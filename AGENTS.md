@@ -23,6 +23,7 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
 - Dashboard reads should go through Convex queries/mutations in `apps/web/convex/dashboard.ts`.
 - The main UI should use Convex React hooks directly where practical, not local fake state.
 - Keep company workbook data shared unless a feature explicitly needs user-owned rows.
+- Vercel intentionally points at the shared seeded dev Convex deployment; do not introduce a production Convex deployment unless explicitly requested.
 - Run workbook imports as dry runs first:
   `pnpm import:workbook:dry-run -- --workbook /path/to/file.xlsx`
 - Confirm the target deployment before any write/import command.
@@ -54,6 +55,7 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
   - `NEXT_PUBLIC_CONVEX_URL`
   - `CONVEX_SITE_URL`
   - `NEXT_PUBLIC_CONVEX_SITE_URL`
+- For Vercel, use the same shared dev Convex URLs and build with `pnpm build`; do not set `CONVEX_DEPLOY_KEY`.
 - If Convex generated files are missing after clone, run Convex codegen/dev before building.
 
 ## Agent Working Memory
