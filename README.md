@@ -65,6 +65,8 @@ Set Vercel's root directory to `apps/web` and use this build command:
 pnpm build
 ```
 
+The Convex generated bindings in `apps/web/convex/_generated` are committed so Vercel can build from a clean checkout without Convex CLI credentials. After changing `apps/web/convex`, run `pnpm --filter web codegen` locally and commit the generated changes.
+
 Required Vercel environment variables:
 
 - `NEXT_PUBLIC_CONVEX_URL`: shared dev Convex cloud URL, for example `https://your-dev-deployment.convex.cloud`.

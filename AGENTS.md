@@ -56,8 +56,9 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
   - `NEXT_PUBLIC_CONVEX_URL`
   - `CONVEX_SITE_URL`
   - `NEXT_PUBLIC_CONVEX_SITE_URL`
-- For Vercel, use the same shared dev Convex URLs and build with `pnpm build`; do not set `CONVEX_DEPLOY_KEY`.
-- If Convex generated files are missing after clone, run Convex codegen/dev before building.
+- For Vercel, use the same shared dev Convex deployment/env values and build with `pnpm build`; do not set `CONVEX_DEPLOY_KEY`.
+- Commit `apps/web/convex/_generated` so Vercel can build from a clean checkout without Convex CLI credentials.
+- If Convex generated files are stale or missing, run `pnpm --filter web codegen` or Convex dev tooling locally, then commit the generated files.
 
 ## Agent Working Memory
 

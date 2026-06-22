@@ -46,9 +46,6 @@ yarn-error.log*
 .firecrawl/
 *.Zone.Identifier
 
-# convex
-**/convex/_generated/
-
 # vercel
 .vercel
 
