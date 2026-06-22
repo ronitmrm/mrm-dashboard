@@ -3,11 +3,15 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "lint": "turbo lint",
-    "format": "turbo format",
-    "typecheck": "turbo typecheck"
+    "build": "turbo run build",
+    "dev": "turbo run dev dev:convex --filter=web --ui=tui",
+    "dev:web": "turbo run dev --filter=web --ui=tui",
+    "dev:convex": "turbo run dev:convex --filter=web --ui=tui",
+    "import:workbook": "pnpm --filter web import:workbook",
+    "import:workbook:dry-run": "pnpm --filter web import:workbook:dry-run",
+    "lint": "turbo run lint",
+    "format": "turbo run format",
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "@workspace/eslint-config": "workspace:*",

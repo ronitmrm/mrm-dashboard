@@ -1,6 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalEnv": ["CONVEX_SITE_URL", "NEXT_PUBLIC_CONVEX_SITE_URL", "NEXT_PUBLIC_CONVEX_URL"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -17,6 +18,10 @@
       "dependsOn": ["^typecheck"]
     },
     "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "dev:convex": {
       "cache": false,
       "persistent": true
     }

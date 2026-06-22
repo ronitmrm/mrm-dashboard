@@ -1,21 +1,52 @@
-# shadcn/ui monorepo template
+# MRMPL Dashboard
 
-This is a Next.js monorepo template with shadcn/ui.
+Next.js + Convex dashboard for MRMPL production, attendance, training, planning, routing, and shop-floor metrics.
 
-## Adding components
+The UI lives in `apps/web`, shared shadcn/ui components live in `packages/ui`, and Convex backend functions live in `apps/web/convex`.
 
-To add components to your app, run the following command at the root of your `web` app:
+## Setup
 
 ```bash
-pnpm dlx shadcn@latest add button -c apps/web
+pnpm install
+cp apps/web/.env.example apps/web/.env.local
 ```
 
-This will place the ui components in the `packages/ui/src/components` directory.
+Fill `apps/web/.env.local` with the Convex deployment values.
 
-## Using components
+Required variables:
 
-To use the components in your app, import them from the `ui` package.
+- `CONVEX_DEPLOYMENT`
+- `NEXT_PUBLIC_CONVEX_URL`
+- `CONVEX_SITE_URL`
+- `NEXT_PUBLIC_CONVEX_SITE_URL`
 
-```tsx
-import { Button } from "@workspace/ui/components/button";
+## Development
+
+```bash
+pnpm dev
 ```
+
+This runs the web app and Convex dev task together through Turborepo's TUI.
+
+Useful focused commands:
+
+```bash
+pnpm dev:web
+pnpm dev:convex
+pnpm lint
+pnpm typecheck
+pnpm --filter web test
+pnpm build
+```
+
+## Data
+
+The dashboard reads from Convex at runtime. Workbook files are treated as local import inputs and are intentionally ignored by git.
+
+To inspect a workbook without writing to Convex:
+
+```bash
+pnpm import:workbook:dry-run -- --workbook /path/to/Advanced_Employee_Performance_System.xlsx
+```
+
+To import workbook data into Convex, use the same script with `pnpm import:workbook` after confirming the target deployment and auth/import path.

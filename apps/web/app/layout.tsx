@@ -1,30 +1,28 @@
-import { Geist, Geist_Mono, Inter } from "next/font/google"
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 
-import "@workspace/ui/globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
+import { ConvexClientProvider } from "@/components/convex-client-provider";
+import { ThemeProvider } from "@/components/theme-provider";
 import { cn } from "@workspace/ui/lib/utils";
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'})
+import "./globals.css";
 
-const fontMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-})
+export const metadata: Metadata = {
+  title: "MRMPL Dashboard",
+  description: "MRMPL production dashboard",
+};
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", inter.variable)}
-    >
-      <body>
-        <ThemeProvider>{children}</ThemeProvider>
+    <html lang="en" suppressHydrationWarning className={cn("antialiased", "font-sans")}>
+      <body className={cn("min-h-svh antialiased")}>
+        <ConvexAuthNextjsServerProvider>
+          <ThemeProvider>
+            <ConvexClientProvider>{children}</ConvexClientProvider>
+          </ThemeProvider>
+        </ConvexAuthNextjsServerProvider>
       </body>
     </html>
-  )
+  );
 }
