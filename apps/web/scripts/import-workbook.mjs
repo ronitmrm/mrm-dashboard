@@ -1,15 +1,13 @@
 /* global process */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { ConvexHttpClient } from "convex/browser";
 import XLSX from "xlsx";
 
-import { api } from "../convex/_generated/api.js";
-
-const confirm = "replace-workbook-import";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const appDir = path.resolve(scriptDir, "..");
 const defaultWorkbook = path.resolve(appDir, "../../..", "Advanced_Employee_Performance_System.xlsx");
@@ -17,7 +15,6 @@ const args = parseArgs(process.argv.slice(2));
 const workbookPath = path.resolve(args.workbook ?? defaultWorkbook);
 const apply = Boolean(args.apply);
 const replace = args.replace !== false;
-const batchSize = Number(args.batchSize ?? 100);
 
 loadEnv(path.join(appDir, ".env.local"));
 
@@ -33,8 +30,6 @@ function parseArgs(argv) {
       parsedArgs.replace = true;
     } else if (arg === "--workbook") {
       parsedArgs.workbook = argv[++index];
-    } else if (arg === "--batch-size") {
-      parsedArgs.batchSize = argv[++index];
     }
   }
   return parsedArgs;
@@ -648,15 +643,6 @@ function dropUndefined(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== ""));
 }
 
-function chunks(rowsToChunk, size) {
-  const safeSize = Math.max(Math.floor(size), 1);
-  const result = [];
-  for (let index = 0; index < rowsToChunk.length; index += safeSize) {
-    result.push(rowsToChunk.slice(index, index + safeSize));
-  }
-  return result;
-}
-
 function countPayload(payload) {
   return Object.fromEntries(Object.entries(payload).map(([key, rowsToCount]) => [key, rowsToCount.length]));
 }
@@ -669,26 +655,39 @@ function countDataEntriesByType(entries) {
   return counts;
 }
 
-function wait(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
+function addImportMetadata(payload, importedAt) {
+  return Object.fromEntries(
+    Object.entries(payload).map(([table, rowsToImport]) => [
+      table,
+      rowsToImport.map((row) => ({
+        ...row,
+        createdAt: typeof row.createdAt === "string" && row.createdAt ? row.createdAt : importedAt,
+      })),
+    ]),
+  );
 }
 
-async function convexMutationWithRetry(client, mutationRef, payload, label) {
-  let lastError;
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
-    try {
-      return await client.mutation(mutationRef, payload);
-    } catch (error) {
-      lastError = error;
-      if (attempt === 5) break;
-      const delayMs = 500 * attempt;
-      console.warn(`${label} failed on attempt ${attempt}; retrying in ${delayMs}ms.`);
-      await wait(delayMs);
-    }
+function writeTableImportFiles(payload) {
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "mrmpl-workbook-import-"));
+  const files = {};
+  for (const [table, rowsToImport] of Object.entries(payload)) {
+    const filePath = path.join(outDir, `${table}.json`);
+    fs.writeFileSync(filePath, `${JSON.stringify(rowsToImport, null, 2)}\n`);
+    files[table] = filePath;
   }
-  throw lastError;
+  return { outDir, files };
+}
+
+function importTable(table, filePath, mode) {
+  execFileSync(
+    "npx",
+    ["convex", "import", "--table", table, mode, "--yes", "--format", "jsonArray", filePath],
+    {
+      cwd: appDir,
+      env: process.env,
+      stdio: "inherit",
+    },
+  );
 }
 
 async function main() {
@@ -708,40 +707,21 @@ async function main() {
     return;
   }
 
-  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (!convexUrl) {
-    throw new Error("NEXT_PUBLIC_CONVEX_URL is required. Set it in apps/web/.env.local or the environment.");
-  }
-
-  const client = new ConvexHttpClient(convexUrl);
-
-  if (replace) {
-    let clearPasses = 0;
-    while (true) {
-      const result = await convexMutationWithRetry(
-        client,
-        api.dashboard.clearWorkbookData,
-        { confirm, batchSize: 250 },
-        `Clear pass ${clearPasses + 1}`,
-      );
-      clearPasses += 1;
-      console.log(`Clear pass ${clearPasses}`, result.deleted);
-      if (!result.hasMore) break;
-    }
+  if (!process.env.CONVEX_DEPLOYMENT && !process.env.NEXT_PUBLIC_CONVEX_URL) {
+    throw new Error("Convex deployment env is required. Set CONVEX_DEPLOYMENT or NEXT_PUBLIC_CONVEX_URL in apps/web/.env.local.");
   }
 
   const importedAt = new Date(fs.statSync(workbookPath).mtimeMs).toISOString();
-  for (const [key, rowsToImport] of Object.entries(parsed)) {
-    for (const chunk of chunks(rowsToImport, batchSize)) {
-      const payload = { confirm, importedAt, [key]: chunk };
-      const result = await convexMutationWithRetry(
-        client,
-        api.dashboard.importWorkbookBatch,
-        payload,
-        `Import ${chunk.length} ${key}`,
-      );
-      console.log(`Imported ${chunk.length} ${key}`, result.inserted[key] ?? 0);
-    }
+  const importPayload = addImportMetadata(parsed, importedAt);
+  const { outDir, files } = writeTableImportFiles(importPayload);
+  const mode = replace ? "--replace" : "--append";
+
+  console.log(`Prepared Convex import files in ${outDir}`);
+  console.log(`${replace ? "Replacing" : "Appending to"} workbook tables in the selected Convex deployment.`);
+
+  for (const [table, filePath] of Object.entries(files)) {
+    console.log(`${table}: ${importPayload[table].length} rows`);
+    importTable(table, filePath, mode);
   }
 
   console.log("Workbook import complete.");
