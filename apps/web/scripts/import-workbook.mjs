@@ -15,6 +15,7 @@ const args = parseArgs(process.argv.slice(2));
 const workbookPath = path.resolve(args.workbook ?? defaultWorkbook);
 const apply = Boolean(args.apply);
 const replace = args.replace !== false;
+const deploymentArgs = getDeploymentArgs(args);
 
 loadEnv(path.join(appDir, ".env.local"));
 
@@ -30,9 +31,23 @@ function parseArgs(argv) {
       parsedArgs.replace = true;
     } else if (arg === "--workbook") {
       parsedArgs.workbook = argv[++index];
+    } else if (arg === "--prod") {
+      parsedArgs.prod = true;
+    } else if (arg === "--deployment") {
+      parsedArgs.deployment = argv[++index];
     }
   }
   return parsedArgs;
+}
+
+function getDeploymentArgs(parsedArgs) {
+  if (parsedArgs.prod && parsedArgs.deployment) {
+    throw new Error("Use either --prod or --deployment, not both.");
+  }
+
+  if (parsedArgs.prod) return ["--prod"];
+  if (parsedArgs.deployment) return ["--deployment", parsedArgs.deployment];
+  return [];
 }
 
 function loadEnv(filePath) {
@@ -681,7 +696,7 @@ function writeTableImportFiles(payload) {
 function importTable(table, filePath, mode) {
   execFileSync(
     "npx",
-    ["convex", "import", "--table", table, mode, "--yes", "--format", "jsonArray", filePath],
+    ["convex", "import", ...deploymentArgs, "--table", table, mode, "--yes", "--format", "jsonArray", filePath],
     {
       cwd: appDir,
       env: process.env,
@@ -707,7 +722,7 @@ async function main() {
     return;
   }
 
-  if (!process.env.CONVEX_DEPLOYMENT && !process.env.NEXT_PUBLIC_CONVEX_URL) {
+  if (deploymentArgs.length === 0 && !process.env.CONVEX_DEPLOYMENT && !process.env.NEXT_PUBLIC_CONVEX_URL) {
     throw new Error("Convex deployment env is required. Set CONVEX_DEPLOYMENT or NEXT_PUBLIC_CONVEX_URL in apps/web/.env.local.");
   }
 
@@ -715,9 +730,10 @@ async function main() {
   const importPayload = addImportMetadata(parsed, importedAt);
   const { outDir, files } = writeTableImportFiles(importPayload);
   const mode = replace ? "--replace" : "--append";
+  const target = deploymentArgs.length > 0 ? deploymentArgs.join(" ") : "selected Convex deployment";
 
   console.log(`Prepared Convex import files in ${outDir}`);
-  console.log(`${replace ? "Replacing" : "Appending to"} workbook tables in the selected Convex deployment.`);
+  console.log(`${replace ? "Replacing" : "Appending to"} workbook tables in ${target}.`);
 
   for (const [table, filePath] of Object.entries(files)) {
     console.log(`${table}: ${importPayload[table].length} rows`);
