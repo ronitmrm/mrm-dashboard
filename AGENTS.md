@@ -24,6 +24,7 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
 - The main UI should use Convex React hooks directly where practical, not local fake state.
 - Keep company workbook data shared unless a feature explicitly needs user-owned rows.
 - Vercel intentionally points at the shared seeded dev Convex deployment; do not introduce a production Convex deployment unless explicitly requested.
+- Vercel deploys the Next.js frontend only. If any file under `apps/web/convex` changes, run `npx convex dev --once` or `pnpm dev:convex` locally before treating the Vercel site as current, otherwise deployed mutations/queries may call stale Convex backend code.
 - Run workbook imports as dry runs first:
   `pnpm import:workbook:dry-run -- --workbook /path/to/file.xlsx`
 - Confirm the target deployment before any write/import command.
