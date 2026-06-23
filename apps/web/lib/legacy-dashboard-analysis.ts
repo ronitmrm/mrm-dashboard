@@ -155,7 +155,17 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     updatedAt: input.updatedAt ?? "",
   });
 
-  if (productionRows.length) return snapshot;
+  if (
+    productionRows.length ||
+    routeRows.length ||
+    cycleRows.length ||
+    toolingRows.length ||
+    workOrderRows.length ||
+    setupChecklistRows.length ||
+    employeeRows.length ||
+    entryRows(byType, "machine_master").length
+  ) return snapshot;
+
   return buildDashboardSnapshot(input);
 }
 
