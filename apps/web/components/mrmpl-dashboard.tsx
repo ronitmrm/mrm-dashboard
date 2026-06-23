@@ -437,17 +437,19 @@ function DashboardShell() {
   async function submitAction(path: string, body: Record<string, unknown>) {
     setActionStatus(null);
     try {
-      const message = await runDashboardAction(path, body, {
-        saveRouteSelection,
-        savePlannerPriority,
-        saveMachineConstraint,
-        savePlanOverride,
-        saveRouteChange,
-        saveDispatchApproval,
-        markComplete,
-        saveProductionEntry,
-        saveDataEntry,
-      });
+      const message = path === "data-import"
+        ? await postDashboardApi(path, body)
+        : await runDashboardAction(path, body, {
+            saveRouteSelection,
+            savePlannerPriority,
+            saveMachineConstraint,
+            savePlanOverride,
+            saveRouteChange,
+            saveDispatchApproval,
+            markComplete,
+            saveProductionEntry,
+            saveDataEntry,
+          });
       setActionStatus({
         tone: "default",
         message,
@@ -2722,6 +2724,19 @@ async function runDashboardAction(
 
 function downloadApi(kind: "data-template" | "data-export", entryType: string) {
   window.location.href = `/api/${kind}?entryType=${encodeURIComponent(entryType)}&t=${Date.now()}`;
+}
+
+async function postDashboardApi(path: string, body: Record<string, unknown>) {
+  const response = await fetch(`/api/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new Error(str(payload.error) || `Request failed with status ${response.status}`);
+  }
+  return str(payload.message || payload.savedText) || "Import complete.";
 }
 
 function formPayload(form: FormData, fields: LegacyField[]) {
