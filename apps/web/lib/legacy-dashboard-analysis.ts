@@ -2,7 +2,9 @@ import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, t
 import { isActivePlannerDecision, machineCodeMatches, sourcePlannerDecisions } from "./planning-rules";
 
 type DataEntry = {
+  _id?: unknown;
   entryType: string;
+  key?: string;
   payload: unknown;
   createdAt: string;
 };
@@ -769,6 +771,7 @@ function buildProductionControl({
   const rmInwardByJc = latestRmInwardByJobCard(rmInwardRows);
   const selectedRouteByJc = latestRouteSelectionByJobCard(routeSelections);
   const rawByJc = new Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines: Set<string>; operators: Set<string> }>();
+  const rawBySetup = new Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string> }>();
   let latestRawDate = "";
   for (const row of productionRows) {
     const jcNo = rowText(row, "JobCardNo", "JOB CARD NO.", "JC NO.");
@@ -782,6 +785,19 @@ function buildProductionControl({
     rec.rows += 1;
     rec.machines.add(rowText(row, "MACHINE NO", "M/C NO"));
     rec.operators.add(rowText(row, "OPERATOR ID", "OPERATOR NAME"));
+    const partCode = rowText(row, "PART CODE", "PART NO", "partCode");
+    const setupNo = rowText(row, "SETUP CODE", "SETUP NO.", "setupNo");
+    const machine = rowText(row, "MACHINE NO", "M/C NO", "machine");
+    const setupKey = productionSetupKey({ jcNo, partCode, setupNo, machine });
+    if (setupKey) {
+      const setupRec = getOrCreate(rawBySetup, setupKey, () => ({ startDate: "", latestDate: "", outputQty: 0, actualQty: 0, rows: 0, dates: new Set<string>() }));
+      if (prodDate && (!setupRec.startDate || prodDate < setupRec.startDate)) setupRec.startDate = prodDate;
+      if (prodDate && (!setupRec.latestDate || prodDate > setupRec.latestDate)) setupRec.latestDate = prodDate;
+      if (prodDate) setupRec.dates.add(prodDate);
+      setupRec.outputQty += safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS"));
+      setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - rejectionTotalFromRow(row), 0);
+      setupRec.rows += 1;
+    }
   }
   const dispatchJcKeys = new Set(dispatchRows.map((row) => canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo"))).filter(Boolean));
   const workOrderOutputRows = workOrderRows.map((row) => {
@@ -802,8 +818,8 @@ function buildProductionControl({
         : "Route master missing";
     const missingCycleRoutes = selectedRoutes.filter((route) => !cycleKeys.has(masterKey(route)));
     const missingToolingRoutes = selectedRoutes.filter((route) => !toolingKeys.has(masterKey(route)));
-    const missingCycle = missingCycleRoutes.map((route) => rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"));
-    const missingTooling = missingToolingRoutes.map((route) => rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"));
+    const missingCycle = missingCycleRoutes.map((route) => setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption));
+    const missingTooling = missingToolingRoutes.map((route) => setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption));
     const firstMissingRoute = missingCycleRoutes[0] ?? missingToolingRoutes[0] ?? selectedRoutes[0] ?? {};
     const actual = rawByJc.get(canonicalKey(jcNo));
     const orderPcs = safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"));
@@ -822,7 +838,7 @@ function buildProductionControl({
       orderPcs: round(orderPcs),
       orderKg: round(safeNumber(rowValue(row, "ORD. KG.", "orderKg"))),
       deliveryDate: rowText(row, "DELIVERY DATE", "deliveryDate"),
-      missingSetupNo: rowText(firstMissingRoute, "SETUP NO.", "SETUP CODE", "setupNo"),
+      missingSetupNo: setupStepKey(rowText(firstMissingRoute, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption),
       missingSetupName: rowText(firstMissingRoute, "SETUP NAME", "setupName"),
       machineUsed: rowText(firstMissingRoute, "MACHINE USED", "machineUsed"),
       machineType: rowText(firstMissingRoute, "MACHINE TYPE", "machineType"),
@@ -862,7 +878,9 @@ function buildProductionControl({
     .filter((row) => row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(workOrderOutputRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
-  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, routeGroups, cycleRows, machineRows, machineConstraints, planOverrides);
+  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, rawBySetup, routeGroups, cycleRows, machineRows, machineConstraints, planOverrides, setupChecklistRows);
+  const setupChecklistHistoryRows = setupChecklistHistory(setupChecklistRows);
+  const setupChecklistMismatchRows = setupChecklistMismatches(setupChecklistHistoryRows, machinePlanDetailRows);
   const machinePlanReady = workOrderOutputRows.filter((row) => row.rmStatus === "Received" && !row.routeStatus.includes("missing") && row.cycleStatus === "Ready" && row.toolingStatus === "Ready").length;
   const latestSetupDate = maxDate(setupChecklistRows.map((row) => parseDate(rowValue(row, "SETUP DATE", "setupDate"))));
   const totalOutputQty = sum([...rawByJc.values()].map((row) => row.outputQty));
@@ -909,6 +927,7 @@ function buildProductionControl({
       activePlanOverrides,
       activeRouteChanges,
       plannerActionLog: plannerActionLog.length,
+      setupChecklistMismatches: setupChecklistMismatchRows.length,
       compulsoryMachineShifts: planOverrides.length,
       latestRawDate: dateLabel(latestRawDate),
       latestSetupDate: dateLabel(latestSetupDate),
@@ -958,7 +977,117 @@ function buildProductionControl({
     dispatchRows: dispatchApprovals,
     dispatchLoss: dispatchRows,
     jobCardSetupProgressRows: setupCompletions,
+    setupChecklistHistoryRows,
+    setupChecklistMismatchRows,
   };
+}
+
+function setupChecklistMismatches(setupRows: Array<Record<string, unknown>>, plannedRows: Array<Record<string, unknown>>) {
+  const plannedByExactKey = new Set(plannedRows.map((row) => setupChecklistKey({
+    jcNo: rowText(row, "jcNo"),
+    partCode: rowText(row, "partCode"),
+    optionNumber: rowText(row, "optionNumber"),
+    setupNo: rowText(row, "setupNo"),
+    machine: rowText(row, "machine"),
+  })).filter(Boolean));
+
+  return setupRows
+    .map((row) => {
+      const target = {
+        jcNo: rowText(row, "jcNo"),
+        partCode: rowText(row, "partCode"),
+        optionNumber: rowText(row, "optionNumber"),
+        setupNo: rowText(row, "setupNo"),
+        machine: rowText(row, "machine"),
+      };
+      const exactKey = setupChecklistKey(target);
+      if (exactKey && plannedByExactKey.has(exactKey)) return null;
+
+      const missingFields = [
+        target.jcNo ? "" : "JC number",
+        target.partCode ? "" : "Part code",
+        target.optionNumber ? "" : "Option number",
+        target.setupNo ? "" : "Setup number",
+        target.machine ? "" : "Machine number",
+      ].filter(Boolean);
+      const closest = closestPlannedSetup(target, plannedRows);
+      const mismatchFields = closest ? [
+        canonicalKey(target.jcNo) === canonicalKey(rowText(closest, "jcNo")) ? "" : `JC expected ${rowText(closest, "jcNo") || "-"}`,
+        canonicalKey(target.partCode) === canonicalKey(rowText(closest, "partCode")) ? "" : `Part expected ${rowText(closest, "partCode") || "-"}`,
+        canonicalKey(target.optionNumber) === canonicalKey(rowText(closest, "optionNumber")) ? "" : `Option expected ${rowText(closest, "optionNumber") || "-"}`,
+        setupStepKey(target.setupNo, target.optionNumber) === setupStepKey(rowText(closest, "setupNo"), rowText(closest, "optionNumber")) ? "" : `Setup expected ${setupStepKey(rowText(closest, "setupNo"), rowText(closest, "optionNumber")) || "-"}`,
+        canonicalKey(target.machine) === canonicalKey(rowText(closest, "machine")) ? "" : `Machine expected ${rowText(closest, "machine") || "-"}`,
+      ].filter(Boolean) : [];
+      const nextAction = missingFields.length
+        ? `Correct setup checklist: missing ${compactJoin(missingFields)}`
+        : mismatchFields.length
+          ? `Review setup checklist: ${compactJoin(mismatchFields)}`
+          : "Review setup checklist: no planned setup matches this entry";
+      return {
+        ...row,
+        status: "Needs planner review",
+        issueType: "Setup checklist mismatch",
+        missingFields: compactJoin(missingFields),
+        mismatchFields: compactJoin(mismatchFields),
+        plannedJobCard: closest ? rowText(closest, "jcNo") : "",
+        plannedPartCode: closest ? rowText(closest, "partCode") : "",
+        plannedOptionNumber: closest ? rowText(closest, "optionNumber") : "",
+        plannedSetupNo: closest ? rowText(closest, "setupNo") : "",
+        plannedMachine: closest ? rowText(closest, "machine") : "",
+        nextAction,
+      };
+    })
+    .filter(Boolean);
+}
+
+function closestPlannedSetup(target: { jcNo: string; partCode: string; optionNumber: string; setupNo: string; machine: string }, plannedRows: Array<Record<string, unknown>>) {
+  let best: { row: Record<string, unknown>; score: number } | undefined;
+  for (const row of plannedRows) {
+    const score = [
+      canonicalKey(target.jcNo) && canonicalKey(target.jcNo) === canonicalKey(rowText(row, "jcNo")),
+      canonicalKey(target.partCode) && canonicalKey(target.partCode) === canonicalKey(rowText(row, "partCode")),
+      canonicalKey(target.optionNumber) && canonicalKey(target.optionNumber) === canonicalKey(rowText(row, "optionNumber")),
+      setupStepKey(target.setupNo, target.optionNumber) && setupStepKey(target.setupNo, target.optionNumber) === setupStepKey(rowText(row, "setupNo"), rowText(row, "optionNumber")),
+      canonicalKey(target.machine) && canonicalKey(target.machine) === canonicalKey(rowText(row, "machine")),
+    ].filter(Boolean).length;
+    if (!best || score > best.score) best = { row, score };
+  }
+  return best && best.score > 0 ? best.row : undefined;
+}
+
+function setupChecklistHistory(rows: Record<string, unknown>[]) {
+  return rows.map((row) => {
+    const setupDate = parseDate(rowValue(row, "SETUP DATE", "setupDate"));
+    const minutes = settingMinutesFromRow(row);
+    return {
+      _id: rowText(row, "_id"),
+      key: rowText(row, "key"),
+      setupDate: dateLabel(setupDate || rowValue(row, "SETUP DATE", "setupDate")),
+      setupDateValue: setupDate || rowText(row, "SETUP DATE", "setupDate"),
+      setupDateKey: setupDate || "",
+      jcNo: rowText(row, "JC NO.", "JC NO", "JobCardNo", "jcNo"),
+      machine: rowText(row, "M/C NO", "MACHINE NO", "machineNo"),
+      partCode: rowText(row, "PART NO", "PART CODE", "partNo"),
+      optionNumber: rowText(row, "OPTION NUMBER", "OPTION NO", "optionNumber"),
+      setupNo: rowText(row, "SETUP NO.", "SETUP NO", "SET UP", "setupNo"),
+      shift: rowText(row, "SHIFT", "shift"),
+      setterCode: rowText(row, "SETTER Code", "SETTER CODE", "setterCode"),
+      helperCode: rowText(row, "HELPER Code", "HELPER CODE", "helperCode"),
+      settingStartTime: rowText(row, "SETTING START TIME", "settingStartTime"),
+      settingEndTime: rowText(row, "SETTING END TIME", "settingEndTime"),
+      settingMinutes: minutes,
+      qcController: rowText(row, "QC CONTROLLER", "qcController"),
+      rimmerAvailability: rowText(row, "RIMMER AVAILABILITY", "rimmerAvailability"),
+      modhiyu: rowText(row, "MODHIYU", "modhiyu"),
+      remarks: rowText(row, "REMARKS", "REMARK", "remarks"),
+      status: "Setup complete",
+    };
+  }).sort((a, b) =>
+    rowText(b, "setupDateKey").localeCompare(rowText(a, "setupDateKey")) ||
+    rowText(a, "machine").localeCompare(rowText(b, "machine"), undefined, { numeric: true }) ||
+    rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }) ||
+    numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")),
+  );
 }
 
 function buildSetupAnalytics(rows: Record<string, unknown>[], filters: DashboardFilters) {
@@ -1123,7 +1252,7 @@ function bucketDataEntries(entries: DataEntry[]) {
   const buckets = new Map<string, Array<Record<string, unknown>>>();
   for (const entry of entries) {
     const payload = asRecord(entry.payload);
-    const row = { ...payload, entryType: entry.entryType, createdAt: entry.createdAt };
+    const row = { ...payload, _id: entry._id, key: entry.key, entryType: entry.entryType, createdAt: entry.createdAt };
     const bucket = buckets.get(entry.entryType) ?? [];
     bucket.push(row);
     buckets.set(entry.entryType, bucket);
@@ -1842,32 +1971,38 @@ function isRmReceived(workOrder: Record<string, unknown>, rmInward?: Record<stri
 function machinePlanDetails(
   workOrderRows: Array<Record<string, unknown>>,
   rawByJc: Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines?: Set<string> }>,
+  rawBySetup: Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string> }>,
   routeGroups: Map<string, Record<string, unknown>[]>,
   cycleRows: Array<Record<string, unknown>>,
   machineRows: Array<Record<string, unknown>>,
   machineConstraints: ActionRow[],
   planOverrides: ActionRow[],
+  setupChecklistRows: Record<string, unknown>[],
 ) {
   const details: Array<Record<string, unknown>> = [];
   const cycleByKey = new Map(cycleRows.map((row) => [masterKey(row), row]));
+  const checklistBySetup = setupChecklistBySetup(setupChecklistRows);
   const unavailableMachines = new Set(machineConstraints
     .filter((row) => isActivePlannerDecision(rowText(row, "status", "STATUS")))
     .map((row) => canonicalKey(rowText(row, "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO")))
     .filter(Boolean));
   const machineLoad = new Map<string, number>();
+  const machineNextSetupDate = new Map<string, string>();
   for (const row of workOrderRows) {
     const partCode = rowText(row, "partCode");
     const optionNumber = rowText(row, "optionNumber");
     if (!partCode || !optionNumber || optionNumber === "Not selected") continue;
+    if (rowText(row, "rmStatus") !== "Received") continue;
 
     const routeKeyValue = [canonicalKey(partCode), optionNumber].join("|");
     const routes = routeGroups.get(routeKeyValue) ?? [];
     const actual = rawByJc.get(canonicalKey(rowText(row, "jcNo")));
 
-    for (const route of routes) {
+    for (const [routeIndex, route] of routes.entries()) {
       const routeMachine = rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
       if (!routeMachine) continue;
       const setupNo = rowText(route, "SETUP NO.", "SETUP CODE", "setupNo");
+      const displaySetupNo = setupStepKey(setupNo, optionNumber) || setupNo;
       const machineType = rowText(route, "MACHINE TYPE", "machineType");
       const override = planOverrideForSetup(planOverrides, row, setupNo);
       const actualMachine = [...(actual?.machines ?? new Set<string>())].find((machine) => machineCodeMatches(routeMachine, machine));
@@ -1885,13 +2020,42 @@ function machinePlanDetails(
             override,
           });
       for (const machine of assignedMachines) {
+        const checklistEntry = findSetupChecklistEntry(checklistBySetup, {
+          jcNo: rowText(row, "jcNo"),
+          partCode,
+          optionNumber,
+          setupNo,
+          machine,
+        });
+        const productionActual = rawBySetup.get(productionSetupKey({
+          jcNo: rowText(row, "jcNo"),
+          partCode,
+          setupNo: displaySetupNo,
+          machine,
+        })) ?? rawBySetup.get(productionSetupKey({
+          jcNo: rowText(row, "jcNo"),
+          partCode,
+          setupNo,
+          machine,
+        }));
+        const rmInwardDate = rowText(row, "rmInwardDate");
+        const baseSetupDate = plannedSetupDate(rmInwardDate, routeIndex);
         const machineKeyValue = canonicalKey(machine);
+        const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
+        const plannedCompletionDate = plannedStartDate;
+        const setupCompletionDate = checklistEntry ? parseDate(rowValue(checklistEntry, "SETUP DATE", "setupDate")) || rowText(checklistEntry, "SETUP DATE", "setupDate") : "";
+        const plannedProductionStartDate = plannedCompletionDate ? addDays(plannedCompletionDate, 1) : "";
+        const plannedProductionEndDate = plannedProductionEnd(plannedProductionStartDate, safeNumber(rowValue(row, "orderPcs")), cycle, productionActual);
+        const actualStartDate = productionActual?.startDate ?? "";
+        const actualCompletionDate = productionActual && productionActual.actualQty >= safeNumber(rowValue(row, "orderPcs")) ? productionActual.latestDate : "";
         if (machineKeyValue) machineLoad.set(machineKeyValue, (machineLoad.get(machineKeyValue) ?? 0) + 1);
+        if (machineKeyValue && plannedProductionEndDate) machineNextSetupDate.set(machineKeyValue, plannedProductionEndDate);
         details.push({
         machine,
         routeMachine,
         machineType,
-        setupNo,
+        setupNo: displaySetupNo,
+        routeSetupNo: setupNo,
         setupName: rowText(route, "SETUP NAME", "setupName"),
         partCode,
         description: rowText(row, "description"),
@@ -1907,7 +2071,23 @@ function machinePlanDetails(
         rawActualQty: round(actual?.actualQty ?? 0),
         rawRejectQty: round(actual?.rejectQty ?? 0),
         rawRows: actual?.rows ?? 0,
-        runningStatus: actual?.rows ? "Running" : "Planned",
+        runningStatus: actual?.rows ? "Running" : (checklistEntry ? "Setup complete" : "Planned"),
+        plannedDate: dateLabel(plannedStartDate),
+        completionDate: dateLabel(setupCompletionDate),
+        setupPlannedDate: dateLabel(plannedStartDate),
+        setupCompletionDate: dateLabel(setupCompletionDate),
+        plannedProductionStartDate: dateLabel(plannedProductionStartDate),
+        plannedProductionEndDate: dateLabel(plannedProductionEndDate),
+        actualProductionStartDate: dateLabel(actualStartDate),
+        actualProductionEndDate: dateLabel(actualCompletionDate),
+        plannedStartDate: dateLabel(plannedStartDate),
+        plannedCompletionDate: dateLabel(plannedCompletionDate),
+        actualStartDate: dateLabel(actualStartDate),
+        actualCompletionDate: dateLabel(actualCompletionDate),
+        setupCompletedOn: dateLabel(setupCompletionDate),
+        setupCompletedBy: checklistEntry ? rowText(checklistEntry, "SETTER Code", "SETTER CODE", "setterCode") : "",
+        setupChecklistRemark: checklistEntry ? rowText(checklistEntry, "REMARKS", "REMARK", "remarks") : "",
+        planVsActual: setupPlanVsActual(plannedCompletionDate, setupCompletionDate),
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
           machineAssignment: machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
           parallelMachineCount: assignedMachines.length,
@@ -1921,6 +2101,94 @@ function machinePlanDetails(
     rowText(a, "partCode").localeCompare(rowText(b, "partCode"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")),
   );
+}
+
+function setupChecklistBySetup(rows: Record<string, unknown>[]) {
+  const grouped = new Map<string, Record<string, unknown>[]>();
+  for (const row of rows) {
+    const jcNo = rowText(row, "JC NO.", "JC NO", "JobCardNo", "jcNo");
+    const partCode = rowText(row, "PART NO", "PART CODE", "partNo");
+    const optionNumber = rowText(row, "OPTION NUMBER", "OPTION NO", "optionNumber");
+    const setupNo = rowText(row, "SETUP NO.", "SETUP NO", "SET UP", "setupNo");
+    const machine = rowText(row, "M/C NO", "MACHINE NO", "machineNo");
+    const key = setupChecklistKey({ jcNo, partCode, optionNumber, setupNo, machine });
+    if (!key) continue;
+    const existing = grouped.get(key) ?? [];
+    existing.push(row);
+    grouped.set(key, existing);
+  }
+  return grouped;
+}
+
+function findSetupChecklistEntry(
+  grouped: Map<string, Record<string, unknown>[]>,
+  target: { jcNo: string; partCode: string; optionNumber: string; setupNo: string; machine: string },
+) {
+  const key = setupChecklistKey(target);
+  return key ? grouped.get(key)?.[0] : undefined;
+}
+
+function setupChecklistKey({
+  jcNo,
+  partCode,
+  optionNumber,
+  setupNo,
+  machine,
+}: {
+  jcNo: string;
+  partCode: string;
+  optionNumber: string;
+  setupNo: string;
+  machine: string;
+}) {
+  const parts = [canonicalKey(jcNo), canonicalKey(partCode), canonicalKey(optionNumber), setupStepKey(setupNo, optionNumber), canonicalKey(machine)];
+  return parts.every(Boolean) ? parts.join("|") : "";
+}
+
+function productionSetupKey({
+  jcNo,
+  partCode,
+  setupNo,
+  machine,
+}: {
+  jcNo: string;
+  partCode: string;
+  setupNo: string;
+  machine: string;
+}) {
+  const parts = [canonicalKey(jcNo), canonicalKey(partCode), canonicalKey(setupNo), canonicalKey(machine)];
+  return parts.every(Boolean) ? parts.join("|") : "";
+}
+
+function setupStepKey(setupNo: string, optionNumber: string) {
+  const setupKey = canonicalKey(setupNo);
+  const optionKey = canonicalKey(optionNumber);
+  if (!setupKey) return "";
+  const match = setupKey.match(/^(\d+)\.(\d+)$/);
+  if (match && match[1] === optionKey) return match[2] ?? "";
+  return setupKey;
+}
+
+function plannedSetupDate(rmInwardDate: string, setupIndex: number) {
+  const start = parseDate(rmInwardDate);
+  return start ? addDays(start, setupIndex) : "";
+}
+
+function setupPlanVsActual(plannedCompletionDate: string, actualCompletionDate: string) {
+  const planned = parseDate(plannedCompletionDate);
+  const actual = parseDate(actualCompletionDate);
+  if (!planned) return "Plan date missing";
+  if (!actual) return "Pending actual";
+  if (actual < planned) return "Early";
+  if (actual === planned) return "On time";
+  return "Delayed";
+}
+
+function addDays(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function planOverrideForSetup(planOverrides: ActionRow[], workOrder: Record<string, unknown>, setupNo: string) {
@@ -1977,6 +2245,33 @@ function requiredMachineCountForTarget(orderPcs: number, cycle: Record<string, u
   const productionDays = Math.max(1, Math.ceil(estimatedHours / planningHoursPerDay));
   const availableProductionDays = Math.max(1, planningDispatchTargetDays - planningSetupBufferDays);
   return Math.min(availableMachineCount, Math.max(1, Math.ceil(productionDays / availableProductionDays)));
+}
+
+function plannedProductionEnd(
+  startDate: string,
+  orderPcs: number,
+  cycle: Record<string, unknown> | undefined,
+  actual?: { latestDate: string; outputQty: number; actualQty: number; dates: Set<string> },
+) {
+  if (!startDate) return "";
+  if (actual?.latestDate && actual.dates.size) {
+    if (actual.actualQty >= orderPcs) return actual.latestDate;
+    const dailyOutput = Math.max(actual.actualQty || actual.outputQty, 0) / actual.dates.size;
+    if (dailyOutput > 0) {
+      const remainingQty = Math.max(orderPcs - actual.actualQty, 0);
+      const remainingDays = Math.max(1, Math.ceil(remainingQty / dailyOutput));
+      return addDays(actual.latestDate, remainingDays);
+    }
+  }
+  const cycleSeconds = safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")) + safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING"));
+  if (!orderPcs || !cycleSeconds) return startDate;
+  const estimatedHours = (orderPcs * cycleSeconds) / 3600;
+  const productionDays = Math.max(1, Math.ceil(estimatedHours / planningHoursPerDay));
+  return addDays(startDate, productionDays - 1);
+}
+
+function maxDateValue(...values: string[]) {
+  return values.map(parseDate).filter(Boolean).sort().at(-1) ?? "";
 }
 
 function candidatePhysicalMachines(
@@ -2167,6 +2462,22 @@ function parseDate(value: unknown) {
   if (!raw) return "";
   if (/^\d{4,6}(?:\.\d+)?$/.test(raw)) return excelSerialIsoDate(Number(raw));
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const dayFirstMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s|$)/);
+  if (dayFirstMatch) {
+    const day = Number(dayFirstMatch[1]);
+    const month = Number(dayFirstMatch[2]);
+    const year = Number(dayFirstMatch[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      day >= 1 && day <= 31 &&
+      month >= 1 && month <= 12 &&
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day
+    ) {
+      return date.toISOString().slice(0, 10);
+    }
+  }
   const parsed = new Date(raw);
   if (!Number.isNaN(parsed.getTime())) return localIsoDate(parsed);
   return "";

@@ -416,6 +416,8 @@ export function buildDashboardSnapshot(input: DashboardInput) {
       routeChangeRows: [],
       dispatchRows: [],
       jobCardSetupProgressRows: [],
+      setupChecklistHistoryRows: [],
+      setupChecklistMismatchRows: [],
       validationIssues: [],
       plannerActionLog: [],
       routeSelectionRequired: [],

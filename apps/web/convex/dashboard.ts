@@ -410,11 +410,28 @@ export const markComplete = mutation({
 
 export const saveDataEntry = mutation({
   args: {
+    id: v.optional(v.id("dataEntries")),
     entryType: v.string(),
     key: optionalString,
     payload: v.any(),
   },
-  handler: async (ctx, args) => insertOwnerRow(ctx, "dataEntries", args),
+  handler: async (ctx, args) => {
+    const ownerFields = await getOwnerFields(ctx);
+    if (args.id) {
+      const existing = await ctx.db.get(args.id);
+      if (!existing || existing.ownerId !== ownerFields.ownerId) {
+        throw new Error("Setup checklist entry was not found or cannot be edited.");
+      }
+      await ctx.db.patch(args.id, {
+        entryType: args.entryType,
+        key: args.key,
+        payload: args.payload,
+        createdAt: now(),
+      });
+      return { ok: true, id: args.id };
+    }
+    return insertOwnerRow(ctx, "dataEntries", args);
+  },
 });
 
 export const seedSampleData = mutation({

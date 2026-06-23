@@ -46,7 +46,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
   rm_inward: ["jcNo", "fgPoNo", "rmPoNo", "partCode", "orderPcs", "orderKg", "rmInwardDate", "rmInwardKg", "status", "remark"],
   employee: ["empId", "employeeType", "employeeName", "location", "doj", "terminatedDate", "status"],
   machine_master: ["machineNo", "machineType", "machineName", "location", "capacity", "status", "remarks"],
-  setup_checklist: ["jcNo", "setupDate", "machineNo", "partNo", "setupNo", "shift", "setterCode", "helperCode", "settingStartTime", "settingEndTime", "qcController", "rimmerAvailability", "modhiyu", "remarks"],
+  setup_checklist: ["jcNo", "setupDate", "machineNo", "partNo", "optionNumber", "setupNo", "shift", "setterCode", "helperCode", "settingStartTime", "settingEndTime", "qcController", "rimmerAvailability", "modhiyu", "remarks"],
   software_raw: ["prodDate", "operatorId", "operatorName", "machineType", "machine", "partCode", "jobCard", "setupNo", "outputQty", "actualQty", "targetQty", "rejectQty", "rejectionType", "rejectionRemark", "downtimeMinutes", "downtimeReason"],
 };
 

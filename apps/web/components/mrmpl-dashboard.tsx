@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import Image from "next/image";
@@ -8,7 +8,6 @@ import { useTheme } from "next-themes";
 import {
   AlertTriangle,
   Boxes,
-  CalendarClock,
   CheckCircle2,
   ClipboardList,
   Database,
@@ -24,7 +23,6 @@ import {
   Settings2,
   ShieldCheck,
   Sun,
-  UserRoundCheck,
   Wrench,
 } from "lucide-react";
 
@@ -75,17 +73,9 @@ import {
 } from "@/lib/dashboard-view-model";
 import { machineFamilyKey } from "@/lib/planning-rules";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 
 type DashboardPayload = Record<string, unknown>;
-
-type LegacyFilters = {
-  operatorId: string;
-  machineType: string;
-  machine: string;
-  month: string;
-  startDate: string;
-  endDate: string;
-};
 
 type ActionStatus = {
   tone: "default" | "destructive";
@@ -107,126 +97,6 @@ type DashboardTabId =
   | "dataEntryTab"
   | "planningControlTab"
   | "shopFloorTab";
-
-const emptyFilters: LegacyFilters = {
-  operatorId: "",
-  machineType: "",
-  machine: "",
-  month: "",
-  startDate: "",
-  endDate: "",
-};
-
-const workbookFiltersStorageKey = "mrmpl-dashboard:workbook-filters";
-const workbookFilterListeners = new Set<() => void>();
-let workbookFiltersSnapshot = emptyFilters;
-let workbookFiltersSerialized = "";
-
-function normalizeWorkbookFilters(value: unknown): LegacyFilters {
-  const record = typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Partial<Record<keyof LegacyFilters, unknown>>
-    : {};
-
-  return {
-    operatorId: typeof record.operatorId === "string" ? record.operatorId : "",
-    machineType: typeof record.machineType === "string" ? record.machineType : "",
-    machine: typeof record.machine === "string" ? record.machine : "",
-    month: typeof record.month === "string" ? record.month : "",
-    startDate: typeof record.startDate === "string" ? record.startDate : "",
-    endDate: typeof record.endDate === "string" ? record.endDate : "",
-  };
-}
-
-function parseStoredWorkbookFilters(serialized: string) {
-  if (!serialized) return emptyFilters;
-
-  try {
-    return normalizeWorkbookFilters(JSON.parse(serialized));
-  } catch {
-    return emptyFilters;
-  }
-}
-
-function workbookFiltersAreEmpty(filters: LegacyFilters) {
-  return Object.values(filters).every((value) => value === "");
-}
-
-function getWorkbookFiltersSnapshot() {
-  if (typeof window === "undefined") return emptyFilters;
-
-  let serialized = "";
-  try {
-    serialized = window.localStorage.getItem(workbookFiltersStorageKey) ?? "";
-  } catch {
-    return workbookFiltersSnapshot;
-  }
-
-  if (serialized !== workbookFiltersSerialized) {
-    workbookFiltersSerialized = serialized;
-    workbookFiltersSnapshot = parseStoredWorkbookFilters(serialized);
-  }
-
-  return workbookFiltersSnapshot;
-}
-
-function getWorkbookFiltersServerSnapshot() {
-  return emptyFilters;
-}
-
-function subscribeWorkbookFilters(listener: () => void) {
-  workbookFilterListeners.add(listener);
-
-  function onStorage(event: StorageEvent) {
-    if (event.key === workbookFiltersStorageKey) {
-      listener();
-    }
-  }
-
-  if (typeof window !== "undefined") {
-    window.addEventListener("storage", onStorage);
-  }
-
-  return () => {
-    workbookFilterListeners.delete(listener);
-    if (typeof window !== "undefined") {
-      window.removeEventListener("storage", onStorage);
-    }
-  };
-}
-
-function writeWorkbookFilters(nextFilters: LegacyFilters) {
-  const normalized = normalizeWorkbookFilters(nextFilters);
-  const serialized = workbookFiltersAreEmpty(normalized) ? "" : JSON.stringify(normalized);
-
-  try {
-    if (serialized) {
-      window.localStorage.setItem(workbookFiltersStorageKey, serialized);
-    } else {
-      window.localStorage.removeItem(workbookFiltersStorageKey);
-    }
-  } catch {
-    // The in-memory snapshot still updates if storage is unavailable.
-  }
-
-  workbookFiltersSerialized = serialized;
-  workbookFiltersSnapshot = normalized;
-  workbookFilterListeners.forEach((listener) => listener());
-}
-
-function useStoredWorkbookFilters() {
-  const filters = useSyncExternalStore(
-    subscribeWorkbookFilters,
-    getWorkbookFiltersSnapshot,
-    getWorkbookFiltersServerSnapshot,
-  );
-  const setFilters = useCallback<React.Dispatch<React.SetStateAction<LegacyFilters>>>((value) => {
-    const current = getWorkbookFiltersSnapshot();
-    const next = typeof value === "function" ? value(current) : value;
-    writeWorkbookFilters(next);
-  }, []);
-
-  return [filters, setFilters] as const;
-}
 
 const navItems: Array<{ id: DashboardTabId; title: string; subtitle: string; icon: typeof LayoutDashboard }> = [
   { id: "productionControlTab", title: "Planner Actions", subtitle: "priority, route, dispatch", icon: ClipboardList },
@@ -362,6 +232,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "setupDate", label: "Setup date", type: "date", required: true },
       { name: "machineNo", label: "Machine no.", required: true },
       { name: "partNo", label: "Part no.", required: true },
+      { name: "optionNumber", label: "Option number", required: true },
       { name: "setupNo", label: "Setup no.", required: true },
       { name: "shift", label: "Shift" },
       { name: "setterCode", label: "Setter code" },
@@ -372,6 +243,29 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "rimmerAvailability", label: "Rimmer availability" },
       { name: "modhiyu", label: "Modhiyu" },
       { name: "remarks", label: "Remarks" },
+    ],
+  },
+  {
+    entryType: "software_raw",
+    title: "Software production output",
+    description: "Daily production rows from the shop-floor software.",
+    fields: [
+      { name: "prodDate", label: "Production date", type: "date", required: true },
+      { name: "operatorId", label: "Operator ID", required: true },
+      { name: "operatorName", label: "Operator name" },
+      { name: "machineType", label: "Machine type" },
+      { name: "machine", label: "Machine no.", required: true },
+      { name: "partCode", label: "Part code", required: true },
+      { name: "jobCard", label: "JC no." },
+      { name: "setupNo", label: "Setup no." },
+      { name: "outputQty", label: "Output qty", type: "number", required: true },
+      { name: "actualQty", label: "Actual qty", type: "number" },
+      { name: "targetQty", label: "Target qty", type: "number" },
+      { name: "rejectQty", label: "Reject qty", type: "number" },
+      { name: "rejectionType", label: "Rejection type" },
+      { name: "rejectionRemark", label: "Rejection remark" },
+      { name: "downtimeMinutes", label: "Downtime minutes", type: "number" },
+      { name: "downtimeReason", label: "Downtime reason" },
     ],
   },
 ];
@@ -390,20 +284,11 @@ export function MrmplDashboard() {
 }
 
 function DashboardShell() {
-  const [filters, setFilters] = useStoredWorkbookFilters();
   const [activeTab, setActiveTab] = useState<DashboardTabId>("productionControlTab");
   const [preferredDataEntryType, setPreferredDataEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
-  const snapshotArgs = useMemo(() => ({
-    operatorId: filters.operatorId || undefined,
-    machineType: filters.machineType || undefined,
-    machine: filters.machine || undefined,
-    month: filters.month || undefined,
-    startDate: filters.startDate || undefined,
-    endDate: filters.endDate || undefined,
-  }), [filters]);
-  const dashboardPayload = useQuery(api.dashboard.snapshot, snapshotArgs);
+  const dashboardPayload = useQuery(api.dashboard.snapshot, {});
   const saveRouteSelection = useMutation(api.dashboard.saveRouteSelection);
   const savePlannerPriority = useMutation(api.dashboard.savePlannerPriority);
   const saveMachineConstraint = useMutation(api.dashboard.saveMachineConstraint);
@@ -434,6 +319,10 @@ function DashboardShell() {
         tone: "default",
         message,
       });
+      const returnTab = str(body.returnTab) as DashboardTabId;
+      if (returnTab && navItems.some((item) => item.id === returnTab)) {
+        setActiveTab(returnTab);
+      }
     } catch (err) {
       setActionStatus({
         tone: "destructive",
@@ -460,14 +349,6 @@ function DashboardShell() {
     () => toDashboardViewModel(dashboardPayload),
     [dashboardPayload],
   );
-
-  function clearDates() {
-    setFilters((current) => ({ ...current, month: "", startDate: "", endDate: "" }));
-  }
-
-  function clearOperator() {
-    setFilters((current) => ({ ...current, operatorId: "" }));
-  }
 
   return (
     <SidebarProvider
@@ -529,13 +410,6 @@ function DashboardShell() {
           <HeaderActions />
         </header>
         <main className="@container/main flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
-          <DashboardFiltersBar
-            payload={payload}
-            filters={filters}
-            setFilters={setFilters}
-            clearDates={clearDates}
-            clearOperator={clearOperator}
-          />
           {actionStatus ? (
             <Badge variant={actionStatus.tone === "destructive" ? "destructive" : "outline"} className="w-fit">
               {actionStatus.message}
@@ -732,7 +606,7 @@ function DashboardContent({
   }
 
   if (activeTab === "machineDetailTab") {
-    return <MachineDetailPanel productionControl={productionControl} view={view} />;
+    return <MachineDetailPanel productionControl={productionControl} />;
   }
 
   if (activeTab === "masterGapsTab") {
@@ -744,7 +618,7 @@ function DashboardContent({
   }
 
   if (activeTab === "planningControlTab") {
-    return <PlanningControlPanel payload={payload} productionControl={productionControl} submitAction={submitAction} />;
+    return <PlanningControlPanel payload={payload} productionControl={productionControl} submitAction={submitAction} openDataEntry={openDataEntry} />;
   }
 
   if (activeTab === "shopFloorTab") {
@@ -752,125 +626,6 @@ function DashboardContent({
   }
 
   return <ProductionControlPanel productionControl={productionControl} view={view} submitAction={submitAction} />;
-}
-
-function DashboardFiltersBar({
-  payload,
-  filters,
-  setFilters,
-  clearDates,
-  clearOperator,
-}: {
-  payload: DashboardPayload;
-  filters: LegacyFilters;
-  setFilters: React.Dispatch<React.SetStateAction<LegacyFilters>>;
-  clearDates: () => void;
-  clearOperator: () => void;
-}) {
-  const sourceFilters = asRecord(payload.filters);
-  const operators = asArray(sourceFilters.operators);
-  const machineTypes = stringArray(sourceFilters.machineTypes);
-  const machines = stringArray(sourceFilters.activeMachines).length
-    ? stringArray(sourceFilters.activeMachines)
-    : stringArray(sourceFilters.machines);
-  const months = asArray(sourceFilters.months);
-
-  return (
-    <Card>
-      <CardHeader className="gap-1">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Search className="size-4" />
-          Workbook filters
-        </CardTitle>
-        <CardDescription>Same filter contract as the legacy dashboard: operator, machine, month, and date range.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <Field label="Operator">
-          <Input
-            list="operator-options"
-            placeholder="OP-1"
-            value={filters.operatorId}
-            onChange={(event) => setFilters((current) => ({ ...current, operatorId: event.target.value }))}
-          />
-          <datalist id="operator-options">
-            {operators.map((operator) => {
-              const record = asRecord(operator);
-              const id = str(record.operatorId);
-              return <option key={id || str(record.name)} value={id} label={str(record.name)} />;
-            })}
-          </datalist>
-        </Field>
-        <Field label="Machine type">
-          <select
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={filters.machineType}
-            onChange={(event) => setFilters((current) => ({ ...current, machineType: event.target.value, machine: "" }))}
-          >
-            <option value="">All types</option>
-            {machineTypes.map((machineType) => (
-              <option key={machineType} value={machineType}>
-                {machineType}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Machine no.">
-          <select
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={filters.machine}
-            onChange={(event) => setFilters((current) => ({ ...current, machine: event.target.value }))}
-          >
-            <option value="">All machines</option>
-            {machines.map((machine) => (
-              <option key={machine} value={machine}>
-                {machine}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Month">
-          <select
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={filters.month}
-            onChange={(event) => setFilters((current) => ({ ...current, month: event.target.value }))}
-          >
-            <option value="">All months</option>
-            {months.map((month) => {
-              const record = asRecord(month);
-              const key = str(record.key);
-              return (
-                <option key={key} value={key}>
-                  {str(record.label) || key}
-                </option>
-              );
-            })}
-          </select>
-        </Field>
-        <Field label="From">
-          <Input
-            type="date"
-            value={filters.startDate}
-            onChange={(event) => setFilters((current) => ({ ...current, startDate: event.target.value }))}
-          />
-        </Field>
-        <Field label="To">
-          <Input
-            type="date"
-            value={filters.endDate}
-            onChange={(event) => setFilters((current) => ({ ...current, endDate: event.target.value }))}
-          />
-        </Field>
-        <div className="flex gap-2 md:col-span-2 xl:col-span-6">
-          <Button type="button" variant="outline" size="sm" onClick={clearOperator}>
-            All operators
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={clearDates}>
-            Clear dates
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
 }
 
 function ProductionControlPanel({
@@ -887,15 +642,9 @@ function ProductionControlPanel({
       <OverviewMetrics view={view} />
       <PlannerDecisionConsole submitAction={submitAction} />
       <ActionLogTable rows={asArray(productionControl.plannerActionLog)} />
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <DataRowsCard title="Route selections" rows={asArray(productionControl.routeOptions)} empty="No route selections yet" />
+      <section className="grid gap-4">
         <DataRowsCard title="Machine issues" rows={asArray(productionControl.machineConstraintRows)} empty="No machine constraints yet" />
       </section>
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <DataRowsCard title="Work-order readiness" rows={asArray(productionControl.workOrders)} empty="No work-order readiness rows returned" />
-        <DataRowsCard title="Dispatch loss" rows={asArray(productionControl.dispatchLoss)} empty="No dispatch loss rows returned" />
-      </section>
-      <DataRowsCard title="Combined job cards" rows={asArray(productionControl.combinedBatches)} empty="No combined job-card rows returned" />
     </>
   );
 }
@@ -917,7 +666,7 @@ function OverviewMetrics({ view }: { view: ReturnType<typeof toDashboardViewMode
           </Card>
         ))}
       </section>
-      <section className="grid gap-4 @5xl/main:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.55fr)]">
+      <section className="grid gap-4">
         <Card>
           <CardHeader>
             <CardTitle>Production trend</CardTitle>
@@ -925,18 +674,6 @@ function OverviewMetrics({ view }: { view: ReturnType<typeof toDashboardViewMode
           </CardHeader>
           <CardContent>
             <TrendChart points={view.trend} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Planning focus</CardTitle>
-            <CardDescription>Highest-impact records from the current workbook</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <FocusRow icon={Factory} label="Machines tracked" value={view.machines.length} />
-            <FocusRow icon={UserRoundCheck} label="Operators tracked" value={view.operators.length} />
-            <FocusRow icon={AlertTriangle} label="Rejection buckets" value={view.rejections.length} />
-            <FocusRow icon={CalendarClock} label="Downtime buckets" value={view.downtime.length} />
           </CardContent>
         </Card>
       </section>
@@ -1032,10 +769,17 @@ function JobCardsPanel({
 }) {
   return (
     <section className="grid gap-4">
+      <JobCardTileBoard
+        rows={asArray(productionControl.jobCardStatusTiles)}
+        plannedRows={asArray(productionControl.machinePlanDetailRows)}
+        machineRows={asArray(productionControl.machinePlanningRows)}
+        actionNeededCount={asArray(productionControl.allWorkOrderGaps).length}
+        openMasterReadiness={openMasterReadiness}
+      />
       <Card>
         <CardHeader>
-          <CardTitle>Job card status</CardTitle>
-          <CardDescription>Selected routes, running setup completion, and dispatch approval use the same endpoint contract as legacy.</CardDescription>
+          <CardTitle>Job card actions</CardTitle>
+          <CardDescription>Setup completion and dispatch approval actions.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 @5xl/main:grid-cols-2">
           <LegacyActionForm
@@ -1064,46 +808,24 @@ function JobCardsPanel({
           />
         </CardContent>
       </Card>
-      <JobCardTileBoard
-        rows={asArray(productionControl.jobCardStatusTiles)}
-        plannedRows={asArray(productionControl.machinePlanDetailRows)}
-        machineRows={asArray(productionControl.machinePlanningRows)}
-        actionNeededCount={asArray(productionControl.allWorkOrderGaps).length}
-        openMasterReadiness={openMasterReadiness}
-      />
-      <DataRowsCard title="Running parts" rows={asArray(productionControl.runningParts)} empty="No running job cards returned" />
-      <DataRowsCard title="Dispatch handoff" rows={asArray(productionControl.dispatchHandoff)} empty="No dispatch handoff rows returned" />
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <DataRowsCard
-          title="Setup completions"
-          rows={asArray(productionControl.jobCardSetupProgressRows).length ? asArray(productionControl.jobCardSetupProgressRows) : asArray(productionControl.jobCardSetupProgress)}
-          empty="No completions saved yet"
-        />
-        <DataRowsCard title="Dispatch approvals" rows={asArray(productionControl.dispatchRows)} empty="No dispatch approvals saved yet" />
-      </section>
     </section>
   );
 }
 
 function MachineDetailPanel({
   productionControl,
-  view,
 }: {
   productionControl: DashboardPayload;
-  view: ReturnType<typeof toDashboardViewModel>;
 }) {
   return (
     <>
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <RankedTable title="Machine performance" rows={view.machines} valueLabel="Output" />
-        <RankedTable title="Operator performance" rows={view.operators} valueLabel="Output" />
-      </section>
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <DataRowsCard title="Part-specific machine switches" rows={asArray(productionControl.planOverrideRows)} empty="No plan switches saved yet" />
+      <MachinePlanningBoard
+        rows={asArray(productionControl.machinePlanningRows)}
+        plannedRows={asArray(productionControl.machinePlanDetailRows)}
+      />
+      <section className="grid gap-4">
         <DataRowsCard title="Machine unavailable / breakdown" rows={asArray(productionControl.machineConstraintRows)} empty="No machine issues saved yet" />
       </section>
-      <MachinePlanningBoard rows={asArray(productionControl.machinePlanningRows)} plannedRows={asArray(productionControl.machinePlanDetailRows)} />
-      <DataRowsCard title="Machine setup plan" rows={asArray(productionControl.machinePlanDetailRows)} empty="No machine setup plan rows returned" />
     </>
   );
 }
@@ -1362,6 +1084,32 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
   };
 }
 
+function setupChecklistEditDefaults(row: DashboardPayload) {
+  const defaults = {
+    __entryId: row._id,
+    jcNo: row.jcNo,
+    setupDate: row.setupDateValue || row.setupDate,
+    machineNo: row.machine,
+    partNo: row.partCode,
+    optionNumber: row.optionNumber || row.plannedOptionNumber,
+    setupNo: row.setupNo,
+    shift: row.shift,
+    setterCode: row.setterCode,
+    helperCode: row.helperCode,
+    settingStartTime: row.settingStartTime,
+    settingEndTime: row.settingEndTime,
+    qcController: row.qcController,
+    rimmerAvailability: row.rimmerAvailability,
+    modhiyu: row.modhiyu,
+    remarks: row.remarks,
+    __returnTab: "planningControlTab",
+  };
+  return {
+    ...defaults,
+    __entryKey: dataEntryKey("setup_checklist", defaults),
+  };
+}
+
 function DataEntryPanel({
   payload,
   submitAction,
@@ -1471,7 +1219,13 @@ function DataEntryForm({
           fields={spec.fields}
           defaults={defaults}
           buttonLabel={`Save ${spec.title}`}
-          onSubmit={(body) => void submitAction("data-entry", { entryType: spec.entryType, payload: body })}
+          onSubmit={(body) => void submitAction("data-entry", {
+            entryType: spec.entryType,
+            id: defaults.__entryId,
+            key: defaults.__entryKey,
+            returnTab: defaults.__returnTab,
+            payload: body,
+          })}
         />
       </CardContent>
     </Card>
@@ -1482,10 +1236,12 @@ function PlanningControlPanel({
   payload,
   productionControl,
   submitAction,
+  openDataEntry,
 }: {
   payload: DashboardPayload;
   productionControl: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
 }) {
   const setupAnalytics = asRecord(payload.setupAnalytics);
   const toolFixtureNumbers = asRecord(payload.toolFixtureNumbers);
@@ -1493,6 +1249,7 @@ function PlanningControlPanel({
 
   return (
     <section className="grid gap-4">
+      <SetupChecklistPlannerReview rows={asArray(productionControl.setupChecklistMismatchRows)} openDataEntry={openDataEntry} />
       <Card>
         <CardHeader>
           <CardTitle>Route selection</CardTitle>
@@ -1535,6 +1292,77 @@ function PlanningControlPanel({
         <DataRowsCard title="Setup analytics" rows={asArray(asRecord(payload.setupAnalytics).rows)} empty="No setup analytics rows returned" />
       </section>
     </section>
+  );
+}
+
+function SetupChecklistPlannerReview({
+  rows,
+  openDataEntry,
+}: {
+  rows: DashboardPayload[];
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Setup checklist planner review</CardTitle>
+        <CardDescription>
+          Checklist entries that do not match planned setup by JC, part, option, setup, and machine. {formatNumber(rows.length)} row{rows.length === 1 ? "" : "s"} need review.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {rows.length ? (
+          <div className="overflow-hidden rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Checklist entry</TableHead>
+                  <TableHead>Issue</TableHead>
+                  <TableHead>Closest planned setup</TableHead>
+                  <TableHead className="w-32">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row, index) => (
+                  <TableRow key={`${displayValue(row._id)}-${index}`}>
+                    <TableCell>
+                      <div className="grid gap-1">
+                        <div className="font-medium">{displayValue(row.jcNo)} / {displayValue(row.partCode)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Option {displayValue(row.optionNumber)} | Setup {displayValue(row.setupNo)} | Machine {displayValue(row.machine)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{displayValue(row.setupDate)} | Setter {displayValue(row.setterCode)}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid gap-1">
+                        <StatusBadge value={row.status} />
+                        <div className="text-xs text-muted-foreground">{displayValue(row.nextAction)}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {displayValue(row.plannedJobCard)} / {displayValue(row.plannedPartCode)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Option {displayValue(row.plannedOptionNumber)} | Setup {displayValue(row.plannedSetupNo)} | Machine {displayValue(row.plannedMachine)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("setup_checklist", setupChecklistEditDefaults(row))}>
+                        Edit
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <EmptyRowsMessage>No setup checklist mismatches found</EmptyRowsMessage>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -2271,6 +2099,8 @@ function JobCardTileBoard({
   const [query, setQuery] = useState("");
   const [searchField, setSearchField] = useState("all");
   const [trackingState, setTrackingState] = useState("all");
+  const [rmStatusFilter, setRmStatusFilter] = useState("all");
+  const [productionStatusFilter, setProductionStatusFilter] = useState("all");
   const [jobCardFilter, setJobCardFilter] = useState("");
   const [itemCodeFilter, setItemCodeFilter] = useState("");
   const [machineFilter, setMachineFilter] = useState("");
@@ -2285,9 +2115,11 @@ function JobCardTileBoard({
       typedFilterMatches(jobCardNumber(row), jobCardFilter) &&
       typedFilterMatches(itemCode(row), itemCodeFilter) &&
       jobCardMatchesMachine(row, machineFilter, plannedByJobCard, plannedByPart) &&
-      (trackingState === "all" || jobCardTrackingState(row) === trackingState),
+      (trackingState === "all" || jobCardTrackingState(row) === trackingState) &&
+      (rmStatusFilter === "all" || (rmStatusFilter === "received" ? displayValue(row.rmStatus) === "Received" : displayValue(row.rmStatus) !== "Received")) &&
+      (productionStatusFilter === "all" || (productionStatusFilter === "in-production" ? jobCardHasProduction(row) : !jobCardHasProduction(row))),
     ),
-    [itemCodeFilter, jobCardFilter, machineFilter, plannedByJobCard, plannedByPart, query, rows, searchField, trackingState],
+    [itemCodeFilter, jobCardFilter, machineFilter, plannedByJobCard, plannedByPart, productionStatusFilter, query, rmStatusFilter, rows, searchField, trackingState],
   );
   const needsAction = actionNeededCount;
   const pendingRm = rows.filter((row) => displayValue(row.rmStatus) !== "Received").length;
@@ -2298,6 +2130,8 @@ function JobCardTileBoard({
     setQuery("");
     setSearchField("all");
     setTrackingState("all");
+    setRmStatusFilter("all");
+    setProductionStatusFilter("all");
     setJobCardFilter("");
     setItemCodeFilter("");
     setMachineFilter("");
@@ -2348,6 +2182,28 @@ function JobCardTileBoard({
                 ["Pending", "Pending"],
               ]}
             />
+            <div className="grid gap-3 @4xl/main:grid-cols-2">
+              <FilterSelect
+                label="RM status"
+                value={rmStatusFilter}
+                onChange={setRmStatusFilter}
+                options={[
+                  ["all", "All RM status"],
+                  ["received", "RM received"],
+                  ["waiting", "Waiting RM"],
+                ]}
+              />
+              <FilterSelect
+                label="Production status"
+                value={productionStatusFilter}
+                onChange={setProductionStatusFilter}
+                options={[
+                  ["all", "All production status"],
+                  ["in-production", "In production"],
+                  ["not-in-production", "Not in production"],
+                ]}
+              />
+            </div>
             <ExcelStyleFilters
               filters={[
                 {
@@ -2384,7 +2240,11 @@ function JobCardTileBoard({
             {filteredRows.length ? (
               <div className="grid max-h-[42rem] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 @7xl/main:grid-cols-3">
                 {filteredRows.map((row, index) => (
-                  <JobCardTile key={`${str(row.jcNo || row.JobCardNo || row.jobCard) || "job-card"}-${index}`} row={row} />
+                  <JobCardTile
+                    key={`${str(row.jcNo || row.JobCardNo || row.jobCard) || "job-card"}-${index}`}
+                    row={row}
+                    setupRows={plannedByJobCard.get(machineKey(jobCardNumber(row))) ?? plannedByPart.get(machineKey(itemCode(row))) ?? []}
+                  />
                 ))}
               </div>
             ) : (
@@ -2399,12 +2259,13 @@ function JobCardTileBoard({
   );
 }
 
-function JobCardTile({ row }: { row: DashboardPayload }) {
+function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: DashboardPayload[] }) {
   const jcNo = displayValue(row.jcNo || row.JobCardNo || row.jobCard);
   const partCode = displayValue(row.partCode || row["PART CODE"] || row.itemCode);
   const option = displayValue(row.optionNumber || row.selectedOption || row.option);
   const blocker = displayValue(row.planningBlocker || row.nextAction || row.routeStatus);
   const trackingState = jobCardTrackingState(row);
+  const schedule = jobCardScheduleSummary(row, setupRows);
 
   return (
     <article className="grid gap-3 rounded-lg border bg-background p-3">
@@ -2416,10 +2277,15 @@ function JobCardTile({ row }: { row: DashboardPayload }) {
         <div className="flex flex-wrap justify-end gap-1.5">
           <StatusBadge value={trackingState} />
           <StatusBadge value={row.rmStatus} />
-          <StatusBadge value={row.dispatchStatus} />
         </div>
       </div>
       <TileField label="Description" value={row.description || row.DESCRIPTION} />
+      <div className="grid gap-2 rounded-md border bg-muted/20 p-2 sm:grid-cols-2">
+        <TileField label="Planned production start" value={schedule.plannedStart} />
+        <TileField label="Planned production end" value={schedule.plannedEnd} />
+        <TileField label="Actual production start" value={schedule.actualStart} />
+        <TileField label="Actual production end" value={schedule.actualEnd} />
+      </div>
       <div className="grid gap-2 sm:grid-cols-2">
         <TileField label="FG PO" value={row.fgPoNo || row["FG PO NO."]} />
         <TileField label="Order pcs" value={row.orderPcs || row["ORD. PCS."]} numeric />
@@ -2432,12 +2298,41 @@ function JobCardTile({ row }: { row: DashboardPayload }) {
         <TileField label="Rejected" value={row.rawRejectQty} numeric />
         <TileField label="Raw rows" value={row.rawRows} numeric />
       </div>
+      {setupRows.length ? (
+        <div className="grid gap-2">
+          <div className="text-[11px] font-medium uppercase text-muted-foreground">Setup jobs</div>
+          <div className="grid max-h-48 gap-2 overflow-y-auto pr-1">
+            {setupRows.map((setup, index) => (
+              <div key={`${displayValue(setup.setupNo)}-${displayValue(setup.machine)}-${index}`} className="rounded-md border bg-muted/10 p-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-medium">Setup {displayValue(setup.setupNo)} · {displayValue(setup.machine)}</div>
+                  <StatusBadge value={setup.planVsActual || setup.runningStatus} />
+                </div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <TileField label="Setup planned date" value={setup.setupPlannedDate || setup.plannedDate} />
+                  <TileField label="Setup completion date" value={setup.setupCompletionDate || setup.completionDate} />
+                  <TileField label="Planned production start" value={setup.plannedProductionStartDate} />
+                  <TileField label="Planned production end" value={setup.plannedProductionEndDate} />
+                  <TileField label="Actual production start" value={setup.actualProductionStartDate} />
+                  <TileField label="Actual production end" value={setup.actualProductionEndDate} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <TileField label="Planning action" value={blocker} important />
     </article>
   );
 }
 
-function MachinePlanningBoard({ rows, plannedRows }: { rows: DashboardPayload[]; plannedRows: DashboardPayload[] }) {
+function MachinePlanningBoard({
+  rows,
+  plannedRows,
+}: {
+  rows: DashboardPayload[];
+  plannedRows: DashboardPayload[];
+}) {
   const [query, setQuery] = useState("");
   const [searchField, setSearchField] = useState("all");
   const boardRows = useMemo(() => machineBoardRows(rows, plannedRows), [plannedRows, rows]);
@@ -2556,7 +2451,7 @@ function MachinePlanningBoard({ rows, plannedRows }: { rows: DashboardPayload[];
                   <MachinePlanningTile
                     key={`${machineValue(row, "machine")}-${index}`}
                     row={row}
-                    plannedCount={plannedByMachine.get(machineKey(machineValue(row, "machine")))?.length ?? 0}
+                    plannedRows={plannedByMachine.get(machineKey(machineValue(row, "machine"))) ?? []}
                     isRunning={machineIsRunning(machineValue(row, "machine"), plannedByMachine)}
                     selected={machineKey(selectedMachine) === machineKey(machineValue(row, "machine"))}
                     onSelect={() => setSelectedMachine(machineValue(row, "machine"))}
@@ -2578,13 +2473,13 @@ function MachinePlanningBoard({ rows, plannedRows }: { rows: DashboardPayload[];
 
 function MachinePlanningTile({
   row,
-  plannedCount,
+  plannedRows,
   isRunning,
   selected,
   onSelect,
 }: {
   row: DashboardPayload;
-  plannedCount: number;
+  plannedRows: DashboardPayload[];
   isRunning: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -2592,7 +2487,10 @@ function MachinePlanningTile({
   const machine = machineValue(row, "machine");
   const machineType = machineValue(row, "machineType");
   const status = machineMasterStatusText(row);
-  const planningStatus = plannedCount > 0 ? "Planned" : "No plan";
+  const plannedCount = plannedRows.length;
+  const planningStatus = machinePlanningStatus(plannedRows);
+  const focusSetup = machineTileFocusSetup(plannedRows);
+  const focusIsComplete = str(focusSetup?.runningStatus).toLowerCase() === "setup complete" || displayValue(focusSetup?.completionDate) !== "-";
 
   return (
     <button
@@ -2607,7 +2505,7 @@ function MachinePlanningTile({
         </div>
         <div className="flex flex-wrap justify-end gap-1.5">
           <MachineStateBadge label="Run" value={isRunning ? "Running" : "Not running"} tone={isRunning ? "success" : "neutral"} />
-          <MachineStateBadge label="Plan" value={planningStatus} tone={plannedCount > 0 ? "planning" : "neutral"} />
+          <MachineStateBadge label="Plan" value={planningStatus} tone={machinePlanningTone(planningStatus)} />
           <MachineStateBadge label="Master" value={status} tone={status === "Active" ? "success" : status === "Inactive" ? "danger" : "warning"} />
         </div>
       </div>
@@ -2617,11 +2515,165 @@ function MachinePlanningTile({
         <TileField label="Operator" value={row.operator || row.operatorName || row["OPERATOR NAME"]} />
         <TileField label="Planned setups" value={plannedCount} numeric />
         <TileField label="Priority" value={row.priority || row.PRIORITY} />
-        <TileField label="Current job card" value={row.jcNo || row.jobCard || row.JobCardNo} />
-        <TileField label="Current part" value={row.partCode || row["PART CODE"] || row.itemCode} />
+        <TileField label={focusIsComplete ? "Current job card" : "Next job card"} value={focusSetup?.jcNo || row.jcNo || row.jobCard || row.JobCardNo} />
+        <TileField label={focusIsComplete ? "Current part" : "Next part to setup"} value={focusSetup?.partCode || row.partCode || row["PART CODE"] || row.itemCode} />
+        <TileField label="Setup" value={focusSetup ? `${displayValue(focusSetup.setupNo)} / Option ${displayValue(focusSetup.optionNumber)}` : "-"} />
+        <TileField label={focusIsComplete ? "Setup completion date" : "Setup planned date"} value={focusIsComplete ? focusSetup?.setupCompletionDate || focusSetup?.completionDate : focusSetup?.setupPlannedDate || focusSetup?.plannedDate} />
         <TileField label="Remarks" value={row.remark || row.remarks || row.REMARKS} important />
       </div>
     </button>
+  );
+}
+
+function SetupChecklistHistory({ rows }: { rows: DashboardPayload[] }) {
+  const [query, setQuery] = useState("");
+  const [machineFilter, setMachineFilter] = useState("");
+  const [jobCardFilter, setJobCardFilter] = useState("");
+  const [optionFilter, setOptionFilter] = useState("");
+  const [setterFilter, setSetterFilter] = useState("");
+  const [shiftFilter, setShiftFilter] = useState("");
+  const machineOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.machine)).filter((value) => value !== "-")), [rows]);
+  const jobCardOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.jcNo)).filter((value) => value !== "-")), [rows]);
+  const optionOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.optionNumber)).filter((value) => value !== "-")), [rows]);
+  const setterOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.setterCode)).filter((value) => value !== "-")), [rows]);
+  const shiftOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.shift)).filter((value) => value !== "-")), [rows]);
+  const filteredRows = useMemo(() => rows.filter((row) =>
+    setupHistoryMatchesQuery(row, query) &&
+    typedFilterMatches(displayValue(row.machine), machineFilter) &&
+    typedFilterMatches(displayValue(row.jcNo), jobCardFilter) &&
+    typedFilterMatches(displayValue(row.optionNumber), optionFilter) &&
+    typedFilterMatches(displayValue(row.setterCode), setterFilter) &&
+    typedFilterMatches(displayValue(row.shift), shiftFilter),
+  ), [jobCardFilter, machineFilter, optionFilter, query, rows, setterFilter, shiftFilter]);
+  const totalMinutes = filteredRows.reduce((total, row) => total + numValue(row, "settingMinutes"), 0);
+  const machines = uniqueValues(filteredRows.map((row) => displayValue(row.machine)).filter((value) => value !== "-")).length;
+  const setters = uniqueValues(filteredRows.map((row) => displayValue(row.setterCode)).filter((value) => value !== "-")).length;
+
+  function clearFilters() {
+    setQuery("");
+    setMachineFilter("");
+    setJobCardFilter("");
+    setOptionFilter("");
+    setSetterFilter("");
+    setShiftFilter("");
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Setup checklist history</CardTitle>
+        <CardDescription>{rows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(rows.length)} setup checklist entries shown` : "No setup checklist entries saved yet"}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {rows.length ? (
+          <>
+            <TrackingSummary
+              items={[
+                ["Setup entries", formatNumber(filteredRows.length)],
+                ["Machines", formatNumber(machines)],
+                ["Setters", formatNumber(setters)],
+                ["Setting time", durationLabel(totalMinutes)],
+                ["Visible", formatNumber(filteredRows.length)],
+              ]}
+            />
+            <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              <span>Search</span>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input className="pl-9" value={query} placeholder="Search job card, machine, part, setup, setter, remark..." onChange={(event) => setQuery(event.target.value)} />
+              </div>
+            </Label>
+            <ExcelStyleFilters
+              filters={[
+                {
+                  id: "setup-history-machine",
+                  label: "Machine no.",
+                  value: machineFilter,
+                  placeholder: "Type or select machine",
+                  options: machineOptions,
+                  onChange: setMachineFilter,
+                },
+                {
+                  id: "setup-history-job-card",
+                  label: "Job card no.",
+                  value: jobCardFilter,
+                  placeholder: "Type or select job card",
+                  options: jobCardOptions,
+                  onChange: setJobCardFilter,
+                },
+                {
+                  id: "setup-history-option",
+                  label: "Option no.",
+                  value: optionFilter,
+                  placeholder: "Type or select option",
+                  options: optionOptions,
+                  onChange: setOptionFilter,
+                },
+                {
+                  id: "setup-history-setter",
+                  label: "Setter",
+                  value: setterFilter,
+                  placeholder: "Type or select setter",
+                  options: setterOptions,
+                  onChange: setSetterFilter,
+                },
+                {
+                  id: "setup-history-shift",
+                  label: "Shift",
+                  value: shiftFilter,
+                  placeholder: "Type or select shift",
+                  options: shiftOptions,
+                  onChange: setShiftFilter,
+                },
+              ]}
+            />
+            <div>
+              <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            </div>
+            {filteredRows.length ? (
+              <div className="grid max-h-[34rem] gap-3 overflow-y-auto pr-1">
+                {filteredRows.map((row, index) => (
+                  <article key={`${displayValue(row.jcNo)}-${displayValue(row.machine)}-${displayValue(row.setupNo)}-${index}`} className="grid gap-3 rounded-lg border bg-background p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="break-words text-sm font-semibold">{displayValue(row.jcNo)}</div>
+                        <div className="break-words text-xs text-muted-foreground">{displayValue(row.partCode)}</div>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-1.5">
+                        <StatusBadge value={row.status} />
+                        <MachineStateBadge label="Machine" value={displayValue(row.machine)} tone="planning" />
+                      </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 @6xl/main:grid-cols-4">
+                      <TileField label="Setup date" value={row.setupDate} />
+                      <TileField label="Option" value={row.optionNumber} />
+                      <TileField label="Setup no." value={row.setupNo} />
+                      <TileField label="Shift" value={row.shift} />
+                      <TileField label="Setting time" value={durationLabel(numValue(row, "settingMinutes"))} />
+                      <TileField label="Setter" value={row.setterCode} />
+                      <TileField label="Helper" value={row.helperCode} />
+                      <TileField label="QC" value={row.qcController} />
+                      <TileField label="Start / end" value={`${displayValue(row.settingStartTime)} / ${displayValue(row.settingEndTime)}`} />
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <TileField label="Rimmer" value={row.rimmerAvailability} />
+                      <TileField label="Modhiyu" value={row.modhiyu} />
+                      <TileField label="Remarks" value={row.remarks} important />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <EmptyRowsMessage>No setup checklist entries match the current filters</EmptyRowsMessage>
+            )}
+          </>
+        ) : (
+          <EmptyRowsMessage>No setup checklist entries saved yet</EmptyRowsMessage>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -2656,6 +2708,13 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
                   <TileField label="Setup" value={`${displayValue(row.setupNo)} ${displayValue(row.setupName) !== "-" ? displayValue(row.setupName) : ""}`} />
                   <TileField label="Order pcs" value={row.orderPcs} numeric />
                   <TileField label="Actual / output" value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`} />
+                  <TileField label="Setup planned date" value={row.setupPlannedDate || row.plannedDate} />
+                  <TileField label="Setup completion date" value={row.setupCompletionDate || row.completionDate} />
+                  <TileField label="Planned production start" value={row.plannedProductionStartDate} />
+                  <TileField label="Planned production end" value={row.plannedProductionEndDate} />
+                  <TileField label="Actual production start" value={row.actualProductionStartDate} />
+                  <TileField label="Actual production end" value={row.actualProductionEndDate} />
+                  <TileField label="Plan vs actual" value={row.planVsActual} />
                   <TileField label="Cycle" value={row.cycleStatus} />
                   <TileField label="Tooling" value={row.toolingStatus} />
                 </div>
@@ -2845,9 +2904,11 @@ function StatusBadge({ value }: { value: unknown }) {
 function statusBadgeToneClass(normalized: string) {
   if (normalized === "-") return "border-slate-300 bg-slate-50 text-slate-700";
   if (normalized.includes("in production") || normalized.includes("running")) return "border-sky-300 bg-sky-50 text-sky-800";
-  if (normalized.includes("ready") || normalized.includes("received") || normalized.includes("dispatch")) return "border-emerald-300 bg-emerald-50 text-emerald-800";
+  if (normalized.includes("ready") || normalized.includes("received") || normalized.includes("dispatch") || normalized.includes("setup complete") || normalized.includes("on time")) return "border-emerald-300 bg-emerald-50 text-emerald-800";
+  if (normalized.includes("early")) return "border-sky-300 bg-sky-50 text-sky-800";
   if (normalized.includes("waiting") || normalized.includes("pending")) return "border-amber-300 bg-amber-50 text-amber-800";
   if (
+    normalized.includes("delayed") ||
     normalized.includes("need") ||
     normalized.includes("action") ||
     normalized.includes("missing") ||
@@ -2993,7 +3054,7 @@ type DashboardActionMutations = {
     downtimeMinutes?: number;
     downtimeReason?: string;
   }) => Promise<unknown>;
-  saveDataEntry: (args: { entryType: string; key?: string; payload: unknown }) => Promise<unknown>;
+  saveDataEntry: (args: { id?: Id<"dataEntries">; entryType: string; key?: string; payload: unknown }) => Promise<unknown>;
 };
 
 async function runDashboardAction(
@@ -3076,8 +3137,14 @@ async function runDashboardAction(
   if (path === "data-entry") {
     const entryType = text(body.entryType);
     const payload = asRecord(body.payload);
+    if (entryType === "software_raw") {
+      await mutations.saveProductionEntry(toProductionEntry(payload));
+      return "Saved production row.";
+    }
+    const id = optionalText(body.id);
+    const key = optionalText(body.key) || dataEntryKey(entryType, payload);
 
-    await mutations.saveDataEntry({ entryType, payload });
+    await mutations.saveDataEntry({ id: id ? id as Id<"dataEntries"> : undefined, entryType, key: key || undefined, payload });
     return "Saved to Convex.";
   }
 
@@ -3343,26 +3410,6 @@ function DashboardSkeleton() {
   );
 }
 
-function FocusRow({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Factory;
-  label: string;
-  value: number;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border p-3">
-      <div className="grid size-9 place-items-center rounded-lg bg-muted">
-        <Icon className="size-4" />
-      </div>
-      <span className="flex-1 text-sm text-muted-foreground">{label}</span>
-      <span className="font-medium tabular-nums">{formatNumber(value)}</span>
-    </div>
-  );
-}
-
 function StatusIcon({ tone }: { tone: "default" | "good" | "warning" }) {
   if (tone === "good") return <CheckCircle2 className="size-4 text-green-600" />;
   if (tone === "warning") return <AlertTriangle className="size-4 text-amber-600" />;
@@ -3459,7 +3506,7 @@ function jobCardTrackingState(row: DashboardPayload) {
     return "Needs action";
   }
 
-  if (Number(row.rawRows) > 0 || Number(row.rawOutputQty) > 0 || Number(row.rawActualQty) > 0) {
+  if (jobCardHasProduction(row)) {
     return "In production";
   }
 
@@ -3468,6 +3515,10 @@ function jobCardTrackingState(row: DashboardPayload) {
   }
 
   return "Pending";
+}
+
+function jobCardHasProduction(row: DashboardPayload) {
+  return Number(row.rawRows) > 0 || Number(row.rawOutputQty) > 0 || Number(row.rawActualQty) > 0;
 }
 
 function rowMatchesFieldQuery(row: DashboardPayload, query: string, field: string) {
@@ -3582,8 +3633,96 @@ function machineIsRunning(machine: string, plannedByMachine: Map<string, Dashboa
   return rows.some((row) => str(row.runningStatus).toLowerCase() === "running" || Number(row.rawRows) > 0 || Number(row.rawOutputQty) > 0 || Number(row.rawActualQty) > 0);
 }
 
+function machinePlanningStatus(rows: DashboardPayload[]) {
+  if (!rows.length) return "No plan";
+  if (rows.some((row) => str(row.runningStatus).toLowerCase() === "setup complete")) return "Setup complete";
+  return "Planned";
+}
+
+function machineTileFocusSetup(rows: DashboardPayload[]) {
+  const completed = rows.filter((row) => str(row.runningStatus).toLowerCase() === "setup complete" || displayValue(row.completionDate) !== "-");
+  if (completed.length) return completed.sort((a, b) =>
+    displayValue(b.completionDate).localeCompare(displayValue(a.completionDate)) ||
+    displayValue(b.plannedDate).localeCompare(displayValue(a.plannedDate)),
+  )[0];
+  const pending = rows.filter((row) => displayValue(row.completionDate) === "-");
+  return (pending.length ? pending : rows).sort((a, b) =>
+    displayValue(a.plannedDate).localeCompare(displayValue(b.plannedDate)) ||
+    displayValue(a.setupNo).localeCompare(displayValue(b.setupNo), undefined, { numeric: true }),
+  )[0];
+}
+
+function machinePlanningTone(status: string): "success" | "planning" | "warning" | "danger" | "neutral" {
+  if (status === "Setup complete") return "success";
+  if (status === "Planned") return "planning";
+  return "neutral";
+}
+
+function jobCardScheduleSummary(row: DashboardPayload, setupRows: DashboardPayload[]) {
+  return {
+    plannedStart: firstDateLabel(setupRows, "plannedProductionStartDate"),
+    plannedEnd: lastDateLabel(setupRows, "plannedProductionEndDate") || displayValue(row.deliveryDate),
+    actualStart: firstDateLabel(setupRows, "actualProductionStartDate"),
+    actualEnd: lastDateLabel(setupRows, "actualProductionEndDate") || "-",
+  };
+}
+
+function firstDateLabel(rows: DashboardPayload[], key: string) {
+  return sortedDateLabels(rows, key)[0] ?? "-";
+}
+
+function lastDateLabel(rows: DashboardPayload[], key: string) {
+  const labels = sortedDateLabels(rows, key);
+  return labels[labels.length - 1] ?? "";
+}
+
+function sortedDateLabels(rows: DashboardPayload[], key: string) {
+  return rows.map((row) => displayValue(row[key])).filter((value) => value !== "-").sort((a, b) => a.localeCompare(b));
+}
+
+function allSetupsComplete(rows: DashboardPayload[]) {
+  return rows.length > 0 && rows.every((row) => displayValue(row.actualCompletionDate) !== "-");
+}
+
+function setupHistoryMatchesQuery(row: DashboardPayload, query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  return [
+    row.setupDate,
+    row.jcNo,
+    row.machine,
+    row.partCode,
+    row.optionNumber,
+    row.setupNo,
+    row.shift,
+    row.setterCode,
+    row.helperCode,
+    row.qcController,
+    row.remarks,
+  ].map((value) => formatCell(value)).join(" ").toLowerCase().includes(normalizedQuery);
+}
+
 function machineKey(value: unknown) {
   return str(value).toLowerCase();
+}
+
+function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
+  if (entryType === "setup_checklist") {
+    return [
+      payload.jcNo,
+      payload.partNo,
+      payload.optionNumber,
+      payload.setupNo,
+      payload.machineNo,
+    ].map((value) => str(value).toLowerCase()).join("|");
+  }
+  if (entryType === "work_order" || entryType === "rm_inward") return str(payload.jcNo);
+  if (entryType === "route" || entryType === "cycle" || entryType === "tooling") {
+    return [payload.partNo, payload.optionNumber, payload.setupNo].map((value) => str(value).toLowerCase()).join("|");
+  }
+  if (entryType === "machine_master") return str(payload.machineNo);
+  if (entryType === "employee") return str(payload.empId);
+  return "";
 }
 
 function uniqueValues(values: string[]) {

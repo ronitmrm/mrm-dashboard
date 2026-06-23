@@ -209,6 +209,7 @@ const setupChecklistMap = {
   location: ["LOCATION", "Location"],
   machineNo: ["M/C NO", "MACHINE NO"],
   partNo: ["PART NO", "PART CODE"],
+  optionNumber: ["OPTION NUMBER", "OPTION NO"],
   setupNo: ["SETUP NO.", "SETUP NO", "SET UP"],
   rimmerAvailability: ["RIMMER AVAILABILITY"],
   modhiyu: ["MODHIYU"],
