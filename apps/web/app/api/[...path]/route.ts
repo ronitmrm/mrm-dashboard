@@ -38,6 +38,42 @@ function workbookPlaceholder(filename: string, body: string) {
   });
 }
 
+const dataEntryTemplateFields: Record<string, string[]> = {
+  route: ["partNo", "optionNumber", "setupNo", "numberOfSetups", "setupName", "machineUsed", "machineType", "stageWeight", "rodSize", "cuttingLength", "finishedGoodsLength"],
+  cycle: ["partNo", "optionNumber", "setupNo", "setupName", "machineUsed", "operationWeight", "cycleTime", "loadingUnloading"],
+  tooling: ["partNo", "optionNumber", "setupNo", "setupName", "machineUsed", "fixture", "fixtureQty", "tooling", "toolingQty", "foamTool", "foamToolQty", "remarks"],
+  work_order: ["jcNo", "partCode", "fgPoNo", "rmPoNo", "poDate", "orderPcs", "orderKg", "numberOfSetups", "optionNumber", "rmInwardKg", "rmInwardDate", "deliveryDate", "plannerPriority", "description", "deliveryRemark"],
+  rm_inward: ["jcNo", "rmInwardDate", "rmInwardKg", "status", "remark"],
+  employee: ["empId", "employeeType", "employeeName", "location", "doj", "terminatedDate", "status"],
+  machine_master: ["machineNo", "machineType", "machineName", "location", "capacity", "status", "remarks"],
+  setup_checklist: ["jcNo", "setupDate", "machineNo", "partNo", "setupNo", "shift", "setterCode", "helperCode", "settingStartTime", "settingEndTime", "qcController", "rimmerAvailability", "modhiyu", "remarks"],
+  software_raw: ["prodDate", "operatorId", "operatorName", "machineType", "machine", "partCode", "jobCard", "setupNo", "outputQty", "actualQty", "targetQty", "rejectQty", "rejectionType", "rejectionRemark", "downtimeMinutes", "downtimeReason"],
+};
+
+function dataTemplateResponse(entryType: string) {
+  const fields = dataEntryTemplateFields[entryType];
+  if (!fields) {
+    throw new RouteError(400, `Unknown data template entry type: ${entryType}`);
+  }
+  return csvResponse(`${entryType}_template.csv`, `${fields.map(csvCell).join(",")}\n`);
+}
+
+function csvResponse(filename: string, body: string) {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+function csvCell(value: unknown) {
+  const textValue = String(value ?? "");
+  return /[",\r\n]/.test(textValue) ? `"${textValue.replaceAll('"', '""')}"` : textValue;
+}
+
 async function authenticatedConvexClient() {
   const token = await convexAuthNextjsToken();
   if (!token) {
@@ -79,7 +115,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     if (path === "data-template") {
       const entryType = search.get("entryType") || "template";
-      return workbookPlaceholder(`${entryType}_template.csv`, "field,value\n");
+      return dataTemplateResponse(entryType);
     }
 
     if (path === "data-export") {
@@ -203,7 +239,26 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     if (path === "data-import") {
-      throw new RouteError(501, "Bulk Excel import needs an authenticated Convex upload/import action.");
+      const entryType = String(body.entryType || "");
+      const fileName = String(body.fileName || "");
+      const fileBase64 = String(body.fileBase64 || "");
+      const importedRows = parseTemplateUpload(entryType, fileName, fileBase64);
+      let inserted = 0;
+
+      for (const payload of importedRows) {
+        if (entryType === "software_raw") {
+          await convex.mutation(api.dashboard.saveProductionEntry, toProductionEntry(payload));
+        } else {
+          await convex.mutation(api.dashboard.saveDataEntry, {
+            entryType,
+            key: dataEntryKey(entryType, payload),
+            payload,
+          });
+        }
+        inserted += 1;
+      }
+
+      return json({ ok: true, rowsUpdated: inserted, inserted, message: `Imported ${inserted} ${entryType.replaceAll("_", " ")} rows.` });
     }
 
     return json({ error: "Not found" }, 404);
@@ -226,6 +281,98 @@ function text(value: unknown) {
 function optionalText(value: unknown) {
   const cleaned = text(value);
   return cleaned || undefined;
+}
+
+function parseTemplateUpload(entryType: string, fileName: string, fileBase64: string) {
+  if (!dataEntryTemplateFields[entryType]) {
+    throw new RouteError(400, `Unknown import entry type: ${entryType}`);
+  }
+  if (!fileName.toLowerCase().endsWith(".csv")) {
+    throw new RouteError(400, "Upload the filled CSV template downloaded from this screen.");
+  }
+  const csvText = decodeDataUrl(fileBase64);
+  return parseCsv(csvText).map(normalizeImportedPayload).filter((row) => Object.values(row).some((value) => text(value)));
+}
+
+function decodeDataUrl(value: string) {
+  const [, encoded = value] = value.split(",", 2);
+  return Buffer.from(encoded, "base64").toString("utf8").replace(/^\uFEFF/, "");
+}
+
+function parseCsv(csvText: string): Array<Record<string, unknown>> {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let index = 0; index < csvText.length; index += 1) {
+    const char = csvText[index];
+    const next = csvText[index + 1];
+
+    if (quoted) {
+      if (char === '"' && next === '"') {
+        cell += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        cell += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      quoted = true;
+    } else if (char === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (char === "\n") {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else if (char !== "\r") {
+      cell += char;
+    }
+  }
+
+  if (cell || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  const [headers = [], ...bodyRows] = rows;
+  const cleanHeaders = headers.map((header) => header.trim()).filter(Boolean);
+  return bodyRows
+    .filter((bodyRow) => bodyRow.some((value) => value.trim()))
+    .map((bodyRow) => Object.fromEntries(cleanHeaders.map((header, index) => [header, bodyRow[index]?.trim() ?? ""])));
+}
+
+function normalizeImportedPayload(row: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, normalizeImportedValue(value)]));
+}
+
+function normalizeImportedValue(value: unknown) {
+  const cleaned = text(value);
+  if (cleaned === "") return "";
+  const numericValue = Number(cleaned);
+  return Number.isFinite(numericValue) && /^-?\d+(\.\d+)?$/.test(cleaned) ? numericValue : cleaned;
+}
+
+function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
+  if (["route", "cycle", "tooling"].includes(entryType)) {
+    return [payload.partNo, payload.optionNumber, payload.setupNo].map(text).join("|");
+  }
+  if (entryType === "work_order" || entryType === "rm_inward" || entryType === "setup_checklist") {
+    return text(payload.jcNo);
+  }
+  if (entryType === "employee") {
+    return text(payload.empId);
+  }
+  if (entryType === "machine_master") {
+    return text(payload.machineNo);
+  }
+  return undefined;
 }
 
 function numeric(value: unknown) {

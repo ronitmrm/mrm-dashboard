@@ -1488,7 +1488,7 @@ function buildDataEntryContext({
     if (machineType) machineTypes.add(machineType);
   }
   for (const row of machineRows) {
-    const machine = rowText(row, "M/C NO", "MACHINE NO", "machine");
+    const machine = rowText(row, "M/C NO", "MACHINE NO", "machine", "machineNo");
     const machineType = rowText(row, "MACHINE TYPE", "machineType");
     if (machine) machineNumbers.add(machine);
     if (machineType) machineTypes.add(machineType);

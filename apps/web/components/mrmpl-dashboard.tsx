@@ -326,7 +326,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
   },
   {
     entryType: "employee",
-    title: "Employee",
+    title: "Employee master",
     description: "Operator and shop-floor employee master data.",
     fields: [
       { name: "empId", label: "Emp ID", required: true },
@@ -336,6 +336,20 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "doj", label: "DOJ", type: "date" },
       { name: "terminatedDate", label: "Terminated date", type: "date" },
       { name: "status", label: "Status", options: ["Active", "Inactive", "Terminated"], defaultValue: "Active" },
+    ],
+  },
+  {
+    entryType: "machine_master",
+    title: "Machine master",
+    description: "Machine number, type, location, and active status used by planning and machine filters.",
+    fields: [
+      { name: "machineNo", label: "Machine no.", required: true },
+      { name: "machineType", label: "Machine type", required: true },
+      { name: "machineName", label: "Machine name" },
+      { name: "location", label: "Location" },
+      { name: "capacity", label: "Capacity", type: "number", step: "0.01" },
+      { name: "status", label: "Status", options: ["Active", "Inactive", "Maintenance"], defaultValue: "Active" },
+      { name: "remarks", label: "Remarks" },
     ],
   },
   {
@@ -1134,10 +1148,10 @@ function DataEntryPanel({
                 ))}
               </select>
             </Field>
-            <Field label="Filled Excel template">
-              <Input name="file" type="file" accept=".xlsx" />
+            <Field label="Filled CSV template">
+              <Input name="file" type="file" accept=".csv,text/csv" />
             </Field>
-            <Button className="self-end" type="submit">Import filled Excel</Button>
+            <Button className="self-end" type="submit">Import filled CSV</Button>
           </form>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => downloadApi("data-template", bulkEntryType)}>
