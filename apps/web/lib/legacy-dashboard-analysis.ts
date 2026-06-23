@@ -760,6 +760,7 @@ function buildProductionControl({
     }))
     .filter((row) => row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing);
   const combinedBatches = combinedRows(workOrderOutputRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
+  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, routeGroups);
   const machinePlanReady = workOrderOutputRows.filter((row) => row.rmStatus === "Received" && !row.routeStatus.includes("missing") && row.cycleStatus === "Ready" && row.toolingStatus === "Ready").length;
   const latestSetupDate = maxDate(setupChecklistRows.map((row) => parseDate(rowValue(row, "SETUP DATE", "setupDate"))));
   const totalOutputQty = sum([...rawByJc.values()].map((row) => row.outputQty));
@@ -837,7 +838,7 @@ function buildProductionControl({
     groupedJobCards: { summary: {}, planningGroups: combinedBatches, productionGroups: [] },
     machinePlanRows: combinedBatches,
     machinePlanningRows: machineRows,
-    machinePlanDetailRows: [],
+    machinePlanDetailRows,
     machineConstraints,
     machineConstraintRows: machineConstraints,
     machineConstraintImpacts: [],
@@ -1695,6 +1696,50 @@ function combinedRows(workOrderRows: Array<Record<string, unknown>>, rawByJc: Ma
       action,
     };
   }).sort((a, b) => (a.action === "Can combine planning" ? 0 : 1) - (b.action === "Can combine planning" ? 0 : 1) || b.orderPcs - a.orderPcs);
+}
+
+function machinePlanDetails(workOrderRows: Array<Record<string, unknown>>, rawByJc: Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number }>, routeGroups: Map<string, Record<string, unknown>[]>) {
+  const details: Array<Record<string, unknown>> = [];
+  for (const row of workOrderRows) {
+    const partCode = rowText(row, "partCode");
+    const optionNumber = rowText(row, "optionNumber");
+    if (!partCode || !optionNumber || optionNumber === "Not selected") continue;
+
+    const routeKeyValue = [canonicalKey(partCode), optionNumber].join("|");
+    const routes = routeGroups.get(routeKeyValue) ?? [];
+    const actual = rawByJc.get(canonicalKey(rowText(row, "jcNo")));
+
+    for (const route of routes) {
+      const machine = rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
+      if (!machine) continue;
+      details.push({
+        machine,
+        machineType: rowText(route, "MACHINE TYPE", "machineType"),
+        setupNo: rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"),
+        setupName: rowText(route, "SETUP NAME", "setupName"),
+        partCode,
+        description: rowText(row, "description"),
+        jcNo: rowText(row, "jcNo"),
+        fgPoNo: rowText(row, "fgPoNo"),
+        optionNumber,
+        orderPcs: rowValue(row, "orderPcs"),
+        rmStatus: rowText(row, "rmStatus"),
+        routeStatus: rowText(row, "routeStatus"),
+        cycleStatus: rowText(row, "cycleStatus"),
+        toolingStatus: rowText(row, "toolingStatus"),
+        rawOutputQty: round(actual?.outputQty ?? 0),
+        rawActualQty: round(actual?.actualQty ?? 0),
+        rawRejectQty: round(actual?.rejectQty ?? 0),
+        rawRows: actual?.rows ?? 0,
+        runningStatus: actual?.rows ? "Running" : "Planned",
+      });
+    }
+  }
+  return details.sort((a, b) =>
+    rowText(a, "machine").localeCompare(rowText(b, "machine"), undefined, { numeric: true }) ||
+    rowText(a, "partCode").localeCompare(rowText(b, "partCode"), undefined, { numeric: true }) ||
+    numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")),
+  );
 }
 
 function groupRouteRows(rows: Record<string, unknown>[]) {
