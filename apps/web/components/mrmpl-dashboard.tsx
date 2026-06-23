@@ -2833,13 +2833,30 @@ function TileField({
 function StatusBadge({ value }: { value: unknown }) {
   const text = displayValue(value);
   const normalized = text.toLowerCase();
-  const variant: "destructive" | "outline" | "secondary" = normalized.includes("missing") || normalized.includes("waiting") || normalized.includes("required") || normalized.includes("breakdown")
-    ? "destructive"
-    : normalized === "-"
-      ? "outline"
-      : "secondary";
+  const toneClass = statusBadgeToneClass(normalized);
 
-  return <Badge variant={variant}>{text}</Badge>;
+  return (
+    <Badge variant="outline" className={toneClass}>
+      {text}
+    </Badge>
+  );
+}
+
+function statusBadgeToneClass(normalized: string) {
+  if (normalized === "-") return "border-slate-300 bg-slate-50 text-slate-700";
+  if (normalized.includes("in production") || normalized.includes("running")) return "border-sky-300 bg-sky-50 text-sky-800";
+  if (normalized.includes("ready") || normalized.includes("received") || normalized.includes("dispatch")) return "border-emerald-300 bg-emerald-50 text-emerald-800";
+  if (normalized.includes("waiting") || normalized.includes("pending")) return "border-amber-300 bg-amber-50 text-amber-800";
+  if (
+    normalized.includes("need") ||
+    normalized.includes("action") ||
+    normalized.includes("missing") ||
+    normalized.includes("required") ||
+    normalized.includes("breakdown")
+  ) {
+    return "border-red-300 bg-red-50 text-red-800";
+  }
+  return "border-slate-300 bg-slate-50 text-slate-700";
 }
 
 function MachineStateBadge({
