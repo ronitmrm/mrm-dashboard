@@ -10,6 +10,8 @@
     "build": "next build",
     "import:workbook": "node scripts/import-workbook.mjs --apply --replace",
     "import:workbook:dry-run": "node scripts/import-workbook.mjs",
+    "import:entry": "node scripts/import-workbook.mjs --apply --append",
+    "import:entry:dry-run": "node scripts/import-workbook.mjs",
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",

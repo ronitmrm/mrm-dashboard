@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import Image from "next/image";
@@ -73,6 +73,7 @@ import {
   type DashboardRankedRow,
   type DashboardTrendPoint,
 } from "@/lib/dashboard-view-model";
+import { machineFamilyKey } from "@/lib/planning-rules";
 import { api } from "@/convex/_generated/api";
 
 type DashboardPayload = Record<string, unknown>;
@@ -373,29 +374,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "remarks", label: "Remarks" },
     ],
   },
-  {
-    entryType: "software_raw",
-    title: "Software raw",
-    description: "Raw production row from shop-floor software exports.",
-    fields: [
-      { name: "prodDate", label: "Production date", type: "date", required: true },
-      { name: "operatorId", label: "Operator ID", required: true },
-      { name: "operatorName", label: "Operator name" },
-      { name: "machineType", label: "Machine type", required: true },
-      { name: "machine", label: "Machine no.", required: true },
-      { name: "partCode", label: "Part code", required: true },
-      { name: "jobCard", label: "Job card" },
-      { name: "setupNo", label: "Setup no." },
-      { name: "outputQty", label: "Output qty", type: "number", required: true },
-      { name: "actualQty", label: "Actual qty", type: "number" },
-      { name: "targetQty", label: "Target qty", type: "number", required: true },
-      { name: "rejectQty", label: "Reject qty", type: "number" },
-      { name: "rejectionType", label: "Rejection type" },
-      { name: "rejectionRemark", label: "Rejection remark" },
-      { name: "downtimeMinutes", label: "Downtime minutes", type: "number" },
-      { name: "downtimeReason", label: "Downtime reason" },
-    ],
-  },
 ];
 
 const subscribeToHydration = () => () => {};
@@ -414,6 +392,8 @@ export function MrmplDashboard() {
 function DashboardShell() {
   const [filters, setFilters] = useStoredWorkbookFilters();
   const [activeTab, setActiveTab] = useState<DashboardTabId>("productionControlTab");
+  const [preferredDataEntryType, setPreferredDataEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
+  const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const snapshotArgs = useMemo(() => ({
     operatorId: filters.operatorId || undefined,
@@ -460,6 +440,16 @@ function DashboardShell() {
         message: err instanceof Error ? err.message : "Action failed.",
       });
     }
+  }
+
+  function openDataEntry(entryType: string, defaults: Record<string, unknown> = {}) {
+    setPreferredDataEntryType(entryType);
+    setPreferredDataEntryDefaults(defaults);
+    setActiveTab("dataEntryTab");
+  }
+
+  function openMasterReadiness() {
+    setActiveTab("masterGapsTab");
   }
 
   const isDashboardLoading = dashboardPayload === undefined;
@@ -554,7 +544,16 @@ function DashboardShell() {
           {isDashboardLoading ? (
             <DashboardSkeleton />
           ) : (
-            <DashboardContent activeTab={activeTab} payload={payload} view={view} submitAction={submitAction} />
+            <DashboardContent
+              activeTab={activeTab}
+              payload={payload}
+              view={view}
+              submitAction={submitAction}
+              openDataEntry={openDataEntry}
+              openMasterReadiness={openMasterReadiness}
+              preferredDataEntryType={preferredDataEntryType}
+              preferredDataEntryDefaults={preferredDataEntryDefaults}
+            />
           )}
         </main>
       </SidebarInset>
@@ -712,16 +711,24 @@ function DashboardContent({
   payload,
   view,
   submitAction,
+  openDataEntry,
+  openMasterReadiness,
+  preferredDataEntryType,
+  preferredDataEntryDefaults,
 }: {
   activeTab: DashboardTabId;
   payload: DashboardPayload;
   view: ReturnType<typeof toDashboardViewModel>;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  openMasterReadiness: () => void;
+  preferredDataEntryType: string;
+  preferredDataEntryDefaults: Record<string, unknown>;
 }) {
   const productionControl = asRecord(payload.productionControl);
 
   if (activeTab === "jobCardStatusTab") {
-    return <JobCardsPanel productionControl={productionControl} submitAction={submitAction} />;
+    return <JobCardsPanel productionControl={productionControl} submitAction={submitAction} openMasterReadiness={openMasterReadiness} />;
   }
 
   if (activeTab === "machineDetailTab") {
@@ -729,11 +736,11 @@ function DashboardContent({
   }
 
   if (activeTab === "masterGapsTab") {
-    return <MasterReadinessPanel productionControl={productionControl} />;
+    return <MasterReadinessPanel productionControl={productionControl} submitAction={submitAction} openDataEntry={openDataEntry} />;
   }
 
   if (activeTab === "dataEntryTab") {
-    return <DataEntryPanel payload={payload} submitAction={submitAction} />;
+    return <DataEntryPanel payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} />;
   }
 
   if (activeTab === "planningControlTab") {
@@ -1017,9 +1024,11 @@ function PlannerDecisionConsole({
 function JobCardsPanel({
   productionControl,
   submitAction,
+  openMasterReadiness,
 }: {
   productionControl: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  openMasterReadiness: () => void;
 }) {
   return (
     <section className="grid gap-4">
@@ -1055,7 +1064,13 @@ function JobCardsPanel({
           />
         </CardContent>
       </Card>
-      <JobCardTileBoard rows={asArray(productionControl.jobCardStatusTiles)} plannedRows={asArray(productionControl.machinePlanDetailRows)} />
+      <JobCardTileBoard
+        rows={asArray(productionControl.jobCardStatusTiles)}
+        plannedRows={asArray(productionControl.machinePlanDetailRows)}
+        machineRows={asArray(productionControl.machinePlanningRows)}
+        actionNeededCount={asArray(productionControl.allWorkOrderGaps).length}
+        openMasterReadiness={openMasterReadiness}
+      />
       <DataRowsCard title="Running parts" rows={asArray(productionControl.runningParts)} empty="No running job cards returned" />
       <DataRowsCard title="Dispatch handoff" rows={asArray(productionControl.dispatchHandoff)} empty="No dispatch handoff rows returned" />
       <section className="grid gap-4 @5xl/main:grid-cols-2">
@@ -1093,39 +1108,286 @@ function MachineDetailPanel({
   );
 }
 
-function MasterReadinessPanel({ productionControl }: { productionControl: DashboardPayload }) {
-  const validation = asRecord(productionControl.validation);
+function MasterReadinessPanel({
+  productionControl,
+  submitAction,
+  openDataEntry,
+}: {
+  productionControl: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+}) {
+  const masterGaps = asArray(productionControl.masterGaps);
+  const allWorkOrderGaps = asArray(productionControl.allWorkOrderGaps);
   return (
     <section className="grid gap-4">
-      <DataRowsCard
-        title="Master data gap list"
-        rows={asArray(productionControl.masterGaps).length ? asArray(productionControl.masterGaps) : asArray(productionControl.validationIssues)}
-        empty="No master-readiness issues returned"
+      <WorkOrderGapTable
+        title="Production validation"
+        description="Immediate attention: RM received and at least one planning gap exists."
+        rows={masterGaps}
+        submitAction={submitAction}
+        openDataEntry={openDataEntry}
+        showFilters={false}
       />
-      <DataRowsCard title="Production validation" rows={asArray(validation.issues)} empty="No production validation issues returned" />
-      <DataRowsCard title="Work order planning status" rows={asArray(productionControl.workOrders)} empty="No work-order readiness rows returned" />
-      <DataRowsCard title="Route selection required" rows={asArray(productionControl.routeSelectionRequired)} empty="No route selections currently required" />
+      <WorkOrderGapTable
+        title="Whole work-order missing details"
+        description="Planner view for every work order with missing route option, route master, cycle time, or tooling."
+        rows={allWorkOrderGaps}
+        submitAction={submitAction}
+        openDataEntry={openDataEntry}
+        showFilters
+      />
     </section>
   );
+}
+
+function WorkOrderGapTable({
+  title,
+  description,
+  rows,
+  submitAction,
+  openDataEntry,
+  showFilters,
+}: {
+  title: string;
+  description: string;
+  rows: DashboardPayload[];
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  showFilters: boolean;
+}) {
+  const [gapFilter, setGapFilter] = useState("all");
+  const [rmFilter, setRmFilter] = useState("all");
+  const filteredRows = rows.filter((row) => {
+    const matchesGap = gapFilter === "all"
+      || (gapFilter === "route_option" && Boolean(row.routeSelectionMissing))
+      || (gapFilter === "route_master" && Boolean(row.routeMasterMissing))
+      || (gapFilter === "cycle_time" && Boolean(row.cycleTimeMissing))
+      || (gapFilter === "tooling" && Boolean(row.toolingPlanMissing));
+    const matchesRm = rmFilter === "all"
+      || (rmFilter === "received" && str(row.rmStatus) === "Received")
+      || (rmFilter === "waiting" && str(row.rmStatus) !== "Received");
+    return matchesGap && matchesRm;
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description} {formatNumber(filteredRows.length)} of {formatNumber(rows.length)} rows shown.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {showFilters ? (
+          <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Gap type">
+            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={gapFilter} onChange={(event) => setGapFilter(event.target.value)}>
+              <option value="all">All gaps</option>
+              <option value="route_option">Route option missing</option>
+              <option value="route_master">Route master missing</option>
+              <option value="cycle_time">Cycle time missing</option>
+              <option value="tooling">Tooling missing</option>
+            </select>
+          </Field>
+          <Field label="RM status">
+            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={rmFilter} onChange={(event) => setRmFilter(event.target.value)}>
+              <option value="all">All work orders</option>
+              <option value="received">RM received</option>
+              <option value="waiting">Waiting RM</option>
+            </select>
+          </Field>
+          </div>
+        ) : null}
+        <div className="overflow-hidden rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Job card</TableHead>
+                <TableHead>Item</TableHead>
+                <TableHead>RM</TableHead>
+                <TableHead>Missing details</TableHead>
+                <TableHead>Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredRows.length ? (
+                filteredRows.map((row, index) => (
+                  <WorkOrderGapRow
+                    key={`${title}-${jobCardNumber(row)}-${index}`}
+                    row={row}
+                    submitAction={submitAction}
+                    openDataEntry={openDataEntry}
+                  />
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    No work-order gaps match the selected filters
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function WorkOrderGapRow({
+  row,
+  submitAction,
+  openDataEntry,
+}: {
+  row: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+}) {
+  const jcNo = str(row.jcNo || row.jobCard);
+  const options = asArray(row.availableOptions);
+  const gaps = workOrderGapLabels(row);
+
+  async function submitRoute(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const optionNumber = String(new FormData(event.currentTarget).get("optionNumber") || "").trim();
+    if (!jcNo || !optionNumber) return;
+    await submitAction("route-selection", { jcNo, optionNumber });
+  }
+
+  return (
+    <TableRow>
+      <TableCell className="min-w-32 font-medium">{jcNo || "-"}</TableCell>
+      <TableCell className="min-w-40">
+        <div>{itemCode(row)}</div>
+        <div className="text-xs text-muted-foreground">{displayValue(row.description)}</div>
+      </TableCell>
+      <TableCell>{displayValue(row.rmStatus)}</TableCell>
+      <TableCell className="min-w-44">
+        <div className="flex flex-wrap gap-1.5">
+          {gaps.map((gap) => (
+            <Badge key={gap} variant="outline">{gap}</Badge>
+          ))}
+        </div>
+      </TableCell>
+      <TableCell className="min-w-80">
+        <div className="grid gap-2">
+          {row.routeSelectionMissing ? (
+            <form className="grid gap-1.5" onSubmit={(event) => void submitRoute(event)}>
+              <Label className="text-xs text-muted-foreground">Select option number</Label>
+              <div className="grid gap-2 sm:grid-cols-[minmax(12rem,1fr)_7.5rem]">
+                <select className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm" name="optionNumber" defaultValue="" required>
+                  <option value="">Select option</option>
+                  {options.map((option, optionIndex) => {
+                    const record = asRecord(option);
+                    const value = str(record.optionNumber || record.option || option) || String(optionIndex + 1);
+                    return (
+                      <option key={`${jcNo}-${value}`} value={value}>
+                        {routeOptionText(record, value)}
+                      </option>
+                    );
+                  })}
+                </select>
+                <Button type="submit" size="sm" className="w-full">Save option</Button>
+              </div>
+            </form>
+          ) : null}
+          <div className="grid gap-2 sm:grid-cols-3">
+            {row.routeMasterMissing ? (
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("route", dataEntryDefaultsFromGap(row, "route"))}>Add routing</Button>
+            ) : null}
+            {row.cycleTimeMissing ? (
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("cycle", dataEntryDefaultsFromGap(row, "cycle"))}>Add cycle time</Button>
+            ) : null}
+            {row.toolingPlanMissing ? (
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("tooling", dataEntryDefaultsFromGap(row, "tooling"))}>Add tooling</Button>
+            ) : null}
+          </div>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function workOrderGapLabels(row: DashboardPayload) {
+  return [
+    row.routeSelectionMissing ? "Route option" : "",
+    row.routeMasterMissing ? "Route master" : "",
+    row.cycleTimeMissing ? "Cycle time" : "",
+    row.toolingPlanMissing ? "Tooling" : "",
+  ].filter(Boolean);
+}
+
+function workOrderNeedsAction(row: DashboardPayload) {
+  return Boolean(row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing);
+}
+
+function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "cycle" | "tooling") {
+  const optionNumber = str(row.optionNumber || row.selectedOption);
+  const setupNo = str(row.missingSetupNo || row.setupNo);
+  const setupName = str(row.setupName || row.missingSetupName);
+  const machineUsed = str(row.machineUsed || row.routeMachine || row.machineFamily || row.machineType);
+  const defaults: Record<string, unknown> = {
+    partNo: itemCode(row) !== "-" ? itemCode(row) : "",
+    optionNumber: optionNumber && optionNumber !== "Not selected" ? optionNumber : "",
+    setupNo,
+    setupName,
+    machineUsed,
+  };
+
+  if (entryType === "route") {
+    return {
+      ...defaults,
+      machineType: str(row.machineType),
+      numberOfSetups: str(row.numberOfSetups),
+    };
+  }
+
+  if (entryType === "cycle") {
+    return {
+      ...defaults,
+      operationWeight: row.operationWeight || row.stageWeight || "",
+      cycleTime: "",
+      loadingUnloading: "",
+    };
+  }
+
+  return {
+    ...defaults,
+    fixture: "",
+    fixtureQty: "",
+    tooling: "",
+    toolingQty: "",
+    foamTool: "",
+    foamToolQty: "",
+    remarks: "",
+  };
 }
 
 function DataEntryPanel({
   payload,
   submitAction,
+  preferredEntryType,
+  preferredDefaults,
 }: {
   payload: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  preferredEntryType: string;
+  preferredDefaults: Record<string, unknown>;
 }) {
   const dataEntry = asRecord(payload.dataEntry);
   const [bulkEntryType, setBulkEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
 
+  useEffect(() => {
+    if (preferredEntryType) setBulkEntryType(preferredEntryType);
+  }, [preferredEntryType]);
+
   async function importEntryTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const file = new FormData(event.currentTarget).get("file");
+    const form = event.currentTarget;
+    const file = new FormData(form).get("file");
     if (!(file instanceof File) || !file.name) return;
     const fileBase64 = await readFileAsDataUrl(file);
     await submitAction("data-import", { entryType: bulkEntryType, fileName: file.name, fileBase64 });
-    event.currentTarget.reset();
+    form.reset();
   }
 
   return (
@@ -1133,7 +1395,7 @@ function DataEntryPanel({
       <Card>
         <CardHeader>
           <CardTitle>Production data entry</CardTitle>
-          <CardDescription>Manual entries write through authenticated Convex mutations. Bulk Excel import/export still needs a dedicated authenticated file workflow.</CardDescription>
+          <CardDescription>Manual entries write through authenticated Convex mutations. Upload filled CSV templates here for small targeted imports; use the local script only for large full-workbook uploads.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <form className="grid gap-3 @3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]" onSubmit={importEntryTemplate}>
@@ -1153,7 +1415,7 @@ function DataEntryPanel({
             <Field label="Filled CSV template">
               <Input name="file" type="file" accept=".csv,text/csv" />
             </Field>
-            <Button className="self-end" type="submit">Import filled CSV</Button>
+            <Button className="self-end" type="submit">Import CSV</Button>
           </form>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => downloadApi("data-template", bulkEntryType)}>
@@ -1176,7 +1438,7 @@ function DataEntryPanel({
       </Card>
       <section className="grid gap-4 @5xl/main:grid-cols-2">
         {dataEntrySpecs.map((spec) => (
-          <DataEntryForm key={spec.entryType} spec={spec} submitAction={submitAction} />
+          <DataEntryForm key={spec.entryType} spec={spec} submitAction={submitAction} defaults={spec.entryType === bulkEntryType ? preferredDefaults : {}} />
         ))}
       </section>
       <DataRowsCard title="Data entry templates" rows={asArray(dataEntry.templates)} empty="No templates returned" />
@@ -1188,10 +1450,13 @@ function DataEntryPanel({
 function DataEntryForm({
   spec,
   submitAction,
+  defaults,
 }: {
   spec: DataEntrySpec;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  defaults: Record<string, unknown>;
 }) {
+  const defaultsKey = JSON.stringify(defaults);
   return (
     <Card>
       <CardHeader>
@@ -1200,9 +1465,11 @@ function DataEntryForm({
       </CardHeader>
       <CardContent>
         <LegacyActionForm
+          key={`${spec.entryType}-${defaultsKey}`}
           title={`Save ${spec.entryType.replaceAll("_", " ")}`}
           description="Writes the same entry type and payload shape used by the legacy form."
           fields={spec.fields}
+          defaults={defaults}
           buttonLabel={`Save ${spec.title}`}
           onSubmit={(body) => void submitAction("data-entry", { entryType: spec.entryType, payload: body })}
         />
@@ -1272,9 +1539,13 @@ function PlanningControlPanel({
 }
 
 function RouteSelectionQueue({
+  title = "Route selection required",
+  description,
   rows,
   submitAction,
 }: {
+  title?: string;
+  description?: string;
   rows: DashboardPayload[];
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
 }) {
@@ -1288,8 +1559,8 @@ function RouteSelectionQueue({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Route selection required</CardTitle>
-        <CardDescription>{rows.length ? `${formatNumber(rows.length)} job cards need route decisions` : "No route decisions currently required"}</CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description || (rows.length ? `${formatNumber(rows.length)} job cards need route decisions` : "No route decisions currently required")}</CardDescription>
       </CardHeader>
       <CardContent>
         {rows.length ? (
@@ -1297,7 +1568,8 @@ function RouteSelectionQueue({
             {rows.slice(0, 12).map((row, index) => {
               const jcNo = str(row.jcNo || row.jobCard);
               const options = asArray(row.availableOptions);
-              const selected = str(row.optionNumber || row.selectedOption || asRecord(options[0]).optionNumber);
+              const rawSelected = str(row.optionNumber || row.selectedOption);
+              const selected = rawSelected && rawSelected !== "Not selected" ? rawSelected : "";
               return (
                 <form
                   key={`${jcNo || "route"}-${index}`}
@@ -1316,7 +1588,7 @@ function RouteSelectionQueue({
                       {options.length ? (
                         options.map((option, optionIndex) => {
                           const record = asRecord(option);
-                          const value = str(record.optionNumber || record.option || optionIndex + 1);
+                          const value = str(record.optionNumber || record.option || option) || String(optionIndex + 1);
                           return (
                             <option key={`${jcNo}-${value}`} value={value}>
                               {routeOptionText(record, value)}
@@ -1917,19 +2189,22 @@ function LegacyActionForm({
   title,
   description,
   fields,
+  defaults = {},
   buttonLabel,
   onSubmit,
 }: {
   title: string;
   description: string;
   fields: LegacyField[];
+  defaults?: Record<string, unknown>;
   buttonLabel: string;
   onSubmit: (body: Record<string, unknown>) => void;
 }) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSubmit(formPayload(new FormData(event.currentTarget), fields));
-    event.currentTarget.reset();
+    const form = event.currentTarget;
+    onSubmit(formPayload(new FormData(form), fields));
+    form.reset();
   }
 
   return (
@@ -1945,7 +2220,7 @@ function LegacyActionForm({
               <select
                 className="h-9 rounded-md border bg-background px-3 text-sm"
                 name={field.name}
-                defaultValue={field.defaultValue ?? field.options[0]}
+                defaultValue={str(defaults[field.name]) || field.defaultValue || field.options[0]}
                 required={field.required}
               >
                 {field.options.map((option) => (
@@ -1962,6 +2237,7 @@ function LegacyActionForm({
                 required={field.required}
                 min={field.min}
                 step={field.step}
+                defaultValue={str(defaults[field.name])}
               />
             )}
           </Field>
@@ -1979,7 +2255,19 @@ function ActionLogTable({ rows }: { rows: DashboardPayload[] }) {
   return <DataRowsCard title="Planner action log" rows={rows} empty="No planner actions saved yet" />;
 }
 
-function JobCardTileBoard({ rows, plannedRows }: { rows: DashboardPayload[]; plannedRows: DashboardPayload[] }) {
+function JobCardTileBoard({
+  rows,
+  plannedRows,
+  machineRows,
+  actionNeededCount,
+  openMasterReadiness,
+}: {
+  rows: DashboardPayload[];
+  plannedRows: DashboardPayload[];
+  machineRows: DashboardPayload[];
+  actionNeededCount: number;
+  openMasterReadiness: () => void;
+}) {
   const [query, setQuery] = useState("");
   const [searchField, setSearchField] = useState("all");
   const [trackingState, setTrackingState] = useState("all");
@@ -1990,7 +2278,7 @@ function JobCardTileBoard({ rows, plannedRows }: { rows: DashboardPayload[]; pla
   const plannedByPart = useMemo(() => groupPlannedRowsByPart(plannedRows), [plannedRows]);
   const jobCardOptions = useMemo(() => uniqueValues(rows.map(jobCardNumber).filter(Boolean)), [rows]);
   const itemCodeOptions = useMemo(() => uniqueValues(rows.map(itemCode).filter(Boolean)), [rows]);
-  const machineOptions = useMemo(() => plannedMachineOptions(plannedRows), [plannedRows]);
+  const machineOptions = useMemo(() => plannedMachineOptions(plannedRows, machineBoardRows(machineRows, plannedRows)), [machineRows, plannedRows]);
   const filteredRows = useMemo(
     () => rows.filter((row) =>
       rowMatchesFieldQuery(row, query, searchField) &&
@@ -2001,9 +2289,19 @@ function JobCardTileBoard({ rows, plannedRows }: { rows: DashboardPayload[]; pla
     ),
     [itemCodeFilter, jobCardFilter, machineFilter, plannedByJobCard, plannedByPart, query, rows, searchField, trackingState],
   );
-  const needsAction = rows.filter((row) => jobCardTrackingState(row) === "Needs action").length;
+  const needsAction = actionNeededCount;
+  const pendingRm = rows.filter((row) => displayValue(row.rmStatus) !== "Received").length;
   const ready = rows.filter((row) => jobCardTrackingState(row) === "Ready").length;
   const inProduction = rows.filter((row) => jobCardTrackingState(row) === "In production").length;
+
+  function clearJobCardFilters() {
+    setQuery("");
+    setSearchField("all");
+    setTrackingState("all");
+    setJobCardFilter("");
+    setItemCodeFilter("");
+    setMachineFilter("");
+  }
 
   return (
     <Card>
@@ -2016,8 +2314,9 @@ function JobCardTileBoard({ rows, plannedRows }: { rows: DashboardPayload[]; pla
           <>
             <TrackingSummary
               items={[
-                ["Needs action", formatNumber(needsAction)],
+                ["Pending RM", formatNumber(pendingRm)],
                 ["Ready", formatNumber(ready)],
+                ["Action needed", formatNumber(needsAction), openMasterReadiness],
                 ["In production", formatNumber(inProduction)],
                 ["Visible", formatNumber(filteredRows.length)],
               ]}
@@ -2077,6 +2376,11 @@ function JobCardTileBoard({ rows, plannedRows }: { rows: DashboardPayload[]; pla
                 },
               ]}
             />
+            <div>
+              <Button type="button" variant="outline" size="sm" onClick={clearJobCardFilters}>
+                Clear filters
+              </Button>
+            </div>
             {filteredRows.length ? (
               <div className="grid max-h-[42rem] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 @7xl/main:grid-cols-3">
                 {filteredRows.map((row, index) => (
@@ -2136,7 +2440,8 @@ function JobCardTile({ row }: { row: DashboardPayload }) {
 function MachinePlanningBoard({ rows, plannedRows }: { rows: DashboardPayload[]; plannedRows: DashboardPayload[] }) {
   const [query, setQuery] = useState("");
   const [searchField, setSearchField] = useState("all");
-  const machineTypes = useMemo(() => uniqueValues(rows.map((row) => machineValue(row, "machineType")).filter((value) => value !== "-")), [rows]);
+  const boardRows = useMemo(() => machineBoardRows(rows, plannedRows), [plannedRows, rows]);
+  const machineTypes = useMemo(() => uniqueValues(boardRows.map((row) => machineValue(row, "machineType")).filter((value) => value !== "-")), [boardRows]);
   const [machineType, setMachineType] = useState("all");
   const [machineFilter, setMachineFilter] = useState("");
   const [jobCardFilter, setJobCardFilter] = useState("");
@@ -2145,11 +2450,11 @@ function MachinePlanningBoard({ rows, plannedRows }: { rows: DashboardPayload[];
   const plannedByMachine = useMemo(() => groupPlannedRowsByMachine(plannedRows), [plannedRows]);
   const jobCardOptions = useMemo(() => uniqueValues(plannedRows.map(jobCardNumber).filter((value) => value !== "-")), [plannedRows]);
   const machineOptions = useMemo(
-    () => uniqueValues([...plannedMachineOptions(plannedRows), ...rows.map((row) => machineValue(row, "machine")).filter((value) => value !== "-")]),
-    [plannedRows, rows],
+    () => plannedMachineOptions(plannedRows, boardRows),
+    [boardRows, plannedRows],
   );
   const filteredRows = useMemo(
-    () => rows.filter((row) => {
+    () => boardRows.filter((row) => {
       const machine = machineValue(row, "machine");
       const isRunning = machineIsRunning(machine, plannedByMachine);
       return (
@@ -2160,19 +2465,29 @@ function MachinePlanningBoard({ rows, plannedRows }: { rows: DashboardPayload[];
         (runningFilter === "all" || (runningFilter === "running" ? isRunning : !isRunning))
       );
     }),
-    [jobCardFilter, machineFilter, machineType, plannedByMachine, query, rows, runningFilter, searchField],
+    [boardRows, jobCardFilter, machineFilter, machineType, plannedByMachine, query, runningFilter, searchField],
   );
-  const runningRows = rows.filter((row) => machineIsRunning(machineValue(row, "machine"), plannedByMachine)).length;
+  const runningRows = boardRows.filter((row) => machineIsRunning(machineValue(row, "machine"), plannedByMachine)).length;
   const selectedPlans = selectedMachine ? plannedByMachine.get(machineKey(selectedMachine)) ?? [] : [];
+
+  function clearMachineFilters() {
+    setQuery("");
+    setSearchField("all");
+    setMachineType("all");
+    setMachineFilter("");
+    setJobCardFilter("");
+    setRunningFilter("all");
+    setSelectedMachine("");
+  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Machine planning board</CardTitle>
-        <CardDescription>{rows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(rows.length)} machines shown` : "No machine planning board rows returned"}</CardDescription>
+        <CardDescription>{boardRows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(boardRows.length)} machines shown` : "No machine planning board rows returned"}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        {rows.length ? (
+        {boardRows.length ? (
           <>
             <TrackingSummary
               items={[
@@ -2230,6 +2545,11 @@ function MachinePlanningBoard({ rows, plannedRows }: { rows: DashboardPayload[];
                 },
               ]}
             />
+            <div>
+              <Button type="button" variant="outline" size="sm" onClick={clearMachineFilters}>
+                Clear filters
+              </Button>
+            </div>
             {filteredRows.length ? (
               <div className="grid max-h-[42rem] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 @7xl/main:grid-cols-3">
                 {filteredRows.map((row, index) => (
@@ -2271,7 +2591,8 @@ function MachinePlanningTile({
 }) {
   const machine = machineValue(row, "machine");
   const machineType = machineValue(row, "machineType");
-  const status = machineStatusText(row);
+  const status = machineMasterStatusText(row);
+  const planningStatus = plannedCount > 0 ? "Planned" : "No plan";
 
   return (
     <button
@@ -2285,15 +2606,16 @@ function MachinePlanningTile({
           <div className="break-words text-xs text-muted-foreground">{machineType}</div>
         </div>
         <div className="flex flex-wrap justify-end gap-1.5">
-          <StatusBadge value={isRunning ? "Running" : "Not running"} />
-          <StatusBadge value={status} />
+          <MachineStateBadge label="Run" value={isRunning ? "Running" : "Not running"} tone={isRunning ? "success" : "neutral"} />
+          <MachineStateBadge label="Plan" value={planningStatus} tone={plannedCount > 0 ? "planning" : "neutral"} />
+          <MachineStateBadge label="Master" value={status} tone={status === "Active" ? "success" : status === "Inactive" ? "danger" : "warning"} />
         </div>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         <TileField label="Location" value={row.location || row.LOCATION || row.Location} />
         <TileField label="Capacity" value={row.capacity || row.CAPACITY || row.Capacity} numeric />
         <TileField label="Operator" value={row.operator || row.operatorName || row["OPERATOR NAME"]} />
-        <TileField label="Planned parts" value={plannedCount} numeric />
+        <TileField label="Planned setups" value={plannedCount} numeric />
         <TileField label="Priority" value={row.priority || row.PRIORITY} />
         <TileField label="Current job card" value={row.jcNo || row.jobCard || row.JobCardNo} />
         <TileField label="Current part" value={row.partCode || row["PART CODE"] || row.itemCode} />
@@ -2348,15 +2670,27 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
   );
 }
 
-function TrackingSummary({ items }: { items: Array<[string, string]> }) {
+function TrackingSummary({ items }: { items: Array<[string, string, (() => void)?]> }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2 @5xl/main:grid-cols-4">
-      {items.map(([label, value]) => (
-        <div key={label} className="rounded-lg border bg-muted/30 p-3">
-          <div className="text-[11px] font-medium uppercase text-muted-foreground">{label}</div>
-          <div className="text-lg font-semibold tabular-nums">{value}</div>
-        </div>
-      ))}
+    <div className="grid gap-2 sm:grid-cols-2 @4xl/main:grid-cols-5">
+      {items.map(([label, value, onClick]) => {
+        const className = "rounded-lg border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-background to-green-100/70 p-2.5 text-left shadow-sm shadow-emerald-950/5 dark:border-emerald-900/50 dark:from-emerald-950/35 dark:via-background dark:to-green-950/25";
+        const content = (
+          <>
+            <div className="text-[10px] font-medium uppercase text-emerald-800 dark:text-emerald-200">{label}</div>
+            <div className="text-base font-semibold tabular-nums">{value}</div>
+          </>
+        );
+        return onClick ? (
+          <button key={label} type="button" className={`${className} transition hover:border-emerald-400 hover:shadow-md focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30`} onClick={onClick}>
+            {content}
+          </button>
+        ) : (
+          <div key={label} className={className}>
+            {content}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -2506,6 +2840,30 @@ function StatusBadge({ value }: { value: unknown }) {
       : "secondary";
 
   return <Badge variant={variant}>{text}</Badge>;
+}
+
+function MachineStateBadge({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "success" | "planning" | "warning" | "danger" | "neutral";
+}) {
+  const toneClass = {
+    success: "border-emerald-300 bg-emerald-50 text-emerald-800",
+    planning: "border-sky-300 bg-sky-50 text-sky-800",
+    warning: "border-amber-300 bg-amber-50 text-amber-800",
+    danger: "border-red-300 bg-red-50 text-red-800",
+    neutral: "border-slate-300 bg-slate-50 text-slate-700",
+  }[tone];
+  return (
+    <Badge variant="outline" className={`gap-1 ${toneClass}`}>
+      <span className="text-[10px] font-semibold uppercase opacity-75">{label}</span>
+      <span>{value}</span>
+    </Badge>
+  );
 }
 
 function EmptyRowsMessage({ children }: { children: ReactNode }) {
@@ -2702,11 +3060,6 @@ async function runDashboardAction(
     const entryType = text(body.entryType);
     const payload = asRecord(body.payload);
 
-    if (entryType === "software_raw") {
-      await mutations.saveProductionEntry(toProductionEntry(payload));
-      return "Saved production row.";
-    }
-
     await mutations.saveDataEntry({ entryType, payload });
     return "Saved to Convex.";
   }
@@ -2794,6 +3147,7 @@ function routeOptionText(option: DashboardPayload, fallback: string) {
   return [
     `Option ${str(option.optionNumber) || fallback}`,
     str(option.machineUsed || option.machine || option.machineFamily),
+    str(option.setupName),
     str(option.setupCount || option.numberOfSetups) ? `${str(option.setupCount || option.numberOfSetups)} setups` : "",
   ]
     .filter(Boolean)
@@ -3042,6 +3396,17 @@ function machineValue(row: DashboardPayload, type: "machine" | "machineType") {
   return displayValue(row.machineType || row["MACHINE TYPE"] || row.type || row.TYPE);
 }
 
+function machineBoardRows(machineRows: DashboardPayload[], plannedRows: DashboardPayload[]) {
+  const rowsByMachine = new Map<string, DashboardPayload>();
+  for (const row of machineRows) {
+    const key = machineKey(machineValue(row, "machine"));
+    if (!key) continue;
+    rowsByMachine.set(key, row);
+  }
+
+  return [...rowsByMachine.values()].sort((a, b) => machineValue(a, "machine").localeCompare(machineValue(b, "machine"), undefined, { numeric: true }));
+}
+
 function jobCardNumber(row: DashboardPayload) {
   return displayValue(row.jcNo || row.JobCardNo || row.jobCard);
 }
@@ -3050,8 +3415,14 @@ function itemCode(row: DashboardPayload) {
   return displayValue(row.partCode || row["PART CODE"] || row.itemCode);
 }
 
-function machineStatusText(row: DashboardPayload) {
-  return displayValue(row.status || row.activeStatus || row.isActive || row.ACTIVE || row.active || row.Active);
+function machineMasterStatusText(row: DashboardPayload) {
+  const rawStatus = str(row.status || row.STATUS || row.activeStatus || row.isActive || row.ACTIVE || row.active || row.Active);
+  const normalized = rawStatus.toLowerCase();
+  if (!rawStatus) return "Active";
+  if (normalized === "planned") return "Not in master";
+  if (["active", "yes", "true", "running", "available"].includes(normalized)) return "Active";
+  if (["inactive", "no", "false", "deactive", "deactivated", "disabled", "unavailable"].includes(normalized)) return "Inactive";
+  return rawStatus;
 }
 
 function jobCardTrackingState(row: DashboardPayload) {
@@ -3121,11 +3492,12 @@ function rowFieldSearchText(row: DashboardPayload, field: string) {
 function groupPlannedRowsByMachine(rows: DashboardPayload[]) {
   const grouped = new Map<string, DashboardPayload[]>();
   for (const row of rows) {
-    const key = machineKey(row.machine || row.machineNo || row["MACHINE NO"] || row["M/C NO"]);
+    const machine = machineValue(row, "machine");
+    const key = machineKey(machine);
     if (!key) continue;
-    const machineRows = grouped.get(key) ?? [];
-    machineRows.push(row);
-    grouped.set(key, machineRows);
+    const machineRowsForKey = grouped.get(key) ?? [];
+    machineRowsForKey.push(row);
+    grouped.set(key, machineRowsForKey);
   }
   return grouped;
 }
@@ -3154,7 +3526,9 @@ function groupPlannedRowsByPart(rows: DashboardPayload[]) {
   return grouped;
 }
 
-function plannedMachineOptions(rows: DashboardPayload[]) {
+function plannedMachineOptions(rows: DashboardPayload[], machineRows: DashboardPayload[] = []) {
+  const boardOptions = machineRows.map((row) => machineValue(row, "machine")).filter((value) => value !== "-");
+  if (boardOptions.length) return uniqueValues(boardOptions);
   return uniqueValues(rows.map((row) => machineValue(row, "machine")).filter((value) => value !== "-"));
 }
 

@@ -15,6 +15,8 @@ const args = parseArgs(process.argv.slice(2));
 const workbookPath = path.resolve(args.workbook ?? defaultWorkbook);
 const apply = Boolean(args.apply);
 const replace = args.replace !== false;
+const entryTypeFilter = args.entryType ? text(args.entryType) : "";
+const includePlannerActions = Boolean(args.includePlannerActions);
 
 loadEnv(path.join(appDir, ".env.local"));
 
@@ -30,6 +32,10 @@ function parseArgs(argv) {
       parsedArgs.replace = true;
     } else if (arg === "--workbook") {
       parsedArgs.workbook = argv[++index];
+    } else if (arg === "--entry-type") {
+      parsedArgs.entryType = argv[++index];
+    } else if (arg === "--include-planner-actions") {
+      parsedArgs.includePlannerActions = true;
     }
   }
   return parsedArgs;
@@ -51,14 +57,12 @@ function loadEnv(filePath) {
 
 function parseWorkbook(filePath) {
   const workbook = XLSX.readFile(filePath, { cellDates: false });
-  const routeLookup = buildRouteLookup(workbook);
   const employeeLookup = buildEmployeeLookup(workbook);
-  const productionEntries = parseProductionEntries(workbook, routeLookup, employeeLookup);
+  // Software_Raw_Import is historical construction data and must not seed shop-floor output.
+  const productionEntries = [];
   const dataEntries = [
-    ...parseRawSheetEntries(workbook, "software_raw", "Software_Raw_Import", isValidRawRow),
     ...parseRawSheetEntries(workbook, "machine_master", "Machine_Master", (row) => text(rowValue(row, "M/C NO", "MACHINE NO", "MACHINE NUMBER"))),
     ...parseRawSheetEntries(workbook, "dispatch", "Main_Floor_Dispatch", (row) => text(rowValue(row, "JC NO.", "JC NO", "JOB CARD NO.", "JobCardNo"))),
-    ...parseRawSheetEntries(workbook, "meeting_action", "Meeting_Action_Tracker", (row) => text(rowValue(row, "Emp ID", "Employee Name"))),
     ...parseRawSheetEntries(workbook, "rejection_classification", "Rejection Classification", (row) => text(rowValue(row, "CODE", "Rejection Reason"))),
     ...parseRawSheetEntries(workbook, "raw_material_plan", "Raw_Material_Date_Plan", (row) => text(rowValue(row, "RM Date Plan ID", "Production Job Card No.", "PART NO"))),
     ...parseRawSheetEntries(workbook, "machine_planning", "FG_Machine_Planning", (row) => text(rowValue(row, "Plan ID", "Production Job Card No.", "PART NO"))),
@@ -69,7 +73,6 @@ function parseWorkbook(filePath) {
     ...parseDataEntries(workbook, "work_order", "Work_Order_Import", workOrderMap),
     ...parseRmInwardEntries(workbook),
     ...parseDataEntries(workbook, "employee", "Employee_Master", employeeMap),
-    ...parseDataEntries(workbook, "setup_checklist", "Setup_Checklist", setupChecklistMap),
   ];
   dataEntries.push({
     entryType: "_summary",
@@ -79,8 +82,8 @@ function parseWorkbook(filePath) {
 
   return {
     productionEntries,
-    attendanceRecords: parseAttendanceRecords(workbook, employeeLookup),
-    trainingRecords: parseTrainingRecords(workbook, employeeLookup),
+    attendanceRecords: [],
+    trainingRecords: [],
     routeSelections: parseRouteSelections(workbook),
     plannerPriorities: parsePlannerPriorities(workbook),
     machineConstraints: parseMachineConstraints(workbook),
@@ -91,6 +94,37 @@ function parseWorkbook(filePath) {
     dataEntries,
   };
 }
+
+function parseEntryTypeWorkbook(filePath, entryType) {
+  const workbook = XLSX.readFile(filePath, { cellDates: false });
+  const parser = dataEntryParsers[entryType];
+  if (!parser) {
+    throw new Error(`Unsupported --entry-type "${entryType}". Supported values: ${Object.keys(dataEntryParsers).join(", ")}`);
+  }
+  const dataEntries = parser(workbook);
+  dataEntries.push({
+    entryType: "_summary",
+    key: "counts",
+    payload: { counts: countDataEntriesByType(dataEntries) },
+  });
+  return { dataEntries };
+}
+
+const dataEntryParsers = {
+  machine_master: (workbook) => parseRawSheetEntries(workbook, "machine_master", "Machine_Master", (row) => text(rowValue(row, "M/C NO", "MACHINE NO", "MACHINE NUMBER"))),
+  dispatch: (workbook) => parseRawSheetEntries(workbook, "dispatch", "Main_Floor_Dispatch", (row) => text(rowValue(row, "JC NO.", "JC NO", "JOB CARD NO.", "JobCardNo"))),
+  rejection_classification: (workbook) => parseRawSheetEntries(workbook, "rejection_classification", "Rejection Classification", (row) => text(rowValue(row, "CODE", "Rejection Reason"))),
+  raw_material_plan: (workbook) => parseRawSheetEntries(workbook, "raw_material_plan", "Raw_Material_Date_Plan", (row) => text(rowValue(row, "RM Date Plan ID", "Production Job Card No.", "PART NO"))),
+  machine_planning: (workbook) => parseRawSheetEntries(workbook, "machine_planning", "FG_Machine_Planning", (row) => text(rowValue(row, "Plan ID", "Production Job Card No.", "PART NO"))),
+  quality_inspection: (workbook) => parseRawSheetEntries(workbook, "quality_inspection", "Quality_Inspection", (row) => text(rowValue(row, "Inspection ID", "PART NO"))),
+  route: (workbook) => parseDataEntries(workbook, "route", "Planning_Route_Master", routeMap),
+  cycle: (workbook) => parseDataEntries(workbook, "cycle", "Planning_Cycle_Time_Master", cycleMap),
+  tooling: (workbook) => parseDataEntries(workbook, "tooling", "Planning_Tooling_Master", toolingMap),
+  work_order: (workbook) => parseDataEntries(workbook, "work_order", "Work_Order_Import", workOrderMap),
+  rm_inward: parseRmInwardEntries,
+  employee: (workbook) => parseDataEntries(workbook, "employee", "Employee_Master", employeeMap),
+  setup_checklist: (workbook) => parseDataEntries(workbook, "setup_checklist", "Setup_Checklist", setupChecklistMap),
+};
 
 const routeMap = {
   partNo: ["PART NO", "PART CODE", "ITEM CODE"],
@@ -679,9 +713,10 @@ function writeTableImportFiles(payload) {
 }
 
 function importTable(table, filePath, mode) {
+  const args = ["convex", "import", "--table", table, mode, "--yes", "--format", "jsonArray", filePath];
   execFileSync(
-    "npx",
-    ["convex", "import", "--table", table, mode, "--yes", "--format", "jsonArray", filePath],
+    process.platform === "win32" ? "cmd.exe" : "npx",
+    process.platform === "win32" ? ["/c", "npx.cmd", ...args] : args,
     {
       cwd: appDir,
       env: process.env,
@@ -695,12 +730,23 @@ async function main() {
     throw new Error(`Workbook not found: ${workbookPath}`);
   }
 
-  const parsed = parseWorkbook(workbookPath);
+  const parsed = entryTypeFilter ? parseEntryTypeWorkbook(workbookPath, entryTypeFilter) : parseWorkbook(workbookPath);
+  if (!entryTypeFilter && !includePlannerActions) {
+    parsed.routeSelections = [];
+    parsed.plannerPriorities = [];
+    parsed.machineConstraints = [];
+    parsed.planOverrides = [];
+    parsed.routeChanges = [];
+    parsed.dispatchApprovals = [];
+    parsed.setupCompletions = [];
+  }
   const counts = countPayload(parsed);
 
   console.log(`Workbook: ${workbookPath}`);
+  if (entryTypeFilter) console.log(`Entry type: ${entryTypeFilter}`);
+  if (!entryTypeFilter && !includePlannerActions) console.log("Planner action/decision tables are skipped. Pass --include-planner-actions to import them as data.");
   console.table(counts);
-  console.table(countDataEntriesByType(parsed.dataEntries));
+  if (parsed.dataEntries) console.table(countDataEntriesByType(parsed.dataEntries));
 
   if (!apply) {
     console.log("Dry run only. Re-run with --apply to import into Convex.");
@@ -717,7 +763,7 @@ async function main() {
   const mode = replace ? "--replace" : "--append";
 
   console.log(`Prepared Convex import files in ${outDir}`);
-  console.log(`${replace ? "Replacing" : "Appending to"} workbook tables in the selected Convex deployment.`);
+  console.log(`${replace ? "Replacing" : "Appending to"} ${entryTypeFilter ? "selected entry type" : "workbook tables"} in the selected Convex deployment.`);
 
   for (const [table, filePath] of Object.entries(files)) {
     console.log(`${table}: ${importPayload[table].length} rows`);

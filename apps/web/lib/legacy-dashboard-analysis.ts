@@ -1,4 +1,5 @@
 import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, type ProductionEntry, type TrainingRecord } from "./dashboard-domain";
+import { isActivePlannerDecision, machineCodeMatches, sourcePlannerDecisions } from "./planning-rules";
 
 type DataEntry = {
   entryType: string;
@@ -78,6 +79,9 @@ const monthNames: Record<string, number> = {
 
 const monthShort = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
 const monthShortLegacy = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const planningHoursPerDay = 8;
+const planningSetupBufferDays = 1;
+const planningDispatchTargetDays = 25;
 const downtimeReasonFields: Array<[string, string[]]> = [
   ["QC Approval", ["QC APPROVAL DOWNTIME (MIN)", "QC APPROVAL", "QCDown"]],
   ["Machine Setting", ["MACHINE SETTING DOWNTIME (MIN)", "MACHINE SETTING", "SettingDown"]],
@@ -103,6 +107,65 @@ const toolFixtureCategories: Array<[string, string]> = [
   ["CUTTING CHAPLA", "CC"],
 ];
 
+function mergeSourceActionRows(sourceRows: ActionRow[], liveRows: ActionRow[], keyFn: (row: ActionRow) => string) {
+  const merged = new Map<string, ActionRow>();
+  for (const row of [...sourceRows, ...liveRows]) {
+    const key = keyFn(row);
+    merged.set(key || JSON.stringify(row), row);
+  }
+  return [...merged.values()];
+}
+
+function routeSelectionDecisionKey(row: ActionRow) {
+  return [
+    canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO")),
+    canonicalKey(rowText(row, "partCode", "PART CODE", "PART NO")),
+    canonicalKey(rowText(row, "optionNumber", "SELECTED ROUTE OPTION", "OPTION NUMBER")),
+  ].join("|");
+}
+
+function priorityDecisionKey(row: ActionRow) {
+  return [
+    canonicalKey(rowText(row, "target", "TARGET")),
+    canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO")),
+    canonicalKey(rowText(row, "partCode", "PART CODE", "PART NO")),
+    canonicalKey(rowText(row, "priority", "PRIORITY")),
+  ].join("|");
+}
+
+function machineConstraintDecisionKey(row: ActionRow) {
+  return [
+    canonicalKey(rowText(row, "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO")),
+    rowText(row, "unavailableFrom", "UNAVAILABLE FROM"),
+    rowText(row, "unavailableTo", "UNAVAILABLE TO"),
+  ].join("|");
+}
+
+function planOverrideDecisionKey(row: ActionRow) {
+  return [
+    canonicalKey(rowText(row, "target", "jcNo", "JC NO.", "JC NO", "PART CODE", "PART NO")),
+    canonicalKey(rowText(row, "setupNo", "SETUP NO.", "SETUP NO")),
+    canonicalKey(rowText(row, "fromMachine", "FROM MACHINE")),
+    canonicalKey(rowText(row, "toMachine", "TO MACHINE")),
+  ].join("|");
+}
+
+function routeChangeDecisionKey(row: ActionRow) {
+  return [
+    canonicalKey(rowText(row, "target", "jcNo", "JC NO.", "JC NO", "PART CODE", "PART NO")),
+    canonicalKey(rowText(row, "newOption", "NEW ROUTE OPTION", "NEW OPTION")),
+    canonicalKey(rowText(row, "applyFromSetup", "APPLY FROM SETUP")),
+  ].join("|");
+}
+
+function setupCompletionDecisionKey(row: ActionRow) {
+  return [
+    canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO")),
+    canonicalKey(rowText(row, "setupNo", "SETUP NO.", "SETUP NO")),
+    canonicalKey(rowText(row, "machine", "MACHINE NO.", "MACHINE NO")),
+  ].join("|");
+}
+
 export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const dataEntries = input.dataEntries ?? [];
   const byType = bucketDataEntries(dataEntries);
@@ -120,6 +183,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const cycleRows = entryRows(byType, "cycle");
   const toolingRows = entryRows(byType, "tooling");
   const workOrderRows = entryRows(byType, "work_order");
+  const rmInwardRows = entryRows(byType, "rm_inward");
   const setupChecklistRows = entryRows(byType, "setup_checklist");
   const rawSoftwareRows = entryRows(byType, "software_raw");
   const meetingRows = entryRows(byType, "meeting_action");
@@ -141,15 +205,16 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     cycleRows,
     toolingRows,
     workOrderRows,
+    rmInwardRows,
     machineRows: entryRows(byType, "machine_master"),
     dispatchRows: entryRows(byType, "dispatch"),
-    routeSelections: input.routeSelections ?? [],
-    plannerPriorities: input.plannerPriorities ?? [],
-    machineConstraints: input.machineConstraints ?? [],
-    planOverrides: input.planOverrides ?? [],
-    routeChanges: input.routeChanges ?? [],
+    routeSelections: mergeSourceActionRows(sourcePlannerDecisions.routeSelections, input.routeSelections ?? [], routeSelectionDecisionKey),
+    plannerPriorities: mergeSourceActionRows(sourcePlannerDecisions.plannerPriorities, input.plannerPriorities ?? [], priorityDecisionKey),
+    machineConstraints: mergeSourceActionRows(sourcePlannerDecisions.machineConstraints, input.machineConstraints ?? [], machineConstraintDecisionKey),
+    planOverrides: mergeSourceActionRows(sourcePlannerDecisions.planOverrides, input.planOverrides ?? [], planOverrideDecisionKey),
+    routeChanges: mergeSourceActionRows(sourcePlannerDecisions.routeChanges, input.routeChanges ?? [], routeChangeDecisionKey),
     dispatchApprovals: input.dispatchApprovals ?? [],
-    setupCompletions: input.setupCompletions ?? [],
+    setupCompletions: mergeSourceActionRows(sourcePlannerDecisions.setupCompletions, input.setupCompletions ?? [], setupCompletionDecisionKey),
     filters: input.filters ?? {},
     workbookName: input.workbookName,
     updatedAt: input.updatedAt ?? "",
@@ -161,6 +226,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     cycleRows.length ||
     toolingRows.length ||
     workOrderRows.length ||
+    rmInwardRows.length ||
     setupChecklistRows.length ||
     employeeRows.length ||
     entryRows(byType, "machine_master").length
@@ -182,6 +248,7 @@ function buildProductionAnalysis({
   cycleRows,
   toolingRows,
   workOrderRows,
+  rmInwardRows,
   machineRows,
   dispatchRows,
   routeSelections,
@@ -207,6 +274,7 @@ function buildProductionAnalysis({
   cycleRows: Record<string, unknown>[];
   toolingRows: Record<string, unknown>[];
   workOrderRows: Record<string, unknown>[];
+  rmInwardRows: Record<string, unknown>[];
   machineRows: Record<string, unknown>[];
   dispatchRows: Record<string, unknown>[];
   routeSelections: ActionRow[];
@@ -502,6 +570,7 @@ function buildProductionAnalysis({
     cycleRows,
     toolingRows,
     workOrderRows,
+    rmInwardRows,
     machineRows,
     dispatchRows,
     setupChecklistRows,
@@ -665,6 +734,7 @@ function buildProductionControl({
   cycleRows,
   toolingRows,
   workOrderRows,
+  rmInwardRows,
   machineRows,
   dispatchRows,
   setupChecklistRows,
@@ -681,6 +751,7 @@ function buildProductionControl({
   cycleRows: Record<string, unknown>[];
   toolingRows: Record<string, unknown>[];
   workOrderRows: Record<string, unknown>[];
+  rmInwardRows: Record<string, unknown>[];
   machineRows: Record<string, unknown>[];
   dispatchRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
@@ -695,6 +766,8 @@ function buildProductionControl({
   const routeGroups = groupRouteRows(routeRows);
   const cycleKeys = new Set(cycleRows.map((row) => masterKey(row)));
   const toolingKeys = new Set(toolingRows.map((row) => masterKey(row)));
+  const rmInwardByJc = latestRmInwardByJobCard(rmInwardRows);
+  const selectedRouteByJc = latestRouteSelectionByJobCard(routeSelections);
   const rawByJc = new Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines: Set<string>; operators: Set<string> }>();
   let latestRawDate = "";
   for (const row of productionRows) {
@@ -715,31 +788,49 @@ function buildProductionControl({
     const jcNo = rowText(row, "JC NO.", "JC NO", "jcNo");
     const partCode = rowText(row, "PART CODE", "PART NO", "partCode");
     const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
+    const selectedOptionNumber = rowText(selectedRouteByJc.get(canonicalKey(jcNo)) ?? {}, "optionNumber", "SELECTED ROUTE OPTION", "OPTION NUMBER");
     const partKey = canonicalKey(partCode);
-    const availableOptions = [...new Set(routeRows.filter((route) => canonicalKey(rowText(route, "PART NO", "PART CODE", "partNo")) === partKey).map((route) => rowText(route, "OPTION NUMBER", "optionNumber")).filter(Boolean))].sort(numericSort);
-    const effectiveOption = optionNumber || (availableOptions.length === 1 ? availableOptions[0]! : "");
+    const availableOptions = routeOptionSummaries(routeRows, partKey);
+    const optionNumbers = availableOptions.map((option) => rowText(option, "optionNumber"));
+    const effectiveOption = optionNumber || selectedOptionNumber || (optionNumbers.length === 1 ? optionNumbers[0]! : "");
     const selectedRoutes = routeGroups.get([partKey, effectiveOption].join("|")) ?? [];
-    const routeStatus = !optionNumber && availableOptions.length > 1
+    const rmInward = rmInwardByJc.get(canonicalKey(jcNo));
+    const routeStatus = !effectiveOption && optionNumbers.length > 1
       ? "Select option"
       : selectedRoutes.length
-        ? (optionNumber ? "Ready" : "Auto single option")
+        ? (optionNumber || selectedOptionNumber ? "Ready" : "Auto single option")
         : "Route master missing";
-    const missingCycle = selectedRoutes.filter((route) => !cycleKeys.has(masterKey(route))).map((route) => rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"));
-    const missingTooling = selectedRoutes.filter((route) => !toolingKeys.has(masterKey(route))).map((route) => rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"));
+    const missingCycleRoutes = selectedRoutes.filter((route) => !cycleKeys.has(masterKey(route)));
+    const missingToolingRoutes = selectedRoutes.filter((route) => !toolingKeys.has(masterKey(route)));
+    const missingCycle = missingCycleRoutes.map((route) => rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"));
+    const missingTooling = missingToolingRoutes.map((route) => rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"));
+    const firstMissingRoute = missingCycleRoutes[0] ?? missingToolingRoutes[0] ?? selectedRoutes[0] ?? {};
     const actual = rawByJc.get(canonicalKey(jcNo));
     const orderPcs = safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"));
     const dispatchStatus = dispatchJcKeys.has(canonicalKey(jcNo)) ? "Shifted to dispatch" : "In production";
     return {
       jcNo,
       fgPoNo: rowText(row, "FG PO NO.", "fgPoNo"),
+      rmPoNo: rowText(row, "RM PO NO.", "rmPoNo"),
+      poDate: rowText(row, "PO DATE", "poDate"),
       partCode,
       description: rowText(row, "DESCRIPTION", "description"),
       optionNumber: effectiveOption || "Not selected",
-      optionSource: optionNumber ? "Excel" : (effectiveOption ? "Auto single route" : "Planner required"),
+      optionSource: optionNumber ? "Excel" : (selectedOptionNumber ? "Planner selected" : (effectiveOption ? "Auto single route" : "Planner required")),
       candidateOption: !optionNumber && effectiveOption ? effectiveOption : "-",
       availableOptions,
       orderPcs: round(orderPcs),
-      rmStatus: rowText(row, "RM I/W DATE", "rmInwardDate") || safeNumber(rowValue(row, "RM INWARD KG.", "rmInwardKg")) ? "Received" : "Waiting",
+      orderKg: round(safeNumber(rowValue(row, "ORD. KG.", "orderKg"))),
+      deliveryDate: rowText(row, "DELIVERY DATE", "deliveryDate"),
+      missingSetupNo: rowText(firstMissingRoute, "SETUP NO.", "SETUP CODE", "setupNo"),
+      missingSetupName: rowText(firstMissingRoute, "SETUP NAME", "setupName"),
+      machineUsed: rowText(firstMissingRoute, "MACHINE USED", "machineUsed"),
+      machineType: rowText(firstMissingRoute, "MACHINE TYPE", "machineType"),
+      stageWeight: safeNumber(rowValue(firstMissingRoute, "STAGE WEIGHT (GRAM)", "stageWeight")),
+      operationWeight: safeNumber(rowValue(firstMissingRoute, "OPERATION WISE WEIGHT (GRAM)", "operationWeight")) || safeNumber(rowValue(firstMissingRoute, "STAGE WEIGHT (GRAM)", "stageWeight")),
+      rmStatus: isRmReceived(row, rmInward) ? "Received" : "Waiting",
+      rmInwardDate: rowText(rmInward ?? {}, "RM I/W DATE", "rmInwardDate") || rowText(row, "RM I/W DATE", "rmInwardDate"),
+      rmInwardKg: safeNumber(rowValue(rmInward ?? {}, "RM INWARD KG.", "rmInwardKg")) || safeNumber(rowValue(row, "RM INWARD KG.", "rmInwardKg")),
       routeStatus,
       cycleStatus: missingCycle.length ? `Missing setup ${compactJoin(missingCycle)}` : "Ready",
       toolingStatus: missingTooling.length ? `Missing setup ${compactJoin(missingTooling)}` : "Ready",
@@ -753,15 +844,15 @@ function buildProductionControl({
         : routeStatus,
     };
   });
-  const masterGaps = workOrderOutputRows
+  const allWorkOrderGaps = workOrderOutputRows
     .map((row) => ({
       ...row,
-      routeSelectionMissing: row.optionSource === "Planner required" && row.rmStatus === "Received",
+      routeSelectionMissing: row.optionSource === "Planner required",
       routeMasterMissing: row.routeStatus === "Route master missing",
       cycleTimeMissing: row.cycleStatus.startsWith("Missing"),
       toolingPlanMissing: row.toolingStatus.startsWith("Missing"),
       missingAreas: [
-        row.optionSource === "Planner required" && row.rmStatus === "Received" ? "Route option" : "",
+        row.optionSource === "Planner required" ? "Route option" : "",
         row.routeStatus === "Route master missing" ? "Route master" : "",
         row.cycleStatus.startsWith("Missing") ? "Cycle time" : "",
         row.toolingStatus.startsWith("Missing") ? "Tooling plan" : "",
@@ -769,8 +860,9 @@ function buildProductionControl({
       nextAction: row.planningBlocker,
     }))
     .filter((row) => row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing);
+  const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(workOrderOutputRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
-  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, routeGroups);
+  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, routeGroups, cycleRows, machineRows, machineConstraints, planOverrides);
   const machinePlanReady = workOrderOutputRows.filter((row) => row.rmStatus === "Received" && !row.routeStatus.includes("missing") && row.cycleStatus === "Ready" && row.toolingStatus === "Ready").length;
   const latestSetupDate = maxDate(setupChecklistRows.map((row) => parseDate(rowValue(row, "SETUP DATE", "setupDate"))));
   const totalOutputQty = sum([...rawByJc.values()].map((row) => row.outputQty));
@@ -839,8 +931,10 @@ function buildProductionControl({
     },
     workOrders: workOrderOutputRows,
     jobCardStatusTiles: workOrderOutputRows,
-    routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required"),
+    routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus === "Received"),
+    routeSelectionWaitingRm: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus !== "Received"),
     masterGaps,
+    allWorkOrderGaps,
     runningParts: [],
     dispatchHandoff: [],
     jobCardSetupProgress: setupCompletions,
@@ -1708,8 +1802,59 @@ function combinedRows(workOrderRows: Array<Record<string, unknown>>, rawByJc: Ma
   }).sort((a, b) => (a.action === "Can combine planning" ? 0 : 1) - (b.action === "Can combine planning" ? 0 : 1) || b.orderPcs - a.orderPcs);
 }
 
-function machinePlanDetails(workOrderRows: Array<Record<string, unknown>>, rawByJc: Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number }>, routeGroups: Map<string, Record<string, unknown>[]>) {
+function latestRmInwardByJobCard(rows: Array<Record<string, unknown>>) {
+  const byJc = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const key = canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo"));
+    if (!key) continue;
+    const current = byJc.get(key);
+    if (!current || rowText(row, "createdAt") >= rowText(current, "createdAt")) {
+      byJc.set(key, row);
+    }
+  }
+  return byJc;
+}
+
+function latestRouteSelectionByJobCard(rows: Array<Record<string, unknown>>) {
+  const byJc = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const key = canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo"));
+    if (!key) continue;
+    const current = byJc.get(key);
+    if (!current || rowText(row, "createdAt") >= rowText(current, "createdAt")) {
+      byJc.set(key, row);
+    }
+  }
+  return byJc;
+}
+
+function isRmReceived(workOrder: Record<string, unknown>, rmInward?: Record<string, unknown>) {
+  const status = rowText(rmInward ?? {}, "status", "STATUS").toLowerCase();
+  if (status && !["waiting", "pending", "not received", "not_received"].includes(status)) return true;
+  return Boolean(
+    rowText(workOrder, "RM I/W DATE", "rmInwardDate") ||
+    rowText(rmInward ?? {}, "RM I/W DATE", "rmInwardDate") ||
+    safeNumber(rowValue(workOrder, "RM INWARD KG.", "rmInwardKg")) ||
+    safeNumber(rowValue(rmInward ?? {}, "RM INWARD KG.", "rmInwardKg")),
+  );
+}
+
+function machinePlanDetails(
+  workOrderRows: Array<Record<string, unknown>>,
+  rawByJc: Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines?: Set<string> }>,
+  routeGroups: Map<string, Record<string, unknown>[]>,
+  cycleRows: Array<Record<string, unknown>>,
+  machineRows: Array<Record<string, unknown>>,
+  machineConstraints: ActionRow[],
+  planOverrides: ActionRow[],
+) {
   const details: Array<Record<string, unknown>> = [];
+  const cycleByKey = new Map(cycleRows.map((row) => [masterKey(row), row]));
+  const unavailableMachines = new Set(machineConstraints
+    .filter((row) => isActivePlannerDecision(rowText(row, "status", "STATUS")))
+    .map((row) => canonicalKey(rowText(row, "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO")))
+    .filter(Boolean));
+  const machineLoad = new Map<string, number>();
   for (const row of workOrderRows) {
     const partCode = rowText(row, "partCode");
     const optionNumber = rowText(row, "optionNumber");
@@ -1720,12 +1865,33 @@ function machinePlanDetails(workOrderRows: Array<Record<string, unknown>>, rawBy
     const actual = rawByJc.get(canonicalKey(rowText(row, "jcNo")));
 
     for (const route of routes) {
-      const machine = rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
-      if (!machine) continue;
-      details.push({
+      const routeMachine = rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
+      if (!routeMachine) continue;
+      const setupNo = rowText(route, "SETUP NO.", "SETUP CODE", "setupNo");
+      const machineType = rowText(route, "MACHINE TYPE", "machineType");
+      const override = planOverrideForSetup(planOverrides, row, setupNo);
+      const actualMachine = [...(actual?.machines ?? new Set<string>())].find((machine) => machineCodeMatches(routeMachine, machine));
+      const cycle = cycleByKey.get(masterKey(route));
+      const assignedMachines = actualMachine
+        ? [actualMachine]
+        : assignedPhysicalMachines({
+            routeMachine,
+            machineType,
+            orderPcs: safeNumber(rowValue(row, "orderPcs")),
+            cycle,
+            machineRows,
+            unavailableMachines,
+            machineLoad,
+            override,
+          });
+      for (const machine of assignedMachines) {
+        const machineKeyValue = canonicalKey(machine);
+        if (machineKeyValue) machineLoad.set(machineKeyValue, (machineLoad.get(machineKeyValue) ?? 0) + 1);
+        details.push({
         machine,
-        machineType: rowText(route, "MACHINE TYPE", "machineType"),
-        setupNo: rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"),
+        routeMachine,
+        machineType,
+        setupNo,
         setupName: rowText(route, "SETUP NAME", "setupName"),
         partCode,
         description: rowText(row, "description"),
@@ -1742,7 +1908,12 @@ function machinePlanDetails(workOrderRows: Array<Record<string, unknown>>, rawBy
         rawRejectQty: round(actual?.rejectQty ?? 0),
         rawRows: actual?.rows ?? 0,
         runningStatus: actual?.rows ? "Running" : "Planned",
+        planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
+          machineAssignment: machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
+          parallelMachineCount: assignedMachines.length,
+          planningAssumption: `${planningHoursPerDay} hrs/day + ${planningSetupBufferDays} setup buffer day; split if 25-day RM target is missed`,
       });
+      }
     }
   }
   return details.sort((a, b) =>
@@ -1750,6 +1921,92 @@ function machinePlanDetails(workOrderRows: Array<Record<string, unknown>>, rawBy
     rowText(a, "partCode").localeCompare(rowText(b, "partCode"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")),
   );
+}
+
+function planOverrideForSetup(planOverrides: ActionRow[], workOrder: Record<string, unknown>, setupNo: string) {
+  const jcKey = canonicalKey(rowText(workOrder, "jcNo", "JC NO.", "JC NO"));
+  const partKey = canonicalKey(rowText(workOrder, "partCode", "PART CODE", "PART NO"));
+  const setupKey = canonicalKey(setupNo);
+  return planOverrides.find((row) => {
+    if (!isActivePlannerDecision(rowText(row, "status", "STATUS"))) return false;
+    const targetKey = canonicalKey(rowText(row, "target", "jcNo", "JC NO.", "JC NO", "partCode", "PART CODE", "PART NO"));
+    const rowJcKey = canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"));
+    const rowPartKey = canonicalKey(rowText(row, "partCode", "PART CODE", "PART NO"));
+    const rowSetupKey = canonicalKey(rowText(row, "setupNo", "SETUP NO.", "SETUP NO"));
+    const targetMatches = Boolean(targetKey && (targetKey === jcKey || targetKey === partKey));
+    const rowMatches = Boolean((rowJcKey && rowJcKey === jcKey) || (rowPartKey && rowPartKey === partKey));
+    const setupMatches = !rowSetupKey || rowSetupKey === setupKey;
+    return (targetMatches || rowMatches) && setupMatches;
+  });
+}
+
+function assignedPhysicalMachines({
+  routeMachine,
+  machineType,
+  orderPcs,
+  cycle,
+  machineRows,
+  unavailableMachines,
+  machineLoad,
+  override,
+}: {
+  routeMachine: string;
+  machineType: string;
+  orderPcs: number;
+  cycle?: Record<string, unknown>;
+  machineRows: Array<Record<string, unknown>>;
+  unavailableMachines: Set<string>;
+  machineLoad: Map<string, number>;
+  override?: ActionRow;
+}) {
+  const overrideMachine = override ? rowText(override, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE") : "";
+  const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, unavailableMachines, machineLoad);
+  if (overrideMachine) {
+    const exactOverride = candidates.find((row) => canonicalKey(row.machine) === canonicalKey(overrideMachine));
+    if (exactOverride) return [exactOverride.machine];
+  }
+  if (!candidates.length) return [routeMachine];
+  const machineCount = requiredMachineCountForTarget(orderPcs, cycle, candidates.length);
+  return candidates.slice(0, machineCount).map((row) => row.machine);
+}
+
+function requiredMachineCountForTarget(orderPcs: number, cycle: Record<string, unknown> | undefined, availableMachineCount: number) {
+  const cycleSeconds = safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")) + safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING"));
+  if (!orderPcs || !cycleSeconds || availableMachineCount <= 1) return 1;
+  const estimatedHours = (orderPcs * cycleSeconds) / 3600;
+  const productionDays = Math.max(1, Math.ceil(estimatedHours / planningHoursPerDay));
+  const availableProductionDays = Math.max(1, planningDispatchTargetDays - planningSetupBufferDays);
+  return Math.min(availableMachineCount, Math.max(1, Math.ceil(productionDays / availableProductionDays)));
+}
+
+function candidatePhysicalMachines(
+  routeMachine: string,
+  machineType: string,
+  machineRows: Array<Record<string, unknown>>,
+  unavailableMachines: Set<string>,
+  machineLoad: Map<string, number>,
+) {
+  const typeKey = canonicalKey(machineType);
+  return machineRows
+    .map((row) => ({
+      machine: rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO", "MACHINE NO."),
+      machineType: rowText(row, "machineType", "MACHINE TYPE", "type", "TYPE"),
+      status: rowText(row, "status", "activeStatus", "isActive", "ACTIVE", "active", "Active"),
+    }))
+    .filter((row) => row.machine)
+    .filter((row) => isMachineActive(row.status))
+    .filter((row) => !unavailableMachines.has(canonicalKey(row.machine)))
+    .filter((row) => machineCodeMatches(routeMachine, row.machine))
+    .filter((row) => !typeKey || !canonicalKey(row.machineType) || canonicalKey(row.machineType) === typeKey)
+    .sort((a, b) =>
+      (machineLoad.get(canonicalKey(a.machine)) ?? 0) - (machineLoad.get(canonicalKey(b.machine)) ?? 0) ||
+      a.machine.localeCompare(b.machine, undefined, { numeric: true }),
+    );
+}
+
+function isMachineActive(status: string) {
+  const normalized = status.toLowerCase();
+  return !normalized || ["active", "yes", "true", "running", "available"].includes(normalized);
 }
 
 function groupRouteRows(rows: Record<string, unknown>[]) {
@@ -1764,6 +2021,40 @@ function groupRouteRows(rows: Record<string, unknown>[]) {
     rowsInGroup.sort((a, b) => numericSort(rowText(a, "SETUP NO.", "SETUP CODE", "setupNo"), rowText(b, "SETUP NO.", "SETUP CODE", "setupNo")));
   }
   return groups;
+}
+
+function routeOptionSummaries(rows: Record<string, unknown>[], partKey: string) {
+  const summaries = new Map<string, {
+    optionNumber: string;
+    setupCount: number;
+    machines: Set<string>;
+    setupNames: Set<string>;
+  }>();
+  for (const row of rows) {
+    if (canonicalKey(rowText(row, "PART NO", "PART CODE", "partNo")) !== partKey) continue;
+    const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
+    if (!optionNumber) continue;
+    const summary = summaries.get(optionNumber) ?? {
+      optionNumber,
+      setupCount: 0,
+      machines: new Set<string>(),
+      setupNames: new Set<string>(),
+    };
+    summary.setupCount += 1;
+    const machine = rowText(row, "MACHINE USED", "machineUsed", "MACHINE TYPE", "machineType");
+    const setupName = rowText(row, "SETUP NAME", "setupName", "SETUP NO.", "setupNo");
+    if (machine) summary.machines.add(machine);
+    if (setupName) summary.setupNames.add(setupName);
+    summaries.set(optionNumber, summary);
+  }
+  return [...summaries.values()]
+    .sort((a, b) => numericSort(a.optionNumber, b.optionNumber))
+    .map((summary) => ({
+      optionNumber: summary.optionNumber,
+      setupCount: summary.setupCount,
+      machineUsed: compactJoin([...summary.machines], 3),
+      setupName: compactJoin([...summary.setupNames], 3),
+    }));
 }
 
 function masterKey(row: Record<string, unknown>) {

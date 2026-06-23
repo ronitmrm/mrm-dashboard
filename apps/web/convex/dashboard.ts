@@ -20,6 +20,7 @@ async function getOwnerFields(ctx: QueryCtx | MutationCtx) {
 const optionalString = v.optional(v.string());
 const optionalNumber = v.optional(v.number());
 const importConfirmation = "replace-workbook-import";
+const plannerActionConfirmation = "replace-workbook-and-planner-actions";
 const workbookTables = [
   "productionEntries",
   "attendanceRecords",
@@ -208,19 +209,17 @@ export const snapshot = query({
         endDate: args.endDate,
       },
     });
-    const importedCounts = payloadRecord(payloadRecord(summaryEntries[0]?.payload).counts);
+    const liveCounts = countRowsByEntryType(dataEntries);
 
     return {
       ...snapshot,
       dataEntry: {
         ...snapshot.dataEntry,
         templates: legacyEntryTypes.map((entryType) => ({ entryType, format: "xlsx" })),
-        keySummary: Object.keys(importedCounts).length
-          ? legacyEntryTypes.map((entryType) => ({ entryType, rows: Number(importedCounts[entryType] ?? 0) }))
-          : legacyEntryTypes.map((entryType) => ({
-              entryType,
-              rows: dataEntries.filter((row) => row.entryType === entryType).length,
-            })),
+        keySummary: legacyEntryTypes.map((entryType) => ({
+          entryType,
+          rows: liveCounts[entryType] ?? 0,
+        })),
         entryTypes: legacyEntryTypes,
       },
     };
@@ -258,10 +257,8 @@ function latestCreatedAt(
 }
 
 const legacyEntryTypes = [
-  "software_raw",
   "machine_master",
   "dispatch",
-  "meeting_action",
   "rejection_classification",
   "raw_material_plan",
   "machine_planning",
@@ -279,6 +276,14 @@ const snapshotEntryTypes = legacyEntryTypes;
 
 function payloadRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function countRowsByEntryType(rows: Array<{ entryType: string }>) {
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    counts[row.entryType] = (counts[row.entryType] ?? 0) + 1;
+  }
+  return counts;
 }
 
 async function dataEntriesByType(ctx: QueryCtx, entryType: string) {
@@ -429,26 +434,32 @@ export const clearWorkbookData = mutation({
   args: {
     confirm: v.string(),
     batchSize: optionalNumber,
+    includePlannerActions: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireDashboardUserId(ctx);
-    if (args.confirm !== importConfirmation) {
+    if (args.confirm !== importConfirmation && args.confirm !== plannerActionConfirmation) {
       throw new Error(`Pass confirm: "${importConfirmation}" to clear imported workbook data.`);
     }
+    if (args.includePlannerActions && args.confirm !== plannerActionConfirmation) {
+      throw new Error(`Pass confirm: "${plannerActionConfirmation}" to clear imported workbook data plus planner actions.`);
+    }
     const limit = Math.min(Math.max(Math.floor(args.batchSize ?? 100), 1), 500);
-    const deleted = {
+    const deleted: Record<string, number> = {
       productionEntries: await deleteBatch(ctx, "productionEntries", limit),
       attendanceRecords: await deleteBatch(ctx, "attendanceRecords", limit),
       trainingRecords: await deleteBatch(ctx, "trainingRecords", limit),
-      routeSelections: await deleteBatch(ctx, "routeSelections", limit),
-      plannerPriorities: await deleteBatch(ctx, "plannerPriorities", limit),
-      machineConstraints: await deleteBatch(ctx, "machineConstraints", limit),
-      planOverrides: await deleteBatch(ctx, "planOverrides", limit),
-      routeChanges: await deleteBatch(ctx, "routeChanges", limit),
-      dispatchApprovals: await deleteBatch(ctx, "dispatchApprovals", limit),
-      setupCompletions: await deleteBatch(ctx, "setupCompletions", limit),
       dataEntries: await deleteBatch(ctx, "dataEntries", limit),
     };
+    if (args.includePlannerActions) {
+      deleted.routeSelections = await deleteBatch(ctx, "routeSelections", limit);
+      deleted.plannerPriorities = await deleteBatch(ctx, "plannerPriorities", limit);
+      deleted.machineConstraints = await deleteBatch(ctx, "machineConstraints", limit);
+      deleted.planOverrides = await deleteBatch(ctx, "planOverrides", limit);
+      deleted.routeChanges = await deleteBatch(ctx, "routeChanges", limit);
+      deleted.dispatchApprovals = await deleteBatch(ctx, "dispatchApprovals", limit);
+      deleted.setupCompletions = await deleteBatch(ctx, "setupCompletions", limit);
+    }
     return {
       ok: true,
       deleted,
@@ -477,6 +488,9 @@ export const importWorkbookBatch = mutation({
     await requireDashboardUserId(ctx);
     if (args.confirm !== importConfirmation) {
       throw new Error(`Pass confirm: "${importConfirmation}" to import workbook data.`);
+    }
+    if ((args.dataEntries?.length ?? 0) > 100) {
+      throw new Error("Large master imports must use scripts/import-workbook.mjs to avoid browser timeouts and partial uploads.");
     }
     const importedAt = args.importedAt ?? now();
     return {

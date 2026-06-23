@@ -43,19 +43,44 @@ const dataEntryTemplateFields: Record<string, string[]> = {
   cycle: ["partNo", "optionNumber", "setupNo", "setupName", "machineUsed", "operationWeight", "cycleTime", "loadingUnloading"],
   tooling: ["partNo", "optionNumber", "setupNo", "setupName", "machineUsed", "fixture", "fixtureQty", "tooling", "toolingQty", "foamTool", "foamToolQty", "remarks"],
   work_order: ["jcNo", "partCode", "fgPoNo", "rmPoNo", "poDate", "orderPcs", "orderKg", "numberOfSetups", "optionNumber", "rmInwardKg", "rmInwardDate", "deliveryDate", "plannerPriority", "description", "deliveryRemark"],
-  rm_inward: ["jcNo", "rmInwardDate", "rmInwardKg", "status", "remark"],
+  rm_inward: ["jcNo", "fgPoNo", "rmPoNo", "partCode", "orderPcs", "orderKg", "rmInwardDate", "rmInwardKg", "status", "remark"],
   employee: ["empId", "employeeType", "employeeName", "location", "doj", "terminatedDate", "status"],
   machine_master: ["machineNo", "machineType", "machineName", "location", "capacity", "status", "remarks"],
   setup_checklist: ["jcNo", "setupDate", "machineNo", "partNo", "setupNo", "shift", "setterCode", "helperCode", "settingStartTime", "settingEndTime", "qcController", "rimmerAvailability", "modhiyu", "remarks"],
   software_raw: ["prodDate", "operatorId", "operatorName", "machineType", "machine", "partCode", "jobCard", "setupNo", "outputQty", "actualQty", "targetQty", "rejectQty", "rejectionType", "rejectionRemark", "downtimeMinutes", "downtimeReason"],
 };
 
-function dataTemplateResponse(entryType: string) {
+async function dataTemplateResponse(entryType: string, convex: ConvexHttpClient) {
   const fields = dataEntryTemplateFields[entryType];
   if (!fields) {
     throw new RouteError(400, `Unknown data template entry type: ${entryType}`);
   }
+  if (entryType === "rm_inward") {
+    return rmInwardTemplateResponse(convex, fields);
+  }
   return csvResponse(`${entryType}_template.csv`, `${fields.map(csvCell).join(",")}\n`);
+}
+
+async function rmInwardTemplateResponse(convex: ConvexHttpClient, fields: string[]) {
+  const snapshot = await convex.query(api.dashboard.snapshot, {});
+  const productionControl = plainRecord(plainRecord(snapshot).productionControl);
+  const workOrders = Array.isArray(productionControl.workOrders) ? productionControl.workOrders : [];
+  const pendingRows = workOrders
+    .map((row) => plainRecord(row))
+    .filter((row) => text(row.rmStatus).toLowerCase() !== "received")
+    .map((row) => ({
+      jcNo: row.jcNo,
+      fgPoNo: row.fgPoNo,
+      rmPoNo: row.rmPoNo,
+      partCode: row.partCode,
+      orderPcs: row.orderPcs,
+      orderKg: row.orderKg,
+      rmInwardDate: "",
+      rmInwardKg: "",
+      status: "",
+      remark: "",
+    }));
+  return csvResponse("rm_inward_template.csv", csvRows(fields, pendingRows));
 }
 
 function csvResponse(filename: string, body: string) {
@@ -72,6 +97,13 @@ function csvResponse(filename: string, body: string) {
 function csvCell(value: unknown) {
   const textValue = String(value ?? "");
   return /[",\r\n]/.test(textValue) ? `"${textValue.replaceAll('"', '""')}"` : textValue;
+}
+
+function csvRows(fields: string[], rows: Array<Record<string, unknown>>) {
+  return [
+    fields.map(csvCell).join(","),
+    ...rows.map((row) => fields.map((field) => csvCell(row[field])).join(",")),
+  ].join("\n") + "\n";
 }
 
 async function authenticatedConvexClient() {
@@ -115,7 +147,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     if (path === "data-template") {
       const entryType = search.get("entryType") || "template";
-      return dataTemplateResponse(entryType);
+      return await dataTemplateResponse(entryType, convex);
     }
 
     if (path === "data-export") {
