@@ -186,7 +186,8 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const toolingRows = entryRows(byType, "tooling");
   const workOrderRows = entryRows(byType, "work_order");
   const rmInwardRows = entryRows(byType, "rm_inward");
-  const setupChecklistRows = entryRows(byType, "setup_checklist");
+  const setupChecklistRows: Record<string, unknown>[] = [];
+  const shopFloorStatusRows = entryRows(byType, "shop_floor_status");
   const rawSoftwareRows = entryRows(byType, "software_raw");
   const meetingRows = entryRows(byType, "meeting_action");
   const routeLookup = loadRouteLookup(routeRows);
@@ -203,6 +204,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     employeeRows,
     meetingRows,
     setupChecklistRows,
+    shopFloorStatusRows,
     routeRows,
     cycleRows,
     toolingRows,
@@ -246,6 +248,7 @@ function buildProductionAnalysis({
   employeeRows,
   meetingRows,
   setupChecklistRows,
+  shopFloorStatusRows,
   routeRows,
   cycleRows,
   toolingRows,
@@ -272,6 +275,7 @@ function buildProductionAnalysis({
   employeeRows: Record<string, unknown>[];
   meetingRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
+  shopFloorStatusRows: Record<string, unknown>[];
   routeRows: Record<string, unknown>[];
   cycleRows: Record<string, unknown>[];
   toolingRows: Record<string, unknown>[];
@@ -576,6 +580,7 @@ function buildProductionAnalysis({
     machineRows,
     dispatchRows,
     setupChecklistRows,
+    shopFloorStatusRows,
     routeSelections,
     plannerPriorities,
     machineConstraints,
@@ -740,6 +745,7 @@ function buildProductionControl({
   machineRows,
   dispatchRows,
   setupChecklistRows,
+  shopFloorStatusRows,
   routeSelections,
   plannerPriorities,
   machineConstraints,
@@ -757,6 +763,7 @@ function buildProductionControl({
   machineRows: Record<string, unknown>[];
   dispatchRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
+  shopFloorStatusRows: Record<string, unknown>[];
   routeSelections: ActionRow[];
   plannerPriorities: ActionRow[];
   machineConstraints: ActionRow[];
@@ -878,9 +885,10 @@ function buildProductionControl({
     .filter((row) => row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(workOrderOutputRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
-  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, rawBySetup, routeGroups, cycleRows, machineRows, machineConstraints, planOverrides, setupChecklistRows);
-  const setupChecklistHistoryRows = setupChecklistHistory(setupChecklistRows);
-  const setupChecklistMismatchRows = setupChecklistMismatches(setupChecklistHistoryRows, machinePlanDetailRows);
+  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, rawBySetup, routeGroups, cycleRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows);
+  const workflowExceptionRows = machinePlanDetailRows.filter((row) => row.rawProductionWithoutWorkflow);
+  const setupChecklistHistoryRows: Record<string, unknown>[] = [];
+  const setupChecklistMismatchRows: Record<string, unknown>[] = [];
   const machinePlanReady = workOrderOutputRows.filter((row) => row.rmStatus === "Received" && !row.routeStatus.includes("missing") && row.cycleStatus === "Ready" && row.toolingStatus === "Ready").length;
   const latestSetupDate = maxDate(setupChecklistRows.map((row) => parseDate(rowValue(row, "SETUP DATE", "setupDate"))));
   const totalOutputQty = sum([...rawByJc.values()].map((row) => row.outputQty));
@@ -927,7 +935,8 @@ function buildProductionControl({
       activePlanOverrides,
       activeRouteChanges,
       plannerActionLog: plannerActionLog.length,
-      setupChecklistMismatches: setupChecklistMismatchRows.length,
+      workflowExceptions: workflowExceptionRows.length,
+      setupChecklistMismatches: 0,
       compulsoryMachineShifts: planOverrides.length,
       latestRawDate: dateLabel(latestRawDate),
       latestSetupDate: dateLabel(latestSetupDate),
@@ -962,6 +971,7 @@ function buildProductionControl({
     machinePlanRows: combinedBatches,
     machinePlanningRows: machineRows,
     machinePlanDetailRows,
+    workflowExceptionRows,
     machineConstraints,
     machineConstraintRows: machineConstraints,
     machineConstraintImpacts: [],
@@ -1977,11 +1987,11 @@ function machinePlanDetails(
   machineRows: Array<Record<string, unknown>>,
   machineConstraints: ActionRow[],
   planOverrides: ActionRow[],
-  setupChecklistRows: Record<string, unknown>[],
+  shopFloorStatusRows: Record<string, unknown>[],
 ) {
   const details: Array<Record<string, unknown>> = [];
   const cycleByKey = new Map(cycleRows.map((row) => [masterKey(row), row]));
-  const checklistBySetup = setupChecklistBySetup(setupChecklistRows);
+  const shopFloorStatusBySetup = latestShopFloorStatusBySetup(shopFloorStatusRows);
   const unavailableMachines = new Set(machineConstraints
     .filter((row) => isActivePlannerDecision(rowText(row, "status", "STATUS")))
     .map((row) => canonicalKey(rowText(row, "machineNo", "machine", "MACHINE NO.", "MACHINE NO", "M/C NO")))
@@ -1996,8 +2006,6 @@ function machinePlanDetails(
 
     const routeKeyValue = [canonicalKey(partCode), optionNumber].join("|");
     const routes = routeGroups.get(routeKeyValue) ?? [];
-    const actual = rawByJc.get(canonicalKey(rowText(row, "jcNo")));
-
     for (const [routeIndex, route] of routes.entries()) {
       const routeMachine = rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
       if (!routeMachine) continue;
@@ -2005,22 +2013,19 @@ function machinePlanDetails(
       const displaySetupNo = setupStepKey(setupNo, optionNumber) || setupNo;
       const machineType = rowText(route, "MACHINE TYPE", "machineType");
       const override = planOverrideForSetup(planOverrides, row, setupNo);
-      const actualMachine = [...(actual?.machines ?? new Set<string>())].find((machine) => machineCodeMatches(routeMachine, machine));
       const cycle = cycleByKey.get(masterKey(route));
-      const assignedMachines = actualMachine
-        ? [actualMachine]
-        : assignedPhysicalMachines({
-            routeMachine,
-            machineType,
-            orderPcs: safeNumber(rowValue(row, "orderPcs")),
-            cycle,
-            machineRows,
-            unavailableMachines,
-            machineLoad,
-            override,
-          });
+      const assignedMachines = assignedPhysicalMachines({
+        routeMachine,
+        machineType,
+        orderPcs: safeNumber(rowValue(row, "orderPcs")),
+        cycle,
+        machineRows,
+        unavailableMachines,
+        machineLoad,
+        override,
+      });
       for (const machine of assignedMachines) {
-        const checklistEntry = findSetupChecklistEntry(checklistBySetup, {
+        const shopFloorStatus = findShopFloorStatus(shopFloorStatusBySetup, {
           jcNo: rowText(row, "jcNo"),
           partCode,
           optionNumber,
@@ -2038,15 +2043,25 @@ function machinePlanDetails(
           setupNo,
           machine,
         }));
+        const taskWorkflowStage = normalizeSetupLifecycleStage(shopFloorStatus ? rowText(shopFloorStatus, "stage") : "");
+        const taskWorkflowStarted = setupLifecycleStageRank(taskWorkflowStage) >= setupLifecycleStageRank("operator_started");
+        const rawProductionWithoutWorkflow = Boolean(productionActual?.rows && !taskWorkflowStarted);
+        const effectiveStage = effectiveShopFloorStage(shopFloorStatus, productionActual);
+        const effectiveStageLabel = setupLifecycleStageLabel(effectiveStage);
+        const settingDone = setupLifecycleStageRank(effectiveStage) >= setupLifecycleStageRank("setting");
+        const machineStarted = setupLifecycleStageRank(effectiveStage) >= setupLifecycleStageRank("operator_started");
+        const itemComplete = effectiveStage === "item_complete";
+        const shopFloorCompletedAt = shopFloorStatus ? rowText(shopFloorStatus, "completedAt", "createdAt") : "";
+        const shopFloorDoneBy = shopFloorStatus ? rowText(shopFloorStatus, "doneBy") : "";
         const rmInwardDate = rowText(row, "rmInwardDate");
         const baseSetupDate = plannedSetupDate(rmInwardDate, routeIndex);
         const machineKeyValue = canonicalKey(machine);
         const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
         const plannedCompletionDate = plannedStartDate;
-        const setupCompletionDate = checklistEntry ? parseDate(rowValue(checklistEntry, "SETUP DATE", "setupDate")) || rowText(checklistEntry, "SETUP DATE", "setupDate") : "";
+        const setupCompletionDate = settingDone ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
         const plannedProductionStartDate = plannedCompletionDate ? addDays(plannedCompletionDate, 1) : "";
         const plannedProductionEndDate = plannedProductionEnd(plannedProductionStartDate, safeNumber(rowValue(row, "orderPcs")), cycle, productionActual);
-        const actualStartDate = productionActual?.startDate ?? "";
+        const actualStartDate = productionActual?.startDate ?? (machineStarted ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "");
         const actualCompletionDate = productionActual && productionActual.actualQty >= safeNumber(rowValue(row, "orderPcs")) ? productionActual.latestDate : "";
         if (machineKeyValue) machineLoad.set(machineKeyValue, (machineLoad.get(machineKeyValue) ?? 0) + 1);
         if (machineKeyValue && plannedProductionEndDate) machineNextSetupDate.set(machineKeyValue, plannedProductionEndDate);
@@ -2067,11 +2082,11 @@ function machinePlanDetails(
         routeStatus: rowText(row, "routeStatus"),
         cycleStatus: rowText(row, "cycleStatus"),
         toolingStatus: rowText(row, "toolingStatus"),
-        rawOutputQty: round(actual?.outputQty ?? 0),
-        rawActualQty: round(actual?.actualQty ?? 0),
-        rawRejectQty: round(actual?.rejectQty ?? 0),
-        rawRows: actual?.rows ?? 0,
-        runningStatus: actual?.rows ? "Running" : (checklistEntry ? "Setup complete" : "Planned"),
+        rawOutputQty: round(productionActual?.outputQty ?? 0),
+        rawActualQty: round(productionActual?.actualQty ?? 0),
+        rawRejectQty: 0,
+        rawRows: productionActual?.rows ?? 0,
+        runningStatus: itemComplete ? "Complete" : (productionActual?.rows || machineStarted ? "Running" : (settingDone ? "Setup complete" : "Planned")),
         plannedDate: dateLabel(plannedStartDate),
         completionDate: dateLabel(setupCompletionDate),
         setupPlannedDate: dateLabel(plannedStartDate),
@@ -2085,8 +2100,16 @@ function machinePlanDetails(
         actualStartDate: dateLabel(actualStartDate),
         actualCompletionDate: dateLabel(actualCompletionDate),
         setupCompletedOn: dateLabel(setupCompletionDate),
-        setupCompletedBy: checklistEntry ? rowText(checklistEntry, "SETTER Code", "SETTER CODE", "setterCode") : "",
-        setupChecklistRemark: checklistEntry ? rowText(checklistEntry, "REMARKS", "REMARK", "remarks") : "",
+        setupCompletedBy: settingDone ? shopFloorDoneBy : "",
+        setupChecklistRemark: "",
+        shopFloorStage: effectiveStage,
+        shopFloorStageLabel: effectiveStageLabel,
+        shopFloorDoneBy,
+        shopFloorWorker: shopFloorStatus ? rowText(shopFloorStatus, "worker") : "",
+        shopFloorRemark: shopFloorStatus ? rowText(shopFloorStatus, "remark") : "",
+        shopFloorUpdatedAt: shopFloorStatus ? rowText(shopFloorStatus, "completedAt", "createdAt") : "",
+        rawProductionWithoutWorkflow,
+        plannerActionRequired: rawProductionWithoutWorkflow ? "Raw production exists but machinist start task is missing" : "",
         planVsActual: setupPlanVsActual(plannedCompletionDate, setupCompletionDate),
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
           machineAssignment: machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
@@ -2118,6 +2141,87 @@ function setupChecklistBySetup(rows: Record<string, unknown>[]) {
     grouped.set(key, existing);
   }
   return grouped;
+}
+
+function latestShopFloorStatusBySetup(rows: Record<string, unknown>[]) {
+  const latest = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const key = setupChecklistKey({
+      jcNo: rowText(row, "jcNo", "JC NO.", "JC NO"),
+      partCode: rowText(row, "partCode", "partNo", "PART CODE", "PART NO"),
+      optionNumber: rowText(row, "optionNumber", "OPTION NUMBER", "OPTION NO"),
+      setupNo: rowText(row, "setupNo", "SETUP NO.", "SETUP NO", "SET UP"),
+      machine: rowText(row, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO."),
+    });
+    if (!key) continue;
+    const current = latest.get(key);
+    const currentAt = current ? rowText(current, "completedAt", "createdAt") : "";
+    const nextAt = rowText(row, "completedAt", "createdAt");
+    if (!current || nextAt >= currentAt) latest.set(key, row);
+  }
+  return latest;
+}
+
+function findShopFloorStatus(
+  latest: Map<string, Record<string, unknown>>,
+  target: { jcNo: string; partCode: string; optionNumber: string; setupNo: string; machine: string },
+) {
+  const key = setupChecklistKey(target);
+  return key ? latest.get(key) : undefined;
+}
+
+const setupLifecycleStages = [
+  "raw_material_at_machine",
+  "presetting",
+  "setting",
+  "quality_approval",
+  "operator_started",
+  "item_complete",
+] as const;
+
+type SetupLifecycleStage = typeof setupLifecycleStages[number];
+
+function effectiveShopFloorStage(
+  shopFloorStatus: Record<string, unknown> | undefined,
+  productionActual: { rows: number } | undefined,
+): SetupLifecycleStage | "" {
+  const candidates: Array<SetupLifecycleStage | ""> = [
+    normalizeSetupLifecycleStage(shopFloorStatus ? rowText(shopFloorStatus, "stage") : ""),
+    productionActual?.rows ? "operator_started" : "",
+  ];
+  return candidates.sort((a, b) => setupLifecycleStageRank(b) - setupLifecycleStageRank(a))[0] ?? "";
+}
+
+function normalizeSetupLifecycleStage(stage: string): SetupLifecycleStage | "" {
+  const normalized = ({
+    shop_floor_rm: "raw_material_at_machine",
+    raw_material_at_machine: "raw_material_at_machine",
+    tools_drawing: "presetting",
+    presetting: "presetting",
+    setting: "setting",
+    qc_approval: "quality_approval",
+    quality_approval: "quality_approval",
+    worker_start: "operator_started",
+    operator_started: "operator_started",
+    item_complete: "item_complete",
+  } as Record<string, SetupLifecycleStage>)[stage];
+  return normalized ?? "";
+}
+
+function setupLifecycleStageRank(stage: string) {
+  const index = setupLifecycleStages.indexOf(normalizeSetupLifecycleStage(stage) as SetupLifecycleStage);
+  return index >= 0 ? index : -1;
+}
+
+function setupLifecycleStageLabel(stage: string) {
+  return ({
+    raw_material_at_machine: "Raw material at the machine",
+    presetting: "Pre setting done",
+    setting: "Setting done",
+    quality_approval: "Quality approval",
+    operator_started: "Operator assigned and machine started",
+    item_complete: "Item complete",
+  } as Record<string, string>)[stage] ?? "";
 }
 
 function findSetupChecklistEntry(

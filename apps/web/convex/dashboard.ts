@@ -33,6 +33,7 @@ const workbookTables = [
   "dispatchApprovals",
   "setupCompletions",
   "dataEntries",
+  "corrections",
 ] as const;
 
 type WorkbookTable = typeof workbookTables[number];
@@ -156,6 +157,7 @@ export const snapshot = query({
       routeChanges,
       dispatchApprovals,
       setupCompletions,
+      corrections,
     ] = await Promise.all([
       ctx.db.query("productionEntries").collect(),
       ctx.db.query("attendanceRecords").collect(),
@@ -167,26 +169,28 @@ export const snapshot = query({
       ctx.db.query("routeChanges").collect(),
       ctx.db.query("dispatchApprovals").collect(),
       ctx.db.query("setupCompletions").collect(),
+      ctx.db.query("corrections").collect(),
     ]);
     const [entryGroups, summaryEntries] = await Promise.all([
       Promise.all(snapshotEntryTypes.map((entryType) => dataEntriesByType(ctx, entryType))),
       dataEntriesByTypeKey(ctx, "_summary", "counts"),
     ]);
-    const dataEntries = [...entryGroups.flat(), ...summaryEntries];
+    const correctionTargets = activeCorrectionTargets(corrections);
+    const dataEntries = withoutCorrectedRows([...entryGroups.flat(), ...summaryEntries], "dataEntries", correctionTargets);
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
-      productionEntries,
-      attendanceRecords,
-      trainingRecords,
+      productionEntries: withoutCorrectedRows(productionEntries, "productionEntries", correctionTargets),
+      attendanceRecords: withoutCorrectedRows(attendanceRecords, "attendanceRecords", correctionTargets),
+      trainingRecords: withoutCorrectedRows(trainingRecords, "trainingRecords", correctionTargets),
       dataEntries,
-      routeSelections,
-      plannerPriorities,
-      machineConstraints,
-      planOverrides,
-      routeChanges,
-      dispatchApprovals,
-      setupCompletions,
+      routeSelections: withoutCorrectedRows(routeSelections, "routeSelections", correctionTargets),
+      plannerPriorities: withoutCorrectedRows(plannerPriorities, "plannerPriorities", correctionTargets),
+      machineConstraints: withoutCorrectedRows(machineConstraints, "machineConstraints", correctionTargets),
+      planOverrides: withoutCorrectedRows(planOverrides, "planOverrides", correctionTargets),
+      routeChanges: withoutCorrectedRows(routeChanges, "routeChanges", correctionTargets),
+      dispatchApprovals: withoutCorrectedRows(dispatchApprovals, "dispatchApprovals", correctionTargets),
+      setupCompletions: withoutCorrectedRows(setupCompletions, "setupCompletions", correctionTargets),
       updatedAt: latestCreatedAt(
         productionEntries,
         attendanceRecords,
@@ -199,6 +203,7 @@ export const snapshot = query({
         dispatchApprovals,
         setupCompletions,
         dataEntries,
+        corrections,
       ),
       filters: {
         operatorId: args.operatorId,
@@ -221,10 +226,25 @@ export const snapshot = query({
           rows: liveCounts[entryType] ?? 0,
         })),
         entryTypes: legacyEntryTypes,
+        corrections,
       },
     };
   },
 });
+
+function activeCorrectionTargets(corrections: Array<{ targetTable: string; targetId: string; action: string }>) {
+  return new Set(corrections
+    .filter((row) => row.action === "reverse" || row.action === "replace" || row.action === "close")
+    .map((row) => `${row.targetTable}:${row.targetId}`));
+}
+
+function withoutCorrectedRows<Row extends { _id: unknown }>(
+  rows: Row[],
+  targetTable: string,
+  correctionTargets: Set<string>,
+) {
+  return rows.filter((row) => !correctionTargets.has(`${targetTable}:${String(row._id)}`));
+}
 
 export const status = query({
   args: {},
@@ -269,10 +289,21 @@ const legacyEntryTypes = [
   "work_order",
   "rm_inward",
   "employee",
-  "setup_checklist",
 ];
 
-const snapshotEntryTypes = legacyEntryTypes;
+const snapshotEntryTypes = [...legacyEntryTypes, "shop_floor_status"];
+const correctionCandidateTables = [
+  "routeSelections",
+  "plannerPriorities",
+  "machineConstraints",
+  "planOverrides",
+  "routeChanges",
+  "dispatchApprovals",
+  "setupCompletions",
+  "dataEntries",
+] as const;
+
+type CorrectionCandidateTable = typeof correctionCandidateTables[number];
 
 function payloadRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -284,6 +315,46 @@ function countRowsByEntryType(rows: Array<{ entryType: string }>) {
     counts[row.entryType] = (counts[row.entryType] ?? 0) + 1;
   }
   return counts;
+}
+
+function correctionCandidate(table: CorrectionCandidateTable, row: Record<string, unknown>) {
+  const payload = payloadRecord(row.payload);
+  const entryType = typeof row.entryType === "string" ? row.entryType : table;
+  const targetKey = typeof row.key === "string" && row.key ? row.key : correctionKeyFor(table, row, payload);
+  return {
+    targetTable: table,
+    targetId: String(row._id),
+    targetKey,
+    targetLabel: correctionLabelFor(table, row, payload),
+    entryType,
+    createdAt: typeof row.createdAt === "string" ? row.createdAt : "",
+    details: correctionDetailsFor(table, row, payload),
+  };
+}
+
+function correctionKeyFor(table: string, row: Record<string, unknown>, payload: Record<string, unknown>) {
+  if (table === "dataEntries") return [payload.jcNo, payload.partCode || payload.partNo, payload.optionNumber, payload.setupNo, payload.machine || payload.machineNo].map(cleanText).filter(Boolean).join(" | ");
+  return [row.jcNo, row.target, row.machineNo, row.toMachine, row.newOption].map(cleanText).filter(Boolean).join(" | ");
+}
+
+function correctionLabelFor(table: string, row: Record<string, unknown>, payload: Record<string, unknown>) {
+  if (table === "dataEntries") {
+    const entryType = cleanText(row.entryType);
+    if (entryType === "shop_floor_status") {
+      return `${cleanText(payload.stageLabel) || cleanText(payload.stage) || "Workflow task"} - ${cleanText(payload.machine)} - ${cleanText(payload.partCode)} - setup ${cleanText(payload.setupNo)}`;
+    }
+    return `${entryType || "Data entry"} - ${correctionKeyFor(table, row, payload) || cleanText(row.key)}`;
+  }
+  return `${table} - ${correctionKeyFor(table, row, payload) || cleanText(row._id)}`;
+}
+
+function correctionDetailsFor(table: string, row: Record<string, unknown>, payload: Record<string, unknown>) {
+  if (table === "dataEntries") return payload;
+  return row;
+}
+
+function cleanText(value: unknown) {
+  return value === undefined || value === null ? "" : String(value).trim();
 }
 
 async function dataEntriesByType(ctx: QueryCtx, entryType: string) {
@@ -431,6 +502,51 @@ export const saveDataEntry = mutation({
       return { ok: true, id: args.id };
     }
     return insertOwnerRow(ctx, "dataEntries", args);
+  },
+});
+
+export const reverseEntry = mutation({
+  args: {
+    targetTable: v.string(),
+    targetId: v.string(),
+    targetKey: optionalString,
+    targetLabel: optionalString,
+    reason: v.string(),
+    correctedBy: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!args.reason.trim()) throw new Error("Correction reason is required.");
+    if (!args.correctedBy.trim()) throw new Error("Corrected by is required.");
+    const ownerFields = await getOwnerFields(ctx);
+    const id = await ctx.db.insert("corrections", {
+      ...args,
+      action: "reverse",
+      ...ownerFields,
+      createdAt: now(),
+    });
+    return { ok: true, id };
+  },
+});
+
+export const correctionCandidates = query({
+  args: {
+    targetTable: optionalString,
+    limit: optionalNumber,
+  },
+  handler: async (ctx, args) => {
+    await requireDashboardUserId(ctx);
+    const corrections = await ctx.db.query("corrections").collect();
+    const correctionTargets = activeCorrectionTargets(corrections);
+    const tableNames = correctionCandidateTables.filter((table) => !args.targetTable || table === args.targetTable);
+    const results = [];
+    for (const table of tableNames) {
+      const rows = await ctx.db.query(table).order("desc").take(args.limit ?? 100);
+      for (const row of rows) {
+        if (correctionTargets.has(`${table}:${String(row._id)}`)) continue;
+        results.push(correctionCandidate(table, row));
+      }
+    }
+    return results.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, args.limit ?? 200);
   },
 });
 

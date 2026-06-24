@@ -122,4 +122,18 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_entry_type", ["entryType"])
     .index("by_entry_type_key", ["entryType", "key"]),
+  corrections: defineTable({
+    ownerId: v.optional(v.id("users")),
+    targetTable: v.string(),
+    targetId: v.string(),
+    targetKey: v.optional(v.string()),
+    targetLabel: v.optional(v.string()),
+    action: v.string(),
+    reason: v.string(),
+    correctedBy: v.string(),
+    correctedPayload: v.optional(v.any()),
+    createdAt: v.string(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_target", ["targetTable", "targetId"]),
 });
