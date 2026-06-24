@@ -107,6 +107,12 @@ const routeChangeValidator = {
   changeAfterSetup: optionalString,
   applyFromSetup: optionalString,
   wipQty: optionalNumber,
+  remainingSetups: v.optional(v.array(v.object({
+    setupNo: v.string(),
+    plan: v.boolean(),
+    quantity: v.number(),
+    remark: optionalString,
+  }))),
   reason: optionalString,
   createdAt: optionalString,
 };
@@ -458,6 +464,12 @@ export const saveRouteChange = mutation({
     changeAfterSetup: optionalString,
     applyFromSetup: optionalString,
     wipQty: optionalNumber,
+    remainingSetups: v.optional(v.array(v.object({
+      setupNo: v.string(),
+      plan: v.boolean(),
+      quantity: v.number(),
+      remark: optionalString,
+    }))),
     reason: optionalString,
   },
   handler: async (ctx, args) => insertOwnerRow(ctx, "routeChanges", args),

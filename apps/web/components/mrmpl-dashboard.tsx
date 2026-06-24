@@ -634,22 +634,19 @@ function DashboardContent({
     return <CorrectionsPanel rows={correctionCandidates} submitAction={submitAction} />;
   }
 
-  return <ProductionControlPanel productionControl={productionControl} view={view} submitAction={submitAction} />;
+  return <ProductionControlPanel productionControl={productionControl} submitAction={submitAction} />;
 }
 
 function ProductionControlPanel({
   productionControl,
-  view,
   submitAction,
 }: {
   productionControl: DashboardPayload;
-  view: ReturnType<typeof toDashboardViewModel>;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
 }) {
   return (
     <>
-      <OverviewMetrics view={view} />
-      <PlannerDecisionConsole submitAction={submitAction} />
+      <PlannerDecisionConsole productionControl={productionControl} submitAction={submitAction} />
       <ActionLogTable rows={asArray(productionControl.plannerActionLog)} />
       <section className="grid gap-4">
         <DataRowsCard title="Machine issues" rows={asArray(productionControl.machineConstraintRows)} empty="No machine constraints yet" />
@@ -691,8 +688,10 @@ function OverviewMetrics({ view }: { view: ReturnType<typeof toDashboardViewMode
 }
 
 function PlannerDecisionConsole({
+  productionControl,
   submitAction,
 }: {
+  productionControl: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
 }) {
   return (
@@ -744,26 +743,176 @@ function PlannerDecisionConsole({
           buttonLabel="Switch plan"
           onSubmit={(body) => submitAction("plan-override", body)}
         />
-        <LegacyActionForm
-          title="4. Mid-route change"
-          description="Use when production has started and remaining setups need a different route option."
-          fields={[
-            { name: "target", label: "Job card / part", placeholder: "Prefer JC No.", required: true },
-            { name: "changeAfterSetup", label: "Change after setup", placeholder: "10" },
-            { name: "newOption", label: "New route option", placeholder: "Option B", required: true },
-            { name: "applyFromSetup", label: "Continue from setup", placeholder: "20" },
-            { name: "wipQty", label: "WIP qty carried", type: "number", placeholder: "optional" },
-            { name: "reason", label: "Reason", placeholder: "Why route is changing midway", required: true },
-          ]}
-          buttonLabel="Change route"
-          onSubmit={(body) => submitAction("route-change", body)}
-        />
+        <RouteChangePlannerForm productionControl={productionControl} submitAction={submitAction} />
         <Button type="button" variant="outline" onClick={() => void submitAction("reschedule", {})}>
           <Settings2 className="size-4" />
           Reschedule
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+function RouteChangePlannerForm({
+  productionControl,
+  submitAction,
+}: {
+  productionControl: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+}) {
+  const workOrders = asArray(productionControl.workOrders);
+  const routeRows = asArray(productionControl.routeMasterRows);
+  const [target, setTarget] = useState("");
+  const [newOption, setNewOption] = useState("");
+  const [reason, setReason] = useState("");
+  const [setupPlan, setSetupPlan] = useState<Record<string, { plan: boolean; quantity: string; remark: string }>>({});
+
+  const selectedWorkOrder = useMemo(() => {
+    const targetKey = target.toLowerCase();
+    return workOrders.find((row) => str(row.jcNo).toLowerCase() === targetKey || str(row.partCode).toLowerCase() === targetKey);
+  }, [target, workOrders]);
+  const partCode = str(selectedWorkOrder?.partCode);
+  const defaultOrderQty = str(selectedWorkOrder?.orderPcs);
+  const optionRows = useMemo(() => routeRows.filter((row) => str(row.partNo).toLowerCase() === partCode.toLowerCase()), [partCode, routeRows]);
+  const optionNumbers = useMemo(() => uniqueValues(optionRows.map((row) => str(row.optionNumber))), [optionRows]);
+  const selectedOption = optionNumbers.includes(newOption) ? newOption : optionNumbers[0] || "";
+  const selectedSetups = useMemo(() => optionRows
+    .filter((row) => str(row.optionNumber) === selectedOption)
+    .sort((a, b) => str(a.displaySetupNo || a.setupNo).localeCompare(str(b.displaySetupNo || b.setupNo), undefined, { numeric: true })), [optionRows, selectedOption]);
+  const selectedSetupKey = selectedSetups.map((setup) => str(setup.displaySetupNo || setup.setupNo)).join("|");
+
+  useEffect(() => {
+    setSetupPlan((current) => {
+      const next: Record<string, { plan: boolean; quantity: string; remark: string }> = {};
+      for (const setup of selectedSetups) {
+        const setupNo = str(setup.displaySetupNo || setup.setupNo);
+        next[setupNo] = current[setupNo] ?? { plan: true, quantity: defaultOrderQty, remark: "" };
+      }
+      return next;
+    });
+  }, [selectedSetupKey, defaultOrderQty]);
+
+  function updateSetup(setupNo: string, patch: Partial<{ plan: boolean; quantity: string; remark: string }>) {
+    setSetupPlan((current) => ({
+      ...current,
+      [setupNo]: { ...(current[setupNo] ?? { plan: true, quantity: "", remark: "" }), ...patch },
+    }));
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const remainingSetups = selectedSetups.map((setup) => {
+      const setupNo = str(setup.displaySetupNo || setup.setupNo);
+      const state = setupPlan[setupNo] ?? { plan: false, quantity: "", remark: "" };
+      return {
+        setupNo,
+        plan: state.plan,
+        quantity: state.plan ? Number(state.quantity) || 0 : 0,
+        remark: state.remark || undefined,
+      };
+    });
+    await submitAction("route-change", {
+      target,
+      newOption: selectedOption,
+      remainingSetups,
+      reason,
+    });
+    setReason("");
+  }
+
+  return (
+    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+      <div>
+        <div className="text-sm font-medium">4. Mid-route change</div>
+        <div className="text-xs text-muted-foreground">Planner selects the new route option and enters remaining setup quantities.</div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Field label="Job card / part">
+          <Input list="route-change-targets" value={target} placeholder="JC-003 or M6" required onChange={(event) => setTarget(event.target.value)} />
+          <datalist id="route-change-targets">
+            {workOrders.map((row) => (
+              <option key={`${str(row.jcNo)}-${str(row.partCode)}`} value={str(row.jcNo)}>
+                {str(row.partCode)}
+              </option>
+            ))}
+          </datalist>
+        </Field>
+        <Field label="New route option">
+          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedOption} required onChange={(event) => setNewOption(event.target.value)}>
+            {optionNumbers.length ? optionNumbers.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            )) : <option value="">Select job card first</option>}
+          </select>
+        </Field>
+        <Field label="Reason">
+          <Input value={reason} placeholder="Why route is changing" required onChange={(event) => setReason(event.target.value)} />
+        </Field>
+      </div>
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Setup</TableHead>
+              <TableHead>Machine</TableHead>
+              <TableHead>Plan</TableHead>
+              <TableHead>Qty to plan</TableHead>
+              <TableHead>Remark</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {selectedSetups.length ? selectedSetups.map((setup) => {
+              const setupNo = str(setup.displaySetupNo || setup.setupNo);
+              const state = setupPlan[setupNo] ?? { plan: true, quantity: str(selectedWorkOrder?.orderPcs), remark: "" };
+              return (
+                <TableRow key={setupNo}>
+                  <TableCell>
+                    <div className="font-medium">{setupNo}</div>
+                    <div className="text-xs text-muted-foreground">{displayValue(setup.setupName)}</div>
+                  </TableCell>
+                  <TableCell>
+                    <div>{displayValue(setup.machineUsed)}</div>
+                    <div className="text-xs text-muted-foreground">{displayValue(setup.machineType)}</div>
+                  </TableCell>
+                  <TableCell>
+                    <input
+                      className="size-4"
+                      type="checkbox"
+                      checked={state.plan}
+                      onChange={(event) => updateSetup(setupNo, { plan: event.target.checked })}
+                      aria-label={`Plan setup ${setupNo}`}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      className="w-28"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={state.quantity}
+                      disabled={!state.plan}
+                      onChange={(event) => updateSetup(setupNo, { quantity: event.target.value })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input value={state.remark} placeholder="optional" onChange={(event) => updateSetup(setupNo, { remark: event.target.value })} />
+                  </TableCell>
+                </TableRow>
+              );
+            }) : (
+              <TableRow>
+                <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
+                  Select a job card and route option to load setups.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      <Button className="w-fit" type="submit" disabled={!target || !selectedOption || !selectedSetups.length}>
+        <Route className="size-4" />
+        Save route change plan
+      </Button>
+    </form>
   );
 }
 
@@ -1263,6 +1412,16 @@ function ShopFloorRowAction({
     return <span className="text-sm text-muted-foreground">No action pending</span>;
   }
 
+  if (nextStage?.id === "raw_material_at_machine" && next.shopFloorTaskReady === false) {
+    return (
+      <div className="grid gap-2">
+        <ShopFloorProgress activeIndex={stageIndex} />
+        <StatusBadge value="WIP not ready" />
+        <div className="text-sm text-muted-foreground">{displayValue(next.shopFloorTaskBlocker) || "Previous setup WIP buffer is not ready"}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-2">
       <ShopFloorProgress activeIndex={stageIndex} />
@@ -1620,7 +1779,7 @@ function DataEntryPanel({
     if (!(file instanceof File) || !file.name) return;
     const fileBase64 = await readFileAsDataUrl(file);
     await submitAction("data-import", { entryType: bulkEntryType, fileName: file.name, fileBase64 });
-    form.reset();
+    if (typeof form.reset === "function") form.reset();
   }
 
   return (
@@ -3662,6 +3821,7 @@ type DashboardActionMutations = {
     changeAfterSetup?: string;
     applyFromSetup?: string;
     wipQty?: number;
+    remainingSetups?: Array<{ setupNo: string; plan: boolean; quantity: number; remark?: string }>;
     reason?: string;
   }) => Promise<unknown>;
   saveDispatchApproval: (args: { jcNo: string; approvedBy: string; remark?: string }) => Promise<unknown>;
@@ -3753,6 +3913,17 @@ async function runDashboardAction(
       changeAfterSetup: optionalText(body.changeAfterSetup),
       applyFromSetup: optionalText(body.applyFromSetup),
       wipQty: optionalNumber(body.wipQty),
+      remainingSetups: Array.isArray(body.remainingSetups)
+        ? body.remainingSetups.map((row) => {
+          const setup = asRecord(row);
+          return {
+            setupNo: text(setup.setupNo),
+            plan: Boolean(setup.plan),
+            quantity: optionalNumber(setup.quantity) ?? 0,
+            remark: optionalText(setup.remark),
+          };
+        }).filter((row) => row.setupNo)
+        : undefined,
       reason: optionalText(body.reason),
     });
     return "Route change saved.";
@@ -4374,7 +4545,7 @@ function shopFloorQueueRows(productionControl: DashboardPayload) {
 function roleTaskMatches(row: DashboardPayload, role: RoleTaskKind) {
   const nextStage = nextShopFloorStage(row);
   if (!nextStage) return false;
-  if (role === "shopFloor") return nextStage.id === "raw_material_at_machine";
+  if (role === "shopFloor") return nextStage.id === "raw_material_at_machine" && row.shopFloorTaskReady !== false;
   if (role === "quality") return nextStage.id === "quality_approval";
   return nextStage.id === "presetting" || nextStage.id === "setting" || nextStage.id === "operator_started";
 }

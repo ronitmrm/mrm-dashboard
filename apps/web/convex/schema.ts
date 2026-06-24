@@ -93,6 +93,12 @@ export default defineSchema({
     changeAfterSetup: v.optional(v.string()),
     applyFromSetup: v.optional(v.string()),
     wipQty: v.optional(v.number()),
+    remainingSetups: v.optional(v.array(v.object({
+      setupNo: v.string(),
+      plan: v.boolean(),
+      quantity: v.number(),
+      remark: v.optional(v.string()),
+    }))),
     reason: v.optional(v.string()),
     createdAt: v.string(),
   }).index("by_owner", ["ownerId"]),
