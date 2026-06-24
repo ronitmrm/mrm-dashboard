@@ -177,12 +177,14 @@ export const snapshot = query({
       ctx.db.query("setupCompletions").collect(),
       ctx.db.query("corrections").collect(),
     ]);
-    const [entryGroups, summaryEntries] = await Promise.all([
-      Promise.all(snapshotEntryTypes.map((entryType) => dataEntriesByType(ctx, entryType))),
-      dataEntriesByTypeKey(ctx, "_summary", "counts"),
-    ]);
+    const allDataEntries = await ctx.db.query("dataEntries").collect();
     const correctionTargets = activeCorrectionTargets(corrections);
-    const dataEntries = withoutCorrectedRows([...entryGroups.flat(), ...summaryEntries], "dataEntries", correctionTargets);
+    const snapshotEntryTypeSet = new Set([...snapshotEntryTypes, "_summary"]);
+    const dataEntries = withoutCorrectedRows(
+      allDataEntries.filter((row) => snapshotEntryTypeSet.has(row.entryType)),
+      "dataEntries",
+      correctionTargets,
+    );
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -361,20 +363,6 @@ function correctionDetailsFor(table: string, row: Record<string, unknown>, paylo
 
 function cleanText(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
-}
-
-async function dataEntriesByType(ctx: QueryCtx, entryType: string) {
-  return ctx.db
-    .query("dataEntries")
-    .withIndex("by_entry_type", (q) => q.eq("entryType", entryType))
-    .collect();
-}
-
-async function dataEntriesByTypeKey(ctx: QueryCtx, entryType: string, key: string) {
-  return ctx.db
-    .query("dataEntries")
-    .withIndex("by_entry_type_key", (q) => q.eq("entryType", entryType).eq("key", key))
-    .collect();
 }
 
 async function latestTableRow<TableName extends WorkbookTable>(

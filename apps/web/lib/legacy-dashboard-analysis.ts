@@ -589,6 +589,9 @@ function buildProductionAnalysis({
     dispatchApprovals,
     setupCompletions,
   });
+  const routingStatus = buildRoutingStatus(routeRows, productionRows);
+  const toolFixtureNumbers = buildToolFixtureNumbers(toolingRows);
+  const dataEntry = buildDataEntryContext({ routeRows, cycleRows, toolingRows, workOrderRows, setupChecklistRows, employeeRows, machineRows });
 
   return {
     updatedAt,
@@ -718,11 +721,11 @@ function buildProductionAnalysis({
       ratio(totalReject, totalOutput),
     ),
     meetingTracker: buildMeetingTracker(meetingRows, operatorPerformance, employees, filters.month ? allMonths.get(filters.month) || filters.month : ""),
-    routingStatus: buildRoutingStatus(routeRows, productionRows),
-    toolFixtureNumbers: buildToolFixtureNumbers(toolingRows),
+    routingStatus,
+    toolFixtureNumbers,
     productionControl,
     setupAnalytics,
-    dataEntry: buildDataEntryContext({ routeRows, cycleRows, toolingRows, workOrderRows, setupChecklistRows, employeeRows, machineRows }),
+    dataEntry,
     monthSeries: [...monthTotals.values()]
       .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
       .map((row) => ({ monthKey: row.monthKey, month: row.month, output: round(row.output), target: round(row.target), reject: round(row.reject), efficiency: ratio(row.output, row.target), runs: row.runs })),
@@ -773,13 +776,16 @@ function buildProductionControl({
   setupCompletions: ActionRow[];
 }) {
   const routeGroups = groupRouteRows(routeRows);
-  const cycleKeys = new Set(cycleRows.map((row) => masterKey(row)));
-  const toolingKeys = new Set(toolingRows.map((row) => masterKey(row)));
+  const dedupedRouteRows = [...routeGroups.values()].flat();
+  const routeOptionsByPart = routeOptionSummariesByPart(dedupedRouteRows);
+  const cycleKeys = new Set(latestMasterRows(cycleRows).keys());
+  const toolingKeys = new Set(latestMasterRows(toolingRows).keys());
   const rmInwardByJc = latestRmInwardByJobCard(rmInwardRows);
   const selectedRouteByJc = latestRouteSelectionByJobCard(routeSelections);
   const routeChangeByTarget = latestRouteChangeByTarget(routeChanges);
   const rawByJc = new Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines: Set<string>; operators: Set<string> }>();
   const rawBySetup = new Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string> }>();
+  const rawBySetupAnyMachine = new Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string>; machines: Set<string> }>();
   let latestRawDate = "";
   for (const row of productionRows) {
     const jcNo = rowText(row, "JobCardNo", "JOB CARD NO.", "JC NO.");
@@ -797,6 +803,7 @@ function buildProductionControl({
     const setupNo = rowText(row, "SETUP CODE", "SETUP NO.", "setupNo");
     const machine = rowText(row, "MACHINE NO", "M/C NO", "machine");
     const setupKey = productionSetupKey({ jcNo, partCode, setupNo, machine });
+    const setupAnyMachineKey = productionSetupBaseKey({ jcNo, partCode, setupNo });
     if (setupKey) {
       const setupRec = getOrCreate(rawBySetup, setupKey, () => ({ startDate: "", latestDate: "", outputQty: 0, actualQty: 0, rows: 0, dates: new Set<string>() }));
       if (prodDate && (!setupRec.startDate || prodDate < setupRec.startDate)) setupRec.startDate = prodDate;
@@ -805,6 +812,16 @@ function buildProductionControl({
       setupRec.outputQty += safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS"));
       setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - rejectionTotalFromRow(row), 0);
       setupRec.rows += 1;
+    }
+    if (setupAnyMachineKey) {
+      const setupRec = getOrCreate(rawBySetupAnyMachine, setupAnyMachineKey, () => ({ startDate: "", latestDate: "", outputQty: 0, actualQty: 0, rows: 0, dates: new Set<string>(), machines: new Set<string>() }));
+      if (prodDate && (!setupRec.startDate || prodDate < setupRec.startDate)) setupRec.startDate = prodDate;
+      if (prodDate && (!setupRec.latestDate || prodDate > setupRec.latestDate)) setupRec.latestDate = prodDate;
+      if (prodDate) setupRec.dates.add(prodDate);
+      setupRec.outputQty += safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS"));
+      setupRec.actualQty += safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")) || Math.max(safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "PROD QTY IN PCS")) - rejectionTotalFromRow(row), 0);
+      setupRec.rows += 1;
+      if (machine) setupRec.machines.add(machine);
     }
   }
   const dispatchJcKeys = new Set(dispatchRows.map((row) => canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo"))).filter(Boolean));
@@ -817,7 +834,7 @@ function buildProductionControl({
     const routeChangeOption = rowText(routeChange ?? {}, "newOption", "NEW ROUTE OPTION", "NEW OPTION");
     const routeChangeRemainingSetups = routeChangeRemainingPlan(routeChange);
     const partKey = canonicalKey(partCode);
-    const availableOptions = routeOptionSummaries(routeRows, partKey);
+    const availableOptions = routeOptionsByPart.get(partKey) ?? [];
     const optionNumbers = availableOptions.map((option) => rowText(option, "optionNumber"));
     const effectiveOption = routeChangeOption || optionNumber || selectedOptionNumber || (optionNumbers.length === 1 ? optionNumbers[0]! : "");
     const allSelectedRoutes = routeGroups.get([partKey, effectiveOption].join("|")) ?? [];
@@ -896,7 +913,7 @@ function buildProductionControl({
     .filter((row) => row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(workOrderOutputRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
-  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, rawBySetup, routeGroups, cycleRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows);
+  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows);
   const workflowExceptionRows = machinePlanDetailRows.filter((row) => row.rawProductionWithoutWorkflow);
   const setupChecklistHistoryRows: Record<string, unknown>[] = [];
   const setupChecklistMismatchRows: Record<string, unknown>[] = [];
@@ -992,7 +1009,7 @@ function buildProductionControl({
     routeChanges,
     routeChangeRows: routeChanges,
     routeChangeImpacts: [],
-    routeMasterRows: routeRows.map((row) => ({
+    routeMasterRows: dedupedRouteRows.map((row) => ({
       partNo: rowText(row, "PART NO", "PART CODE", "partNo"),
       optionNumber: rowText(row, "OPTION NUMBER", "optionNumber"),
       setupNo: rowText(row, "SETUP NO.", "SETUP CODE", "setupNo"),
@@ -1637,11 +1654,12 @@ function buildToolFixtureNumbers(rows: Record<string, unknown>[]) {
     if (!known.has(prefix)) categories.push([`UNMAPPED PREFIX ${prefix}`, prefix]);
   }
   const toolRows = categories.map(([category, prefix]) => {
-    const usedNumbers = [...(usedByPrefix.get(prefix) ?? new Set<number>())].sort((a, b) => a - b);
+    const usedNumberSet = usedByPrefix.get(prefix) ?? new Set<number>();
+    const usedNumbers = [...usedNumberSet].sort((a, b) => a - b);
     const highest = usedNumbers.length ? Math.max(...usedNumbers) : 0;
     let firstFree = "";
     for (let number = 1; number <= highest; number += 1) {
-      if (!usedNumbers.includes(number)) {
+      if (!usedNumberSet.has(number)) {
         firstFree = `${prefix}${number}`;
         break;
       }
@@ -1738,7 +1756,8 @@ function buildDataEntryContext({
   const machineNumbers = new Set<string>();
   const machineTypes = new Set<string>();
   const employeeIds = new Set<string>();
-  for (const row of [...routeRows, ...cycleRows, ...toolingRows, ...workOrderRows, ...setupChecklistRows]) {
+  const setupSourceRows = routeRows.length ? routeRows : [...cycleRows, ...toolingRows];
+  for (const row of [...setupSourceRows, ...workOrderRows, ...setupChecklistRows]) {
     const part = rowText(row, "PART NO", "PART CODE", "partNo", "partCode");
     const jcNo = rowText(row, "JC NO.", "JC NO", "jcNo");
     const setup = rowText(row, "SETUP NO.", "SETUP NO", "SETUP CODE", "SET UP", "setupNo");
@@ -2035,6 +2054,7 @@ function machinePlanDetails(
   workOrderRows: Array<Record<string, unknown>>,
   rawByJc: Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines?: Set<string> }>,
   rawBySetup: Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string> }>,
+  rawBySetupAnyMachine: Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string>; machines: Set<string> }>,
   routeGroups: Map<string, Record<string, unknown>[]>,
   cycleRows: Array<Record<string, unknown>>,
   machineRows: Array<Record<string, unknown>>,
@@ -2043,7 +2063,7 @@ function machinePlanDetails(
   shopFloorStatusRows: Record<string, unknown>[],
 ) {
   const details: Array<Record<string, unknown>> = [];
-  const cycleByKey = new Map(cycleRows.map((row) => [masterKey(row), row]));
+  const cycleByKey = latestMasterRows(cycleRows);
   const shopFloorStatusBySetup = latestShopFloorStatusBySetup(shopFloorStatusRows);
   const unavailableMachines = new Set(machineConstraints
     .filter((row) => isActivePlannerDecision(rowText(row, "status", "STATUS")))
@@ -2076,6 +2096,15 @@ function machinePlanDetails(
       const machineType = rowText(route, "MACHINE TYPE", "machineType");
       const override = planOverrideForSetup(planOverrides, row, setupNo);
       const cycle = cycleByKey.get(masterKey(route));
+      const productionActualAnyMachine = rawBySetupAnyMachine.get(productionSetupBaseKey({
+        jcNo: rowText(row, "jcNo"),
+        partCode,
+        setupNo: displaySetupNo,
+      })) ?? rawBySetupAnyMachine.get(productionSetupBaseKey({
+        jcNo: rowText(row, "jcNo"),
+        partCode,
+        setupNo,
+      }));
       const assignedMachines = assignedPhysicalMachines({
         routeMachine,
         machineType,
@@ -2085,6 +2114,7 @@ function machinePlanDetails(
         unavailableMachines,
         machineLoad,
         override,
+        actualMachines: productionActualAnyMachine?.machines,
       });
       const routeProductionEndDates: string[] = [];
       const routeProductionStartDates: string[] = [];
@@ -2107,7 +2137,7 @@ function machinePlanDetails(
           partCode,
           setupNo,
           machine,
-        }));
+        })) ?? (productionActualAnyMachine?.machines.has(machine) ? productionActualAnyMachine : undefined);
         const taskWorkflowStage = normalizeSetupLifecycleStage(shopFloorStatus ? rowText(shopFloorStatus, "stage") : "");
         const taskWorkflowStarted = setupLifecycleStageRank(taskWorkflowStage) >= setupLifecycleStageRank("operator_started");
         const rawProductionWithoutWorkflow = Boolean(productionActual?.rows && !taskWorkflowStarted);
@@ -2129,7 +2159,7 @@ function machinePlanDetails(
         if (plannedProductionEndDate) routeProductionEndDates.push(parseDate(plannedProductionEndDate) || plannedProductionEndDate);
         if (productionActual?.rows) routeProductionActuals.push(productionActual);
         const actualStartDate = productionActual?.startDate ?? (machineStarted ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "");
-        const actualCompletionDate = productionActual && productionActual.actualQty >= setupOrderPcs ? productionActual.latestDate : "";
+        const actualCompletionDate = itemComplete ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
         if (machineKeyValue) machineLoad.set(machineKeyValue, (machineLoad.get(machineKeyValue) ?? 0) + 1);
         if (machineKeyValue && plannedProductionEndDate) machineNextSetupDate.set(machineKeyValue, plannedProductionEndDate);
         const detail = {
@@ -2427,6 +2457,19 @@ function productionSetupKey({
   return parts.every(Boolean) ? parts.join("|") : "";
 }
 
+function productionSetupBaseKey({
+  jcNo,
+  partCode,
+  setupNo,
+}: {
+  jcNo: string;
+  partCode: string;
+  setupNo: string;
+}) {
+  const parts = [canonicalKey(jcNo), canonicalKey(partCode), canonicalKey(setupNo)];
+  return parts.every(Boolean) ? parts.join("|") : "";
+}
+
 function setupStepKey(setupNo: string, optionNumber: string) {
   const setupKey = canonicalKey(setupNo);
   const optionKey = canonicalKey(optionNumber);
@@ -2484,6 +2527,7 @@ function assignedPhysicalMachines({
   unavailableMachines,
   machineLoad,
   override,
+  actualMachines,
 }: {
   routeMachine: string;
   machineType: string;
@@ -2493,9 +2537,12 @@ function assignedPhysicalMachines({
   unavailableMachines: Set<string>;
   machineLoad: Map<string, number>;
   override?: ActionRow;
+  actualMachines?: Set<string>;
 }) {
   const overrideMachine = override ? rowText(override, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE") : "";
   const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, unavailableMachines, machineLoad);
+  const actualMachineList = [...(actualMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  if (actualMachineList.length) return actualMachineList;
   if (overrideMachine) {
     const exactOverride = candidates.find((row) => canonicalKey(row.machine) === canonicalKey(overrideMachine));
     if (exactOverride) return [exactOverride.machine];
@@ -2653,31 +2700,47 @@ function isMachineActive(status: string) {
 }
 
 function groupRouteRows(rows: Record<string, unknown>[]) {
-  const groups = new Map<string, Record<string, unknown>[]>();
+  const groups = new Map<string, Map<string, Record<string, unknown>>>();
   for (const row of rows) {
     const key = [canonicalKey(rowText(row, "PART NO", "PART CODE", "partNo")), rowText(row, "OPTION NUMBER", "optionNumber")].join("|");
-    const list = groups.get(key) ?? [];
-    list.push(row);
+    const setupKey = masterKey(row);
+    if (!setupKey) continue;
+    const list = groups.get(key) ?? new Map<string, Record<string, unknown>>();
+    const current = list.get(setupKey);
+    if (!current || rowText(row, "createdAt") >= rowText(current, "createdAt")) {
+      list.set(setupKey, row);
+    }
     groups.set(key, list);
   }
-  for (const rowsInGroup of groups.values()) {
-    rowsInGroup.sort((a, b) => numericSort(rowText(a, "SETUP NO.", "SETUP CODE", "setupNo"), rowText(b, "SETUP NO.", "SETUP CODE", "setupNo")));
+  const dedupedGroups = new Map<string, Record<string, unknown>[]>();
+  for (const [key, rowsInGroup] of groups.entries()) {
+    const rows = [...rowsInGroup.values()];
+    rows.sort((a, b) => numericSort(setupStepKey(rowText(a, "SETUP NO.", "SETUP CODE", "setupNo"), rowText(a, "OPTION NUMBER", "optionNumber")), setupStepKey(rowText(b, "SETUP NO.", "SETUP CODE", "setupNo"), rowText(b, "OPTION NUMBER", "optionNumber"))));
+    dedupedGroups.set(key, rows);
   }
-  return groups;
+  return dedupedGroups;
 }
 
 function routeOptionSummaries(rows: Record<string, unknown>[], partKey: string) {
+  return routeOptionSummariesByPart(rows).get(partKey) ?? [];
+}
+
+function routeOptionSummariesByPart(rows: Record<string, unknown>[]) {
   const summaries = new Map<string, {
+    partKey: string;
     optionNumber: string;
     setupCount: number;
     machines: Set<string>;
     setupNames: Set<string>;
   }>();
-  for (const row of rows) {
-    if (canonicalKey(rowText(row, "PART NO", "PART CODE", "partNo")) !== partKey) continue;
+  for (const row of latestMasterRows(rows).values()) {
+    const partKey = canonicalKey(rowText(row, "PART NO", "PART CODE", "partNo"));
+    if (!partKey) continue;
     const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
     if (!optionNumber) continue;
-    const summary = summaries.get(optionNumber) ?? {
+    const key = [partKey, optionNumber].join("|");
+    const summary = summaries.get(key) ?? {
+      partKey,
       optionNumber,
       setupCount: 0,
       machines: new Set<string>(),
@@ -2688,24 +2751,45 @@ function routeOptionSummaries(rows: Record<string, unknown>[], partKey: string) 
     const setupName = rowText(row, "SETUP NAME", "setupName", "SETUP NO.", "setupNo");
     if (machine) summary.machines.add(machine);
     if (setupName) summary.setupNames.add(setupName);
-    summaries.set(optionNumber, summary);
+    summaries.set(key, summary);
   }
-  return [...summaries.values()]
-    .sort((a, b) => numericSort(a.optionNumber, b.optionNumber))
-    .map((summary) => ({
+  const byPart = new Map<string, Array<Record<string, unknown>>>();
+  for (const summary of summaries.values()) {
+    const rowsForPart = byPart.get(summary.partKey) ?? [];
+    rowsForPart.push({
       optionNumber: summary.optionNumber,
       setupCount: summary.setupCount,
       machineUsed: compactJoin([...summary.machines], 3),
       setupName: compactJoin([...summary.setupNames], 3),
-    }));
+    });
+    byPart.set(summary.partKey, rowsForPart);
+  }
+  for (const rowsForPart of byPart.values()) {
+    rowsForPart.sort((a, b) => numericSort(rowText(a, "optionNumber"), rowText(b, "optionNumber")));
+  }
+  return byPart;
 }
 
 function masterKey(row: Record<string, unknown>) {
+  const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
   return [
     canonicalKey(rowText(row, "PART NO", "PART CODE", "partNo", "partCode")),
-    rowText(row, "OPTION NUMBER", "optionNumber"),
-    rowText(row, "SETUP NO.", "SETUP CODE", "setupNo"),
+    optionNumber,
+    setupStepKey(rowText(row, "SETUP NO.", "SETUP CODE", "setupNo"), optionNumber),
   ].join("|");
+}
+
+function latestMasterRows(rows: Record<string, unknown>[]) {
+  const latest = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const key = masterKey(row);
+    if (!key || key.split("|").some((part) => !part)) continue;
+    const current = latest.get(key);
+    if (!current || rowText(row, "createdAt") >= rowText(current, "createdAt")) {
+      latest.set(key, row);
+    }
+  }
+  return latest;
 }
 
 function routeKey(partNo: unknown, setup: unknown) {
@@ -2714,11 +2798,17 @@ function routeKey(partNo: unknown, setup: unknown) {
   return partText && setupText ? `${partText}|${setupText}` : "";
 }
 
+const normalizedRowCache = new WeakMap<Record<string, unknown>, Map<string, unknown>>();
+
 function rowValue(row: Record<string, unknown>, ...names: string[]) {
   for (const name of names) {
     if (row[name] !== undefined && row[name] !== null && row[name] !== "") return row[name];
   }
-  const normalized = new Map(Object.entries(row).map(([key, value]) => [normalizeHeader(key), value]));
+  let normalized = normalizedRowCache.get(row);
+  if (!normalized) {
+    normalized = new Map(Object.entries(row).map(([key, value]) => [normalizeHeader(key), value]));
+    normalizedRowCache.set(row, normalized);
+  }
   for (const name of names) {
     const value = normalized.get(normalizeHeader(name));
     if (value !== undefined && value !== null && value !== "") return value;

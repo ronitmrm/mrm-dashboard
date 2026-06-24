@@ -3,6 +3,224 @@ import { describe, expect, it } from "vitest";
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis";
 
 describe("buildLegacyDashboardSnapshot", () => {
+  it("uses the latest canonical route row when old imports use option-prefixed setup numbers", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-001",
+            partCode: "M4",
+            optionNumber: "1",
+            orderPcs: 1000,
+            rmInwardDate: "2026-06-24",
+          },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-17T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: 1,
+            setupNo: 1.2,
+            machineUsed: "D5",
+            machineType: "MANUAL",
+          },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo: "2",
+            machineUsed: "D3",
+            machineType: "MANUAL",
+          },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-17T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: 1,
+            setupNo: 1.2,
+            cycleTime: 7,
+            loadingUnloading: 9,
+          },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo: "2",
+            cycleTime: 7,
+            loadingUnloading: 25,
+          },
+        },
+        {
+          entryType: "tooling",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo: "2",
+            machineUsed: "D3",
+            tooling: "G1",
+          },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            machineNo: "D301",
+            machineType: "MANUAL",
+            status: "Active",
+          },
+        },
+      ],
+    });
+
+    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
+      routeMasterRows: Array<Record<string, unknown>>;
+      machinePlanDetailRows: Array<Record<string, unknown>>;
+    };
+
+    expect(productionControl.routeMasterRows).toContainEqual(expect.objectContaining({
+      partNo: "M4",
+      displaySetupNo: "2",
+      machineUsed: "D3",
+    }));
+    expect(productionControl.routeMasterRows).not.toContainEqual(expect.objectContaining({
+      partNo: "M4",
+      displaySetupNo: "2",
+      machineUsed: "D5",
+    }));
+    expect(productionControl.machinePlanDetailRows[0]).toMatchObject({
+      jcNo: "JC-001",
+      partCode: "M4",
+      setupNo: "2",
+      routeMachine: "D3",
+      machine: "D301",
+    });
+  });
+
+  it("counts WIP from the actual production machine before releasing the next setup", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [
+        {
+          prodDate: "2026-06-24",
+          jobCard: "JC-001",
+          partCode: "M4",
+          setupNo: "1",
+          machine: "C501",
+          machineType: "AUTOMATIC",
+          operatorId: "OP-1",
+          outputQty: 1000,
+          actualQty: 1000,
+          targetQty: 0,
+          rejectQty: 0,
+        },
+      ],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-001",
+            partCode: "M4",
+            optionNumber: "1",
+            orderPcs: 1000,
+            rmInwardDate: "2026-06-24",
+          },
+        },
+        ...[
+          ["1", "C5", "AUTOMATIC"],
+          ["2", "D3", "MANUAL"],
+        ].map(([setupNo, machineUsed, machineType]) => ({
+          entryType: "route",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo,
+            machineUsed,
+            machineType,
+          },
+        })),
+        ...[
+          ["1", 28.8],
+          ["2", 32],
+        ].map(([setupNo, cycleTime]) => ({
+          entryType: "cycle",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo,
+            cycleTime,
+            loadingUnloading: 0,
+          },
+        })),
+        {
+          entryType: "tooling",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo: "1",
+            tooling: "T1",
+          },
+        },
+        {
+          entryType: "tooling",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo: "2",
+            tooling: "T2",
+          },
+        },
+        ...[
+          ["C501", "AUTOMATIC"],
+          ["C502", "AUTOMATIC"],
+          ["D301", "MANUAL"],
+        ].map(([machineNo, machineType]) => ({
+          entryType: "machine_master",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            machineNo,
+            machineType,
+            status: "Active",
+          },
+        })),
+      ],
+    });
+
+    const setupOne = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-001" && row.setupNo === "1");
+    const setupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-001" && row.setupNo === "2");
+
+    expect(setupOne).toMatchObject({
+      machine: "C501",
+      rawActualQty: 1000,
+      runningStatus: "Running",
+      actualCompletionDate: "",
+      actualProductionEndDate: "",
+    });
+    expect(setupTwo).toMatchObject({
+      machine: "D301",
+      shopFloorTaskReady: true,
+      shopFloorTaskBlocker: "",
+    });
+  });
+
   it("keeps planning data visible before production rows are imported", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",

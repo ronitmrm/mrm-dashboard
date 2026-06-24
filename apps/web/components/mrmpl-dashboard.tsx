@@ -1214,7 +1214,7 @@ function RoleTaskPanel({
   const [taskFilter, setTaskFilter] = useState("");
   const copy = roleTaskCopy[role];
   const queueRows = useMemo(() => shopFloorQueueRows(productionControl), [productionControl]);
-  const roleRows = useMemo(() => queueRows.filter((row) => roleTaskMatches(row.next, role)), [queueRows, role]);
+  const roleRows = useMemo(() => queueRows.filter((row) => roleTaskMatches(row, role)), [queueRows, role]);
   const filteredRows = useMemo(() => roleRows.filter((row) =>
     typedFilterMatches(row.machine, machineFilter) &&
     typedFilterMatches(row.location, locationFilter) &&
@@ -4542,10 +4542,15 @@ function shopFloorQueueRows(productionControl: DashboardPayload) {
     } => Boolean(row.next));
 }
 
-function roleTaskMatches(row: DashboardPayload, role: RoleTaskKind) {
-  const nextStage = nextShopFloorStage(row);
+function roleTaskMatches(row: {
+  current: DashboardPayload | undefined;
+  next: DashboardPayload;
+}, role: RoleTaskKind) {
+  const nextStage = nextShopFloorStage(row.next);
   if (!nextStage) return false;
-  if (role === "shopFloor") return nextStage.id === "raw_material_at_machine" && row.shopFloorTaskReady !== false;
+  if (role === "shopFloor") {
+    return nextStage.id === "raw_material_at_machine" && row.next.shopFloorTaskReady !== false && !row.current;
+  }
   if (role === "quality") return nextStage.id === "quality_approval";
   return nextStage.id === "presetting" || nextStage.id === "setting" || nextStage.id === "operator_started";
 }
