@@ -293,7 +293,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(jcMachinePlans.every((row) => row.machineAssignment === "Parallel 25-day plan")).toBe(true);
   });
 
-  it("marks setup complete only when job card, part, option, setup, and machine all match", () => {
+  it("marks setup complete only from matching shop floor workflow status", () => {
     const baseDataEntries = [
       {
         entryType: "work_order",
@@ -345,28 +345,20 @@ describe("buildLegacyDashboardSnapshot", () => {
       dataEntries: [
         ...baseDataEntries,
         {
-          entryType: "setup_checklist",
+          entryType: "shop_floor_status",
           createdAt: "2026-06-23T01:00:00.000Z",
           payload: {
             jcNo: "JC-001",
             partNo: "M4",
             setupNo: "1",
             machineNo: "C501",
+            stage: "setting",
           },
         },
       ],
     });
     expect(incompleteMatch.productionControl.machinePlanDetailRows[0]).toMatchObject({
       runningStatus: "Planned",
-    });
-    expect(incompleteMatch.productionControl.setupChecklistMismatchRows).toHaveLength(1);
-    expect(incompleteMatch.productionControl.setupChecklistMismatchRows[0]).toMatchObject({
-      jcNo: "JC-001",
-      partCode: "M4",
-      setupNo: "1",
-      machine: "C501",
-      missingFields: "Option number",
-      status: "Needs planner review",
     });
 
     const strictMatch = buildLegacyDashboardSnapshot({
@@ -375,7 +367,7 @@ describe("buildLegacyDashboardSnapshot", () => {
       dataEntries: [
         ...baseDataEntries,
         {
-          entryType: "setup_checklist",
+          entryType: "shop_floor_status",
           createdAt: "2026-06-23T01:00:00.000Z",
           payload: {
             jcNo: "JC-001",
@@ -383,6 +375,8 @@ describe("buildLegacyDashboardSnapshot", () => {
             optionNumber: "1",
             setupNo: "1",
             machineNo: "C501",
+            stage: "setting",
+            completedAt: "2026-06-23T01:00:00.000Z",
           },
         },
       ],
@@ -393,7 +387,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(strictMatch.productionControl.setupChecklistMismatchRows).toHaveLength(0);
   });
 
-  it("matches setup checklist step number against option-prefixed route setup numbers", () => {
+  it("matches shop floor workflow step number against option-prefixed route setup numbers", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -441,7 +435,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
         {
-          entryType: "setup_checklist",
+          entryType: "shop_floor_status",
           createdAt: "2026-06-23T01:00:00.000Z",
           payload: {
             jcNo: "JC-001",
@@ -449,6 +443,8 @@ describe("buildLegacyDashboardSnapshot", () => {
             optionNumber: "1",
             setupNo: "1",
             machineNo: "C501",
+            stage: "setting",
+            completedAt: "2026-06-23T01:00:00.000Z",
           },
         },
       ],
@@ -461,6 +457,99 @@ describe("buildLegacyDashboardSnapshot", () => {
       runningStatus: "Setup complete",
     });
     expect(snapshot.productionControl.setupChecklistMismatchRows).toHaveLength(0);
+  });
+
+  it("does not plan a later setup before the previous setup can produce material", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-003",
+            partCode: "M6",
+            optionNumber: "1",
+            orderPcs: 2880,
+            rmInwardDate: "2026-06-24",
+          },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M6",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "C501",
+            machineType: "AUTOMATIC",
+          },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M6",
+            optionNumber: "1",
+            setupNo: "2",
+            machineUsed: "C502",
+            machineType: "AUTOMATIC",
+          },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M6",
+            optionNumber: "1",
+            setupNo: "1",
+            cycleTime: 30,
+            loadingUnloading: 0,
+          },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M6",
+            optionNumber: "1",
+            setupNo: "2",
+            cycleTime: 10,
+            loadingUnloading: 0,
+          },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            machineNo: "C502",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
+        },
+      ],
+    });
+
+    const jcRows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-003");
+    expect(jcRows).toHaveLength(2);
+    expect(jcRows.find((row) => row.setupNo === "1")).toMatchObject({
+      setupPlannedDate: "24-June-26",
+      plannedProductionStartDate: "25-June-26",
+      plannedProductionEndDate: "27-June-26",
+    });
+    expect(jcRows.find((row) => row.setupNo === "2")).toMatchObject({
+      setupPlannedDate: "27-June-26",
+    });
   });
 
   it("plans the next setup on a machine from the current job planned production end date", () => {

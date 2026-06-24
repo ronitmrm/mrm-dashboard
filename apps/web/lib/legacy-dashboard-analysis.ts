@@ -2006,6 +2006,8 @@ function machinePlanDetails(
 
     const routeKeyValue = [canonicalKey(partCode), optionNumber].join("|");
     const routes = routeGroups.get(routeKeyValue) ?? [];
+    const rmInwardDate = rowText(row, "rmInwardDate");
+    let operationReadyDate = parseDate(rmInwardDate) || rmInwardDate;
     for (const [routeIndex, route] of routes.entries()) {
       const routeMachine = rowText(route, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
       if (!routeMachine) continue;
@@ -2024,6 +2026,7 @@ function machinePlanDetails(
         machineLoad,
         override,
       });
+      const routeProductionEndDates: string[] = [];
       for (const machine of assignedMachines) {
         const shopFloorStatus = findShopFloorStatus(shopFloorStatusBySetup, {
           jcNo: rowText(row, "jcNo"),
@@ -2053,14 +2056,14 @@ function machinePlanDetails(
         const itemComplete = effectiveStage === "item_complete";
         const shopFloorCompletedAt = shopFloorStatus ? rowText(shopFloorStatus, "completedAt", "createdAt") : "";
         const shopFloorDoneBy = shopFloorStatus ? rowText(shopFloorStatus, "doneBy") : "";
-        const rmInwardDate = rowText(row, "rmInwardDate");
-        const baseSetupDate = plannedSetupDate(rmInwardDate, routeIndex);
+        const baseSetupDate = operationReadyDate || plannedSetupDate(rmInwardDate, routeIndex);
         const machineKeyValue = canonicalKey(machine);
         const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
         const plannedCompletionDate = plannedStartDate;
         const setupCompletionDate = settingDone ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
         const plannedProductionStartDate = plannedCompletionDate ? addDays(plannedCompletionDate, 1) : "";
         const plannedProductionEndDate = plannedProductionEnd(plannedProductionStartDate, safeNumber(rowValue(row, "orderPcs")), cycle, productionActual);
+        if (plannedProductionEndDate) routeProductionEndDates.push(parseDate(plannedProductionEndDate) || plannedProductionEndDate);
         const actualStartDate = productionActual?.startDate ?? (machineStarted ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "");
         const actualCompletionDate = productionActual && productionActual.actualQty >= safeNumber(rowValue(row, "orderPcs")) ? productionActual.latestDate : "";
         if (machineKeyValue) machineLoad.set(machineKeyValue, (machineLoad.get(machineKeyValue) ?? 0) + 1);
@@ -2117,6 +2120,7 @@ function machinePlanDetails(
           planningAssumption: `${planningHoursPerDay} hrs/day + ${planningSetupBufferDays} setup buffer day; split if 25-day RM target is missed`,
       });
       }
+      operationReadyDate = maxDateValue(operationReadyDate, maxDateValue(...routeProductionEndDates));
     }
   }
   return details.sort((a, b) =>
