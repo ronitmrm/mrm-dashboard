@@ -185,7 +185,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (path === "planner-priority") {
       const result = await convex.mutation(api.dashboard.savePlannerPriority, {
         target: String(body.target || ""),
+        jcNo: body.jcNo ? String(body.jcNo) : undefined,
+        partCode: body.partCode ? String(body.partCode) : undefined,
         priority: String(body.priority || "Normal"),
+        approvalMode: body.approvalMode ? String(body.approvalMode) : undefined,
+        interruptedJcNo: body.interruptedJcNo ? String(body.interruptedJcNo) : undefined,
+        interruptedFinishedQty: body.interruptedFinishedQty === undefined || body.interruptedFinishedQty === "" ? undefined : Number(body.interruptedFinishedQty),
         remark: body.remark ? String(body.remark) : undefined,
       });
       return json({ ...result, rowsUpdated: 1, jobCards: body.target ? [body.target] : [] });

@@ -903,6 +903,9 @@ function buildProductionControl({
       rmInwardKg: safeNumber(rowValue(rmInward ?? {}, "RM INWARD KG.", "rmInwardKg")) || safeNumber(rowValue(row, "RM INWARD KG.", "rmInwardKg")),
       plannerPriority: priorityLabel(plannerPriorityValue),
       plannerPriorityScore: plannerPriority ? priorityScore(plannerPriorityValue) : 0,
+      priorityApprovalMode: plannerPriority ? priorityApprovalMode(plannerPriority) : "idle_queue_only",
+      priorityInterruptedJcNo: plannerPriority ? rowText(plannerPriority, "interruptedJcNo", "INTERRUPTED JC NO", "STOPPED JC NO") : "",
+      priorityInterruptedFinishedQty: plannerPriority ? safeNumber(rowValue(plannerPriority, "interruptedFinishedQty", "INTERRUPTED FINISHED QTY", "FINISHED QTY")) : 0,
       priorityRemark: plannerPriority ? rowText(plannerPriority, "remark", "REMARK") : "",
       routeStatus,
       cycleStatus: missingCycle.length ? `Missing setup ${compactJoin(missingCycle)}` : "Ready",
@@ -2121,6 +2124,12 @@ function plannerPriorityForWorkOrder(byTarget: Map<string, Record<string, unknow
     ?? byTarget.get(`target:${partKey}`);
 }
 
+function priorityApprovalMode(row: Record<string, unknown>) {
+  const value = rowText(row, "approvalMode", "priorityApprovalMode", "PRIORITY APPROVAL MODE").toLowerCase();
+  if (value === "allow_started_not_running" || value === "allow_stop_running") return value;
+  return "idle_queue_only";
+}
+
 function workOrderPlanningSort(a: Record<string, unknown>, b: Record<string, unknown>) {
   return safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"))
     || compareDateValues(rowText(a, "deliveryDate"), rowText(b, "deliveryDate"))
@@ -2275,7 +2284,8 @@ function machinePlanDetails(
         const itemComplete = effectiveStage === "item_complete";
         const shopFloorCompletedAt = shopFloorStatus ? rowText(shopFloorStatus, "completedAt", "createdAt") : "";
         const shopFloorDoneBy = shopFloorStatus ? rowText(shopFloorStatus, "doneBy") : "";
-        const baseSetupDate = operationReadyDate || plannedSetupDate(rmInwardDate, routeIndex);
+        const staticBaseReadyDate = routeIndex === 0 ? (parseDate(rmInwardDate) || rmInwardDate) : plannedSetupDate(rmInwardDate, routeIndex);
+        const baseSetupDate = operationReadyDate || staticBaseReadyDate;
         const machineKeyValue = canonicalKey(machine);
         const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
         const plannedCompletionDate = plannedStartDate;
@@ -2314,6 +2324,9 @@ function machinePlanDetails(
         toolingStatus: rowText(row, "toolingStatus"),
         plannerPriority: rowText(row, "plannerPriority"),
         plannerPriorityScore: safeNumber(rowValue(row, "plannerPriorityScore")),
+        priorityApprovalMode: rowText(row, "priorityApprovalMode"),
+        priorityInterruptedJcNo: rowText(row, "priorityInterruptedJcNo"),
+        priorityInterruptedFinishedQty: safeNumber(rowValue(row, "priorityInterruptedFinishedQty")),
         priorityRemark: rowText(row, "priorityRemark"),
         rawOutputQty: round(productionActual?.outputQty ?? 0),
         rawActualQty: round(productionActual?.actualQty ?? 0),
@@ -2355,7 +2368,7 @@ function machinePlanDetails(
           enumerable: false,
           value: {
             readyDate: baseSetupDate,
-            baseReadyDate: baseSetupDate,
+            baseReadyDate: staticBaseReadyDate,
             canPullForward: operationReadyCanPullForward,
             orderPcs: machineOrderPcs,
             totalOrderPcs: setupOrderPcs,
@@ -2516,6 +2529,7 @@ function planningScheduleSignature(details: Array<Record<string, unknown>>) {
 }
 
 function rescheduleMachineQueues(details: Array<Record<string, unknown>>) {
+  applyPriorityInterruptionQuantities(details);
   const byMachine = new Map<string, Array<Record<string, unknown>>>();
   for (const row of details) {
     const machine = rowText(row, "machine");
@@ -2551,14 +2565,79 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>) {
 function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>) {
   const aActualStart = actualProductionStartDate(planningMeta(a));
   const bActualStart = actualProductionStartDate(planningMeta(b));
+  const priorityDiff = safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"));
+  if (priorityDiff > 0 && canPriorityPreempt(a, b)) return priorityDiff;
+  if (priorityDiff < 0 && canPriorityPreempt(b, a)) return priorityDiff;
   if (aActualStart || bActualStart) {
     if (aActualStart && bActualStart) return aActualStart.localeCompare(bActualStart);
     return aActualStart ? -1 : 1;
   }
-  return safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore")) ||
+  return priorityQueueStateRank(a) - priorityQueueStateRank(b) ||
+    priorityDiff ||
     machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) ||
     rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo"));
+}
+
+function applyPriorityInterruptionQuantities(details: Array<Record<string, unknown>>) {
+  const stopApprovals = details.filter((row) => priorityApprovalMode(row) === "allow_stop_running" && safeNumber(rowValue(row, "priorityInterruptedFinishedQty")) > 0);
+  for (const approval of stopApprovals) {
+    const finishedQty = safeNumber(rowValue(approval, "priorityInterruptedFinishedQty"));
+    for (const row of details) {
+      if (!priorityInterruptsRow(approval, row)) continue;
+      const meta = planningMeta(row);
+      const currentActual = meta.productionActual ?? {
+        latestDate: actualProductionStartDate(meta) || parseDate(rowText(row, "setupPlannedDate")) || "",
+        outputQty: 0,
+        actualQty: 0,
+        dates: new Set<string>(),
+      };
+      const actualQty = Math.max(currentActual.actualQty ?? 0, finishedQty);
+      const outputQty = Math.max(currentActual.outputQty ?? 0, finishedQty);
+      meta.productionActual = {
+        ...currentActual,
+        latestDate: currentActual.latestDate || currentActual.startDate || parseDate(rowText(row, "setupPlannedDate")) || "",
+        outputQty,
+        actualQty,
+      };
+      row.rawOutputQty = round(outputQty);
+      row.rawActualQty = round(actualQty);
+      row.priorityStoppedByJcNo = rowText(approval, "jcNo");
+      row.priorityRemainingQty = round(Math.max((meta.totalOrderPcs ?? meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs"))) - actualQty, 0));
+    }
+  }
+}
+
+function canPriorityPreempt(blockingRow: Record<string, unknown>, priorityRow: Record<string, unknown>) {
+  if (safeNumber(rowValue(priorityRow, "plannerPriorityScore")) <= safeNumber(rowValue(blockingRow, "plannerPriorityScore"))) return false;
+  const state = priorityQueueState(blockingRow);
+  if (state === "idle") return true;
+  const mode = priorityApprovalMode(priorityRow);
+  if (state === "started_not_running") return mode === "allow_started_not_running" || mode === "allow_stop_running";
+  return mode === "allow_stop_running" && priorityInterruptsRow(priorityRow, blockingRow) && safeNumber(rowValue(priorityRow, "priorityInterruptedFinishedQty")) > 0;
+}
+
+function priorityInterruptsRow(priorityRow: Record<string, unknown>, row: Record<string, unknown>) {
+  const stoppedJc = canonicalKey(rowText(priorityRow, "priorityInterruptedJcNo", "interruptedJcNo", "STOPPED JC NO"));
+  if (stoppedJc) return stoppedJc === canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"));
+  return false;
+}
+
+function priorityQueueStateRank(row: Record<string, unknown>) {
+  const state = priorityQueueState(row);
+  if (state === "running") return 0;
+  if (state === "started_not_running") return 1;
+  return 2;
+}
+
+function priorityQueueState(row: Record<string, unknown>) {
+  if (rowText(row, "runningStatus").toLowerCase() === "complete") return "idle";
+  if (actualProductionStartDate(planningMeta(row)) || rowText(row, "runningStatus").toLowerCase() === "running") return "running";
+  const stage = rowText(row, "shopFloorStage").toLowerCase();
+  const runningStatus = rowText(row, "runningStatus").toLowerCase();
+  if (stage && stage !== "planned" && stage !== "item_complete") return "started_not_running";
+  if (runningStatus === "setup complete") return "started_not_running";
+  return "idle";
 }
 
 function machineQueueSortDate(row: Record<string, unknown>) {

@@ -83,6 +83,9 @@ const plannerPriorityValidator = {
   jcNo: optionalString,
   partCode: optionalString,
   priority: v.string(),
+  approvalMode: optionalString,
+  interruptedJcNo: optionalString,
+  interruptedFinishedQty: optionalNumber,
   remark: optionalString,
   createdAt: optionalString,
 };
@@ -422,7 +425,16 @@ export const saveRouteSelection = mutation({
 });
 
 export const savePlannerPriority = mutation({
-  args: { target: v.string(), jcNo: optionalString, partCode: optionalString, priority: v.string(), remark: optionalString },
+  args: {
+    target: v.string(),
+    jcNo: optionalString,
+    partCode: optionalString,
+    priority: v.string(),
+    approvalMode: optionalString,
+    interruptedJcNo: optionalString,
+    interruptedFinishedQty: optionalNumber,
+    remark: optionalString,
+  },
   handler: async (ctx, args) => insertOwnerRow(ctx, "plannerPriorities", args),
 });
 

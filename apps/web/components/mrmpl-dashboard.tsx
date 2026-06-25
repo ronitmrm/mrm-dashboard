@@ -811,6 +811,9 @@ function PlannerPriorityForm({
   const [partCode, setPartCode] = useState("");
   const [jcNo, setJcNo] = useState("");
   const [priority, setPriority] = useState("High");
+  const [approvalMode, setApprovalMode] = useState("idle_queue_only");
+  const [interruptedJcNo, setInterruptedJcNo] = useState("");
+  const [interruptedFinishedQty, setInterruptedFinishedQty] = useState("");
   const [remark, setRemark] = useState("");
   const jobCardOptions = useMemo(() => uniqueValues(workOrders
     .filter((row) => !partCode || machineKey(itemCode(row)) === machineKey(partCode))
@@ -827,9 +830,16 @@ function PlannerPriorityForm({
       jcNo: selectedJc,
       partCode: selectedPart,
       priority,
+      approvalMode,
+      interruptedJcNo: approvalMode === "allow_stop_running" ? interruptedJcNo : "",
+      interruptedFinishedQty: approvalMode === "allow_stop_running" ? Number(interruptedFinishedQty || 0) : undefined,
       remark,
     });
     setRemark("");
+    if (approvalMode !== "allow_stop_running") {
+      setInterruptedJcNo("");
+      setInterruptedFinishedQty("");
+    }
   }
 
   return (
@@ -878,6 +888,44 @@ function PlannerPriorityForm({
             ))}
           </select>
         </Field>
+        <Field label="Queue approval">
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={approvalMode}
+            onChange={(event) => setApprovalMode(event.target.value)}
+          >
+            <option value="idle_queue_only">Idle queue only</option>
+            <option value="allow_started_not_running">Move started task, machine not running</option>
+            <option value="allow_stop_running">Stop running item</option>
+          </select>
+        </Field>
+        {approvalMode === "allow_stop_running" ? (
+          <>
+            <Field label="Stopped JC number">
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                value={interruptedJcNo}
+                required
+                onChange={(event) => setInterruptedJcNo(event.target.value)}
+              >
+                <option value="">Select JC to stop</option>
+                {uniqueValues(workOrders.map(jobCardNumber).filter((value) => value !== "-")).map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Finished qty">
+              <Input
+                min="0"
+                step="1"
+                type="number"
+                value={interruptedFinishedQty}
+                required
+                onChange={(event) => setInterruptedFinishedQty(event.target.value)}
+              />
+            </Field>
+          </>
+        ) : null}
         <Field label="Reason">
           <Input value={remark} placeholder="Customer urgent / dispatch commitment" onChange={(event) => setRemark(event.target.value)} />
         </Field>
@@ -4298,7 +4346,16 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 type DashboardActionMutations = {
   saveRouteSelection: (args: { jcNo: string; optionNumber: string }) => Promise<unknown>;
-  savePlannerPriority: (args: { target: string; jcNo?: string; partCode?: string; priority: string; remark?: string }) => Promise<unknown>;
+  savePlannerPriority: (args: {
+    target: string;
+    jcNo?: string;
+    partCode?: string;
+    priority: string;
+    approvalMode?: string;
+    interruptedJcNo?: string;
+    interruptedFinishedQty?: number;
+    remark?: string;
+  }) => Promise<unknown>;
   saveMachineConstraint: (args: {
     machineNo: string;
     unavailableFrom: string;
@@ -4379,6 +4436,9 @@ async function runDashboardAction(
       jcNo: optionalText(body.jcNo),
       partCode: optionalText(body.partCode),
       priority: text(body.priority) || "Normal",
+      approvalMode: optionalText(body.approvalMode),
+      interruptedJcNo: optionalText(body.interruptedJcNo),
+      interruptedFinishedQty: optionalNumber(body.interruptedFinishedQty),
       remark: optionalText(body.remark),
     });
     return "Priority saved.";
