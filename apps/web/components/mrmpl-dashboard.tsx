@@ -20,6 +20,7 @@ import {
   LogOut,
   Moon,
   PackageCheck,
+  RefreshCw,
   Route,
   Search,
   Settings2,
@@ -306,6 +307,7 @@ function DashboardShell() {
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
   const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
+  const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
   const dashboardPayload = useQuery(api.dashboard.snapshot, {});
   const refreshSnapshot = useAction(api.dashboard.refreshSnapshot);
   const saveRouteSelection = useMutation(api.dashboard.saveRouteSelection);
@@ -318,13 +320,37 @@ function DashboardShell() {
   const saveProductionEntry = useMutation(api.dashboard.saveProductionEntry);
   const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
   const reverseEntry = useMutation(api.dashboard.reverseEntry);
-  const correctionCandidates = useQuery(api.dashboard.correctionCandidates, { limit: 200 });
+  const correctionCandidates = useQuery(
+    api.dashboard.correctionCandidates,
+    activeTab === "correctionsTab" ? { limit: 200 } : "skip",
+  );
 
   useEffect(() => {
     if (asRecord(dashboardPayload).cacheStatus === "missing") {
-      void refreshSnapshot();
+      void refreshSnapshot({});
     }
   }, [dashboardPayload, refreshSnapshot]);
+
+  async function refreshDashboardSnapshot(force = true) {
+    setIsRefreshingSnapshot(true);
+    setActionStatus(null);
+    try {
+      const result = await refreshSnapshot({ force });
+      setActionStatus({
+        tone: "default",
+        message: result.skipped
+          ? "Dashboard snapshot is already fresh."
+          : "Dashboard snapshot refreshed.",
+      });
+    } catch (err) {
+      setActionStatus({
+        tone: "destructive",
+        message: err instanceof Error ? err.message : "Snapshot refresh failed.",
+      });
+    } finally {
+      setIsRefreshingSnapshot(false);
+    }
+  }
 
   async function submitAction(path: string, body: Record<string, unknown>) {
     setActionStatus(null);
@@ -345,9 +371,8 @@ function DashboardShell() {
           });
       setActionStatus({
         tone: "default",
-        message,
+        message: `${message} Snapshot refresh is manual to reduce Convex I/O.`,
       });
-      await refreshSnapshot();
       const returnTab = str(body.returnTab) as DashboardTabId;
       if (returnTab && navItems.some((item) => item.id === returnTab)) {
         setActiveTab(returnTab);
@@ -450,7 +475,10 @@ function DashboardShell() {
           <Badge variant="outline">
             {isDashboardLoading ? "Loading" : "Connected"}
           </Badge>
-          <HeaderActions />
+          <HeaderActions
+            isRefreshingSnapshot={isRefreshingSnapshot}
+            onRefreshSnapshot={() => void refreshDashboardSnapshot(true)}
+          />
         </header>
         <main className="@container/main flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
           {actionStatus ? (
@@ -592,7 +620,13 @@ function AuthScreen() {
   );
 }
 
-function HeaderActions() {
+function HeaderActions({
+  isRefreshingSnapshot,
+  onRefreshSnapshot,
+}: {
+  isRefreshingSnapshot: boolean;
+  onRefreshSnapshot: () => void;
+}) {
   const { isAuthenticated } = useConvexAuth();
   const { signOut } = useAuthActions();
   const { resolvedTheme, setTheme } = useTheme();
@@ -601,6 +635,17 @@ function HeaderActions() {
 
   return (
     <div className="flex shrink-0 items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-2"
+        disabled={isRefreshingSnapshot}
+        onClick={onRefreshSnapshot}
+      >
+        <RefreshCw className={`size-4${isRefreshingSnapshot ? " animate-spin" : ""}`} />
+        <span className="hidden sm:inline">{isRefreshingSnapshot ? "Refreshing" : "Refresh snapshot"}</span>
+      </Button>
       <Button
         type="button"
         variant="outline"
