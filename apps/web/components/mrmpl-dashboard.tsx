@@ -4688,6 +4688,18 @@ function machineBoardRows(machineRows: DashboardPayload[], plannedRows: Dashboar
     if (!key) continue;
     rowsByMachine.set(key, row);
   }
+  for (const row of plannedRows) {
+    const machine = machineValue(row, "machine");
+    const key = machineKey(machine);
+    if (!key || rowsByMachine.has(key)) continue;
+    rowsByMachine.set(key, {
+      machine,
+      machineNo: machine,
+      machineType: machineValue(row, "machineType"),
+      status: "Planned",
+      remarks: "Machine is planned but missing from machine master",
+    });
+  }
 
   return [...rowsByMachine.values()].sort((a, b) => machineValue(a, "machine").localeCompare(machineValue(b, "machine"), undefined, { numeric: true }));
 }
@@ -4788,7 +4800,7 @@ function groupPlannedRowsByMachine(rows: DashboardPayload[]) {
     machineRowsForKey.push(row);
     grouped.set(key, machineRowsForKey);
   }
-  return grouped;
+  return sortGroupedRows(grouped, machinePlanDisplaySort);
 }
 
 function groupPlannedRowsByJobCard(rows: DashboardPayload[]) {
@@ -4800,7 +4812,7 @@ function groupPlannedRowsByJobCard(rows: DashboardPayload[]) {
     existing.push(row);
     grouped.set(key, existing);
   }
-  return grouped;
+  return sortGroupedRows(grouped, jobCardSetupSort);
 }
 
 function groupPlannedRowsByPart(rows: DashboardPayload[]) {
@@ -4812,7 +4824,38 @@ function groupPlannedRowsByPart(rows: DashboardPayload[]) {
     existing.push(row);
     grouped.set(key, existing);
   }
+  return sortGroupedRows(grouped, jobCardSetupSort);
+}
+
+function sortGroupedRows(
+  grouped: Map<string, DashboardPayload[]>,
+  sorter: (a: DashboardPayload, b: DashboardPayload) => number,
+) {
+  for (const [key, rows] of grouped) {
+    grouped.set(key, [...rows].sort(sorter));
+  }
   return grouped;
+}
+
+function machinePlanDisplaySort(a: DashboardPayload, b: DashboardPayload) {
+  return shopFloorDisplayBucket(a) - shopFloorDisplayBucket(b)
+    || shopFloorPlanSort(a, b);
+}
+
+function jobCardSetupSort(a: DashboardPayload, b: DashboardPayload) {
+  return displayValue(a.setupNo).localeCompare(displayValue(b.setupNo), undefined, { numeric: true })
+    || shopFloorPlanSort(a, b);
+}
+
+function shopFloorDisplayBucket(row: DashboardPayload) {
+  if (shopFloorItemIsFinished(row)) return 2;
+  if (shopFloorItemIsCurrent(row)) return 0;
+  return 1;
+}
+
+function shopFloorItemIsFinished(row: DashboardPayload) {
+  return str(row.shopFloorStage) === "item_complete"
+    || str(row.runningStatus).toLowerCase() === "complete";
 }
 
 function plannedMachineOptions(rows: DashboardPayload[], machineRows: DashboardPayload[] = []) {
