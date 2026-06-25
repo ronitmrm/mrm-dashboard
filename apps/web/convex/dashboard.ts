@@ -297,6 +297,8 @@ const legacyEntryTypes = [
   "work_order",
   "rm_inward",
   "employee",
+  "first_piece_inspection_master",
+  "first_piece_inspection_report",
 ];
 
 const snapshotEntryTypes = [...legacyEntryTypes, "shop_floor_status"];

@@ -82,8 +82,10 @@ const monthNames: Record<string, number> = {
 const monthShort = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
 const monthShortLegacy = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const planningHoursPerDay = 8;
+const wipAvailabilityBufferDays = 1;
 const planningSetupBufferDays = 1;
 const planningDispatchTargetDays = 25;
+const minimumParallelMachineWorkDays = 15;
 const downtimeReasonFields: Array<[string, string[]]> = [
   ["QC Approval", ["QC APPROVAL DOWNTIME (MIN)", "QC APPROVAL", "QCDown"]],
   ["Machine Setting", ["MACHINE SETTING DOWNTIME (MIN)", "MACHINE SETTING", "SettingDown"]],
@@ -188,6 +190,8 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const rmInwardRows = entryRows(byType, "rm_inward");
   const setupChecklistRows: Record<string, unknown>[] = [];
   const shopFloorStatusRows = entryRows(byType, "shop_floor_status");
+  const firstPieceInspectionMasterRows = entryRows(byType, "first_piece_inspection_master");
+  const firstPieceInspectionReportRows = entryRows(byType, "first_piece_inspection_report");
   const rawSoftwareRows = entryRows(byType, "software_raw");
   const meetingRows = entryRows(byType, "meeting_action");
   const routeLookup = loadRouteLookup(routeRows);
@@ -205,6 +209,8 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     meetingRows,
     setupChecklistRows,
     shopFloorStatusRows,
+    firstPieceInspectionMasterRows,
+    firstPieceInspectionReportRows,
     routeRows,
     cycleRows,
     toolingRows,
@@ -249,6 +255,8 @@ function buildProductionAnalysis({
   meetingRows,
   setupChecklistRows,
   shopFloorStatusRows,
+  firstPieceInspectionMasterRows,
+  firstPieceInspectionReportRows,
   routeRows,
   cycleRows,
   toolingRows,
@@ -276,6 +284,8 @@ function buildProductionAnalysis({
   meetingRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
+  firstPieceInspectionMasterRows: Record<string, unknown>[];
+  firstPieceInspectionReportRows: Record<string, unknown>[];
   routeRows: Record<string, unknown>[];
   cycleRows: Record<string, unknown>[];
   toolingRows: Record<string, unknown>[];
@@ -581,6 +591,8 @@ function buildProductionAnalysis({
     dispatchRows,
     setupChecklistRows,
     shopFloorStatusRows,
+    firstPieceInspectionMasterRows,
+    firstPieceInspectionReportRows,
     routeSelections,
     plannerPriorities,
     machineConstraints,
@@ -749,6 +761,8 @@ function buildProductionControl({
   dispatchRows,
   setupChecklistRows,
   shopFloorStatusRows,
+  firstPieceInspectionMasterRows,
+  firstPieceInspectionReportRows,
   routeSelections,
   plannerPriorities,
   machineConstraints,
@@ -767,6 +781,8 @@ function buildProductionControl({
   dispatchRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
+  firstPieceInspectionMasterRows: Record<string, unknown>[];
+  firstPieceInspectionReportRows: Record<string, unknown>[];
   routeSelections: ActionRow[];
   plannerPriorities: ActionRow[];
   machineConstraints: ActionRow[];
@@ -913,7 +929,7 @@ function buildProductionControl({
     .filter((row) => row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(workOrderOutputRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
-  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows);
+  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows);
   const workflowExceptionRows = machinePlanDetailRows.filter((row) => row.rawProductionWithoutWorkflow);
   const setupChecklistHistoryRows: Record<string, unknown>[] = [];
   const setupChecklistMismatchRows: Record<string, unknown>[] = [];
@@ -1026,6 +1042,8 @@ function buildProductionControl({
     jobCardSetupProgressRows: setupCompletions,
     setupChecklistHistoryRows,
     setupChecklistMismatchRows,
+    firstPieceInspectionMasterRows,
+    firstPieceInspectionReportRows,
   };
 }
 
@@ -2057,6 +2075,7 @@ function machinePlanDetails(
   rawBySetupAnyMachine: Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string>; machines: Set<string> }>,
   routeGroups: Map<string, Record<string, unknown>[]>,
   cycleRows: Array<Record<string, unknown>>,
+  toolingRows: Array<Record<string, unknown>>,
   machineRows: Array<Record<string, unknown>>,
   machineConstraints: ActionRow[],
   planOverrides: ActionRow[],
@@ -2071,11 +2090,14 @@ function machinePlanDetails(
     .filter(Boolean));
   const machineLoad = new Map<string, number>();
   const machineNextSetupDate = new Map<string, string>();
+  const machinePlannedDays = new Map<string, number>();
+  const machinePlannedQty = new Map<string, number>();
   for (const row of workOrderRows) {
     const partCode = rowText(row, "partCode");
     const optionNumber = rowText(row, "optionNumber");
     if (!partCode || !optionNumber || optionNumber === "Not selected") continue;
     if (rowText(row, "rmStatus") !== "Received") continue;
+    if (!workOrderPlanningMastersReady(row, { hasCycleMaster: cycleRows.length > 0, hasToolingMaster: toolingRows.length > 0 })) continue;
 
     const routeKeyValue = [canonicalKey(partCode), optionNumber].join("|");
     const remainingSetups = routeChangeRemainingPlan(row).filter((setup) => setup.plan && safeNumber(setup.quantity) > 0);
@@ -2085,6 +2107,7 @@ function machinePlanDetails(
       ? allRoutes.filter((route) => remainingQtyBySetup.has(canonicalKey(setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), optionNumber))))
       : allRoutes;
     const rmInwardDate = rowText(row, "rmInwardDate");
+    const dispatchDeadlineDate = dispatchTargetDate(rmInwardDate);
     let operationReadyDate = parseDate(rmInwardDate) || rmInwardDate;
     let operationReadyCanPullForward = true;
     for (const [routeIndex, route] of routes.entries()) {
@@ -2113,9 +2136,15 @@ function machinePlanDetails(
         machineRows,
         unavailableMachines,
         machineLoad,
+        machineNextSetupDate,
+        machinePlannedDays,
+        machinePlannedQty,
+        readyDate: operationReadyDate || plannedSetupDate(rmInwardDate, routeIndex),
+        deadlineDate: dispatchDeadlineDate,
         override,
         actualMachines: productionActualAnyMachine?.machines,
       });
+      const machineOrderPcs = assignedMachineOrderPcs(setupOrderPcs, assignedMachines.length);
       const routeProductionEndDates: string[] = [];
       const routeProductionStartDates: string[] = [];
       const routeProductionActuals: Array<{ latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }> = [];
@@ -2154,14 +2183,19 @@ function machinePlanDetails(
         const plannedCompletionDate = plannedStartDate;
         const setupCompletionDate = settingDone ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
         const plannedProductionStartDate = plannedCompletionDate;
-        const plannedProductionEndDate = plannedProductionEnd(plannedProductionStartDate, setupOrderPcs, cycle, productionActual);
+        const plannedProductionEndDate = plannedProductionEnd(plannedProductionStartDate, machineOrderPcs, cycle, productionActual);
         if (plannedProductionStartDate) routeProductionStartDates.push(parseDate(plannedProductionStartDate) || plannedProductionStartDate);
         if (plannedProductionEndDate) routeProductionEndDates.push(parseDate(plannedProductionEndDate) || plannedProductionEndDate);
         if (productionActual?.rows) routeProductionActuals.push(productionActual);
         const actualStartDate = productionActual?.startDate ?? (machineStarted ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "");
         const actualCompletionDate = itemComplete ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
-        if (machineKeyValue) machineLoad.set(machineKeyValue, (machineLoad.get(machineKeyValue) ?? 0) + 1);
-        if (machineKeyValue && plannedProductionEndDate) machineNextSetupDate.set(machineKeyValue, plannedProductionEndDate);
+        if (machineKeyValue) {
+          machineLoad.set(machineKeyValue, (machineLoad.get(machineKeyValue) ?? 0) + 1);
+          machinePlannedDays.set(machineKeyValue, (machinePlannedDays.get(machineKeyValue) ?? 0) + plannedProductionDays(plannedProductionStartDate, plannedProductionEndDate));
+          machinePlannedQty.set(machineKeyValue, (machinePlannedQty.get(machineKeyValue) ?? 0) + machineOrderPcs);
+        }
+        if (machineKeyValue && plannedProductionEndDate) machineNextSetupDate.set(machineKeyValue, nextMachineAvailableDate(plannedProductionEndDate));
+        const taskReadiness = shopFloorTaskReadiness(operationReadyCanPullForward, plannedStartDate);
         const detail = {
         machine,
         routeMachine,
@@ -2174,7 +2208,8 @@ function machinePlanDetails(
         jcNo: rowText(row, "jcNo"),
         fgPoNo: rowText(row, "fgPoNo"),
         optionNumber,
-        orderPcs: setupOrderPcs,
+        orderPcs: machineOrderPcs,
+        totalOrderPcs: setupOrderPcs,
         rmStatus: rowText(row, "rmStatus"),
         routeStatus: rowText(row, "routeStatus"),
         cycleStatus: rowText(row, "cycleStatus"),
@@ -2207,20 +2242,22 @@ function machinePlanDetails(
         shopFloorUpdatedAt: shopFloorStatus ? rowText(shopFloorStatus, "completedAt", "createdAt") : "",
         rawProductionWithoutWorkflow,
         plannerActionRequired: rawProductionWithoutWorkflow ? "Raw production exists but machinist start task is missing" : "",
-        shopFloorTaskReady: operationReadyCanPullForward,
-        shopFloorTaskBlocker: operationReadyCanPullForward ? "" : "Previous setup WIP buffer is not ready",
+        shopFloorTaskReady: taskReadiness.ready,
+        shopFloorTaskBlocker: taskReadiness.blocker,
         planVsActual: setupPlanVsActual(plannedCompletionDate, setupCompletionDate),
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
           machineAssignment: machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
           parallelMachineCount: assignedMachines.length,
-          planningAssumption: `${planningHoursPerDay} hrs/day; next setup waits for 2-day WIP buffer, or 3 days when previous setup is slower`,
+          planningAssumption: `${planningHoursPerDay} hrs/day; next setup waits for WIP quantity plus ${wipAvailabilityBufferDays} buffer day; parallel machines require at least ${minimumParallelMachineWorkDays} production days each; compatible machines are selected by lower planned utilization first`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
           value: {
             readyDate: baseSetupDate,
+            baseReadyDate: baseSetupDate,
             canPullForward: operationReadyCanPullForward,
-            orderPcs: setupOrderPcs,
+            orderPcs: machineOrderPcs,
+            totalOrderPcs: setupOrderPcs,
             cycle,
             productionActual,
           },
@@ -2241,11 +2278,140 @@ function machinePlanDetails(
       operationReadyCanPullForward = actualWipBufferAvailable(bufferArgs);
     }
   }
-  return rescheduleMachineQueues(details).sort((a, b) =>
+  return applyPlannedDateTaskReadiness(finalizeMachineAndSetupSchedule(details)).sort((a, b) =>
     rowText(a, "machine").localeCompare(rowText(b, "machine"), undefined, { numeric: true }) ||
     rowText(a, "partCode").localeCompare(rowText(b, "partCode"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")),
   );
+}
+
+function workOrderPlanningMastersReady(row: Record<string, unknown>, masters: { hasCycleMaster: boolean; hasToolingMaster: boolean }) {
+  const routeStatus = rowText(row, "routeStatus");
+  return (routeStatus === "Ready" || routeStatus === "Auto single option" || routeStatus === "Route change plan") &&
+    (!masters.hasCycleMaster || rowText(row, "cycleStatus") === "Ready") &&
+    (!masters.hasToolingMaster || rowText(row, "toolingStatus") === "Ready");
+}
+
+function shopFloorTaskReadiness(previousOperationReady: boolean, plannedStartDate: string) {
+  const dateReady = setupPlannedDateIsDue(plannedStartDate);
+  return {
+    ready: previousOperationReady && dateReady,
+    blocker: [
+      previousOperationReady ? "" : "Previous setup WIP buffer is not ready",
+      dateReady ? "" : `Planned date not due until ${dateLabel(plannedStartDate)}`,
+    ].filter(Boolean).join("; "),
+  };
+}
+
+function applyPlannedDateTaskReadiness(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return rows.map((row) => {
+    const plannedDate = parseDate(rowText(row, "plannedStartDate", "setupPlannedDate", "plannedDate"));
+    const dateReady = setupPlannedDateIsDue(plannedDate);
+    const blockers = taskBlockersWithoutPlannedDate(rowText(row, "shopFloorTaskBlocker"));
+    if (!dateReady) blockers.push(`Planned date not due until ${dateLabel(plannedDate)}`);
+    return {
+      ...row,
+      shopFloorTaskReady: blockers.length === 0,
+      shopFloorTaskBlocker: uniqueTextValues(blockers).join("; "),
+    };
+  });
+}
+
+function setupPlannedDateIsDue(plannedDate: string) {
+  return !plannedDate || plannedDate <= localIsoDate(new Date());
+}
+
+function uniqueTextValues(values: string[]) {
+  return [...new Set(values.flatMap((value) => cleanText(value).split(";").map((part) => part.trim())).filter(Boolean))];
+}
+
+function taskBlockersWithoutPlannedDate(value: string) {
+  return uniqueTextValues([value]).filter((blocker) => !blocker.toLowerCase().startsWith("planned date not due until"));
+}
+
+function finalizeMachineAndSetupSchedule(details: Array<Record<string, unknown>>) {
+  let previousSignature = "";
+  for (let iteration = 0; iteration < 8; iteration += 1) {
+    refreshSetupDependencyReadyDates(details);
+    rescheduleMachineQueues(details);
+    const signature = planningScheduleSignature(details);
+    if (signature === previousSignature) break;
+    previousSignature = signature;
+  }
+  refreshSetupDependencyReadyDates(details);
+  rescheduleMachineQueues(details);
+  return details;
+}
+
+function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>>) {
+  const grouped = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of details) {
+    const key = [rowText(row, "jcNo"), canonicalKey(rowText(row, "partCode")), rowText(row, "optionNumber")].join("|");
+    const rows = grouped.get(key) ?? [];
+    rows.push(row);
+    grouped.set(key, rows);
+  }
+
+  for (const rows of grouped.values()) {
+    const bySetup = new Map<string, Array<Record<string, unknown>>>();
+    for (const row of rows) {
+      const setup = setupStepKey(rowText(row, "setupNo"), rowText(row, "optionNumber"));
+      const setupRows = bySetup.get(setup) ?? [];
+      setupRows.push(row);
+      bySetup.set(setup, setupRows);
+    }
+    const setupGroups = [...bySetup.entries()]
+      .map(([setup, setupRows]) => ({ setup, rows: setupRows }))
+      .sort((a, b) => numericSort(a.setup, b.setup));
+
+    let operationReadyDate = "";
+    for (const [index, group] of setupGroups.entries()) {
+      const baseReadyDate = maxDateValue(...group.rows.map((row) => planningMeta(row).baseReadyDate ?? ""));
+      const groupReadyDate = maxDateValue(operationReadyDate, baseReadyDate);
+      for (const row of group.rows) {
+        planningMeta(row).readyDate = groupReadyDate;
+      }
+
+      const nextGroup = setupGroups[index + 1];
+      const currentCycle = planningMeta(group.rows[0] ?? {}).cycle;
+      const nextCycle = nextGroup ? planningMeta(nextGroup.rows[0] ?? {}).cycle : undefined;
+      const productionStartDates = group.rows.map((row) => parseDate(rowText(row, "plannedProductionStartDate", "setupPlannedDate", "plannedStartDate"))).filter(Boolean);
+      const productionEndDates = group.rows.map((row) => parseDate(rowText(row, "plannedProductionEndDate"))).filter(Boolean);
+      const actuals = uniqueProductionActuals(group.rows.map((row) => planningMeta(row).productionActual).filter(Boolean) as Array<{ latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }>);
+      const setupOrderPcs = Math.max(...group.rows.map((row) => planningMeta(row).totalOrderPcs ?? planningMeta(row).orderPcs ?? 0), 0);
+      const bufferReadyDate = nextGroup ? plannedWipBufferReadyDate({
+        productionStartDates,
+        orderPcs: setupOrderPcs,
+        previousCycle: currentCycle,
+        nextCycle,
+        actuals,
+      }) : "";
+      operationReadyDate = maxDateValue(groupReadyDate, bufferReadyDate || maxDateValue(...productionEndDates));
+    }
+  }
+}
+
+function uniqueProductionActuals(actuals: Array<{ startDate?: string; latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }>) {
+  const seen = new Set<string>();
+  return actuals.filter((actual) => {
+    const key = [actual.startDate, actual.latestDate, actual.outputQty, actual.actualQty, [...actual.dates].sort().join(",")].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function planningScheduleSignature(details: Array<Record<string, unknown>>) {
+  return details.map((row) => [
+    rowText(row, "jcNo"),
+    rowText(row, "partCode"),
+    rowText(row, "optionNumber"),
+    rowText(row, "setupNo"),
+    rowText(row, "machine"),
+    rowText(row, "setupPlannedDate"),
+    rowText(row, "plannedProductionEndDate"),
+    planningMeta(row).readyDate ?? "",
+  ].join("|")).join("\n");
 }
 
 function rescheduleMachineQueues(details: Array<Record<string, unknown>>) {
@@ -2259,13 +2425,14 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>) {
   }
 
   for (const rows of byMachine.values()) {
-    const queue = [...rows];
+    const queue = [...rows].sort(machineQueueSort);
     let machineNextDate = "";
     while (queue.length) {
       const row = takeNextMachineQueueRow(queue, machineNextDate);
       const meta = planningMeta(row);
-      const readyDate = meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "";
-      const plannedStartDate = maxDateValue(readyDate, machineNextDate);
+      const actualStartDate = actualProductionStartDate(meta);
+      const readyDate = actualStartDate || meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "";
+      const plannedStartDate = actualStartDate || maxDateValue(readyDate, machineNextDate);
       const plannedProductionEndDate = plannedProductionEnd(plannedStartDate, meta.orderPcs ?? 0, meta.cycle, meta.productionActual);
       row.plannedDate = dateLabel(plannedStartDate);
       row.setupPlannedDate = dateLabel(plannedStartDate);
@@ -2274,10 +2441,36 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>) {
       row.plannedProductionStartDate = dateLabel(plannedStartDate);
       row.plannedProductionEndDate = dateLabel(plannedProductionEndDate);
       row.planVsActual = setupPlanVsActual(plannedStartDate, parseDate(rowText(row, "setupCompletionDate")) || rowText(row, "setupCompletionDate"));
-      machineNextDate = plannedProductionEndDate || plannedStartDate;
+      machineNextDate = nextMachineAvailableDate(plannedProductionEndDate || plannedStartDate);
     }
   }
   return details;
+}
+
+function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>) {
+  const aActualStart = actualProductionStartDate(planningMeta(a));
+  const bActualStart = actualProductionStartDate(planningMeta(b));
+  if (aActualStart || bActualStart) {
+    if (aActualStart && bActualStart) return aActualStart.localeCompare(bActualStart);
+    return aActualStart ? -1 : 1;
+  }
+  return machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) ||
+    rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }) ||
+    numericSort(rowText(a, "setupNo"), rowText(b, "setupNo"));
+}
+
+function machineQueueSortDate(row: Record<string, unknown>) {
+  const meta = planningMeta(row);
+  return actualProductionStartDate(meta) || queueReadyDate(row) || parseDate(rowText(row, "setupPlannedDate")) || "";
+}
+
+function actualProductionStartDate(meta: ReturnType<typeof planningMeta>) {
+  return parseDate(meta.productionActual?.startDate) || "";
+}
+
+function nextMachineAvailableDate(dateValue: string) {
+  const date = parseDate(dateValue);
+  return date ? addDays(date, 1) : "";
 }
 
 function takeNextMachineQueueRow(queue: Array<Record<string, unknown>>, machineNextDate: string) {
@@ -2312,10 +2505,12 @@ function earliestQueueReadyDate(queue: Array<Record<string, unknown>>) {
 function planningMeta(row: Record<string, unknown>) {
   return ((row as Record<string, unknown>).__planningMeta ?? {}) as {
     readyDate?: string;
+    baseReadyDate?: string;
     canPullForward?: boolean;
     orderPcs?: number;
+    totalOrderPcs?: number;
     cycle?: Record<string, unknown>;
-    productionActual?: { latestDate: string; outputQty: number; actualQty: number; dates: Set<string> };
+    productionActual?: { startDate?: string; latestDate: string; outputQty: number; actualQty: number; dates: Set<string> };
   };
 }
 
@@ -2526,6 +2721,11 @@ function assignedPhysicalMachines({
   machineRows,
   unavailableMachines,
   machineLoad,
+  machineNextSetupDate,
+  machinePlannedDays,
+  machinePlannedQty,
+  readyDate,
+  deadlineDate,
   override,
   actualMachines,
 }: {
@@ -2536,11 +2736,16 @@ function assignedPhysicalMachines({
   machineRows: Array<Record<string, unknown>>;
   unavailableMachines: Set<string>;
   machineLoad: Map<string, number>;
+  machineNextSetupDate: Map<string, string>;
+  machinePlannedDays: Map<string, number>;
+  machinePlannedQty: Map<string, number>;
+  readyDate: string;
+  deadlineDate: string;
   override?: ActionRow;
   actualMachines?: Set<string>;
 }) {
   const overrideMachine = override ? rowText(override, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE") : "";
-  const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, unavailableMachines, machineLoad);
+  const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, unavailableMachines, machineLoad, machineNextSetupDate, machinePlannedDays, machinePlannedQty);
   const actualMachineList = [...(actualMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   if (actualMachineList.length) return actualMachineList;
   if (overrideMachine) {
@@ -2548,17 +2753,75 @@ function assignedPhysicalMachines({
     if (exactOverride) return [exactOverride.machine];
   }
   if (!candidates.length) return [routeMachine];
-  const machineCount = requiredMachineCountForTarget(orderPcs, cycle, candidates.length);
+  const machineCount = requiredMachineCountForTarget({
+    orderPcs,
+    cycle,
+    candidates,
+    readyDate,
+    deadlineDate,
+    machineNextSetupDate,
+  });
   return candidates.slice(0, machineCount).map((row) => row.machine);
 }
 
-function requiredMachineCountForTarget(orderPcs: number, cycle: Record<string, unknown> | undefined, availableMachineCount: number) {
+function requiredMachineCountForTarget({
+  orderPcs,
+  cycle,
+  candidates,
+  readyDate,
+  deadlineDate,
+  machineNextSetupDate,
+}: {
+  orderPcs: number;
+  cycle: Record<string, unknown> | undefined;
+  candidates: Array<{ machine: string }>;
+  readyDate: string;
+  deadlineDate: string;
+  machineNextSetupDate: Map<string, string>;
+}) {
+  const availableMachineCount = candidates.length;
   const cycleSeconds = safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")) + safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING"));
   if (!orderPcs || !cycleSeconds || availableMachineCount <= 1) return 1;
   const estimatedHours = (orderPcs * cycleSeconds) / 3600;
   const productionDays = Math.max(1, Math.ceil(estimatedHours / planningHoursPerDay));
   const availableProductionDays = Math.max(1, planningDispatchTargetDays - planningSetupBufferDays);
-  return Math.min(availableMachineCount, Math.max(1, Math.ceil(productionDays / availableProductionDays)));
+  const parallelMachineLimit = Math.min(availableMachineCount, Math.max(1, Math.floor(productionDays / minimumParallelMachineWorkDays)));
+  const durationCount = Math.min(parallelMachineLimit, Math.max(1, Math.ceil(productionDays / availableProductionDays)));
+  const normalizedReadyDate = parseDate(readyDate) || readyDate;
+  const normalizedDeadlineDate = parseDate(deadlineDate) || deadlineDate;
+  if (!normalizedReadyDate || !normalizedDeadlineDate) return durationCount;
+
+  for (let machineCount = durationCount; machineCount <= parallelMachineLimit; machineCount += 1) {
+    const machineQty = assignedMachineOrderPcs(orderPcs, machineCount);
+    const latestEnd = maxDateValue(...candidates.slice(0, machineCount).map((candidate) => {
+      const machineReadyDate = machineNextSetupDate.get(canonicalKey(candidate.machine)) ?? "";
+      const startDate = maxDateValue(normalizedReadyDate, machineReadyDate);
+      return plannedProductionEnd(startDate, machineQty, cycle);
+    }));
+    if (latestEnd && latestEnd <= normalizedDeadlineDate) return machineCount;
+  }
+
+  return durationCount;
+}
+
+function assignedMachineOrderPcs(orderPcs: number, machineCount: number) {
+  if (!orderPcs || machineCount <= 1) return orderPcs;
+  return Math.ceil(orderPcs / machineCount);
+}
+
+function plannedProductionDays(startDate: string, endDate: string) {
+  const start = parseDate(startDate) || startDate;
+  const end = parseDate(endDate) || endDate;
+  if (!start || !end) return 0;
+  const startTime = Date.parse(`${start}T00:00:00.000Z`);
+  const endTime = Date.parse(`${end}T00:00:00.000Z`);
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return 0;
+  return Math.max(1, Math.round((endTime - startTime) / 86_400_000) + 1);
+}
+
+function dispatchTargetDate(rmInwardDate: string) {
+  const rmDate = parseDate(rmInwardDate) || rmInwardDate;
+  return rmDate ? addDays(rmDate, planningDispatchTargetDays) : "";
 }
 
 function plannedProductionEnd(
@@ -2567,21 +2830,22 @@ function plannedProductionEnd(
   cycle: Record<string, unknown> | undefined,
   actual?: { latestDate: string; outputQty: number; actualQty: number; dates: Set<string> },
 ) {
-  if (!startDate) return "";
+  const normalizedStartDate = parseDate(startDate) || startDate;
+  if (!normalizedStartDate) return "";
   if (actual?.latestDate && actual.dates.size) {
-    if (actual.actualQty >= orderPcs) return actual.latestDate;
+    if (actual.actualQty >= orderPcs) return maxDateValue(normalizedStartDate, actual.latestDate);
     const dailyOutput = Math.max(actual.actualQty || actual.outputQty, 0) / actual.dates.size;
     if (dailyOutput > 0) {
       const remainingQty = Math.max(orderPcs - actual.actualQty, 0);
       const remainingDays = Math.max(1, Math.ceil(remainingQty / dailyOutput));
-      return addDays(actual.latestDate, remainingDays);
+      return maxDateValue(normalizedStartDate, addDays(parseDate(actual.latestDate) || actual.latestDate, remainingDays));
     }
   }
   const cycleSeconds = safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")) + safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING"));
-  if (!orderPcs || !cycleSeconds) return startDate;
+  if (!orderPcs || !cycleSeconds) return normalizedStartDate;
   const estimatedHours = (orderPcs * cycleSeconds) / 3600;
   const productionDays = Math.max(1, Math.ceil(estimatedHours / planningHoursPerDay));
-  return addDays(startDate, productionDays - 1);
+  return addDays(normalizedStartDate, productionDays - 1);
 }
 
 function plannedWipBufferReadyDate({
@@ -2613,10 +2877,10 @@ function plannedWipBufferReadyDate({
   if (actuals.length && actualDailyQty > 0) {
     const actualQty = Math.min(orderPcs, sum(actuals.map((actual) => Math.max(actual.actualQty || actual.outputQty, 0))));
     const latestActualDate = maxDateValue(...actuals.map((actual) => actual.latestDate));
-    if (actualQty >= requiredBufferQty) return latestActualDate;
+    if (actualQty >= requiredBufferQty) return addDays(latestActualDate, wipAvailabilityBufferDays);
     const remainingQty = Math.max(requiredBufferQty - actualQty, 0);
     const remainingDays = Math.max(1, Math.ceil(remainingQty / actualDailyQty));
-    return addDays(latestActualDate, remainingDays);
+    return addDays(latestActualDate, remainingDays + wipAvailabilityBufferDays);
   }
 
   let producedQty = 0;
@@ -2628,7 +2892,7 @@ function plannedWipBufferReadyDate({
   while (date && date <= lastPossibleDate) {
     const activeMachineCount = starts.filter((start) => start <= date).length;
     producedQty = Math.min(orderPcs, producedQty + activeMachineCount * effectivePreviousDailyQty);
-    if (producedQty >= requiredBufferQty) return date;
+    if (producedQty >= requiredBufferQty) return addDays(date, wipAvailabilityBufferDays);
     date = addDays(date, 1);
   }
   return "";
@@ -2675,6 +2939,9 @@ function candidatePhysicalMachines(
   machineRows: Array<Record<string, unknown>>,
   unavailableMachines: Set<string>,
   machineLoad: Map<string, number>,
+  machineNextSetupDate: Map<string, string>,
+  machinePlannedDays: Map<string, number>,
+  machinePlannedQty: Map<string, number>,
 ) {
   const typeKey = canonicalKey(machineType);
   return machineRows
@@ -2689,6 +2956,9 @@ function candidatePhysicalMachines(
     .filter((row) => machineCodeMatches(routeMachine, row.machine))
     .filter((row) => !typeKey || !canonicalKey(row.machineType) || canonicalKey(row.machineType) === typeKey)
     .sort((a, b) =>
+      (machinePlannedDays.get(canonicalKey(a.machine)) ?? 0) - (machinePlannedDays.get(canonicalKey(b.machine)) ?? 0) ||
+      (machinePlannedQty.get(canonicalKey(a.machine)) ?? 0) - (machinePlannedQty.get(canonicalKey(b.machine)) ?? 0) ||
+      (machineNextSetupDate.get(canonicalKey(a.machine)) ?? "").localeCompare(machineNextSetupDate.get(canonicalKey(b.machine)) ?? "") ||
       (machineLoad.get(canonicalKey(a.machine)) ?? 0) - (machineLoad.get(canonicalKey(b.machine)) ?? 0) ||
       a.machine.localeCompare(b.machine, undefined, { numeric: true }),
     );
@@ -2900,6 +3170,24 @@ function parseDate(value: unknown) {
   if (!raw) return "";
   if (/^\d{4,6}(?:\.\d+)?$/.test(raw)) return excelSerialIsoDate(Number(raw));
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const namedDayFirstMatch = raw.match(/^(\d{1,2})[-\s]([A-Za-z]+)[-\s](\d{2}|\d{4})(?:\s|$)/);
+  if (namedDayFirstMatch) {
+    const [, dayText, monthText, yearText] = namedDayFirstMatch;
+    const day = Number(dayText);
+    const month = monthText ? monthNames[monthText.toLowerCase()] : undefined;
+    const rawYear = Number(yearText);
+    const year = yearText && yearText.length === 2 ? 2000 + rawYear : rawYear;
+    if (day >= 1 && day <= 31 && month !== undefined && month >= 1 && month <= 12 && Number.isFinite(year)) {
+      const date = new Date(Date.UTC(year, month - 1, day));
+      if (
+        date.getUTCFullYear() === year &&
+        date.getUTCMonth() === month - 1 &&
+        date.getUTCDate() === day
+      ) {
+        return date.toISOString().slice(0, 10);
+      }
+    }
+  }
   const dayFirstMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s|$)/);
   if (dayFirstMatch) {
     const day = Number(dayFirstMatch[1]);

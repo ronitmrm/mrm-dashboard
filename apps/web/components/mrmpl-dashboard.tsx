@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import Image from "next/image";
@@ -8,6 +8,8 @@ import { useTheme } from "next-themes";
 import {
   AlertTriangle,
   Boxes,
+  ChevronDown,
+  ChevronRight,
   CheckCircle2,
   ClipboardList,
   Database,
@@ -101,6 +103,7 @@ type DashboardTabId =
   | "shopFloorTasksTab"
   | "machinistTasksTab"
   | "qualityControlTasksTab"
+  | "firstPieceInspectionTab"
   | "correctionsTab";
 
 const navItems: Array<{ id: DashboardTabId; title: string; subtitle: string; icon: typeof LayoutDashboard }> = [
@@ -114,6 +117,7 @@ const navItems: Array<{ id: DashboardTabId; title: string; subtitle: string; ico
   { id: "shopFloorTasksTab", title: "Shop Floor Tasks", subtitle: "raw material at machine", icon: PackageCheck },
   { id: "machinistTasksTab", title: "Machinist", subtitle: "pre setting, setting, start", icon: Wrench },
   { id: "qualityControlTasksTab", title: "Quality Control", subtitle: "setup approvals", icon: ShieldCheck },
+  { id: "firstPieceInspectionTab", title: "First Piece Inspection", subtitle: "quality readings", icon: Gauge },
   { id: "correctionsTab", title: "Corrections", subtitle: "reverse wrong entries", icon: Undo2 },
 ];
 
@@ -233,6 +237,22 @@ const dataEntrySpecs: DataEntrySpec[] = [
     ],
   },
   {
+    entryType: "first_piece_inspection_master",
+    title: "First piece inspection master",
+    description: "Dimension checklist used by quality approval for each part, option, and setup.",
+    fields: [
+      { name: "jcNo", label: "Job card number" },
+      { name: "uid", label: "UID", required: true },
+      { name: "optionNumber", label: "Option number", required: true },
+      { name: "setupNo", label: "Setup number", required: true },
+      { name: "description", label: "Description", required: true },
+      { name: "specification", label: "Specification", required: true },
+      { name: "instrumentUsed", label: "Instrument used" },
+      { name: "tolerancePlus", label: "Tolerance +", type: "number", step: "0.001" },
+      { name: "toleranceMinus", label: "Tolerance -", type: "number", step: "0.001" },
+    ],
+  },
+  {
     entryType: "software_raw",
     title: "Software production output",
     description: "Daily production rows from the shop-floor software.",
@@ -274,6 +294,7 @@ function DashboardShell() {
   const [activeTab, setActiveTab] = useState<DashboardTabId>("productionControlTab");
   const [preferredDataEntryType, setPreferredDataEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
+  const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const dashboardPayload = useQuery(api.dashboard.snapshot, {});
   const saveRouteSelection = useMutation(api.dashboard.saveRouteSelection);
@@ -329,6 +350,15 @@ function DashboardShell() {
 
   function openMasterReadiness() {
     setActiveTab("masterGapsTab");
+  }
+
+  function openFirstPieceInspection(row: DashboardPayload) {
+    setFirstPieceInspectionTasks((openTasks) => {
+      const key = shopFloorPlanKey(row);
+      if (openTasks.some((task) => shopFloorPlanKey(task) === key)) return openTasks;
+      return [...openTasks, row];
+    });
+    setActiveTab("firstPieceInspectionTab");
   }
 
   const isDashboardLoading = dashboardPayload === undefined;
@@ -416,6 +446,8 @@ function DashboardShell() {
               correctionCandidates={asArray(correctionCandidates)}
               openDataEntry={openDataEntry}
               openMasterReadiness={openMasterReadiness}
+              openFirstPieceInspection={openFirstPieceInspection}
+              firstPieceInspectionTasks={firstPieceInspectionTasks}
               preferredDataEntryType={preferredDataEntryType}
               preferredDataEntryDefaults={preferredDataEntryDefaults}
             />
@@ -579,6 +611,8 @@ function DashboardContent({
   correctionCandidates,
   openDataEntry,
   openMasterReadiness,
+  openFirstPieceInspection,
+  firstPieceInspectionTasks,
   preferredDataEntryType,
   preferredDataEntryDefaults,
 }: {
@@ -589,6 +623,8 @@ function DashboardContent({
   correctionCandidates: DashboardPayload[];
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
   openMasterReadiness: () => void;
+  openFirstPieceInspection: (row: DashboardPayload) => void;
+  firstPieceInspectionTasks: DashboardPayload[];
   preferredDataEntryType: string;
   preferredDataEntryDefaults: Record<string, unknown>;
 }) {
@@ -627,7 +663,18 @@ function DashboardContent({
   }
 
   if (activeTab === "qualityControlTasksTab") {
-    return <RoleTaskPanel productionControl={productionControl} submitAction={submitAction} role="quality" />;
+    return <RoleTaskPanel productionControl={productionControl} submitAction={submitAction} role="quality" onStartFirstPieceInspection={openFirstPieceInspection} />;
+  }
+
+  if (activeTab === "firstPieceInspectionTab") {
+    return (
+      <FirstPieceInspectionPanel
+        tasks={firstPieceInspectionTasks}
+        productionControl={productionControl}
+        submitAction={submitAction}
+        openDataEntry={openDataEntry}
+      />
+    );
   }
 
   if (activeTab === "correctionsTab") {
@@ -1202,17 +1249,29 @@ function ShopFloorStatusPanel({
 function RoleTaskPanel({
   productionControl,
   submitAction,
+  openDataEntry,
+  enableFirstPieceInspection = false,
+  onStartFirstPieceInspection,
   role,
 }: {
   productionControl: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  openDataEntry?: (entryType: string, defaults?: Record<string, unknown>) => void;
+  enableFirstPieceInspection?: boolean;
+  onStartFirstPieceInspection?: (row: DashboardPayload) => void;
   role: RoleTaskKind;
 }) {
   const [machineFilter, setMachineFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [itemFilter, setItemFilter] = useState("");
   const [taskFilter, setTaskFilter] = useState("");
-  const copy = roleTaskCopy[role];
+  const copy = enableFirstPieceInspection
+    ? {
+        title: "First Piece Inspection",
+        description: "Quality approval tasks that require a first-piece inspection report with five piece readings.",
+        empty: "No first-piece inspection tasks are pending.",
+      }
+    : roleTaskCopy[role];
   const queueRows = useMemo(() => shopFloorQueueRows(productionControl), [productionControl]);
   const roleRows = useMemo(() => queueRows.filter((row) => roleTaskMatches(row, role)), [queueRows, role]);
   const filteredRows = useMemo(() => roleRows.filter((row) =>
@@ -1252,95 +1311,266 @@ function RoleTaskPanel({
     });
   }
 
+  async function saveFirstPieceReport(row: DashboardPayload, report: DashboardPayload) {
+    const payload = {
+      ...report,
+      jcNo: jobCardNumber(row),
+      partCode: itemCode(row),
+      optionNumber: displayValue(row.optionNumber),
+      setupNo: displayValue(row.setupNo),
+      setupName: displayValue(row.setupName),
+      machine: displayValue(row.machine),
+      machineType: displayValue(row.machineType),
+    };
+    await submitAction("data-entry", {
+      entryType: "first_piece_inspection_report",
+      key: dataEntryKey("first_piece_inspection_report", payload),
+      payload,
+    });
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{copy.title}</CardTitle>
-        <CardDescription>{copy.description}</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <TrackingSummary
-          items={[
-            ["Pending", formatNumber(filteredRows.length)],
-            ["Machines", formatNumber(uniqueValues(filteredRows.map((row) => row.machine)).length)],
-            ["Locations", formatNumber(uniqueValues(filteredRows.map((row) => row.location).filter((value) => value !== "-")).length)],
-          ]}
-        />
-        <ExcelStyleFilters
-          filters={[
-            {
-              id: `${role}-machine`,
-              label: "Machine no.",
-              value: machineFilter,
-              placeholder: "Type or select machine",
-              options: machineOptions,
-              onChange: setMachineFilter,
-            },
-            {
-              id: `${role}-location`,
-              label: "Master location",
-              value: locationFilter,
-              placeholder: "Type or select master location",
-              options: locationOptions,
-              onChange: setLocationFilter,
-            },
-            {
-              id: `${role}-item`,
-              label: "Item setup",
-              value: itemFilter,
-              placeholder: "Type or select setup",
-              options: itemOptions,
-              onChange: setItemFilter,
-            },
-            {
-              id: `${role}-task`,
-              label: "Task",
-              value: taskFilter,
-              placeholder: "Type or select task",
-              options: taskOptions,
-              onChange: setTaskFilter,
-            },
-          ]}
-        />
-        {filteredRows.length ? (
-          <div className="max-h-[72vh] overflow-auto rounded-lg border">
-            <Table>
-              <TableHeader className="sticky top-0 z-10 bg-background">
-                <TableRow>
-                  <TableHead className="min-w-32">Machine no.</TableHead>
-                  <TableHead className="min-w-36">Master location</TableHead>
-                  <TableHead className="min-w-72">Item setup</TableHead>
-                  <TableHead className="min-w-52">Pending task</TableHead>
-                  <TableHead className="min-w-80">Entry</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredRows.map((row) => (
-                  <TableRow key={`${row.machine}-${shopFloorPlanKey(row.next)}`}>
-                    <TableCell className="align-middle">
-                      <div className="font-semibold">{row.machine}</div>
-                      <div className="text-xs text-muted-foreground">{machineValue(row.machineRow, "machineType")}</div>
-                    </TableCell>
-                    <TableCell className="align-middle text-sm">{row.location}</TableCell>
-                    <TableCell className="align-middle">
-                      <ShopFloorItemSummary row={row.next} tone="next" />
-                    </TableCell>
-                    <TableCell className="align-middle">
-                      <StatusBadge value={pendingTaskLabel(row.next)} />
-                    </TableCell>
-                    <TableCell className="align-middle">
-                      <ShopFloorRowAction next={row.next} onSaveStage={saveStage} />
-                    </TableCell>
+    <section className="grid gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{copy.title}</CardTitle>
+          <CardDescription>{copy.description}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <TrackingSummary
+            items={[
+              ["Pending", formatNumber(filteredRows.length)],
+              ["Machines", formatNumber(uniqueValues(filteredRows.map((row) => row.machine)).length)],
+              ["Locations", formatNumber(uniqueValues(filteredRows.map((row) => row.location).filter((value) => value !== "-")).length)],
+            ]}
+          />
+          <ExcelStyleFilters
+            filters={[
+              {
+                id: `${role}-machine`,
+                label: "Machine no.",
+                value: machineFilter,
+                placeholder: "Type or select machine",
+                options: machineOptions,
+                onChange: setMachineFilter,
+              },
+              {
+                id: `${role}-location`,
+                label: "Master location",
+                value: locationFilter,
+                placeholder: "Type or select master location",
+                options: locationOptions,
+                onChange: setLocationFilter,
+              },
+              {
+                id: `${role}-item`,
+                label: "Item setup",
+                value: itemFilter,
+                placeholder: "Type or select setup",
+                options: itemOptions,
+                onChange: setItemFilter,
+              },
+              {
+                id: `${role}-task`,
+                label: "Task",
+                value: taskFilter,
+                placeholder: "Type or select task",
+                options: taskOptions,
+                onChange: setTaskFilter,
+              },
+            ]}
+          />
+          {filteredRows.length ? (
+            <div className="max-h-[72vh] overflow-auto rounded-lg border">
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow>
+                    <TableHead className="min-w-32">Machine no.</TableHead>
+                    <TableHead className="min-w-36">Master location</TableHead>
+                    <TableHead className="min-w-72">Item setup</TableHead>
+                    <TableHead className="min-w-52">Pending task</TableHead>
+                    <TableHead className="min-w-80">Entry</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <EmptyRowsMessage>{copy.empty}</EmptyRowsMessage>
-        )}
-      </CardContent>
-    </Card>
+                </TableHeader>
+                <TableBody>
+                  {filteredRows.map((row) => (
+                    <TableRow key={`${row.machine}-${shopFloorPlanKey(row.next)}`}>
+                      <TableCell className="align-middle">
+                        <div className="font-semibold">{row.machine}</div>
+                        <div className="text-xs text-muted-foreground">{machineValue(row.machineRow, "machineType")}</div>
+                      </TableCell>
+                      <TableCell className="align-middle text-sm">{row.location}</TableCell>
+                      <TableCell className="align-middle">
+                        <ShopFloorItemSummary row={row.next} tone="next" />
+                      </TableCell>
+                      <TableCell className="align-middle">
+                        <StatusBadge value={pendingTaskLabel(row.next)} />
+                      </TableCell>
+                      <TableCell className="align-middle">
+                        {role === "quality" && onStartFirstPieceInspection ? (
+                          <Button type="button" size="sm" onClick={() => onStartFirstPieceInspection(row.next)}>
+                            <CheckCircle2 className="size-4" />
+                            Start quality approval
+                          </Button>
+                        ) : (
+                          <ShopFloorRowAction
+                            next={row.next}
+                            onSaveStage={saveStage}
+                            onSaveFirstPieceReport={enableFirstPieceInspection ? saveFirstPieceReport : undefined}
+                            inspectionMasters={enableFirstPieceInspection ? asArray(productionControl.firstPieceInspectionMasterRows) : []}
+                            openDataEntry={enableFirstPieceInspection ? openDataEntry : undefined}
+                          />
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <EmptyRowsMessage>{copy.empty}</EmptyRowsMessage>
+          )}
+        </CardContent>
+      </Card>
+      {enableFirstPieceInspection ? (
+        <>
+          <DataRowsCard title="First piece inspection reports" rows={asArray(productionControl.firstPieceInspectionReportRows)} empty="No first-piece reports saved yet" />
+          <DataRowsCard title="First piece inspection master" rows={asArray(productionControl.firstPieceInspectionMasterRows)} empty="No first-piece master dimensions saved yet" />
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function FirstPieceInspectionPanel({
+  tasks,
+  productionControl,
+  submitAction,
+  openDataEntry,
+}: {
+  tasks: DashboardPayload[];
+  productionControl: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+}) {
+  const masters = asArray(productionControl.firstPieceInspectionMasterRows);
+  const [expandedTaskKey, setExpandedTaskKey] = useState(tasks[0] ? shopFloorPlanKey(tasks[0]) : "");
+
+  useEffect(() => {
+    if (!expandedTaskKey && tasks[0]) setExpandedTaskKey(shopFloorPlanKey(tasks[0]));
+  }, [expandedTaskKey, tasks]);
+
+  async function saveStage(row: DashboardPayload, stage: ShopFloorStageId, extra: Record<string, unknown> = {}) {
+    const stageSpec = shopFloorStages.find((item) => item.id === stage);
+    const payload = {
+      jcNo: jobCardNumber(row),
+      partCode: itemCode(row),
+      optionNumber: displayValue(row.optionNumber),
+      setupNo: displayValue(row.setupNo),
+      setupName: displayValue(row.setupName),
+      machine: displayValue(row.machine),
+      machineType: displayValue(row.machineType),
+      stage,
+      stageLabel: stageSpec?.label ?? "Item complete",
+      role: stageSpec?.role ?? "Shop floor",
+      doneBy: "",
+      worker: "",
+      remark: "",
+      completedAt: new Date().toISOString(),
+      ...extra,
+    };
+    await submitAction("data-entry", {
+      entryType: "shop_floor_status",
+      key: dataEntryKey("shop_floor_status", payload),
+      payload,
+    });
+  }
+
+  async function saveFirstPieceReport(row: DashboardPayload, report: DashboardPayload) {
+    const payload = {
+      ...report,
+      jcNo: jobCardNumber(row),
+      partCode: itemCode(row),
+      optionNumber: displayValue(row.optionNumber),
+      setupNo: displayValue(row.setupNo),
+      setupName: displayValue(row.setupName),
+      machine: displayValue(row.machine),
+      machineType: displayValue(row.machineType),
+    };
+    await submitAction("data-entry", {
+      entryType: "first_piece_inspection_report",
+      key: dataEntryKey("first_piece_inspection_report", payload),
+      payload,
+    });
+  }
+
+  return (
+    <section className="grid gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>First Piece Inspection Report</CardTitle>
+          <CardDescription>Open quality approval reports stay here until they are saved. Saving the report completes the quality approval task.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {tasks.length ? (
+            <div className="overflow-hidden rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12"></TableHead>
+                    <TableHead>Item</TableHead>
+                    <TableHead>Job card</TableHead>
+                    <TableHead>Machine</TableHead>
+                    <TableHead>Setup</TableHead>
+                    <TableHead>Option</TableHead>
+                    <TableHead>Task assigned</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tasks.map((task) => {
+                    const taskKey = shopFloorPlanKey(task);
+                    const expanded = expandedTaskKey === taskKey;
+                    return (
+                      <Fragment key={taskKey}>
+                        <TableRow className="cursor-pointer" onClick={() => setExpandedTaskKey(expanded ? "" : taskKey)}>
+                          <TableCell>
+                            <Button type="button" variant="ghost" size="sm" className="size-8 p-0" aria-label={expanded ? "Collapse report" : "Expand report"}>
+                              {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                            </Button>
+                          </TableCell>
+                          <TableCell className="font-medium">{itemCode(task)}</TableCell>
+                          <TableCell>{jobCardNumber(task)}</TableCell>
+                          <TableCell>{displayValue(task.machine)}</TableCell>
+                          <TableCell>{displayValue(task.setupNo)}</TableCell>
+                          <TableCell>{displayValue(task.optionNumber)}</TableCell>
+                          <TableCell>{displayValue(task.shopFloorUpdatedAt)}</TableCell>
+                        </TableRow>
+                        {expanded ? (
+                          <TableRow>
+                            <TableCell colSpan={7} className="bg-muted/15 p-4">
+                              <ShopFloorRowAction
+                                next={task}
+                                onSaveStage={saveStage}
+                                onSaveFirstPieceReport={saveFirstPieceReport}
+                                inspectionMasters={masters}
+                                openDataEntry={openDataEntry}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <EmptyRowsMessage>Start a quality approval task from the Quality Control tab to open its first-piece report.</EmptyRowsMessage>
+          )}
+        </CardContent>
+      </Card>
+      <DataRowsCard title="First piece inspection reports" rows={asArray(productionControl.firstPieceInspectionReportRows)} empty="No first-piece reports saved yet" />
+    </section>
   );
 }
 
@@ -1368,29 +1598,79 @@ function ShopFloorRowAction({
   current,
   next,
   onSaveStage,
+  onSaveFirstPieceReport,
+  inspectionMasters = [],
+  openDataEntry,
 }: {
   current?: DashboardPayload;
   next?: DashboardPayload;
   onSaveStage: (row: DashboardPayload, stage: ShopFloorStageId, extra?: Record<string, unknown>) => Promise<void>;
+  onSaveFirstPieceReport?: (row: DashboardPayload, report: DashboardPayload) => Promise<void>;
+  inspectionMasters?: DashboardPayload[];
+  openDataEntry?: (entryType: string, defaults?: Record<string, unknown>) => void;
 }) {
   const [doneBy, setDoneBy] = useState("");
   const [worker, setWorker] = useState("");
   const [remark, setRemark] = useState("");
+  const [inspectionReadings, setInspectionReadings] = useState<Record<string, string[]>>({});
   const row = next ?? current;
   const stage = str(row?.shopFloorStage) as ShopFloorStageId;
   const stageIndex = shopFloorStageIndex(stage);
   const nextStage = next ? shopFloorStages.find((_, index) => index === stageIndex + 1) : undefined;
+  const firstPieceMasters = useMemo(() => next && nextStage?.id === "quality_approval"
+    ? matchingFirstPieceInspectionMasters(inspectionMasters, next)
+    : [], [inspectionMasters, next, nextStage?.id]);
+  const needsFirstPieceInspection = nextStage?.id === "quality_approval" && Boolean(onSaveFirstPieceReport);
+  const canSubmitInspection = !needsFirstPieceInspection
+    || (firstPieceMasters.length > 0 && firstPieceMasters.every((master) => firstPieceReadingsFor(inspectionReadings, master).every(Boolean)));
+
+  function updateInspectionReading(master: DashboardPayload, pieceIndex: number, value: string) {
+    const masterKey = firstPieceMasterKey(master);
+    setInspectionReadings((currentReadings) => {
+      const readings = [...(currentReadings[masterKey] ?? Array.from({ length: 5 }, () => ""))];
+      readings[pieceIndex] = value;
+      return { ...currentReadings, [masterKey]: readings };
+    });
+  }
 
   async function submitNextStage() {
     if (!next || !nextStage) return;
+    if (nextStage.id === "quality_approval" && !canSubmitInspection) return;
+    const taskCompletedAt = new Date().toISOString();
+    const firstPieceInspection = needsFirstPieceInspection
+      ? {
+          reportId: firstPieceReportKey(next, taskCompletedAt),
+          taskAssignedAt: str(next.shopFloorUpdatedAt),
+          taskCompletedAt,
+          checkedPieces: 5,
+          dimensions: firstPieceMasters.map((master) => ({
+            uid: str(master.uid),
+            description: str(master.description),
+            instrumentUsed: str(master.instrumentUsed),
+            specification: str(master.specification),
+            tolerancePlus: optionalNumber(master.tolerancePlus),
+            toleranceMinus: optionalNumber(master.toleranceMinus),
+            readings: firstPieceReadingsFor(inspectionReadings, master).map((value) => optionalNumber(value) ?? value),
+          })),
+      }
+      : undefined;
+    if (needsFirstPieceInspection && firstPieceInspection && onSaveFirstPieceReport) {
+      await onSaveFirstPieceReport(next, {
+        ...firstPieceInspection,
+        approvedBy: doneBy,
+        remark,
+      });
+    }
     await onSaveStage(next, nextStage.id, {
       doneBy,
       worker: nextStage.id === "operator_started" ? worker : "",
       remark,
+      firstPieceInspection,
     });
     setDoneBy("");
     setWorker("");
     setRemark("");
+    setInspectionReadings({});
   }
 
   if (current) {
@@ -1412,11 +1692,11 @@ function ShopFloorRowAction({
     return <span className="text-sm text-muted-foreground">No action pending</span>;
   }
 
-  if (nextStage?.id === "raw_material_at_machine" && next.shopFloorTaskReady === false) {
+  if (nextStage && next.shopFloorTaskReady === false) {
     return (
       <div className="grid gap-2">
         <ShopFloorProgress activeIndex={stageIndex} />
-        <StatusBadge value="WIP not ready" />
+        <StatusBadge value="Task not ready" />
         <div className="text-sm text-muted-foreground">{displayValue(next.shopFloorTaskBlocker) || "Previous setup WIP buffer is not ready"}</div>
       </div>
     );
@@ -1439,7 +1719,16 @@ function ShopFloorRowAction({
           {nextStage.id === "operator_started" ? (
             <Input className="h-8" value={remark} placeholder="Remark" onChange={(event) => setRemark(event.target.value)} />
           ) : null}
-          <Button type="button" size="sm" className="w-fit" onClick={() => void submitNextStage()}>
+          {needsFirstPieceInspection ? (
+            <FirstPieceInspectionForm
+              row={next}
+              masters={firstPieceMasters}
+              readings={inspectionReadings}
+              onReadingChange={updateInspectionReading}
+              onAddMaster={openDataEntry}
+            />
+          ) : null}
+          <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection} onClick={() => void submitNextStage()}>
             <CheckCircle2 className="size-4" />
             {nextStage.button}
           </Button>
@@ -1447,6 +1736,93 @@ function ShopFloorRowAction({
       ) : (
         <div className="text-sm text-muted-foreground">Ready to start machine.</div>
       )}
+    </div>
+  );
+}
+
+function FirstPieceInspectionForm({
+  row,
+  masters,
+  readings,
+  onReadingChange,
+  onAddMaster,
+}: {
+  row: DashboardPayload;
+  masters: DashboardPayload[];
+  readings: Record<string, string[]>;
+  onReadingChange: (master: DashboardPayload, pieceIndex: number, value: string) => void;
+  onAddMaster?: (entryType: string, defaults?: Record<string, unknown>) => void;
+}) {
+  const defaults = firstPieceMasterDefaults(row);
+  if (!masters.length) {
+    return (
+      <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
+        <div className="font-medium text-amber-900 dark:text-amber-100">First piece inspection master missing</div>
+        <div className="text-amber-800 dark:text-amber-200">Add dimensions for this part, option, and setup before quality approval.</div>
+        {onAddMaster ? (
+          <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onAddMaster("first_piece_inspection_master", defaults)}>
+            Add inspection master
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium">First piece inspection report</div>
+          <div className="text-xs text-muted-foreground">Task assigned: {displayValue(row.shopFloorUpdatedAt)}</div>
+        </div>
+        {onAddMaster ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => onAddMaster("first_piece_inspection_master", defaults)}>
+            Add dimension
+          </Button>
+        ) : null}
+      </div>
+      <div className="overflow-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="min-w-40">Dimension</TableHead>
+              <TableHead className="min-w-28">Instrument</TableHead>
+              <TableHead className="min-w-28">Spec</TableHead>
+              <TableHead className="min-w-24">Tol +</TableHead>
+              <TableHead className="min-w-24">Tol -</TableHead>
+              {[1, 2, 3, 4, 5].map((piece) => (
+                <TableHead key={piece} className="min-w-24">P{piece}</TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {masters.map((master) => (
+              <TableRow key={firstPieceMasterKey(master)}>
+                <TableCell>
+                  <div className="font-medium">{displayValue(master.uid)}</div>
+                  <div className="text-xs text-muted-foreground">{displayValue(master.description)}</div>
+                </TableCell>
+                <TableCell>{displayValue(master.instrumentUsed)}</TableCell>
+                <TableCell>{displayValue(master.specification)}</TableCell>
+                <TableCell>{displayValue(master.tolerancePlus)}</TableCell>
+                <TableCell>{displayValue(master.toleranceMinus)}</TableCell>
+                {[0, 1, 2, 3, 4].map((pieceIndex) => (
+                  <TableCell key={pieceIndex}>
+                    <Input
+                      className="h-8 min-w-20"
+                      type="number"
+                      step="0.001"
+                      value={firstPieceReadingsFor(readings, master)[pieceIndex] ?? ""}
+                      onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)}
+                      required
+                    />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
@@ -3135,10 +3511,12 @@ function MachinePlanningBoard({
   const [machineType, setMachineType] = useState("all");
   const [machineFilter, setMachineFilter] = useState("");
   const [jobCardFilter, setJobCardFilter] = useState("");
+  const [itemCodeFilter, setItemCodeFilter] = useState("");
   const [runningFilter, setRunningFilter] = useState("all");
   const [selectedMachine, setSelectedMachine] = useState("");
   const plannedByMachine = useMemo(() => groupPlannedRowsByMachine(plannedRows), [plannedRows]);
   const jobCardOptions = useMemo(() => uniqueValues(plannedRows.map(jobCardNumber).filter((value) => value !== "-")), [plannedRows]);
+  const itemCodeOptions = useMemo(() => uniqueValues(plannedRows.map(itemCode).filter((value) => value !== "-")), [plannedRows]);
   const machineOptions = useMemo(
     () => plannedMachineOptions(plannedRows, boardRows),
     [boardRows, plannedRows],
@@ -3151,11 +3529,12 @@ function MachinePlanningBoard({
         rowMatchesMachineQuery(row, query, searchField, plannedByMachine) &&
         typedFilterMatches(machine, machineFilter) &&
         machineMatchesJobCard(machine, jobCardFilter, plannedByMachine) &&
+        machineMatchesItemCode(machine, itemCodeFilter, plannedByMachine) &&
         (machineType === "all" || machineValue(row, "machineType") === machineType) &&
         (runningFilter === "all" || (runningFilter === "running" ? isRunning : !isRunning))
       );
     }),
-    [boardRows, jobCardFilter, machineFilter, machineType, plannedByMachine, query, runningFilter, searchField],
+    [boardRows, itemCodeFilter, jobCardFilter, machineFilter, machineType, plannedByMachine, query, runningFilter, searchField],
   );
   const runningRows = boardRows.filter((row) => machineIsRunning(machineValue(row, "machine"), plannedByMachine)).length;
   const selectedPlans = selectedMachine ? plannedByMachine.get(machineKey(selectedMachine)) ?? [] : [];
@@ -3166,6 +3545,7 @@ function MachinePlanningBoard({
     setMachineType("all");
     setMachineFilter("");
     setJobCardFilter("");
+    setItemCodeFilter("");
     setRunningFilter("all");
     setSelectedMachine("");
   }
@@ -3233,6 +3613,14 @@ function MachinePlanningBoard({
                   options: jobCardOptions,
                   onChange: setJobCardFilter,
                 },
+                {
+                  id: "machine-item-code-filter",
+                  label: "Item code",
+                  value: itemCodeFilter,
+                  placeholder: "Type or select item code",
+                  options: itemCodeOptions,
+                  onChange: setItemCodeFilter,
+                },
               ]}
             />
             <div>
@@ -3241,7 +3629,7 @@ function MachinePlanningBoard({
               </Button>
             </div>
             {filteredRows.length ? (
-              <div className="grid max-h-[42rem] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 @7xl/main:grid-cols-3">
+              <div className="grid max-h-[42rem] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 @5xl/main:grid-cols-3 @7xl/main:grid-cols-4">
                 {filteredRows.map((row, index) => (
                   <MachinePlanningTile
                     key={`${machineValue(row, "machine")}-${index}`}
@@ -3290,21 +3678,21 @@ function MachinePlanningTile({
   return (
     <button
       type="button"
-      className={`grid gap-3 rounded-lg border bg-background p-3 text-left transition hover:border-primary/60 hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 ${selected ? "border-primary bg-muted/40" : ""}`}
+      className={`grid gap-2 rounded-md border bg-background p-2 text-left transition hover:border-primary/60 hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 ${selected ? "border-primary bg-muted/40" : ""}`}
       onClick={onSelect}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="break-words text-sm font-semibold">{machine}</div>
+          <div className="break-words text-[13px] font-semibold">{machine}</div>
           <div className="break-words text-xs text-muted-foreground">{machineType}</div>
         </div>
-        <div className="flex flex-wrap justify-end gap-1.5">
+        <div className="flex flex-wrap justify-end gap-1">
           <MachineStateBadge label="Run" value={isRunning ? "Running" : "Not running"} tone={isRunning ? "success" : "neutral"} />
           <MachineStateBadge label="Plan" value={planningStatus} tone={machinePlanningTone(planningStatus)} />
           <MachineStateBadge label="Master" value={status} tone={status === "Active" ? "success" : status === "Inactive" ? "danger" : "warning"} />
         </div>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-x-2 gap-y-1.5 sm:grid-cols-2">
         <TileField label="Location" value={row.location || row.LOCATION || row.Location} />
         <TileField label="Capacity" value={row.capacity || row.CAPACITY || row.Capacity} numeric />
         <TileField label="Operator" value={row.operator || row.operatorName || row["OPERATOR NAME"]} />
@@ -4494,6 +4882,13 @@ function machineMatchesJobCard(machine: string, jobCardFilter: string, plannedBy
   return plannedRows.some((plannedRow) => jobCardNumber(plannedRow).toLowerCase() === normalizedFilter);
 }
 
+function machineMatchesItemCode(machine: string, itemCodeFilter: string, plannedByMachine: Map<string, DashboardPayload[]>) {
+  const normalizedFilter = itemCodeFilter.trim().toLowerCase();
+  if (!normalizedFilter) return true;
+  const plannedRows = plannedByMachine.get(machineKey(machine)) ?? [];
+  return plannedRows.some((plannedRow) => itemCode(plannedRow).toLowerCase() === normalizedFilter);
+}
+
 function machineIsRunning(machine: string, plannedByMachine: Map<string, DashboardPayload[]>) {
   const rows = plannedByMachine.get(machineKey(machine)) ?? [];
   return rows.some((row) => str(row.runningStatus).toLowerCase() === "running" || Number(row.rawRows) > 0 || Number(row.rawOutputQty) > 0 || Number(row.rawActualQty) > 0);
@@ -4548,8 +4943,9 @@ function roleTaskMatches(row: {
 }, role: RoleTaskKind) {
   const nextStage = nextShopFloorStage(row.next);
   if (!nextStage) return false;
+  if (row.next.shopFloorTaskReady === false) return false;
   if (role === "shopFloor") {
-    return nextStage.id === "raw_material_at_machine" && row.next.shopFloorTaskReady !== false && !row.current;
+    return nextStage.id === "raw_material_at_machine" && !row.current;
   }
   if (role === "quality") return nextStage.id === "quality_approval";
   return nextStage.id === "presetting" || nextStage.id === "setting" || nextStage.id === "operator_started";
@@ -4672,6 +5068,26 @@ function machineKey(value: unknown) {
 }
 
 function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
+  if (entryType === "first_piece_inspection_master") {
+    return [
+      payload.jcNo,
+      payload.partNo,
+      payload.uid,
+      payload.optionNumber,
+      payload.setupNo,
+      payload.description,
+    ].map((value) => str(value).toLowerCase()).join("|");
+  }
+  if (entryType === "first_piece_inspection_report") {
+    return [
+      payload.reportId,
+      payload.jcNo,
+      payload.partCode,
+      payload.optionNumber,
+      payload.setupNo,
+      payload.machine,
+    ].map((value) => str(value).toLowerCase()).join("|");
+  }
   if (entryType === "setup_checklist") {
     return [
       payload.jcNo,
@@ -4697,6 +5113,68 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   if (entryType === "machine_master") return str(payload.machineNo);
   if (entryType === "employee") return str(payload.empId);
   return "";
+}
+
+function firstPieceMasterDefaults(row: DashboardPayload) {
+  return {
+    jcNo: jobCardNumber(row) !== "-" ? jobCardNumber(row) : "",
+    optionNumber: displayValue(row.optionNumber) !== "-" ? displayValue(row.optionNumber) : "",
+    setupNo: displayValue(row.setupNo) !== "-" ? displayValue(row.setupNo) : "",
+    uid: itemCode(row) !== "-" ? itemCode(row) : "",
+    description: "",
+    instrumentUsed: "",
+    specification: "",
+    tolerancePlus: "",
+    toleranceMinus: "",
+    __returnTab: "firstPieceInspectionTab",
+  };
+}
+
+function matchingFirstPieceInspectionMasters(masters: DashboardPayload[], row: DashboardPayload) {
+  const part = machineKey(itemCode(row));
+  const jcNo = machineKey(jobCardNumber(row));
+  const option = machineKey(row.optionNumber);
+  const setup = machineKey(row.setupNo);
+  return masters
+    .filter((master) => {
+      const masterJcNo = machineKey(master.jcNo || master.jobCard || master.jobCardNumber);
+      const masterPart = machineKey(master.uid || master.partNo || master.partCode);
+      return (!masterJcNo || masterJcNo === jcNo) &&
+        masterPart === part &&
+        machineKey(master.optionNumber) === option &&
+        machineKey(master.setupNo) === setup;
+    })
+    .sort((a, b) =>
+      displayValue(a.uid).localeCompare(displayValue(b.uid), undefined, { numeric: true }) ||
+      displayValue(a.description).localeCompare(displayValue(b.description), undefined, { numeric: true }),
+    );
+}
+
+function firstPieceMasterKey(master: DashboardPayload) {
+  return [
+    master._id,
+    master.jcNo || master.jobCard || master.jobCardNumber,
+    master.partNo || master.partCode,
+    master.uid,
+    master.optionNumber,
+    master.setupNo,
+  ].map((value) => str(value).toLowerCase()).filter(Boolean).join("|");
+}
+
+function firstPieceReportKey(row: DashboardPayload, completedAt?: string) {
+  return [
+    jobCardNumber(row),
+    itemCode(row),
+    displayValue(row.optionNumber),
+    displayValue(row.setupNo),
+    displayValue(row.machine),
+    "fpi",
+    completedAt,
+  ].map((value) => str(value).toLowerCase()).join("|");
+}
+
+function firstPieceReadingsFor(readings: Record<string, string[]>, master: DashboardPayload) {
+  return readings[firstPieceMasterKey(master)] ?? Array.from({ length: 5 }, () => "");
 }
 
 function uniqueValues(values: string[]) {
