@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { api } from "@/convex/_generated/api";
 import type { ProductionEntry } from "@/lib/dashboard-domain";
+import { PUBLIC_CONVEX_URL } from "@/lib/convex-env";
 
 class RouteError extends Error {
   constructor(
@@ -113,7 +114,7 @@ async function authenticatedConvexClient() {
     throw new RouteError(401, "Authentication is required to access the dashboard API.");
   }
 
-  return new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL as string, {
+  return new ConvexHttpClient(PUBLIC_CONVEX_URL, {
     auth: token,
   });
 }
