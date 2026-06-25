@@ -1779,4 +1779,145 @@ describe("buildLegacyDashboardSnapshot", () => {
       setupPlannedDate: "24-June-26",
     });
   });
+
+  it("deduplicates repeated quality approval and first-piece report saves for the same setup", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-FPI",
+            partCode: "M-FPI",
+            optionNumber: "1",
+            orderPcs: 100,
+            rmInwardDate: "2026-06-23",
+          },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            partNo: "M-FPI",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "C901",
+            machineType: "AUTOMATIC",
+          },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            partNo: "M-FPI",
+            optionNumber: "1",
+            setupNo: "1",
+            cycleTime: 10,
+            loadingUnloading: 0,
+          },
+        },
+        {
+          entryType: "tooling",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            partNo: "M-FPI",
+            optionNumber: "1",
+            setupNo: "1",
+            toolNo: "T-FPI",
+          },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            machineNo: "C901",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
+        },
+        {
+          _id: "status-old",
+          entryType: "shop_floor_status",
+          key: "jc-fpi|m-fpi|1|1|c901",
+          createdAt: "2026-06-24T10:00:00.000Z",
+          payload: {
+            jcNo: "JC-FPI",
+            partCode: "M-FPI",
+            optionNumber: "1",
+            setupNo: "1",
+            machine: "C901",
+            stage: "setting",
+            doneBy: "Q1",
+            completedAt: "2026-06-24T10:00:00.000Z",
+          },
+        },
+        {
+          _id: "status-new",
+          entryType: "shop_floor_status",
+          key: "jc-fpi|m-fpi|1|1|c901",
+          createdAt: "2026-06-24T11:00:00.000Z",
+          payload: {
+            jcNo: "JC-FPI",
+            partCode: "M-FPI",
+            optionNumber: "1",
+            setupNo: "1",
+            machine: "C901",
+            stage: "quality_approval",
+            doneBy: "Q2",
+            completedAt: "2026-06-24T11:00:00.000Z",
+          },
+        },
+        {
+          _id: "report-old",
+          entryType: "first_piece_inspection_report",
+          key: "old-timestamped-key",
+          createdAt: "2026-06-24T10:00:00.000Z",
+          payload: {
+            reportId: "old",
+            jcNo: "JC-FPI",
+            partCode: "M-FPI",
+            optionNumber: "1",
+            setupNo: "1",
+            machine: "C901",
+            taskCompletedAt: "2026-06-24T10:00:00.000Z",
+            approvedBy: "Q1",
+          },
+        },
+        {
+          _id: "report-new",
+          entryType: "first_piece_inspection_report",
+          key: "jc-fpi|m-fpi|1|1|c901|fpi",
+          createdAt: "2026-06-24T11:00:00.000Z",
+          payload: {
+            reportId: "jc-fpi|m-fpi|1|1|c901|fpi",
+            jcNo: "JC-FPI",
+            partCode: "M-FPI",
+            optionNumber: "1",
+            setupNo: "1",
+            machine: "C901",
+            taskCompletedAt: "2026-06-24T11:00:00.000Z",
+            approvedBy: "Q2",
+          },
+        },
+      ],
+    });
+
+    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
+      firstPieceInspectionReportRows: Array<Record<string, unknown>>;
+      machinePlanDetailRows: Array<Record<string, unknown>>;
+    };
+
+    expect(productionControl.firstPieceInspectionReportRows).toHaveLength(1);
+    expect(productionControl.firstPieceInspectionReportRows[0]).toMatchObject({
+      approvedBy: "Q2",
+      reportId: "jc-fpi|m-fpi|1|1|c901|fpi",
+    });
+    expect(productionControl.machinePlanDetailRows[0]).toMatchObject({
+      jcNo: "JC-FPI",
+      shopFloorStage: "quality_approval",
+      shopFloorDoneBy: "Q2",
+    });
+  });
 });

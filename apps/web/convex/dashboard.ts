@@ -503,6 +503,31 @@ export const saveDataEntry = mutation({
       });
       return { ok: true, id: args.id };
     }
+    if (args.key) {
+      const existingRows = await ctx.db
+        .query("dataEntries")
+        .withIndex("by_entry_type_key", (q) => q.eq("entryType", args.entryType).eq("key", args.key))
+        .collect();
+      const corrections = await ctx.db
+        .query("corrections")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerFields.ownerId))
+        .collect();
+      const correctionTargets = activeCorrectionTargets(corrections);
+      const existing = existingRows
+        .filter((row) => row.ownerId === ownerFields.ownerId)
+        .filter((row) => !correctionTargets.has(`dataEntries:${String(row._id)}`))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .at(-1);
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          entryType: args.entryType,
+          key: args.key,
+          payload: args.payload,
+          createdAt: now(),
+        });
+        return { ok: true, id: existing._id };
+      }
+    }
     return insertOwnerRow(ctx, "dataEntries", args);
   },
 });

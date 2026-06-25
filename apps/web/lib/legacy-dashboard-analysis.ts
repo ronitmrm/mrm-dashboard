@@ -189,9 +189,9 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const workOrderRows = entryRows(byType, "work_order");
   const rmInwardRows = entryRows(byType, "rm_inward");
   const setupChecklistRows: Record<string, unknown>[] = [];
-  const shopFloorStatusRows = entryRows(byType, "shop_floor_status");
+  const shopFloorStatusRows = latestEntryRowsByKey(entryRows(byType, "shop_floor_status"), shopFloorStatusEntryKey);
   const firstPieceInspectionMasterRows = entryRows(byType, "first_piece_inspection_master");
-  const firstPieceInspectionReportRows = entryRows(byType, "first_piece_inspection_report");
+  const firstPieceInspectionReportRows = latestEntryRowsByKey(entryRows(byType, "first_piece_inspection_report"), firstPieceReportEntryKey);
   const rawSoftwareRows = entryRows(byType, "software_raw");
   const meetingRows = entryRows(byType, "meeting_action");
   const routeLookup = loadRouteLookup(routeRows);
@@ -1327,6 +1327,44 @@ function bucketDataEntries(entries: DataEntry[]) {
 
 function entryRows(buckets: Map<string, Array<Record<string, unknown>>>, entryType: string) {
   return buckets.get(entryType) ?? [];
+}
+
+function latestEntryRowsByKey(
+  rows: Array<Record<string, unknown>>,
+  keyForRow: (row: Record<string, unknown>) => string,
+) {
+  const latest = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const key = keyForRow(row) || rowText(row, "key") || rowText(row, "_id");
+    if (!key) continue;
+    const current = latest.get(key);
+    if (!current || latestEntryTimestamp(row) >= latestEntryTimestamp(current)) latest.set(key, row);
+  }
+  return [...latest.values()];
+}
+
+function latestEntryTimestamp(row: Record<string, unknown>) {
+  return rowText(row, "taskCompletedAt", "completedAt", "createdAt");
+}
+
+function shopFloorStatusEntryKey(row: Record<string, unknown>) {
+  return setupChecklistKey({
+    jcNo: rowText(row, "jcNo", "JC NO.", "JC NO"),
+    partCode: rowText(row, "partCode", "partNo", "PART CODE", "PART NO"),
+    optionNumber: rowText(row, "optionNumber", "OPTION NUMBER", "OPTION NO"),
+    setupNo: rowText(row, "setupNo", "SETUP NO.", "SETUP NO", "SET UP"),
+    machine: rowText(row, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO."),
+  });
+}
+
+function firstPieceReportEntryKey(row: Record<string, unknown>) {
+  return setupChecklistKey({
+    jcNo: rowText(row, "jcNo", "JC NO.", "JC NO"),
+    partCode: rowText(row, "partCode", "partNo", "PART CODE", "PART NO"),
+    optionNumber: rowText(row, "optionNumber", "OPTION NUMBER", "OPTION NO"),
+    setupNo: rowText(row, "setupNo", "SETUP NO.", "SETUP NO", "SET UP"),
+    machine: rowText(row, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO."),
+  });
 }
 
 function loadRouteLookup(rows: Record<string, unknown>[]) {

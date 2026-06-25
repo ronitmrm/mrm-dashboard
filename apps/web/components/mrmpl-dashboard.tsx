@@ -361,6 +361,11 @@ function DashboardShell() {
     setActiveTab("firstPieceInspectionTab");
   }
 
+  function closeFirstPieceInspection(row: DashboardPayload) {
+    const key = shopFloorPlanKey(row);
+    setFirstPieceInspectionTasks((openTasks) => openTasks.filter((task) => shopFloorPlanKey(task) !== key));
+  }
+
   const isDashboardLoading = dashboardPayload === undefined;
   const payload = isDashboardLoading ? {} : asRecord(dashboardPayload);
   const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
@@ -447,6 +452,7 @@ function DashboardShell() {
               openDataEntry={openDataEntry}
               openMasterReadiness={openMasterReadiness}
               openFirstPieceInspection={openFirstPieceInspection}
+              closeFirstPieceInspection={closeFirstPieceInspection}
               firstPieceInspectionTasks={firstPieceInspectionTasks}
               preferredDataEntryType={preferredDataEntryType}
               preferredDataEntryDefaults={preferredDataEntryDefaults}
@@ -612,6 +618,7 @@ function DashboardContent({
   openDataEntry,
   openMasterReadiness,
   openFirstPieceInspection,
+  closeFirstPieceInspection,
   firstPieceInspectionTasks,
   preferredDataEntryType,
   preferredDataEntryDefaults,
@@ -624,6 +631,7 @@ function DashboardContent({
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
   openMasterReadiness: () => void;
   openFirstPieceInspection: (row: DashboardPayload) => void;
+  closeFirstPieceInspection: (row: DashboardPayload) => void;
   firstPieceInspectionTasks: DashboardPayload[];
   preferredDataEntryType: string;
   preferredDataEntryDefaults: Record<string, unknown>;
@@ -673,6 +681,7 @@ function DashboardContent({
         productionControl={productionControl}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
+        onTaskComplete={closeFirstPieceInspection}
       />
     );
   }
@@ -1447,11 +1456,13 @@ function FirstPieceInspectionPanel({
   productionControl,
   submitAction,
   openDataEntry,
+  onTaskComplete,
 }: {
   tasks: DashboardPayload[];
   productionControl: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  onTaskComplete: (row: DashboardPayload) => void;
 }) {
   const masters = asArray(productionControl.firstPieceInspectionMasterRows);
   const [expandedTaskKey, setExpandedTaskKey] = useState(tasks[0] ? shopFloorPlanKey(tasks[0]) : "");
@@ -1484,6 +1495,7 @@ function FirstPieceInspectionPanel({
       key: dataEntryKey("shop_floor_status", payload),
       payload,
     });
+    if (stage === "quality_approval") onTaskComplete(row);
   }
 
   async function saveFirstPieceReport(row: DashboardPayload, report: DashboardPayload) {
@@ -1613,6 +1625,7 @@ function ShopFloorRowAction({
   const [worker, setWorker] = useState("");
   const [remark, setRemark] = useState("");
   const [inspectionReadings, setInspectionReadings] = useState<Record<string, string[]>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const row = next ?? current;
   const stage = str(row?.shopFloorStage) as ShopFloorStageId;
   const stageIndex = shopFloorStageIndex(stage);
@@ -1634,43 +1647,58 @@ function ShopFloorRowAction({
   }
 
   async function submitNextStage() {
-    if (!next || !nextStage) return;
+    if (!next || !nextStage || isSubmitting) return;
     if (nextStage.id === "quality_approval" && !canSubmitInspection) return;
-    const taskCompletedAt = new Date().toISOString();
-    const firstPieceInspection = needsFirstPieceInspection
-      ? {
-          reportId: firstPieceReportKey(next, taskCompletedAt),
-          taskAssignedAt: str(next.shopFloorUpdatedAt),
-          taskCompletedAt,
-          checkedPieces: 5,
-          dimensions: firstPieceMasters.map((master) => ({
-            uid: str(master.uid),
-            description: str(master.description),
-            instrumentUsed: str(master.instrumentUsed),
-            specification: str(master.specification),
-            tolerancePlus: optionalNumber(master.tolerancePlus),
-            toleranceMinus: optionalNumber(master.toleranceMinus),
-            readings: firstPieceReadingsFor(inspectionReadings, master).map((value) => optionalNumber(value) ?? value),
-          })),
+    setIsSubmitting(true);
+    try {
+      const taskCompletedAt = new Date().toISOString();
+      const firstPieceInspection = needsFirstPieceInspection
+        ? {
+            reportId: firstPieceReportKey(next),
+            taskAssignedAt: str(next.shopFloorUpdatedAt),
+            taskCompletedAt,
+            checkedPieces: 5,
+            dimensions: firstPieceMasters.map((master) => ({
+              uid: str(master.uid),
+              description: str(master.description),
+              instrumentUsed: str(master.instrumentUsed),
+              specification: str(master.specification),
+              tolerancePlus: optionalNumber(master.tolerancePlus),
+              toleranceMinus: optionalNumber(master.toleranceMinus),
+              readings: firstPieceReadingsFor(inspectionReadings, master).map((value) => optionalNumber(value) ?? value),
+            })),
+        }
+        : undefined;
+      if (needsFirstPieceInspection && firstPieceInspection && onSaveFirstPieceReport) {
+        await onSaveFirstPieceReport(next, {
+          ...firstPieceInspection,
+          approvedBy: doneBy,
+          remark,
+        });
       }
-      : undefined;
-    if (needsFirstPieceInspection && firstPieceInspection && onSaveFirstPieceReport) {
-      await onSaveFirstPieceReport(next, {
-        ...firstPieceInspection,
-        approvedBy: doneBy,
+      await onSaveStage(next, nextStage.id, {
+        doneBy,
+        worker: nextStage.id === "operator_started" ? worker : "",
         remark,
+        firstPieceInspection,
       });
+      setDoneBy("");
+      setWorker("");
+      setRemark("");
+      setInspectionReadings({});
+    } finally {
+      setIsSubmitting(false);
     }
-    await onSaveStage(next, nextStage.id, {
-      doneBy,
-      worker: nextStage.id === "operator_started" ? worker : "",
-      remark,
-      firstPieceInspection,
-    });
-    setDoneBy("");
-    setWorker("");
-    setRemark("");
-    setInspectionReadings({});
+  }
+
+  async function submitCurrentStageComplete() {
+    if (!current || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await onSaveStage(current, "item_complete");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (current) {
@@ -1680,7 +1708,7 @@ function ShopFloorRowAction({
           <StatusBadge value="Running" />
           <span className="text-sm text-muted-foreground">Worker: {displayValue(current.shopFloorWorker)}</span>
         </div>
-        <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => void onSaveStage(current, "item_complete")}>
+        <Button type="button" size="sm" variant="outline" className="w-fit" disabled={isSubmitting} onClick={() => void submitCurrentStageComplete()}>
           <CheckCircle2 className="size-4" />
           Item finished
         </Button>
@@ -1728,7 +1756,7 @@ function ShopFloorRowAction({
               onAddMaster={openDataEntry}
             />
           ) : null}
-          <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection} onClick={() => void submitNextStage()}>
+          <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection || isSubmitting} onClick={() => void submitNextStage()}>
             <CheckCircle2 className="size-4" />
             {nextStage.button}
           </Button>
@@ -5195,12 +5223,12 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   }
   if (entryType === "first_piece_inspection_report") {
     return [
-      payload.reportId,
       payload.jcNo,
       payload.partCode,
       payload.optionNumber,
       payload.setupNo,
       payload.machine,
+      "fpi",
     ].map((value) => str(value).toLowerCase()).join("|");
   }
   if (entryType === "setup_checklist") {
@@ -5276,7 +5304,7 @@ function firstPieceMasterKey(master: DashboardPayload) {
   ].map((value) => str(value).toLowerCase()).filter(Boolean).join("|");
 }
 
-function firstPieceReportKey(row: DashboardPayload, completedAt?: string) {
+function firstPieceReportKey(row: DashboardPayload) {
   return [
     jobCardNumber(row),
     itemCode(row),
@@ -5284,7 +5312,6 @@ function firstPieceReportKey(row: DashboardPayload, completedAt?: string) {
     displayValue(row.setupNo),
     displayValue(row.machine),
     "fpi",
-    completedAt,
   ].map((value) => str(value).toLowerCase()).join("|");
 }
 
