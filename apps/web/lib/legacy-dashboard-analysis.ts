@@ -905,7 +905,10 @@ function buildProductionControl({
       plannerPriorityScore: plannerPriority ? priorityScore(plannerPriorityValue) : 0,
       priorityApprovalMode: plannerPriority ? priorityApprovalMode(plannerPriority) : "idle_queue_only",
       priorityInterruptedJcNo: plannerPriority ? rowText(plannerPriority, "interruptedJcNo", "INTERRUPTED JC NO", "STOPPED JC NO") : "",
+      priorityInterruptedSetupNo: plannerPriority ? rowText(plannerPriority, "interruptedSetupNo", "INTERRUPTED SETUP NO", "STOPPED SETUP NO") : "",
+      priorityInterruptedMachine: plannerPriority ? rowText(plannerPriority, "interruptedMachine", "INTERRUPTED MACHINE", "STOPPED MACHINE") : "",
       priorityInterruptedFinishedQty: plannerPriority ? safeNumber(rowValue(plannerPriority, "interruptedFinishedQty", "INTERRUPTED FINISHED QTY", "FINISHED QTY")) : 0,
+      priorityInterruptedSetups: Array.isArray(plannerPriority?.interruptedSetups) ? plannerPriority.interruptedSetups : [],
       priorityRemark: plannerPriority ? rowText(plannerPriority, "remark", "REMARK") : "",
       routeStatus,
       cycleStatus: missingCycle.length ? `Missing setup ${compactJoin(missingCycle)}` : "Ready",
@@ -2326,7 +2329,10 @@ function machinePlanDetails(
         plannerPriorityScore: safeNumber(rowValue(row, "plannerPriorityScore")),
         priorityApprovalMode: rowText(row, "priorityApprovalMode"),
         priorityInterruptedJcNo: rowText(row, "priorityInterruptedJcNo"),
+        priorityInterruptedSetupNo: rowText(row, "priorityInterruptedSetupNo"),
+        priorityInterruptedMachine: rowText(row, "priorityInterruptedMachine"),
         priorityInterruptedFinishedQty: safeNumber(rowValue(row, "priorityInterruptedFinishedQty")),
+        priorityInterruptedSetups: Array.isArray(row.priorityInterruptedSetups) ? row.priorityInterruptedSetups : [],
         priorityRemark: rowText(row, "priorityRemark"),
         rawOutputQty: round(productionActual?.outputQty ?? 0),
         rawActualQty: round(productionActual?.actualQty ?? 0),
@@ -2782,9 +2788,10 @@ function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>
 }
 
 function applyPriorityInterruptionQuantities(details: Array<Record<string, unknown>>) {
-  const stopApprovals = details.filter((row) => priorityApprovalMode(row) === "allow_stop_running" && safeNumber(rowValue(row, "priorityInterruptedFinishedQty")) > 0);
+  const stopApprovals = details.filter((row) => priorityApprovalMode(row) === "allow_stop_running" && priorityApprovalHasFinishedQty(row));
   for (const approval of stopApprovals) {
-    const finishedQty = safeNumber(rowValue(approval, "priorityInterruptedFinishedQty"));
+    const setupInterruptions = priorityInterruptedSetups(approval);
+    const defaultFinishedQty = safeNumber(rowValue(approval, "priorityInterruptedFinishedQty"));
     for (const row of details) {
       if (!priorityInterruptsRow(approval, row)) continue;
       const meta = planningMeta(row);
@@ -2794,6 +2801,8 @@ function applyPriorityInterruptionQuantities(details: Array<Record<string, unkno
         actualQty: 0,
         dates: new Set<string>(),
       };
+      const matchingInterruption = setupInterruptions.find((interruption) => priorityInterruptionMatchesRow(interruption, row));
+      const finishedQty = matchingInterruption?.finishedQty || defaultFinishedQty;
       const actualQty = Math.max(currentActual.actualQty ?? 0, finishedQty);
       const outputQty = Math.max(currentActual.outputQty ?? 0, finishedQty);
       meta.productionActual = {
@@ -2816,14 +2825,57 @@ function canPriorityPreempt(blockingRow: Record<string, unknown>, priorityRow: R
   const state = priorityQueueState(blockingRow);
   if (state === "idle") return true;
   const mode = priorityApprovalMode(priorityRow);
-  if (state === "started_not_running") return mode === "allow_started_not_running" || mode === "allow_stop_running";
-  return mode === "allow_stop_running" && priorityInterruptsRow(priorityRow, blockingRow) && safeNumber(rowValue(priorityRow, "priorityInterruptedFinishedQty")) > 0;
+  if (state === "started_not_running") {
+    if (mode !== "allow_started_not_running" && mode !== "allow_stop_running") return false;
+    return priorityInterruptedSetups(priorityRow).length ? priorityInterruptsRow(priorityRow, blockingRow) : true;
+  }
+  return mode === "allow_stop_running" && priorityInterruptsRow(priorityRow, blockingRow) && priorityInterruptionHasFinishedQty(priorityRow, blockingRow);
 }
 
 function priorityInterruptsRow(priorityRow: Record<string, unknown>, row: Record<string, unknown>) {
+  const setupInterruptions = priorityInterruptedSetups(priorityRow);
+  if (setupInterruptions.length) return setupInterruptions.some((interruption) => priorityInterruptionMatchesRow(interruption, row));
+
   const stoppedJc = canonicalKey(rowText(priorityRow, "priorityInterruptedJcNo", "interruptedJcNo", "STOPPED JC NO"));
-  if (stoppedJc) return stoppedJc === canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"));
-  return false;
+  if (!stoppedJc || stoppedJc !== canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"))) return false;
+  const stoppedSetup = canonicalKey(rowText(priorityRow, "priorityInterruptedSetupNo", "interruptedSetupNo", "STOPPED SETUP NO"));
+  const stoppedMachine = canonicalKey(rowText(priorityRow, "priorityInterruptedMachine", "interruptedMachine", "STOPPED MACHINE"));
+  if (stoppedSetup && stoppedSetup !== canonicalKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))) return false;
+  if (stoppedMachine && stoppedMachine !== canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO"))) return false;
+  return true;
+}
+
+function priorityInterruptedSetups(priorityRow: Record<string, unknown>) {
+  const raw = priorityRow.interruptedSetups || priorityRow.priorityInterruptedSetups;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
+    .map((item) => item as Record<string, unknown>)
+    .map((item) => ({
+      jcNo: canonicalKey(rowText(item, "jcNo", "JC NO", "jobCard")),
+      setupNo: canonicalKey(rowText(item, "setupNo", "SETUP NO", "setup")),
+      machine: canonicalKey(rowText(item, "machine", "machineNo", "MACHINE NO", "M/C NO")),
+      finishedQty: safeNumber(rowValue(item, "finishedQty", "FINISHED QTY")),
+    }))
+    .filter((item) => item.jcNo && item.setupNo);
+}
+
+function priorityInterruptionMatchesRow(interruption: ReturnType<typeof priorityInterruptedSetups>[number], row: Record<string, unknown>) {
+  return interruption.jcNo === canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"))
+    && interruption.setupNo === canonicalKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))
+    && (!interruption.machine || interruption.machine === canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO")));
+}
+
+function priorityApprovalHasFinishedQty(priorityRow: Record<string, unknown>) {
+  const setupInterruptions = priorityInterruptedSetups(priorityRow);
+  if (!setupInterruptions.length) return safeNumber(rowValue(priorityRow, "priorityInterruptedFinishedQty")) > 0;
+  return setupInterruptions.some((interruption) => interruption.finishedQty > 0);
+}
+
+function priorityInterruptionHasFinishedQty(priorityRow: Record<string, unknown>, blockingRow: Record<string, unknown>) {
+  const setupInterruptions = priorityInterruptedSetups(priorityRow);
+  if (!setupInterruptions.length) return safeNumber(rowValue(priorityRow, "priorityInterruptedFinishedQty")) > 0;
+  return setupInterruptions.some((interruption) => interruption.finishedQty > 0 && priorityInterruptionMatchesRow(interruption, blockingRow));
 }
 
 function priorityQueueStateRank(row: Record<string, unknown>) {

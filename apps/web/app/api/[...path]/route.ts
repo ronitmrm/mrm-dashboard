@@ -191,7 +191,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
         priority: String(body.priority || "Normal"),
         approvalMode: body.approvalMode ? String(body.approvalMode) : undefined,
         interruptedJcNo: body.interruptedJcNo ? String(body.interruptedJcNo) : undefined,
+        interruptedSetupNo: body.interruptedSetupNo ? String(body.interruptedSetupNo) : undefined,
+        interruptedMachine: body.interruptedMachine ? String(body.interruptedMachine) : undefined,
         interruptedFinishedQty: body.interruptedFinishedQty === undefined || body.interruptedFinishedQty === "" ? undefined : Number(body.interruptedFinishedQty),
+        interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
         remark: body.remark ? String(body.remark) : undefined,
       });
       return json({ ...result, rowsUpdated: 1, jobCards: body.target ? [body.target] : [] });
@@ -304,6 +307,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : "Request failed" }, err instanceof RouteError ? err.status : 400);
   }
+}
+
+function priorityInterruptedSetups(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const rows = value
+    .filter((row) => typeof row === "object" && row !== null && !Array.isArray(row))
+    .map((row) => row as Record<string, unknown>)
+    .map((row) => ({
+      jcNo: String(row.jcNo || ""),
+      setupNo: String(row.setupNo || ""),
+      machine: String(row.machine || ""),
+      finishedQty: row.finishedQty === undefined || row.finishedQty === "" ? undefined : Number(row.finishedQty),
+    }))
+    .filter((row) => row.jcNo && row.setupNo && row.machine);
+  return rows.length ? rows : undefined;
 }
 
 function plainRecord(value: unknown): Record<string, unknown> {

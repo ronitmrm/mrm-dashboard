@@ -829,42 +829,72 @@ function PlannerPriorityForm({
   const [partCode, setPartCode] = useState("");
   const [jcNo, setJcNo] = useState("");
   const [priority, setPriority] = useState("High");
-  const [approvalMode, setApprovalMode] = useState("idle_queue_only");
-  const [interruptedJcNo, setInterruptedJcNo] = useState("");
-  const [interruptedFinishedQty, setInterruptedFinishedQty] = useState("");
   const [remark, setRemark] = useState("");
+  const [planReady, setPlanReady] = useState(false);
+  const [selectedInterruptions, setSelectedInterruptions] = useState<Record<string, boolean>>({});
+  const [finishedQtyByInterruption, setFinishedQtyByInterruption] = useState<Record<string, string>>({});
   const jobCardOptions = useMemo(() => uniqueValues(workOrders
     .filter((row) => !partCode || machineKey(itemCode(row)) === machineKey(partCode))
     .map(jobCardNumber)
     .filter((value) => value !== "-")), [partCode, workOrders]);
+  const selectedPart = partCode || itemOptions[0] || "";
+  const selectedJc = jcNo && jobCardOptions.includes(jcNo) ? jcNo : "";
+  const priorityPlan = useMemo(() => priorityChangePlan(productionControl, selectedPart, selectedJc), [productionControl, selectedPart, selectedJc]);
+  const selectedBlockers = priorityPlan.steps
+    .flatMap((step) => step.blockers)
+    .filter((blocker) => selectedInterruptions[blocker.key]);
+  const hasSelectedRunningWithoutQty = selectedBlockers.some((blocker) =>
+    blocker.state === "running" && Number(finishedQtyByInterruption[blocker.key] || 0) <= 0,
+  );
+
+  function resetPlanReview() {
+    setPlanReady(false);
+    setSelectedInterruptions({});
+    setFinishedQtyByInterruption({});
+  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const selectedPart = partCode || itemOptions[0] || "";
-    const selectedJc = jcNo && jobCardOptions.includes(jcNo) ? jcNo : "";
-    if (!selectedPart && !selectedJc) return;
+    if (!planReady) {
+      setPlanReady(true);
+      return;
+    }
+    if ((!selectedPart && !selectedJc) || hasSelectedRunningWithoutQty) return;
+    const interruptedSetups = selectedBlockers.map((blocker) => ({
+      jcNo: blocker.jcNo,
+      setupNo: blocker.setupNo,
+      machine: blocker.machine,
+      finishedQty: blocker.state === "running" ? Number(finishedQtyByInterruption[blocker.key] || 0) : undefined,
+    }));
+    const firstInterruption = interruptedSetups[0];
+    const approvalMode = selectedBlockers.some((blocker) => blocker.state === "running")
+      ? "allow_stop_running"
+      : selectedBlockers.some((blocker) => blocker.state === "started_not_running")
+        ? "allow_started_not_running"
+        : "idle_queue_only";
+
     submitAction("planner-priority", {
       target: selectedJc || selectedPart,
       jcNo: selectedJc,
       partCode: selectedPart,
       priority,
       approvalMode,
-      interruptedJcNo: approvalMode === "allow_stop_running" ? interruptedJcNo : "",
-      interruptedFinishedQty: approvalMode === "allow_stop_running" ? Number(interruptedFinishedQty || 0) : undefined,
+      interruptedJcNo: firstInterruption?.jcNo || "",
+      interruptedSetupNo: firstInterruption?.setupNo || "",
+      interruptedMachine: firstInterruption?.machine || "",
+      interruptedFinishedQty: firstInterruption?.finishedQty,
+      interruptedSetups,
       remark,
     });
     setRemark("");
-    if (approvalMode !== "allow_stop_running") {
-      setInterruptedJcNo("");
-      setInterruptedFinishedQty("");
-    }
+    resetPlanReview();
   }
 
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
       <div>
         <div className="text-sm font-medium">1. Priority change</div>
-        <div className="text-xs text-muted-foreground">Use when a job card or part becomes urgent without changing the machine route.</div>
+        <div className="text-xs text-muted-foreground">Review the setup-wise machine impact before applying a priority change.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
         <Field label="Item code">
@@ -875,6 +905,7 @@ function PlannerPriorityForm({
             onChange={(event) => {
               setPartCode(event.target.value);
               setJcNo("");
+              resetPlanReview();
             }}
           >
             <option value="">Select item</option>
@@ -887,7 +918,10 @@ function PlannerPriorityForm({
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={jcNo}
-            onChange={(event) => setJcNo(event.target.value)}
+            onChange={(event) => {
+              setJcNo(event.target.value);
+              resetPlanReview();
+            }}
           >
             <option value="">All JCs for item</option>
             {jobCardOptions.map((option) => (
@@ -899,61 +933,195 @@ function PlannerPriorityForm({
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={priority}
-            onChange={(event) => setPriority(event.target.value)}
+            onChange={(event) => {
+              setPriority(event.target.value);
+              resetPlanReview();
+            }}
           >
             {["Urgent", "High", "Normal", "Low"].map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
         </Field>
-        <Field label="Queue approval">
-          <select
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={approvalMode}
-            onChange={(event) => setApprovalMode(event.target.value)}
-          >
-            <option value="idle_queue_only">Idle queue only</option>
-            <option value="allow_started_not_running">Move started task, machine not running</option>
-            <option value="allow_stop_running">Stop running item</option>
-          </select>
-        </Field>
-        {approvalMode === "allow_stop_running" ? (
-          <>
-            <Field label="Stopped JC number">
-              <select
-                className="h-9 rounded-md border bg-background px-3 text-sm"
-                value={interruptedJcNo}
-                required
-                onChange={(event) => setInterruptedJcNo(event.target.value)}
-              >
-                <option value="">Select JC to stop</option>
-                {uniqueValues(workOrders.map(jobCardNumber).filter((value) => value !== "-")).map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Finished qty">
-              <Input
-                min="0"
-                step="1"
-                type="number"
-                value={interruptedFinishedQty}
-                required
-                onChange={(event) => setInterruptedFinishedQty(event.target.value)}
-              />
-            </Field>
-          </>
-        ) : null}
         <Field label="Reason">
           <Input value={remark} placeholder="Customer urgent / dispatch commitment" onChange={(event) => setRemark(event.target.value)} />
         </Field>
       </div>
-      <Button className="w-fit" type="submit">
+
+      {planReady ? (
+        <div className="grid gap-3 rounded-lg border bg-muted/20 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-medium">Probable priority plan</div>
+              <div className="text-xs text-muted-foreground">{priorityPlan.steps.length} target setup{priorityPlan.steps.length === 1 ? "" : "s"} checked from the current machine queue.</div>
+            </div>
+            <Button type="button" variant="outline" onClick={resetPlanReview}>Recheck inputs</Button>
+          </div>
+          {priorityPlan.steps.length ? (
+            <div className="grid gap-2">
+              {priorityPlan.steps.map((step) => (
+                <div key={step.key} className="grid gap-2 rounded-lg border bg-background p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-medium">{step.itemCode} / {step.jcNo} / Setup {step.setupNo}</div>
+                      <div className="text-xs text-muted-foreground">Target machine {step.machine} - {step.startDate} to {step.endDate}</div>
+                    </div>
+                    <Badge variant={step.blockers.length ? "secondary" : "outline"}>{step.blockers.length ? step.blockers.length + " queue impact" : "No stop needed"}</Badge>
+                  </div>
+                  {step.blockers.length ? (
+                    <div className="grid gap-2">
+                      {step.blockers.map((blocker) => {
+                        const selected = Boolean(selectedInterruptions[blocker.key]);
+                        return (
+                          <div key={blocker.key} className="grid gap-2 rounded-md border p-2 md:grid-cols-[1fr_auto] md:items-center">
+                            <div>
+                              <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
+                              <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} to {blocker.endDate} - {blocker.label}</div>
+                            </div>
+                            <div className="flex flex-wrap items-end gap-2">
+                              {blocker.requiresApproval ? (
+                                <Button
+                                  type="button"
+                                  variant={selected ? "default" : "outline"}
+                                  onClick={() => setSelectedInterruptions((current) => ({ ...current, [blocker.key]: !selected }))}
+                                >
+                                  {blocker.state === "running" ? (selected ? "Stop selected" : "Stop this setup") : (selected ? "Move approved" : "Approve queue move")}
+                                </Button>
+                              ) : (
+                                <Badge variant="outline">Queue will move</Badge>
+                              )}
+                              {selected && blocker.state === "running" ? (
+                                <Field label="Finished qty">
+                                  <Input
+                                    className="w-28"
+                                    min="0"
+                                    step="1"
+                                    type="number"
+                                    value={finishedQtyByInterruption[blocker.key] ?? ""}
+                                    required
+                                    onChange={(event) => setFinishedQtyByInterruption((current) => ({ ...current, [blocker.key]: event.target.value }))}
+                                  />
+                                </Field>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">No planned setup was found for this item / JC in the current machine plan.</div>
+          )}
+          {hasSelectedRunningWithoutQty ? (
+            <div className="text-xs text-destructive">Enter finished quantity for every running setup selected to stop.</div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <Button className="w-fit" type="submit" disabled={planReady && (priorityPlan.steps.length === 0 || hasSelectedRunningWithoutQty)}>
         <Wrench className="size-4" />
-        Add priority
+        {planReady ? "Apply approved priority" : "Show probable plan"}
       </Button>
     </form>
   );
+}
+
+type PriorityPlanBlocker = {
+  key: string;
+  jcNo: string;
+  itemCode: string;
+  setupNo: string;
+  machine: string;
+  startDate: string;
+  endDate: string;
+  state: "running" | "started_not_running" | "queued";
+  label: string;
+  requiresApproval: boolean;
+};
+
+type PriorityPlanStep = {
+  key: string;
+  jcNo: string;
+  itemCode: string;
+  setupNo: string;
+  machine: string;
+  startDate: string;
+  endDate: string;
+  blockers: PriorityPlanBlocker[];
+};
+
+function priorityChangePlan(productionControl: DashboardPayload, partCode: string, jcNo: string): { steps: PriorityPlanStep[] } {
+  const plannedRows = asArray(productionControl.machinePlanDetailRows).filter((row) => !shopFloorItemIsFinished(row));
+  const targetPartKey = machineKey(partCode);
+  const targetJcKey = machineKey(jcNo);
+  const targetRows = plannedRows
+    .filter((row) => !targetPartKey || machineKey(itemCode(row)) === targetPartKey)
+    .filter((row) => !targetJcKey || machineKey(jobCardNumber(row)) === targetJcKey)
+    .sort(jobCardSetupSort);
+
+  return {
+    steps: targetRows.map((targetRow) => {
+      const targetMachine = machineValue(targetRow, "machine");
+      const targetMachineKey = machineKey(targetMachine);
+      const targetDate = dateSortValue(plannedSetupDate(targetRow));
+      const blockers = plannedRows
+        .filter((row) => priorityPlanRowKey(row) !== priorityPlanRowKey(targetRow))
+        .filter((row) => machineKey(machineValue(row, "machine")) === targetMachineKey)
+        .filter((row) => priorityPlanBlocksTarget(row, targetDate))
+        .sort(machinePlanDisplaySort)
+        .map(priorityPlanBlocker);
+      return {
+        key: priorityPlanRowKey(targetRow),
+        jcNo: jobCardNumber(targetRow),
+        itemCode: itemCode(targetRow),
+        setupNo: displayValue(targetRow.setupNo),
+        machine: targetMachine,
+        startDate: displayValue(plannedSetupDate(targetRow)),
+        endDate: displayValue(targetRow.plannedProductionEndDate || targetRow.endDate),
+        blockers,
+      };
+    }),
+  };
+}
+
+function priorityPlanBlocksTarget(row: DashboardPayload, targetDate: number) {
+  const state = priorityPlanBlockerState(row);
+  if (state === "running" || state === "started_not_running") return true;
+  const rowDate = dateSortValue(plannedSetupDate(row));
+  return rowDate <= targetDate;
+}
+
+function priorityPlanBlocker(row: DashboardPayload): PriorityPlanBlocker {
+  const state = priorityPlanBlockerState(row);
+  return {
+    key: priorityPlanRowKey(row),
+    jcNo: jobCardNumber(row),
+    itemCode: itemCode(row),
+    setupNo: displayValue(row.setupNo),
+    machine: machineValue(row, "machine"),
+    startDate: displayValue(plannedSetupDate(row)),
+    endDate: displayValue(row.plannedProductionEndDate || row.endDate),
+    state,
+    label: state === "running" ? "Running now" : state === "started_not_running" ? "Started, not running" : "Planned before target",
+    requiresApproval: state === "running" || state === "started_not_running",
+  };
+}
+
+function priorityPlanBlockerState(row: DashboardPayload): PriorityPlanBlocker["state"] {
+  if (shopFloorItemIsCurrent(row)) return "running";
+  const runningStatus = str(row.runningStatus).toLowerCase();
+  const stageIndex = shopFloorStageIndex(str(row.shopFloorStage));
+  if (runningStatus === "setup complete" || stageIndex >= 0) return "started_not_running";
+  return "queued";
+}
+
+function priorityPlanRowKey(row: DashboardPayload) {
+  return [jobCardNumber(row), itemCode(row), displayValue(row.optionNumber), displayValue(row.setupNo), machineValue(row, "machine")]
+    .map(machineKey)
+    .join("|");
 }
 
 function RouteChangePlannerForm({
