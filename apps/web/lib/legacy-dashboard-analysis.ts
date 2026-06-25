@@ -1,5 +1,5 @@
 import { buildDashboardSnapshot, type AttendanceRecord, type DashboardFilters, type ProductionEntry, type TrainingRecord } from "./dashboard-domain";
-import { isActivePlannerDecision, machineCodeMatches, sourcePlannerDecisions } from "./planning-rules";
+import { isActivePlannerDecision, machineCodeMatches, priorityLabel, priorityScore, sourcePlannerDecisions } from "./planning-rules";
 
 type DataEntry = {
   _id?: unknown;
@@ -799,6 +799,7 @@ function buildProductionControl({
   const rmInwardByJc = latestRmInwardByJobCard(rmInwardRows);
   const selectedRouteByJc = latestRouteSelectionByJobCard(routeSelections);
   const routeChangeByTarget = latestRouteChangeByTarget(routeChanges);
+  const priorityByTarget = latestPlannerPriorityByTarget(plannerPriorities);
   const rawByJc = new Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines: Set<string>; operators: Set<string> }>();
   const rawBySetup = new Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string> }>();
   const rawBySetupAnyMachine = new Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string>; machines: Set<string> }>();
@@ -844,6 +845,8 @@ function buildProductionControl({
   const workOrderOutputRows = workOrderRows.map((row) => {
     const jcNo = rowText(row, "JC NO.", "JC NO", "jcNo");
     const partCode = rowText(row, "PART CODE", "PART NO", "partCode");
+    const plannerPriority = plannerPriorityForWorkOrder(priorityByTarget, jcNo, partCode);
+    const plannerPriorityValue = plannerPriority ? rowText(plannerPriority, "priority", "PRIORITY") : "";
     const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
     const selectedOptionNumber = rowText(selectedRouteByJc.get(canonicalKey(jcNo)) ?? {}, "optionNumber", "SELECTED ROUTE OPTION", "OPTION NUMBER");
     const routeChange = routeChangeForWorkOrder(routeChangeByTarget, jcNo, partCode);
@@ -898,6 +901,9 @@ function buildProductionControl({
       rmStatus: isRmReceived(row, rmInward) ? "Received" : "Waiting",
       rmInwardDate: rowText(rmInward ?? {}, "RM I/W DATE", "rmInwardDate") || rowText(row, "RM I/W DATE", "rmInwardDate"),
       rmInwardKg: safeNumber(rowValue(rmInward ?? {}, "RM INWARD KG.", "rmInwardKg")) || safeNumber(rowValue(row, "RM INWARD KG.", "rmInwardKg")),
+      plannerPriority: priorityLabel(plannerPriorityValue),
+      plannerPriorityScore: plannerPriority ? priorityScore(plannerPriorityValue) : 0,
+      priorityRemark: plannerPriority ? rowText(plannerPriority, "remark", "REMARK") : "",
       routeStatus,
       cycleStatus: missingCycle.length ? `Missing setup ${compactJoin(missingCycle)}` : "Ready",
       toolingStatus: missingTooling.length ? `Missing setup ${compactJoin(missingTooling)}` : "Ready",
@@ -911,6 +917,7 @@ function buildProductionControl({
         : routeStatus,
     };
   });
+  const prioritizedWorkOrderRows = [...workOrderOutputRows].sort(workOrderPlanningSort);
   const allWorkOrderGaps = workOrderOutputRows
     .map((row) => ({
       ...row,
@@ -928,8 +935,8 @@ function buildProductionControl({
     }))
     .filter((row) => row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
-  const combinedBatches = combinedRows(workOrderOutputRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
-  const machinePlanDetailRows = machinePlanDetails(workOrderOutputRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows);
+  const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
+  const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows);
   const workflowExceptionRows = machinePlanDetailRows.filter((row) => row.rawProductionWithoutWorkflow);
   const setupChecklistHistoryRows: Record<string, unknown>[] = [];
   const setupChecklistMismatchRows: Record<string, unknown>[] = [];
@@ -1001,7 +1008,7 @@ function buildProductionControl({
       },
       issues: masterGaps.map((row) => ({ severity: "warning", sourceSheet: "Work_Order_Import", key: row.jcNo || row.partCode, message: row.nextAction })),
     },
-    workOrders: workOrderOutputRows,
+    workOrders: prioritizedWorkOrderRows,
     jobCardStatusTiles: workOrderOutputRows,
     routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus === "Received"),
     routeSelectionWaitingRm: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus !== "Received"),
@@ -1989,16 +1996,22 @@ function productionSourceMap() {
 }
 
 function combinedRows(workOrderRows: Array<Record<string, unknown>>, rawByJc: Map<string, { outputQty: number }>, routeGroups: Map<string, Record<string, unknown>[]>, cycleKeys: Set<string>, toolingKeys: Set<string>) {
-  const groups = new Map<string, { partCode: string; optionNumber: string; jobCards: string[]; fgPos: Set<string>; orderPcs: number; orders: number; rmReady: number }>();
+  const groups = new Map<string, { partCode: string; optionNumber: string; jobCards: string[]; fgPos: Set<string>; orderPcs: number; orders: number; rmReady: number; plannerPriority: string; plannerPriorityScore: number; priorityRemark: string }>();
   for (const row of workOrderRows) {
     const partCode = rowText(row, "partCode");
     const optionNumber = rowText(row, "optionNumber") || "Not selected";
-    const group = getOrCreate(groups, [canonicalKey(partCode), optionNumber].join("|"), () => ({ partCode, optionNumber, jobCards: [], fgPos: new Set<string>(), orderPcs: 0, orders: 0, rmReady: 0 }));
+    const group = getOrCreate(groups, [canonicalKey(partCode), optionNumber].join("|"), () => ({ partCode, optionNumber, jobCards: [], fgPos: new Set<string>(), orderPcs: 0, orders: 0, rmReady: 0, plannerPriority: "Normal", plannerPriorityScore: 0, priorityRemark: "" }));
     group.jobCards.push(rowText(row, "jcNo"));
     group.fgPos.add(rowText(row, "fgPoNo"));
     group.orderPcs += safeNumber(rowValue(row, "orderPcs"));
     group.orders += 1;
     if (rowText(row, "rmStatus") === "Received") group.rmReady += 1;
+    const rowPriorityScore = safeNumber(rowValue(row, "plannerPriorityScore"));
+    if (rowPriorityScore > group.plannerPriorityScore) {
+      group.plannerPriority = rowText(row, "plannerPriority") || "Normal";
+      group.plannerPriorityScore = rowPriorityScore;
+      group.priorityRemark = rowText(row, "priorityRemark");
+    }
   }
   return [...groups.values()].map((group) => {
     const routeKeyValue = [canonicalKey(group.partCode), group.optionNumber === "Not selected" ? "" : group.optionNumber].join("|");
@@ -2028,12 +2041,12 @@ function combinedRows(workOrderRows: Array<Record<string, unknown>>, rawByJc: Ma
       candidateOption: "",
       rmReady: `${group.rmReady}/${group.orders}`,
       rawOutputAllSetups: round(rawOutputAllSetups),
-      plannerPriority: "Normal",
-      plannerPriorityScore: 1,
-      priorityRemark: "",
+      plannerPriority: group.plannerPriority,
+      plannerPriorityScore: group.plannerPriorityScore,
+      priorityRemark: group.priorityRemark,
       action,
     };
-  }).sort((a, b) => (a.action === "Can combine planning" ? 0 : 1) - (b.action === "Can combine planning" ? 0 : 1) || b.orderPcs - a.orderPcs);
+  }).sort((a, b) => b.plannerPriorityScore - a.plannerPriorityScore || (a.action === "Can combine planning" ? 0 : 1) - (b.action === "Can combine planning" ? 0 : 1) || b.orderPcs - a.orderPcs);
 }
 
 function latestRmInwardByJobCard(rows: Array<Record<string, unknown>>) {
@@ -2075,6 +2088,53 @@ function latestRouteChangeByTarget(rows: Array<Record<string, unknown>>) {
     }
   }
   return byTarget;
+}
+
+function latestPlannerPriorityByTarget(rows: Array<Record<string, unknown>>) {
+  const byTarget = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    if (!isActivePlannerDecision(rowText(row, "status", "STATUS"))) continue;
+    const jcNo = canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"));
+    const partCode = canonicalKey(rowText(row, "partCode", "PART CODE", "PART NO"));
+    const target = canonicalKey(rowText(row, "target", "TARGET"));
+    const keys = [
+      jcNo ? `jc:${jcNo}` : "",
+      partCode && !jcNo ? `part:${partCode}` : "",
+      target ? `target:${target}` : "",
+    ].filter(Boolean);
+    for (const key of keys) {
+      const current = byTarget.get(key);
+      if (!current || rowText(row, "createdAt") >= rowText(current, "createdAt")) {
+        byTarget.set(key, row);
+      }
+    }
+  }
+  return byTarget;
+}
+
+function plannerPriorityForWorkOrder(byTarget: Map<string, Record<string, unknown>>, jcNo: string, partCode: string) {
+  const jcKey = canonicalKey(jcNo);
+  const partKey = canonicalKey(partCode);
+  return byTarget.get(`jc:${jcKey}`)
+    ?? byTarget.get(`part:${partKey}`)
+    ?? byTarget.get(`target:${jcKey}`)
+    ?? byTarget.get(`target:${partKey}`);
+}
+
+function workOrderPlanningSort(a: Record<string, unknown>, b: Record<string, unknown>) {
+  return safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"))
+    || compareDateValues(rowText(a, "deliveryDate"), rowText(b, "deliveryDate"))
+    || compareDateValues(rowText(a, "rmInwardDate"), rowText(b, "rmInwardDate"))
+    || rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true });
+}
+
+function compareDateValues(a: unknown, b: unknown) {
+  const aDate = parseDate(a);
+  const bDate = parseDate(b);
+  if (!aDate && !bDate) return 0;
+  if (!aDate) return 1;
+  if (!bDate) return -1;
+  return aDate.localeCompare(bDate);
 }
 
 function routeChangeForWorkOrder(byTarget: Map<string, Record<string, unknown>>, jcNo: string, partCode: string) {
@@ -2252,6 +2312,9 @@ function machinePlanDetails(
         routeStatus: rowText(row, "routeStatus"),
         cycleStatus: rowText(row, "cycleStatus"),
         toolingStatus: rowText(row, "toolingStatus"),
+        plannerPriority: rowText(row, "plannerPriority"),
+        plannerPriorityScore: safeNumber(rowValue(row, "plannerPriorityScore")),
+        priorityRemark: rowText(row, "priorityRemark"),
         rawOutputQty: round(productionActual?.outputQty ?? 0),
         rawActualQty: round(productionActual?.actualQty ?? 0),
         rawRejectQty: 0,
@@ -2492,7 +2555,8 @@ function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>
     if (aActualStart && bActualStart) return aActualStart.localeCompare(bActualStart);
     return aActualStart ? -1 : 1;
   }
-  return machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) ||
+  return safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore")) ||
+    machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) ||
     rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo"));
 }

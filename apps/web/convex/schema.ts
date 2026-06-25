@@ -63,6 +63,8 @@ export default defineSchema({
   plannerPriorities: defineTable({
     ownerId: v.optional(v.id("users")),
     target: v.string(),
+    jcNo: v.optional(v.string()),
+    partCode: v.optional(v.string()),
     priority: v.string(),
     remark: v.optional(v.string()),
     createdAt: v.string(),

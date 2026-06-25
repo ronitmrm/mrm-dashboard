@@ -1253,6 +1253,92 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(second).toMatchObject({ machine: "C502" });
   });
 
+  it("uses planner priority to schedule a selected job card before normal priority work", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      plannerPriorities: [
+        {
+          target: "JC-043",
+          jcNo: "JC-043",
+          partCode: "M43",
+          priority: "High",
+          remark: "Customer urgent",
+          createdAt: "2026-06-23T01:00:00.000Z",
+        },
+      ],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-042",
+            partCode: "M42",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
+          },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:01:00.000Z",
+          payload: {
+            jcNo: "JC-043",
+            partCode: "M43",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
+          },
+        },
+        ...["M42", "M43"].flatMap((partNo) => [
+          {
+            entryType: "route",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "C501",
+              machineType: "AUTOMATIC",
+            },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 1,
+              loadingUnloading: 0,
+            },
+          },
+        ]),
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
+        },
+      ],
+    });
+
+    const m42 = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-042");
+    const m43 = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-043");
+
+    expect(m43).toMatchObject({
+      plannerPriority: "High",
+      setupPlannedDate: "23-June-26",
+    });
+    expect(m42).toMatchObject({
+      plannerPriority: "Normal",
+      setupPlannedDate: "24-June-26",
+    });
+  });
+
   it("moves a later setup when actual previous setup output is below cycle plan", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",

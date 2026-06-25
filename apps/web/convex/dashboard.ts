@@ -80,6 +80,8 @@ const trainingRecordValidator = {
 const routeSelectionValidator = { jcNo: v.string(), optionNumber: v.string(), createdAt: optionalString };
 const plannerPriorityValidator = {
   target: v.string(),
+  jcNo: optionalString,
+  partCode: optionalString,
   priority: v.string(),
   remark: optionalString,
   createdAt: optionalString,
@@ -420,7 +422,7 @@ export const saveRouteSelection = mutation({
 });
 
 export const savePlannerPriority = mutation({
-  args: { target: v.string(), priority: v.string(), remark: optionalString },
+  args: { target: v.string(), jcNo: optionalString, partCode: optionalString, priority: v.string(), remark: optionalString },
   handler: async (ctx, args) => insertOwnerRow(ctx, "plannerPriorities", args),
 });
 

@@ -757,17 +757,7 @@ function PlannerDecisionConsole({
         <CardDescription>Priority changes, machine breakdowns, part-specific machine switches, and mid-route changes.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <LegacyActionForm
-          title="1. Priority change"
-          description="Use when a job card or part becomes urgent without changing the machine route."
-          fields={[
-            { name: "target", label: "Job card or part code", placeholder: "JC-003 or R29", required: true },
-            { name: "priority", label: "Priority", options: ["Urgent", "High", "Normal", "Low"], defaultValue: "Urgent" },
-            { name: "remark", label: "Reason", placeholder: "Customer urgent / dispatch commitment" },
-          ]}
-          buttonLabel="Add priority"
-          onSubmit={(body) => submitAction("planner-priority", body)}
-        />
+        <PlannerPriorityForm productionControl={productionControl} submitAction={submitAction} />
         <LegacyActionForm
           title="2. Machine unavailable / breakdown"
           description="Use when the machine itself cannot be used."
@@ -806,6 +796,97 @@ function PlannerDecisionConsole({
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+function PlannerPriorityForm({
+  productionControl,
+  submitAction,
+}: {
+  productionControl: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+}) {
+  const workOrders = asArray(productionControl.workOrders);
+  const itemOptions = useMemo(() => uniqueValues(workOrders.map(itemCode).filter((value) => value !== "-")), [workOrders]);
+  const [partCode, setPartCode] = useState("");
+  const [jcNo, setJcNo] = useState("");
+  const [priority, setPriority] = useState("High");
+  const [remark, setRemark] = useState("");
+  const jobCardOptions = useMemo(() => uniqueValues(workOrders
+    .filter((row) => !partCode || machineKey(itemCode(row)) === machineKey(partCode))
+    .map(jobCardNumber)
+    .filter((value) => value !== "-")), [partCode, workOrders]);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const selectedPart = partCode || itemOptions[0] || "";
+    const selectedJc = jcNo && jobCardOptions.includes(jcNo) ? jcNo : "";
+    if (!selectedPart && !selectedJc) return;
+    submitAction("planner-priority", {
+      target: selectedJc || selectedPart,
+      jcNo: selectedJc,
+      partCode: selectedPart,
+      priority,
+      remark,
+    });
+    setRemark("");
+  }
+
+  return (
+    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+      <div>
+        <div className="text-sm font-medium">1. Priority change</div>
+        <div className="text-xs text-muted-foreground">Use when a job card or part becomes urgent without changing the machine route.</div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
+        <Field label="Item code">
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={partCode}
+            required
+            onChange={(event) => {
+              setPartCode(event.target.value);
+              setJcNo("");
+            }}
+          >
+            <option value="">Select item</option>
+            {itemOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="JC number">
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={jcNo}
+            onChange={(event) => setJcNo(event.target.value)}
+          >
+            <option value="">All JCs for item</option>
+            {jobCardOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Priority">
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={priority}
+            onChange={(event) => setPriority(event.target.value)}
+          >
+            {["Urgent", "High", "Normal", "Low"].map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Reason">
+          <Input value={remark} placeholder="Customer urgent / dispatch commitment" onChange={(event) => setRemark(event.target.value)} />
+        </Field>
+      </div>
+      <Button className="w-fit" type="submit">
+        <Wrench className="size-4" />
+        Add priority
+      </Button>
+    </form>
   );
 }
 
@@ -4217,7 +4298,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 type DashboardActionMutations = {
   saveRouteSelection: (args: { jcNo: string; optionNumber: string }) => Promise<unknown>;
-  savePlannerPriority: (args: { target: string; priority: string; remark?: string }) => Promise<unknown>;
+  savePlannerPriority: (args: { target: string; jcNo?: string; partCode?: string; priority: string; remark?: string }) => Promise<unknown>;
   saveMachineConstraint: (args: {
     machineNo: string;
     unavailableFrom: string;
@@ -4295,6 +4376,8 @@ async function runDashboardAction(
   if (path === "planner-priority") {
     await mutations.savePlannerPriority({
       target: text(body.target),
+      jcNo: optionalText(body.jcNo),
+      partCode: optionalText(body.partCode),
       priority: text(body.priority) || "Normal",
       remark: optionalText(body.remark),
     });
