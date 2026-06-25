@@ -147,4 +147,10 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_target", ["targetTable", "targetId"]),
+  dashboardSnapshotChunks: defineTable({
+    ownerId: v.optional(v.id("users")),
+    sequence: v.number(),
+    chunk: v.string(),
+    updatedAt: v.string(),
+  }).index("by_owner", ["ownerId"]),
 });

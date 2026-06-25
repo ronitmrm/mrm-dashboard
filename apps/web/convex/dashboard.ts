@@ -1,7 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
-import { mutation, query, type QueryCtx, type MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { action, internalMutation, internalQuery, mutation, query, type QueryCtx, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { buildLegacyDashboardSnapshot } from "../lib/legacy-dashboard-analysis";
 
@@ -156,92 +158,66 @@ export const snapshot = query({
     endDate: optionalString,
   },
   handler: async (ctx, args) => {
-    await requireDashboardUserId(ctx);
-    const [
-      productionEntries,
-      attendanceRecords,
-      trainingRecords,
-      routeSelections,
-      plannerPriorities,
-      machineConstraints,
-      planOverrides,
-      routeChanges,
-      dispatchApprovals,
-      setupCompletions,
-      corrections,
-    ] = await Promise.all([
-      ctx.db.query("productionEntries").collect(),
-      ctx.db.query("attendanceRecords").collect(),
-      ctx.db.query("trainingRecords").collect(),
-      ctx.db.query("routeSelections").collect(),
-      ctx.db.query("plannerPriorities").collect(),
-      ctx.db.query("machineConstraints").collect(),
-      ctx.db.query("planOverrides").collect(),
-      ctx.db.query("routeChanges").collect(),
-      ctx.db.query("dispatchApprovals").collect(),
-      ctx.db.query("setupCompletions").collect(),
-      ctx.db.query("corrections").collect(),
-    ]);
-    const allDataEntries = await ctx.db.query("dataEntries").collect();
-    const correctionTargets = activeCorrectionTargets(corrections);
-    const snapshotEntryTypeSet = new Set([...snapshotEntryTypes, "_summary"]);
-    const dataEntries = withoutCorrectedRows(
-      allDataEntries.filter((row) => snapshotEntryTypeSet.has(row.entryType)),
-      "dataEntries",
-      correctionTargets,
-    );
+    const ownerId = await requireDashboardUserId(ctx);
+    const cached = await readDashboardSnapshotPayload(ctx, ownerId);
+    if (cached) {
+      return applySnapshotFilters(cached, args);
+    }
+    return applySnapshotFilters(emptyDashboardSnapshot(), args);
+  },
+});
 
-    const snapshot = buildLegacyDashboardSnapshot({
-      workbookName: "Convex",
-      productionEntries: withoutCorrectedRows(productionEntries, "productionEntries", correctionTargets),
-      attendanceRecords: withoutCorrectedRows(attendanceRecords, "attendanceRecords", correctionTargets),
-      trainingRecords: withoutCorrectedRows(trainingRecords, "trainingRecords", correctionTargets),
-      dataEntries,
-      routeSelections: withoutCorrectedRows(routeSelections, "routeSelections", correctionTargets),
-      plannerPriorities: withoutCorrectedRows(plannerPriorities, "plannerPriorities", correctionTargets),
-      machineConstraints: withoutCorrectedRows(machineConstraints, "machineConstraints", correctionTargets),
-      planOverrides: withoutCorrectedRows(planOverrides, "planOverrides", correctionTargets),
-      routeChanges: withoutCorrectedRows(routeChanges, "routeChanges", correctionTargets),
-      dispatchApprovals: withoutCorrectedRows(dispatchApprovals, "dispatchApprovals", correctionTargets),
-      setupCompletions: withoutCorrectedRows(setupCompletions, "setupCompletions", correctionTargets),
-      updatedAt: latestCreatedAt(
-        productionEntries,
-        attendanceRecords,
-        trainingRecords,
-        routeSelections,
-        plannerPriorities,
-        machineConstraints,
-        planOverrides,
-        routeChanges,
-        dispatchApprovals,
-        setupCompletions,
-        dataEntries,
-        corrections,
-      ),
-      filters: {
-        operatorId: args.operatorId,
-        machineType: args.machineType,
-        machine: args.machine,
-        month: args.month,
-        startDate: args.startDate,
-        endDate: args.endDate,
-      },
-    });
-    const liveCounts = countRowsByEntryType(dataEntries);
+export const refreshSnapshot = action({
+  args: {},
+  handler: async (ctx) => {
+    const source = emptySnapshotSource();
+    for (const table of snapshotSourceTables) {
+      let cursor: string | null = null;
+      do {
+        const result: { page: SnapshotSourceRow[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(internal.dashboard.collectSnapshotTablePage, {
+          table,
+          paginationOpts: { numItems: 1000, cursor },
+        });
+        appendSnapshotRows(source, table, result.page);
+        cursor = result.isDone ? null : result.continueCursor;
+      } while (cursor !== null);
+    }
+    const payload = buildDashboardSnapshotPayload(source);
+    await ctx.runMutation(internal.dashboard.saveDashboardSnapshot, { payload });
+    return { ok: true, updatedAt: payload.updatedAt };
+  },
+});
 
-    return {
-      ...snapshot,
-      dataEntry: {
-        ...snapshot.dataEntry,
-        templates: legacyEntryTypes.map((entryType) => ({ entryType, format: "xlsx" })),
-        keySummary: legacyEntryTypes.map((entryType) => ({
-          entryType,
-          rows: liveCounts[entryType] ?? 0,
-        })),
-        entryTypes: legacyEntryTypes,
-        corrections,
-      },
-    };
+export const collectSnapshotTablePage = internalQuery({
+  args: {
+    table: v.union(
+      v.literal("productionEntries"),
+      v.literal("attendanceRecords"),
+      v.literal("trainingRecords"),
+      v.literal("routeSelections"),
+      v.literal("plannerPriorities"),
+      v.literal("machineConstraints"),
+      v.literal("planOverrides"),
+      v.literal("routeChanges"),
+      v.literal("dispatchApprovals"),
+      v.literal("setupCompletions"),
+      v.literal("corrections"),
+      v.literal("dataEntries"),
+    ),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    return paginateSnapshotTable(ctx, args.table, args.paginationOpts);
+  },
+});
+
+export const saveDashboardSnapshot = internalMutation({
+  args: { payload: v.any() },
+  handler: async (ctx, args) => {
+    const ownerId = await getAuthUserId(ctx);
+    const updatedAt = typeof args.payload?.updatedAt === "string" && args.payload.updatedAt ? args.payload.updatedAt : now();
+    await replaceDashboardSnapshotChunks(ctx, ownerId, args.payload, updatedAt);
+    return { ok: true, updatedAt };
   },
 });
 
@@ -257,6 +233,241 @@ function withoutCorrectedRows<Row extends { _id: unknown }>(
   correctionTargets: Set<string>,
 ) {
   return rows.filter((row) => !correctionTargets.has(`${targetTable}:${String(row._id)}`));
+}
+
+const snapshotSourceTables = [
+  "productionEntries",
+  "attendanceRecords",
+  "trainingRecords",
+  "routeSelections",
+  "plannerPriorities",
+  "machineConstraints",
+  "planOverrides",
+  "routeChanges",
+  "dispatchApprovals",
+  "setupCompletions",
+  "corrections",
+  "dataEntries",
+] as const;
+
+type SnapshotSourceTable = typeof snapshotSourceTables[number];
+type SnapshotSourceRow = Record<string, unknown> & { _id: unknown; createdAt?: string; _creationTime?: number };
+type SnapshotSource = ReturnType<typeof emptySnapshotSource>;
+type PaginationOpts = {
+  numItems: number;
+  cursor: string | null;
+  endCursor?: string | null;
+  id?: number;
+  maximumRowsRead?: number;
+  maximumBytesRead?: number;
+};
+
+function emptySnapshotSource() {
+  return {
+    productionEntries: [] as SnapshotSourceRow[],
+    attendanceRecords: [] as SnapshotSourceRow[],
+    trainingRecords: [] as SnapshotSourceRow[],
+    routeSelections: [] as SnapshotSourceRow[],
+    plannerPriorities: [] as SnapshotSourceRow[],
+    machineConstraints: [] as SnapshotSourceRow[],
+    planOverrides: [] as SnapshotSourceRow[],
+    routeChanges: [] as SnapshotSourceRow[],
+    dispatchApprovals: [] as SnapshotSourceRow[],
+    setupCompletions: [] as SnapshotSourceRow[],
+    corrections: [] as Array<SnapshotSourceRow & { targetTable: string; targetId: string; action: string }>,
+    allDataEntries: [] as Array<SnapshotSourceRow & { entryType: string }>,
+  };
+}
+
+function paginateSnapshotTable(ctx: QueryCtx, table: SnapshotSourceTable, paginationOpts: PaginationOpts) {
+  switch (table) {
+    case "productionEntries":
+      return ctx.db.query("productionEntries").paginate(paginationOpts);
+    case "attendanceRecords":
+      return ctx.db.query("attendanceRecords").paginate(paginationOpts);
+    case "trainingRecords":
+      return ctx.db.query("trainingRecords").paginate(paginationOpts);
+    case "routeSelections":
+      return ctx.db.query("routeSelections").paginate(paginationOpts);
+    case "plannerPriorities":
+      return ctx.db.query("plannerPriorities").paginate(paginationOpts);
+    case "machineConstraints":
+      return ctx.db.query("machineConstraints").paginate(paginationOpts);
+    case "planOverrides":
+      return ctx.db.query("planOverrides").paginate(paginationOpts);
+    case "routeChanges":
+      return ctx.db.query("routeChanges").paginate(paginationOpts);
+    case "dispatchApprovals":
+      return ctx.db.query("dispatchApprovals").paginate(paginationOpts);
+    case "setupCompletions":
+      return ctx.db.query("setupCompletions").paginate(paginationOpts);
+    case "corrections":
+      return ctx.db.query("corrections").paginate(paginationOpts);
+    case "dataEntries":
+      return ctx.db.query("dataEntries").paginate(paginationOpts);
+  }
+}
+
+function appendSnapshotRows(source: SnapshotSource, table: SnapshotSourceTable, rows: SnapshotSourceRow[]) {
+  switch (table) {
+    case "productionEntries":
+      source.productionEntries.push(...rows);
+      return;
+    case "attendanceRecords":
+      source.attendanceRecords.push(...rows);
+      return;
+    case "trainingRecords":
+      source.trainingRecords.push(...rows);
+      return;
+    case "routeSelections":
+      source.routeSelections.push(...rows);
+      return;
+    case "plannerPriorities":
+      source.plannerPriorities.push(...rows);
+      return;
+    case "machineConstraints":
+      source.machineConstraints.push(...rows);
+      return;
+    case "planOverrides":
+      source.planOverrides.push(...rows);
+      return;
+    case "routeChanges":
+      source.routeChanges.push(...rows);
+      return;
+    case "dispatchApprovals":
+      source.dispatchApprovals.push(...rows);
+      return;
+    case "setupCompletions":
+      source.setupCompletions.push(...rows);
+      return;
+    case "corrections":
+      source.corrections.push(...rows as Array<SnapshotSourceRow & { targetTable: string; targetId: string; action: string }>);
+      return;
+    case "dataEntries":
+      source.allDataEntries.push(...rows as Array<SnapshotSourceRow & { entryType: string }>);
+      return;
+  }
+}
+
+async function readDashboardSnapshotPayload(ctx: QueryCtx, ownerId: Id<"users"> | null) {
+  const chunks = await latestDashboardSnapshotChunks(ctx, ownerId);
+  if (!chunks.length) return null;
+  return JSON.parse(chunks.sort((a, b) => a.sequence - b.sequence).map((row) => row.chunk).join(""));
+}
+
+async function latestDashboardSnapshotChunks(ctx: QueryCtx | MutationCtx, ownerId: Id<"users"> | null) {
+  if (ownerId) {
+    const ownerRows = await ctx.db
+      .query("dashboardSnapshotChunks")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    if (ownerRows.length) return ownerRows;
+  }
+  return ctx.db
+    .query("dashboardSnapshotChunks")
+    .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+    .collect();
+}
+
+async function replaceDashboardSnapshotChunks(ctx: MutationCtx, ownerId: Id<"users"> | null, payload: unknown, updatedAt: string) {
+  const existing = await latestDashboardSnapshotChunks(ctx, ownerId);
+  for (const row of existing) {
+    await ctx.db.delete(row._id);
+  }
+  const serialized = JSON.stringify(payload);
+  const chunkSize = 650_000;
+  for (let index = 0; index < serialized.length; index += chunkSize) {
+    await ctx.db.insert("dashboardSnapshotChunks", {
+      ownerId: ownerId ?? undefined,
+      sequence: index / chunkSize,
+      chunk: serialized.slice(index, index + chunkSize),
+      updatedAt,
+    });
+  }
+}
+
+function buildDashboardSnapshotPayload(source: SnapshotSource) {
+  const correctionTargets = activeCorrectionTargets(source.corrections);
+  const snapshotEntryTypeSet = new Set([...snapshotEntryTypes, "_summary"]);
+  const dataEntries = withoutCorrectedRows(
+    source.allDataEntries.filter((row) => snapshotEntryTypeSet.has(row.entryType)),
+    "dataEntries",
+    correctionTargets,
+  );
+
+  const snapshot = buildLegacyDashboardSnapshot({
+    workbookName: "Convex",
+    productionEntries: withoutCorrectedRows(source.productionEntries, "productionEntries", correctionTargets) as never,
+    attendanceRecords: withoutCorrectedRows(source.attendanceRecords, "attendanceRecords", correctionTargets) as never,
+    trainingRecords: withoutCorrectedRows(source.trainingRecords, "trainingRecords", correctionTargets) as never,
+    dataEntries: dataEntries as never,
+    routeSelections: withoutCorrectedRows(source.routeSelections, "routeSelections", correctionTargets),
+    plannerPriorities: withoutCorrectedRows(source.plannerPriorities, "plannerPriorities", correctionTargets),
+    machineConstraints: withoutCorrectedRows(source.machineConstraints, "machineConstraints", correctionTargets),
+    planOverrides: withoutCorrectedRows(source.planOverrides, "planOverrides", correctionTargets),
+    routeChanges: withoutCorrectedRows(source.routeChanges, "routeChanges", correctionTargets),
+    dispatchApprovals: withoutCorrectedRows(source.dispatchApprovals, "dispatchApprovals", correctionTargets),
+    setupCompletions: withoutCorrectedRows(source.setupCompletions, "setupCompletions", correctionTargets),
+    updatedAt: latestCreatedAt(
+      source.productionEntries,
+      source.attendanceRecords,
+      source.trainingRecords,
+      source.routeSelections,
+      source.plannerPriorities,
+      source.machineConstraints,
+      source.planOverrides,
+      source.routeChanges,
+      source.dispatchApprovals,
+      source.setupCompletions,
+      dataEntries,
+      source.corrections,
+    ),
+    filters: {},
+  });
+  const liveCounts = countRowsByEntryType(dataEntries);
+
+  return {
+    ...snapshot,
+    cacheStatus: "ready",
+    dataEntry: {
+      ...snapshot.dataEntry,
+      templates: legacyEntryTypes.map((entryType) => ({ entryType, format: "xlsx" })),
+      keySummary: legacyEntryTypes.map((entryType) => ({
+        entryType,
+        rows: liveCounts[entryType] ?? 0,
+      })),
+      entryTypes: legacyEntryTypes,
+      corrections: source.corrections,
+    },
+  };
+}
+
+function emptyDashboardSnapshot() {
+  return {
+    ...buildDashboardSnapshotPayload({
+      productionEntries: [],
+      attendanceRecords: [],
+      trainingRecords: [],
+      routeSelections: [],
+      plannerPriorities: [],
+      machineConstraints: [],
+      planOverrides: [],
+      routeChanges: [],
+      dispatchApprovals: [],
+      setupCompletions: [],
+      corrections: [],
+      allDataEntries: [],
+    }),
+    cacheStatus: "missing",
+  };
+}
+
+function applySnapshotFilters(payload: unknown, filters: Record<string, string | undefined>) {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return payload;
+  return {
+    ...payload,
+    filters,
+  };
 }
 
 export const status = query({

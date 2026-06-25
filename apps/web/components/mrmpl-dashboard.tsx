@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import Image from "next/image";
 import { useTheme } from "next-themes";
 import {
@@ -307,6 +307,7 @@ function DashboardShell() {
   const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const dashboardPayload = useQuery(api.dashboard.snapshot, {});
+  const refreshSnapshot = useAction(api.dashboard.refreshSnapshot);
   const saveRouteSelection = useMutation(api.dashboard.saveRouteSelection);
   const savePlannerPriority = useMutation(api.dashboard.savePlannerPriority);
   const saveMachineConstraint = useMutation(api.dashboard.saveMachineConstraint);
@@ -318,6 +319,12 @@ function DashboardShell() {
   const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
   const reverseEntry = useMutation(api.dashboard.reverseEntry);
   const correctionCandidates = useQuery(api.dashboard.correctionCandidates, { limit: 200 });
+
+  useEffect(() => {
+    if (asRecord(dashboardPayload).cacheStatus === "missing") {
+      void refreshSnapshot();
+    }
+  }, [dashboardPayload, refreshSnapshot]);
 
   async function submitAction(path: string, body: Record<string, unknown>) {
     setActionStatus(null);
@@ -340,6 +347,7 @@ function DashboardShell() {
         tone: "default",
         message,
       });
+      await refreshSnapshot();
       const returnTab = str(body.returnTab) as DashboardTabId;
       if (returnTab && navItems.some((item) => item.id === returnTab)) {
         setActiveTab(returnTab);
