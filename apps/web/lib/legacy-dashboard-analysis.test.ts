@@ -1524,6 +1524,95 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(blockerSetupTwo).toMatchObject({ machine: "C501", setupPlannedDate: "4-July-26" });
   });
 
+  it("moves planned work to an idle physical machine in the same family when it fits before the next queued job", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { jcNo: "JC-001", partCode: "M-SLOW", optionNumber: "1", orderPcs: 1000, rmInwardDate: "2026-06-24" },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:01:00.000Z",
+          payload: { jcNo: "JC-002", partCode: "M-C502", optionNumber: "1", orderPcs: 1000, rmInwardDate: "2026-06-24" },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:02:00.000Z",
+          payload: { jcNo: "JC-003", partCode: "M-FIT", optionNumber: "1", orderPcs: 1000, rmInwardDate: "2026-06-24" },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { partNo: "M-SLOW", optionNumber: "1", setupNo: "1.1", machineUsed: "A5", machineType: "AUTOMATIC" },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { partNo: "M-SLOW", optionNumber: "1", setupNo: "1.1", cycleTime: 576, loadingUnloading: 0 },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { partNo: "M-SLOW", optionNumber: "1", setupNo: "1.2", machineUsed: "C5", machineType: "AUTOMATIC" },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { partNo: "M-SLOW", optionNumber: "1", setupNo: "1.2", cycleTime: 288, loadingUnloading: 0 },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { partNo: "M-C502", optionNumber: "1", setupNo: "1.1", machineUsed: "C5", machineType: "AUTOMATIC" },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { partNo: "M-C502", optionNumber: "1", setupNo: "1.1", cycleTime: 288, loadingUnloading: 0 },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { partNo: "M-FIT", optionNumber: "1", setupNo: "1.1", machineUsed: "C5", machineType: "AUTOMATIC" },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { partNo: "M-FIT", optionNumber: "1", setupNo: "1.1", cycleTime: 25, loadingUnloading: 0 },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { machineNo: "A501", machineType: "AUTOMATIC", status: "Active" },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { machineNo: "C502", machineType: "AUTOMATIC", status: "Active" },
+        },
+      ],
+    });
+
+    const fitRow = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-003");
+
+    expect(fitRow).toMatchObject({
+      machine: "C501",
+      machineAssignment: "Family idle gap balance",
+      familyIdleGapFromMachine: "C502",
+      setupPlannedDate: "24-June-26",
+      plannedProductionEndDate: "24-June-26",
+    });
+  });
+
   it("moves a later setup when actual previous setup output is below cycle plan", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
