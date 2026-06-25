@@ -3,11 +3,11 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import { action, internalMutation, internalQuery, mutation, query, type QueryCtx, type MutationCtx } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query, type ActionCtx, type QueryCtx, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { buildLegacyDashboardSnapshot } from "../lib/legacy-dashboard-analysis";
 
-async function requireDashboardUserId(ctx: QueryCtx | MutationCtx) {
+async function requireDashboardUserId(ctx: QueryCtx | MutationCtx | ActionCtx) {
   const userId = await getAuthUserId(ctx);
   if (userId === null) {
     throw new Error("Authentication is required to access the dashboard.");
@@ -23,6 +23,7 @@ const optionalString = v.optional(v.string());
 const optionalNumber = v.optional(v.number());
 const importConfirmation = "replace-workbook-import";
 const plannerActionConfirmation = "replace-workbook-and-planner-actions";
+const dashboardSnapshotFreshForMs = 5 * 60 * 1000;
 const workbookTables = [
   "productionEntries",
   "attendanceRecords",
@@ -39,6 +40,7 @@ const workbookTables = [
 ] as const;
 
 type WorkbookTable = typeof workbookTables[number];
+type RefreshSnapshotResult = { ok: true; skipped: boolean; updatedAt?: string };
 
 const productionEntryValidator = {
   prodDate: v.string(),
@@ -176,8 +178,21 @@ export const snapshot = query({
 });
 
 export const refreshSnapshot = action({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<RefreshSnapshotResult> => {
+    const ownerId = await requireDashboardUserId(ctx);
+    if (!args.force) {
+      const freshness: { fresh: boolean; updatedAt?: string } = await ctx.runQuery(internal.dashboard.dashboardSnapshotFreshness, {
+        ownerId,
+        maxAgeMs: dashboardSnapshotFreshForMs,
+        nowMs: Date.now(),
+      });
+      if (freshness.fresh) {
+        return { ok: true, skipped: true, updatedAt: freshness.updatedAt };
+      }
+    }
     const source = emptySnapshotSource();
     for (const table of snapshotSourceTables) {
       let cursor: string | null = null;
@@ -191,10 +206,41 @@ export const refreshSnapshot = action({
       } while (cursor !== null);
     }
     const payload = buildDashboardSnapshotPayload(source);
-    await ctx.runMutation(internal.dashboard.saveDashboardSnapshot, { payload });
-    return { ok: true, updatedAt: payload.updatedAt };
+    await ctx.runMutation(internal.dashboard.saveDashboardSnapshot, { ownerId, payload, cacheUpdatedAt: now() });
+    return { ok: true, skipped: false, updatedAt: payload.updatedAt };
   },
 });
+
+export const dashboardSnapshotFreshness = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    maxAgeMs: v.number(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const chunks = await latestDashboardSnapshotChunks(ctx, args.ownerId);
+    if (!chunks.length) return { exists: false, fresh: false };
+    const updatedAt = latestSnapshotChunkUpdatedAt(chunks);
+    const updatedAtMs = Date.parse(updatedAt);
+    return {
+      exists: true,
+      fresh: Number.isFinite(updatedAtMs) && args.nowMs - updatedAtMs <= args.maxAgeMs,
+      updatedAt,
+    };
+  },
+});
+
+function latestSnapshotChunkUpdatedAt(chunks: Array<{ updatedAt?: string; _creationTime?: number }>) {
+  return chunks.reduce((latest, row) => {
+    const updatedAt =
+      typeof row.updatedAt === "string" && row.updatedAt
+        ? row.updatedAt
+        : typeof row._creationTime === "number"
+          ? new Date(row._creationTime).toISOString()
+          : "";
+    return updatedAt > latest ? updatedAt : latest;
+  }, "");
+}
 
 export const collectSnapshotTablePage = internalQuery({
   args: {
@@ -220,11 +266,14 @@ export const collectSnapshotTablePage = internalQuery({
 });
 
 export const saveDashboardSnapshot = internalMutation({
-  args: { payload: v.any() },
+  args: {
+    ownerId: v.id("users"),
+    payload: v.any(),
+    cacheUpdatedAt: v.string(),
+  },
   handler: async (ctx, args) => {
-    const ownerId = await getAuthUserId(ctx);
     const updatedAt = typeof args.payload?.updatedAt === "string" && args.payload.updatedAt ? args.payload.updatedAt : now();
-    await replaceDashboardSnapshotChunks(ctx, ownerId, args.payload, updatedAt);
+    await replaceDashboardSnapshotChunks(ctx, args.ownerId, args.payload, args.cacheUpdatedAt);
     return { ok: true, updatedAt };
   },
 });
