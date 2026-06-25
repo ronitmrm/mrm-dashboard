@@ -283,8 +283,18 @@ const serverHydrationSnapshot = () => false;
 
 export function MrmplDashboard() {
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const [authCheckTimedOut, setAuthCheckTimedOut] = useState(false);
 
-  if (isLoading) return <AuthLoadingScreen />;
+  useEffect(() => {
+    if (!isLoading) {
+      setAuthCheckTimedOut(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => setAuthCheckTimedOut(true), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [isLoading]);
+
+  if (isLoading && !authCheckTimedOut) return <AuthLoadingScreen />;
   if (!isAuthenticated) return <AuthScreen />;
 
   return <DashboardShell />;
