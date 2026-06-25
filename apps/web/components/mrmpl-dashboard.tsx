@@ -3672,8 +3672,10 @@ function MachinePlanningTile({
   const status = machineMasterStatusText(row);
   const plannedCount = plannedRows.length;
   const planningStatus = machinePlanningStatus(plannedRows);
-  const focusSetup = machineTileFocusSetup(plannedRows);
-  const focusIsComplete = str(focusSetup?.runningStatus).toLowerCase() === "setup complete" || displayValue(focusSetup?.completionDate) !== "-";
+  const currentSetup = currentShopFloorItem(plannedRows);
+  const nextSetup = nextShopFloorItem(plannedRows, currentSetup);
+  const focusSetup = currentSetup ?? nextSetup ?? machineTileFocusSetup(plannedRows);
+  const focusIsCurrent = Boolean(currentSetup && focusSetup && shopFloorPlanKey(focusSetup) === shopFloorPlanKey(currentSetup));
 
   return (
     <button
@@ -3698,10 +3700,10 @@ function MachinePlanningTile({
         <TileField label="Operator" value={row.operator || row.operatorName || row["OPERATOR NAME"]} />
         <TileField label="Planned setups" value={plannedCount} numeric />
         <TileField label="Priority" value={row.priority || row.PRIORITY} />
-        <TileField label={focusIsComplete ? "Current job card" : "Next job card"} value={focusSetup?.jcNo || row.jcNo || row.jobCard || row.JobCardNo} />
-        <TileField label={focusIsComplete ? "Current part" : "Next part to setup"} value={focusSetup?.partCode || row.partCode || row["PART CODE"] || row.itemCode} />
+        <TileField label={focusIsCurrent ? "Current job card" : "Next job card"} value={focusSetup?.jcNo || row.jcNo || row.jobCard || row.JobCardNo} />
+        <TileField label={focusIsCurrent ? "Current part" : "Next part to setup"} value={focusSetup?.partCode || row.partCode || row["PART CODE"] || row.itemCode} />
         <TileField label="Setup" value={focusSetup ? `${displayValue(focusSetup.setupNo)} / Option ${displayValue(focusSetup.optionNumber)}` : "-"} />
-        <TileField label={focusIsComplete ? "Setup completion date" : "Setup planned date"} value={focusIsComplete ? focusSetup?.setupCompletionDate || focusSetup?.completionDate : focusSetup?.setupPlannedDate || focusSetup?.plannedDate} />
+        <TileField label={focusIsCurrent ? "Setup completion date" : "Setup planned date"} value={focusIsCurrent ? focusSetup?.setupCompletionDate || focusSetup?.completionDate : focusSetup?.setupPlannedDate || focusSetup?.plannedDate} />
         <TileField label="Remarks" value={row.remark || row.remarks || row.REMARKS} important />
       </div>
     </button>
@@ -4979,7 +4981,7 @@ function shopFloorStageIndex(stage: string) {
 }
 
 function shopFloorPlanSort(a: DashboardPayload, b: DashboardPayload) {
-  return displayValue(a.plannedDate).localeCompare(displayValue(b.plannedDate))
+  return dateSortValue(plannedSetupDate(a)) - dateSortValue(plannedSetupDate(b))
     || displayValue(a.setupNo).localeCompare(displayValue(b.setupNo), undefined, { numeric: true })
     || itemCode(a).localeCompare(itemCode(b), undefined, { numeric: true });
 }
@@ -5003,14 +5005,84 @@ function machinePlanningStatus(rows: DashboardPayload[]) {
 function machineTileFocusSetup(rows: DashboardPayload[]) {
   const completed = rows.filter((row) => str(row.runningStatus).toLowerCase() === "setup complete" || displayValue(row.completionDate) !== "-");
   if (completed.length) return completed.sort((a, b) =>
-    displayValue(b.completionDate).localeCompare(displayValue(a.completionDate)) ||
-    displayValue(b.plannedDate).localeCompare(displayValue(a.plannedDate)),
+    dateSortValue(completedSetupDate(b)) - dateSortValue(completedSetupDate(a)) ||
+    dateSortValue(plannedSetupDate(b)) - dateSortValue(plannedSetupDate(a)),
   )[0];
   const pending = rows.filter((row) => displayValue(row.completionDate) === "-");
   return (pending.length ? pending : rows).sort((a, b) =>
-    displayValue(a.plannedDate).localeCompare(displayValue(b.plannedDate)) ||
+    dateSortValue(plannedSetupDate(a)) - dateSortValue(plannedSetupDate(b)) ||
     displayValue(a.setupNo).localeCompare(displayValue(b.setupNo), undefined, { numeric: true }),
   )[0];
+}
+
+function plannedSetupDate(row: DashboardPayload | undefined) {
+  return row?.plannedProductionStartDate || row?.setupPlannedDate || row?.plannedDate;
+}
+
+function completedSetupDate(row: DashboardPayload | undefined) {
+  return row?.setupCompletionDate || row?.completionDate;
+}
+
+function dateSortValue(value: unknown) {
+  const parsedDate = parseSortableDate(value);
+  return parsedDate ? parsedDate.getTime() : Number.MAX_SAFE_INTEGER;
+}
+
+function parseSortableDate(value: unknown) {
+  const raw = str(value);
+  if (!raw || raw === "-") return undefined;
+  const directDate = new Date(raw);
+  if (!Number.isNaN(directDate.getTime())) return directDate;
+  const slashMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (slashMatch) {
+    const [, day, month, year] = slashMatch;
+    return normalizedDate(Number(year), Number(month) - 1, Number(day));
+  }
+  const namedMatch = raw.match(/^(\d{1,2})[-\s]([A-Za-z]+)[-\s](\d{2,4})$/);
+  if (namedMatch) {
+    const day = namedMatch[1] ?? "";
+    const monthName = namedMatch[2] ?? "";
+    const year = namedMatch[3] ?? "";
+    const monthIndex = monthNameToIndex(monthName);
+    if (monthIndex !== undefined) return normalizedDate(Number(year), monthIndex, Number(day));
+  }
+  return undefined;
+}
+
+function normalizedDate(year: number, monthIndex: number, day: number) {
+  const fullYear = year < 100 ? 2000 + year : year;
+  const date = new Date(fullYear, monthIndex, day);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function monthNameToIndex(value: string) {
+  const months: Record<string, number> = {
+    jan: 0,
+    january: 0,
+    feb: 1,
+    february: 1,
+    mar: 2,
+    march: 2,
+    apr: 3,
+    april: 3,
+    may: 4,
+    jun: 5,
+    june: 5,
+    jul: 6,
+    july: 6,
+    aug: 7,
+    august: 7,
+    sep: 8,
+    sept: 8,
+    september: 8,
+    oct: 9,
+    october: 9,
+    nov: 10,
+    november: 10,
+    dec: 11,
+    december: 11,
+  };
+  return months[value.trim().toLowerCase()];
 }
 
 function machinePlanningTone(status: string): "success" | "planning" | "warning" | "danger" | "neutral" {
