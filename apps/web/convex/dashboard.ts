@@ -195,19 +195,23 @@ export const refreshSnapshot = action({
     }
     const source = emptySnapshotSource();
     for (const table of snapshotSourceTables) {
-      let cursor: string | null = null;
-      do {
-        const result: { page: SnapshotSourceRow[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(internal.dashboard.collectSnapshotTablePage, {
-          table,
-          paginationOpts: { numItems: 1000, cursor },
-        });
-        appendSnapshotRows(source, table, result.page);
-        cursor = result.isDone ? null : result.continueCursor;
-      } while (cursor !== null);
+      for (const ownerScope of snapshotSourceOwnerScopes) {
+        let cursor: string | null = null;
+        do {
+          const result: { page: SnapshotSourceRow[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(internal.dashboard.collectSnapshotTablePage, {
+            table,
+            ownerId,
+            ownerScope,
+            paginationOpts: { numItems: 1000, cursor },
+          });
+          appendSnapshotRows(source, table, result.page);
+          cursor = result.isDone ? null : result.continueCursor;
+        } while (cursor !== null);
+      }
     }
     const payload = buildDashboardSnapshotPayload(source);
-    await ctx.runMutation(internal.dashboard.saveDashboardSnapshot, { ownerId, payload, cacheUpdatedAt: now() });
-    return { ok: true, skipped: false, updatedAt: payload.updatedAt };
+    const saveResult: { ok: true; changed: boolean; updatedAt?: string } = await ctx.runMutation(internal.dashboard.saveDashboardSnapshot, { ownerId, payload, cacheUpdatedAt: now() });
+    return { ok: true, skipped: !saveResult.changed, updatedAt: saveResult.updatedAt ?? payload.updatedAt };
   },
 });
 
@@ -258,10 +262,17 @@ export const collectSnapshotTablePage = internalQuery({
       v.literal("corrections"),
       v.literal("dataEntries"),
     ),
+    ownerId: v.id("users"),
+    ownerScope: v.union(v.literal("owner"), v.literal("global")),
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    return paginateSnapshotTable(ctx, args.table, args.paginationOpts);
+    return paginateSnapshotTable(
+      ctx,
+      args.table,
+      args.ownerScope === "owner" ? args.ownerId : undefined,
+      args.paginationOpts,
+    );
   },
 });
 
@@ -273,8 +284,8 @@ export const saveDashboardSnapshot = internalMutation({
   },
   handler: async (ctx, args) => {
     const updatedAt = typeof args.payload?.updatedAt === "string" && args.payload.updatedAt ? args.payload.updatedAt : now();
-    await replaceDashboardSnapshotChunks(ctx, args.ownerId, args.payload, args.cacheUpdatedAt);
-    return { ok: true, updatedAt };
+    const result = await replaceDashboardSnapshotChunks(ctx, args.ownerId, args.payload, args.cacheUpdatedAt);
+    return { ok: true as const, changed: result.changed, updatedAt: result.updatedAt || updatedAt };
   },
 });
 
@@ -306,6 +317,7 @@ const snapshotSourceTables = [
   "corrections",
   "dataEntries",
 ] as const;
+const snapshotSourceOwnerScopes = ["owner", "global"] as const;
 
 type SnapshotSourceTable = typeof snapshotSourceTables[number];
 type SnapshotSourceRow = Record<string, unknown> & { _id: unknown; createdAt?: string; _creationTime?: number };
@@ -336,32 +348,73 @@ function emptySnapshotSource() {
   };
 }
 
-function paginateSnapshotTable(ctx: QueryCtx, table: SnapshotSourceTable, paginationOpts: PaginationOpts) {
+function paginateSnapshotTable(
+  ctx: QueryCtx,
+  table: SnapshotSourceTable,
+  ownerId: Id<"users"> | undefined,
+  paginationOpts: PaginationOpts,
+) {
   switch (table) {
     case "productionEntries":
-      return ctx.db.query("productionEntries").paginate(paginationOpts);
+      return ctx.db
+        .query("productionEntries")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
     case "attendanceRecords":
-      return ctx.db.query("attendanceRecords").paginate(paginationOpts);
+      return ctx.db
+        .query("attendanceRecords")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
     case "trainingRecords":
-      return ctx.db.query("trainingRecords").paginate(paginationOpts);
+      return ctx.db
+        .query("trainingRecords")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
     case "routeSelections":
-      return ctx.db.query("routeSelections").paginate(paginationOpts);
+      return ctx.db
+        .query("routeSelections")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
     case "plannerPriorities":
-      return ctx.db.query("plannerPriorities").paginate(paginationOpts);
+      return ctx.db
+        .query("plannerPriorities")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
     case "machineConstraints":
-      return ctx.db.query("machineConstraints").paginate(paginationOpts);
+      return ctx.db
+        .query("machineConstraints")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
     case "planOverrides":
-      return ctx.db.query("planOverrides").paginate(paginationOpts);
+      return ctx.db
+        .query("planOverrides")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
     case "routeChanges":
-      return ctx.db.query("routeChanges").paginate(paginationOpts);
+      return ctx.db
+        .query("routeChanges")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
     case "dispatchApprovals":
-      return ctx.db.query("dispatchApprovals").paginate(paginationOpts);
+      return ctx.db
+        .query("dispatchApprovals")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
     case "setupCompletions":
-      return ctx.db.query("setupCompletions").paginate(paginationOpts);
+      return ctx.db
+        .query("setupCompletions")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
     case "corrections":
-      return ctx.db.query("corrections").paginate(paginationOpts);
+      return ctx.db
+        .query("corrections")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
     case "dataEntries":
-      return ctx.db.query("dataEntries").paginate(paginationOpts);
+      return ctx.db
+        .query("dataEntries")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .paginate(paginationOpts);
   }
 }
 
@@ -414,24 +467,32 @@ async function readDashboardSnapshotPayload(ctx: QueryCtx, ownerId: Id<"users"> 
 
 async function latestDashboardSnapshotChunks(ctx: QueryCtx | MutationCtx, ownerId: Id<"users"> | null) {
   if (ownerId) {
-    const ownerRows = await ctx.db
-      .query("dashboardSnapshotChunks")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
+    const ownerRows = await exactDashboardSnapshotChunks(ctx, ownerId);
     if (ownerRows.length) return ownerRows;
   }
+  return exactDashboardSnapshotChunks(ctx, null);
+}
+
+async function exactDashboardSnapshotChunks(ctx: QueryCtx | MutationCtx, ownerId: Id<"users"> | null) {
   return ctx.db
     .query("dashboardSnapshotChunks")
-    .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId ?? undefined))
     .collect();
 }
 
 async function replaceDashboardSnapshotChunks(ctx: MutationCtx, ownerId: Id<"users"> | null, payload: unknown, updatedAt: string) {
-  const existing = await latestDashboardSnapshotChunks(ctx, ownerId);
-  for (const row of existing) {
+  const serialized = JSON.stringify(payload);
+  const exactExisting = await exactDashboardSnapshotChunks(ctx, ownerId);
+  const comparisonRows = exactExisting.length ? exactExisting : await latestDashboardSnapshotChunks(ctx, ownerId);
+  if (serializedSnapshotChunks(comparisonRows) === serialized) {
+    return {
+      changed: false,
+      updatedAt: latestSnapshotChunkUpdatedAt(comparisonRows),
+    };
+  }
+  for (const row of exactExisting) {
     await ctx.db.delete(row._id);
   }
-  const serialized = JSON.stringify(payload);
   const chunkSize = 650_000;
   for (let index = 0; index < serialized.length; index += chunkSize) {
     await ctx.db.insert("dashboardSnapshotChunks", {
@@ -441,6 +502,15 @@ async function replaceDashboardSnapshotChunks(ctx: MutationCtx, ownerId: Id<"use
       updatedAt,
     });
   }
+  return { changed: true, updatedAt };
+}
+
+function serializedSnapshotChunks(chunks: Array<{ sequence: number; chunk: string }>) {
+  return chunks
+    .slice()
+    .sort((a, b) => a.sequence - b.sequence)
+    .map((row) => row.chunk)
+    .join("");
 }
 
 function buildDashboardSnapshotPayload(source: SnapshotSource) {
@@ -634,6 +704,150 @@ function correctionLabelFor(table: string, row: Record<string, unknown>, payload
 function correctionDetailsFor(table: string, row: Record<string, unknown>, payload: Record<string, unknown>) {
   if (table === "dataEntries") return payload;
   return row;
+}
+
+function rowCreatedAt(row: { createdAt?: string; _creationTime?: number }) {
+  return typeof row.createdAt === "string" && row.createdAt
+    ? row.createdAt
+    : typeof row._creationTime === "number"
+      ? new Date(row._creationTime).toISOString()
+      : "";
+}
+
+function newestRows<Row extends { createdAt?: string; _creationTime?: number }>(
+  ownerRows: Row[],
+  globalRows: Row[],
+  limit: number,
+) {
+  return [...ownerRows, ...globalRows]
+    .sort((a, b) => rowCreatedAt(b).localeCompare(rowCreatedAt(a)))
+    .slice(0, limit);
+}
+
+async function correctionRowsForOwner(ctx: QueryCtx, ownerId: Id<"users">) {
+  const ownerRows = await ctx.db
+    .query("corrections")
+    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+    .collect();
+  const globalRows = await ctx.db
+    .query("corrections")
+    .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+    .collect();
+  return [...ownerRows, ...globalRows];
+}
+
+async function correctionCandidateRowsForOwner(
+  ctx: QueryCtx,
+  table: CorrectionCandidateTable,
+  ownerId: Id<"users">,
+  limit: number,
+) {
+  switch (table) {
+    case "routeSelections": {
+      const ownerRows = await ctx.db
+        .query("routeSelections")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .take(limit);
+      const globalRows = await ctx.db
+        .query("routeSelections")
+        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+        .order("desc")
+        .take(limit);
+      return newestRows(ownerRows, globalRows, limit);
+    }
+    case "plannerPriorities": {
+      const ownerRows = await ctx.db
+        .query("plannerPriorities")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .take(limit);
+      const globalRows = await ctx.db
+        .query("plannerPriorities")
+        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+        .order("desc")
+        .take(limit);
+      return newestRows(ownerRows, globalRows, limit);
+    }
+    case "machineConstraints": {
+      const ownerRows = await ctx.db
+        .query("machineConstraints")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .take(limit);
+      const globalRows = await ctx.db
+        .query("machineConstraints")
+        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+        .order("desc")
+        .take(limit);
+      return newestRows(ownerRows, globalRows, limit);
+    }
+    case "planOverrides": {
+      const ownerRows = await ctx.db
+        .query("planOverrides")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .take(limit);
+      const globalRows = await ctx.db
+        .query("planOverrides")
+        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+        .order("desc")
+        .take(limit);
+      return newestRows(ownerRows, globalRows, limit);
+    }
+    case "routeChanges": {
+      const ownerRows = await ctx.db
+        .query("routeChanges")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .take(limit);
+      const globalRows = await ctx.db
+        .query("routeChanges")
+        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+        .order("desc")
+        .take(limit);
+      return newestRows(ownerRows, globalRows, limit);
+    }
+    case "dispatchApprovals": {
+      const ownerRows = await ctx.db
+        .query("dispatchApprovals")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .take(limit);
+      const globalRows = await ctx.db
+        .query("dispatchApprovals")
+        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+        .order("desc")
+        .take(limit);
+      return newestRows(ownerRows, globalRows, limit);
+    }
+    case "setupCompletions": {
+      const ownerRows = await ctx.db
+        .query("setupCompletions")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .take(limit);
+      const globalRows = await ctx.db
+        .query("setupCompletions")
+        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+        .order("desc")
+        .take(limit);
+      return newestRows(ownerRows, globalRows, limit);
+    }
+    case "dataEntries": {
+      const ownerRows = await ctx.db
+        .query("dataEntries")
+        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+        .order("desc")
+        .take(limit);
+      const globalRows = await ctx.db
+        .query("dataEntries")
+        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+        .order("desc")
+        .take(limit);
+      return newestRows(ownerRows, globalRows, limit);
+    }
+  }
 }
 
 function cleanText(value: unknown) {
@@ -851,13 +1065,13 @@ export const correctionCandidates = query({
     limit: optionalNumber,
   },
   handler: async (ctx, args) => {
-    await requireDashboardUserId(ctx);
-    const corrections = await ctx.db.query("corrections").collect();
+    const ownerId = await requireDashboardUserId(ctx);
+    const corrections = await correctionRowsForOwner(ctx, ownerId);
     const correctionTargets = activeCorrectionTargets(corrections);
     const tableNames = correctionCandidateTables.filter((table) => !args.targetTable || table === args.targetTable);
     const results = [];
     for (const table of tableNames) {
-      const rows = await ctx.db.query(table).order("desc").take(args.limit ?? 100);
+      const rows = await correctionCandidateRowsForOwner(ctx, table, ownerId, args.limit ?? 100);
       for (const row of rows) {
         if (correctionTargets.has(`${table}:${String(row._id)}`)) continue;
         results.push(correctionCandidate(table, row));
