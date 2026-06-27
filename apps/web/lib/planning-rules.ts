@@ -31,7 +31,7 @@ const priorityScores = new Map([
   ["low", 25],
   ["l", 25],
 ]);
-const planningHolidayWeekdays = new Set([0]);
+const planningHolidayWeekdays = new Set([5]);
 
 export function machineFamilyKey(value: unknown) {
   const normalized = text(value).toUpperCase().replace(/[^A-Z0-9]/g, "");

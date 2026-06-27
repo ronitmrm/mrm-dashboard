@@ -383,6 +383,9 @@ function dataEntryKey(entryType, payload) {
   if (entryType === "employee") {
     return text(payload.empId);
   }
+  if (entryType === "planning_holiday") {
+    return [payload.date, payload.scope, payload.machine, payload.department].map(text).join("|");
+  }
   return "";
 }
 

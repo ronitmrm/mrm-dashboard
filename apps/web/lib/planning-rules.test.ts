@@ -7,6 +7,7 @@ import {
   normalizeRescheduleAction,
   priorityScore,
   rescheduleActionLabel,
+  isPlanningWorkday,
   sourcePlannerDecisions,
 } from "./planning-rules";
 
@@ -29,6 +30,11 @@ describe("machineFamilyKey", () => {
 });
 
 describe("planner source rules", () => {
+  it("uses Friday as the weekly plant shutdown day", () => {
+    expect(isPlanningWorkday(new Date("2026-06-26T00:00:00.000Z"))).toBe(false);
+    expect(isPlanningWorkday(new Date("2026-06-28T00:00:00.000Z"))).toBe(true);
+  });
+
   it("starts without old workbook planner decisions", () => {
     expect(sourcePlannerDecisions.machineConstraints).toEqual([]);
     expect(sourcePlannerDecisions.planOverrides).toEqual([]);

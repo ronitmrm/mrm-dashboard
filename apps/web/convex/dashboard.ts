@@ -627,6 +627,7 @@ const legacyEntryTypes = [
   "work_order",
   "rm_inward",
   "employee",
+  "planning_holiday",
   "first_piece_inspection_master",
   "first_piece_inspection_report",
 ];

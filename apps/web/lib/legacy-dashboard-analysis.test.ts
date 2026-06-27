@@ -528,6 +528,80 @@ describe("buildLegacyDashboardSnapshot", () => {
     });
   });
 
+  it("skips Friday shutdown and manual planning holidays in production dates", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-25T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-HOLIDAY",
+            partCode: "M-HOLIDAY",
+            optionNumber: "1",
+            orderPcs: 2000,
+            rmInwardDate: "2026-06-25",
+          },
+        },
+        {
+          entryType: "planning_holiday",
+          createdAt: "2026-06-25T00:00:00.000Z",
+          payload: {
+            date: "2026-06-27",
+            reason: "Vacation",
+            scope: "Plant",
+          },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-25T00:00:00.000Z",
+          payload: {
+            partNo: "M-HOLIDAY",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "C5",
+            machineType: "AUTOMATIC",
+          },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-25T00:00:00.000Z",
+          payload: {
+            partNo: "M-HOLIDAY",
+            optionNumber: "1",
+            setupNo: "1",
+            cycleTime: 28.8,
+            loadingUnloading: 0,
+          },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-25T00:00:00.000Z",
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
+        },
+      ],
+    });
+
+    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
+      planningCalendar: Record<string, unknown>;
+    };
+
+    expect(productionControl.planningCalendar).toMatchObject({
+      weeklyHoliday: "Friday",
+      holidayDates: ["2026-06-27"],
+    });
+    expect(productionControl.machinePlanDetailRows[0]).toMatchObject({
+      jcNo: "JC-HOLIDAY",
+      setupPlannedDate: "25-June-26",
+      plannedProductionEndDate: "28-June-26",
+    });
+  });
+
   it("splits a setup across compatible machines when the 25-day target is missed and each machine gets at least 15 days", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -845,10 +919,10 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(jcRows.find((row) => row.setupNo === "1")).toMatchObject({
       setupPlannedDate: "24-June-26",
       plannedProductionStartDate: "24-June-26",
-      plannedProductionEndDate: "26-June-26",
+      plannedProductionEndDate: "27-June-26",
     });
     expect(jcRows.find((row) => row.setupNo === "2")).toMatchObject({
-      setupPlannedDate: "27-June-26",
+      setupPlannedDate: "28-June-26",
       shopFloorTaskReady: false,
       shopFloorTaskBlocker: expect.stringContaining("Previous setup WIP buffer is not ready"),
     });
@@ -1619,7 +1693,7 @@ describe("buildLegacyDashboardSnapshot", () => {
       { machine: "C501", setupNo: "1", setupPlannedDate: "24-June-26", plannedProductionEndDate: "24-June-26" },
       { machine: "C501", setupNo: "2", setupPlannedDate: "25-June-26", plannedProductionEndDate: "25-June-26" },
     ]);
-    expect(blockerSetupTwo).toMatchObject({ machine: "C501", setupPlannedDate: "4-July-26" });
+    expect(blockerSetupTwo).toMatchObject({ machine: "C501", setupPlannedDate: "6-July-26" });
   });
 
   it("moves planned work to an idle physical machine in the same family when it fits before the next queued job", () => {
@@ -1807,7 +1881,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     });
 
     expect(snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-003" && row.setupNo === "2")).toMatchObject({
-      setupPlannedDate: "23-July-26",
+      setupPlannedDate: "28-July-26",
     });
   });
 
@@ -1944,7 +2018,7 @@ describe("buildLegacyDashboardSnapshot", () => {
       setupPlannedDate: "4-July-26",
     });
     expect(c501Rows.find((row) => row.jcNo === "JC-A" && row.setupNo === "2")).toMatchObject({
-      setupPlannedDate: "10-July-26",
+      setupPlannedDate: "12-July-26",
     });
   });
 
@@ -2039,10 +2113,10 @@ describe("buildLegacyDashboardSnapshot", () => {
 
     const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "C501");
     expect(c501Rows.find((row) => row.jcNo === "JC-A")).toMatchObject({
-      setupPlannedDate: "5-July-26",
+      setupPlannedDate: "7-July-26",
     });
     expect(c501Rows.find((row) => row.jcNo === "JC-B")).toMatchObject({
-      setupPlannedDate: "10-July-26",
+      setupPlannedDate: "12-July-26",
       shopFloorTaskReady: false,
       shopFloorTaskBlocker: expect.stringContaining("Previous setup WIP buffer is not ready"),
     });

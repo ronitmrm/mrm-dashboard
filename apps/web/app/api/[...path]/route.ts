@@ -47,6 +47,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
   rm_inward: ["jcNo", "fgPoNo", "rmPoNo", "partCode", "orderPcs", "orderKg", "rmInwardDate", "rmInwardKg", "status", "remark"],
   employee: ["empId", "employeeType", "employeeName", "location", "doj", "terminatedDate", "status"],
   machine_master: ["machineNo", "machineType", "machineName", "location", "capacity", "status", "remarks"],
+  planning_holiday: ["date", "reason", "scope", "machine", "department", "remark"],
   first_piece_inspection_master: ["jcNo", "uid", "optionNumber", "setupNo", "description", "specification", "instrumentUsed", "tolerancePlus", "toleranceMinus"],
   setup_checklist: ["jcNo", "setupDate", "machineNo", "partNo", "optionNumber", "setupNo", "shift", "setterCode", "helperCode", "settingStartTime", "settingEndTime", "qcController", "rimmerAvailability", "modhiyu", "remarks"],
   software_raw: ["prodDate", "operatorId", "operatorName", "machineType", "machine", "partCode", "jobCard", "setupNo", "outputQty", "actualQty", "targetQty", "rejectQty", "rejectionType", "rejectionRemark", "downtimeMinutes", "downtimeReason"],
@@ -428,6 +429,9 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   }
   if (entryType === "machine_master") {
     return text(payload.machineNo);
+  }
+  if (entryType === "planning_holiday") {
+    return [payload.date, payload.scope, payload.machine, payload.department].map(text).join("|");
   }
   return undefined;
 }

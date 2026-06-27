@@ -8,6 +8,7 @@ import { useTheme } from "next-themes";
 import {
   AlertTriangle,
   Boxes,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   CheckCircle2,
@@ -107,6 +108,7 @@ type DashboardTabId =
   | "machineDetailTab"
   | "masterGapsTab"
   | "dataEntryTab"
+  | "planningHolidayTab"
   | "planningControlTab"
   | "shopFloorStatusTab"
   | "shopFloorTasksTab"
@@ -121,6 +123,7 @@ const navItems: Array<{ id: DashboardTabId; title: string; subtitle: string; ico
   { id: "machineDetailTab", title: "Machine Detail", subtitle: "setup planning", icon: Factory },
   { id: "masterGapsTab", title: "Master Readiness", subtitle: "missing planning data", icon: Database },
   { id: "dataEntryTab", title: "Data Entry", subtitle: "imports and manual entry", icon: ListChecks },
+  { id: "planningHolidayTab", title: "Planning Holidays", subtitle: "Friday shutdown, holidays", icon: CalendarDays },
   { id: "planningControlTab", title: "Planning Control", subtitle: "route and plan checks", icon: Route },
   { id: "shopFloorStatusTab", title: "Shop Floor Status", subtitle: "machine queue", icon: Factory },
   { id: "shopFloorTasksTab", title: "Shop Floor Tasks", subtitle: "raw material at machine", icon: PackageCheck },
@@ -243,6 +246,19 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "capacity", label: "Capacity", type: "number", step: "0.01" },
       { name: "status", label: "Status", options: ["Active", "Inactive", "Maintenance"], defaultValue: "Active" },
       { name: "remarks", label: "Remarks" },
+    ],
+  },
+  {
+    entryType: "planning_holiday",
+    title: "Planning holiday",
+    description: "Plant shutdown dates and vacation days that planning should skip.",
+    fields: [
+      { name: "date", label: "Holiday date", type: "date", required: true },
+      { name: "reason", label: "Reason", options: ["Plant holiday", "Vacation", "Maintenance shutdown", "Other"], defaultValue: "Plant holiday" },
+      { name: "scope", label: "Scope", options: ["Plant", "Machine", "Department"], defaultValue: "Plant" },
+      { name: "machine", label: "Machine no." },
+      { name: "department", label: "Department" },
+      { name: "remark", label: "Remark" },
     ],
   },
   {
@@ -733,6 +749,10 @@ function DashboardContent({
 
   if (activeTab === "dataEntryTab") {
     return <DataEntryPanel payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} />;
+  }
+
+  if (activeTab === "planningHolidayTab") {
+    return <PlanningHolidayPanel productionControl={productionControl} submitAction={submitAction} />;
   }
 
   if (activeTab === "planningControlTab") {
@@ -2618,6 +2638,34 @@ function DataEntryPanel({
       </section>
       <DataRowsCard title="Data entry templates" rows={asArray(dataEntry.templates)} empty="No templates returned" />
       <DataRowsCard title="Data entry key summary" rows={asArray(dataEntry.keySummary)} empty="No entry summary returned" />
+    </section>
+  );
+}
+
+function PlanningHolidayPanel({
+  productionControl,
+  submitAction,
+}: {
+  productionControl: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+}) {
+  const spec = dataEntrySpecs.find((item) => item.entryType === "planning_holiday");
+  const holidayRows = asArray(productionControl.planningHolidayRows);
+  const calendar = asRecord(productionControl.planningCalendar);
+
+  return (
+    <section className="grid gap-4">
+      <TrackingSummary
+        items={[
+          ["Weekly shutdown", displayValue(calendar.weeklyHoliday || "Friday")],
+          ["Manual holidays", formatNumber(holidayRows.length)],
+          ["Next saved date", nextPlanningHolidayLabel(holidayRows)],
+        ]}
+      />
+      {spec ? (
+        <DataEntryForm spec={spec} submitAction={submitAction} defaults={{ scope: "Plant", reason: "Plant holiday", __returnTab: "planningHolidayTab" }} />
+      ) : null}
+      <DataRowsCard title="Saved planning holidays" rows={holidayRows} empty="No manual planning holidays saved yet" />
     </section>
   );
 }
@@ -5091,6 +5139,18 @@ function displayValue(value: unknown, numeric = false) {
   return formatCell(value);
 }
 
+function nextPlanningHolidayLabel(rows: DashboardPayload[]) {
+  const today = new Date().toISOString().slice(0, 10);
+  const next = rows
+    .map((row) => ({
+      label: displayValue(row.date),
+      value: str(row.dateValue || row.date),
+    }))
+    .filter((row) => row.value && row.value >= today)
+    .sort((a, b) => a.value.localeCompare(b.value))[0];
+  return next?.label ?? "-";
+}
+
 function machineValue(row: DashboardPayload, type: "machine" | "machineType") {
   if (type === "machine") {
     return displayValue(row.machine || row.machineNo || row["MACHINE NO"] || row["M/C NO"] || row["MACHINE NO."]);
@@ -5560,6 +5620,14 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       payload.optionNumber,
       payload.setupNo,
       payload.machine,
+    ].map((value) => str(value).toLowerCase()).join("|");
+  }
+  if (entryType === "planning_holiday") {
+    return [
+      payload.date,
+      payload.scope,
+      payload.machine,
+      payload.department,
     ].map((value) => str(value).toLowerCase()).join("|");
   }
   if (entryType === "work_order" || entryType === "rm_inward") return str(payload.jcNo);
