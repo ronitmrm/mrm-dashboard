@@ -31,3 +31,7 @@ _Avoid_: Setup completion date.
 **Planning Recalculation**:
 A rebuild of forecast planning from the latest masters, holidays, constraints, production entries, and shop-floor workflow data. It may move future unstarted setups to newly available physical machines, but it must not move setups that already have production actuals or an operator-started shop-floor task.
 _Avoid_: Manual date refresh.
+
+**Route Machine Family**:
+A route-level machine code such as `D5` or `C5` that represents a physical-machine family. Future planning requires at least one active physical machine in machine master for that family, such as `D501`; otherwise the work order is flagged and no unstarted machine plan row is created.
+_Avoid_: Pseudo-machine.

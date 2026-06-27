@@ -3,6 +3,90 @@ import { describe, expect, it } from "vitest";
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis";
 
 describe("buildLegacyDashboardSnapshot", () => {
+  it("blocks planning when a route machine family has no active physical machine in master", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-MISSING-D5",
+            partCode: "M4",
+            optionNumber: "1",
+            orderPcs: 100,
+            rmInwardDate: "2026-06-24",
+          },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "D5",
+            machineType: "MANUAL",
+          },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo: "1",
+            cycleTime: 60,
+            loadingUnloading: 0,
+          },
+        },
+        {
+          entryType: "tooling",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "D5",
+            tooling: "G1",
+          },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-25T00:00:00.000Z",
+          payload: {
+            machineNo: "D501",
+            machineType: "MANUAL",
+            status: "Inactive",
+          },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-25T00:00:00.000Z",
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
+        },
+      ],
+    });
+
+    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
+      masterGaps: Array<Record<string, unknown>>;
+    };
+
+    expect(productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-MISSING-D5")).toEqual([]);
+    expect(productionControl.masterGaps).toContainEqual(expect.objectContaining({
+      jcNo: "JC-MISSING-D5",
+      partCode: "M4",
+      machineMasterMissing: true,
+      missingAreas: "Machine master",
+      planningBlocker: "Add active machine for family D5",
+    }));
+  });
+
   it("recalculates family route machines while keeping started shop-floor machines locked", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",

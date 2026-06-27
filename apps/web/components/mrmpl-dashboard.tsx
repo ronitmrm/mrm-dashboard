@@ -2300,7 +2300,7 @@ function MasterReadinessPanel({
       />
       <WorkOrderGapTable
         title="Whole work-order missing details"
-        description="Planner view for every work order with missing route option, route master, cycle time, or tooling."
+        description="Planner view for every work order with missing route option, route master, cycle time, tooling, or machine master."
         rows={allWorkOrderGaps}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
@@ -2332,7 +2332,8 @@ function WorkOrderGapTable({
       || (gapFilter === "route_option" && Boolean(row.routeSelectionMissing))
       || (gapFilter === "route_master" && Boolean(row.routeMasterMissing))
       || (gapFilter === "cycle_time" && Boolean(row.cycleTimeMissing))
-      || (gapFilter === "tooling" && Boolean(row.toolingPlanMissing));
+      || (gapFilter === "tooling" && Boolean(row.toolingPlanMissing))
+      || (gapFilter === "machine_master" && Boolean(row.machineMasterMissing));
     const matchesRm = rmFilter === "all"
       || (rmFilter === "received" && str(row.rmStatus) === "Received")
       || (rmFilter === "waiting" && str(row.rmStatus) !== "Received");
@@ -2355,6 +2356,7 @@ function WorkOrderGapTable({
               <option value="route_master">Route master missing</option>
               <option value="cycle_time">Cycle time missing</option>
               <option value="tooling">Tooling missing</option>
+              <option value="machine_master">Machine master missing</option>
             </select>
           </Field>
           <Field label="RM status">
@@ -2459,7 +2461,7 @@ function WorkOrderGapRow({
               </div>
             </form>
           ) : null}
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-4">
             {row.routeMasterMissing ? (
               <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("route", dataEntryDefaultsFromGap(row, "route"))}>Add routing</Button>
             ) : null}
@@ -2468,6 +2470,9 @@ function WorkOrderGapRow({
             ) : null}
             {row.toolingPlanMissing ? (
               <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("tooling", dataEntryDefaultsFromGap(row, "tooling"))}>Add tooling</Button>
+            ) : null}
+            {row.machineMasterMissing ? (
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("machine_master", dataEntryDefaultsFromGap(row, "machine_master"))}>Add machine</Button>
             ) : null}
           </div>
         </div>
@@ -2482,18 +2487,28 @@ function workOrderGapLabels(row: DashboardPayload) {
     row.routeMasterMissing ? "Route master" : "",
     row.cycleTimeMissing ? "Cycle time" : "",
     row.toolingPlanMissing ? "Tooling" : "",
+    row.machineMasterMissing ? "Machine master" : "",
   ].filter(Boolean);
 }
 
 function workOrderNeedsAction(row: DashboardPayload) {
-  return Boolean(row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing);
+  return Boolean(row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing || row.machineMasterMissing);
 }
 
-function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "cycle" | "tooling") {
+function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "cycle" | "tooling" | "machine_master") {
   const optionNumber = str(row.optionNumber || row.selectedOption);
   const setupNo = str(row.missingSetupNo || row.setupNo);
   const setupName = str(row.setupName || row.missingSetupName);
   const machineUsed = str(row.machineUsed || row.routeMachine || row.machineFamily || row.machineType);
+  if (entryType === "machine_master") {
+    return {
+      machineNo: "",
+      machineType: str(row.machineType),
+      status: "Active",
+      remarks: machineUsed ? `Active machine required for route family ${machineUsed}` : "Active machine required for route family",
+      __returnTab: "masterGapsTab",
+    };
+  }
   const defaults: Record<string, unknown> = {
     partNo: itemCode(row) !== "-" ? itemCode(row) : "",
     optionNumber: optionNumber && optionNumber !== "Not selected" ? optionNumber : "",
