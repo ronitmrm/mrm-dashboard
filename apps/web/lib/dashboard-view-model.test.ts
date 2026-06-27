@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toDashboardViewModel } from "./dashboard-view-model";
+import { jobCardScheduleSummary, toDashboardViewModel } from "./dashboard-view-model";
 
 describe("toDashboardViewModel", () => {
   it("normalizes the legacy dashboard payload for the shadcn dashboard", () => {
@@ -36,5 +36,20 @@ describe("toDashboardViewModel", () => {
     expect(view.metrics.find((metric) => metric.label === "Attendance")?.value).toBe("No data");
     expect(view.trend).toHaveLength(2);
     expect(view.machines[0]!.label).toBe("CNC-1");
+  });
+
+  it("sorts dashboard date labels chronologically for job-card schedule summaries", () => {
+    const summary = jobCardScheduleSummary(
+      { deliveryDate: "15-August-26" },
+      [
+        { plannedProductionStartDate: "27-June-26", plannedProductionEndDate: "7-July-26" },
+        { plannedProductionStartDate: "7-July-26", plannedProductionEndDate: "29-July-26" },
+        { plannedProductionStartDate: "28-June-26", plannedProductionEndDate: "26-July-26" },
+        { plannedProductionStartDate: "30-June-26", plannedProductionEndDate: "28-July-26" },
+      ],
+    );
+
+    expect(summary.plannedStart).toBe("27-June-26");
+    expect(summary.plannedEnd).toBe("29-July-26");
   });
 });
