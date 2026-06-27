@@ -6,6 +6,7 @@ import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, mutation, query, type ActionCtx, type QueryCtx, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { buildLegacyDashboardSnapshot } from "../lib/legacy-dashboard-analysis";
+import { applyShopFloorStatusPatches, shopFloorStatusPatchFromDataEntry } from "../lib/shop-floor-optimistic";
 
 async function requireDashboardUserId(ctx: QueryCtx | MutationCtx | ActionCtx) {
   const userId = await getAuthUserId(ctx);
@@ -459,7 +460,7 @@ function appendSnapshotRows(source: SnapshotSource, table: SnapshotSourceTable, 
   }
 }
 
-async function readDashboardSnapshotPayload(ctx: QueryCtx, ownerId: Id<"users"> | null) {
+async function readDashboardSnapshotPayload(ctx: QueryCtx | MutationCtx, ownerId: Id<"users"> | null) {
   const chunks = await latestDashboardSnapshotChunks(ctx, ownerId);
   if (!chunks.length) return null;
   return JSON.parse(chunks.sort((a, b) => a.sequence - b.sequence).map((row) => row.chunk).join(""));
@@ -1005,6 +1006,7 @@ export const saveDataEntry = mutation({
         payload: args.payload,
         createdAt: now(),
       });
+      await patchCachedShopFloorStatus(ctx, ownerFields.ownerId, args.entryType, args.payload);
       return { ok: true, id: args.id };
     }
     if (args.key) {
@@ -1029,12 +1031,30 @@ export const saveDataEntry = mutation({
           payload: args.payload,
           createdAt: now(),
         });
+        await patchCachedShopFloorStatus(ctx, ownerFields.ownerId, args.entryType, args.payload);
         return { ok: true, id: existing._id };
       }
     }
-    return insertOwnerRow(ctx, "dataEntries", args);
+    const result = await insertOwnerRow(ctx, "dataEntries", args);
+    await patchCachedShopFloorStatus(ctx, ownerFields.ownerId, args.entryType, args.payload);
+    return result;
   },
 });
+
+async function patchCachedShopFloorStatus(
+  ctx: MutationCtx,
+  ownerId: Id<"users">,
+  entryType: string,
+  payload: unknown,
+) {
+  const patch = shopFloorStatusPatchFromDataEntry(entryType, payload);
+  if (!patch) return;
+  const cached = await readDashboardSnapshotPayload(ctx, ownerId);
+  if (!cached) return;
+  const patched = applyShopFloorStatusPatches(cached, [patch]);
+  if (patched === cached) return;
+  await replaceDashboardSnapshotChunks(ctx, ownerId, patched, now());
+}
 
 export const reverseEntry = mutation({
   args: {

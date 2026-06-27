@@ -50,4 +50,64 @@ describe("shop-floor optimistic status patches", () => {
     expect(row.shopFloorUpdatedAt).toBe("2026-06-27T10:00:00.000Z");
     expect(row.runningStatus).toBe("Planned");
   });
+
+  it("reflects a started machine in shop-floor rows, machine detail rows, and job-card tiles", () => {
+    const payload = {
+      productionControl: {
+        jobCardStatusTiles: [
+          {
+            jcNo: "JC-2",
+            partCode: "ITEM-2",
+            optionNumber: "B",
+            rmStatus: "Received",
+            runningStatus: "Planned",
+            rawRows: 0,
+          },
+        ],
+        machinePlanDetailRows: [
+          {
+            jcNo: "JC-2",
+            partCode: "ITEM-2",
+            optionNumber: "B",
+            setupNo: "2",
+            machine: "C502",
+            shopFloorStage: "quality_approval",
+            shopFloorStageLabel: "Quality approval",
+            runningStatus: "Setup complete",
+            actualProductionStartDate: "-",
+          },
+        ],
+      },
+    };
+    const patch = shopFloorStatusPatchFromAction("data-entry", {
+      entryType: "shop_floor_status",
+      payload: {
+        jcNo: "JC-2",
+        partCode: "ITEM-2",
+        optionNumber: "B",
+        setupNo: "2",
+        machine: "C502",
+        stage: "operator_started",
+        stageLabel: "Operator assigned and machine started",
+        doneBy: "M1",
+        worker: "OP1",
+        completedAt: "2026-06-27T11:00:00.000Z",
+      },
+    });
+
+    const patched = applyShopFloorStatusPatches(payload, upsertShopFloorStatusPatch([], patch!));
+    const productionControl = patched.productionControl as {
+      jobCardStatusTiles: Record<string, unknown>[];
+      machinePlanDetailRows: Record<string, unknown>[];
+    };
+    const machineRow = productionControl.machinePlanDetailRows[0]!;
+    const jobCard = productionControl.jobCardStatusTiles[0]!;
+
+    expect(machineRow.shopFloorStage).toBe("operator_started");
+    expect(machineRow.shopFloorStageLabel).toBe("Operator assigned and machine started");
+    expect(machineRow.shopFloorWorker).toBe("OP1");
+    expect(machineRow.runningStatus).toBe("Running");
+    expect(jobCard.runningStatus).toBe("Running");
+    expect(jobCard.shopFloorStage).toBe("operator_started");
+  });
 });

@@ -25,8 +25,12 @@ const stageLabels: Record<string, string> = {
 
 export function shopFloorStatusPatchFromAction(path: string, body: Record<string, unknown>): ShopFloorStatusPatch | undefined {
   if (path !== "data-entry") return undefined;
-  if (text(body.entryType) !== "shop_floor_status") return undefined;
-  const payload = record(body.payload);
+  return shopFloorStatusPatchFromDataEntry(body.entryType, body.payload);
+}
+
+export function shopFloorStatusPatchFromDataEntry(entryType: unknown, payloadValue: unknown): ShopFloorStatusPatch | undefined {
+  if (text(entryType) !== "shop_floor_status") return undefined;
+  const payload = record(payloadValue);
   const patch = {
     jcNo: text(payload.jcNo),
     partCode: text(payload.partCode),
@@ -81,13 +85,39 @@ export function applyShopFloorStatusPatches(payload: DashboardPayload, patches: 
     };
   });
   if (!changed) return payload;
+  const patchedJobCards = patchJobCardRows(array(productionControl.jobCardStatusTiles), patches);
   return {
     ...payload,
     productionControl: {
       ...productionControl,
       machinePlanDetailRows: patchedRows,
+      ...(patchedJobCards.changed ? { jobCardStatusTiles: patchedJobCards.rows } : {}),
     },
   };
+}
+
+function patchJobCardRows(rows: unknown[], patches: ShopFloorStatusPatch[]) {
+  let changed = false;
+  const patchedRows = rows.map((row) => {
+    const rowRecord = record(row);
+    const matchingPatches = patches.filter((patch) =>
+      text(rowRecord.jcNo || rowRecord.JobCardNo || rowRecord.jobCard).toLowerCase() === patch.jcNo.toLowerCase() &&
+      text(rowRecord.partCode || rowRecord["PART CODE"] || rowRecord.itemCode).toLowerCase() === patch.partCode.toLowerCase() &&
+      (!text(rowRecord.optionNumber || rowRecord.selectedOption || rowRecord.option) ||
+        text(rowRecord.optionNumber || rowRecord.selectedOption || rowRecord.option).toLowerCase() === patch.optionNumber.toLowerCase()),
+    );
+    if (!matchingPatches.length) return row;
+    const latestPatch = matchingPatches[matchingPatches.length - 1]!;
+    changed = true;
+    return {
+      ...rowRecord,
+      runningStatus: optimisticRunningStatus(latestPatch.stage, rowRecord.runningStatus),
+      shopFloorStage: latestPatch.stage,
+      shopFloorStageLabel: latestPatch.stageLabel || stageLabels[latestPatch.stage] || latestPatch.stage,
+      shopFloorUpdatedAt: latestPatch.completedAt || "",
+    };
+  });
+  return { changed, rows: patchedRows };
 }
 
 function optimisticRunningStatus(stage: string, current: unknown) {

@@ -5169,7 +5169,11 @@ function jobCardTrackingState(row: DashboardPayload) {
 }
 
 function jobCardHasProduction(row: DashboardPayload) {
-  return Number(row.rawRows) > 0 || Number(row.rawOutputQty) > 0 || Number(row.rawActualQty) > 0;
+  return str(row.runningStatus).toLowerCase() === "running" ||
+    str(row.shopFloorStage).toLowerCase() === "operator_started" ||
+    Number(row.rawRows) > 0 ||
+    Number(row.rawOutputQty) > 0 ||
+    Number(row.rawActualQty) > 0;
 }
 
 function rowMatchesFieldQuery(row: DashboardPayload, query: string, field: string) {
