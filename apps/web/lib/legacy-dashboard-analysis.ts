@@ -2331,7 +2331,9 @@ function machinePlanDetails(
         const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
         const plannedCompletionDate = plannedStartDate;
         const setupCompletionDate = settingDone ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
-        const plannedProductionStartDate = plannedCompletionDate;
+        const actualStartDate = productionActual?.startDate ?? (machineStarted ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "");
+        const actualCompletionDate = itemComplete ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
+        const plannedProductionStartDate = actualStartDate || maxDateValue(plannedCompletionDate, setupCompletionDate);
         const plannedProductionEndDate = plannedProductionEnd(plannedProductionStartDate, machineOrderPcs, cycle, productionActual, planningCalendar);
         if (plannedProductionEndDate) routeProductionEndDates.push(parseDate(plannedProductionEndDate) || plannedProductionEndDate);
         if (plannedProductionStartDate && plannedProductionEndDate) {
@@ -2343,8 +2345,6 @@ function machinePlanDetails(
           });
         }
         if (productionActual?.rows) routeProductionActuals.push(productionActual);
-        const actualStartDate = productionActual?.startDate ?? (machineStarted ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "");
-        const actualCompletionDate = itemComplete ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
         if (machineKeyValue) {
           machineLoad.set(machineKeyValue, (machineLoad.get(machineKeyValue) ?? 0) + 1);
           machinePlannedDays.set(machineKeyValue, (machinePlannedDays.get(machineKeyValue) ?? 0) + plannedProductionDays(plannedProductionStartDate, plannedProductionEndDate, planningCalendar));
@@ -2832,15 +2832,17 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
       const actualStartDate = actualProductionStartDate(meta);
       const readyDate = actualStartDate || meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "";
       const plannedStartDate = actualStartDate || maxDateValue(readyDate, machineNextDate);
+      const setupCompletionDate = parseDate(rowText(row, "setupCompletionDate", "completionDate", "setupCompletedOn"));
+      const plannedProductionStartDate = actualStartDate || maxDateValue(plannedStartDate, setupCompletionDate);
       const plannedProductionEndDate = maxDateValue(
-        plannedProductionEnd(plannedStartDate, meta.orderPcs ?? 0, meta.cycle, meta.productionActual, planningCalendar),
+        plannedProductionEnd(plannedProductionStartDate, meta.orderPcs ?? 0, meta.cycle, meta.productionActual, planningCalendar),
         meta.minimumProductionEndDate ?? "",
       );
       row.plannedDate = dateLabel(plannedStartDate);
       row.setupPlannedDate = dateLabel(plannedStartDate);
       row.plannedStartDate = dateLabel(plannedStartDate);
       row.plannedCompletionDate = dateLabel(plannedStartDate);
-      row.plannedProductionStartDate = dateLabel(plannedStartDate);
+      row.plannedProductionStartDate = dateLabel(plannedProductionStartDate);
       row.plannedProductionEndDate = dateLabel(plannedProductionEndDate);
       row.planVsActual = setupPlanVsActual(plannedStartDate, parseDate(rowText(row, "setupCompletionDate")) || rowText(row, "setupCompletionDate"));
       machineNextDate = nextMachineAvailableDate(plannedProductionEndDate || plannedStartDate, planningCalendar);

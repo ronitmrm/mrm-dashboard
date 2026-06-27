@@ -19,3 +19,11 @@ _Avoid_: Machine-to-machine WIP pairing.
 **WIP Availability Buffer**:
 The planning delay between producing WIP on one setup and allowing the next setup to consume it.
 _Avoid_: Same-day transfer.
+
+**Production Start Forecast**:
+The planned production start date for a setup before actual production starts. It follows the later of the machine plan and setup completion date.
+_Avoid_: Fixed production start date.
+
+**Actual Production Start**:
+The first recorded production date for a setup on a machine. Once present, it locks the production start date used by planning.
+_Avoid_: Setup completion date.

@@ -602,6 +602,108 @@ describe("buildLegacyDashboardSnapshot", () => {
     });
   });
 
+  it("keeps production dates dynamic until actual production starts", () => {
+    const baseDataEntries = [
+      {
+        entryType: "work_order",
+        createdAt: "2026-06-23T00:00:00.000Z",
+        payload: {
+          jcNo: "JC-M42",
+          partCode: "M42",
+          optionNumber: "1",
+          orderPcs: 2000,
+          rmInwardDate: "2026-06-23",
+        },
+      },
+      {
+        entryType: "route",
+        createdAt: "2026-06-23T00:00:00.000Z",
+        payload: {
+          partNo: "M42",
+          optionNumber: "1",
+          setupNo: "1",
+          machineUsed: "C5",
+          machineType: "AUTOMATIC",
+        },
+      },
+      {
+        entryType: "cycle",
+        createdAt: "2026-06-23T00:00:00.000Z",
+        payload: {
+          partNo: "M42",
+          optionNumber: "1",
+          setupNo: "1",
+          cycleTime: 28.8,
+          loadingUnloading: 0,
+        },
+      },
+      {
+        entryType: "shop_floor_status",
+        createdAt: "2026-06-25T10:00:00.000Z",
+        payload: {
+          jcNo: "JC-M42",
+          partCode: "M42",
+          optionNumber: "1",
+          setupNo: "1",
+          machine: "C501",
+          stage: "setting",
+          completedAt: "2026-06-25T10:00:00.000Z",
+        },
+      },
+      {
+        entryType: "machine_master",
+        createdAt: "2026-06-23T00:00:00.000Z",
+        payload: {
+          machineNo: "C501",
+          machineType: "AUTOMATIC",
+          status: "Active",
+        },
+      },
+    ];
+    const setupCompleteSnapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: baseDataEntries,
+    });
+    const setupCompleteRow = setupCompleteSnapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-M42");
+
+    expect(setupCompleteRow).toMatchObject({
+      setupPlannedDate: "23-June-26",
+      setupCompletionDate: "25-June-26",
+      planVsActual: "Delayed",
+      plannedProductionStartDate: "25-June-26",
+      plannedProductionEndDate: "27-June-26",
+      actualProductionStartDate: "",
+    });
+
+    const productionStartedSnapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [
+        {
+          prodDate: "2026-06-28",
+          jobCard: "JC-M42",
+          partCode: "M42",
+          setupNo: "1",
+          machine: "C501",
+          machineType: "AUTOMATIC",
+          operatorId: "OP-1",
+          outputQty: 500,
+          actualQty: 500,
+          targetQty: 0,
+          rejectQty: 0,
+        },
+      ],
+      dataEntries: baseDataEntries,
+    });
+    const productionStartedRow = productionStartedSnapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-M42");
+
+    expect(productionStartedRow).toMatchObject({
+      plannedProductionStartDate: "28-June-26",
+      actualProductionStartDate: "28-June-26",
+      plannedProductionEndDate: "1-July-26",
+    });
+  });
+
   it("splits a setup across compatible machines when the 25-day target is missed and each machine gets at least 15 days", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
