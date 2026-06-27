@@ -27,3 +27,7 @@ _Avoid_: Fixed production start date.
 **Actual Production Start**:
 The first recorded production date for a setup on a machine. Once present, it locks the production start date used by planning.
 _Avoid_: Setup completion date.
+
+**Planning Recalculation**:
+A rebuild of forecast planning from the latest masters, holidays, constraints, production entries, and shop-floor workflow data. It may move future unstarted setups to newly available physical machines, but it must not move setups that already have production actuals or an operator-started shop-floor task.
+_Avoid_: Manual date refresh.

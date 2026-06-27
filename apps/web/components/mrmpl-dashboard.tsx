@@ -364,8 +364,8 @@ function DashboardShell() {
       setActionStatus({
         tone: "default",
         message: result.skipped
-          ? "Dashboard snapshot is already fresh."
-          : "Dashboard snapshot refreshed.",
+          ? "Planning is already up to date."
+          : "Planning recalculated from latest data.",
       });
       if (!result.skipped) setOptimisticShopFloorStatuses([]);
     } catch (err) {
@@ -678,7 +678,7 @@ function HeaderActions({
         onClick={onRefreshSnapshot}
       >
         <RefreshCw className={`size-4${isRefreshingSnapshot ? " animate-spin" : ""}`} />
-        <span className="hidden sm:inline">{isRefreshingSnapshot ? "Refreshing" : "Refresh snapshot"}</span>
+        <span className="hidden sm:inline">{isRefreshingSnapshot ? "Recalculating" : "Recalculate planning"}</span>
       </Button>
       <Button
         type="button"

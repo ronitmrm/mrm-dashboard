@@ -3,6 +3,106 @@ import { describe, expect, it } from "vitest";
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis";
 
 describe("buildLegacyDashboardSnapshot", () => {
+  it("recalculates family route machines while keeping started shop-floor machines locked", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-FUTURE-D5",
+            partCode: "M4",
+            optionNumber: "1",
+            orderPcs: 100,
+            rmInwardDate: "2026-06-24",
+          },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-RUNNING-D5",
+            partCode: "M4",
+            optionNumber: "1",
+            orderPcs: 100,
+            rmInwardDate: "2026-06-24",
+          },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "D5",
+            machineType: "MANUAL",
+          },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo: "1",
+            cycleTime: 60,
+            loadingUnloading: 0,
+          },
+        },
+        {
+          entryType: "tooling",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: {
+            partNo: "M4",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "D5",
+            tooling: "G1",
+          },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-25T00:00:00.000Z",
+          payload: {
+            machineNo: "D501",
+            machineType: "MANUAL",
+            status: "Active",
+          },
+        },
+        {
+          entryType: "shop_floor_status",
+          createdAt: "2026-06-25T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-RUNNING-D5",
+            partCode: "M4",
+            optionNumber: "1",
+            setupNo: "1",
+            machine: "D5",
+            stage: "operator_started",
+            completedAt: "2026-06-25T08:00:00.000Z",
+          },
+        },
+      ],
+    });
+
+    const future = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-FUTURE-D5");
+    const running = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-RUNNING-D5");
+
+    expect(future).toMatchObject({
+      routeMachine: "D5",
+      machine: "D501",
+      machineAssignment: "Assigned physical machine",
+    });
+    expect(running).toMatchObject({
+      routeMachine: "D5",
+      machine: "D5",
+      runningStatus: "Running",
+    });
+  });
+
   it("uses the latest canonical route row when old imports use option-prefixed setup numbers", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",

@@ -2275,6 +2275,16 @@ function machinePlanDetails(
         partCode,
         setupNo,
       }));
+      const startedShopFloorMachines = shopFloorStartedMachinesForSetup(shopFloorStatusRows, {
+        jcNo: rowText(row, "jcNo"),
+        partCode,
+        optionNumber,
+        setupNo: displaySetupNo,
+      });
+      const actualMachines = new Set([
+        ...(productionActualAnyMachine?.machines ?? new Set<string>()),
+        ...startedShopFloorMachines,
+      ]);
       const assignedMachines = assignedPhysicalMachines({
         routeMachine,
         machineType,
@@ -2289,7 +2299,7 @@ function machinePlanDetails(
         readyDate: operationReadyDate || plannedSetupDate(rmInwardDate, routeIndex, planningCalendar),
         deadlineDate: dispatchDeadlineDate,
         override,
-        actualMachines: productionActualAnyMachine?.machines,
+        actualMachines: actualMachines.size ? actualMachines : undefined,
         planningCalendar,
       });
       const machineOrderPcs = assignedMachineOrderPcs(setupOrderPcs, assignedMachines.length);
@@ -2413,7 +2423,7 @@ function machinePlanDetails(
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
           machineAssignment: machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
           parallelMachineCount: assignedMachines.length,
-          planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for combined downstream WIP demand plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; parallel machines require at least ${minimumParallelMachineWorkDays} production days each; compatible machines are selected by lower planned utilization first`,
+          planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for combined downstream WIP demand plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; started shop-floor or production-actual machines stay locked during recalculation; parallel machines require at least ${minimumParallelMachineWorkDays} production days each; compatible machines are selected by lower planned utilization first`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -3083,6 +3093,28 @@ function latestShopFloorStatusBySetup(rows: Record<string, unknown>[]) {
   return latest;
 }
 
+function shopFloorStartedMachinesForSetup(
+  rows: Record<string, unknown>[],
+  target: { jcNo: string; partCode: string; optionNumber: string; setupNo: string },
+) {
+  const targetKey = setupKeyWithoutMachine(target);
+  if (!targetKey) return new Set<string>();
+  const machines = new Set<string>();
+  for (const row of rows) {
+    if (setupLifecycleStageRank(rowText(row, "stage")) < setupLifecycleStageRank("operator_started")) continue;
+    const key = setupKeyWithoutMachine({
+      jcNo: rowText(row, "jcNo", "JC NO.", "JC NO"),
+      partCode: rowText(row, "partCode", "partNo", "PART CODE", "PART NO"),
+      optionNumber: rowText(row, "optionNumber", "OPTION NUMBER", "OPTION NO"),
+      setupNo: rowText(row, "setupNo", "SETUP NO.", "SETUP NO", "SET UP"),
+    });
+    if (key !== targetKey) continue;
+    const machine = rowText(row, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO.");
+    if (machine) machines.add(machine);
+  }
+  return machines;
+}
+
 function findShopFloorStatus(
   latest: Map<string, Record<string, unknown>>,
   target: { jcNo: string; partCode: string; optionNumber: string; setupNo: string; machine: string },
@@ -3167,6 +3199,21 @@ function setupChecklistKey({
   machine: string;
 }) {
   const parts = [canonicalKey(jcNo), canonicalKey(partCode), canonicalKey(optionNumber), setupStepKey(setupNo, optionNumber), canonicalKey(machine)];
+  return parts.every(Boolean) ? parts.join("|") : "";
+}
+
+function setupKeyWithoutMachine({
+  jcNo,
+  partCode,
+  optionNumber,
+  setupNo,
+}: {
+  jcNo: string;
+  partCode: string;
+  optionNumber: string;
+  setupNo: string;
+}) {
+  const parts = [canonicalKey(jcNo), canonicalKey(partCode), canonicalKey(optionNumber), setupStepKey(setupNo, optionNumber)];
   return parts.every(Boolean) ? parts.join("|") : "";
 }
 
