@@ -2379,7 +2379,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     });
   });
 
-  it("does not let a downstream setup finish before the previous setup finishes", () => {
+  it("adds a practical handoff buffer before a downstream setup can finish", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -2457,7 +2457,7 @@ describe("buildLegacyDashboardSnapshot", () => {
 
     expect(setupThree).toBeDefined();
     expect(setupFour).toBeDefined();
-    expect(dateLabelValue(setupFour!.plannedProductionEndDate)).toBeGreaterThanOrEqual(dateLabelValue(setupThree!.plannedProductionEndDate));
+    expect(dateLabelValue(setupFour!.plannedProductionEndDate)).toBeGreaterThan(dateLabelValue(setupThree!.plannedProductionEndDate));
   });
 });
 

@@ -83,6 +83,7 @@ const monthShort = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "S
 const monthShortLegacy = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const planningHoursPerDay = 8;
 const wipAvailabilityBufferDays = 1;
+const interSetupTransferBufferDays = 1;
 const planningSetupBufferDays = 1;
 const planningDispatchTargetDays = 25;
 const minimumParallelMachineWorkDays = 15;
@@ -2368,7 +2369,7 @@ function machinePlanDetails(
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
           machineAssignment: machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
           parallelMachineCount: assignedMachines.length,
-          planningAssumption: `${planningHoursPerDay} hrs/day; next setup waits for WIP quantity plus ${wipAvailabilityBufferDays} buffer day; parallel machines require at least ${minimumParallelMachineWorkDays} production days each; compatible machines are selected by lower planned utilization first`,
+          planningAssumption: `${planningHoursPerDay} hrs/day; next setup waits for WIP quantity plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; parallel machines require at least ${minimumParallelMachineWorkDays} production days each; compatible machines are selected by lower planned utilization first`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -2691,7 +2692,7 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
       const groupReadyDate = maxDateValue(operationReadyDate, baseReadyDate);
       for (const row of group.rows) {
         planningMeta(row).readyDate = groupReadyDate;
-        planningMeta(row).minimumProductionEndDate = previousSetupEndDate;
+        planningMeta(row).minimumProductionEndDate = practicalSetupHandoffEndDate(previousSetupEndDate);
       }
 
       const nextGroup = setupGroups[index + 1];
@@ -2713,6 +2714,11 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
       previousSetupEndDate = maxDateValue(previousSetupEndDate, groupEndDate);
     }
   }
+}
+
+function practicalSetupHandoffEndDate(previousSetupEndDate: string) {
+  const normalizedEndDate = parseDate(previousSetupEndDate) || previousSetupEndDate;
+  return normalizedEndDate ? addDays(normalizedEndDate, interSetupTransferBufferDays) : "";
 }
 
 function uniqueProductionActuals(actuals: Array<{ startDate?: string; latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }>) {
