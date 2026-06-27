@@ -37,5 +37,5 @@ A route-level machine code such as `D5` or `C5` that represents a physical-machi
 _Avoid_: Pseudo-machine.
 
 **Priority Plan Scenario**:
-The probable timing shown before saving a planner priority change. It must show dates for keeping running machines active and for stopping selected running setups, because selecting a priority must be a planning decision rather than an implicit machine stop.
+The setup-by-setup decision flow shown before saving a planner priority change. It opens one setup at a time; downstream setup dates are hidden until the previous setup action is confirmed.
 _Avoid_: Single probable date.
