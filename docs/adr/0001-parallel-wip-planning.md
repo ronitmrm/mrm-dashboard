@@ -1,0 +1,3 @@
+# Parallel WIP Planning Uses a Common Pool
+
+When a setup is split across parallel machines, each machine creates its own WIP stream with its own start date, end date, planned quantity, and daily output. Downstream setups consume from a common WIP pool after the WIP availability buffer, not from fixed upstream-machine to downstream-machine pairings, because shop-floor material movement is planned as pooled setup stock. The planner must therefore calculate readiness from all upstream streams and from the combined daily demand of all machines assigned to the next setup, while preventing last-day production from being consumed on the same day.

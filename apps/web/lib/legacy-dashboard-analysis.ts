@@ -52,6 +52,12 @@ type PriorityTuple = [number, number, number, number];
 type PlanningCalendar = {
   holidayDates: Set<string>;
 };
+type WipProductionStream = {
+  startDate: string;
+  endDate: string;
+  quantity: number;
+  dailyQty: number;
+};
 
 const rejectionEntryCount = 5;
 const unassignedDowntimeReason = "Reason Not Entered";
@@ -2288,7 +2294,7 @@ function machinePlanDetails(
       });
       const machineOrderPcs = assignedMachineOrderPcs(setupOrderPcs, assignedMachines.length);
       const routeProductionEndDates: string[] = [];
-      const routeProductionStartDates: string[] = [];
+      const routeProductionStreams: WipProductionStream[] = [];
       const routeProductionActuals: Array<{ latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }> = [];
       for (const machine of assignedMachines) {
         const shopFloorStatus = findShopFloorStatus(shopFloorStatusBySetup, {
@@ -2327,8 +2333,15 @@ function machinePlanDetails(
         const setupCompletionDate = settingDone ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
         const plannedProductionStartDate = plannedCompletionDate;
         const plannedProductionEndDate = plannedProductionEnd(plannedProductionStartDate, machineOrderPcs, cycle, productionActual, planningCalendar);
-        if (plannedProductionStartDate) routeProductionStartDates.push(parseDate(plannedProductionStartDate) || plannedProductionStartDate);
         if (plannedProductionEndDate) routeProductionEndDates.push(parseDate(plannedProductionEndDate) || plannedProductionEndDate);
+        if (plannedProductionStartDate && plannedProductionEndDate) {
+          routeProductionStreams.push({
+            startDate: parseDate(plannedProductionStartDate) || plannedProductionStartDate,
+            endDate: parseDate(plannedProductionEndDate) || plannedProductionEndDate,
+            quantity: machineOrderPcs,
+            dailyQty: cycleDailyQty(cycle),
+          });
+        }
         if (productionActual?.rows) routeProductionActuals.push(productionActual);
         const actualStartDate = productionActual?.startDate ?? (machineStarted ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "");
         const actualCompletionDate = itemComplete ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
@@ -2400,7 +2413,7 @@ function machinePlanDetails(
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
           machineAssignment: machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
           parallelMachineCount: assignedMachines.length,
-          planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; next setup waits for WIP quantity plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; parallel machines require at least ${minimumParallelMachineWorkDays} production days each; compatible machines are selected by lower planned utilization first`,
+          planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for combined downstream WIP demand plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; parallel machines require at least ${minimumParallelMachineWorkDays} production days each; compatible machines are selected by lower planned utilization first`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -2419,10 +2432,11 @@ function machinePlanDetails(
       const nextRoute = routes[routeIndex + 1];
       const nextCycle = nextRoute ? cycleByKey.get(masterKey(nextRoute)) : undefined;
       const bufferArgs = {
-        productionStartDates: routeProductionStartDates,
+        productionStreams: routeProductionStreams,
         orderPcs: setupOrderPcs,
         previousCycle: cycle,
         nextCycle,
+        nextMachineCount: 1,
         actuals: routeProductionActuals,
         planningCalendar,
       };
@@ -2734,15 +2748,16 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
       const nextGroup = setupGroups[index + 1];
       const currentCycle = planningMeta(group.rows[0] ?? {}).cycle;
       const nextCycle = nextGroup ? planningMeta(nextGroup.rows[0] ?? {}).cycle : undefined;
-      const productionStartDates = group.rows.map((row) => parseDate(rowText(row, "plannedProductionStartDate", "setupPlannedDate", "plannedStartDate"))).filter(Boolean);
+      const productionStreams = wipProductionStreamsFromRows(group.rows, planningCalendar);
       const productionEndDates = group.rows.map((row) => parseDate(rowText(row, "plannedProductionEndDate"))).filter(Boolean);
       const actuals = uniqueProductionActuals(group.rows.map((row) => planningMeta(row).productionActual).filter(Boolean) as Array<{ latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }>);
       const setupOrderPcs = Math.max(...group.rows.map((row) => planningMeta(row).totalOrderPcs ?? planningMeta(row).orderPcs ?? 0), 0);
       const bufferReadyDate = nextGroup ? plannedWipBufferReadyDate({
-        productionStartDates,
+        productionStreams,
         orderPcs: setupOrderPcs,
         previousCycle: currentCycle,
         nextCycle,
+        nextMachineCount: Math.max(1, nextGroup.rows.length),
         actuals,
         planningCalendar,
       }) : "";
@@ -2756,6 +2771,22 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
 function practicalSetupHandoffEndDate(previousSetupEndDate: string, planningCalendar: PlanningCalendar) {
   const normalizedEndDate = parseDate(previousSetupEndDate) || previousSetupEndDate;
   return normalizedEndDate ? addDays(normalizedEndDate, interSetupTransferBufferDays, planningCalendar) : "";
+}
+
+function wipProductionStreamsFromRows(rows: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar): WipProductionStream[] {
+  return rows
+    .map((row) => {
+      const meta = planningMeta(row);
+      const startDate = addDays(parseDate(rowText(row, "plannedProductionStartDate", "setupPlannedDate", "plannedStartDate")) || "", 0, planningCalendar);
+      const endDate = parseDate(rowText(row, "plannedProductionEndDate", "setupPlannedDate", "plannedDate"));
+      return {
+        startDate,
+        endDate,
+        quantity: meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs")),
+        dailyQty: cycleDailyQty(meta.cycle),
+      };
+    })
+    .filter((stream) => stream.startDate && stream.endDate && stream.endDate >= stream.startDate && stream.quantity > 0 && stream.dailyQty > 0);
 }
 
 function uniqueProductionActuals(actuals: Array<{ startDate?: string; latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }>) {
@@ -3417,31 +3448,40 @@ function plannedProductionEnd(
 }
 
 function plannedWipBufferReadyDate({
-  productionStartDates,
+  productionStreams,
   orderPcs,
   previousCycle,
   nextCycle,
+  nextMachineCount = 1,
   actuals = [],
   planningCalendar = defaultPlanningCalendar,
 }: {
-  productionStartDates: string[];
+  productionStreams: WipProductionStream[];
   orderPcs: number;
   previousCycle: Record<string, unknown> | undefined;
   nextCycle: Record<string, unknown> | undefined;
+  nextMachineCount?: number;
   actuals?: Array<{ latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }>;
   planningCalendar?: PlanningCalendar;
 }) {
-  const starts = productionStartDates.map(parseDate).filter(Boolean).sort();
-  if ((!starts.length && !actuals.length) || !orderPcs || !nextCycle) return "";
-  const previousDailyQty = cycleDailyQty(previousCycle);
-  const nextDailyQty = cycleDailyQty(nextCycle);
-  if (!previousDailyQty || !nextDailyQty) return "";
+  const streams = productionStreams
+    .map((stream) => ({
+      startDate: parseDate(stream.startDate) || stream.startDate,
+      endDate: parseDate(stream.endDate) || stream.endDate,
+      quantity: Math.max(stream.quantity, 0),
+      dailyQty: Math.max(stream.dailyQty, 0),
+    }))
+    .filter((stream) => stream.startDate && stream.endDate && stream.endDate >= stream.startDate && stream.quantity > 0 && stream.dailyQty > 0);
+  if ((!streams.length && !actuals.length) || !orderPcs || !nextCycle) return "";
+  const plannedPreviousDailyQty = streams.length ? sum(streams.map((stream) => stream.dailyQty)) : cycleDailyQty(previousCycle);
+  const nextDailyQty = cycleDailyQty(nextCycle) * Math.max(1, nextMachineCount);
+  if (!plannedPreviousDailyQty || !nextDailyQty) return "";
 
   const actualDailyQty = sum(actuals.map((actual) => {
     const dateCount = actual.dates.size || 1;
     return Math.max(actual.actualQty || actual.outputQty, 0) / dateCount;
   }));
-  const effectivePreviousDailyQty = actualDailyQty || previousDailyQty;
+  const effectivePreviousDailyQty = actualDailyQty || plannedPreviousDailyQty;
   const bufferDays = effectivePreviousDailyQty < nextDailyQty ? 3 : 2;
   const requiredBufferQty = Math.min(orderPcs, nextDailyQty * bufferDays);
   if (actuals.length && actualDailyQty > 0) {
@@ -3453,35 +3493,42 @@ function plannedWipBufferReadyDate({
     return addDays(latestActualDate, remainingDays + wipAvailabilityBufferDays, planningCalendar);
   }
 
-  let producedQty = 0;
-  const firstStart = starts[0];
+  const firstStart = streams.map((stream) => stream.startDate).sort()[0];
   if (!firstStart) return "";
   let date = firstStart;
-  const lastPossibleDate = addDays(date, Math.max(365, Math.ceil(orderPcs / effectivePreviousDailyQty) + starts.length + 30), planningCalendar);
+  const lastPossibleDate = maxDateValue(...streams.map((stream) => stream.endDate)) || addDays(date, Math.max(365, Math.ceil(orderPcs / effectivePreviousDailyQty) + streams.length + 30), planningCalendar);
 
   while (date && date <= lastPossibleDate) {
-    const activeMachineCount = starts.filter((start) => start <= date).length;
-    producedQty = Math.min(orderPcs, producedQty + activeMachineCount * effectivePreviousDailyQty);
+    const producedQty = Math.min(orderPcs, sum(streams.map((stream) => streamProducedQtyThroughDate(stream, date, planningCalendar))));
     if (producedQty >= requiredBufferQty) return addDays(date, wipAvailabilityBufferDays, planningCalendar);
     date = addDays(date, 1, planningCalendar);
   }
   return "";
 }
 
+function streamProducedQtyThroughDate(stream: WipProductionStream, dateValue: string, planningCalendar: PlanningCalendar) {
+  const start = parseDate(stream.startDate) || stream.startDate;
+  const end = minDateValue(parseDate(stream.endDate) || stream.endDate, parseDate(dateValue) || dateValue);
+  if (!start || !end || end < start) return 0;
+  return Math.min(stream.quantity, plannedProductionDays(start, end, planningCalendar) * stream.dailyQty);
+}
+
 function actualWipBufferAvailable({
   orderPcs,
   previousCycle,
   nextCycle,
+  nextMachineCount = 1,
   actuals = [],
 }: {
   orderPcs: number;
   previousCycle: Record<string, unknown> | undefined;
   nextCycle: Record<string, unknown> | undefined;
+  nextMachineCount?: number;
   actuals?: Array<{ latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }>;
 }) {
   if (!orderPcs || !nextCycle || !actuals.length) return false;
   const previousDailyQty = cycleDailyQty(previousCycle);
-  const nextDailyQty = cycleDailyQty(nextCycle);
+  const nextDailyQty = cycleDailyQty(nextCycle) * Math.max(1, nextMachineCount);
   if (!previousDailyQty || !nextDailyQty) return false;
   const actualDailyQty = sum(actuals.map((actual) => {
     const dateCount = actual.dates.size || 1;
@@ -3501,6 +3548,10 @@ function cycleDailyQty(cycle: Record<string, unknown> | undefined) {
 
 function maxDateValue(...values: string[]) {
   return values.map(parseDate).filter(Boolean).sort().at(-1) ?? "";
+}
+
+function minDateValue(...values: string[]) {
+  return values.map(parseDate).filter(Boolean).sort()[0] ?? "";
 }
 
 function candidatePhysicalMachines(
