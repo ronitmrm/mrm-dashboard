@@ -1990,7 +1990,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(dashboardDateKey(priority?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(running?.plannedProductionEndDate));
   });
 
-  it("pushes the C501 queue after delayed running work and inserts priority before M43", () => {
+  it("pushes the C501 queue after delayed running work and cascades M43 downstream setup dates", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -2033,6 +2033,16 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         ]),
         {
+          entryType: "route",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { partNo: "M43", optionNumber: "1", setupNo: "2", machineUsed: "TH501", machineType: "AUTOMATIC" },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { partNo: "M43", optionNumber: "1", setupNo: "2", cycleTime: 28800, loadingUnloading: 0 },
+        },
+        {
           entryType: "shop_floor_status",
           createdAt: "2026-06-23T00:30:00.000Z",
           payload: { jcNo: "JC-042", partCode: "M42", optionNumber: "1", setupNo: "1", machine: "C501", stage: "operator_started", completedAt: "2026-06-23T00:30:00.000Z" },
@@ -2042,6 +2052,11 @@ describe("buildLegacyDashboardSnapshot", () => {
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
         },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { machineNo: "TH501", machineType: "AUTOMATIC", status: "Active" },
+        },
       ],
     });
 
@@ -2050,7 +2065,8 @@ describe("buildLegacyDashboardSnapshot", () => {
       .sort((a, b) => dashboardDateKey(a.setupPlannedDate) - dashboardDateKey(b.setupPlannedDate));
     const running = c501Rows.find((row) => row.partCode === "M42");
     const m116 = c501Rows.find((row) => row.partCode === "M116");
-    const m43 = c501Rows.find((row) => row.partCode === "M43");
+    const m43SetupOne = c501Rows.find((row) => row.partCode === "M43");
+    const m43SetupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.partCode === "M43" && row.setupNo === "2");
 
     expect(running).toMatchObject({
       runningStatus: "Running",
@@ -2060,11 +2076,16 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(m116).toMatchObject({
       plannerPriority: "High",
     });
-    expect(m43).toMatchObject({
+    expect(m43SetupOne).toMatchObject({
       plannerPriority: "Normal",
     });
     expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(running?.plannedProductionEndDate));
-    expect(dashboardDateKey(m43?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
+    expect(dashboardDateKey(m43SetupOne?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
+    expect(m43SetupTwo).toMatchObject({
+      machine: "TH501",
+      setupNo: "2",
+    });
+    expect(dashboardDateKey(m43SetupTwo?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m43SetupOne?.plannedProductionEndDate));
   });
 
   it("moves priority ahead of a started setup task when planner approves non-running queue change", () => {
