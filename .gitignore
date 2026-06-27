@@ -42,6 +42,10 @@ yarn-error.log*
 # local data and generated agent artifacts
 *.xls
 *.xlsx
+backups/
+.handoff/
+.agents/
+skills-lock.json
 .codebase-memory/
 .firecrawl/
 *.Zone.Identifier
