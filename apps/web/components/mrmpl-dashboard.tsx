@@ -79,6 +79,7 @@ import {
   type DashboardTrendPoint,
 } from "@/lib/dashboard-view-model";
 import { machineFamilyKey } from "@/lib/planning-rules";
+import { planningRefreshStatusMessage, shouldAutoRefreshPlanning } from "@/lib/planning-refresh-policy";
 import { priorityPlanWindow, type PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
   applyShopFloorStatusPatches,
@@ -95,6 +96,18 @@ type ActionStatus = {
   tone: "default" | "destructive";
   message: string;
 } | null;
+
+type PlanningRefreshResult = {
+  mode?: string;
+  ok?: boolean;
+  skipped?: boolean;
+  error?: string;
+};
+
+type DashboardApiResult = {
+  message: string;
+  planningRefresh?: PlanningRefreshResult;
+};
 
 type DataEntrySpec = {
   entryType: string;
@@ -381,10 +394,12 @@ function DashboardShell() {
 
   async function submitAction(path: string, body: Record<string, unknown>) {
     setActionStatus(null);
+    const autoRefreshPlanning = shouldAutoRefreshPlanning(path, body);
     try {
-      const message = path === "data-import"
+      const apiResult = path === "data-import"
         ? await postDashboardApi(path, body)
-        : await runDashboardAction(path, body, {
+        : undefined;
+      const message = apiResult?.message ?? (await runDashboardAction(path, body, {
             saveRouteSelection,
             savePlannerPriority,
             saveMachineConstraint,
@@ -395,14 +410,31 @@ function DashboardShell() {
             saveProductionEntry,
             saveDataEntry,
             reverseEntry,
-          });
+          }));
       const shopFloorPatch = shopFloorStatusPatchFromAction(path, body);
       if (shopFloorPatch) {
         setOptimisticShopFloorStatuses((current) => upsertShopFloorStatusPatch(current, shopFloorPatch));
       }
+      const serverAutoRefreshed = planningRefreshCompleted(apiResult?.planningRefresh);
+      if (autoRefreshPlanning && !serverAutoRefreshed) {
+        setIsRefreshingSnapshot(true);
+        try {
+          const refreshResult = await refreshSnapshot({ force: true });
+          if (!refreshResult.skipped) setOptimisticShopFloorStatuses([]);
+        } catch (err) {
+          setActionStatus({
+            tone: "destructive",
+            message: `${message} Automatic planning refresh failed: ${err instanceof Error ? err.message : "Snapshot refresh failed."}`,
+          });
+          return;
+        } finally {
+          setIsRefreshingSnapshot(false);
+        }
+      }
+      if (serverAutoRefreshed) setOptimisticShopFloorStatuses([]);
       setActionStatus({
         tone: "default",
-        message: `${message} Snapshot refresh is manual to reduce Convex I/O.`,
+        message: `${message} ${planningRefreshStatusMessage(autoRefreshPlanning)}`,
       });
       const returnTab = str(body.returnTab) as DashboardTabId;
       if (returnTab && navItems.some((item) => item.id === returnTab)) {
@@ -4843,7 +4875,10 @@ type DashboardActionMutations = {
     priority: string;
     approvalMode?: string;
     interruptedJcNo?: string;
+    interruptedSetupNo?: string;
+    interruptedMachine?: string;
     interruptedFinishedQty?: number;
+    interruptedSetups?: Array<{ jcNo: string; setupNo: string; machine: string; finishedQty?: number }>;
     remark?: string;
   }) => Promise<unknown>;
   saveMachineConstraint: (args: {
@@ -4928,7 +4963,10 @@ async function runDashboardAction(
       priority: text(body.priority) || "Normal",
       approvalMode: optionalText(body.approvalMode),
       interruptedJcNo: optionalText(body.interruptedJcNo),
+      interruptedSetupNo: optionalText(body.interruptedSetupNo),
+      interruptedMachine: optionalText(body.interruptedMachine),
       interruptedFinishedQty: optionalNumber(body.interruptedFinishedQty),
+      interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
       remark: optionalText(body.remark),
     });
     return "Priority saved.";
@@ -5041,7 +5079,7 @@ function downloadApi(kind: "data-template" | "data-export", entryType: string) {
   window.location.href = `/api/${kind}?entryType=${encodeURIComponent(entryType)}&t=${Date.now()}`;
 }
 
-async function postDashboardApi(path: string, body: Record<string, unknown>) {
+async function postDashboardApi(path: string, body: Record<string, unknown>): Promise<DashboardApiResult> {
   const response = await fetch(`/api/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -5051,7 +5089,39 @@ async function postDashboardApi(path: string, body: Record<string, unknown>) {
   if (!response.ok) {
     throw new Error(str(payload.error) || `Request failed with status ${response.status}`);
   }
-  return str(payload.message || payload.savedText) || "Import complete.";
+  return {
+    message: str(payload.message || payload.savedText) || "Import complete.",
+    planningRefresh: planningRefreshPayload(payload.planningRefresh),
+  };
+}
+
+function planningRefreshPayload(value: unknown): PlanningRefreshResult | undefined {
+  const payload = asRecord(value);
+  if (!Object.keys(payload).length) return undefined;
+  return {
+    mode: optionalText(payload.mode),
+    ok: typeof payload.ok === "boolean" ? payload.ok : undefined,
+    skipped: typeof payload.skipped === "boolean" ? payload.skipped : undefined,
+    error: optionalText(payload.error),
+  };
+}
+
+function planningRefreshCompleted(value: PlanningRefreshResult | undefined) {
+  return value?.mode === "auto" && value.ok !== false && !value.error;
+}
+
+function priorityInterruptedSetups(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const rows = value
+    .map((row) => asRecord(row))
+    .map((row) => ({
+      jcNo: text(row.jcNo),
+      setupNo: text(row.setupNo),
+      machine: text(row.machine),
+      finishedQty: optionalNumber(row.finishedQty),
+    }))
+    .filter((row) => row.jcNo && row.setupNo && row.machine);
+  return rows.length ? rows : undefined;
 }
 
 function formPayload(form: FormData, fields: LegacyField[]) {
