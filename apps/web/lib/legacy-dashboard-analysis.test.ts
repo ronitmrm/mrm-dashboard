@@ -2378,4 +2378,108 @@ describe("buildLegacyDashboardSnapshot", () => {
       shopFloorDoneBy: "Q2",
     });
   });
+
+  it("does not let a downstream setup finish before the previous setup finishes", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-27T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-M12",
+            partCode: "M12",
+            optionNumber: "1",
+            orderPcs: 10000,
+            rmInwardDate: "2026-06-27",
+          },
+        },
+        ...[
+          ["1", "C501", "TURNING", 34.56],
+          ["2", "TR502", "THREADING", 82.944],
+          ["3", "TR503", "THREADING", 82.944],
+          ["4", "TH502", "THREADING", 34.56],
+        ].flatMap(([setupNo, machineUsed, machineType, cycleTime]) => [
+          {
+            entryType: "route",
+            createdAt: "2026-06-27T00:00:00.000Z",
+            payload: {
+              partNo: "M12",
+              optionNumber: "1",
+              setupNo,
+              machineUsed,
+              machineType,
+            },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-27T00:00:00.000Z",
+            payload: {
+              partNo: "M12",
+              optionNumber: "1",
+              setupNo,
+              cycleTime,
+              loadingUnloading: 0,
+            },
+          },
+          {
+            entryType: "tooling",
+            createdAt: "2026-06-27T00:00:00.000Z",
+            payload: {
+              partNo: "M12",
+              optionNumber: "1",
+              setupNo,
+              toolNo: `T-${setupNo}`,
+            },
+          },
+        ]),
+        ...[
+          ["C501", "TURNING"],
+          ["TR502", "THREADING"],
+          ["TR503", "THREADING"],
+          ["TH502", "THREADING"],
+        ].map(([machineNo, machineType]) => ({
+          entryType: "machine_master",
+          createdAt: "2026-06-27T00:00:00.000Z",
+          payload: {
+            machineNo,
+            machineType,
+            status: "Active",
+          },
+        })),
+      ],
+    });
+
+    const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-M12");
+    const setupThree = rows.find((row) => row.setupNo === "3");
+    const setupFour = rows.find((row) => row.setupNo === "4");
+
+    expect(setupThree).toBeDefined();
+    expect(setupFour).toBeDefined();
+    expect(dateLabelValue(setupFour!.plannedProductionEndDate)).toBeGreaterThanOrEqual(dateLabelValue(setupThree!.plannedProductionEndDate));
+  });
 });
+
+function dateLabelValue(value: unknown) {
+  const raw = String(value ?? "");
+  const match = raw.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/);
+  if (!match) return Date.parse(raw);
+  const [, day, monthName, yearText] = match;
+  const month = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+  ].indexOf(monthName!.toLowerCase());
+  const year = Number(yearText);
+  return Date.UTC(year < 100 ? 2000 + year : year, month, Number(day));
+}

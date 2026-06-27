@@ -2685,11 +2685,13 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
       .sort((a, b) => numericSort(a.setup, b.setup));
 
     let operationReadyDate = "";
+    let previousSetupEndDate = "";
     for (const [index, group] of setupGroups.entries()) {
       const baseReadyDate = maxDateValue(...group.rows.map((row) => planningMeta(row).baseReadyDate ?? ""));
       const groupReadyDate = maxDateValue(operationReadyDate, baseReadyDate);
       for (const row of group.rows) {
         planningMeta(row).readyDate = groupReadyDate;
+        planningMeta(row).minimumProductionEndDate = previousSetupEndDate;
       }
 
       const nextGroup = setupGroups[index + 1];
@@ -2706,7 +2708,9 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
         nextCycle,
         actuals,
       }) : "";
-      operationReadyDate = maxDateValue(groupReadyDate, bufferReadyDate || maxDateValue(...productionEndDates));
+      const groupEndDate = maxDateValue(...productionEndDates);
+      operationReadyDate = maxDateValue(groupReadyDate, bufferReadyDate || groupEndDate);
+      previousSetupEndDate = maxDateValue(previousSetupEndDate, groupEndDate);
     }
   }
 }
@@ -2754,7 +2758,10 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>) {
       const actualStartDate = actualProductionStartDate(meta);
       const readyDate = actualStartDate || meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "";
       const plannedStartDate = actualStartDate || maxDateValue(readyDate, machineNextDate);
-      const plannedProductionEndDate = plannedProductionEnd(plannedStartDate, meta.orderPcs ?? 0, meta.cycle, meta.productionActual);
+      const plannedProductionEndDate = maxDateValue(
+        plannedProductionEnd(plannedStartDate, meta.orderPcs ?? 0, meta.cycle, meta.productionActual),
+        meta.minimumProductionEndDate ?? "",
+      );
       row.plannedDate = dateLabel(plannedStartDate);
       row.setupPlannedDate = dateLabel(plannedStartDate);
       row.plannedStartDate = dateLabel(plannedStartDate);
@@ -2955,6 +2962,7 @@ function planningMeta(row: Record<string, unknown>) {
   return ((row as Record<string, unknown>).__planningMeta ?? {}) as {
     readyDate?: string;
     baseReadyDate?: string;
+    minimumProductionEndDate?: string;
     canPullForward?: boolean;
     orderPcs?: number;
     totalOrderPcs?: number;
