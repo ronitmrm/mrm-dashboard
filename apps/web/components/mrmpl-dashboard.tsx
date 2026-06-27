@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, useSyncExternalStore, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import Image from "next/image";
@@ -79,6 +79,7 @@ import {
   type DashboardTrendPoint,
 } from "@/lib/dashboard-view-model";
 import { machineFamilyKey } from "@/lib/planning-rules";
+import { priorityPlanWindow, type PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
   applyShopFloorStatusPatches,
   shopFloorStatusPatchFromAction,
@@ -1037,62 +1038,21 @@ function PlannerPriorityForm({
             <div>
               <div className="text-sm font-medium">Probable priority plan</div>
               <div className="text-xs text-muted-foreground">{priorityPlan.steps.length} target setup{priorityPlan.steps.length === 1 ? "" : "s"} checked from the current machine queue.</div>
+              <div className="text-xs text-muted-foreground">Leave running blockers unselected for a no-stop plan; select only the running setups you want to stop.</div>
             </div>
             <Button type="button" variant="outline" onClick={resetPlanReview}>Recheck inputs</Button>
           </div>
           {priorityPlan.steps.length ? (
             <div className="grid gap-2">
               {priorityPlan.steps.map((step) => (
-                <div key={step.key} className="grid gap-2 rounded-lg border bg-background p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-medium">{step.itemCode} / {step.jcNo} / Setup {step.setupNo}</div>
-                      <div className="text-xs text-muted-foreground">Target machine {step.machine} - {step.startDate} to {step.endDate}</div>
-                    </div>
-                    <Badge variant={step.blockers.length ? "secondary" : "outline"}>{step.blockers.length ? step.blockers.length + " queue impact" : "No stop needed"}</Badge>
-                  </div>
-                  {step.blockers.length ? (
-                    <div className="grid gap-2">
-                      {step.blockers.map((blocker) => {
-                        const selected = Boolean(selectedInterruptions[blocker.key]);
-                        return (
-                          <div key={blocker.key} className="grid gap-2 rounded-md border p-2 md:grid-cols-[1fr_auto] md:items-center">
-                            <div>
-                              <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
-                              <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} to {blocker.endDate} - {blocker.label}</div>
-                            </div>
-                            <div className="flex flex-wrap items-end gap-2">
-                              {blocker.requiresApproval ? (
-                                <Button
-                                  type="button"
-                                  variant={selected ? "default" : "outline"}
-                                  onClick={() => setSelectedInterruptions((current) => ({ ...current, [blocker.key]: !selected }))}
-                                >
-                                  {blocker.state === "running" ? (selected ? "Stop selected" : "Stop this setup") : (selected ? "Move approved" : "Approve queue move")}
-                                </Button>
-                              ) : (
-                                <Badge variant="outline">Queue will move</Badge>
-                              )}
-                              {selected && blocker.state === "running" ? (
-                                <Field label="Finished qty">
-                                  <Input
-                                    className="w-28"
-                                    min="0"
-                                    step="1"
-                                    type="number"
-                                    value={finishedQtyByInterruption[blocker.key] ?? ""}
-                                    required
-                                    onChange={(event) => setFinishedQtyByInterruption((current) => ({ ...current, [blocker.key]: event.target.value }))}
-                                  />
-                                </Field>
-                              ) : null}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
+                <PriorityPlanStepReview
+                  key={step.key}
+                  step={step}
+                  selectedInterruptions={selectedInterruptions}
+                  finishedQtyByInterruption={finishedQtyByInterruption}
+                  setSelectedInterruptions={setSelectedInterruptions}
+                  setFinishedQtyByInterruption={setFinishedQtyByInterruption}
+                />
               ))}
             </div>
           ) : (
@@ -1109,6 +1069,135 @@ function PlannerPriorityForm({
         {planReady ? "Apply approved priority" : "Show probable plan"}
       </Button>
     </form>
+  );
+}
+
+function PriorityPlanStepReview({
+  step,
+  selectedInterruptions,
+  finishedQtyByInterruption,
+  setSelectedInterruptions,
+  setFinishedQtyByInterruption,
+}: {
+  step: PriorityPlanStep;
+  selectedInterruptions: Record<string, boolean>;
+  finishedQtyByInterruption: Record<string, string>;
+  setSelectedInterruptions: Dispatch<SetStateAction<Record<string, boolean>>>;
+  setFinishedQtyByInterruption: Dispatch<SetStateAction<Record<string, string>>>;
+}) {
+  const selectedNonRunningKeys = new Set(step.blockers
+    .filter((blocker) => blocker.state !== "running" && selectedInterruptions[blocker.key])
+    .map((blocker) => blocker.key));
+  const selectedRunningKeys = new Set(step.blockers
+    .filter((blocker) => blocker.state === "running" && selectedInterruptions[blocker.key])
+    .map((blocker) => blocker.key));
+  const allRunningKeys = step.blockers.filter((blocker) => blocker.state === "running").map((blocker) => blocker.key);
+  const stopPreviewKeys = new Set([
+    ...selectedNonRunningKeys,
+    ...(selectedRunningKeys.size ? [...selectedRunningKeys] : allRunningKeys),
+  ]);
+  const noStopWindow = priorityPlanWindow({
+    targetStartDate: step.startDate,
+    targetEndDate: step.endDate,
+    blockers: step.blockers,
+    preemptedBlockerKeys: selectedNonRunningKeys,
+  });
+  const stopWindow = priorityPlanWindow({
+    targetStartDate: step.startDate,
+    targetEndDate: step.endDate,
+    blockers: step.blockers,
+    preemptedBlockerKeys: stopPreviewKeys,
+  });
+  const selectedRunningCount = selectedRunningKeys.size;
+  const runningBlockerCount = allRunningKeys.length;
+
+  return (
+    <div className="grid gap-2 rounded-lg border bg-background p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium">{step.itemCode} / {step.jcNo} / Setup {step.setupNo}</div>
+          <div className="text-xs text-muted-foreground">Current queue on {step.machine} - {step.startDate} to {step.endDate}</div>
+        </div>
+        <Badge variant={step.blockers.length ? "secondary" : "outline"}>{step.blockers.length ? step.blockers.length + " queue impact" : "No stop needed"}</Badge>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-2">
+        <PriorityScenarioCard
+          title="Do not stop running machine"
+          window={noStopWindow}
+          detail={runningBlockerCount ? "Running setups finish first; queued setups move after priority." : "No running setup blocks this target."}
+        />
+        <PriorityScenarioCard
+          title="Stop selected running setup"
+          window={stopWindow}
+          detail={selectedRunningCount
+            ? `${selectedRunningCount} running setup${selectedRunningCount === 1 ? "" : "s"} selected to stop.`
+            : runningBlockerCount
+              ? "Preview assumes running blockers are stopped until exact setups are selected below."
+              : "Same as no-stop because no running setup blocks this target."}
+        />
+      </div>
+
+      {step.blockers.length ? (
+        <div className="grid gap-2">
+          {step.blockers.map((blocker) => {
+            const selected = Boolean(selectedInterruptions[blocker.key]);
+            return (
+              <div key={blocker.key} className="grid gap-2 rounded-md border p-2 md:grid-cols-[1fr_auto] md:items-center">
+                <div>
+                  <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
+                  <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} to {blocker.endDate} - {blocker.label}</div>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  {blocker.requiresApproval ? (
+                    <Button
+                      type="button"
+                      variant={selected ? "default" : "outline"}
+                      onClick={() => setSelectedInterruptions((current) => ({ ...current, [blocker.key]: !selected }))}
+                    >
+                      {blocker.state === "running" ? (selected ? "Stop selected" : "Stop this setup") : (selected ? "Move approved" : "Approve queue move")}
+                    </Button>
+                  ) : (
+                    <Badge variant="outline">Queue will move</Badge>
+                  )}
+                  {selected && blocker.state === "running" ? (
+                    <Field label="Finished qty">
+                      <Input
+                        className="w-28"
+                        min="0"
+                        step="1"
+                        type="number"
+                        value={finishedQtyByInterruption[blocker.key] ?? ""}
+                        required
+                        onChange={(event) => setFinishedQtyByInterruption((current) => ({ ...current, [blocker.key]: event.target.value }))}
+                      />
+                    </Field>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PriorityScenarioCard({
+  title,
+  window,
+  detail,
+}: {
+  title: string;
+  window: PriorityPlanWindow;
+  detail: string;
+}) {
+  return (
+    <div className="grid gap-1 rounded-md border bg-muted/20 p-3">
+      <div className="text-xs font-medium text-muted-foreground">{title}</div>
+      <div className="text-sm font-semibold">{window.startDate || "-"} to {window.endDate || "-"}</div>
+      <div className="text-xs text-muted-foreground">{detail}</div>
+    </div>
   );
 }
 

@@ -35,3 +35,7 @@ _Avoid_: Manual date refresh.
 **Route Machine Family**:
 A route-level machine code such as `D5` or `C5` that represents a physical-machine family. Future planning requires at least one active physical machine in machine master for that family, such as `D501`; otherwise the work order is flagged and no unstarted machine plan row is created.
 _Avoid_: Pseudo-machine.
+
+**Priority Plan Scenario**:
+The probable timing shown before saving a planner priority change. It must show dates for keeping running machines active and for stopping selected running setups, because selecting a priority must be a planning decision rather than an implicit machine stop.
+_Avoid_: Single probable date.
