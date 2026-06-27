@@ -76,6 +76,12 @@ import {
   type DashboardTrendPoint,
 } from "@/lib/dashboard-view-model";
 import { machineFamilyKey } from "@/lib/planning-rules";
+import {
+  applyShopFloorStatusPatches,
+  shopFloorStatusPatchFromAction,
+  upsertShopFloorStatusPatch,
+  type ShopFloorStatusPatch,
+} from "@/lib/shop-floor-optimistic";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 
@@ -306,6 +312,7 @@ function DashboardShell() {
   const [preferredDataEntryType, setPreferredDataEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
   const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
+  const [optimisticShopFloorStatuses, setOptimisticShopFloorStatuses] = useState<ShopFloorStatusPatch[]>([]);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
   const dashboardPayload = useQuery(api.dashboard.snapshot, {});
@@ -342,6 +349,7 @@ function DashboardShell() {
           ? "Dashboard snapshot is already fresh."
           : "Dashboard snapshot refreshed.",
       });
+      if (!result.skipped) setOptimisticShopFloorStatuses([]);
     } catch (err) {
       setActionStatus({
         tone: "destructive",
@@ -369,6 +377,10 @@ function DashboardShell() {
             saveDataEntry,
             reverseEntry,
           });
+      const shopFloorPatch = shopFloorStatusPatchFromAction(path, body);
+      if (shopFloorPatch) {
+        setOptimisticShopFloorStatuses((current) => upsertShopFloorStatusPatch(current, shopFloorPatch));
+      }
       setActionStatus({
         tone: "default",
         message: `${message} Snapshot refresh is manual to reduce Convex I/O.`,
@@ -410,12 +422,16 @@ function DashboardShell() {
   }
 
   const isDashboardLoading = dashboardPayload === undefined;
-  const payload = isDashboardLoading ? {} : asRecord(dashboardPayload);
+  const basePayload = isDashboardLoading ? {} : asRecord(dashboardPayload);
+  const payload = useMemo(
+    () => applyShopFloorStatusPatches(basePayload, optimisticShopFloorStatuses),
+    [basePayload, optimisticShopFloorStatuses],
+  );
   const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
 
   const view = useMemo(
-    () => toDashboardViewModel(dashboardPayload),
-    [dashboardPayload],
+    () => toDashboardViewModel(payload),
+    [payload],
   );
 
   return (
