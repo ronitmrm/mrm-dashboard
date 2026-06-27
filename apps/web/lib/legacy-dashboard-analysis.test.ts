@@ -1876,6 +1876,95 @@ describe("buildLegacyDashboardSnapshot", () => {
     });
   });
 
+  it("reserves the C501 queue for high-priority M116 before earlier-ready normal M32", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      plannerPriorities: [
+        {
+          target: "JC-081",
+          jcNo: "JC-081",
+          partCode: "M116",
+          priority: "High",
+          approvalMode: "idle_queue_only",
+          createdAt: "2026-06-27T01:00:00.000Z",
+        },
+      ],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-023",
+            partCode: "M32",
+            optionNumber: "1",
+            orderPcs: 1,
+            rmInwardDate: "2026-06-25",
+          },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:01:00.000Z",
+          payload: {
+            jcNo: "JC-081",
+            partCode: "M116",
+            optionNumber: "1",
+            orderPcs: 1,
+            rmInwardDate: "2026-06-28",
+          },
+        },
+        ...["M32", "M116"].flatMap((partNo) => [
+          {
+            entryType: "route",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "C501",
+              machineType: "AUTOMATIC",
+            },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
+          },
+        ]),
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
+        },
+      ],
+    });
+
+    const c501Rows = snapshot.productionControl.machinePlanDetailRows
+      .filter((row) => row.machine === "C501")
+      .sort((a, b) => dashboardDateKey(a.setupPlannedDate) - dashboardDateKey(b.setupPlannedDate));
+    const m116 = c501Rows.find((row) => row.partCode === "M116");
+    const m32 = c501Rows.find((row) => row.partCode === "M32");
+
+    expect(m116).toMatchObject({
+      plannerPriority: "High",
+      setupPlannedDate: "28-June-26",
+    });
+    expect(m32).toMatchObject({
+      plannerPriority: "Normal",
+    });
+    expect(dashboardDateKey(m32?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
+  });
+
   it("keeps priority behind a setup task that already started without planner approval", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",

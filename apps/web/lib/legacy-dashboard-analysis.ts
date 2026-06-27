@@ -3050,6 +3050,7 @@ function takeNextMachineQueueRow(queue: Array<Record<string, unknown>>, machineN
   const first = queue[0]!;
   const currentSlotDate = machineNextDate || earliestQueueReadyDate(queue) || queueReadyDate(first);
   if (isQueueReady(first, currentSlotDate)) return queue.shift()!;
+  if (shouldReservePriorityQueueSlot(first, queue)) return queue.shift()!;
   const readyIndex = queue.findIndex((row, index) => {
     const meta = planningMeta(row);
     return index > 0 && meta.canPullForward !== false && isQueueReady(row, currentSlotDate);
@@ -3059,6 +3060,11 @@ function takeNextMachineQueueRow(queue: Array<Record<string, unknown>>, machineN
     return readyRow!;
   }
   return queue.shift()!;
+}
+
+function shouldReservePriorityQueueSlot(first: Record<string, unknown>, queue: Array<Record<string, unknown>>) {
+  if (safeNumber(rowValue(first, "plannerPriorityScore")) <= 0) return false;
+  return queue.slice(1).some((row) => canPriorityPreempt(row, first));
 }
 
 function isQueueReady(row: Record<string, unknown>, currentSlotDate: string) {
