@@ -11,14 +11,20 @@ pnpm install
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-Fill `apps/web/.env.local` with the Convex deployment values.
+Fill `apps/web/.env.local` with Convex values.
 
-Required variables:
+For local self-hosted Convex development, see `docs/local-convex.md`.
 
-- `CONVEX_DEPLOYMENT`
+Required app variables:
+
 - `NEXT_PUBLIC_CONVEX_URL`
 - `CONVEX_SITE_URL`
 - `NEXT_PUBLIC_CONVEX_SITE_URL`
+
+Convex CLI variables depend on the backend target:
+
+- Cloud: `CONVEX_DEPLOYMENT`
+- Local self-hosted: `CONVEX_SELF_HOSTED_URL` and `CONVEX_SELF_HOSTED_ADMIN_KEY`
 
 ## Development
 
@@ -33,6 +39,9 @@ Useful focused commands:
 ```bash
 pnpm dev:web
 pnpm dev:convex
+pnpm convex:local:up
+pnpm convex:local:admin-key
+pnpm convex:local:push
 pnpm lint
 pnpm typecheck
 pnpm --filter web test
@@ -49,13 +58,13 @@ To inspect a workbook without writing to Convex:
 pnpm import:workbook:dry-run -- --workbook /path/to/Advanced_Employee_Performance_System.xlsx
 ```
 
-To import workbook data into the shared dev Convex deployment:
+To import workbook data into the selected Convex deployment:
 
 ```bash
 pnpm import:workbook -- --workbook /path/to/Advanced_Employee_Performance_System.xlsx
 ```
 
-The importer uses `npx convex import --replace`, so verify the selected Convex deployment before running it. This project intentionally uses the shared dev Convex deployment for both local development and the Vercel-hosted dashboard.
+The importer uses `npx convex import --replace`, so verify the selected Convex deployment before running it. For routine local development, prefer the self-hosted backend documented in `docs/local-convex.md` to avoid spending database I/O on the shared cloud Convex deployment.
 
 ## Vercel Dev-Backed Deployment
 

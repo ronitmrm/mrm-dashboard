@@ -757,8 +757,12 @@ async function main() {
     return;
   }
 
-  if (!process.env.CONVEX_DEPLOYMENT && !process.env.NEXT_PUBLIC_CONVEX_URL) {
-    throw new Error("Convex deployment env is required. Set CONVEX_DEPLOYMENT or NEXT_PUBLIC_CONVEX_URL in apps/web/.env.local.");
+  if (process.env.CONVEX_SELF_HOSTED_URL && !process.env.CONVEX_SELF_HOSTED_ADMIN_KEY) {
+    throw new Error("CONVEX_SELF_HOSTED_ADMIN_KEY is required when importing into a self-hosted Convex backend.");
+  }
+
+  if (!process.env.CONVEX_DEPLOYMENT && !process.env.NEXT_PUBLIC_CONVEX_URL && !process.env.CONVEX_SELF_HOSTED_URL) {
+    throw new Error("Convex deployment env is required. Set CONVEX_DEPLOYMENT/NEXT_PUBLIC_CONVEX_URL for cloud or CONVEX_SELF_HOSTED_URL/CONVEX_SELF_HOSTED_ADMIN_KEY for local self-hosted Convex in apps/web/.env.local.");
   }
 
   const importedAt = new Date(fs.statSync(workbookPath).mtimeMs).toISOString();

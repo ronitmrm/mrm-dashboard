@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "next dev --webpack -p 3001",
     "dev:convex": "convex dev --typecheck disable --tail-logs disable",
+    "dev:convex:local": "convex dev --typecheck disable --tail-logs disable",
+    "convex:local:push": "convex dev --once --typecheck disable --tail-logs disable",
+    "convex:auth:keys": "node scripts/generate-convex-auth-keys.mjs",
     "codegen": "convex codegen --typecheck disable",
     "build": "next build",
     "import:workbook": "node scripts/import-workbook.mjs --apply --replace",
