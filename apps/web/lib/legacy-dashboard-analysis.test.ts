@@ -1965,6 +1965,130 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(dashboardDateKey(m32?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
   });
 
+  it("does not overlap C501 when a running M43 and priority M116 push normal M32", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      plannerPriorities: [
+        {
+          target: "JC-081",
+          jcNo: "JC-081",
+          partCode: "M116",
+          priority: "High",
+          approvalMode: "idle_queue_only",
+          createdAt: "2026-06-27T01:00:00.000Z",
+        },
+        {
+          target: "M43",
+          partCode: "M43",
+          priority: "High",
+          createdAt: "2026-06-25T01:00:00.000Z",
+        },
+      ],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-023",
+            partCode: "M32",
+            optionNumber: "1",
+            orderPcs: 5,
+            rmInwardDate: "2026-06-25",
+          },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:01:00.000Z",
+          payload: {
+            jcNo: "JC-033",
+            partCode: "M43",
+            optionNumber: "1",
+            orderPcs: 1,
+            rmInwardDate: "2026-06-23",
+          },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:02:00.000Z",
+          payload: {
+            jcNo: "JC-081",
+            partCode: "M116",
+            optionNumber: "1",
+            orderPcs: 8,
+            rmInwardDate: "2026-06-28",
+          },
+        },
+        ...["M32", "M43", "M116"].flatMap((partNo) => [
+          {
+            entryType: "route",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "C501",
+              machineType: "AUTOMATIC",
+            },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
+          },
+        ]),
+        {
+          entryType: "shop_floor_status",
+          createdAt: "2026-06-27T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-033",
+            partNo: "M43",
+            optionNumber: "1",
+            setupNo: "1",
+            machineNo: "C501",
+            stage: "operator_started",
+            completedAt: "2026-06-27T00:00:00.000Z",
+          },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
+        },
+      ],
+    });
+
+    const c501Rows = snapshot.productionControl.machinePlanDetailRows
+      .filter((row) => row.machine === "C501")
+      .sort((a, b) => dashboardDateKey(a.setupPlannedDate) - dashboardDateKey(b.setupPlannedDate));
+    const m43 = c501Rows.find((row) => row.partCode === "M43");
+    const m116 = c501Rows.find((row) => row.partCode === "M116");
+    const m32 = c501Rows.find((row) => row.partCode === "M32");
+
+    expect(m43).toMatchObject({
+      runningStatus: "Running",
+      plannedProductionStartDate: "27-June-26",
+    });
+    expect(m116).toMatchObject({
+      plannerPriority: "High",
+      setupPlannedDate: "28-June-26",
+    });
+    expect(dashboardDateKey(m32?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
+    for (let index = 1; index < c501Rows.length; index += 1) {
+      expect(dashboardDateKey(c501Rows[index]!.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(c501Rows[index - 1]!.plannedProductionEndDate));
+    }
+  });
+
   it("keeps priority behind a setup task that already started without planner approval", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",

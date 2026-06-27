@@ -2862,9 +2862,9 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
     while (queue.length) {
       const row = takeNextMachineQueueRow(queue, machineNextDate);
       const meta = planningMeta(row);
-      const actualStartDate = actualProductionStartDate(meta);
-      const readyDate = actualStartDate || meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "";
-      const plannedStartDate = actualStartDate || maxDateValue(readyDate, machineNextDate);
+      const actualStartDate = lockedProductionStartDate(row);
+      const readyDate = meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "";
+      const plannedStartDate = maxDateValue(readyDate, actualStartDate, machineNextDate);
       const setupCompletionDate = parseDate(rowText(row, "setupCompletionDate", "completionDate", "setupCompletedOn"));
       const plannedProductionStartDate = actualStartDate || maxDateValue(plannedStartDate, setupCompletionDate);
       const plannedProductionEndDate = maxDateValue(
@@ -2886,8 +2886,8 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
 }
 
 function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>) {
-  const aActualStart = actualProductionStartDate(planningMeta(a));
-  const bActualStart = actualProductionStartDate(planningMeta(b));
+  const aActualStart = lockedProductionStartDate(a);
+  const bActualStart = lockedProductionStartDate(b);
   const priorityDiff = safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"));
   if (priorityDiff > 0 && canPriorityPreempt(a, b)) return priorityDiff;
   if (priorityDiff < 0 && canPriorityPreempt(b, a)) return priorityDiff;
@@ -2897,8 +2897,8 @@ function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>
   }
   const familyTargetDiff = compareFamilyIdleGapSortDates(a, b);
   return priorityQueueStateRank(a) - priorityQueueStateRank(b) ||
-    familyTargetDiff ||
     priorityDiff ||
+    familyTargetDiff ||
     machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) ||
     rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo"));
@@ -2938,7 +2938,6 @@ function applyPriorityInterruptionQuantities(details: Array<Record<string, unkno
 
 function canPriorityPreempt(blockingRow: Record<string, unknown>, priorityRow: Record<string, unknown>) {
   if (safeNumber(rowValue(priorityRow, "plannerPriorityScore")) <= safeNumber(rowValue(blockingRow, "plannerPriorityScore"))) return false;
-  if (familyIdleGapSortDate(blockingRow) && !familyIdleGapSortDate(priorityRow)) return false;
   const state = priorityQueueState(blockingRow);
   if (state === "idle") return true;
   const mode = priorityApprovalMode(priorityRow);
@@ -3004,7 +3003,7 @@ function priorityQueueStateRank(row: Record<string, unknown>) {
 
 function priorityQueueState(row: Record<string, unknown>) {
   if (rowText(row, "runningStatus").toLowerCase() === "complete") return "idle";
-  if (actualProductionStartDate(planningMeta(row)) || rowText(row, "runningStatus").toLowerCase() === "running") return "running";
+  if (lockedProductionStartDate(row) || rowText(row, "runningStatus").toLowerCase() === "running") return "running";
   const stage = rowText(row, "shopFloorStage").toLowerCase();
   const runningStatus = rowText(row, "runningStatus").toLowerCase();
   if (stage && stage !== "planned" && stage !== "item_complete") return "started_not_running";
@@ -3039,6 +3038,16 @@ function compareFamilyIdleGapSortDates(a: Record<string, unknown>, b: Record<str
 
 function actualProductionStartDate(meta: ReturnType<typeof planningMeta>) {
   return parseDate(meta.productionActual?.startDate) || "";
+}
+
+function lockedProductionStartDate(row: Record<string, unknown>) {
+  if (rowText(row, "runningStatus").toLowerCase() === "complete") return "";
+  const metaStart = actualProductionStartDate(planningMeta(row));
+  if (metaStart) return metaStart;
+  const rowActualStart = parseDate(rowText(row, "actualProductionStartDate", "actualStartDate"));
+  if (rowActualStart) return rowActualStart;
+  if (rowText(row, "runningStatus").toLowerCase() !== "running") return "";
+  return parseDate(rowText(row, "plannedProductionStartDate", "setupCompletionDate", "completionDate", "setupCompletedOn")) || "";
 }
 
 function nextMachineAvailableDate(dateValue: string, planningCalendar: PlanningCalendar) {

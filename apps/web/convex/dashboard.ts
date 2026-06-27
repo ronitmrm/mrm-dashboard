@@ -6,7 +6,6 @@ import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, mutation, query, type ActionCtx, type QueryCtx, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { buildLegacyDashboardSnapshot } from "../lib/legacy-dashboard-analysis";
-import { applyShopFloorStatusPatches, shopFloorStatusPatchFromDataEntry } from "../lib/shop-floor-optimistic";
 
 async function requireDashboardUserId(ctx: QueryCtx | MutationCtx | ActionCtx) {
   const userId = await getAuthUserId(ctx);
@@ -913,7 +912,6 @@ export const saveDataEntry = mutation({
         ...ownerFields,
         createdAt: now(),
       });
-      await patchCachedShopFloorStatus(ctx, args.entryType, args.payload);
       return { ok: true, id: args.id };
     }
     if (args.key) {
@@ -937,29 +935,13 @@ export const saveDataEntry = mutation({
           ...ownerFields,
           createdAt: now(),
         });
-        await patchCachedShopFloorStatus(ctx, args.entryType, args.payload);
         return { ok: true, id: existing._id };
       }
     }
     const result = await insertOwnerRow(ctx, "dataEntries", args);
-    await patchCachedShopFloorStatus(ctx, args.entryType, args.payload);
     return result;
   },
 });
-
-async function patchCachedShopFloorStatus(
-  ctx: MutationCtx,
-  entryType: string,
-  payload: unknown,
-) {
-  const patch = shopFloorStatusPatchFromDataEntry(entryType, payload);
-  if (!patch) return;
-  const cached = await readDashboardSnapshotPayload(ctx, null);
-  if (!cached) return;
-  const patched = applyShopFloorStatusPatches(cached, [patch]);
-  if (patched === cached) return;
-  await replaceDashboardSnapshotChunks(ctx, null, patched, now());
-}
 
 export const reverseEntry = mutation({
   args: {

@@ -1,3 +1,7 @@
+**Always start each response with the word "mayank".**
+**Save the handoff docs in this directory under `./.handoff/`. Create it if not present and add it to .gitignore as well.**
+**While running powershell commands, run this for execution policy bypass: `Set-ExecutionPolicy Bypass -Scope Process -Force`.**
+
 # Agent Rules: MRMPL Dashboard
 
 This repo is meant to be iterated on by non-technical users through AI agents. Keep changes boring, traceable, and easy to verify.
@@ -28,6 +32,7 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
 - Run workbook imports as dry runs first:
   `pnpm import:workbook:dry-run -- --workbook /path/to/file.xlsx`
 - Confirm the target deployment before any write/import command.
+- Use convex skills whenever necessary
 
 ## Design System
 
@@ -47,6 +52,7 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
 - Keep API compatibility routes under `apps/web/app/api/[...path]/route.ts` honest: no fake success responses.
 - For Next.js behavior, check local Next docs or current package behavior before relying on old conventions.
 - Prefer existing package boundaries over adding new abstractions.
+- You have a bunch of code best practices skills from matt Pocock. use those regularly while working in this project.
 
 ## Environment
 
@@ -97,12 +103,18 @@ pnpm build
 For UI changes, also smoke-test `pnpm dev` in a browser when possible.
 Always kill dev server/s after testing, unless the user specifies to have them up and running.
 
+### Vercel Plugin Pointers
+
+- While debugging, make sure to view the build AND runtime logs for a full picture.
+- DO NOT alter deployments directly. always treat GitHub as the source of truth and commit changes for them to be picked up by Vercel, not the other way around.
+
 ## Git Discipline
 
 - Check `git status --short` before and after every change set.
+- Regularly check git fetch origin for upstream changes.
 - Commit every completed change set with a clear, specific message.
 - Never commit secrets, `.env.local`, workbook files, generated caches, or ignored files.
-- After every 3 local commits, push upstream to `main`:
+- After every 3 local commits, ask the user if they want to push upstream to `main` aka deploy the latest changes:
   `git push origin main`
 - Reset the push counter after a successful push.
 - If commit or push fails, stop and report the exact failure instead of continuing silently.
