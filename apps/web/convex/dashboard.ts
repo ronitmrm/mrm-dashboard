@@ -16,8 +16,13 @@ async function requireDashboardUserId(ctx: QueryCtx | MutationCtx | ActionCtx) {
   return userId;
 }
 
-async function getOwnerFields(ctx: QueryCtx | MutationCtx) {
-  return { ownerId: await requireDashboardUserId(ctx) };
+async function requireDashboardAccess(ctx: QueryCtx | MutationCtx | ActionCtx) {
+  await requireDashboardUserId(ctx);
+}
+
+async function getGlobalOwnerFields(ctx: QueryCtx | MutationCtx) {
+  await requireDashboardAccess(ctx);
+  return { ownerId: undefined };
 }
 
 const optionalString = v.optional(v.string());
@@ -169,8 +174,8 @@ export const snapshot = query({
     endDate: optionalString,
   },
   handler: async (ctx, args) => {
-    const ownerId = await requireDashboardUserId(ctx);
-    const cached = await readDashboardSnapshotPayload(ctx, ownerId);
+    await requireDashboardAccess(ctx);
+    const cached = await readDashboardSnapshotPayload(ctx, null);
     if (cached) {
       return applySnapshotFilters(cached, args);
     }
@@ -183,10 +188,9 @@ export const refreshSnapshot = action({
     force: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<RefreshSnapshotResult> => {
-    const ownerId = await requireDashboardUserId(ctx);
+    await requireDashboardAccess(ctx);
     if (!args.force) {
       const freshness: { fresh: boolean; updatedAt?: string } = await ctx.runQuery(internal.dashboard.dashboardSnapshotFreshness, {
-        ownerId,
         maxAgeMs: dashboardSnapshotFreshForMs,
         nowMs: Date.now(),
       });
@@ -201,7 +205,6 @@ export const refreshSnapshot = action({
         do {
           const result: { page: SnapshotSourceRow[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(internal.dashboard.collectSnapshotTablePage, {
             table,
-            ownerId,
             ownerScope,
             paginationOpts: { numItems: 1000, cursor },
           });
@@ -211,19 +214,18 @@ export const refreshSnapshot = action({
       }
     }
     const payload = buildDashboardSnapshotPayload(source);
-    const saveResult: { ok: true; changed: boolean; updatedAt?: string } = await ctx.runMutation(internal.dashboard.saveDashboardSnapshot, { ownerId, payload, cacheUpdatedAt: now() });
+    const saveResult: { ok: true; changed: boolean; updatedAt?: string } = await ctx.runMutation(internal.dashboard.saveDashboardSnapshot, { payload, cacheUpdatedAt: now() });
     return { ok: true, skipped: !saveResult.changed, updatedAt: saveResult.updatedAt ?? payload.updatedAt };
   },
 });
 
 export const dashboardSnapshotFreshness = internalQuery({
   args: {
-    ownerId: v.id("users"),
     maxAgeMs: v.number(),
     nowMs: v.number(),
   },
   handler: async (ctx, args) => {
-    const chunks = await latestDashboardSnapshotChunks(ctx, args.ownerId);
+    const chunks = await latestDashboardSnapshotChunks(ctx, null);
     if (!chunks.length) return { exists: false, fresh: false };
     const updatedAt = latestSnapshotChunkUpdatedAt(chunks);
     const updatedAtMs = Date.parse(updatedAt);
@@ -263,7 +265,6 @@ export const collectSnapshotTablePage = internalQuery({
       v.literal("corrections"),
       v.literal("dataEntries"),
     ),
-    ownerId: v.id("users"),
     ownerScope: v.union(v.literal("owner"), v.literal("global")),
     paginationOpts: paginationOptsValidator,
   },
@@ -271,7 +272,6 @@ export const collectSnapshotTablePage = internalQuery({
     return paginateSnapshotTable(
       ctx,
       args.table,
-      args.ownerScope === "owner" ? args.ownerId : undefined,
       args.paginationOpts,
     );
   },
@@ -279,13 +279,12 @@ export const collectSnapshotTablePage = internalQuery({
 
 export const saveDashboardSnapshot = internalMutation({
   args: {
-    ownerId: v.id("users"),
     payload: v.any(),
     cacheUpdatedAt: v.string(),
   },
   handler: async (ctx, args) => {
     const updatedAt = typeof args.payload?.updatedAt === "string" && args.payload.updatedAt ? args.payload.updatedAt : now();
-    const result = await replaceDashboardSnapshotChunks(ctx, args.ownerId, args.payload, args.cacheUpdatedAt);
+    const result = await replaceDashboardSnapshotChunks(ctx, null, args.payload, args.cacheUpdatedAt);
     return { ok: true as const, changed: result.changed, updatedAt: result.updatedAt || updatedAt };
   },
 });
@@ -318,7 +317,7 @@ const snapshotSourceTables = [
   "corrections",
   "dataEntries",
 ] as const;
-const snapshotSourceOwnerScopes = ["owner", "global"] as const;
+const snapshotSourceOwnerScopes = ["global"] as const;
 
 type SnapshotSourceTable = typeof snapshotSourceTables[number];
 type SnapshotSourceRow = Record<string, unknown> & { _id: unknown; createdAt?: string; _creationTime?: number };
@@ -352,69 +351,56 @@ function emptySnapshotSource() {
 function paginateSnapshotTable(
   ctx: QueryCtx,
   table: SnapshotSourceTable,
-  ownerId: Id<"users"> | undefined,
   paginationOpts: PaginationOpts,
 ) {
   switch (table) {
     case "productionEntries":
       return ctx.db
         .query("productionEntries")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
     case "attendanceRecords":
       return ctx.db
         .query("attendanceRecords")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
     case "trainingRecords":
       return ctx.db
         .query("trainingRecords")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
     case "routeSelections":
       return ctx.db
         .query("routeSelections")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
     case "plannerPriorities":
       return ctx.db
         .query("plannerPriorities")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
     case "machineConstraints":
       return ctx.db
         .query("machineConstraints")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
     case "planOverrides":
       return ctx.db
         .query("planOverrides")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
     case "routeChanges":
       return ctx.db
         .query("routeChanges")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
     case "dispatchApprovals":
       return ctx.db
         .query("dispatchApprovals")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
     case "setupCompletions":
       return ctx.db
         .query("setupCompletions")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
     case "corrections":
       return ctx.db
         .query("corrections")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
     case "dataEntries":
       return ctx.db
         .query("dataEntries")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .paginate(paginationOpts);
   }
 }
@@ -707,146 +693,65 @@ function correctionDetailsFor(table: string, row: Record<string, unknown>, paylo
   return row;
 }
 
-function rowCreatedAt(row: { createdAt?: string; _creationTime?: number }) {
-  return typeof row.createdAt === "string" && row.createdAt
-    ? row.createdAt
-    : typeof row._creationTime === "number"
-      ? new Date(row._creationTime).toISOString()
-      : "";
-}
-
-function newestRows<Row extends { createdAt?: string; _creationTime?: number }>(
-  ownerRows: Row[],
-  globalRows: Row[],
-  limit: number,
-) {
-  return [...ownerRows, ...globalRows]
-    .sort((a, b) => rowCreatedAt(b).localeCompare(rowCreatedAt(a)))
-    .slice(0, limit);
-}
-
-async function correctionRowsForOwner(ctx: QueryCtx, ownerId: Id<"users">) {
-  const ownerRows = await ctx.db
+async function globalCorrectionRows(ctx: QueryCtx) {
+  return ctx.db
     .query("corrections")
-    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
     .collect();
-  const globalRows = await ctx.db
-    .query("corrections")
-    .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
-    .collect();
-  return [...ownerRows, ...globalRows];
 }
 
-async function correctionCandidateRowsForOwner(
+async function globalCorrectionCandidateRows(
   ctx: QueryCtx,
   table: CorrectionCandidateTable,
-  ownerId: Id<"users">,
   limit: number,
 ) {
   switch (table) {
     case "routeSelections": {
-      const ownerRows = await ctx.db
+      return ctx.db
         .query("routeSelections")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .order("desc")
         .take(limit);
-      const globalRows = await ctx.db
-        .query("routeSelections")
-        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
-        .order("desc")
-        .take(limit);
-      return newestRows(ownerRows, globalRows, limit);
     }
     case "plannerPriorities": {
-      const ownerRows = await ctx.db
+      return ctx.db
         .query("plannerPriorities")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .order("desc")
         .take(limit);
-      const globalRows = await ctx.db
-        .query("plannerPriorities")
-        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
-        .order("desc")
-        .take(limit);
-      return newestRows(ownerRows, globalRows, limit);
     }
     case "machineConstraints": {
-      const ownerRows = await ctx.db
+      return ctx.db
         .query("machineConstraints")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .order("desc")
         .take(limit);
-      const globalRows = await ctx.db
-        .query("machineConstraints")
-        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
-        .order("desc")
-        .take(limit);
-      return newestRows(ownerRows, globalRows, limit);
     }
     case "planOverrides": {
-      const ownerRows = await ctx.db
+      return ctx.db
         .query("planOverrides")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .order("desc")
         .take(limit);
-      const globalRows = await ctx.db
-        .query("planOverrides")
-        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
-        .order("desc")
-        .take(limit);
-      return newestRows(ownerRows, globalRows, limit);
     }
     case "routeChanges": {
-      const ownerRows = await ctx.db
+      return ctx.db
         .query("routeChanges")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .order("desc")
         .take(limit);
-      const globalRows = await ctx.db
-        .query("routeChanges")
-        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
-        .order("desc")
-        .take(limit);
-      return newestRows(ownerRows, globalRows, limit);
     }
     case "dispatchApprovals": {
-      const ownerRows = await ctx.db
+      return ctx.db
         .query("dispatchApprovals")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .order("desc")
         .take(limit);
-      const globalRows = await ctx.db
-        .query("dispatchApprovals")
-        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
-        .order("desc")
-        .take(limit);
-      return newestRows(ownerRows, globalRows, limit);
     }
     case "setupCompletions": {
-      const ownerRows = await ctx.db
+      return ctx.db
         .query("setupCompletions")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .order("desc")
         .take(limit);
-      const globalRows = await ctx.db
-        .query("setupCompletions")
-        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
-        .order("desc")
-        .take(limit);
-      return newestRows(ownerRows, globalRows, limit);
     }
     case "dataEntries": {
-      const ownerRows = await ctx.db
+      return ctx.db
         .query("dataEntries")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
         .order("desc")
         .take(limit);
-      const globalRows = await ctx.db
-        .query("dataEntries")
-        .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
-        .order("desc")
-        .take(limit);
-      return newestRows(ownerRows, globalRows, limit);
     }
   }
 }
@@ -866,7 +771,7 @@ async function latestTableRow<TableName extends WorkbookTable>(
 export const saveProductionEntry = mutation({
   args: productionEntryValidator,
   handler: async (ctx, args) => {
-    const ownerFields = await getOwnerFields(ctx);
+    const ownerFields = await getGlobalOwnerFields(ctx);
     const id = await ctx.db.insert("productionEntries", {
       ...args,
       ...ownerFields,
@@ -879,7 +784,7 @@ export const saveProductionEntry = mutation({
 export const saveAttendanceRecord = mutation({
   args: attendanceRecordValidator,
   handler: async (ctx, args) => {
-    const ownerFields = await getOwnerFields(ctx);
+    const ownerFields = await getGlobalOwnerFields(ctx);
     const id = await ctx.db.insert("attendanceRecords", {
       ...args,
       ...ownerFields,
@@ -892,7 +797,7 @@ export const saveAttendanceRecord = mutation({
 export const saveTrainingRecord = mutation({
   args: trainingRecordValidator,
   handler: async (ctx, args) => {
-    const ownerFields = await getOwnerFields(ctx);
+    const ownerFields = await getGlobalOwnerFields(ctx);
     const id = await ctx.db.insert("trainingRecords", {
       ...args,
       ...ownerFields,
@@ -994,19 +899,20 @@ export const saveDataEntry = mutation({
     payload: v.any(),
   },
   handler: async (ctx, args) => {
-    const ownerFields = await getOwnerFields(ctx);
+    const ownerFields = await getGlobalOwnerFields(ctx);
     if (args.id) {
       const existing = await ctx.db.get(args.id);
-      if (!existing || existing.ownerId !== ownerFields.ownerId) {
+      if (!existing) {
         throw new Error("Setup checklist entry was not found or cannot be edited.");
       }
       await ctx.db.patch(args.id, {
         entryType: args.entryType,
         key: args.key,
         payload: args.payload,
+        ...ownerFields,
         createdAt: now(),
       });
-      await patchCachedShopFloorStatus(ctx, ownerFields.ownerId, args.entryType, args.payload);
+      await patchCachedShopFloorStatus(ctx, args.entryType, args.payload);
       return { ok: true, id: args.id };
     }
     if (args.key) {
@@ -1016,11 +922,9 @@ export const saveDataEntry = mutation({
         .collect();
       const corrections = await ctx.db
         .query("corrections")
-        .withIndex("by_owner", (q) => q.eq("ownerId", ownerFields.ownerId))
         .collect();
       const correctionTargets = activeCorrectionTargets(corrections);
       const existing = existingRows
-        .filter((row) => row.ownerId === ownerFields.ownerId)
         .filter((row) => !correctionTargets.has(`dataEntries:${String(row._id)}`))
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .at(-1);
@@ -1029,31 +933,31 @@ export const saveDataEntry = mutation({
           entryType: args.entryType,
           key: args.key,
           payload: args.payload,
+          ...ownerFields,
           createdAt: now(),
         });
-        await patchCachedShopFloorStatus(ctx, ownerFields.ownerId, args.entryType, args.payload);
+        await patchCachedShopFloorStatus(ctx, args.entryType, args.payload);
         return { ok: true, id: existing._id };
       }
     }
     const result = await insertOwnerRow(ctx, "dataEntries", args);
-    await patchCachedShopFloorStatus(ctx, ownerFields.ownerId, args.entryType, args.payload);
+    await patchCachedShopFloorStatus(ctx, args.entryType, args.payload);
     return result;
   },
 });
 
 async function patchCachedShopFloorStatus(
   ctx: MutationCtx,
-  ownerId: Id<"users">,
   entryType: string,
   payload: unknown,
 ) {
   const patch = shopFloorStatusPatchFromDataEntry(entryType, payload);
   if (!patch) return;
-  const cached = await readDashboardSnapshotPayload(ctx, ownerId);
+  const cached = await readDashboardSnapshotPayload(ctx, null);
   if (!cached) return;
   const patched = applyShopFloorStatusPatches(cached, [patch]);
   if (patched === cached) return;
-  await replaceDashboardSnapshotChunks(ctx, ownerId, patched, now());
+  await replaceDashboardSnapshotChunks(ctx, null, patched, now());
 }
 
 export const reverseEntry = mutation({
@@ -1068,7 +972,7 @@ export const reverseEntry = mutation({
   handler: async (ctx, args) => {
     if (!args.reason.trim()) throw new Error("Correction reason is required.");
     if (!args.correctedBy.trim()) throw new Error("Corrected by is required.");
-    const ownerFields = await getOwnerFields(ctx);
+    const ownerFields = await getGlobalOwnerFields(ctx);
     const id = await ctx.db.insert("corrections", {
       ...args,
       action: "reverse",
@@ -1085,13 +989,13 @@ export const correctionCandidates = query({
     limit: optionalNumber,
   },
   handler: async (ctx, args) => {
-    const ownerId = await requireDashboardUserId(ctx);
-    const corrections = await correctionRowsForOwner(ctx, ownerId);
+    await requireDashboardAccess(ctx);
+    const corrections = await globalCorrectionRows(ctx);
     const correctionTargets = activeCorrectionTargets(corrections);
     const tableNames = correctionCandidateTables.filter((table) => !args.targetTable || table === args.targetTable);
     const results = [];
     for (const table of tableNames) {
-      const rows = await correctionCandidateRowsForOwner(ctx, table, ownerId, args.limit ?? 100);
+      const rows = await globalCorrectionCandidateRows(ctx, table, args.limit ?? 100);
       for (const row of rows) {
         if (correctionTargets.has(`${table}:${String(row._id)}`)) continue;
         results.push(correctionCandidate(table, row));
@@ -1211,7 +1115,7 @@ async function insertOwnerRow<
   table: TableName,
   args: Record<string, unknown>,
 ): Promise<{ ok: true; id: Id<TableName> }> {
-  const ownerFields = await getOwnerFields(ctx);
+  const ownerFields = await getGlobalOwnerFields(ctx);
   const id = await ctx.db.insert(table, {
     ...args,
     ...ownerFields,
@@ -1238,7 +1142,7 @@ async function insertImportedRows<TableName extends WorkbookTable>(
   rows: Array<Record<string, unknown>>,
   importedAt: string,
 ) {
-  const ownerFields = await getOwnerFields(ctx);
+  const ownerFields = await getGlobalOwnerFields(ctx);
   for (const row of rows) {
     await ctx.db.insert(table, {
       ...row,
