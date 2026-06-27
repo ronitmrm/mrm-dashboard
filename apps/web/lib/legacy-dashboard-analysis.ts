@@ -2870,6 +2870,7 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
       const plannedProductionEndDate = maxDateValue(
         plannedProductionEnd(plannedProductionStartDate, meta.orderPcs ?? 0, meta.cycle, meta.productionActual, planningCalendar),
         meta.minimumProductionEndDate ?? "",
+        liveRunningMinimumEndDate(row, planningCalendar),
       );
       row.plannedDate = dateLabel(plannedStartDate);
       row.setupPlannedDate = dateLabel(plannedStartDate);
@@ -3009,6 +3010,13 @@ function priorityQueueState(row: Record<string, unknown>) {
   if (stage && stage !== "planned" && stage !== "item_complete") return "started_not_running";
   if (runningStatus === "setup complete") return "started_not_running";
   return "idle";
+}
+
+function liveRunningMinimumEndDate(row: Record<string, unknown>, planningCalendar: PlanningCalendar) {
+  if (rowText(row, "priorityStoppedByJcNo")) return "";
+  if (rowText(row, "runningStatus").toLowerCase() !== "running") return "";
+  if (rowText(row, "shopFloorStage").toLowerCase() === "item_complete") return "";
+  return addDays(localIsoDate(new Date()), 0, planningCalendar);
 }
 
 function machineQueueSortDate(row: Record<string, unknown>) {

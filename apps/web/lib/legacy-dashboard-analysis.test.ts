@@ -2,6 +2,34 @@ import { describe, expect, it } from "vitest";
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis";
 
+const dashboardMonthNumbers: Record<string, string> = {
+  january: "01",
+  february: "02",
+  march: "03",
+  april: "04",
+  may: "05",
+  june: "06",
+  july: "07",
+  august: "08",
+  september: "09",
+  october: "10",
+  november: "11",
+  december: "12",
+};
+
+function dashboardDateKey(value: unknown) {
+  const raw = String(value ?? "");
+  const match = /^(\d{1,2})-([A-Za-z]+)-(\d{2})$/.exec(raw);
+  if (!match) return 0;
+  const [, day, month, year] = match;
+  return Number(`20${year}${dashboardMonthNumbers[month!.toLowerCase()] ?? "00"}${day!.padStart(2, "0")}`);
+}
+
+function todayDateKey() {
+  const date = new Date();
+  return Number(`${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`);
+}
+
 describe("buildLegacyDashboardSnapshot", () => {
   it("blocks planning when a route machine family has no active physical machine in master", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -1957,7 +1985,86 @@ describe("buildLegacyDashboardSnapshot", () => {
     const priority = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-043");
 
     expect(running).toMatchObject({ runningStatus: "Running", setupPlannedDate: "23-June-26" });
-    expect(priority).toMatchObject({ plannerPriority: "High", setupPlannedDate: "24-June-26" });
+    expect(priority).toMatchObject({ plannerPriority: "High" });
+    expect(dashboardDateKey(running?.plannedProductionEndDate)).toBeGreaterThanOrEqual(todayDateKey());
+    expect(dashboardDateKey(priority?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(running?.plannedProductionEndDate));
+  });
+
+  it("pushes the C501 queue after delayed running work and inserts priority before M43", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      plannerPriorities: [
+        {
+          target: "JC-116",
+          jcNo: "JC-116",
+          partCode: "M116",
+          priority: "High",
+          approvalMode: "idle_queue_only",
+          createdAt: "2026-06-27T01:00:00.000Z",
+        },
+      ],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { jcNo: "JC-042", partCode: "M42", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-23" },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:01:00.000Z",
+          payload: { jcNo: "JC-043", partCode: "M43", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-23" },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:02:00.000Z",
+          payload: { jcNo: "JC-116", partCode: "M116", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-23" },
+        },
+        ...["M42", "M43", "M116"].flatMap((partNo) => [
+          {
+            entryType: "route",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+          },
+        ]),
+        {
+          entryType: "shop_floor_status",
+          createdAt: "2026-06-23T00:30:00.000Z",
+          payload: { jcNo: "JC-042", partCode: "M42", optionNumber: "1", setupNo: "1", machine: "C501", stage: "operator_started", completedAt: "2026-06-23T00:30:00.000Z" },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+        },
+      ],
+    });
+
+    const c501Rows = snapshot.productionControl.machinePlanDetailRows
+      .filter((row) => row.machine === "C501")
+      .sort((a, b) => dashboardDateKey(a.setupPlannedDate) - dashboardDateKey(b.setupPlannedDate));
+    const running = c501Rows.find((row) => row.partCode === "M42");
+    const m116 = c501Rows.find((row) => row.partCode === "M116");
+    const m43 = c501Rows.find((row) => row.partCode === "M43");
+
+    expect(running).toMatchObject({
+      runningStatus: "Running",
+      plannedProductionStartDate: "23-June-26",
+    });
+    expect(dashboardDateKey(running?.plannedProductionEndDate)).toBeGreaterThanOrEqual(todayDateKey());
+    expect(m116).toMatchObject({
+      plannerPriority: "High",
+    });
+    expect(m43).toMatchObject({
+      plannerPriority: "Normal",
+    });
+    expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(running?.plannedProductionEndDate));
+    expect(dashboardDateKey(m43?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
   });
 
   it("moves priority ahead of a started setup task when planner approves non-running queue change", () => {
