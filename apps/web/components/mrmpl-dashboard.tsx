@@ -4,7 +4,6 @@ import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, t
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import Image from "next/image";
-import { useTheme } from "next-themes";
 import {
   CalendarDays,
   ChevronDown,
@@ -80,6 +79,7 @@ import {
   upsertShopFloorStatusPatch,
   type ShopFloorStatusPatch,
 } from "@/lib/shop-floor-optimistic";
+import { useTheme } from "@/components/theme-provider";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 
