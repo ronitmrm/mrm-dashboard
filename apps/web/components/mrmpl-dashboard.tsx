@@ -6,8 +6,6 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import Image from "next/image";
 import { useTheme } from "next-themes";
 import {
-  AlertTriangle,
-  Boxes,
   CalendarDays,
   ChevronDown,
   ChevronRight,
@@ -35,7 +33,6 @@ import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -72,13 +69,9 @@ import {
 import {
   dateSortValue,
   formatNumber,
-  formatPercent,
   jobCardScheduleSummary,
   toDashboardViewModel,
-  type DashboardRankedRow,
-  type DashboardTrendPoint,
 } from "@/lib/dashboard-view-model";
-import { machineFamilyKey } from "@/lib/planning-rules";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy";
 import { priorityPlanWindow, type PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
@@ -317,11 +310,10 @@ export function MrmplDashboard() {
   const [authCheckTimedOut, setAuthCheckTimedOut] = useState(false);
 
   useEffect(() => {
-    if (!isLoading) {
-      setAuthCheckTimedOut(false);
-      return;
-    }
-    const timeout = window.setTimeout(() => setAuthCheckTimedOut(true), 4000);
+    const timeout = window.setTimeout(
+      () => setAuthCheckTimedOut(isLoading),
+      isLoading ? 4000 : 0,
+    );
     return () => window.clearTimeout(timeout);
   }, [isLoading]);
 
@@ -341,6 +333,7 @@ function DashboardShell() {
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
   const dashboardPayload = useQuery(api.dashboard.snapshot, {});
+  const dashboardRefreshStatus = useQuery(api.dashboard.refreshStatus, {});
   const refreshSnapshot = useAction(api.dashboard.refreshSnapshot);
   const saveRouteSelection = useMutation(api.dashboard.saveRouteSelection);
   const savePlannerPriority = useMutation(api.dashboard.savePlannerPriority);
@@ -370,7 +363,9 @@ function DashboardShell() {
       const result = await refreshSnapshot({ force });
       setActionStatus({
         tone: "default",
-        message: result.skipped
+        message: result.queued
+          ? "Planning recalculation queued."
+          : result.skipped
           ? "Planning is already up to date."
           : "Planning recalculated from latest data.",
       });
@@ -449,7 +444,10 @@ function DashboardShell() {
   }
 
   const isDashboardLoading = dashboardPayload === undefined;
-  const basePayload = isDashboardLoading ? {} : asRecord(dashboardPayload);
+  const basePayload = useMemo(
+    () => (isDashboardLoading ? {} : asRecord(dashboardPayload)),
+    [dashboardPayload, isDashboardLoading],
+  );
   const snapshotUpdatedAt = str(basePayload.updatedAt);
   useEffect(() => {
     if (!snapshotUpdatedAt || lastSnapshotUpdatedAtRef.current === snapshotUpdatedAt) return;
@@ -462,6 +460,7 @@ function DashboardShell() {
     [basePayload, optimisticShopFloorStatuses],
   );
   const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
+  const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true;
 
   const view = useMemo(
     () => toDashboardViewModel(payload),
@@ -526,7 +525,7 @@ function DashboardShell() {
             {isDashboardLoading ? "Loading" : "Connected"}
           </Badge>
           <HeaderActions
-            isRefreshingSnapshot={isRefreshingSnapshot}
+            isRefreshingSnapshot={isSnapshotRefreshActive}
             onRefreshSnapshot={() => void refreshDashboardSnapshot(true)}
           />
         </header>
@@ -542,7 +541,6 @@ function DashboardShell() {
             <DashboardContent
               activeTab={activeTab}
               payload={payload}
-              view={view}
               submitAction={submitAction}
               correctionCandidates={asArray(correctionCandidates)}
               openDataEntry={openDataEntry}
@@ -725,7 +723,6 @@ function HeaderActions({
 function DashboardContent({
   activeTab,
   payload,
-  view,
   submitAction,
   correctionCandidates,
   openDataEntry,
@@ -738,7 +735,6 @@ function DashboardContent({
 }: {
   activeTab: DashboardTabId;
   payload: DashboardPayload;
-  view: ReturnType<typeof toDashboardViewModel>;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   correctionCandidates: DashboardPayload[];
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
@@ -764,7 +760,7 @@ function DashboardContent({
   }
 
   if (activeTab === "dataEntryTab") {
-    return <DataEntryPanel payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} />;
+    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} />;
   }
 
   if (activeTab === "planningHolidayTab") {
@@ -772,7 +768,7 @@ function DashboardContent({
   }
 
   if (activeTab === "planningControlTab") {
-    return <PlanningControlPanel payload={payload} productionControl={productionControl} submitAction={submitAction} openDataEntry={openDataEntry} />;
+    return <PlanningControlPanel payload={payload} productionControl={productionControl} submitAction={submitAction} />;
   }
 
   if (activeTab === "shopFloorStatusTab") {
@@ -823,38 +819,6 @@ function ProductionControlPanel({
       <ActionLogTable rows={asArray(productionControl.plannerActionLog)} />
       <section className="grid gap-4">
         <DataRowsCard title="Machine issues" rows={asArray(productionControl.machineConstraintRows)} empty="No machine constraints yet" />
-      </section>
-    </>
-  );
-}
-
-function OverviewMetrics({ view }: { view: ReturnType<typeof toDashboardViewModel> }) {
-  return (
-    <>
-      <section className="grid gap-4 md:grid-cols-2 @5xl/main:grid-cols-3 @7xl/main:grid-cols-6">
-        {view.metrics.map((metric) => (
-          <Card key={metric.label}>
-            <CardHeader>
-              <CardDescription>{metric.label}</CardDescription>
-              <CardTitle className="text-2xl tabular-nums">{metric.value}</CardTitle>
-              <CardAction>
-                <StatusIcon tone={metric.tone} />
-              </CardAction>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">{metric.detail}</CardContent>
-          </Card>
-        ))}
-      </section>
-      <section className="grid gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Production trend</CardTitle>
-            <CardDescription>Output, target, and rejection volume by month</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <TrendChart points={view.trend} />
-          </CardContent>
-        </Card>
       </section>
     </>
   );
@@ -1425,18 +1389,14 @@ function RouteChangePlannerForm({
   const selectedSetups = useMemo(() => optionRows
     .filter((row) => str(row.optionNumber) === selectedOption)
     .sort((a, b) => str(a.displaySetupNo || a.setupNo).localeCompare(str(b.displaySetupNo || b.setupNo), undefined, { numeric: true })), [optionRows, selectedOption]);
-  const selectedSetupKey = selectedSetups.map((setup) => str(setup.displaySetupNo || setup.setupNo)).join("|");
-
-  useEffect(() => {
-    setSetupPlan((current) => {
-      const next: Record<string, { plan: boolean; quantity: string; remark: string }> = {};
-      for (const setup of selectedSetups) {
-        const setupNo = str(setup.displaySetupNo || setup.setupNo);
-        next[setupNo] = current[setupNo] ?? { plan: true, quantity: defaultOrderQty, remark: "" };
-      }
-      return next;
-    });
-  }, [selectedSetupKey, defaultOrderQty]);
+  const selectedSetupPlan = useMemo(() => {
+    const next: Record<string, { plan: boolean; quantity: string; remark: string }> = {};
+    for (const setup of selectedSetups) {
+      const setupNo = str(setup.displaySetupNo || setup.setupNo);
+      next[setupNo] = setupPlan[setupNo] ?? { plan: true, quantity: defaultOrderQty, remark: "" };
+    }
+    return next;
+  }, [defaultOrderQty, selectedSetups, setupPlan]);
 
   function updateSetup(setupNo: string, patch: Partial<{ plan: boolean; quantity: string; remark: string }>) {
     setSetupPlan((current) => ({
@@ -1449,7 +1409,7 @@ function RouteChangePlannerForm({
     event.preventDefault();
     const remainingSetups = selectedSetups.map((setup) => {
       const setupNo = str(setup.displaySetupNo || setup.setupNo);
-      const state = setupPlan[setupNo] ?? { plan: false, quantity: "", remark: "" };
+      const state = selectedSetupPlan[setupNo] ?? { plan: false, quantity: "", remark: "" };
       return {
         setupNo,
         plan: state.plan,
@@ -1508,7 +1468,7 @@ function RouteChangePlannerForm({
           <TableBody>
             {selectedSetups.length ? selectedSetups.map((setup) => {
               const setupNo = str(setup.displaySetupNo || setup.setupNo);
-              const state = setupPlan[setupNo] ?? { plan: true, quantity: str(selectedWorkOrder?.orderPcs), remark: "" };
+              const state = selectedSetupPlan[setupNo] ?? { plan: true, quantity: str(selectedWorkOrder?.orderPcs), remark: "" };
               return (
                 <TableRow key={setupNo}>
                   <TableCell>
@@ -2055,11 +2015,9 @@ function FirstPieceInspectionPanel({
   onTaskComplete: (row: DashboardPayload) => void;
 }) {
   const masters = asArray(productionControl.firstPieceInspectionMasterRows);
-  const [expandedTaskKey, setExpandedTaskKey] = useState(tasks[0] ? shopFloorPlanKey(tasks[0]) : "");
-
-  useEffect(() => {
-    if (!expandedTaskKey && tasks[0]) setExpandedTaskKey(shopFloorPlanKey(tasks[0]));
-  }, [expandedTaskKey, tasks]);
+  const [expandedTaskKey, setExpandedTaskKey] = useState<string | null>(null);
+  const defaultExpandedTaskKey = tasks[0] ? shopFloorPlanKey(tasks[0]) : "";
+  const activeExpandedTaskKey = expandedTaskKey ?? defaultExpandedTaskKey;
 
   async function saveStage(row: DashboardPayload, stage: ShopFloorStageId, extra: Record<string, unknown> = {}) {
     const stageSpec = shopFloorStages.find((item) => item.id === stage);
@@ -2131,7 +2089,7 @@ function FirstPieceInspectionPanel({
                 <TableBody>
                   {tasks.map((task) => {
                     const taskKey = shopFloorPlanKey(task);
-                    const expanded = expandedTaskKey === taskKey;
+                    const expanded = activeExpandedTaskKey === taskKey;
                     return (
                       <Fragment key={taskKey}>
                         <TableRow className="cursor-pointer" onClick={() => setExpandedTaskKey(expanded ? "" : taskKey)}>
@@ -2683,10 +2641,6 @@ function workOrderGapLabels(row: DashboardPayload) {
   ].filter(Boolean);
 }
 
-function workOrderNeedsAction(row: DashboardPayload) {
-  return Boolean(row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing || row.machineMasterMissing);
-}
-
 function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "cycle" | "tooling" | "machine_master") {
   const optionNumber = str(row.optionNumber || row.selectedOption);
   const setupNo = str(row.missingSetupNo || row.setupNo);
@@ -2738,32 +2692,6 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
   };
 }
 
-function setupChecklistEditDefaults(row: DashboardPayload) {
-  const defaults = {
-    __entryId: row._id,
-    jcNo: row.jcNo,
-    setupDate: row.setupDateValue || row.setupDate,
-    machineNo: row.machine,
-    partNo: row.partCode,
-    optionNumber: row.optionNumber || row.plannedOptionNumber,
-    setupNo: row.setupNo,
-    shift: row.shift,
-    setterCode: row.setterCode,
-    helperCode: row.helperCode,
-    settingStartTime: row.settingStartTime,
-    settingEndTime: row.settingEndTime,
-    qcController: row.qcController,
-    rimmerAvailability: row.rimmerAvailability,
-    modhiyu: row.modhiyu,
-    remarks: row.remarks,
-    __returnTab: "planningControlTab",
-  };
-  return {
-    ...defaults,
-    __entryKey: dataEntryKey("setup_checklist", defaults),
-  };
-}
-
 function DataEntryPanel({
   payload,
   submitAction,
@@ -2776,11 +2704,7 @@ function DataEntryPanel({
   preferredDefaults: Record<string, unknown>;
 }) {
   const dataEntry = asRecord(payload.dataEntry);
-  const [bulkEntryType, setBulkEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
-
-  useEffect(() => {
-    if (preferredEntryType) setBulkEntryType(preferredEntryType);
-  }, [preferredEntryType]);
+  const [bulkEntryType, setBulkEntryType] = useState(preferredEntryType || dataEntrySpecs[0]?.entryType || "route");
 
   async function importEntryTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2918,12 +2842,10 @@ function PlanningControlPanel({
   payload,
   productionControl,
   submitAction,
-  openDataEntry,
 }: {
   payload: DashboardPayload;
   productionControl: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
 }) {
   const toolFixtureNumbers = asRecord(payload.toolFixtureNumbers);
 
@@ -3128,534 +3050,6 @@ function CorrectionsPanel({
   );
 }
 
-function SetupChecklistPlannerReview({
-  rows,
-  openDataEntry,
-}: {
-  rows: DashboardPayload[];
-  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Setup checklist planner review</CardTitle>
-        <CardDescription>
-          Checklist entries that do not match planned setup by JC, part, option, setup, and machine. {formatNumber(rows.length)} row{rows.length === 1 ? "" : "s"} need review.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {rows.length ? (
-          <div className="overflow-hidden rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Checklist entry</TableHead>
-                  <TableHead>Issue</TableHead>
-                  <TableHead>Closest planned setup</TableHead>
-                  <TableHead className="w-32">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row, index) => (
-                  <TableRow key={`${displayValue(row._id)}-${index}`}>
-                    <TableCell>
-                      <div className="grid gap-1">
-                        <div className="font-medium">{displayValue(row.jcNo)} / {displayValue(row.partCode)}</div>
-                        <div className="text-xs text-muted-foreground">
-                          Option {displayValue(row.optionNumber)} | Setup {displayValue(row.setupNo)} | Machine {displayValue(row.machine)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">{displayValue(row.setupDate)} | Setter {displayValue(row.setterCode)}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="grid gap-1">
-                        <StatusBadge value={row.status} />
-                        <div className="text-xs text-muted-foreground">{displayValue(row.nextAction)}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {displayValue(row.plannedJobCard)} / {displayValue(row.plannedPartCode)}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Option {displayValue(row.plannedOptionNumber)} | Setup {displayValue(row.plannedSetupNo)} | Machine {displayValue(row.plannedMachine)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("setup_checklist", setupChecklistEditDefaults(row))}>
-                        Edit
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <EmptyRowsMessage>No setup checklist mismatches found</EmptyRowsMessage>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function RouteSelectionQueue({
-  title = "Route selection required",
-  description,
-  rows,
-  submitAction,
-}: {
-  title?: string;
-  description?: string;
-  rows: DashboardPayload[];
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-}) {
-  async function submit(event: FormEvent<HTMLFormElement>, jcNo: string) {
-    event.preventDefault();
-    const optionNumber = String(new FormData(event.currentTarget).get("optionNumber") || "").trim();
-    if (!jcNo || !optionNumber) return;
-    await submitAction("route-selection", { jcNo, optionNumber });
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description || (rows.length ? `${formatNumber(rows.length)} job cards need route decisions` : "No route decisions currently required")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {rows.length ? (
-          <div className="grid gap-3 @5xl/main:grid-cols-2">
-            {rows.slice(0, 12).map((row, index) => {
-              const jcNo = str(row.jcNo || row.jobCard);
-              const options = asArray(row.availableOptions);
-              const rawSelected = str(row.optionNumber || row.selectedOption);
-              const selected = rawSelected && rawSelected !== "Not selected" ? rawSelected : "";
-              return (
-                <form
-                  key={`${jcNo || "route"}-${index}`}
-                  className="grid gap-3 rounded-xl border p-3"
-                  onSubmit={(event) => void submit(event, jcNo)}
-                >
-                  <div>
-                    <div className="font-medium">{jcNo || "Unassigned job card"}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {[row.partCode, row.description, row.deliveryDate].map(str).filter(Boolean).join(" · ") || "Route master pending"}
-                    </div>
-                  </div>
-                  <Field label="Route option">
-                    <select className="h-9 rounded-md border bg-background px-3 text-sm" name="optionNumber" defaultValue={selected} required>
-                      <option value="">Select option</option>
-                      {options.length ? (
-                        options.map((option, optionIndex) => {
-                          const record = asRecord(option);
-                          const value = str(record.optionNumber || record.option || option) || String(optionIndex + 1);
-                          return (
-                            <option key={`${jcNo}-${value}`} value={value}>
-                              {routeOptionText(record, value)}
-                            </option>
-                          );
-                        })
-                      ) : (
-                        <option value={selected || "1"}>{selected || "1"}</option>
-                      )}
-                    </select>
-                  </Field>
-                  <Button className="w-fit" type="submit">Save route</Button>
-                </form>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="grid h-28 place-items-center rounded-xl border border-dashed text-sm text-muted-foreground">
-            No route selections currently required
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function ShopFloorPanel({
-  payload,
-  view,
-  submitAction,
-}: {
-  payload: DashboardPayload;
-  view: ReturnType<typeof toDashboardViewModel>;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-}) {
-  const meetingTracker = asRecord(payload.meetingTracker);
-
-  return (
-    <>
-      <OverviewMetrics view={view} />
-      <InsightCards payload={payload} />
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <OperatorEfficiencyBenchmark rows={asArray(payload.operatorPerformance)} />
-        <AttendanceBenchmark rows={asArray(payload.attendance)} scope={str(asRecord(payload.summary).attendanceScope)} />
-      </section>
-      <section className="grid gap-4 @5xl/main:grid-cols-3">
-        <RankedList title="Parts" rows={view.parts} icon={Boxes} empty="No part data yet" />
-        <RankedList title="Rejections" rows={view.rejections} icon={AlertTriangle} empty="No rejection data yet" />
-        <RankedList title="Training" rows={view.training} icon={ShieldCheck} empty="No training data yet" />
-      </section>
-      <DataRowsCard title="Downtime reasons" rows={asArray(payload.downtimeReasons)} empty="No downtime data yet" />
-      <section className="grid gap-4 @5xl/main:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-        <TrainingGuidancePanel guidance={asRecord(payload.trainingGuidance)} />
-        <MonthlyTrainingPlanPanel rows={asArray(payload.monthlyTrainingPlan)} />
-      </section>
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <DataRowsCard title="Operator attendance" rows={asArray(payload.attendance)} empty="No attendance rows yet" />
-        <DataRowsCard title="Pending training" rows={asArray(payload.pendingTraining)} empty="No pending training rows yet" />
-      </section>
-      <MeetingSummaryPanel tracker={meetingTracker} />
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <DataRowsCard
-          title="Pending meetings"
-          rows={asArray(meetingTracker.pendingOperators).length ? asArray(meetingTracker.pendingOperators) : asArray(meetingTracker.pendingMeetings)}
-          empty="No pending meeting rows yet"
-        />
-        <DataRowsCard title="Completed meetings" rows={asArray(meetingTracker.completedMeetings)} empty="No completed meeting rows yet" />
-      </section>
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <DataRowsCard title="Rejection type analysis" rows={asArray(payload.rejectionTypeAnalysis)} empty="No rejection type analysis yet" />
-        <DataRowsCard title="Defect hotspots" rows={asArray(payload.defectHotspots)} empty="No defect hotspot rows yet" />
-      </section>
-      <Card>
-        <CardHeader>
-          <CardTitle>Shop-floor completion</CardTitle>
-          <CardDescription>Quick completion action matching the running job-card workflow.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <LegacyActionForm
-            title="Mark production complete"
-            description="Persist a setup completion from the shop-floor view."
-            fields={[
-              { name: "jcNo", label: "Job card", placeholder: "JC-1001", required: true },
-              { name: "setupNo", label: "Setup no.", placeholder: "10" },
-              { name: "machine", label: "Machine", placeholder: "CNC-01" },
-              { name: "completedBy", label: "Completed by", placeholder: "Name or code", required: true },
-              { name: "remark", label: "Remark", placeholder: "Optional" },
-            ]}
-            buttonLabel="Mark complete"
-            onSubmit={(body) => submitAction("mark-complete", body)}
-          />
-        </CardContent>
-      </Card>
-    </>
-  );
-}
-
-type BarDatum = {
-  key: string;
-  label: string;
-  value: number;
-  detail?: string;
-  group?: string;
-  tone?: "default" | "good" | "warning";
-};
-
-function InsightCards({ payload }: { payload: DashboardPayload }) {
-  const machineAgg = aggregateMachines(asArray(payload.machineRows));
-  const weakestMachine = machineAgg
-    .filter((row) => row.target > 0)
-    .sort((a, b) => a.efficiency - b.efficiency)[0];
-  const bestType = aggregateMachineTypes(asArray(payload.machineTypeRows))[0];
-  const topReject = asArray(payload.rejectHotspots)[0];
-  const attendance = weightedAttendanceFromRows(asArray(payload.attendance));
-  const trainingRows = asArray(payload.pendingTraining);
-
-  const cards = [
-    {
-      label: "Highest rejection driver",
-      value: topReject ? `${str(topReject.partNo)} | setup ${str(topReject.setup)}` : "No rejection data",
-      detail: topReject
-        ? `${formatNumber(numValue(topReject, "reject"))} rejected on ${str(topReject.machine)}, ${formatPercent(numValue(topReject, "rejectRate"))} reject rate`
-        : "No rejected quantity found for this scope.",
-      warning: Boolean(topReject && numValue(topReject, "reject") > 0),
-    },
-    {
-      label: "Weakest machine efficiency",
-      value: weakestMachine ? `${weakestMachine.machine} at ${formatPercent(weakestMachine.efficiency)}` : "No target data",
-      detail: weakestMachine
-        ? `${formatNumber(weakestMachine.output)} output vs ${formatNumber(weakestMachine.target)} target`
-        : "No machine has target quantity in this scope.",
-      warning: Boolean(weakestMachine && weakestMachine.efficiency < 0.9),
-    },
-    {
-      label: "Best machine type for output",
-      value: bestType ? `${bestType.machineType}: ${formatNumber(bestType.output)}` : "No machine type data",
-      detail: bestType
-        ? `${formatPercent(bestType.efficiency)} efficiency, ${formatPercent(bestType.rejectRate)} reject rate`
-        : "Machine type appears after production entries are available.",
-      warning: false,
-    },
-    {
-      label: "People follow-up",
-      value: `${attendance ? formatPercent(attendance) : "No attendance"} | ${formatNumber(trainingRows.length)} training`,
-      detail: trainingRows.length ? "Pending training exists in this scope." : "No pending training currently recorded in this scope.",
-      warning: trainingRows.length > 0 || (attendance > 0 && attendance < 0.9),
-    },
-  ];
-
-  return (
-    <section className="grid gap-4 md:grid-cols-2 @5xl/main:grid-cols-4">
-      {cards.map((card) => (
-        <Card key={card.label} className={card.warning ? "border-amber-300/70" : ""}>
-          <CardHeader>
-            <CardDescription>{card.label}</CardDescription>
-            <CardTitle className="text-base leading-snug">{card.value}</CardTitle>
-            <CardAction>
-              {card.warning ? <AlertTriangle className="size-4 text-amber-600" /> : <CheckCircle2 className="size-4 text-green-600" />}
-            </CardAction>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">{card.detail}</CardContent>
-        </Card>
-      ))}
-    </section>
-  );
-}
-
-function OperatorEfficiencyBenchmark({ rows }: { rows: DashboardPayload[] }) {
-  const sourceRows = rows.filter((row) => numValue(row, "target") > 0);
-  const topIds = new Set(sourceRows.slice(0, 5).map((row) => str(row.operatorId)));
-  const top = sourceRows.slice(0, 5).map((row) => operatorBenchmarkDatum(row, "Top"));
-  const bottom = sourceRows
-    .filter((row) => !topIds.has(str(row.operatorId)))
-    .sort((a, b) => numValue(a, "efficiency") - numValue(b, "efficiency"))
-    .slice(0, 5)
-    .map((row) => operatorBenchmarkDatum(row, "Bottom"));
-
-  return (
-    <BarChartCard
-      title="Efficiency top 5 / bottom 5"
-      description="Best and weakest operators by output / target"
-      rows={[...top, ...bottom]}
-      valueFormatter={formatPercent}
-    />
-  );
-}
-
-function AttendanceBenchmark({ rows, scope }: { rows: DashboardPayload[]; scope: string }) {
-  const sourceRows = [...rows].sort((a, b) => numValue(b, "attendancePct") - numValue(a, "attendancePct"));
-  const topIds = new Set(sourceRows.slice(0, 5).map((row) => str(row.operatorId)));
-  const top = sourceRows.slice(0, 5).map((row) => attendanceBenchmarkDatum(row, "Top"));
-  const bottom = sourceRows
-    .filter((row) => !topIds.has(str(row.operatorId)))
-    .sort((a, b) => numValue(a, "attendancePct") - numValue(b, "attendancePct"))
-    .slice(0, 5)
-    .map((row) => attendanceBenchmarkDatum(row, "Bottom"));
-
-  return (
-    <BarChartCard
-      title="Attendance top 5 / bottom 5"
-      description={scope || "Best and weakest attendance performers"}
-      rows={[...top, ...bottom]}
-      valueFormatter={formatPercent}
-    />
-  );
-}
-
-function MachineTypeKpiGrid({ rows }: { rows: DashboardPayload[] }) {
-  const machineTypes = aggregateMachineTypes(rows);
-  if (!machineTypes.length) return null;
-
-  return (
-    <section className="grid gap-4 md:grid-cols-2 @5xl/main:grid-cols-4">
-      {machineTypes.map((row) => (
-        <Card key={row.machineType}>
-          <CardHeader>
-            <CardDescription>{row.machineType}</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">{formatNumber(row.output)}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-3 text-sm">
-            <MetricMini label="Target" value={formatNumber(row.target)} />
-            <MetricMini label="Eff." value={formatPercent(row.efficiency)} />
-            <MetricMini label="Cards" value={formatNumber(row.runs)} />
-          </CardContent>
-        </Card>
-      ))}
-    </section>
-  );
-}
-
-function MonthlyMachineUsagePanel({ rows }: { rows: DashboardPayload[] }) {
-  const latest = rows[rows.length - 1];
-  const chartRows = rows.map((row) => ({
-    key: str(row.monthKey || row.month),
-    label: str(row.month),
-    value: numValue(row, "machinesUsed"),
-    detail: `${formatNumber(numValue(row, "cardEntries"))} cards | ${hoursLabel(numValue(row, "runtimeHours"))} production`,
-  }));
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Monthly machine usage</CardTitle>
-        <CardDescription>Available hours exclude breaks; production hours also exclude downtime.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        {latest ? (
-          <SummaryCardGrid
-            items={[
-              ["Latest month", str(latest.month)],
-              ["Machines used", formatNumber(numValue(latest, "machinesUsed"))],
-              ["Card entries", formatNumber(numValue(latest, "cardEntries"))],
-              ["Available time", hoursLabel(numValue(latest, "loggedHours"))],
-              ["Downtime", durationLabel(numValue(latest, "downtime"))],
-              ["Production time", hoursLabel(numValue(latest, "runtimeHours"))],
-            ]}
-          />
-        ) : null}
-        <MiniBarList rows={chartRows} valueFormatter={formatNumber} empty="No monthly machine usage rows returned" />
-      </CardContent>
-    </Card>
-  );
-}
-
-function SetupSummaryPanel({ setupAnalytics }: { setupAnalytics: DashboardPayload }) {
-  const summary = asRecord(setupAnalytics.summary);
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Setting summary</CardTitle>
-        <CardDescription>From setup checklist</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <SummaryCardGrid
-          items={[
-            ["Total settings", formatNumber(numValue(summary, "totalSettings"))],
-            ["Avg setting time", durationLabel(numValue(summary, "avgMinutes"))],
-            ["Total setting time", durationLabel(numValue(summary, "totalMinutes"))],
-            ["Active machinists", formatNumber(numValue(summary, "activeSetters"))],
-            ["Unique item/setup", formatNumber(numValue(summary, "uniqueItemSetups"))],
-          ]}
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
-function RoutingStatusPanel({ routingStatus }: { routingStatus: DashboardPayload }) {
-  const routeParts = asArray(routingStatus.routeParts);
-  const pending = asArray(routingStatus.pendingFromProduction);
-  const rows = pending.slice(0, 8).map((row) => ({
-    partCode: row.partCode,
-    entries: row.entries,
-    latestDate: row.latestDate,
-    action: "Create routing plan",
-  }));
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Routing status</CardTitle>
-        <CardDescription>Part-code readiness, using the same route status source as legacy.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <SummaryCardGrid
-          items={[
-            ["Routed parts", formatNumber(routeParts.length)],
-            ["Pending from production", formatNumber(pending.length)],
-          ]}
-        />
-        <DataRowsCard title="Routing actions" rows={rows} empty="No routing actions pending" />
-      </CardContent>
-    </Card>
-  );
-}
-
-function SetupTrendPanel({ setupAnalytics }: { setupAnalytics: DashboardPayload }) {
-  const dailyRows = asArray(setupAnalytics.dailyBySetter).slice(0, 15).map((row, index) => ({
-    key: `${str(row.dateKey)}-${str(row.setter)}-${index}`,
-    label: `${str(row.date)} | ${str(row.setter)}`,
-    value: numValue(row, "settings"),
-    detail: `${formatNumber(numValue(row, "settings"))} settings | avg ${durationLabel(numValue(row, "avgMinutes"))}`,
-  }));
-  const monthlyRows = asArray(setupAnalytics.monthlyBySetter).slice(0, 12).map((row, index) => ({
-    key: `${str(row.monthKey)}-${str(row.setter)}-${index}`,
-    label: `${str(row.month)} | ${str(row.setter)}`,
-    value: numValue(row, "settings"),
-    detail: `${formatNumber(numValue(row, "settings"))} settings | avg ${durationLabel(numValue(row, "avgMinutes"))}`,
-  }));
-
-  return (
-    <section className="grid gap-4">
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <BarChartCard title="Daily settings by machinist" description="Selected date/month scope" rows={dailyRows} valueFormatter={formatNumber} />
-        <BarChartCard title="Monthly setting trend" description="Machinist wise" rows={monthlyRows} valueFormatter={formatNumber} />
-      </section>
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <DataRowsCard title="Machinist setting time" rows={asArray(setupAnalytics.setterPerformance)} empty="No setter performance rows returned" />
-        <DataRowsCard title="Same item setup time comparison" rows={asArray(setupAnalytics.sameSetupComparison)} empty="No same-setup comparison rows returned" />
-      </section>
-    </section>
-  );
-}
-
-function RejectionAnalysisPanel({ payload }: { payload: DashboardPayload }) {
-  const rejectionTypeRows = asArray(payload.rejectionTypeAnalysis).map((row) => ({
-    key: str(row.code || row.name),
-    label: str(row.name || row.code),
-    value: numValue(row, "reject"),
-    detail: `${formatNumber(numValue(row, "entries"))} entries | ${formatNumber(numValue(row, "operators"))} operators`,
-  }));
-  const defectRows = asArray(payload.defectAnalysis).slice(0, 12).map((row) => ({
-    key: str(row.code || row.name),
-    label: `${str(row.code)} ${str(row.name)}`.trim(),
-    value: numValue(row, "reject"),
-    detail: `${formatNumber(numValue(row, "entries"))} entries | ${formatNumber(numValue(row, "parts"))} parts`,
-  }));
-  const hotspots = asArray(payload.rejectHotspots);
-  const productRows = aggregateBars(hotspots, (row) => str(row.partNo) || "Unspecified", "reject").slice(0, 10);
-  const setupRows = aggregateBars(hotspots, (row) => `Setup ${str(row.setup) || "Unspecified"}`, "reject").slice(0, 10);
-
-  return (
-    <section className="grid gap-4">
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <BarChartCard title="Rejection by type" description="Process, QC, setup, and in-process setup" rows={rejectionTypeRows} valueFormatter={formatNumber} />
-        <BarChartCard title="Rejection by defect code" description="Rejected pcs grouped by reason code" rows={defectRows} valueFormatter={formatNumber} />
-      </section>
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <DataRowsCard title="Rejection by remark" rows={asArray(payload.rejectionRemarkAnalysis)} empty="No rejection remark rows returned" />
-        <DataRowsCard title="Rejection reason hotspots" rows={asArray(payload.defectHotspots)} empty="No defect hotspot rows returned" />
-      </section>
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <BarChartCard title="Product rejection" description="Part wise, selected scope" rows={productRows} valueFormatter={formatNumber} />
-        <BarChartCard title="Setting rejection" description="Setup wise, selected machine type / machine no." rows={setupRows} valueFormatter={formatNumber} />
-      </section>
-      <DataRowsCard title="Rejection hotspot detail" rows={hotspots} empty="No rejection hotspot rows returned" />
-    </section>
-  );
-}
-
-function DowntimeAnalysisPanel({ payload }: { payload: DashboardPayload }) {
-  const downtimeReasons = asArray(payload.downtimeReasons).slice(0, 10).map((row) => ({
-    key: str(row.reason),
-    label: str(row.reason),
-    value: numValue(row, "downtime"),
-    detail: `${formatNumber(numValue(row, "runs"))} records | ${formatNumber(numValue(row, "machines"))} machines`,
-  }));
-  const sourceRows = asArray(payload.downtimeByMachine).length ? asArray(payload.downtimeByMachine) : asArray(payload.downtimeByType);
-  const downtimeRows = sourceRows.slice(0, 15).map((row, index) => ({
-    key: `${str(row.machine || row.machineType)}-${index}`,
-    label: str(row.machine || row.machineType),
-    value: numValue(row, "downtime"),
-    detail: `${formatNumber(numValue(row, "cardEntries"))} cards | ${hoursLabel(numValue(row, "runtimeHours"))} production | ${str(row.topReason) || "reason n/a"}`,
-  }));
-
-  return (
-    <section className="grid gap-4">
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        <BarChartCard title="Downtime reason analysis" description="Downtime grouped by reason" rows={downtimeReasons} valueFormatter={durationLabel} />
-        <BarChartCard title="Machine downtime" description="Downtime by machine / type, top reason shown in each row" rows={downtimeRows} valueFormatter={durationLabel} />
-      </section>
-      <DataRowsCard title="Downtime reason detail" rows={asArray(payload.downtimeReasonDetails)} empty="No downtime reason detail rows returned" />
-    </section>
-  );
-}
-
 function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
   return (
     <Card>
@@ -3677,159 +3071,6 @@ function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
         </section>
       </CardContent>
     </Card>
-  );
-}
-
-function MeetingSummaryPanel({ tracker }: { tracker: DashboardPayload }) {
-  const summary = asRecord(tracker.summary);
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Monthly one-to-one meeting tracker</CardTitle>
-        <CardDescription>
-          {str(tracker.month) || "Selected month"}: {formatNumber(numValue(tracker, "completedCount"))} completed, {formatNumber(numValue(tracker, "pendingCount"))} pending
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <SummaryCardGrid
-          items={[
-            ["Completed", formatNumber(numValue(tracker, "completedCount"))],
-            ["Pending", formatNumber(numValue(tracker, "pendingCount"))],
-            ["Machine issues", formatNumber(numValue(summary, "machineIssueCount"))],
-            ["Training needs", formatNumber(numValue(summary, "trainingNeedCount"))],
-            ["Target concerns", formatNumber(numValue(summary, "targetConcernCount"))],
-            ["Motivation notes", formatNumber(numValue(summary, "motivationCount"))],
-          ]}
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
-function TrainingGuidancePanel({ guidance }: { guidance: DashboardPayload }) {
-  const summary = asRecord(guidance.summary);
-  const rows = asArray(guidance.rows);
-  const note = str(guidance.note);
-  const efficiencyThreshold = numValue(summary, "efficiencyThreshold");
-  const rejectThreshold = numValue(summary, "rejectThreshold");
-
-  return (
-    <section className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Training guidance</CardTitle>
-          <CardDescription>
-            {note || "Decision-support flags from the legacy operator analysis"}
-            {efficiencyThreshold || rejectThreshold
-              ? ` Thresholds: efficiency below ${formatPercent(efficiencyThreshold)}, rejection above ${formatPercent(rejectThreshold)}.`
-              : ""}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SummaryCardGrid
-            items={[
-              ["Training required first", formatNumber(numValue(summary, "trainingRequired"))],
-              ["Training pending", formatNumber(numValue(summary, "trainingPending"))],
-              ["Monitor after training", formatNumber(numValue(summary, "monitorAfterTraining"))],
-              ["Management review", formatNumber(numValue(summary, "managementReviewAfterTraining"))],
-              ["Improved after training", formatNumber(numValue(summary, "improvedAfterTraining"))],
-            ]}
-          />
-        </CardContent>
-      </Card>
-      <DataRowsCard title="Training guidance detail" rows={rows} empty="No training guidance rows returned" />
-    </section>
-  );
-}
-
-function MonthlyTrainingPlanPanel({ rows }: { rows: DashboardPayload[] }) {
-  return <DataRowsCard title="Monthly training plan" rows={rows} empty="No monthly training plan rows returned" />;
-}
-
-function BarChartCard({
-  title,
-  description,
-  rows,
-  valueFormatter,
-}: {
-  title: string;
-  description: string;
-  rows: BarDatum[];
-  valueFormatter: (value: number) => string;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <MiniBarList rows={rows} valueFormatter={valueFormatter} empty="No data for this filter" />
-      </CardContent>
-    </Card>
-  );
-}
-
-function MiniBarList({
-  rows,
-  valueFormatter,
-  empty,
-}: {
-  rows: BarDatum[];
-  valueFormatter: (value: number) => string;
-  empty: string;
-}) {
-  if (!rows.length) {
-    return <div className="grid h-36 place-items-center rounded-xl border border-dashed text-sm text-muted-foreground">{empty}</div>;
-  }
-
-  const max = Math.max(...rows.map((row) => Math.abs(row.value)), 1);
-  return (
-    <div className="grid gap-2">
-      {rows.map((row) => {
-        const width = `${Math.max(3, (Math.abs(row.value) / max) * 100)}%`;
-        return (
-          <div key={row.key} className="grid gap-1 rounded-lg border p-2">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 text-xs">
-              <div className="min-w-0">
-                <span className="truncate font-medium">{row.label}</span>
-                {row.group ? <Badge className="ml-2 align-middle" variant={row.group === "Bottom" ? "destructive" : "outline"}>{row.group}</Badge> : null}
-              </div>
-              <span className="font-medium tabular-nums">{valueFormatter(row.value)}</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className={row.tone === "warning" ? "h-full rounded-full bg-amber-500" : row.tone === "good" ? "h-full rounded-full bg-green-600" : "h-full rounded-full bg-primary"}
-                style={{ width }}
-              />
-            </div>
-            {row.detail ? <div className="truncate text-xs text-muted-foreground">{row.detail}</div> : null}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function SummaryCardGrid({ items }: { items: Array<[string, string]> }) {
-  return (
-    <section className="grid gap-3 sm:grid-cols-2 @5xl/main:grid-cols-3">
-      {items.map(([label, value]) => (
-        <div key={label} className="rounded-lg border p-3">
-          <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="text-lg font-semibold tabular-nums">{value}</div>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function MetricMini({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="truncate font-medium tabular-nums">{value}</div>
-    </div>
   );
 }
 
@@ -4369,158 +3610,6 @@ function MachinePlanningTile({
         <TileField label="Remarks" value={row.remark || row.remarks || row.REMARKS} important />
       </div>
     </button>
-  );
-}
-
-function SetupChecklistHistory({ rows }: { rows: DashboardPayload[] }) {
-  const [query, setQuery] = useState("");
-  const [machineFilter, setMachineFilter] = useState("");
-  const [jobCardFilter, setJobCardFilter] = useState("");
-  const [optionFilter, setOptionFilter] = useState("");
-  const [setterFilter, setSetterFilter] = useState("");
-  const [shiftFilter, setShiftFilter] = useState("");
-  const machineOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.machine)).filter((value) => value !== "-")), [rows]);
-  const jobCardOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.jcNo)).filter((value) => value !== "-")), [rows]);
-  const optionOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.optionNumber)).filter((value) => value !== "-")), [rows]);
-  const setterOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.setterCode)).filter((value) => value !== "-")), [rows]);
-  const shiftOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.shift)).filter((value) => value !== "-")), [rows]);
-  const filteredRows = useMemo(() => rows.filter((row) =>
-    setupHistoryMatchesQuery(row, query) &&
-    typedFilterMatches(displayValue(row.machine), machineFilter) &&
-    typedFilterMatches(displayValue(row.jcNo), jobCardFilter) &&
-    typedFilterMatches(displayValue(row.optionNumber), optionFilter) &&
-    typedFilterMatches(displayValue(row.setterCode), setterFilter) &&
-    typedFilterMatches(displayValue(row.shift), shiftFilter),
-  ), [jobCardFilter, machineFilter, optionFilter, query, rows, setterFilter, shiftFilter]);
-  const totalMinutes = filteredRows.reduce((total, row) => total + numValue(row, "settingMinutes"), 0);
-  const machines = uniqueValues(filteredRows.map((row) => displayValue(row.machine)).filter((value) => value !== "-")).length;
-  const setters = uniqueValues(filteredRows.map((row) => displayValue(row.setterCode)).filter((value) => value !== "-")).length;
-
-  function clearFilters() {
-    setQuery("");
-    setMachineFilter("");
-    setJobCardFilter("");
-    setOptionFilter("");
-    setSetterFilter("");
-    setShiftFilter("");
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Setup checklist history</CardTitle>
-        <CardDescription>{rows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(rows.length)} setup checklist entries shown` : "No setup checklist entries saved yet"}</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        {rows.length ? (
-          <>
-            <TrackingSummary
-              items={[
-                ["Setup entries", formatNumber(filteredRows.length)],
-                ["Machines", formatNumber(machines)],
-                ["Setters", formatNumber(setters)],
-                ["Setting time", durationLabel(totalMinutes)],
-                ["Visible", formatNumber(filteredRows.length)],
-              ]}
-            />
-            <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
-              <span>Search</span>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input className="pl-9" value={query} placeholder="Search job card, machine, part, setup, setter, remark..." onChange={(event) => setQuery(event.target.value)} />
-              </div>
-            </Label>
-            <ExcelStyleFilters
-              filters={[
-                {
-                  id: "setup-history-machine",
-                  label: "Machine no.",
-                  value: machineFilter,
-                  placeholder: "Type or select machine",
-                  options: machineOptions,
-                  onChange: setMachineFilter,
-                },
-                {
-                  id: "setup-history-job-card",
-                  label: "Job card no.",
-                  value: jobCardFilter,
-                  placeholder: "Type or select job card",
-                  options: jobCardOptions,
-                  onChange: setJobCardFilter,
-                },
-                {
-                  id: "setup-history-option",
-                  label: "Option no.",
-                  value: optionFilter,
-                  placeholder: "Type or select option",
-                  options: optionOptions,
-                  onChange: setOptionFilter,
-                },
-                {
-                  id: "setup-history-setter",
-                  label: "Setter",
-                  value: setterFilter,
-                  placeholder: "Type or select setter",
-                  options: setterOptions,
-                  onChange: setSetterFilter,
-                },
-                {
-                  id: "setup-history-shift",
-                  label: "Shift",
-                  value: shiftFilter,
-                  placeholder: "Type or select shift",
-                  options: shiftOptions,
-                  onChange: setShiftFilter,
-                },
-              ]}
-            />
-            <div>
-              <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            </div>
-            {filteredRows.length ? (
-              <div className="grid max-h-[34rem] gap-3 overflow-y-auto pr-1">
-                {filteredRows.map((row, index) => (
-                  <article key={`${displayValue(row.jcNo)}-${displayValue(row.machine)}-${displayValue(row.setupNo)}-${index}`} className="grid gap-3 rounded-lg border bg-background p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="break-words text-sm font-semibold">{displayValue(row.jcNo)}</div>
-                        <div className="break-words text-xs text-muted-foreground">{displayValue(row.partCode)}</div>
-                      </div>
-                      <div className="flex flex-wrap justify-end gap-1.5">
-                        <StatusBadge value={row.status} />
-                        <MachineStateBadge label="Machine" value={displayValue(row.machine)} tone="planning" />
-                      </div>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2 @6xl/main:grid-cols-4">
-                      <TileField label="Setup date" value={row.setupDate} />
-                      <TileField label="Option" value={row.optionNumber} />
-                      <TileField label="Setup no." value={row.setupNo} />
-                      <TileField label="Shift" value={row.shift} />
-                      <TileField label="Setting time" value={durationLabel(numValue(row, "settingMinutes"))} />
-                      <TileField label="Setter" value={row.setterCode} />
-                      <TileField label="Helper" value={row.helperCode} />
-                      <TileField label="QC" value={row.qcController} />
-                      <TileField label="Start / end" value={`${displayValue(row.settingStartTime)} / ${displayValue(row.settingEndTime)}`} />
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <TileField label="Rimmer" value={row.rimmerAvailability} />
-                      <TileField label="Modhiyu" value={row.modhiyu} />
-                      <TileField label="Remarks" value={row.remarks} important />
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <EmptyRowsMessage>No setup checklist entries match the current filters</EmptyRowsMessage>
-            )}
-          </>
-        ) : (
-          <EmptyRowsMessage>No setup checklist entries saved yet</EmptyRowsMessage>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -5162,152 +4251,6 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
-function TrendChart({ points }: { points: DashboardTrendPoint[] }) {
-  if (!points.length) {
-    return (
-      <div className="grid h-72 place-items-center rounded-xl border border-dashed text-sm text-muted-foreground">
-        No production trend available
-      </div>
-    );
-  }
-
-  const max = Math.max(...points.map((point) => Math.max(point.output, point.target, point.reject)), 1);
-  const width = 640;
-  const height = 240;
-  const step = points.length > 1 ? width / (points.length - 1) : width;
-  const y = (value: number) => height - (value / max) * (height - 24) - 12;
-  const line = (key: "output" | "target") =>
-    points.map((point, index) => `${index * step},${y(point[key])}`).join(" ");
-
-  return (
-    <div className="grid gap-4">
-      <div className="overflow-hidden rounded-xl border bg-muted/20 p-3">
-        <svg viewBox={`0 0 ${width} ${height}`} className="h-72 w-full" role="img">
-          <title>Production output and target trend</title>
-          {[0.25, 0.5, 0.75].map((tick) => (
-            <line
-              key={tick}
-              x1="0"
-              x2={width}
-              y1={height * tick}
-              y2={height * tick}
-              className="stroke-border"
-              strokeDasharray="4 6"
-            />
-          ))}
-          <polyline points={line("target")} fill="none" className="stroke-muted-foreground" strokeWidth="3" />
-          <polyline points={line("output")} fill="none" className="stroke-primary" strokeWidth="4" />
-          {points.map((point, index) => (
-            <circle key={`${point.label}-${index}`} cx={index * step} cy={y(point.output)} r="4" className="fill-primary" />
-          ))}
-        </svg>
-      </div>
-      <div className="grid gap-2 text-sm sm:grid-cols-3">
-        {points.slice(-3).map((point) => (
-          <div key={point.label} className="rounded-lg border p-3">
-            <div className="text-muted-foreground">{point.label}</div>
-            <div className="font-medium tabular-nums">{formatNumber(point.output)} output</div>
-            <div className="text-xs text-muted-foreground">
-              {formatNumber(point.target)} target · {formatNumber(point.reject)} rejected
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function RankedTable({
-  title,
-  rows,
-  valueLabel,
-}: {
-  title: string;
-  rows: DashboardRankedRow[];
-  valueLabel: string;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>Sorted by highest recorded output</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead className="text-right">{valueLabel}</TableHead>
-              <TableHead className="hidden text-right sm:table-cell">Rate</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length ? (
-              rows.map((row) => (
-                <TableRow key={`${title}-${row.label}`}>
-                  <TableCell>
-                    <div className="font-medium">{row.label}</div>
-                    <div className="text-xs text-muted-foreground">{row.detail}</div>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatNumber(row.value)}</TableCell>
-                  <TableCell className="hidden text-right tabular-nums sm:table-cell">{formatPercent(row.rate)}</TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
-                  No records yet
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
-
-function RankedList({
-  title,
-  rows,
-  icon: Icon,
-  empty,
-}: {
-  title: string;
-  rows: DashboardRankedRow[];
-  icon: typeof Boxes;
-  empty: string;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>Top workbook rows</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        {rows.length ? (
-          rows.slice(0, 5).map((row) => (
-            <div key={`${title}-${row.label}`} className="flex items-center gap-3 rounded-xl border p-3">
-              <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted">
-                <Icon className="size-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">{row.label}</div>
-                <div className="truncate text-xs text-muted-foreground">{row.detail}</div>
-              </div>
-              <div className="text-right text-sm font-medium tabular-nums">{formatNumber(row.value)}</div>
-            </div>
-          ))
-        ) : (
-          <div className="grid h-36 place-items-center rounded-xl border border-dashed text-sm text-muted-foreground">
-            {empty}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function DashboardSkeleton() {
   return (
     <div className="grid gap-4">
@@ -5323,12 +4266,6 @@ function DashboardSkeleton() {
       </div>
     </div>
   );
-}
-
-function StatusIcon({ tone }: { tone: "default" | "good" | "warning" }) {
-  if (tone === "good") return <CheckCircle2 className="size-4 text-green-600" />;
-  if (tone === "warning") return <AlertTriangle className="size-4 text-amber-600" />;
-  return <Gauge className="size-4 text-muted-foreground" />;
 }
 
 function formatDate(value: string) {
@@ -5786,28 +4723,6 @@ function machinePlanningTone(status: string): "success" | "planning" | "warning"
   return "neutral";
 }
 
-function allSetupsComplete(rows: DashboardPayload[]) {
-  return rows.length > 0 && rows.every((row) => displayValue(row.actualCompletionDate) !== "-");
-}
-
-function setupHistoryMatchesQuery(row: DashboardPayload, query: string) {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) return true;
-  return [
-    row.setupDate,
-    row.jcNo,
-    row.machine,
-    row.partCode,
-    row.optionNumber,
-    row.setupNo,
-    row.shift,
-    row.setterCode,
-    row.helperCode,
-    row.qcController,
-    row.remarks,
-  ].map((value) => formatCell(value)).join(" ").toLowerCase().includes(normalizedQuery);
-}
-
 function machineKey(value: unknown) {
   return str(value).toLowerCase();
 }
@@ -5933,128 +4848,12 @@ function uniqueValues(values: string[]) {
   return [...new Set(values.map(str).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
-function stringArray(value: unknown) {
-  return [...new Set((Array.isArray(value) ? value : []).map(str).filter(Boolean))].sort((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true }),
-  );
-}
-
 function numValue(row: DashboardPayload, ...keys: string[]) {
   for (const key of keys) {
     const value = Number(row[key]);
     if (Number.isFinite(value)) return value;
   }
   return 0;
-}
-
-function sumRows(rows: DashboardPayload[], key: string) {
-  return rows.reduce((total, row) => total + numValue(row, key), 0);
-}
-
-function safeRatio(numerator: number, denominator: number) {
-  return denominator ? numerator / denominator : 0;
-}
-
-function weightedAttendanceFromRows(rows: DashboardPayload[]) {
-  const present = sumRows(rows, "presentDays");
-  const working = sumRows(rows, "workingDays");
-  if (working) return present / working;
-  const rates = rows.map((row) => numValue(row, "attendancePct")).filter((value) => value > 0);
-  return rates.length ? rates.reduce((total, value) => total + value, 0) / rates.length : 0;
-}
-
-function aggregateMachines(rows: DashboardPayload[]) {
-  const grouped = new Map<string, { machine: string; machineType: string; output: number; target: number; reject: number; runs: number }>();
-  for (const row of rows) {
-    const machine = str(row.machine) || "Unspecified";
-    const current = grouped.get(machine) ?? { machine, machineType: str(row.machineType), output: 0, target: 0, reject: 0, runs: 0 };
-    current.machineType = current.machineType || str(row.machineType);
-    current.output += numValue(row, "output");
-    current.target += numValue(row, "target");
-    current.reject += numValue(row, "reject");
-    current.runs += numValue(row, "runs") || 1;
-    grouped.set(machine, current);
-  }
-  return [...grouped.values()]
-    .map((row) => ({
-      ...row,
-      efficiency: safeRatio(row.output, row.target),
-      rejectRate: safeRatio(row.reject, row.output),
-    }))
-    .sort((a, b) => b.output - a.output);
-}
-
-function aggregateMachineTypes(rows: DashboardPayload[]) {
-  const grouped = new Map<string, { machineType: string; output: number; target: number; reject: number; runs: number }>();
-  for (const row of rows) {
-    const machineType = str(row.machineType) || "Unspecified";
-    const current = grouped.get(machineType) ?? { machineType, output: 0, target: 0, reject: 0, runs: 0 };
-    current.output += numValue(row, "output");
-    current.target += numValue(row, "target");
-    current.reject += numValue(row, "reject");
-    current.runs += numValue(row, "runs") || 1;
-    grouped.set(machineType, current);
-  }
-  return [...grouped.values()]
-    .map((row) => ({
-      ...row,
-      efficiency: safeRatio(row.output, row.target),
-      rejectRate: safeRatio(row.reject, row.output),
-    }))
-    .sort((a, b) => b.output - a.output);
-}
-
-function operatorBenchmarkDatum(row: DashboardPayload, group: string): BarDatum {
-  return {
-    key: `${group}-${str(row.operatorId) || str(row.name)}`,
-    label: `${str(row.name) || str(row.operatorName) || "Operator"} (${str(row.operatorId) || "-"})`,
-    value: numValue(row, "efficiency"),
-    detail: `${formatNumber(numValue(row, "output"))} out / ${formatNumber(numValue(row, "target"))} target | ${formatPercent(numValue(row, "rejectRate"))} reject`,
-    group,
-    tone: group === "Bottom" ? "warning" : "good",
-  };
-}
-
-function attendanceBenchmarkDatum(row: DashboardPayload, group: string): BarDatum {
-  return {
-    key: `${group}-${str(row.operatorId) || str(row.name)}`,
-    label: `${str(row.name) || "Operator"} (${str(row.operatorId) || "-"})`,
-    value: numValue(row, "attendancePct"),
-    detail: `${formatNumber(numValue(row, "presentDays"))} present / ${formatNumber(numValue(row, "workingDays"))} working days`,
-    group,
-    tone: group === "Bottom" ? "warning" : "good",
-  };
-}
-
-function aggregateBars(rows: DashboardPayload[], label: (row: DashboardPayload) => string, valueKey: string): BarDatum[] {
-  const grouped = new Map<string, { label: string; value: number; rows: number }>();
-  for (const row of rows) {
-    const rowLabel = label(row);
-    const current = grouped.get(rowLabel) ?? { label: rowLabel, value: 0, rows: 0 };
-    current.value += numValue(row, valueKey);
-    current.rows += 1;
-    grouped.set(rowLabel, current);
-  }
-  return [...grouped.values()]
-    .map((row) => ({
-      key: row.label,
-      label: row.label,
-      value: row.value,
-      detail: `${formatNumber(row.rows)} rows`,
-    }))
-    .sort((a, b) => b.value - a.value);
-}
-
-function durationLabel(minutes: number) {
-  if (!minutes) return "0m";
-  const hours = Math.floor(minutes / 60);
-  const mins = Math.round(minutes % 60);
-  return hours ? `${hours}h ${mins}m` : `${mins}m`;
-}
-
-function hoursLabel(hours: number) {
-  if (!hours) return "0h";
-  return `${formatNumber(hours)}h`;
 }
 
 function tableColumns(rows: DashboardPayload[]) {

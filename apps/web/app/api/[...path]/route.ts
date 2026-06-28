@@ -3,6 +3,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { api } from "@/convex/_generated/api";
+import { browserImportPolicy, exportUnavailablePayload } from "@/lib/dashboard-api-policy";
 import type { ProductionEntry } from "@/lib/dashboard-domain";
 import { PUBLIC_CONVEX_URL } from "@/lib/convex-env";
 import { shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy";
@@ -24,17 +25,6 @@ function json(payload: unknown, status = 200) {
   return NextResponse.json(payload, {
     status,
     headers: {
-      "Cache-Control": "no-store",
-    },
-  });
-}
-
-function workbookPlaceholder(filename: string, body: string) {
-  return new Response(body, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
       "Cache-Control": "no-store",
     },
   });
@@ -155,13 +145,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     if (path === "data-export") {
-      const entryType = search.get("entryType") || "data";
-      return workbookPlaceholder(`${entryType}_export.csv`, "entryType,payload\n");
+      const payload = exportUnavailablePayload(path)!;
+      return json({ error: payload.error }, payload.status);
     }
 
     if (path === "export-workbook") {
-      const scope = search.get("scope") || "full";
-      return workbookPlaceholder(`mrmpl_${scope}_export.csv`, "section,status\nConvex export,available\n");
+      const payload = exportUnavailablePayload(path)!;
+      return json({ error: payload.error }, payload.status);
     }
 
     return json({ error: "Not found" }, 404);
@@ -287,6 +277,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const fileName = String(body.fileName || "");
       const fileBase64 = String(body.fileBase64 || "");
       const importedRows = parseTemplateUpload(entryType, fileName, fileBase64);
+      const importPolicy = browserImportPolicy(entryType, importedRows.length);
+      if (!importPolicy.ok) {
+        throw new RouteError(importPolicy.status, importPolicy.error);
+      }
       let inserted = 0;
 
       for (const payload of importedRows) {

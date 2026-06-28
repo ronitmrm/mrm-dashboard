@@ -10,6 +10,35 @@ export type DashboardRefreshState = {
   lastError?: string;
 };
 
+export type DashboardRefreshStatusSummary = {
+  status: DashboardRefreshStatus;
+  isRefreshing: boolean;
+  requestedAtMs?: number;
+  scheduledAtMs?: number;
+  startedAtMs?: number;
+  completedAtMs?: number;
+  lastError?: string;
+};
+
+export function dashboardRefreshStatus(current: DashboardRefreshState | null): DashboardRefreshStatusSummary {
+  if (!current) {
+    return {
+      status: "idle",
+      isRefreshing: false,
+    };
+  }
+
+  return {
+    status: current.status,
+    isRefreshing: current.status === "queued" || current.status === "running",
+    requestedAtMs: current.requestedAtMs,
+    scheduledAtMs: current.scheduledAtMs,
+    startedAtMs: current.startedAtMs,
+    completedAtMs: current.completedAtMs,
+    lastError: current.lastError,
+  };
+}
+
 export function requestDashboardRefresh(
   current: DashboardRefreshState | null,
   requestedAtMs: number,

@@ -140,7 +140,8 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_entry_type", ["entryType"])
-    .index("by_entry_type_key", ["entryType", "key"]),
+    .index("by_entry_type_key", ["entryType", "key"])
+    .index("by_owner_entry_type_key", ["ownerId", "entryType", "key"]),
   corrections: defineTable({
     ownerId: v.optional(v.id("users")),
     targetTable: v.string(),
@@ -154,7 +155,8 @@ export default defineSchema({
     createdAt: v.string(),
   })
     .index("by_owner", ["ownerId"])
-    .index("by_target", ["targetTable", "targetId"]),
+    .index("by_target", ["targetTable", "targetId"])
+    .index("by_owner_target", ["ownerId", "targetTable", "targetId"]),
   dashboardSnapshotChunks: defineTable({
     ownerId: v.optional(v.id("users")),
     sequence: v.number(),

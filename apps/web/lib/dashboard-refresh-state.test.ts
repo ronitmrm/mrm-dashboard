@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   beginDashboardRefreshRun,
+  dashboardRefreshStatus,
   finishDashboardRefreshRun,
   requestDashboardRefresh,
 } from "./dashboard-refresh-state";
@@ -43,5 +44,36 @@ describe("dashboard refresh state", () => {
     expect(finished.state.status).toBe("idle");
     expect(finished.state.completedAtMs).toBe(300);
     expect(finished.state.lastError).toBeUndefined();
+  });
+
+  it("summarizes refresh state for public status responses", () => {
+    expect(dashboardRefreshStatus(null)).toEqual({
+      status: "idle",
+      isRefreshing: false,
+    });
+
+    expect(dashboardRefreshStatus({
+      status: "queued",
+      requestedAtMs: 100,
+      scheduledAtMs: 100,
+    })).toEqual({
+      status: "queued",
+      isRefreshing: true,
+      requestedAtMs: 100,
+      scheduledAtMs: 100,
+    });
+
+    expect(dashboardRefreshStatus({
+      status: "failed",
+      requestedAtMs: 100,
+      completedAtMs: 200,
+      lastError: "Planning refresh failed.",
+    })).toEqual({
+      status: "failed",
+      isRefreshing: false,
+      requestedAtMs: 100,
+      completedAtMs: 200,
+      lastError: "Planning refresh failed.",
+    });
   });
 });

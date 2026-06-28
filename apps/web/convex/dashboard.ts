@@ -8,10 +8,17 @@ import type { Id } from "./_generated/dataModel";
 import { buildLegacyDashboardSnapshot } from "../lib/legacy-dashboard-analysis";
 import {
   beginDashboardRefreshRun,
+  dashboardRefreshStatus,
   finishDashboardRefreshRun,
-  requestDashboardRefresh,
+  requestDashboardRefresh as requestDashboardRefreshState,
   type DashboardRefreshState,
+  type DashboardRefreshStatusSummary,
 } from "../lib/dashboard-refresh-state";
+import {
+  activeCorrectionTargetKeys,
+  latestUncorrectedRow,
+  type CorrectionTargetRow,
+} from "../lib/dashboard-corrections";
 import { shouldQueuePlanningRefresh } from "../lib/planning-refresh-policy";
 
 async function requireDashboardUserId(ctx: QueryCtx | MutationCtx | ActionCtx) {
@@ -53,7 +60,15 @@ const workbookTables = [
 ] as const;
 
 type WorkbookTable = typeof workbookTables[number];
-type RefreshSnapshotResult = { ok: true; skipped: boolean; updatedAt?: string };
+type RefreshSnapshotResult = {
+  ok: true;
+  skipped: boolean;
+  updatedAt?: string;
+  queued?: boolean;
+  status?: DashboardRefreshStatusSummary["status"];
+  isRefreshing?: boolean;
+  lastError?: string;
+};
 type DashboardRefreshStateRow = {
   _id: Id<"dashboardRefreshState">;
   key: string;
@@ -211,7 +226,36 @@ export const refreshSnapshot = action({
   },
   handler: async (ctx, args): Promise<RefreshSnapshotResult> => {
     await requireDashboardAccess(ctx);
-    return rebuildDashboardSnapshot(ctx, args);
+    if (!args.force) {
+      const freshness: { fresh: boolean; updatedAt?: string } = await ctx.runQuery(internal.dashboard.dashboardSnapshotFreshness, {
+        maxAgeMs: dashboardSnapshotFreshForMs,
+        nowMs: nowMs(),
+      });
+      if (freshness.fresh) {
+        return { ok: true, skipped: true, updatedAt: freshness.updatedAt };
+      }
+    }
+
+    const queued: DashboardRefreshStatusSummary & { scheduled: boolean } = await ctx.runMutation(internal.dashboard.requestDashboardRefresh, {
+      requestedAtMs: nowMs(),
+    });
+    return {
+      ok: true,
+      skipped: false,
+      queued: true,
+      status: queued.status,
+      isRefreshing: queued.isRefreshing,
+      lastError: queued.lastError,
+    };
+  },
+});
+
+export const refreshStatus = query({
+  args: {},
+  handler: async (ctx): Promise<DashboardRefreshStatusSummary> => {
+    await requireDashboardAccess(ctx);
+    const row = await dashboardRefreshStateRow(ctx);
+    return dashboardRefreshStatus(row ? dashboardRefreshStateFromRow(row) : null);
   },
 });
 
@@ -388,10 +432,18 @@ export const finishDashboardRefresh = internalMutation({
   },
 });
 
-async function queueDashboardRefresh(ctx: MutationCtx) {
-  const requestedAtMs = nowMs();
+export const requestDashboardRefresh = internalMutation({
+  args: {
+    requestedAtMs: v.number(),
+  },
+  handler: async (ctx, args): Promise<DashboardRefreshStatusSummary & { scheduled: boolean }> => {
+    return queueDashboardRefresh(ctx, args.requestedAtMs);
+  },
+});
+
+async function queueDashboardRefresh(ctx: MutationCtx, requestedAtMs = nowMs()): Promise<DashboardRefreshStatusSummary & { scheduled: boolean }> {
   const row = await dashboardRefreshStateRow(ctx);
-  const transition = requestDashboardRefresh(row ? dashboardRefreshStateFromRow(row) : null, requestedAtMs);
+  const transition = requestDashboardRefreshState(row ? dashboardRefreshStateFromRow(row) : null, requestedAtMs);
 
   if (row) {
     await ctx.db.patch(row._id, transition.state);
@@ -405,6 +457,11 @@ async function queueDashboardRefresh(ctx: MutationCtx) {
   if (transition.shouldSchedule) {
     await ctx.scheduler.runAfter(0, internal.dashboard.refreshSnapshotInternal, {});
   }
+
+  return {
+    ...dashboardRefreshStatus(transition.state),
+    scheduled: transition.shouldSchedule,
+  };
 }
 
 async function dashboardRefreshStateRow(ctx: QueryCtx | MutationCtx) {
@@ -424,12 +481,6 @@ function dashboardRefreshStateFromRow(row: DashboardRefreshStateRow): DashboardR
     completedAtMs: row.completedAtMs,
     lastError: row.lastError,
   };
-}
-
-function activeCorrectionTargets(corrections: Array<{ targetTable: string; targetId: string; action: string }>) {
-  return new Set(corrections
-    .filter((row) => row.action === "reverse" || row.action === "replace" || row.action === "close")
-    .map((row) => `${row.targetTable}:${row.targetId}`));
 }
 
 function withoutCorrectedRows<Row extends { _id: unknown }>(
@@ -638,7 +689,7 @@ function serializedSnapshotChunks(chunks: Array<{ sequence: number; chunk: strin
 }
 
 function buildDashboardSnapshotPayload(source: SnapshotSource) {
-  const correctionTargets = activeCorrectionTargets(source.corrections);
+  const correctionTargets = activeCorrectionTargetKeys(source.corrections);
   const snapshotEntryTypeSet = new Set([...snapshotEntryTypes, "_summary"]);
   const dataEntries = withoutCorrectedRows(
     source.allDataEntries.filter((row) => snapshotEntryTypeSet.has(row.entryType)),
@@ -831,12 +882,6 @@ function correctionDetailsFor(table: string, row: Record<string, unknown>, paylo
   return row;
 }
 
-async function globalCorrectionRows(ctx: QueryCtx) {
-  return ctx.db
-    .query("corrections")
-    .collect();
-}
-
 async function globalCorrectionCandidateRows(
   ctx: QueryCtx,
   table: CorrectionCandidateTable,
@@ -892,6 +937,21 @@ async function globalCorrectionCandidateRows(
         .take(limit);
     }
   }
+}
+
+async function activeCorrectionTargetsForRows(
+  ctx: QueryCtx | MutationCtx,
+  targetTable: string,
+  rows: Array<{ _id: unknown }>,
+) {
+  const correctionGroups = await Promise.all(rows.map((row) => ctx.db
+    .query("corrections")
+    .withIndex("by_owner_target", (q) => q
+      .eq("ownerId", undefined)
+      .eq("targetTable", targetTable)
+      .eq("targetId", String(row._id)))
+    .collect()));
+  return activeCorrectionTargetKeys(correctionGroups.flat() as CorrectionTargetRow[]);
 }
 
 function cleanText(value: unknown) {
@@ -1083,16 +1143,14 @@ export const saveDataEntry = mutation({
     if (args.key) {
       const existingRows = await ctx.db
         .query("dataEntries")
-        .withIndex("by_entry_type_key", (q) => q.eq("entryType", args.entryType).eq("key", args.key))
-        .collect();
-      const corrections = await ctx.db
-        .query("corrections")
-        .collect();
-      const correctionTargets = activeCorrectionTargets(corrections);
-      const existing = existingRows
-        .filter((row) => !correctionTargets.has(`dataEntries:${String(row._id)}`))
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-        .at(-1);
+        .withIndex("by_owner_entry_type_key", (q) => q
+          .eq("ownerId", ownerFields.ownerId)
+          .eq("entryType", args.entryType)
+          .eq("key", args.key))
+        .order("desc")
+        .take(20);
+      const correctionTargets = await activeCorrectionTargetsForRows(ctx, "dataEntries", existingRows);
+      const existing = latestUncorrectedRow(existingRows, "dataEntries", correctionTargets);
       if (existing) {
         await ctx.db.patch(existing._id, {
           entryType: args.entryType,
@@ -1148,18 +1206,18 @@ export const correctionCandidates = query({
   },
   handler: async (ctx, args) => {
     await requireDashboardAccess(ctx);
-    const corrections = await globalCorrectionRows(ctx);
-    const correctionTargets = activeCorrectionTargets(corrections);
+    const limit = Math.min(Math.max(Math.floor(args.limit ?? 200), 1), 200);
     const tableNames = correctionCandidateTables.filter((table) => !args.targetTable || table === args.targetTable);
     const results = [];
     for (const table of tableNames) {
-      const rows = await globalCorrectionCandidateRows(ctx, table, args.limit ?? 100);
+      const rows = await globalCorrectionCandidateRows(ctx, table, limit);
+      const correctionTargets = await activeCorrectionTargetsForRows(ctx, table, rows);
       for (const row of rows) {
         if (correctionTargets.has(`${table}:${String(row._id)}`)) continue;
         results.push(correctionCandidate(table, row));
       }
     }
-    return results.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, args.limit ?? 200);
+    return results.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
   },
 });
 

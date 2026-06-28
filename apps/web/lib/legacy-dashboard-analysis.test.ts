@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis";
 
@@ -1966,26 +1966,30 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("does not overlap C501 when a running M43 and priority M116 push normal M32", () => {
-    const snapshot = buildLegacyDashboardSnapshot({
-      workbookName: "Convex",
-      productionEntries: [],
-      plannerPriorities: [
-        {
-          target: "JC-081",
-          jcNo: "JC-081",
-          partCode: "M116",
-          priority: "High",
-          approvalMode: "idle_queue_only",
-          createdAt: "2026-06-27T01:00:00.000Z",
-        },
-        {
-          target: "M43",
-          partCode: "M43",
-          priority: "High",
-          createdAt: "2026-06-25T01:00:00.000Z",
-        },
-      ],
-      dataEntries: [
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-27T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        plannerPriorities: [
+          {
+            target: "JC-081",
+            jcNo: "JC-081",
+            partCode: "M116",
+            priority: "High",
+            approvalMode: "idle_queue_only",
+            createdAt: "2026-06-27T01:00:00.000Z",
+          },
+          {
+            target: "M43",
+            partCode: "M43",
+            priority: "High",
+            createdAt: "2026-06-25T01:00:00.000Z",
+          },
+        ],
+        dataEntries: [
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:00:00.000Z",
@@ -2065,27 +2069,30 @@ describe("buildLegacyDashboardSnapshot", () => {
             status: "Active",
           },
         },
-      ],
-    });
+        ],
+      });
 
-    const c501Rows = snapshot.productionControl.machinePlanDetailRows
-      .filter((row) => row.machine === "C501")
-      .sort((a, b) => dashboardDateKey(a.setupPlannedDate) - dashboardDateKey(b.setupPlannedDate));
-    const m43 = c501Rows.find((row) => row.partCode === "M43");
-    const m116 = c501Rows.find((row) => row.partCode === "M116");
-    const m32 = c501Rows.find((row) => row.partCode === "M32");
+      const c501Rows = snapshot.productionControl.machinePlanDetailRows
+        .filter((row) => row.machine === "C501")
+        .sort((a, b) => dashboardDateKey(a.setupPlannedDate) - dashboardDateKey(b.setupPlannedDate));
+      const m43 = c501Rows.find((row) => row.partCode === "M43");
+      const m116 = c501Rows.find((row) => row.partCode === "M116");
+      const m32 = c501Rows.find((row) => row.partCode === "M32");
 
-    expect(m43).toMatchObject({
-      runningStatus: "Running",
-      plannedProductionStartDate: "27-June-26",
-    });
-    expect(m116).toMatchObject({
-      plannerPriority: "High",
-      setupPlannedDate: "28-June-26",
-    });
-    expect(dashboardDateKey(m32?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
-    for (let index = 1; index < c501Rows.length; index += 1) {
-      expect(dashboardDateKey(c501Rows[index]!.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(c501Rows[index - 1]!.plannedProductionEndDate));
+      expect(m43).toMatchObject({
+        runningStatus: "Running",
+        plannedProductionStartDate: "27-June-26",
+      });
+      expect(m116).toMatchObject({
+        plannerPriority: "High",
+        setupPlannedDate: "28-June-26",
+      });
+      expect(dashboardDateKey(m32?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
+      for (let index = 1; index < c501Rows.length; index += 1) {
+        expect(dashboardDateKey(c501Rows[index]!.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(c501Rows[index - 1]!.plannedProductionEndDate));
+      }
+    } finally {
+      vi.useRealTimers();
     }
   });
 

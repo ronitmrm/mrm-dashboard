@@ -57,7 +57,6 @@ function loadEnv(filePath) {
 
 function parseWorkbook(filePath) {
   const workbook = XLSX.readFile(filePath, { cellDates: false });
-  const employeeLookup = buildEmployeeLookup(workbook);
   // Software_Raw_Import is historical construction data and must not seed shop-floor output.
   const productionEntries = [];
   const dataEntries = [
@@ -220,113 +219,6 @@ const setupChecklistMap = {
   qcController: ["QC CONTROLLER"],
   remarks: ["REMARKS", "REMARK"],
 };
-
-function buildRouteLookup(workbook) {
-  const lookup = new Map();
-  for (const row of rows(workbook, "Planning_Route_Master")) {
-    const partNo = text(rowValue(row, "PART CODE", "PART NO"));
-    const setupNo = text(rowValue(row, "SETUP CODE", "SETUP NO.", "SET UP"));
-    if (!partNo || !setupNo) continue;
-    const key = routeKey(partNo, setupNo);
-    if (lookup.has(key)) continue;
-    lookup.set(key, {
-      machineType: text(rowValue(row, "MACHINE TYPE")),
-      machineUsed: text(rowValue(row, "MACHINE USED")),
-      setupName: text(rowValue(row, "SETUP NAME")),
-    });
-  }
-  return lookup;
-}
-
-function buildEmployeeLookup(workbook) {
-  const lookup = new Map();
-  for (const row of rows(workbook, "Employee_Master")) {
-    const empId = text(rowValue(row, "Emp ID", "EMP ID"));
-    if (!empId) continue;
-    lookup.set(empId, {
-      name: text(rowValue(row, "Employee Name", "EMPLOYEE NAME")) || empId,
-      department: text(rowValue(row, "Department", "DEPARTMENT")),
-    });
-  }
-  return lookup;
-}
-
-function parseProductionEntries(workbook, routeLookup, employeeLookup) {
-  const entries = [];
-  for (const row of rows(workbook, "Software_Raw_Import")) {
-    if (!isValidRawRow(row)) continue;
-    const prodDate = isoDate(rowValue(row, "PROD DATE", "PRODUCTION DATE"));
-    const machine = text(rowValue(row, "M/C NO", "MACHINE NO"));
-    const rawOperator = text(rowValue(row, "OPERATOR ID", "OPERATOR NAME"));
-    if (!prodDate || !machine || !rawOperator) continue;
-
-    const partCode = text(rowValue(row, "PART NO", "PART CODE")) || "-";
-    const setupNo = text(rowValue(row, "SET UP", "SETUP CODE", "SETUP NO."));
-    const route = routeLookup.get(routeKey(partCode, setupNo)) ?? {};
-    const rejection = firstRejection(row);
-    const downtime = downtimeFromRow(row);
-    const employee = employeeLookup.get(rawOperator);
-
-    entries.push(dropUndefined({
-      prodDate,
-      operatorId: rawOperator,
-      operatorName: employee?.name ?? rawOperator,
-      machineType: route.machineType || text(rowValue(row, "MACHINE TYPE", "MC TYPE")) || "Unspecified",
-      machine,
-      partCode,
-      jobCard: text(rowValue(row, "JobCardNo", "JOB CARD NO.", "JC NO.")) || undefined,
-      setupNo: setupNo || undefined,
-      outputQty: number(rowValue(row, "PROD QTY IN PCS", "PRODUCTION QTY (PCS)")),
-      actualQty: optionalNumberValue(rowValue(row, "ACTUAL QTY IN PCS", "ACTUAL QTY")),
-      targetQty: number(rowValue(row, "Target Pcs", "TARGET QTY (PCS)", "TARGE PCS")),
-      rejectQty: rejection.total,
-      rejectionType: rejection.type || undefined,
-      rejectionRemark: rejection.remark || text(rowValue(row, "REMARKS", "REMARK")) || undefined,
-      downtimeMinutes: downtime.minutes || undefined,
-      downtimeReason: downtime.reason || undefined,
-    }));
-  }
-  return entries;
-}
-
-function parseAttendanceRecords(workbook, employeeLookup) {
-  return rows(workbook, "Attendance")
-    .map((row) => {
-      const operatorId = text(rowValue(row, "Emp ID", "EMP ID"));
-      const monthKey = attendanceMonthKey(row);
-      if (!operatorId || !monthKey) return undefined;
-      return dropUndefined({
-        operatorId,
-        operatorName: text(rowValue(row, "Employee Name", "EMPLOYEE NAME")) || employeeLookup.get(operatorId)?.name,
-        monthKey,
-        workingDays: number(rowValue(row, "Working Days", "WORKING DAYS")),
-        presentDays: number(rowValue(row, "Days Present", "DAYS PRESENT")),
-        score: optionalNumberValue(rowValue(row, "Attendance Score", "ATTENDANCE SCORE")),
-      });
-    })
-    .filter(Boolean);
-}
-
-function parseTrainingRecords(workbook, employeeLookup) {
-  return rows(workbook, "Training_Tracker")
-    .map((row) => {
-      const operatorId = text(rowValue(row, "Emp ID", "EMP ID"));
-      const trainingType = text(rowValue(row, "Training Type", "TRAINING TYPE"));
-      const status = text(rowValue(row, "Status", "STATUS"));
-      if (!operatorId && !trainingType && !status) return undefined;
-      return dropUndefined({
-        operatorId,
-        operatorName: text(rowValue(row, "Employee Name", "EMPLOYEE NAME")) || employeeLookup.get(operatorId)?.name,
-        department: text(rowValue(row, "Department", "DEPARTMENT", "Location", "LOCATION")) || employeeLookup.get(operatorId)?.department,
-        date: isoDate(rowValue(row, "Date", "DATE")) || undefined,
-        trainingType: trainingType || "Unspecified",
-        reason: text(rowValue(row, "Reason/Finding", "REASON/FINDING")) || undefined,
-        trainer: text(rowValue(row, "Trainer Name", "TRAINER NAME", "Trainer Code", "TRAINER CODE")) || undefined,
-        status: status || "Pending",
-      });
-    })
-    .filter(Boolean);
-}
 
 function parseDataEntries(workbook, entryType, sheetName, fieldMap) {
   return rows(workbook, sheetName)
@@ -523,92 +415,6 @@ function cleanCell(value, header = "") {
   return String(value).trim();
 }
 
-function isValidRawRow(row) {
-  const value = rowValue(row, "Sr");
-  return Number.isFinite(Number(value));
-}
-
-function routeKey(partNo, setupNo) {
-  return `${text(partNo)}|${text(setupNo)}`;
-}
-
-function firstRejection(row) {
-  let total = 0;
-  let type = "";
-  let remark = "";
-  for (let index = 1; index <= 7; index += 1) {
-    const qty = number(rowValue(row, `RejQty${index}`));
-    if (qty <= 0) continue;
-    total += qty;
-    if (!type) type = text(rowValue(row, `RejType${index}`));
-    if (!remark) remark = text(rowValue(row, `RejRemarks${index}`, `RejReason${index}`));
-  }
-  const legacyReject = number(rowValue(row, "REJ QTY IN PCS", "REJECTION QTY (PCS)"));
-  if (!total && legacyReject > 0) {
-    total = legacyReject;
-    type = "Unclassified Rejection";
-  }
-  return { total, type, remark };
-}
-
-function downtimeFromRow(row) {
-  const reasons = [
-    ["QC approval", rowValue(row, "QCDown")],
-    ["Machine setting", rowValue(row, "SettingDown")],
-    ["No raw material", rowValue(row, "NoRMDown")],
-    ["No operator", rowValue(row, "NoOpDown")],
-    ["No electricity", rowValue(row, "NoElecDown")],
-    ["Other", rowValue(row, "OtherDown")],
-  ]
-    .map(([reason, value]) => ({ reason, minutes: durationMinutes(value) }))
-    .filter((item) => item.minutes > 0);
-  const reasonTotal = reasons.reduce((sum, item) => sum + item.minutes, 0);
-  const total = durationMinutes(rowValue(row, "M/C DOWN TIME", "DownTime", "TOTAL DOWNTIME MINUTES"));
-  const top = reasons.sort((a, b) => b.minutes - a.minutes)[0];
-  return {
-    minutes: Math.max(reasonTotal, total),
-    reason: top?.reason || (total > 0 ? "Unassigned downtime" : ""),
-  };
-}
-
-function attendanceMonthKey(row) {
-  const rawMonth = rowValue(row, "Month");
-  const rawYear = rowValue(row, "year");
-  if (rawMonth instanceof Date) return localIsoMonth(rawMonth);
-  const monthText = text(rawMonth).toLowerCase();
-  const month = monthNames[monthText] ?? Number(rawMonth);
-  const year = Number(rawYear);
-  if (!month || !year) return "";
-  return `${year}-${String(month).padStart(2, "0")}`;
-}
-
-const monthNames = {
-  january: 1,
-  jan: 1,
-  february: 2,
-  feb: 2,
-  march: 3,
-  mar: 3,
-  april: 4,
-  apr: 4,
-  may: 5,
-  june: 6,
-  jun: 6,
-  july: 7,
-  jul: 7,
-  august: 8,
-  aug: 8,
-  september: 9,
-  sep: 9,
-  sept: 9,
-  october: 10,
-  oct: 10,
-  november: 11,
-  nov: 11,
-  december: 12,
-  dec: 12,
-};
-
 function isoDate(value) {
   const date = asDate(value);
   return date ? localIsoDate(date) : "";
@@ -633,10 +439,6 @@ function localIsoDate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function localIsoMonth(date) {
-  return localIsoDate(date).slice(0, 7);
-}
-
 function asDate(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -648,15 +450,6 @@ function asDate(value) {
   if (!valueText) return undefined;
   const parsed = new Date(valueText);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-}
-
-function durationMinutes(value) {
-  if (value instanceof Date) {
-    return value.getHours() * 60 + value.getMinutes() + value.getSeconds() / 60;
-  }
-  const numeric = number(value);
-  if (!numeric) return 0;
-  return numeric <= 1 ? numeric * 24 * 60 : numeric;
 }
 
 function optionalNumberValue(value) {

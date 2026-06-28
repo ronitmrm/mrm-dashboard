@@ -1099,114 +1099,6 @@ function buildProductionControl({
   };
 }
 
-function setupChecklistMismatches(setupRows: Array<Record<string, unknown>>, plannedRows: Array<Record<string, unknown>>) {
-  const plannedByExactKey = new Set(plannedRows.map((row) => setupChecklistKey({
-    jcNo: rowText(row, "jcNo"),
-    partCode: rowText(row, "partCode"),
-    optionNumber: rowText(row, "optionNumber"),
-    setupNo: rowText(row, "setupNo"),
-    machine: rowText(row, "machine"),
-  })).filter(Boolean));
-
-  return setupRows
-    .map((row) => {
-      const target = {
-        jcNo: rowText(row, "jcNo"),
-        partCode: rowText(row, "partCode"),
-        optionNumber: rowText(row, "optionNumber"),
-        setupNo: rowText(row, "setupNo"),
-        machine: rowText(row, "machine"),
-      };
-      const exactKey = setupChecklistKey(target);
-      if (exactKey && plannedByExactKey.has(exactKey)) return null;
-
-      const missingFields = [
-        target.jcNo ? "" : "JC number",
-        target.partCode ? "" : "Part code",
-        target.optionNumber ? "" : "Option number",
-        target.setupNo ? "" : "Setup number",
-        target.machine ? "" : "Machine number",
-      ].filter(Boolean);
-      const closest = closestPlannedSetup(target, plannedRows);
-      const mismatchFields = closest ? [
-        canonicalKey(target.jcNo) === canonicalKey(rowText(closest, "jcNo")) ? "" : `JC expected ${rowText(closest, "jcNo") || "-"}`,
-        canonicalKey(target.partCode) === canonicalKey(rowText(closest, "partCode")) ? "" : `Part expected ${rowText(closest, "partCode") || "-"}`,
-        canonicalKey(target.optionNumber) === canonicalKey(rowText(closest, "optionNumber")) ? "" : `Option expected ${rowText(closest, "optionNumber") || "-"}`,
-        setupStepKey(target.setupNo, target.optionNumber) === setupStepKey(rowText(closest, "setupNo"), rowText(closest, "optionNumber")) ? "" : `Setup expected ${setupStepKey(rowText(closest, "setupNo"), rowText(closest, "optionNumber")) || "-"}`,
-        canonicalKey(target.machine) === canonicalKey(rowText(closest, "machine")) ? "" : `Machine expected ${rowText(closest, "machine") || "-"}`,
-      ].filter(Boolean) : [];
-      const nextAction = missingFields.length
-        ? `Correct setup checklist: missing ${compactJoin(missingFields)}`
-        : mismatchFields.length
-          ? `Review setup checklist: ${compactJoin(mismatchFields)}`
-          : "Review setup checklist: no planned setup matches this entry";
-      return {
-        ...row,
-        status: "Needs planner review",
-        issueType: "Setup checklist mismatch",
-        missingFields: compactJoin(missingFields),
-        mismatchFields: compactJoin(mismatchFields),
-        plannedJobCard: closest ? rowText(closest, "jcNo") : "",
-        plannedPartCode: closest ? rowText(closest, "partCode") : "",
-        plannedOptionNumber: closest ? rowText(closest, "optionNumber") : "",
-        plannedSetupNo: closest ? rowText(closest, "setupNo") : "",
-        plannedMachine: closest ? rowText(closest, "machine") : "",
-        nextAction,
-      };
-    })
-    .filter(Boolean);
-}
-
-function closestPlannedSetup(target: { jcNo: string; partCode: string; optionNumber: string; setupNo: string; machine: string }, plannedRows: Array<Record<string, unknown>>) {
-  let best: { row: Record<string, unknown>; score: number } | undefined;
-  for (const row of plannedRows) {
-    const score = [
-      canonicalKey(target.jcNo) && canonicalKey(target.jcNo) === canonicalKey(rowText(row, "jcNo")),
-      canonicalKey(target.partCode) && canonicalKey(target.partCode) === canonicalKey(rowText(row, "partCode")),
-      canonicalKey(target.optionNumber) && canonicalKey(target.optionNumber) === canonicalKey(rowText(row, "optionNumber")),
-      setupStepKey(target.setupNo, target.optionNumber) && setupStepKey(target.setupNo, target.optionNumber) === setupStepKey(rowText(row, "setupNo"), rowText(row, "optionNumber")),
-      canonicalKey(target.machine) && canonicalKey(target.machine) === canonicalKey(rowText(row, "machine")),
-    ].filter(Boolean).length;
-    if (!best || score > best.score) best = { row, score };
-  }
-  return best && best.score > 0 ? best.row : undefined;
-}
-
-function setupChecklistHistory(rows: Record<string, unknown>[]) {
-  return rows.map((row) => {
-    const setupDate = parseDate(rowValue(row, "SETUP DATE", "setupDate"));
-    const minutes = settingMinutesFromRow(row);
-    return {
-      _id: rowText(row, "_id"),
-      key: rowText(row, "key"),
-      setupDate: dateLabel(setupDate || rowValue(row, "SETUP DATE", "setupDate")),
-      setupDateValue: setupDate || rowText(row, "SETUP DATE", "setupDate"),
-      setupDateKey: setupDate || "",
-      jcNo: rowText(row, "JC NO.", "JC NO", "JobCardNo", "jcNo"),
-      machine: rowText(row, "M/C NO", "MACHINE NO", "machineNo"),
-      partCode: rowText(row, "PART NO", "PART CODE", "partNo"),
-      optionNumber: rowText(row, "OPTION NUMBER", "OPTION NO", "optionNumber"),
-      setupNo: rowText(row, "SETUP NO.", "SETUP NO", "SET UP", "setupNo"),
-      shift: rowText(row, "SHIFT", "shift"),
-      setterCode: rowText(row, "SETTER Code", "SETTER CODE", "setterCode"),
-      helperCode: rowText(row, "HELPER Code", "HELPER CODE", "helperCode"),
-      settingStartTime: rowText(row, "SETTING START TIME", "settingStartTime"),
-      settingEndTime: rowText(row, "SETTING END TIME", "settingEndTime"),
-      settingMinutes: minutes,
-      qcController: rowText(row, "QC CONTROLLER", "qcController"),
-      rimmerAvailability: rowText(row, "RIMMER AVAILABILITY", "rimmerAvailability"),
-      modhiyu: rowText(row, "MODHIYU", "modhiyu"),
-      remarks: rowText(row, "REMARKS", "REMARK", "remarks"),
-      status: "Setup complete",
-    };
-  }).sort((a, b) =>
-    rowText(b, "setupDateKey").localeCompare(rowText(a, "setupDateKey")) ||
-    rowText(a, "machine").localeCompare(rowText(b, "machine"), undefined, { numeric: true }) ||
-    rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }) ||
-    numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")),
-  );
-}
-
 function buildSetupAnalytics(rows: Record<string, unknown>[], filters: DashboardFilters) {
   const daily = new Map<string, { dateKey: string; date: string; setter: string; settings: number; totalMinutes: number; machines: Set<string>; itemSetups: Set<string> }>();
   const monthly = new Map<string, { monthKey: string; month: string; setter: string; settings: number; totalMinutes: number; machines: Set<string>; itemSetups: Set<string> }>();
@@ -3103,23 +2995,6 @@ function planningMeta(row: Record<string, unknown>) {
   };
 }
 
-function setupChecklistBySetup(rows: Record<string, unknown>[]) {
-  const grouped = new Map<string, Record<string, unknown>[]>();
-  for (const row of rows) {
-    const jcNo = rowText(row, "JC NO.", "JC NO", "JobCardNo", "jcNo");
-    const partCode = rowText(row, "PART NO", "PART CODE", "partNo");
-    const optionNumber = rowText(row, "OPTION NUMBER", "OPTION NO", "optionNumber");
-    const setupNo = rowText(row, "SETUP NO.", "SETUP NO", "SET UP", "setupNo");
-    const machine = rowText(row, "M/C NO", "MACHINE NO", "machineNo");
-    const key = setupChecklistKey({ jcNo, partCode, optionNumber, setupNo, machine });
-    if (!key) continue;
-    const existing = grouped.get(key) ?? [];
-    existing.push(row);
-    grouped.set(key, existing);
-  }
-  return grouped;
-}
-
 function latestShopFloorStatusBySetup(rows: Record<string, unknown>[]) {
   const latest = new Map<string, Record<string, unknown>>();
   for (const row of rows) {
@@ -3221,14 +3096,6 @@ function setupLifecycleStageLabel(stage: string) {
     operator_started: "Operator assigned and machine started",
     item_complete: "Item complete",
   } as Record<string, string>)[stage] ?? "";
-}
-
-function findSetupChecklistEntry(
-  grouped: Map<string, Record<string, unknown>[]>,
-  target: { jcNo: string; partCode: string; optionNumber: string; setupNo: string; machine: string },
-) {
-  const key = setupChecklistKey(target);
-  return key ? grouped.get(key)?.[0] : undefined;
 }
 
 function setupChecklistKey({
@@ -3714,10 +3581,6 @@ function groupRouteRows(rows: Record<string, unknown>[]) {
     dedupedGroups.set(key, rows);
   }
   return dedupedGroups;
-}
-
-function routeOptionSummaries(rows: Record<string, unknown>[], partKey: string) {
-  return routeOptionSummariesByPart(rows).get(partKey) ?? [];
 }
 
 function routeOptionSummariesByPart(rows: Record<string, unknown>[]) {
