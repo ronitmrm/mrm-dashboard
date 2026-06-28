@@ -27,6 +27,9 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
 - Dashboard reads should go through Convex queries/mutations in `apps/web/convex/dashboard.ts`.
 - The main UI should use Convex React hooks directly where practical, not local fake state.
 - Keep company workbook data shared unless a feature explicitly needs user-owned rows.
+- Treat Convex free-tier I/O as a hard product constraint for this repo. The deployed shared dev Convex instance can exhaust its 1 GB free-tier I/O budget quickly if agents add broad reactive reads, unbounded scans, large return payloads, or forced snapshot rebuilds.
+- Be careful with `dashboard:snapshot`: it has historically returned a multi-MB app-state payload. Prefer small, tab-specific queries, bounded result sets, coalesced background refreshes, and explicit user-triggered refreshes over making the main snapshot larger or more reactive.
+- Do not add forced `refreshSnapshot({ force: true })` calls after routine UI actions, imports, polling, navigation, or "make it always current" requests without challenging the cost. The user is often describing desired freshness in non-technical terms; explain the Convex I/O tradeoff and offer cheaper alternatives before implementing.
 - Vercel intentionally points at the shared seeded dev Convex deployment; do not introduce a production Convex deployment unless explicitly requested.
 - Vercel deploys the Next.js frontend only. If any file under `apps/web/convex` changes, run `npx convex dev --once` or `pnpm dev:convex` locally before treating the Vercel site as current, otherwise deployed mutations/queries may call stale Convex backend code.
 - Run workbook imports as dry runs first:
