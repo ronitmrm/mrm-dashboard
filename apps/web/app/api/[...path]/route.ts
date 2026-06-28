@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { api } from "@/convex/_generated/api";
 import type { ProductionEntry } from "@/lib/dashboard-domain";
 import { PUBLIC_CONVEX_URL } from "@/lib/convex-env";
-import { shouldAutoRefreshPlanning } from "@/lib/planning-refresh-policy";
+import { shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy";
 
 class RouteError extends Error {
   constructor(
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         jcNo: String(body.jcNo || ""),
         optionNumber: String(body.optionNumber || ""),
       });
-      return json(await withPlanningRefresh(convex, path, body, { ...result, rowsUpdated: 1, message: "Route option saved." }));
+      return json(await withPlanningRefresh(path, body, { ...result, rowsUpdated: 1, message: "Route option saved." }));
     }
 
     if (path === "planner-priority") {
@@ -199,7 +199,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
         remark: body.remark ? String(body.remark) : undefined,
       });
-      return json(await withPlanningRefresh(convex, path, body, { ...result, rowsUpdated: 1, jobCards: body.target ? [body.target] : [] }));
+      return json(await withPlanningRefresh(path, body, { ...result, rowsUpdated: 1, jobCards: body.target ? [body.target] : [] }));
     }
 
     if (path === "machine-constraint") {
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         remark: body.remark ? String(body.remark) : undefined,
         rescheduleAction: body.rescheduleAction ? String(body.rescheduleAction) : undefined,
       });
-      return json(await withPlanningRefresh(convex, path, body, { ...result, message: "Machine issue saved." }));
+      return json(await withPlanningRefresh(path, body, { ...result, message: "Machine issue saved." }));
     }
 
     if (path === "plan-override") {
@@ -222,7 +222,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         fromMachine: body.fromMachine ? String(body.fromMachine) : undefined,
         reason: body.reason ? String(body.reason) : undefined,
       });
-      return json(await withPlanningRefresh(convex, path, body, { ...result, message: "Plan override saved." }));
+      return json(await withPlanningRefresh(path, body, { ...result, message: "Plan override saved." }));
     }
 
     if (path === "route-change") {
@@ -234,7 +234,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         wipQty: body.wipQty === undefined || body.wipQty === "" ? undefined : Number(body.wipQty),
         reason: body.reason ? String(body.reason) : undefined,
       });
-      return json(await withPlanningRefresh(convex, path, body, {
+      return json(await withPlanningRefresh(path, body, {
         ...result,
         oldOption: body.changeAfterSetup || "",
         newOption: body.newOption || "",
@@ -263,7 +263,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         setupNo: body.setupNo ? String(body.setupNo) : undefined,
         machine: body.machine ? String(body.machine) : undefined,
       });
-      return json(await withPlanningRefresh(convex, path, body, { ...result, message: "Job card completion saved." }));
+      return json(await withPlanningRefresh(path, body, { ...result, message: "Job card completion saved." }));
     }
 
     if (path === "data-entry") {
@@ -272,14 +272,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (entryType === "software_raw") {
         const productionEntry = toProductionEntry(payload);
         const result = await convex.mutation(api.dashboard.saveProductionEntry, productionEntry);
-        return json(await withPlanningRefresh(convex, path, body, { ...result, rowsUpdated: 1, row: "productionEntries", savedText: "Saved production row." }));
+        return json(await withPlanningRefresh(path, body, { ...result, rowsUpdated: 1, row: "productionEntries", savedText: "Saved production row." }));
       }
 
       const result = await convex.mutation(api.dashboard.saveDataEntry, {
         entryType,
         payload,
       });
-      return json(await withPlanningRefresh(convex, path, body, { ...result, rowsUpdated: 1, savedText: "Saved to Convex." }));
+      return json(await withPlanningRefresh(path, body, { ...result, rowsUpdated: 1, savedText: "Saved to Convex." }));
     }
 
     if (path === "data-import") {
@@ -302,7 +302,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         inserted += 1;
       }
 
-      return json(await withPlanningRefresh(convex, path, body, { ok: true, rowsUpdated: inserted, inserted, message: `Imported ${inserted} ${entryType.replaceAll("_", " ")} rows.` }));
+      return json(await withPlanningRefresh(path, body, { ok: true, rowsUpdated: inserted, inserted, message: `Imported ${inserted} ${entryType.replaceAll("_", " ")} rows.` }));
     }
 
     return json({ error: "Not found" }, 404);
@@ -312,31 +312,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
 }
 
 async function withPlanningRefresh(
-  convex: ConvexHttpClient,
   path: string,
   body: Record<string, unknown>,
   payload: Record<string, unknown>,
 ) {
-  if (!shouldAutoRefreshPlanning(path, body)) return payload;
-  try {
-    const result = await convex.action(api.dashboard.refreshSnapshot, { force: true });
-    return {
-      ...payload,
-      planningRefresh: {
-        mode: "auto",
-        ...plainRecord(result),
-      },
-    };
-  } catch (err) {
-    return {
-      ...payload,
-      planningRefresh: {
-        mode: "auto",
-        ok: false,
-        error: err instanceof Error ? err.message : "Planning refresh failed.",
-      },
-    };
-  }
+  if (!shouldQueuePlanningRefresh(path, body)) return payload;
+  return {
+    ...payload,
+    planningRefresh: {
+      mode: "queued",
+      ok: true,
+    },
+  };
 }
 
 function priorityInterruptedSetups(value: unknown) {

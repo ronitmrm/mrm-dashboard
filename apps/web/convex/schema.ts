@@ -161,4 +161,14 @@ export default defineSchema({
     chunk: v.string(),
     updatedAt: v.string(),
   }).index("by_owner", ["ownerId"]),
+  dashboardRefreshState: defineTable({
+    key: v.string(),
+    status: v.string(),
+    requestedAtMs: v.number(),
+    scheduledAtMs: v.optional(v.number()),
+    startedAtMs: v.optional(v.number()),
+    runRequestedAtMs: v.optional(v.number()),
+    completedAtMs: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+  }).index("by_key", ["key"]),
 });

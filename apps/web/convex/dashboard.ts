@@ -3,9 +3,16 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import { action, internalMutation, internalQuery, mutation, query, type ActionCtx, type QueryCtx, type MutationCtx } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx, type QueryCtx, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { buildLegacyDashboardSnapshot } from "../lib/legacy-dashboard-analysis";
+import {
+  beginDashboardRefreshRun,
+  finishDashboardRefreshRun,
+  requestDashboardRefresh,
+  type DashboardRefreshState,
+} from "../lib/dashboard-refresh-state";
+import { shouldQueuePlanningRefresh } from "../lib/planning-refresh-policy";
 
 async function requireDashboardUserId(ctx: QueryCtx | MutationCtx | ActionCtx) {
   const userId = await getAuthUserId(ctx);
@@ -29,6 +36,7 @@ const optionalNumber = v.optional(v.number());
 const importConfirmation = "replace-workbook-import";
 const plannerActionConfirmation = "replace-workbook-and-planner-actions";
 const dashboardSnapshotFreshForMs = 5 * 60 * 1000;
+const dashboardRefreshStateKey = "global";
 const workbookTables = [
   "productionEntries",
   "attendanceRecords",
@@ -46,6 +54,17 @@ const workbookTables = [
 
 type WorkbookTable = typeof workbookTables[number];
 type RefreshSnapshotResult = { ok: true; skipped: boolean; updatedAt?: string };
+type DashboardRefreshStateRow = {
+  _id: Id<"dashboardRefreshState">;
+  key: string;
+  status: string;
+  requestedAtMs: number;
+  scheduledAtMs?: number;
+  startedAtMs?: number;
+  runRequestedAtMs?: number;
+  completedAtMs?: number;
+  lastError?: string;
+};
 
 const productionEntryValidator = {
   prodDate: v.string(),
@@ -163,6 +182,10 @@ function now() {
   return new Date().toISOString();
 }
 
+function nowMs() {
+  return Date.now();
+}
+
 export const snapshot = query({
   args: {
     operatorId: optionalString,
@@ -188,35 +211,71 @@ export const refreshSnapshot = action({
   },
   handler: async (ctx, args): Promise<RefreshSnapshotResult> => {
     await requireDashboardAccess(ctx);
-    if (!args.force) {
-      const freshness: { fresh: boolean; updatedAt?: string } = await ctx.runQuery(internal.dashboard.dashboardSnapshotFreshness, {
-        maxAgeMs: dashboardSnapshotFreshForMs,
-        nowMs: Date.now(),
-      });
-      if (freshness.fresh) {
-        return { ok: true, skipped: true, updatedAt: freshness.updatedAt };
-      }
-    }
-    const source = emptySnapshotSource();
-    for (const table of snapshotSourceTables) {
-      for (const ownerScope of snapshotSourceOwnerScopes) {
-        let cursor: string | null = null;
-        do {
-          const result: { page: SnapshotSourceRow[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(internal.dashboard.collectSnapshotTablePage, {
-            table,
-            ownerScope,
-            paginationOpts: { numItems: 1000, cursor },
-          });
-          appendSnapshotRows(source, table, result.page);
-          cursor = result.isDone ? null : result.continueCursor;
-        } while (cursor !== null);
-      }
-    }
-    const payload = buildDashboardSnapshotPayload(source);
-    const saveResult: { ok: true; changed: boolean; updatedAt?: string } = await ctx.runMutation(internal.dashboard.saveDashboardSnapshot, { payload, cacheUpdatedAt: now() });
-    return { ok: true, skipped: !saveResult.changed, updatedAt: saveResult.updatedAt ?? payload.updatedAt };
+    return rebuildDashboardSnapshot(ctx, args);
   },
 });
+
+export const refreshSnapshotInternal = internalAction({
+  args: {},
+  handler: async (ctx): Promise<RefreshSnapshotResult> => {
+    const started: { shouldRun: boolean; runRequestedAtMs?: number } = await ctx.runMutation(internal.dashboard.beginDashboardRefresh, {
+      startedAtMs: nowMs(),
+    });
+    if (!started.shouldRun || started.runRequestedAtMs === undefined) {
+      return { ok: true, skipped: true };
+    }
+
+    let error: string | null = null;
+    let result: RefreshSnapshotResult | null = null;
+    try {
+      result = await rebuildDashboardSnapshot(ctx, { force: true });
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Planning refresh failed.";
+    }
+
+    await ctx.runMutation(internal.dashboard.finishDashboardRefresh, {
+      runRequestedAtMs: started.runRequestedAtMs,
+      completedAtMs: nowMs(),
+      error,
+    });
+
+    if (error) throw new Error(error);
+    return result ?? { ok: true, skipped: true };
+  },
+});
+
+async function rebuildDashboardSnapshot(
+  ctx: ActionCtx,
+  args: { force?: boolean },
+): Promise<RefreshSnapshotResult> {
+  if (!args.force) {
+    const freshness: { fresh: boolean; updatedAt?: string } = await ctx.runQuery(internal.dashboard.dashboardSnapshotFreshness, {
+      maxAgeMs: dashboardSnapshotFreshForMs,
+      nowMs: Date.now(),
+    });
+    if (freshness.fresh) {
+      return { ok: true, skipped: true, updatedAt: freshness.updatedAt };
+    }
+  }
+  const source = emptySnapshotSource();
+  for (const table of snapshotSourceTables) {
+    for (const ownerScope of snapshotSourceOwnerScopes) {
+      let cursor: string | null = null;
+      do {
+        const result: { page: SnapshotSourceRow[]; isDone: boolean; continueCursor: string } = await ctx.runQuery(internal.dashboard.collectSnapshotTablePage, {
+          table,
+          ownerScope,
+          paginationOpts: { numItems: 1000, cursor },
+        });
+        appendSnapshotRows(source, table, result.page);
+        cursor = result.isDone ? null : result.continueCursor;
+      } while (cursor !== null);
+    }
+  }
+  const payload = buildDashboardSnapshotPayload(source);
+  const saveResult: { ok: true; changed: boolean; updatedAt?: string } = await ctx.runMutation(internal.dashboard.saveDashboardSnapshot, { payload, cacheUpdatedAt: now() });
+  return { ok: true, skipped: !saveResult.changed, updatedAt: saveResult.updatedAt ?? payload.updatedAt };
+}
 
 export const dashboardSnapshotFreshness = internalQuery({
   args: {
@@ -287,6 +346,85 @@ export const saveDashboardSnapshot = internalMutation({
     return { ok: true as const, changed: result.changed, updatedAt: result.updatedAt || updatedAt };
   },
 });
+
+export const beginDashboardRefresh = internalMutation({
+  args: {
+    startedAtMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const row = await dashboardRefreshStateRow(ctx);
+    const transition = beginDashboardRefreshRun(row ? dashboardRefreshStateFromRow(row) : null, args.startedAtMs);
+    if (row && transition.state) {
+      await ctx.db.patch(row._id, transition.state);
+    }
+    return {
+      shouldRun: transition.shouldRun,
+      runRequestedAtMs: transition.runRequestedAtMs,
+    };
+  },
+});
+
+export const finishDashboardRefresh = internalMutation({
+  args: {
+    runRequestedAtMs: v.number(),
+    completedAtMs: v.number(),
+    error: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const row = await dashboardRefreshStateRow(ctx);
+    if (!row) return { ok: true, scheduled: false };
+
+    const transition = finishDashboardRefreshRun(
+      dashboardRefreshStateFromRow(row),
+      args.runRequestedAtMs,
+      args.completedAtMs,
+      args.error,
+    );
+    await ctx.db.patch(row._id, transition.state);
+    if (transition.shouldSchedule) {
+      await ctx.scheduler.runAfter(0, internal.dashboard.refreshSnapshotInternal, {});
+    }
+    return { ok: true, scheduled: transition.shouldSchedule };
+  },
+});
+
+async function queueDashboardRefresh(ctx: MutationCtx) {
+  const requestedAtMs = nowMs();
+  const row = await dashboardRefreshStateRow(ctx);
+  const transition = requestDashboardRefresh(row ? dashboardRefreshStateFromRow(row) : null, requestedAtMs);
+
+  if (row) {
+    await ctx.db.patch(row._id, transition.state);
+  } else {
+    await ctx.db.insert("dashboardRefreshState", {
+      key: dashboardRefreshStateKey,
+      ...transition.state,
+    });
+  }
+
+  if (transition.shouldSchedule) {
+    await ctx.scheduler.runAfter(0, internal.dashboard.refreshSnapshotInternal, {});
+  }
+}
+
+async function dashboardRefreshStateRow(ctx: QueryCtx | MutationCtx) {
+  return await ctx.db
+    .query("dashboardRefreshState")
+    .withIndex("by_key", (q) => q.eq("key", dashboardRefreshStateKey))
+    .unique();
+}
+
+function dashboardRefreshStateFromRow(row: DashboardRefreshStateRow): DashboardRefreshState {
+  return {
+    status: row.status as DashboardRefreshState["status"],
+    requestedAtMs: row.requestedAtMs,
+    scheduledAtMs: row.scheduledAtMs,
+    startedAtMs: row.startedAtMs,
+    runRequestedAtMs: row.runRequestedAtMs,
+    completedAtMs: row.completedAtMs,
+    lastError: row.lastError,
+  };
+}
 
 function activeCorrectionTargets(corrections: Array<{ targetTable: string; targetId: string; action: string }>) {
   return new Set(corrections
@@ -777,6 +915,7 @@ export const saveProductionEntry = mutation({
       ...ownerFields,
       createdAt: now(),
     });
+    await queueDashboardRefresh(ctx);
     return { ok: true, id };
   },
 });
@@ -809,7 +948,11 @@ export const saveTrainingRecord = mutation({
 
 export const saveRouteSelection = mutation({
   args: { jcNo: v.string(), optionNumber: v.string() },
-  handler: async (ctx, args) => insertOwnerRow(ctx, "routeSelections", args),
+  handler: async (ctx, args) => {
+    const result = await insertOwnerRow(ctx, "routeSelections", args);
+    await queueDashboardRefresh(ctx);
+    return result;
+  },
 });
 
 export const savePlannerPriority = mutation({
@@ -831,7 +974,11 @@ export const savePlannerPriority = mutation({
     }))),
     remark: optionalString,
   },
-  handler: async (ctx, args) => insertOwnerRow(ctx, "plannerPriorities", args),
+  handler: async (ctx, args) => {
+    const result = await insertOwnerRow(ctx, "plannerPriorities", args);
+    await queueDashboardRefresh(ctx);
+    return result;
+  },
 });
 
 export const saveMachineConstraint = mutation({
@@ -843,7 +990,11 @@ export const saveMachineConstraint = mutation({
     remark: optionalString,
     rescheduleAction: optionalString,
   },
-  handler: async (ctx, args) => insertOwnerRow(ctx, "machineConstraints", args),
+  handler: async (ctx, args) => {
+    const result = await insertOwnerRow(ctx, "machineConstraints", args);
+    await queueDashboardRefresh(ctx);
+    return result;
+  },
 });
 
 export const savePlanOverride = mutation({
@@ -854,7 +1005,11 @@ export const savePlanOverride = mutation({
     fromMachine: optionalString,
     reason: optionalString,
   },
-  handler: async (ctx, args) => insertOwnerRow(ctx, "planOverrides", args),
+  handler: async (ctx, args) => {
+    const result = await insertOwnerRow(ctx, "planOverrides", args);
+    await queueDashboardRefresh(ctx);
+    return result;
+  },
 });
 
 export const saveRouteChange = mutation({
@@ -872,7 +1027,11 @@ export const saveRouteChange = mutation({
     }))),
     reason: optionalString,
   },
-  handler: async (ctx, args) => insertOwnerRow(ctx, "routeChanges", args),
+  handler: async (ctx, args) => {
+    const result = await insertOwnerRow(ctx, "routeChanges", args);
+    await queueDashboardRefresh(ctx);
+    return result;
+  },
 });
 
 export const saveDispatchApproval = mutation({
@@ -888,7 +1047,11 @@ export const markComplete = mutation({
     setupNo: optionalString,
     machine: optionalString,
   },
-  handler: async (ctx, args) => insertOwnerRow(ctx, "setupCompletions", args),
+  handler: async (ctx, args) => {
+    const result = await insertOwnerRow(ctx, "setupCompletions", args);
+    await queueDashboardRefresh(ctx);
+    return result;
+  },
 });
 
 export const saveDataEntry = mutation({
@@ -912,6 +1075,9 @@ export const saveDataEntry = mutation({
         ...ownerFields,
         createdAt: now(),
       });
+      if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType })) {
+        await queueDashboardRefresh(ctx);
+      }
       return { ok: true, id: args.id };
     }
     if (args.key) {
@@ -935,10 +1101,16 @@ export const saveDataEntry = mutation({
           ...ownerFields,
           createdAt: now(),
         });
+        if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType })) {
+          await queueDashboardRefresh(ctx);
+        }
         return { ok: true, id: existing._id };
       }
     }
     const result = await insertOwnerRow(ctx, "dataEntries", args);
+    if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType })) {
+      await queueDashboardRefresh(ctx);
+    }
     return result;
   },
 });
@@ -962,6 +1134,9 @@ export const reverseEntry = mutation({
       ...ownerFields,
       createdAt: now(),
     });
+    if (shouldQueuePlanningRefresh("reverse-entry", { targetTable: args.targetTable })) {
+      await queueDashboardRefresh(ctx);
+    }
     return { ok: true, id };
   },
 });

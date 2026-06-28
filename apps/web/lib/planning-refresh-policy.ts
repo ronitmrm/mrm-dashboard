@@ -17,7 +17,7 @@ const autoRefreshTargetTables = new Set([
   "productionEntries",
 ]);
 
-export function shouldAutoRefreshPlanning(path: string, body: Record<string, unknown> = {}) {
+export function shouldQueuePlanningRefresh(path: string, body: Record<string, unknown> = {}) {
   if (autoRefreshActionPaths.has(path)) return true;
   if (path === "data-entry" || path === "data-import") {
     return autoRefreshDataEntryTypes.has(text(body.entryType));
@@ -30,7 +30,7 @@ export function shouldAutoRefreshPlanning(path: string, body: Record<string, unk
 
 export function planningRefreshStatusMessage(autoRefresh: boolean) {
   return autoRefresh
-    ? "Planning recalculated automatically."
+    ? "Planning recalculation queued."
     : "Use Recalculate planning after master changes.";
 }
 

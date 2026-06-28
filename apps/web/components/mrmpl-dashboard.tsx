@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, useSyncExternalStore, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import Image from "next/image";
@@ -79,7 +79,7 @@ import {
   type DashboardTrendPoint,
 } from "@/lib/dashboard-view-model";
 import { machineFamilyKey } from "@/lib/planning-rules";
-import { planningRefreshStatusMessage, shouldAutoRefreshPlanning } from "@/lib/planning-refresh-policy";
+import { planningRefreshStatusMessage, shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy";
 import { priorityPlanWindow, type PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
   applyShopFloorStatusPatches,
@@ -97,16 +97,8 @@ type ActionStatus = {
   message: string;
 } | null;
 
-type PlanningRefreshResult = {
-  mode?: string;
-  ok?: boolean;
-  skipped?: boolean;
-  error?: string;
-};
-
 type DashboardApiResult = {
   message: string;
-  planningRefresh?: PlanningRefreshResult;
 };
 
 type DataEntrySpec = {
@@ -345,6 +337,7 @@ function DashboardShell() {
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
   const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
   const [optimisticShopFloorStatuses, setOptimisticShopFloorStatuses] = useState<ShopFloorStatusPatch[]>([]);
+  const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
   const dashboardPayload = useQuery(api.dashboard.snapshot, {});
@@ -394,7 +387,7 @@ function DashboardShell() {
 
   async function submitAction(path: string, body: Record<string, unknown>) {
     setActionStatus(null);
-    const autoRefreshPlanning = shouldAutoRefreshPlanning(path, body);
+    const queuePlanningRefresh = shouldQueuePlanningRefresh(path, body);
     try {
       const apiResult = path === "data-import"
         ? await postDashboardApi(path, body)
@@ -415,26 +408,9 @@ function DashboardShell() {
       if (shopFloorPatch) {
         setOptimisticShopFloorStatuses((current) => upsertShopFloorStatusPatch(current, shopFloorPatch));
       }
-      const serverAutoRefreshed = planningRefreshCompleted(apiResult?.planningRefresh);
-      if (autoRefreshPlanning && !serverAutoRefreshed) {
-        setIsRefreshingSnapshot(true);
-        try {
-          const refreshResult = await refreshSnapshot({ force: true });
-          if (!refreshResult.skipped) setOptimisticShopFloorStatuses([]);
-        } catch (err) {
-          setActionStatus({
-            tone: "destructive",
-            message: `${message} Automatic planning refresh failed: ${err instanceof Error ? err.message : "Snapshot refresh failed."}`,
-          });
-          return;
-        } finally {
-          setIsRefreshingSnapshot(false);
-        }
-      }
-      if (serverAutoRefreshed) setOptimisticShopFloorStatuses([]);
       setActionStatus({
         tone: "default",
-        message: `${message} ${planningRefreshStatusMessage(autoRefreshPlanning)}`,
+        message: `${message} ${planningRefreshStatusMessage(queuePlanningRefresh)}`,
       });
       const returnTab = str(body.returnTab) as DashboardTabId;
       if (returnTab && navItems.some((item) => item.id === returnTab)) {
@@ -474,6 +450,13 @@ function DashboardShell() {
 
   const isDashboardLoading = dashboardPayload === undefined;
   const basePayload = isDashboardLoading ? {} : asRecord(dashboardPayload);
+  const snapshotUpdatedAt = str(basePayload.updatedAt);
+  useEffect(() => {
+    if (!snapshotUpdatedAt || lastSnapshotUpdatedAtRef.current === snapshotUpdatedAt) return;
+    lastSnapshotUpdatedAtRef.current = snapshotUpdatedAt;
+    setOptimisticShopFloorStatuses((current) => current.length ? [] : current);
+  }, [snapshotUpdatedAt]);
+
   const payload = useMemo(
     () => applyShopFloorStatusPatches(basePayload, optimisticShopFloorStatuses),
     [basePayload, optimisticShopFloorStatuses],
@@ -5091,23 +5074,7 @@ async function postDashboardApi(path: string, body: Record<string, unknown>): Pr
   }
   return {
     message: str(payload.message || payload.savedText) || "Import complete.",
-    planningRefresh: planningRefreshPayload(payload.planningRefresh),
   };
-}
-
-function planningRefreshPayload(value: unknown): PlanningRefreshResult | undefined {
-  const payload = asRecord(value);
-  if (!Object.keys(payload).length) return undefined;
-  return {
-    mode: optionalText(payload.mode),
-    ok: typeof payload.ok === "boolean" ? payload.ok : undefined,
-    skipped: typeof payload.skipped === "boolean" ? payload.skipped : undefined,
-    error: optionalText(payload.error),
-  };
-}
-
-function planningRefreshCompleted(value: PlanningRefreshResult | undefined) {
-  return value?.mode === "auto" && value.ok !== false && !value.error;
 }
 
 function priorityInterruptedSetups(value: unknown) {
