@@ -2773,7 +2773,7 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
       row.plannedProductionStartDate = dateLabel(plannedProductionStartDate);
       row.plannedProductionEndDate = dateLabel(plannedProductionEndDate);
       row.planVsActual = setupPlanVsActual(plannedStartDate, parseDate(rowText(row, "setupCompletionDate")) || rowText(row, "setupCompletionDate"));
-      machineNextDate = nextMachineAvailableDate(plannedProductionEndDate || plannedStartDate, planningCalendar);
+      machineNextDate = maxDateValue(machineNextDate, nextMachineAvailableDate(plannedProductionEndDate || plannedStartDate, planningCalendar));
     }
   }
   return details;
@@ -2974,16 +2974,30 @@ function takeNextMachineQueueRow(queue: Array<Record<string, unknown>>, machineN
   const first = queue[0]!;
   const currentSlotDate = machineNextDate || earliestQueueReadyDate(queue) || queueReadyDate(first);
   if (isQueueReady(first, currentSlotDate)) return queue.shift()!;
-  if (shouldReservePriorityQueueSlot(first, queue)) return queue.shift()!;
+  if (shouldReserveMachineQueueSlot(first, queue)) return queue.shift()!;
   const readyIndex = queue.findIndex((row, index) => {
     const meta = planningMeta(row);
-    return index > 0 && meta.canPullForward !== false && isQueueReady(row, currentSlotDate);
+    return index > 0 && meta.canPullForward !== false && isQueueReady(row, currentSlotDate) && !hasQueueBarrierBefore(queue, index, row);
   });
   if (readyIndex > 0) {
     const [readyRow] = queue.splice(readyIndex, 1);
     return readyRow!;
   }
   return queue.shift()!;
+}
+
+function shouldReserveMachineQueueSlot(first: Record<string, unknown>, queue: Array<Record<string, unknown>>) {
+  if (priorityQueueState(first) !== "idle") return true;
+  return shouldReservePriorityQueueSlot(first, queue);
+}
+
+function shouldHoldMachineQueuePosition(ahead: Record<string, unknown>, candidate: Record<string, unknown>) {
+  if (priorityQueueState(ahead) !== "idle") return true;
+  return canPriorityPreempt(candidate, ahead);
+}
+
+function hasQueueBarrierBefore(queue: Array<Record<string, unknown>>, candidateIndex: number, candidate: Record<string, unknown>) {
+  return queue.slice(0, candidateIndex).some((ahead) => shouldHoldMachineQueuePosition(ahead, candidate));
 }
 
 function shouldReservePriorityQueueSlot(first: Record<string, unknown>, queue: Array<Record<string, unknown>>) {

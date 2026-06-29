@@ -2526,6 +2526,105 @@ describe("buildLegacyDashboardSnapshot", () => {
     }
   });
 
+  it("keeps stale normal work behind a high-priority item after running work", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [
+          {
+            prodDate: "2026-06-24",
+            jobCard: "JC-001",
+            partCode: "M4",
+            setupNo: "1",
+            machine: "C501",
+            machineType: "AUTOMATIC",
+            operatorId: "OP-1",
+            outputQty: 1000,
+            actualQty: 1000,
+            targetQty: 0,
+            rejectQty: 0,
+          },
+        ],
+        plannerPriorities: [
+          {
+            target: "JC-081",
+            jcNo: "JC-081",
+            partCode: "M116",
+            priority: "High",
+            approvalMode: "idle_queue_only",
+            createdAt: "2026-06-27T09:24:40.704Z",
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: { jcNo: "JC-001", partCode: "M4", optionNumber: "1", orderPcs: 1000, rmInwardDate: "2026-06-24" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-25T00:00:00.000Z",
+            payload: { jcNo: "JC-025", partCode: "M34", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-06-25" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-27T00:00:00.000Z",
+            payload: { jcNo: "JC-033", partCode: "M43", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-27" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-28T00:00:00.000Z",
+            payload: { jcNo: "JC-081", partCode: "M116", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-28" },
+          },
+          ...["M4", "M34", "M43", "M116"].flatMap((partNo) => [
+            {
+              entryType: "route",
+              createdAt: "2026-06-23T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+            },
+            {
+              entryType: "cycle",
+              createdAt: "2026-06-23T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            },
+          ]),
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-06-25T08:50:33.782Z",
+            payload: { jcNo: "JC-001", partCode: "M4", optionNumber: "1", setupNo: "1", machine: "C501", stage: "item_complete", completedAt: "2026-06-25T08:50:33.782Z" },
+          },
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-06-27T08:00:00.000Z",
+            payload: { jcNo: "JC-033", partCode: "M43", optionNumber: "1", setupNo: "1", machine: "C501", stage: "operator_started", completedAt: "2026-06-27T08:00:00.000Z" },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+          },
+        ],
+      });
+
+      const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "C501");
+      const m43 = c501Rows.find((row) => row.partCode === "M43");
+      const m116 = c501Rows.find((row) => row.partCode === "M116");
+      const m34 = c501Rows.find((row) => row.partCode === "M34");
+
+      expect(m43).toMatchObject({ runningStatus: "Running", plannedProductionStartDate: "29-June-26" });
+      expect(m116).toMatchObject({ plannerPriority: "High" });
+      expect(m34).toMatchObject({ plannerPriority: "Normal" });
+      expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m43?.plannedProductionEndDate));
+      expect(dashboardDateKey(m34?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
+      expect(dashboardDateKey(m34?.plannedProductionStartDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("moves priority ahead of a started setup task when planner approves non-running queue change", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"));
