@@ -2464,6 +2464,68 @@ describe("buildLegacyDashboardSnapshot", () => {
     }
   });
 
+  it("moves an operator-started item with no production rows and leaves actual production start blank", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-27T00:00:00.000Z",
+            payload: { jcNo: "JC-033", partCode: "M43", optionNumber: "1", orderPcs: 4, rmInwardDate: "2026-06-27" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-28T00:00:00.000Z",
+            payload: { jcNo: "JC-081", partCode: "M116", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-28" },
+          },
+          ...["M43", "M116"].flatMap((partNo) => [
+            {
+              entryType: "route",
+              createdAt: "2026-06-23T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+            },
+            {
+              entryType: "cycle",
+              createdAt: "2026-06-23T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            },
+          ]),
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-06-27T08:00:00.000Z",
+            payload: { jcNo: "JC-033", partCode: "M43", optionNumber: "1", setupNo: "1", machine: "C501", stage: "operator_started", completedAt: "2026-06-27T08:00:00.000Z" },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+          },
+        ],
+      });
+
+      const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "C501");
+      const m43 = c501Rows.find((row) => row.partCode === "M43");
+      const m116 = c501Rows.find((row) => row.partCode === "M116");
+
+      expect(m43).toMatchObject({
+        runningStatus: "Running",
+        rawRows: 0,
+        actualProductionStartDate: "",
+        setupPlannedDate: "27-June-26",
+        plannedProductionStartDate: "29-June-26",
+      });
+      expect(dashboardDateKey(m43?.plannedProductionEndDate)).toBeGreaterThan(20260627);
+      expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m43?.plannedProductionEndDate));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("moves priority ahead of a started setup task when planner approves non-running queue change", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"));

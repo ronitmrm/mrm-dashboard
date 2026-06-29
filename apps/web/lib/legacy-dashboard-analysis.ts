@@ -2256,7 +2256,7 @@ function machinePlanDetails(
         const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
         const plannedCompletionDate = plannedStartDate;
         const setupCompletionDate = settingDone ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
-        const actualStartDate = productionActual?.startDate ?? (machineStarted ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "");
+        const actualStartDate = productionActual?.startDate ?? "";
         const actualCompletionDate = itemComplete ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
         const plannedProductionStartDate = actualStartDate || maxDateValue(plannedCompletionDate, setupCompletionDate);
         const plannedProductionEndDate = plannedProductionEnd(plannedProductionStartDate, machineOrderPcs, cycle, productionActual, planningCalendar);
@@ -2962,7 +2962,7 @@ function lockedProductionStartDate(row: Record<string, unknown>) {
   const rowActualStart = parseDate(rowText(row, "actualProductionStartDate", "actualStartDate"));
   if (rowActualStart) return rowActualStart;
   if (rowText(row, "runningStatus").toLowerCase() !== "running") return "";
-  return parseDate(rowText(row, "plannedProductionStartDate", "setupCompletionDate", "completionDate", "setupCompletedOn")) || "";
+  return parseDate(rowText(row, "setupCompletionDate", "completionDate", "setupCompletedOn", "plannedProductionStartDate")) || "";
 }
 
 function nextMachineAvailableDate(dateValue: string, planningCalendar: PlanningCalendar) {
