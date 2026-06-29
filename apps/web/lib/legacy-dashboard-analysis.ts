@@ -2754,11 +2754,13 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
     while (queue.length) {
       const row = takeNextMachineQueueRow(queue, machineNextDate);
       const meta = planningMeta(row);
-      const actualStartDate = lockedProductionStartDate(row);
+      const lockedStartDate = lockedProductionStartDate(row);
+      const productionActualStartDate = actualProductionStartDate(meta);
       const readyDate = meta.readyDate || parseDate(rowText(row, "setupPlannedDate")) || "";
-      const plannedStartDate = maxDateValue(readyDate, actualStartDate, machineNextDate);
+      const plannedStartDate = maxDateValue(readyDate, lockedStartDate, machineNextDate);
       const setupCompletionDate = parseDate(rowText(row, "setupCompletionDate", "completionDate", "setupCompletedOn"));
-      const plannedProductionStartDate = actualStartDate || maxDateValue(plannedStartDate, setupCompletionDate);
+      const unenteredProductionStartDate = unenteredProductionForecastStartDate(row, planningCalendar);
+      const plannedProductionStartDate = productionActualStartDate || maxDateValue(plannedStartDate, setupCompletionDate, unenteredProductionStartDate);
       const plannedProductionEndDate = maxDateValue(
         plannedProductionEnd(plannedProductionStartDate, meta.orderPcs ?? 0, meta.cycle, meta.productionActual, planningCalendar),
         meta.minimumProductionEndDate ?? "",
@@ -2901,6 +2903,14 @@ function priorityQueueState(row: Record<string, unknown>) {
   if (stage && stage !== "planned" && stage !== "item_complete") return "started_not_running";
   if (runningStatus === "setup complete") return "started_not_running";
   return "idle";
+}
+
+function unenteredProductionForecastStartDate(row: Record<string, unknown>, planningCalendar: PlanningCalendar) {
+  const meta = planningMeta(row);
+  if (actualProductionStartDate(meta)) return "";
+  if (rowText(row, "runningStatus").toLowerCase() === "complete") return "";
+  if (setupLifecycleStageRank(rowText(row, "shopFloorStage")) < setupLifecycleStageRank("setting")) return "";
+  return addDays(localIsoDate(new Date()), 0, planningCalendar);
 }
 
 function liveRunningMinimumEndDate(row: Record<string, unknown>, planningCalendar: PlanningCalendar) {

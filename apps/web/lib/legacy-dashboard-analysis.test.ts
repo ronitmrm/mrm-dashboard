@@ -815,6 +815,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("keeps production dates dynamic until actual production starts", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
     const baseDataEntries = [
       {
         entryType: "work_order",
@@ -883,8 +886,8 @@ describe("buildLegacyDashboardSnapshot", () => {
       setupPlannedDate: "23-June-26",
       setupCompletionDate: "25-June-26",
       planVsActual: "Delayed",
-      plannedProductionStartDate: "25-June-26",
-      plannedProductionEndDate: "27-June-26",
+      plannedProductionStartDate: "29-June-26",
+      plannedProductionEndDate: "30-June-26",
       actualProductionStartDate: "",
     });
 
@@ -914,6 +917,7 @@ describe("buildLegacyDashboardSnapshot", () => {
       actualProductionStartDate: "28-June-26",
       plannedProductionEndDate: "1-July-26",
     });
+    vi.useRealTimers();
   });
 
   it("splits a setup across compatible machines when the 25-day target is missed and each machine gets at least 15 days", () => {
@@ -2097,6 +2101,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("keeps priority behind a setup task that already started without planner approval", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -2149,7 +2156,10 @@ describe("buildLegacyDashboardSnapshot", () => {
     const priority = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-043");
 
     expect(started).toMatchObject({ runningStatus: "Setup complete", setupPlannedDate: "23-June-26" });
-    expect(priority).toMatchObject({ plannerPriority: "High", setupPlannedDate: "24-June-26" });
+    expect(dashboardDateKey(started?.plannedProductionEndDate)).toBeGreaterThanOrEqual(todayDateKey());
+    expect(priority).toMatchObject({ plannerPriority: "High" });
+    expect(dashboardDateKey(priority?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(started?.plannedProductionEndDate));
+    vi.useRealTimers();
   });
 
   it("keeps priority behind a running machine unless the planner approves a stop", () => {
@@ -2211,6 +2221,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("pushes the C501 queue after delayed running work and cascades M43 downstream setup dates", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -2290,7 +2303,7 @@ describe("buildLegacyDashboardSnapshot", () => {
 
     expect(running).toMatchObject({
       runningStatus: "Running",
-      plannedProductionStartDate: "23-June-26",
+      plannedProductionStartDate: "29-June-26",
     });
     expect(dashboardDateKey(running?.plannedProductionEndDate)).toBeGreaterThanOrEqual(todayDateKey());
     expect(m116).toMatchObject({
@@ -2306,6 +2319,85 @@ describe("buildLegacyDashboardSnapshot", () => {
       setupNo: "2",
     });
     expect(dashboardDateKey(m43SetupTwo?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m43SetupOne?.plannedProductionEndDate));
+    vi.useRealTimers();
+  });
+
+  it("moves a setup-complete production forecast with no production rows and cascades the next setup", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              jcNo: "JC-NO-PROD",
+              partCode: "M-NO-PROD",
+              optionNumber: "1",
+              orderPcs: 3,
+              rmInwardDate: "2026-06-23",
+            },
+          },
+          {
+            entryType: "route",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "route",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "2", machineUsed: "C502", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "2", cycleTime: 28800, loadingUnloading: 0 },
+          },
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-06-23T00:30:00.000Z",
+            payload: {
+              jcNo: "JC-NO-PROD",
+              partCode: "M-NO-PROD",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "C501",
+              stage: "setting",
+              completedAt: "2026-06-23T00:30:00.000Z",
+            },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { machineNo: "C502", machineType: "AUTOMATIC", status: "Active" },
+          },
+        ],
+      });
+
+      const setupOne = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-NO-PROD" && row.setupNo === "1");
+      const setupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-NO-PROD" && row.setupNo === "2");
+
+      expect(setupOne).toMatchObject({ runningStatus: "Setup complete" });
+      expect(dashboardDateKey(setupOne?.plannedProductionEndDate)).toBeGreaterThanOrEqual(20260701);
+      expect(dashboardDateKey(setupTwo?.setupPlannedDate)).toBeGreaterThanOrEqual(20260701);
+      expect(dashboardDateKey(setupTwo?.plannedProductionEndDate)).toBeGreaterThan(dashboardDateKey(setupOne?.plannedProductionEndDate));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("moves priority ahead of a started setup task when planner approves non-running queue change", () => {
