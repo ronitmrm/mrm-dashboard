@@ -2356,6 +2356,17 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
           {
+            entryType: "work_order",
+            createdAt: "2026-07-02T00:00:00.000Z",
+            payload: {
+              jcNo: "JC-D301-FOLLOWER",
+              partCode: "M-D301-FOLLOWER",
+              optionNumber: "1",
+              orderPcs: 2,
+              rmInwardDate: "2026-07-02",
+            },
+          },
+          {
             entryType: "route",
             createdAt: "2026-06-23T00:00:00.000Z",
             payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
@@ -2363,7 +2374,12 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "route",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "2", machineUsed: "C502", machineType: "AUTOMATIC" },
+            payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "2", machineUsed: "D3", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "route",
+            createdAt: "2026-07-02T00:00:00.000Z",
+            payload: { partNo: "M-D301-FOLLOWER", optionNumber: "1", setupNo: "1", machineUsed: "D3", machineType: "AUTOMATIC" },
           },
           {
             entryType: "cycle",
@@ -2374,6 +2390,11 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "cycle",
             createdAt: "2026-06-23T00:00:00.000Z",
             payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "2", cycleTime: 28800, loadingUnloading: 0 },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-07-02T00:00:00.000Z",
+            payload: { partNo: "M-D301-FOLLOWER", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
           },
           {
             entryType: "shop_floor_status",
@@ -2396,18 +2417,21 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { machineNo: "C502", machineType: "AUTOMATIC", status: "Active" },
+            payload: { machineNo: "D301", machineType: "AUTOMATIC", status: "Active" },
           },
         ],
       });
 
       const setupOne = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-NO-PROD" && row.setupNo === "1");
       const setupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-NO-PROD" && row.setupNo === "2");
+      const follower = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-D301-FOLLOWER");
 
       expect(setupOne).toMatchObject({ runningStatus: "Setup complete" });
       expect(dashboardDateKey(setupOne?.plannedProductionEndDate)).toBeGreaterThanOrEqual(20260701);
       expect(dashboardDateKey(setupTwo?.setupPlannedDate)).toBeGreaterThanOrEqual(20260701);
       expect(dashboardDateKey(setupTwo?.plannedProductionEndDate)).toBeGreaterThan(dashboardDateKey(setupOne?.plannedProductionEndDate));
+      expect(follower).toMatchObject({ machine: "D301", plannerPriority: "Normal" });
+      expect(dashboardDateKey(follower?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(setupTwo?.plannedProductionEndDate));
     } finally {
       vi.useRealTimers();
     }

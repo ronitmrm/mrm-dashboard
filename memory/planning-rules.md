@@ -36,3 +36,9 @@ During machine queue rescheduling, historical completed rows may appear after cu
 Date: 2026-06-29
 
 When one row on a machine is delayed, the consumed machine capacity must cascade through every later queued row on that same machine, not only the immediate next row. A later setup must not keep an old setup planned date if any earlier row's refreshed planned production end now occupies that machine window. Regression coverage: `apps/web/lib/legacy-dashboard-analysis.test.ts` - `keeps stale normal work behind a high-priority item after running work` includes M43 -> M116 -> M34 -> M35 and a queue-wide no-overlap assertion.
+
+## Cross-machine setup WIP cascade
+
+Date: 2026-06-29
+
+When a setup date changes, downstream setups for the same job/part/option must be recalculated from WIP availability, even when the next setup is on a different machine. If the downstream setup's date changes, that downstream machine queue must then be recalculated as well, so later rows on that machine move when the changed setup consumes capacity. Regression coverage: `apps/web/lib/legacy-dashboard-analysis.test.ts` - `moves a setup-complete production forecast with no production rows and cascades the next setup` includes a delayed setup 1, setup 2 on a different D3 machine family, and a later D301 queue follower.
