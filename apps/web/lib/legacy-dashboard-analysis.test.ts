@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const dashboardMonthNumbers: Record<string, string> = {
   january: "01",
@@ -741,6 +745,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("skips Friday shutdown and manual planning holidays in production dates", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -1152,6 +1159,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("does not plan a later setup before the previous setup can produce material", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -1795,6 +1805,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("uses planner priority to schedule a selected job card before normal priority work", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -2400,7 +2413,61 @@ describe("buildLegacyDashboardSnapshot", () => {
     }
   });
 
+  it("moves a stale planned production window with no production rows and cascades the next machine item", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { jcNo: "JC-043", partCode: "M43", optionNumber: "1", orderPcs: 4, rmInwardDate: "2026-06-23" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-23T00:01:00.000Z",
+            payload: { jcNo: "JC-116", partCode: "M116", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-23" },
+          },
+          ...["M43", "M116"].flatMap((partNo) => [
+            {
+              entryType: "route",
+              createdAt: "2026-06-23T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+            },
+            {
+              entryType: "cycle",
+              createdAt: "2026-06-23T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            },
+          ]),
+          {
+            entryType: "machine_master",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+          },
+        ],
+      });
+
+      const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "C501");
+      const m43 = c501Rows.find((row) => row.partCode === "M43");
+      const m116 = c501Rows.find((row) => row.partCode === "M116");
+
+      expect(m43).toMatchObject({ runningStatus: "Planned", setupPlannedDate: "23-June-26", plannedProductionStartDate: "29-June-26" });
+      expect(dashboardDateKey(m43?.plannedProductionEndDate)).toBeGreaterThan(20260627);
+      expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m43?.plannedProductionEndDate));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("moves priority ahead of a started setup task when planner approves non-running queue change", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -2556,6 +2623,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("recomputes downstream setup readiness when an earlier setup is pulled into an idle machine gap", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -2628,6 +2698,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("moves planned work to an idle physical machine in the same family when it fits before the next queued job", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -2954,6 +3027,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("does not move a later setup ahead when its WIP buffer is still short", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-25T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [
@@ -3149,6 +3225,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("plans the next setup on a machine from the current job planned production end date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],

@@ -2905,12 +2905,25 @@ function priorityQueueState(row: Record<string, unknown>) {
   return "idle";
 }
 
+function staleUnstartedForecastStartDate(row: Record<string, unknown>, planningCalendar: PlanningCalendar) {
+  const meta = planningMeta(row);
+  if (actualProductionStartDate(meta)) return "";
+  if (rowText(row, "runningStatus").toLowerCase() === "complete") return "";
+  if (setupLifecycleStageRank(rowText(row, "shopFloorStage")) >= setupLifecycleStageRank("setting")) return "";
+
+  const today = addDays(localIsoDate(new Date()), 0, planningCalendar);
+  const plannedStartDate = parseDate(rowText(row, "setupPlannedDate", "plannedStartDate", "plannedDate"));
+  return plannedStartDate && today && plannedStartDate < today ? today : "";
+}
+
 function unenteredProductionForecastStartDate(row: Record<string, unknown>, planningCalendar: PlanningCalendar) {
   const meta = planningMeta(row);
   if (actualProductionStartDate(meta)) return "";
   if (rowText(row, "runningStatus").toLowerCase() === "complete") return "";
-  if (setupLifecycleStageRank(rowText(row, "shopFloorStage")) < setupLifecycleStageRank("setting")) return "";
-  return addDays(localIsoDate(new Date()), 0, planningCalendar);
+
+  const today = addDays(localIsoDate(new Date()), 0, planningCalendar);
+  if (setupLifecycleStageRank(rowText(row, "shopFloorStage")) >= setupLifecycleStageRank("setting")) return today;
+  return staleUnstartedForecastStartDate(row, planningCalendar);
 }
 
 function liveRunningMinimumEndDate(row: Record<string, unknown>, planningCalendar: PlanningCalendar) {
