@@ -2571,6 +2571,11 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
           {
             entryType: "work_order",
+            createdAt: "2026-06-26T00:00:00.000Z",
+            payload: { jcNo: "JC-026", partCode: "M35", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-06-26" },
+          },
+          {
+            entryType: "work_order",
             createdAt: "2026-06-27T00:00:00.000Z",
             payload: { jcNo: "JC-033", partCode: "M43", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-27" },
           },
@@ -2579,7 +2584,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             createdAt: "2026-06-28T00:00:00.000Z",
             payload: { jcNo: "JC-081", partCode: "M116", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-28" },
           },
-          ...["M4", "M34", "M43", "M116"].flatMap((partNo) => [
+          ...["M4", "M34", "M35", "M43", "M116"].flatMap((partNo) => [
             {
               entryType: "route",
               createdAt: "2026-06-23T00:00:00.000Z",
@@ -2613,13 +2618,26 @@ describe("buildLegacyDashboardSnapshot", () => {
       const m43 = c501Rows.find((row) => row.partCode === "M43");
       const m116 = c501Rows.find((row) => row.partCode === "M116");
       const m34 = c501Rows.find((row) => row.partCode === "M34");
+      const m35 = c501Rows.find((row) => row.partCode === "M35");
+      const scheduledC501Rows = c501Rows
+        .filter((row) => !["Complete", "Completed"].includes(String(row.runningStatus)))
+        .sort((left, right) => dashboardDateKey(left.setupPlannedDate) - dashboardDateKey(right.setupPlannedDate));
 
       expect(m43).toMatchObject({ runningStatus: "Running", plannedProductionStartDate: "29-June-26" });
       expect(m116).toMatchObject({ plannerPriority: "High" });
       expect(m34).toMatchObject({ plannerPriority: "Normal" });
+      expect(m35).toMatchObject({ plannerPriority: "Normal" });
       expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m43?.plannedProductionEndDate));
       expect(dashboardDateKey(m34?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
       expect(dashboardDateKey(m34?.plannedProductionStartDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
+      expect(dashboardDateKey(m35?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m34?.plannedProductionEndDate));
+
+      for (let index = 1; index < scheduledC501Rows.length; index += 1) {
+        const previous = scheduledC501Rows[index - 1];
+        const current = scheduledC501Rows[index];
+
+        expect(dashboardDateKey(current?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(previous?.plannedProductionEndDate));
+      }
     } finally {
       vi.useRealTimers();
     }
