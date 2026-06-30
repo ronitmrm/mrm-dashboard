@@ -703,6 +703,7 @@ function buildDashboardSnapshotPayload(source: SnapshotSource) {
   const correctionTargets = dataEntryCorrectionTargetsWithWorkflowCascade(
     source.allDataEntries,
     activeCorrectionTargetKeys(source.corrections),
+    source.corrections,
   );
   const snapshotEntryTypeSet = new Set([...snapshotEntryTypes, "_summary"]);
   const dataEntries = withoutCorrectedRows(
@@ -965,9 +966,10 @@ async function activeCorrectionTargetsForRows(
       .eq("targetTable", targetTable)
       .eq("targetId", String(row._id)))
     .collect()));
-  const correctionTargets = activeCorrectionTargetKeys(correctionGroups.flat() as CorrectionTargetRow[]);
+  const corrections = correctionGroups.flat() as CorrectionTargetRow[];
+  const correctionTargets = activeCorrectionTargetKeys(corrections);
   if (targetTable === "dataEntries") {
-    return dataEntryCorrectionTargetsWithWorkflowCascade(rows as DataEntryCorrectionRow[], correctionTargets);
+    return dataEntryCorrectionTargetsWithWorkflowCascade(rows as DataEntryCorrectionRow[], correctionTargets, corrections);
   }
   return correctionTargets;
 }

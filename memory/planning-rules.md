@@ -67,6 +67,8 @@ Date: 2026-06-30
 
 When a shop-floor workflow task is reversed from the Corrections tab, every downstream task for the same job/part/option/setup/machine must reopen as well. The cascade is `raw_material_at_machine -> presetting -> setting -> first_piece_inspection_report -> quality_approval -> operator_started -> item_complete`. Correcting an FPIR invalidates quality approval and later stages. The snapshot correction filter expands active correction targets before planning analysis, and data-entry upserts use the same expanded target set so a reopened downstream row is not reused as the current live row.
 
+A correction cascade is time-bounded. It invalidates downstream task rows that existed at the time of the correction, but a downstream row completed after the correction must stay live. Otherwise, an old correction can keep making newly completed tasks disappear from the dashboard.
+
 Relevant code:
 
 - `apps/web/lib/dashboard-corrections.ts` - `dataEntryCorrectionTargetsWithWorkflowCascade`.

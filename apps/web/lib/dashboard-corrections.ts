@@ -2,6 +2,7 @@ export type CorrectionTargetRow = {
   targetTable: string;
   targetId: string;
   action: string;
+  createdAt?: string;
 };
 
 export type CorrectableRow = {
@@ -20,6 +21,7 @@ type WorkflowCorrectionStep = {
   setupKey: string;
   rank: number;
   cascadeAfterRank: number;
+  createdAt?: string;
 };
 
 const activeCorrectionActions = new Set(["reverse", "replace", "close"]);
@@ -57,17 +59,21 @@ export function activeCorrectionTargetKeys(corrections: CorrectionTargetRow[]) {
 export function dataEntryCorrectionTargetsWithWorkflowCascade(
   rows: DataEntryCorrectionRow[],
   correctionTargets: Set<string>,
+  corrections: CorrectionTargetRow[] = [],
 ) {
   const expandedTargets = new Set(correctionTargets);
+  const correctionCreatedAtByTarget = activeCorrectionCreatedAtByTarget(corrections);
   const workflowSteps = rows
     .map(workflowCorrectionStepForRow)
     .filter((step): step is WorkflowCorrectionStep => Boolean(step));
   const correctedSteps = workflowSteps.filter((step) => correctionTargets.has(`dataEntries:${step.id}`));
 
   for (const correctedStep of correctedSteps) {
+    const correctionCreatedAt = correctionCreatedAtByTarget.get(`dataEntries:${correctedStep.id}`);
     for (const step of workflowSteps) {
       if (step.setupKey !== correctedStep.setupKey) continue;
       if (step.rank <= correctedStep.cascadeAfterRank) continue;
+      if (isAfterCorrection(step.createdAt, correctionCreatedAt)) continue;
       expandedTargets.add(`dataEntries:${step.id}`);
     }
   }
@@ -98,6 +104,7 @@ function workflowCorrectionStepForRow(row: DataEntryCorrectionRow): WorkflowCorr
       setupKey,
       rank: firstPieceInspectionRank,
       cascadeAfterRank: setupLifecycleStageRanks.get("setting") ?? 2,
+      createdAt: row.createdAt,
     };
   }
 
@@ -111,7 +118,26 @@ function workflowCorrectionStepForRow(row: DataEntryCorrectionRow): WorkflowCorr
     setupKey,
     rank,
     cascadeAfterRank: rank,
+    createdAt: row.createdAt,
   };
+}
+
+function activeCorrectionCreatedAtByTarget(corrections: CorrectionTargetRow[]) {
+  const correctionCreatedAtByTarget = new Map<string, string | undefined>();
+  for (const row of corrections) {
+    if (!activeCorrectionActions.has(row.action)) continue;
+    const targetKey = `${row.targetTable}:${row.targetId}`;
+    const createdAt = cleanText(row.createdAt) || undefined;
+    const current = correctionCreatedAtByTarget.get(targetKey);
+    if (!correctionCreatedAtByTarget.has(targetKey) || !current || (createdAt && createdAt > current)) {
+      correctionCreatedAtByTarget.set(targetKey, createdAt ?? current);
+    }
+  }
+  return correctionCreatedAtByTarget;
+}
+
+function isAfterCorrection(rowCreatedAt: string | undefined, correctionCreatedAt: string | undefined) {
+  return Boolean(rowCreatedAt && correctionCreatedAt && rowCreatedAt > correctionCreatedAt);
 }
 
 function setupKeyForWorkflowRow(row: DataEntryCorrectionRow, payload: Record<string, unknown>) {

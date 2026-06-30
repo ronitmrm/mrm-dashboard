@@ -49,12 +49,38 @@ describe("dashboard corrections", () => {
       "dataEntries:operator",
     ]));
   });
+
+  it("does not cascade an old correction to tasks completed after the correction", () => {
+    const rows = [
+      shopFloorRow("rm", "raw_material_at_machine", {}, "2026-06-30T08:00:00.000Z"),
+      shopFloorRow("old-presetting", "presetting", {}, "2026-06-30T08:05:00.000Z"),
+      shopFloorRow("new-setting", "setting", {}, "2026-06-30T08:20:00.000Z"),
+    ];
+    const corrections = [
+      {
+        targetTable: "dataEntries",
+        targetId: "rm",
+        action: "reverse",
+        createdAt: "2026-06-30T08:10:00.000Z",
+      },
+    ];
+
+    expect(dataEntryCorrectionTargetsWithWorkflowCascade(
+      rows,
+      activeCorrectionTargetKeys(corrections),
+      corrections,
+    )).toEqual(new Set([
+      "dataEntries:rm",
+      "dataEntries:old-presetting",
+    ]));
+  });
 });
 
 function shopFloorRow(
   _id: string,
   stage: string,
   overrides: Partial<WorkflowPayload> = {},
+  createdAt?: string,
 ) {
   const payload = workflowPayload({ ...overrides, stage });
   return {
@@ -62,16 +88,18 @@ function shopFloorRow(
     entryType: "shop_floor_status",
     key: setupKey(payload),
     payload,
+    createdAt,
   };
 }
 
-function firstPieceRow(_id: string, overrides: Partial<WorkflowPayload> = {}) {
+function firstPieceRow(_id: string, overrides: Partial<WorkflowPayload> = {}, createdAt?: string) {
   const payload = workflowPayload(overrides);
   return {
     _id,
     entryType: "first_piece_inspection_report",
     key: `${setupKey(payload)}|fpi`,
     payload,
+    createdAt,
   };
 }
 
