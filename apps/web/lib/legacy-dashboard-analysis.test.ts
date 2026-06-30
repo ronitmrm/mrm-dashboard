@@ -336,30 +336,44 @@ describe("buildLegacyDashboardSnapshot", () => {
       vi.useRealTimers();
     }
   });
-  it("keeps route-family machine assignment stable until load improvement is material", () => {
+  it("preserves a previous machine for the same setup while downstream setup can move", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
+      previousMachinePlanDetailRows: [
+        { jcNo: "JC-002", partCode: "M102", optionNumber: "1", setupNo: "1", routeMachine: "ADB5", machine: "ADB503" },
+      ],
       dataEntries: [
-        ...[
-          ["JC-001", "M101"],
-          ["JC-002", "M102"],
-          ["JC-003", "M103"],
-        ].flatMap(([jcNo, partNo]) => [
-          {
-            entryType: "work_order",
-            createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { jcNo, partCode: partNo, optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-24" },
-          },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: { jcNo: "JC-001", partCode: "M101", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-24" },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: { partNo: "M101", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: { partNo: "M101", optionNumber: "1", setupNo: "1", cycleTime: 3600, loadingUnloading: 0 },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: { jcNo: "JC-002", partCode: "M102", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-24" },
+        },
+        ...["1", "2"].flatMap((setupNo) => [
           {
             entryType: "route",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+            payload: { partNo: "M102", optionNumber: "1", setupNo, machineUsed: "ADB5", machineType: "AUTOMATIC" },
           },
           {
             entryType: "cycle",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 3600, loadingUnloading: 0 },
+            payload: { partNo: "M102", optionNumber: "1", setupNo, cycleTime: 3600, loadingUnloading: 0 },
           },
         ]),
         {
@@ -375,11 +389,11 @@ describe("buildLegacyDashboardSnapshot", () => {
       ],
     });
 
-    const machineByPart = new Map(snapshot.productionControl.machinePlanDetailRows.map((row) => [row.partCode, row.machine]));
+    const setupOne = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-002" && row.setupNo === "1");
+    const setupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-002" && row.setupNo === "2");
 
-    expect(machineByPart.get("M101")).toBe("ADB503");
-    expect(machineByPart.get("M102")).toBe("ADB503");
-    expect(machineByPart.get("M103")).toBe("ADB504");
+    expect(setupOne).toMatchObject({ partCode: "M102", machine: "ADB503" });
+    expect(setupTwo).toMatchObject({ partCode: "M102", machine: "ADB504" });
   });
   it("uses the latest canonical route row when old imports use option-prefixed setup numbers", () => {
     const snapshot = buildLegacyDashboardSnapshot({

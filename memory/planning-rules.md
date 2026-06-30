@@ -100,12 +100,15 @@ Relevant code:
 
 Date: 2026-06-30
 
-When recalculating route-machine-family assignments, compatible physical machines must not churn just because another machine is marginally lighter. Use the physical machine number as the stable default, and only let planned days already loaded, planned quantity already loaded, next available date, or current load override that stable order when the improvement is material. Current thresholds are 2 planning days for planned-days/date gaps, one setup-day of quantity for planned quantity, and 2 queued setups for current load. Production actuals, `raw_material_at_machine` or later shop-floor locks, explicit planner machine switches, and machine-unavailable constraints still override this stability band.
+When recalculating route-machine-family assignments, the stability rule applies to the same setup identity, not to every setup of the part or every future row. If setup 1 of a job card was previously planned on `ADB503`, setup 1 should stay on `ADB503` unless another physical machine gives a material improvement, the machine becomes unavailable, production/shop-floor actuals lock a different machine, or the planner explicitly switches it. Setup 2 of the same part remains an independent setup and may be assigned to another compatible machine such as `ADB504` when normal machine load/availability makes that sensible.
+
+The material improvement check uses planned days already loaded, planned quantity already loaded, next available date, and current load for the previously planned machine versus the best current candidate. Production actuals, `raw_material_at_machine` or later shop-floor locks, explicit planner machine switches, and machine-unavailable constraints still override this stability rule.
 
 Relevant code:
 
-- `apps/web/lib/legacy-dashboard-analysis.ts` - `candidatePhysicalMachines` and `compareMachineAssignmentCandidate` apply the stability bands.
-- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `keeps route-family machine assignment stable until load improvement is material`.
+- `apps/web/lib/legacy-dashboard-analysis.ts` - `previousMachineAssignmentsBySetup` and `stableMachineAssignmentCandidates` apply same-setup preservation.
+- `apps/web/convex/dashboard.ts` - snapshot refresh passes previous `machinePlanDetailRows` into the next recalculation.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `preserves a previous machine for the same setup while downstream setup can move`.
 
 ## Snapshot owner scope
 

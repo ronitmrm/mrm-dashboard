@@ -318,11 +318,43 @@ async function rebuildDashboardSnapshot(
       } while (cursor !== null);
     }
   }
-  const payload = buildDashboardSnapshotPayload(source);
+  const previousMachinePlanDetailRows: Array<Record<string, unknown>> = await ctx.runQuery(internal.dashboard.latestMachinePlanDetailRows, {});
+  const payload = buildDashboardSnapshotPayload(source, previousMachinePlanDetailRows);
   const saveResult: { ok: true; changed: boolean; updatedAt?: string } = await ctx.runMutation(internal.dashboard.saveDashboardSnapshot, { payload, cacheUpdatedAt: now() });
   return { ok: true, skipped: !saveResult.changed, updatedAt: saveResult.updatedAt ?? payload.updatedAt };
 }
 
+export const latestMachinePlanDetailRows = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const chunks = await latestDashboardSnapshotChunks(ctx, null);
+    if (!chunks.length) return [];
+    let payload: unknown;
+    try {
+      payload = JSON.parse(serializedSnapshotChunks(chunks));
+    } catch {
+      return [];
+    }
+    const productionControl = typeof payload === "object" && payload !== null && !Array.isArray(payload)
+      ? (payload as { productionControl?: unknown }).productionControl
+      : undefined;
+    const machinePlanDetailRows = typeof productionControl === "object" && productionControl !== null && !Array.isArray(productionControl)
+      ? (productionControl as { machinePlanDetailRows?: unknown }).machinePlanDetailRows
+      : undefined;
+    if (!Array.isArray(machinePlanDetailRows)) return [];
+    return machinePlanDetailRows.map((row) => {
+      const record = typeof row === "object" && row !== null && !Array.isArray(row) ? row as Record<string, unknown> : {};
+      return {
+        jcNo: record.jcNo,
+        partCode: record.partCode,
+        optionNumber: record.optionNumber,
+        setupNo: record.setupNo,
+        routeMachine: record.routeMachine,
+        machine: record.machine,
+      };
+    });
+  },
+});
 export const dashboardSnapshotFreshness = internalQuery({
   args: {
     maxAgeMs: v.number(),
@@ -699,7 +731,7 @@ function serializedSnapshotChunks(chunks: Array<{ sequence: number; chunk: strin
     .join("");
 }
 
-function buildDashboardSnapshotPayload(source: SnapshotSource) {
+function buildDashboardSnapshotPayload(source: SnapshotSource, previousMachinePlanDetailRows: Array<Record<string, unknown>> = []) {
   const correctionTargets = dataEntryCorrectionTargetsWithWorkflowCascade(
     source.allDataEntries,
     activeCorrectionTargetKeys(source.corrections),
@@ -725,6 +757,7 @@ function buildDashboardSnapshotPayload(source: SnapshotSource) {
     routeChanges: withoutCorrectedRows(source.routeChanges, "routeChanges", correctionTargets),
     dispatchApprovals: withoutCorrectedRows(source.dispatchApprovals, "dispatchApprovals", correctionTargets),
     setupCompletions: withoutCorrectedRows(source.setupCompletions, "setupCompletions", correctionTargets),
+    previousMachinePlanDetailRows,
     updatedAt: latestCreatedAt(
       source.productionEntries,
       source.attendanceRecords,

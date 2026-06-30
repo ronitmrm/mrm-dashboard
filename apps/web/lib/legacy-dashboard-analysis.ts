@@ -25,6 +25,7 @@ export type LegacyDashboardInput = {
   routeChanges?: ActionRow[];
   dispatchApprovals?: ActionRow[];
   setupCompletions?: ActionRow[];
+  previousMachinePlanDetailRows?: Array<Record<string, unknown>>;
   filters?: DashboardFilters;
   updatedAt?: string;
 };
@@ -97,8 +98,6 @@ const interSetupTransferBufferDays = 1;
 const planningSetupBufferDays = 1;
 const planningDispatchTargetDays = 25;
 const minimumParallelMachineWorkDays = 15;
-const machineAssignmentStableDayBand = 2;
-const machineAssignmentStableLoadBand = 2;
 const defaultPlanningCalendar: PlanningCalendar = { holidayDates: new Set<string>() };
 const downtimeReasonFields: Array<[string, string[]]> = [
   ["QC Approval", ["QC APPROVAL DOWNTIME (MIN)", "QC APPROVAL", "QCDown"]],
@@ -243,6 +242,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     routeChanges: mergeSourceActionRows(sourcePlannerDecisions.routeChanges, input.routeChanges ?? [], routeChangeDecisionKey),
     dispatchApprovals: input.dispatchApprovals ?? [],
     setupCompletions: mergeSourceActionRows(sourcePlannerDecisions.setupCompletions, input.setupCompletions ?? [], setupCompletionDecisionKey),
+    previousMachinePlanDetailRows: input.previousMachinePlanDetailRows ?? [],
     filters: input.filters ?? {},
     workbookName: input.workbookName,
     updatedAt: input.updatedAt ?? "",
@@ -290,6 +290,7 @@ function buildProductionAnalysis({
   routeChanges,
   dispatchApprovals,
   setupCompletions,
+  previousMachinePlanDetailRows,
   filters,
   workbookName,
   updatedAt,
@@ -320,6 +321,7 @@ function buildProductionAnalysis({
   routeChanges: ActionRow[];
   dispatchApprovals: ActionRow[];
   setupCompletions: ActionRow[];
+  previousMachinePlanDetailRows: Array<Record<string, unknown>>;
   filters: DashboardFilters;
   workbookName: string;
   updatedAt: string;
@@ -621,6 +623,7 @@ function buildProductionAnalysis({
     routeChanges,
     dispatchApprovals,
     setupCompletions,
+    previousMachinePlanDetailRows,
   });
   const routingStatus = buildRoutingStatus(routeRows, productionRows);
   const toolFixtureNumbers = buildToolFixtureNumbers(toolingRows);
@@ -792,6 +795,7 @@ function buildProductionControl({
   routeChanges,
   dispatchApprovals,
   setupCompletions,
+  previousMachinePlanDetailRows,
 }: {
   productionRows: ProductionRow[];
   routeRows: Record<string, unknown>[];
@@ -813,6 +817,7 @@ function buildProductionControl({
   routeChanges: ActionRow[];
   dispatchApprovals: ActionRow[];
   setupCompletions: ActionRow[];
+  previousMachinePlanDetailRows: Array<Record<string, unknown>>;
 }) {
   const routeGroups = groupRouteRows(routeRows);
   const dedupedRouteRows = [...routeGroups.values()].flat();
@@ -981,7 +986,7 @@ function buildProductionControl({
     .filter((row) => row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing || row.machineMasterMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
-  const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, planningCalendar);
+  const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
   const workflowExceptionRows = machinePlanDetailRows.filter((row) => row.rawProductionWithoutWorkflow);
   const setupChecklistHistoryRows: Record<string, unknown>[] = [];
   const setupChecklistMismatchRows: Record<string, unknown>[] = [];
@@ -2171,6 +2176,7 @@ function machinePlanDetails(
   machineConstraints: ActionRow[],
   planOverrides: ActionRow[],
   shopFloorStatusRows: Record<string, unknown>[],
+  previousMachineAssignments: Map<string, Set<string>>,
   planningCalendar: PlanningCalendar,
 ) {
   const details: Array<Record<string, unknown>> = [];
@@ -2228,6 +2234,13 @@ function machinePlanDetails(
         optionNumber,
         setupNo: displaySetupNo,
       });
+      const previousMachines = previousMachineAssignments.get(machinePlanSetupKey({
+        jcNo: rowText(row, "jcNo"),
+        partCode,
+        optionNumber,
+        setupNo: displaySetupNo,
+        routeMachine,
+      }));
       if (routePlanningBlocked && !productionActualMachines.size && !lockedShopFloorMachines.size) continue;
       const assignedMachines = assignedPhysicalMachines({
         routeMachine,
@@ -2245,6 +2258,7 @@ function machinePlanDetails(
         override,
         productionActualMachines: productionActualMachines.size ? productionActualMachines : undefined,
         lockedMachines: lockedShopFloorMachines.size ? lockedShopFloorMachines : undefined,
+        previousMachines: previousMachines?.size ? previousMachines : undefined,
         planningCalendar,
       });
       if (!assignedMachines.length) {
@@ -2374,7 +2388,7 @@ function machinePlanDetails(
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
           machineAssignment: machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
           parallelMachineCount: assignedMachines.length,
-          planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for combined downstream WIP demand plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; compatible machines use stability bands so only material load/date gains change the physical machine; parallel machines require at least ${minimumParallelMachineWorkDays} production days each`,
+          planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for combined downstream WIP demand plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; downstream setups are assigned independently; parallel machines require at least ${minimumParallelMachineWorkDays} production days each`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -3400,6 +3414,7 @@ function assignedPhysicalMachines({
   override,
   productionActualMachines,
   lockedMachines,
+  previousMachines,
   planningCalendar,
 }: {
   routeMachine: string;
@@ -3417,12 +3432,14 @@ function assignedPhysicalMachines({
   override?: ActionRow;
   productionActualMachines?: Set<string>;
   lockedMachines?: Set<string>;
+  previousMachines?: Set<string>;
   planningCalendar: PlanningCalendar;
 }) {
   const overrideMachine = override ? rowText(override, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE") : "";
-  const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, unavailableMachines, machineLoad, machineNextSetupDate, machinePlannedDays, machinePlannedQty, cycle, readyDate, planningCalendar);
+  const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, unavailableMachines, machineLoad, machineNextSetupDate, machinePlannedDays, machinePlannedQty);
   const productionActualMachineList = [...(productionActualMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const lockedMachineList = [...(lockedMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const previousMachineList = [...(previousMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   if (productionActualMachineList.length) return productionActualMachineList;
   if (overrideMachine) {
     const exactOverride = candidates.find((row) => canonicalKey(row.machine) === canonicalKey(overrideMachine));
@@ -3430,18 +3447,26 @@ function assignedPhysicalMachines({
   }
   if (lockedMachineList.length) return lockedMachineList;
   if (!candidates.length) return [];
+  const assignmentCandidates = stableMachineAssignmentCandidates(candidates, previousMachineList, {
+    machineLoad,
+    machineNextSetupDate,
+    machinePlannedDays,
+    machinePlannedQty,
+    plannedQtyBand: Math.max(1, Math.ceil(cycleDailyQty(cycle))),
+    readyDate,
+    planningCalendar,
+  });
   const machineCount = requiredMachineCountForTarget({
     orderPcs,
     cycle,
-    candidates,
+    candidates: assignmentCandidates,
     readyDate,
     deadlineDate,
     machineNextSetupDate,
     planningCalendar,
   });
-  return candidates.slice(0, machineCount).map((row) => row.machine);
+  return assignmentCandidates.slice(0, machineCount).map((row) => row.machine);
 }
-
 function requiredMachineCountForTarget({
   orderPcs,
   cycle,
@@ -3651,27 +3676,21 @@ function candidatePhysicalMachines(
   machineNextSetupDate: Map<string, string>,
   machinePlannedDays: Map<string, number>,
   machinePlannedQty: Map<string, number>,
-  cycle: Record<string, unknown> | undefined,
-  readyDate: string,
-  planningCalendar: PlanningCalendar,
 ) {
-  const plannedQtyBand = Math.max(1, Math.ceil(cycleDailyQty(cycle)));
   return activePhysicalMachineRows(routeMachine, machineType, machineRows)
     .filter((row) => !unavailableMachines.has(canonicalKey(row.machine)))
-    .sort((a, b) => compareMachineAssignmentCandidate(a, b, {
-      machineLoad,
-      machineNextSetupDate,
-      machinePlannedDays,
-      machinePlannedQty,
-      plannedQtyBand,
-      readyDate,
-      planningCalendar,
-    }));
+    .sort((a, b) =>
+      (machinePlannedDays.get(canonicalKey(a.machine)) ?? 0) - (machinePlannedDays.get(canonicalKey(b.machine)) ?? 0) ||
+      (machinePlannedQty.get(canonicalKey(a.machine)) ?? 0) - (machinePlannedQty.get(canonicalKey(b.machine)) ?? 0) ||
+      (machineNextSetupDate.get(canonicalKey(a.machine)) ?? "").localeCompare(machineNextSetupDate.get(canonicalKey(b.machine)) ?? "") ||
+      (machineLoad.get(canonicalKey(a.machine)) ?? 0) - (machineLoad.get(canonicalKey(b.machine)) ?? 0) ||
+      a.machine.localeCompare(b.machine, undefined, { numeric: true }),
+    );
 }
 
-function compareMachineAssignmentCandidate(
-  a: { machine: string },
-  b: { machine: string },
+function stableMachineAssignmentCandidates(
+  candidates: Array<{ machine: string }>,
+  previousMachineList: string[],
   context: {
     machineLoad: Map<string, number>;
     machineNextSetupDate: Map<string, string>;
@@ -3682,26 +3701,50 @@ function compareMachineAssignmentCandidate(
     planningCalendar: PlanningCalendar;
   },
 ) {
-  const aKey = canonicalKey(a.machine);
-  const bKey = canonicalKey(b.machine);
-  const plannedDaysDiff = substantialMetricDiff((context.machinePlannedDays.get(aKey) ?? 0) - (context.machinePlannedDays.get(bKey) ?? 0), machineAssignmentStableDayBand);
-  if (plannedDaysDiff) return plannedDaysDiff;
-  const plannedQtyDiff = substantialMetricDiff((context.machinePlannedQty.get(aKey) ?? 0) - (context.machinePlannedQty.get(bKey) ?? 0), context.plannedQtyBand);
-  if (plannedQtyDiff) return plannedQtyDiff;
-  const nextAvailableDiff = substantialMetricDiff(planningDateGap(
-    context.machineNextSetupDate.get(aKey) ?? "",
-    context.machineNextSetupDate.get(bKey) ?? "",
-    context.readyDate,
-    context.planningCalendar,
-  ), machineAssignmentStableDayBand);
-  if (nextAvailableDiff) return nextAvailableDiff;
-  const loadDiff = substantialMetricDiff((context.machineLoad.get(aKey) ?? 0) - (context.machineLoad.get(bKey) ?? 0), machineAssignmentStableLoadBand);
-  if (loadDiff) return loadDiff;
-  return a.machine.localeCompare(b.machine, undefined, { numeric: true });
+  if (!previousMachineList.length || candidates.length <= 1) return candidates;
+  const previousCandidates = previousMachineList
+    .map((machine) => candidates.find((candidate) => canonicalKey(candidate.machine) === canonicalKey(machine)))
+    .filter((candidate): candidate is { machine: string } => Boolean(candidate));
+  if (!previousCandidates.length) return candidates;
+  const bestCandidate = candidates[0];
+  const previousCandidate = previousCandidates[0];
+  if (!bestCandidate || !previousCandidate || canonicalKey(bestCandidate.machine) === canonicalKey(previousCandidate.machine)) return candidates;
+  if (previousAssignmentMoveIsMaterial(bestCandidate, previousCandidate, context)) return candidates;
+  const previousKeys = new Set(previousCandidates.map((candidate) => canonicalKey(candidate.machine)));
+  return [
+    ...previousCandidates,
+    ...candidates.filter((candidate) => !previousKeys.has(canonicalKey(candidate.machine))),
+  ];
 }
 
-function substantialMetricDiff(diff: number, band: number) {
-  return Math.abs(diff) >= band ? diff : 0;
+function previousAssignmentMoveIsMaterial(
+  bestCandidate: { machine: string },
+  previousCandidate: { machine: string },
+  context: {
+    machineLoad: Map<string, number>;
+    machineNextSetupDate: Map<string, string>;
+    machinePlannedDays: Map<string, number>;
+    machinePlannedQty: Map<string, number>;
+    plannedQtyBand: number;
+    readyDate: string;
+    planningCalendar: PlanningCalendar;
+  },
+) {
+  const bestKey = canonicalKey(bestCandidate.machine);
+  const previousKey = canonicalKey(previousCandidate.machine);
+  const plannedDaysGain = (context.machinePlannedDays.get(previousKey) ?? 0) - (context.machinePlannedDays.get(bestKey) ?? 0);
+  if (plannedDaysGain >= 2) return true;
+  const plannedQtyGain = (context.machinePlannedQty.get(previousKey) ?? 0) - (context.machinePlannedQty.get(bestKey) ?? 0);
+  if (plannedQtyGain >= context.plannedQtyBand) return true;
+  const nextAvailableGain = planningDateGap(
+    context.machineNextSetupDate.get(previousKey) ?? "",
+    context.machineNextSetupDate.get(bestKey) ?? "",
+    context.readyDate,
+    context.planningCalendar,
+  );
+  if (nextAvailableGain >= 2) return true;
+  const loadGain = (context.machineLoad.get(previousKey) ?? 0) - (context.machineLoad.get(bestKey) ?? 0);
+  return loadGain >= 2;
 }
 
 function planningDateGap(leftDate: string, rightDate: string, fallbackDate: string, planningCalendar: PlanningCalendar) {
@@ -3724,6 +3767,42 @@ function planningDaysBetween(startDate: string, endDate: string, planningCalenda
     guard += 1;
   }
   return days;
+}
+
+function previousMachineAssignmentsBySetup(rows: Array<Record<string, unknown>>) {
+  const assignments = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const machine = rowText(row, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO.");
+    const key = machinePlanSetupKey({
+      jcNo: rowText(row, "jcNo", "JC NO.", "JC NO"),
+      partCode: rowText(row, "partCode", "partNo", "PART CODE", "PART NO"),
+      optionNumber: rowText(row, "optionNumber", "OPTION NUMBER", "OPTION NO"),
+      setupNo: rowText(row, "setupNo", "SETUP NO.", "SETUP NO", "SET UP"),
+      routeMachine: rowText(row, "routeMachine", "MACHINE USED", "machineUsed", "routeMachineCode"),
+    });
+    if (!key || !machine) continue;
+    const machines = assignments.get(key) ?? new Set<string>();
+    machines.add(machine);
+    assignments.set(key, machines);
+  }
+  return assignments;
+}
+
+function machinePlanSetupKey({
+  jcNo,
+  partCode,
+  optionNumber,
+  setupNo,
+  routeMachine,
+}: {
+  jcNo: string;
+  partCode: string;
+  optionNumber: string;
+  setupNo: string;
+  routeMachine: string;
+}) {
+  const parts = [canonicalKey(jcNo), canonicalKey(partCode), canonicalKey(optionNumber), setupStepKey(setupNo, optionNumber), canonicalKey(routeMachine)];
+  return parts.every(Boolean) ? parts.join("|") : "";
 }
 function activePhysicalMachineRows(
   routeMachine: string,

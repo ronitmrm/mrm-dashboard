@@ -37,7 +37,7 @@ An automatic planning recalculation after live planning inputs change, such as p
 _Avoid_: Manual operational refresh.
 
 **Machine Assignment Stability**:
-A recalculation rule for route machine families: keep a compatible setup on the stable physical machine when planned days, planned quantity, next available date, and current load differences are only marginal. Move it automatically only for a material planning improvement, machine unavailability, a physical shop-floor lock, production actuals, or an explicit planner machine switch.
+A recalculation rule for route machine families: when the same job-card setup was already planned on a physical machine, keep that setup on the same machine unless there is a material planning improvement, machine unavailability, a physical shop-floor lock, production actuals, or an explicit planner machine switch. Other setups, including setup 2 of the same part, are assigned independently.
 _Avoid_: Load balancing every recalculation.
 
 **Route Machine Family**:
