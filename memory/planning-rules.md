@@ -47,3 +47,5 @@ When a setup date changes, downstream setups for the same job/part/option must b
 Date: 2026-06-30
 
 No-production forecasts depend on the current planning date. The dashboard must not keep serving a ready snapshot from a previous calendar day without recalculation. The Convex snapshot query exposes `snapshotCacheUpdatedAt`, and the web dashboard queues a non-forced planning refresh when that cache date is older than the browser's current local date. Identical rebuilds still advance the chunk `updatedAt` so the UI does not repeatedly request the same daily refresh.
+
+The dashboard header displays the last completed planning recalculation time from snapshotCacheUpdatedAt, separate from workbook/data updatedAt, so operators can tell when the planning cache was last rebuilt.

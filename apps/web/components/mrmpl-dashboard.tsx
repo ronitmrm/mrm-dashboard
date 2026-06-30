@@ -449,6 +449,8 @@ function DashboardShell() {
     [dashboardPayload, isDashboardLoading],
   );
   const snapshotUpdatedAt = str(basePayload.updatedAt);
+  const planningRecalculatedAt = str(basePayload.snapshotCacheUpdatedAt)
+    || (typeof dashboardRefreshStatus?.completedAtMs === "number" ? new Date(dashboardRefreshStatus.completedAtMs).toISOString() : "");
   useEffect(() => {
     if (!snapshotUpdatedAt || lastSnapshotUpdatedAtRef.current === snapshotUpdatedAt) return;
     lastSnapshotUpdatedAtRef.current = snapshotUpdatedAt;
@@ -518,7 +520,8 @@ function DashboardShell() {
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-semibold">{selectedTab.title}</h1>
             <p className="truncate text-xs text-muted-foreground">
-              {view.updatedAt ? `Updated ${formatDate(view.updatedAt)}` : "Live workbook snapshot"}
+              <span>{planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live workbook snapshot"}</span>
+              {planningRecalculatedAt && view.updatedAt ? <span> - Workbook updated {formatDate(view.updatedAt)}</span> : null}
             </p>
           </div>
           <Badge variant="outline">
