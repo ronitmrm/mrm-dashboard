@@ -94,3 +94,9 @@ Per-machine/per-setup live state must be read from `productionControl.machinePla
 Relevant code:
 
 - `apps/web/components/mrmpl-dashboard.tsx` - `JobCardTileBoard` passes planned setup rows into job-card tracking/search/filter helpers.
+
+## Snapshot owner scope
+
+Date: 2026-06-30
+
+Planning snapshots still include legacy owner-scoped workbook/master rows because historical imports stored work orders and RM inward rows that way. For shop-floor status conflict resolution, current global status rows must take precedence over legacy owner-scoped active rows on the same machine; otherwise an old owner-scoped active setup can suppress a newer global RM-at-machine entry. This was observed on M93/JC-067 on ADB503.

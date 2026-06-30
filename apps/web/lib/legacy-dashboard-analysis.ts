@@ -7,6 +7,7 @@ type DataEntry = {
   key?: string;
   payload: unknown;
   createdAt: string;
+  ownerId?: unknown;
 };
 
 type ActionRow = Record<string, unknown> & { createdAt?: string };
@@ -1263,7 +1264,7 @@ function bucketDataEntries(entries: DataEntry[]) {
   const buckets = new Map<string, Array<Record<string, unknown>>>();
   for (const entry of entries) {
     const payload = asRecord(entry.payload);
-    const row = { ...payload, _id: entry._id, key: entry.key, entryType: entry.entryType, createdAt: entry.createdAt };
+    const row = { ...payload, _id: entry._id, ownerId: entry.ownerId, key: entry.key, entryType: entry.entryType, createdAt: entry.createdAt };
     const bucket = buckets.get(entry.entryType) ?? [];
     bucket.push(row);
     buckets.set(entry.entryType, bucket);
@@ -1298,6 +1299,7 @@ function singleActiveShopFloorStatusRows(rows: Array<Record<string, unknown>>) {
   const activeRows = rows
     .filter((row) => shopFloorStatusBlocksMachine(row))
     .sort((a, b) =>
+      shopFloorStatusOwnerRank(a) - shopFloorStatusOwnerRank(b) ||
       latestEntryTimestamp(a).localeCompare(latestEntryTimestamp(b)) ||
       shopFloorStatusEntryKey(a).localeCompare(shopFloorStatusEntryKey(b)),
     );
@@ -1319,6 +1321,10 @@ function shopFloorStatusBlocksMachine(row: Record<string, unknown>) {
   const stage = rowText(row, "stage", "shopFloorStage");
   const normalizedStage = normalizeSetupLifecycleStage(stage);
   return Boolean(normalizedStage && normalizedStage !== "item_complete");
+}
+
+function shopFloorStatusOwnerRank(row: Record<string, unknown>) {
+  return rowText(row, "ownerId") ? 1 : 0;
 }
 
 function shopFloorStatusEntryKey(row: Record<string, unknown>) {
