@@ -2559,6 +2559,68 @@ describe("buildLegacyDashboardSnapshot", () => {
     }
   });
 
+  it("does not treat a second shop-floor start on the same machine as running until the active setup completes", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-25T00:00:00.000Z",
+            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-25" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-26T00:00:00.000Z",
+            payload: { jcNo: "JC-017", partCode: "M25", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-26" },
+          },
+          ...["M24", "M25"].flatMap((partNo) => [
+            {
+              entryType: "route",
+              createdAt: "2026-06-25T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "ADB502", machineType: "AUTOMATIC" },
+            },
+            {
+              entryType: "cycle",
+              createdAt: "2026-06-25T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            },
+          ]),
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-06-25T08:00:00.000Z",
+            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", setupNo: "1", machine: "ADB502", stage: "operator_started", completedAt: "2026-06-25T08:00:00.000Z" },
+          },
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-06-27T08:00:00.000Z",
+            payload: { jcNo: "JC-017", partCode: "M25", optionNumber: "1", setupNo: "1", machine: "ADB502", stage: "operator_started", completedAt: "2026-06-27T08:00:00.000Z" },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-06-25T00:00:00.000Z",
+            payload: { machineNo: "ADB502", machineType: "AUTOMATIC", status: "Active" },
+          },
+        ],
+      });
+
+      const adbRows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "ADB502");
+      const first = adbRows.find((row) => row.jcNo === "JC-016");
+      const second = adbRows.find((row) => row.jcNo === "JC-017");
+      const activeRows = adbRows.filter((row) => row.runningStatus === "Running" || row.shopFloorStage === "operator_started");
+
+      expect(activeRows.map((row) => row.jcNo)).toEqual(["JC-016"]);
+      expect(first).toMatchObject({ runningStatus: "Running", shopFloorStage: "operator_started" });
+      expect(second).toMatchObject({ runningStatus: "Planned", shopFloorStage: "", shopFloorTaskReady: false });
+      expect(second?.shopFloorTaskBlocker).toContain("Machine has active setup M24 JC-016 setup 1");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("keeps stale normal work behind a high-priority item after running work", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));

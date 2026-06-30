@@ -201,7 +201,9 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const rmInwardRows = entryRows(byType, "rm_inward");
   const planningHolidayRows = latestEntryRowsByKey(entryRows(byType, "planning_holiday"), planningHolidayEntryKey);
   const setupChecklistRows: Record<string, unknown>[] = [];
-  const shopFloorStatusRows = latestEntryRowsByKey(entryRows(byType, "shop_floor_status"), shopFloorStatusEntryKey);
+  const shopFloorStatusRows = singleActiveShopFloorStatusRows(
+    latestEntryRowsByKey(entryRows(byType, "shop_floor_status"), shopFloorStatusEntryKey),
+  );
   const firstPieceInspectionMasterRows = entryRows(byType, "first_piece_inspection_master");
   const firstPieceInspectionReportRows = latestEntryRowsByKey(entryRows(byType, "first_piece_inspection_report"), firstPieceReportEntryKey);
   const rawSoftwareRows = entryRows(byType, "software_raw");
@@ -1290,6 +1292,34 @@ function latestEntryRowsByKey(
 function latestEntryTimestamp(row: Record<string, unknown>) {
   return rowText(row, "taskCompletedAt", "completedAt", "createdAt");
 }
+function singleActiveShopFloorStatusRows(rows: Array<Record<string, unknown>>) {
+  const activeMachines = new Set<string>();
+  const blockedStatusKeys = new Set<string>();
+  const activeRows = rows
+    .filter((row) => shopFloorStatusBlocksMachine(row))
+    .sort((a, b) =>
+      latestEntryTimestamp(a).localeCompare(latestEntryTimestamp(b)) ||
+      shopFloorStatusEntryKey(a).localeCompare(shopFloorStatusEntryKey(b)),
+    );
+
+  for (const row of activeRows) {
+    const machine = canonicalKey(rowText(row, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO."));
+    if (!machine) continue;
+    if (activeMachines.has(machine)) {
+      blockedStatusKeys.add(shopFloorStatusEntryKey(row));
+      continue;
+    }
+    activeMachines.add(machine);
+  }
+
+  return rows.filter((row) => !blockedStatusKeys.has(shopFloorStatusEntryKey(row)));
+}
+
+function shopFloorStatusBlocksMachine(row: Record<string, unknown>) {
+  const stage = rowText(row, "stage", "shopFloorStage");
+  const normalizedStage = normalizeSetupLifecycleStage(stage);
+  return Boolean(normalizedStage && normalizedStage !== "item_complete");
+}
 
 function shopFloorStatusEntryKey(row: Record<string, unknown>) {
   return setupChecklistKey({
@@ -2370,7 +2400,9 @@ function machinePlanDetails(
       operationReadyCanPullForward = actualWipBufferAvailable(bufferArgs);
     }
   }
-  return applyPlannedDateTaskReadiness(finalizeMachineAndSetupSchedule(details, planningCalendar)).sort((a, b) =>
+  const finalizedDetails = finalizeMachineAndSetupSchedule(details, planningCalendar);
+  applyMachineActiveTaskReadiness(finalizedDetails);
+  return applyPlannedDateTaskReadiness(finalizedDetails).sort((a, b) =>
     rowText(a, "machine").localeCompare(rowText(b, "machine"), undefined, { numeric: true }) ||
     rowText(a, "partCode").localeCompare(rowText(b, "partCode"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo")),
@@ -2395,6 +2427,53 @@ function shopFloorTaskReadiness(previousOperationReady: boolean, plannedStartDat
   };
 }
 
+const machineActiveTaskBlockerPrefix = "Machine has active setup";
+
+function applyMachineActiveTaskReadiness(rows: Array<Record<string, unknown>>) {
+  const byMachine = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of rows) {
+    const machine = rowText(row, "machine");
+    if (!machine) continue;
+    const machineRows = byMachine.get(machine) ?? [];
+    machineRows.push(row);
+    byMachine.set(machine, machineRows);
+  }
+
+  for (const machineRows of byMachine.values()) {
+    let activeRow: Record<string, unknown> | undefined;
+    const sortedRows = [...machineRows].sort(machineQueueSort);
+    for (const row of sortedRows) {
+      const blockers = taskBlockersWithoutMachineActive(rowText(row, "shopFloorTaskBlocker"));
+      if (activeRow && scheduleRowKey(row) !== scheduleRowKey(activeRow) && !shopFloorRowIsComplete(row)) {
+        blockers.push(machineActiveTaskBlocker(activeRow));
+      }
+      row.shopFloorTaskBlocker = uniqueTextValues(blockers).join("; ");
+      if (!activeRow && shopFloorRowBlocksMachine(row)) activeRow = row;
+    }
+  }
+  return rows;
+}
+
+function shopFloorRowBlocksMachine(row: Record<string, unknown>) {
+  if (shopFloorRowIsComplete(row)) return false;
+  if (rowText(row, "priorityStoppedByJcNo")) return false;
+  const runningStatus = rowText(row, "runningStatus").toLowerCase();
+  if (runningStatus === "running" || runningStatus === "setup complete") return true;
+  return setupLifecycleStageRank(rowText(row, "shopFloorStage")) >= setupLifecycleStageRank("raw_material_at_machine");
+}
+
+function shopFloorRowIsComplete(row: Record<string, unknown>) {
+  return rowText(row, "runningStatus").toLowerCase() === "complete"
+    || rowText(row, "shopFloorStage").toLowerCase() === "item_complete";
+}
+
+function machineActiveTaskBlocker(activeRow: Record<string, unknown>) {
+  return `${machineActiveTaskBlockerPrefix} ${rowText(activeRow, "partCode") || "item"} ${rowText(activeRow, "jcNo") || "job"} setup ${rowText(activeRow, "setupNo") || "-"}; mark it complete before starting the next setup`;
+}
+
+function taskBlockersWithoutMachineActive(value: string) {
+  return uniqueTextValues([value]).filter((blocker) => !blocker.toLowerCase().startsWith(machineActiveTaskBlockerPrefix.toLowerCase()));
+}
 function applyPlannedDateTaskReadiness(rows: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   return rows.map((row) => {
     const plannedDate = parseDate(rowText(row, "plannedStartDate", "setupPlannedDate", "plannedDate"));

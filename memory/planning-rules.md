@@ -49,3 +49,14 @@ Date: 2026-06-30
 No-production forecasts depend on the current planning date. The dashboard must not keep serving a ready snapshot from a previous calendar day without recalculation. The Convex snapshot query exposes `snapshotCacheUpdatedAt`, and the web dashboard queues a non-forced planning refresh when that cache date is older than the browser's current local date. Identical rebuilds still advance the chunk `updatedAt` so the UI does not repeatedly request the same daily refresh.
 
 The dashboard header displays the last completed planning recalculation time from snapshotCacheUpdatedAt, separate from workbook/data updatedAt, so operators can tell when the planning cache was last rebuilt.
+
+## Single active shop-floor setup per machine
+
+Date: 2026-06-30
+
+A physical machine can have only one active shop-floor setup at a time. Once any setup on a machine has non-complete shop-floor progress (`raw_material_at_machine` through `operator_started`) or is shown as running/setup-complete, later setup tasks on the same machine must stay blocked until that active setup is marked `item_complete`. The dashboard snapshot suppresses later duplicate active `shop_floor_status` rows on the same machine and adds a machine-active blocker to later queued rows, so the shop-floor first task does not appear prematurely and machine detail does not show two running setups on the same machine.
+
+Relevant code:
+
+- `apps/web/lib/legacy-dashboard-analysis.ts` - `singleActiveShopFloorStatusRows` and `applyMachineActiveTaskReadiness`.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `does not treat a second shop-floor start on the same machine as running until the active setup completes`.
