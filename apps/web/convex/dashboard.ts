@@ -16,8 +16,10 @@ import {
 } from "../lib/dashboard-refresh-state";
 import {
   activeCorrectionTargetKeys,
+  dataEntryCorrectionTargetsWithWorkflowCascade,
   latestUncorrectedRow,
   type CorrectionTargetRow,
+  type DataEntryCorrectionRow,
 } from "../lib/dashboard-corrections";
 import { shouldQueuePlanningRefresh } from "../lib/planning-refresh-policy";
 
@@ -698,7 +700,10 @@ function serializedSnapshotChunks(chunks: Array<{ sequence: number; chunk: strin
 }
 
 function buildDashboardSnapshotPayload(source: SnapshotSource) {
-  const correctionTargets = activeCorrectionTargetKeys(source.corrections);
+  const correctionTargets = dataEntryCorrectionTargetsWithWorkflowCascade(
+    source.allDataEntries,
+    activeCorrectionTargetKeys(source.corrections),
+  );
   const snapshotEntryTypeSet = new Set([...snapshotEntryTypes, "_summary"]);
   const dataEntries = withoutCorrectedRows(
     source.allDataEntries.filter((row) => snapshotEntryTypeSet.has(row.entryType)),
@@ -960,7 +965,11 @@ async function activeCorrectionTargetsForRows(
       .eq("targetTable", targetTable)
       .eq("targetId", String(row._id)))
     .collect()));
-  return activeCorrectionTargetKeys(correctionGroups.flat() as CorrectionTargetRow[]);
+  const correctionTargets = activeCorrectionTargetKeys(correctionGroups.flat() as CorrectionTargetRow[]);
+  if (targetTable === "dataEntries") {
+    return dataEntryCorrectionTargetsWithWorkflowCascade(rows as DataEntryCorrectionRow[], correctionTargets);
+  }
+  return correctionTargets;
 }
 
 function cleanText(value: unknown) {

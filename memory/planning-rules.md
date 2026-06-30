@@ -60,3 +60,14 @@ Relevant code:
 
 - `apps/web/lib/legacy-dashboard-analysis.ts` - `singleActiveShopFloorStatusRows` and `applyMachineActiveTaskReadiness`.
 - `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `does not treat a second shop-floor start on the same machine as running until the active setup completes`.
+
+## Correction cascade for shop-floor workflow tasks
+
+Date: 2026-06-30
+
+When a shop-floor workflow task is reversed from the Corrections tab, every downstream task for the same job/part/option/setup/machine must reopen as well. The cascade is `raw_material_at_machine -> presetting -> setting -> first_piece_inspection_report -> quality_approval -> operator_started -> item_complete`. Correcting an FPIR invalidates quality approval and later stages. The snapshot correction filter expands active correction targets before planning analysis, and data-entry upserts use the same expanded target set so a reopened downstream row is not reused as the current live row.
+
+Relevant code:
+
+- `apps/web/lib/dashboard-corrections.ts` - `dataEntryCorrectionTargetsWithWorkflowCascade`.
+- `apps/web/lib/dashboard-corrections.test.ts` - regression `cascades reversed shop-floor tasks to downstream tasks on the same setup`.
