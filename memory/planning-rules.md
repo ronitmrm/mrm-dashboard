@@ -71,3 +71,14 @@ Relevant code:
 
 - `apps/web/lib/dashboard-corrections.ts` - `dataEntryCorrectionTargetsWithWorkflowCascade`.
 - `apps/web/lib/dashboard-corrections.test.ts` - regression `cascades reversed shop-floor tasks to downstream tasks on the same setup`.
+
+## Operational actions queue planning refresh
+
+Date: 2026-06-30
+
+Operational rows that can change planning state must queue a planning recalculation automatically. This includes production entries (`software_raw`), RM inward, shop-floor workflow status, FPIR, and corrections that reverse those data-entry types. Master/structural changes such as route, cycle, machine master, and work-order imports stay manual through the Recalculate planning button to avoid broad unnecessary Convex snapshot rebuilds.
+
+Relevant code:
+
+- `apps/web/lib/planning-refresh-policy.ts` - automatic refresh allow-list.
+- `apps/web/convex/dashboard.ts` - `saveDataEntry` and `reverseEntry` queue the snapshot refresh.

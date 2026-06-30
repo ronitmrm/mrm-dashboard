@@ -1204,13 +1204,19 @@ export const reverseEntry = mutation({
     if (!args.reason.trim()) throw new Error("Correction reason is required.");
     if (!args.correctedBy.trim()) throw new Error("Corrected by is required.");
     const ownerFields = await getGlobalOwnerFields(ctx);
+    const targetDataEntry = args.targetTable === "dataEntries"
+      ? await ctx.db.get(args.targetId as Id<"dataEntries">)
+      : null;
     const id = await ctx.db.insert("corrections", {
       ...args,
       action: "reverse",
       ...ownerFields,
       createdAt: now(),
     });
-    if (shouldQueuePlanningRefresh("reverse-entry", { targetTable: args.targetTable })) {
+    if (shouldQueuePlanningRefresh("reverse-entry", {
+      targetTable: args.targetTable,
+      entryType: targetDataEntry?.entryType,
+    })) {
       await queueDashboardRefresh(ctx);
     }
     return { ok: true, id };

@@ -8,7 +8,10 @@ describe("planning refresh policy", () => {
     expect(shouldQueuePlanningRefresh("mark-complete")).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "software_raw" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "first_piece_inspection_report" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "rm_inward" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "shop_floor_status" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "first_piece_inspection_report" })).toBe(true);
   });
 
   it("leaves master and structural imports for manual recalculation", () => {

@@ -10,6 +10,7 @@ const autoRefreshActionPaths = new Set([
 const autoRefreshDataEntryTypes = new Set([
   "rm_inward",
   "shop_floor_status",
+  "first_piece_inspection_report",
   "software_raw",
 ]);
 
