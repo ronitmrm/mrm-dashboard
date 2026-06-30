@@ -978,6 +978,125 @@ function cleanText(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();
 }
 
+const setupLifecycleStageRanks = new Map([
+  ["raw_material_at_machine", 0],
+  ["presetting", 1],
+  ["setting", 2],
+  ["quality_approval", 3],
+  ["operator_started", 4],
+  ["item_complete", 5],
+]);
+
+const setupLifecycleStageAliases: Record<string, string> = {
+  shop_floor_rm: "raw_material_at_machine",
+  raw_material_at_machine: "raw_material_at_machine",
+  tools_drawing: "presetting",
+  presetting: "presetting",
+  setting: "setting",
+  qc_approval: "quality_approval",
+  quality_approval: "quality_approval",
+  worker_start: "operator_started",
+  operator_started: "operator_started",
+  item_complete: "item_complete",
+};
+
+function canonicalText(value: unknown) {
+  return cleanText(value).toLowerCase();
+}
+
+function normalizeSetupLifecycleStage(value: unknown) {
+  return setupLifecycleStageAliases[canonicalText(value)] ?? canonicalText(value);
+}
+
+function setupLifecycleStageRank(value: unknown) {
+  return setupLifecycleStageRanks.get(normalizeSetupLifecycleStage(value)) ?? -1;
+}
+
+function shopFloorStageRequiresMachineLock(value: unknown) {
+  return setupLifecycleStageRank(value) >= setupLifecycleStageRank("raw_material_at_machine");
+}
+
+function shopFloorStageIsActiveMachineLock(value: unknown) {
+  const rank = setupLifecycleStageRank(value);
+  return rank >= setupLifecycleStageRank("raw_material_at_machine") && rank < setupLifecycleStageRank("item_complete");
+}
+
+function payloadText(payload: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = cleanText(payload[key]);
+    if (value) return value;
+  }
+  return "";
+}
+
+function sameText(left: unknown, right: unknown) {
+  return canonicalText(left) === canonicalText(right);
+}
+
+function sameShopFloorSetup(left: Record<string, unknown>, right: Record<string, unknown>) {
+  return sameText(payloadText(left, "jcNo", "jobCard"), payloadText(right, "jcNo", "jobCard"))
+    && sameText(payloadText(left, "partCode", "partNo"), payloadText(right, "partCode", "partNo"))
+    && sameText(payloadText(left, "optionNumber", "option"), payloadText(right, "optionNumber", "option"))
+    && sameText(payloadText(left, "setupNo"), payloadText(right, "setupNo"));
+}
+
+function planOverrideMatchesMachineSwitch(row: Record<string, unknown>, target: Record<string, unknown>, lockedMachine: string) {
+  const targetCode = payloadText(row, "target");
+  if (!targetCode || (!sameText(targetCode, payloadText(target, "jcNo", "jobCard")) && !sameText(targetCode, payloadText(target, "partCode", "partNo")))) return false;
+  const setupNo = payloadText(row, "setupNo");
+  if (setupNo && !sameText(setupNo, payloadText(target, "setupNo"))) return false;
+  const toMachine = payloadText(row, "toMachine");
+  if (!toMachine || !sameText(toMachine, payloadText(target, "machine", "machineNo"))) return false;
+  const fromMachine = payloadText(row, "fromMachine");
+  return !fromMachine || sameText(fromMachine, lockedMachine);
+}
+
+async function hasPlannerMachineSwitch(ctx: MutationCtx, target: Record<string, unknown>, lockedMachine: string) {
+  const rows = await ctx.db
+    .query("planOverrides")
+    .withIndex("by_owner", (q) => q.eq("ownerId", undefined))
+    .order("desc")
+    .take(500);
+  const matches = rows.filter((row) => planOverrideMatchesMachineSwitch(row, target, lockedMachine));
+  if (!matches.length) return false;
+  const correctionTargets = await activeCorrectionTargetsForRows(ctx, "planOverrides", matches);
+  return matches.some((row) => !correctionTargets.has(`planOverrides:${String(row._id)}`));
+}
+
+async function assertShopFloorMachineLockAllowsSave(ctx: MutationCtx, args: { id?: Id<"dataEntries">; entryType: string; key?: string; payload: unknown }) {
+  if (args.entryType !== "shop_floor_status") return;
+  const target = payloadRecord(args.payload);
+  if (!shopFloorStageRequiresMachineLock(target.stage)) return;
+  const targetMachine = payloadText(target, "machine", "machineNo");
+  if (!payloadText(target, "jcNo", "jobCard") || !payloadText(target, "partCode", "partNo") || !payloadText(target, "setupNo") || !targetMachine) return;
+
+  const rows = await ctx.db
+    .query("dataEntries")
+    .withIndex("by_entry_type", (q) => q.eq("entryType", "shop_floor_status"))
+    .order("desc")
+    .take(1000);
+  const candidateLocks = rows.filter((row) => {
+    if (row.ownerId !== undefined) return false;
+    const payload = payloadRecord(row.payload);
+    if (!shopFloorStageIsActiveMachineLock(payload.stage)) return false;
+    if (!sameShopFloorSetup(payload, target)) return false;
+    return Boolean(payloadText(payload, "machine", "machineNo"));
+  });
+  if (!candidateLocks.length) return;
+
+  const correctionTargets = await activeCorrectionTargetsForRows(ctx, "dataEntries", candidateLocks);
+  const activeLocks = candidateLocks.filter((row) => !correctionTargets.has(`dataEntries:${String(row._id)}`));
+  if (!activeLocks.length) return;
+  if (activeLocks.some((row) => sameText(payloadText(payloadRecord(row.payload), "machine", "machineNo"), targetMachine))) return;
+
+  const blockingLocks = activeLocks.filter((row) => !sameText(payloadText(payloadRecord(row.payload), "machine", "machineNo"), targetMachine));
+  const lockedMachines = [...new Set(blockingLocks.map((row) => payloadText(payloadRecord(row.payload), "machine", "machineNo")).filter(Boolean))];
+  for (const lockedMachine of lockedMachines) {
+    if (await hasPlannerMachineSwitch(ctx, target, lockedMachine)) return;
+  }
+
+  throw new Error(`This setup is already locked to ${lockedMachines.join(", ")} because RM is at the machine. Use planner part-specific machine switch before moving it to ${targetMachine}.`);
+}
 async function latestTableRow<TableName extends WorkbookTable>(
   ctx: QueryCtx,
   table: TableName,
@@ -1143,6 +1262,7 @@ export const saveDataEntry = mutation({
   },
   handler: async (ctx, args) => {
     const ownerFields = await getGlobalOwnerFields(ctx);
+    await assertShopFloorMachineLockAllowsSave(ctx, args);
     if (args.id) {
       const existing = await ctx.db.get(args.id);
       if (!existing) {

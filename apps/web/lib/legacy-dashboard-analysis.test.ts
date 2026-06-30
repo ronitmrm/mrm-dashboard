@@ -219,6 +219,123 @@ describe("buildLegacyDashboardSnapshot", () => {
     });
   });
 
+  it("locks route-family assignment once raw material is at the physical machine", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: { jcNo: "JC-001", partCode: "M23", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-24" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-25T00:00:00.000Z",
+            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-25" },
+          },
+          ...["M23", "M24"].flatMap((partNo) => [
+            {
+              entryType: "route",
+              createdAt: "2026-06-24T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+            },
+            {
+              entryType: "cycle",
+              createdAt: "2026-06-24T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            },
+          ]),
+          {
+            entryType: "machine_master",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: { machineNo: "ADB503", machineType: "AUTOMATIC", status: "Active" },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: { machineNo: "ADB504", machineType: "AUTOMATIC", status: "Active" },
+          },
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-06-30T10:25:58.273Z",
+            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", setupNo: "1", machine: "ADB503", stage: "raw_material_at_machine", completedAt: "2026-06-30T10:25:57.947Z" },
+          },
+        ],
+      });
+
+      const loader = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-001");
+      const locked = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-016");
+
+      expect(loader).toMatchObject({ partCode: "M23", machine: "ADB503" });
+      expect(locked).toMatchObject({ partCode: "M24", machine: "ADB503", shopFloorStage: "raw_material_at_machine" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("allows an active planner machine switch to move an RM-locked route-family setup", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-30T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        planOverrides: [
+          {
+            target: "JC-016",
+            setupNo: "1",
+            toMachine: "ADB504",
+            reason: "Planner approved machine switch after RM placement",
+            status: "Active",
+            createdAt: "2026-06-30T10:30:00.000Z",
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-25T00:00:00.000Z",
+            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-25" },
+          },
+          {
+            entryType: "route",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: { machineNo: "ADB503", machineType: "AUTOMATIC", status: "Active" },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: { machineNo: "ADB504", machineType: "AUTOMATIC", status: "Active" },
+          },
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-06-30T10:25:58.273Z",
+            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", setupNo: "1", machine: "ADB503", stage: "raw_material_at_machine", completedAt: "2026-06-30T10:25:57.947Z" },
+          },
+        ],
+      });
+
+      const switched = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-016");
+
+      expect(switched).toMatchObject({ partCode: "M24", machine: "ADB504", shopFloorStage: "" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("uses the latest canonical route row when old imports use option-prefixed setup numbers", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",

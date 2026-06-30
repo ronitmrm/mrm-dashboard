@@ -2219,17 +2219,14 @@ function machinePlanDetails(
         partCode,
         setupNo,
       }));
-      const startedShopFloorMachines = shopFloorStartedMachinesForSetup(shopFloorStatusRows, {
+      const productionActualMachines = productionActualAnyMachine?.machines ?? new Set<string>();
+      const lockedShopFloorMachines = shopFloorLockedMachinesForSetup(shopFloorStatusRows, {
         jcNo: rowText(row, "jcNo"),
         partCode,
         optionNumber,
         setupNo: displaySetupNo,
       });
-      const actualMachines = new Set([
-        ...(productionActualAnyMachine?.machines ?? new Set<string>()),
-        ...startedShopFloorMachines,
-      ]);
-      if (routePlanningBlocked && !actualMachines.size) continue;
+      if (routePlanningBlocked && !productionActualMachines.size && !lockedShopFloorMachines.size) continue;
       const assignedMachines = assignedPhysicalMachines({
         routeMachine,
         machineType,
@@ -2244,7 +2241,8 @@ function machinePlanDetails(
         readyDate: operationReadyDate || plannedSetupDate(rmInwardDate, routeIndex, planningCalendar),
         deadlineDate: dispatchDeadlineDate,
         override,
-        actualMachines: actualMachines.size ? actualMachines : undefined,
+        productionActualMachines: productionActualMachines.size ? productionActualMachines : undefined,
+        lockedMachines: lockedShopFloorMachines.size ? lockedShopFloorMachines : undefined,
         planningCalendar,
       });
       if (!assignedMachines.length) {
@@ -3136,7 +3134,7 @@ function latestShopFloorStatusBySetup(rows: Record<string, unknown>[]) {
   return latest;
 }
 
-function shopFloorStartedMachinesForSetup(
+function shopFloorLockedMachinesForSetup(
   rows: Record<string, unknown>[],
   target: { jcNo: string; partCode: string; optionNumber: string; setupNo: string },
 ) {
@@ -3144,7 +3142,7 @@ function shopFloorStartedMachinesForSetup(
   if (!targetKey) return new Set<string>();
   const machines = new Set<string>();
   for (const row of rows) {
-    if (setupLifecycleStageRank(rowText(row, "stage")) < setupLifecycleStageRank("operator_started")) continue;
+    if (setupLifecycleStageRank(rowText(row, "stage")) < setupLifecycleStageRank("raw_material_at_machine")) continue;
     const key = setupKeyWithoutMachine({
       jcNo: rowText(row, "jcNo", "JC NO.", "JC NO"),
       partCode: rowText(row, "partCode", "partNo", "PART CODE", "PART NO"),
@@ -3398,7 +3396,8 @@ function assignedPhysicalMachines({
   readyDate,
   deadlineDate,
   override,
-  actualMachines,
+  productionActualMachines,
+  lockedMachines,
   planningCalendar,
 }: {
   routeMachine: string;
@@ -3414,17 +3413,20 @@ function assignedPhysicalMachines({
   readyDate: string;
   deadlineDate: string;
   override?: ActionRow;
-  actualMachines?: Set<string>;
+  productionActualMachines?: Set<string>;
+  lockedMachines?: Set<string>;
   planningCalendar: PlanningCalendar;
 }) {
   const overrideMachine = override ? rowText(override, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE") : "";
   const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, unavailableMachines, machineLoad, machineNextSetupDate, machinePlannedDays, machinePlannedQty);
-  const actualMachineList = [...(actualMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  if (actualMachineList.length) return actualMachineList;
+  const productionActualMachineList = [...(productionActualMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const lockedMachineList = [...(lockedMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  if (productionActualMachineList.length) return productionActualMachineList;
   if (overrideMachine) {
     const exactOverride = candidates.find((row) => canonicalKey(row.machine) === canonicalKey(overrideMachine));
     if (exactOverride) return [exactOverride.machine];
   }
+  if (lockedMachineList.length) return lockedMachineList;
   if (!candidates.length) return [];
   const machineCount = requiredMachineCountForTarget({
     orderPcs,

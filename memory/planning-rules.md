@@ -54,11 +54,12 @@ The dashboard header displays the last completed planning recalculation time fro
 
 Date: 2026-06-30
 
-A physical machine can have only one active shop-floor setup at a time. Once any setup on a machine has non-complete shop-floor progress (`raw_material_at_machine` through `operator_started`) or is shown as running/setup-complete, later setup tasks on the same machine must stay blocked until that active setup is marked `item_complete`. The dashboard snapshot suppresses later duplicate active `shop_floor_status` rows on the same machine and adds a machine-active blocker to later queued rows, so the shop-floor first task does not appear prematurely and machine detail does not show two running setups on the same machine.
+A physical machine can have only one active shop-floor setup at a time. Once any setup on a machine has non-complete shop-floor progress (`raw_material_at_machine` through `operator_started`) or is shown as running/setup-complete, later setup tasks on the same machine must stay blocked until that active setup is marked `item_complete`. `raw_material_at_machine` and later stages also lock route-family assignment to that physical machine; moving it afterward requires an explicit planner machine switch/override. The dashboard snapshot suppresses later duplicate active `shop_floor_status` rows on the same machine and adds a machine-active blocker to later queued rows, so the shop-floor first task does not appear prematurely and machine detail does not show two running setups on the same machine.
 
 Relevant code:
 
 - `apps/web/lib/legacy-dashboard-analysis.ts` - `singleActiveShopFloorStatusRows` and `applyMachineActiveTaskReadiness`.
+- `apps/web/convex/dashboard.ts` - `saveDataEntry` rejects new cross-machine shop-floor locks unless a matching part-specific machine switch exists.
 - `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `does not treat a second shop-floor start on the same machine as running until the active setup completes`.
 
 ## Correction cascade for shop-floor workflow tasks
