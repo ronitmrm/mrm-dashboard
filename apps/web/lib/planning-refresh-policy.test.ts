@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { planningRefreshStatusMessage, shouldQueuePlanningRefresh } from "./planning-refresh-policy";
+import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot } from "./planning-refresh-policy";
 
 describe("planning refresh policy", () => {
   it("queues recalculation for operational planning changes", () => {
@@ -21,5 +21,17 @@ describe("planning refresh policy", () => {
   it("tells users whether recalculation was queued or left manual", () => {
     expect(planningRefreshStatusMessage(true)).toBe("Planning recalculation queued.");
     expect(planningRefreshStatusMessage(false)).toBe("Use Recalculate planning after master changes.");
+  });
+
+  it("refreshes ready planning snapshots from an earlier calendar day", () => {
+    expect(shouldRefreshStalePlanningSnapshot(
+      { cacheStatus: "ready", snapshotCacheUpdatedAt: "2026-06-29T18:30:00" },
+      new Date("2026-06-30T09:00:00"),
+    )).toBe(true);
+    expect(shouldRefreshStalePlanningSnapshot(
+      { cacheStatus: "ready", snapshotCacheUpdatedAt: "2026-06-30T01:00:00" },
+      new Date("2026-06-30T09:00:00"),
+    )).toBe(false);
+    expect(shouldRefreshStalePlanningSnapshot({ cacheStatus: "missing" })).toBe(true);
   });
 });

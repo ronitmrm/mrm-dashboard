@@ -71,7 +71,7 @@ import {
   jobCardScheduleSummary,
   toDashboardViewModel,
 } from "@/lib/dashboard-view-model";
-import { planningRefreshStatusMessage, shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy";
+import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot } from "@/lib/planning-refresh-policy";
 import { priorityPlanWindow, type PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
   applyShopFloorStatusPatches,
@@ -351,7 +351,7 @@ function DashboardShell() {
   );
 
   useEffect(() => {
-    if (asRecord(dashboardPayload).cacheStatus === "missing") {
+    if (shouldRefreshStalePlanningSnapshot(asRecord(dashboardPayload))) {
       void refreshSnapshot({});
     }
   }, [dashboardPayload, refreshSnapshot]);

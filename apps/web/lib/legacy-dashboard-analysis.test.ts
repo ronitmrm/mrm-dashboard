@@ -1316,6 +1316,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("adds a buffer day before planning the next setup after WIP quantity is available", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -1586,6 +1589,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("waits for pooled WIP demand when the next setup is split across parallel machines", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -1654,6 +1660,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
   it("does not count a staggered upstream split machine after its own planned end date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],

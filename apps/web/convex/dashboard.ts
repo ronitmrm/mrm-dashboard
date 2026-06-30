@@ -637,7 +637,13 @@ function appendSnapshotRows(source: SnapshotSource, table: SnapshotSourceTable, 
 async function readDashboardSnapshotPayload(ctx: QueryCtx | MutationCtx, ownerId: Id<"users"> | null) {
   const chunks = await latestDashboardSnapshotChunks(ctx, ownerId);
   if (!chunks.length) return null;
-  return JSON.parse(chunks.sort((a, b) => a.sequence - b.sequence).map((row) => row.chunk).join(""));
+  const snapshotCacheUpdatedAt = latestSnapshotChunkUpdatedAt(chunks);
+  const payload = JSON.parse(chunks.sort((a, b) => a.sequence - b.sequence).map((row) => row.chunk).join(""));
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return payload;
+  return {
+    ...payload,
+    snapshotCacheUpdatedAt,
+  };
 }
 
 async function latestDashboardSnapshotChunks(ctx: QueryCtx | MutationCtx, ownerId: Id<"users"> | null) {
@@ -660,9 +666,12 @@ async function replaceDashboardSnapshotChunks(ctx: MutationCtx, ownerId: Id<"use
   const exactExisting = await exactDashboardSnapshotChunks(ctx, ownerId);
   const comparisonRows = exactExisting.length ? exactExisting : await latestDashboardSnapshotChunks(ctx, ownerId);
   if (serializedSnapshotChunks(comparisonRows) === serialized) {
+    for (const row of exactExisting) {
+      await ctx.db.patch(row._id, { updatedAt });
+    }
     return {
       changed: false,
-      updatedAt: latestSnapshotChunkUpdatedAt(comparisonRows),
+      updatedAt,
     };
   }
   for (const row of exactExisting) {

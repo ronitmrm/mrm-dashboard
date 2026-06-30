@@ -42,3 +42,8 @@ When one row on a machine is delayed, the consumed machine capacity must cascade
 Date: 2026-06-29
 
 When a setup date changes, downstream setups for the same job/part/option must be recalculated from WIP availability, even when the next setup is on a different machine. If the downstream setup's date changes, that downstream machine queue must then be recalculated as well, so later rows on that machine move when the changed setup consumes capacity. Regression coverage: `apps/web/lib/legacy-dashboard-analysis.test.ts` - `moves a setup-complete production forecast with no production rows and cascades the next setup` includes a delayed setup 1, setup 2 on a different D3 machine family, and a later D301 queue follower.
+## Daily planning snapshot refresh
+
+Date: 2026-06-30
+
+No-production forecasts depend on the current planning date. The dashboard must not keep serving a ready snapshot from a previous calendar day without recalculation. The Convex snapshot query exposes `snapshotCacheUpdatedAt`, and the web dashboard queues a non-forced planning refresh when that cache date is older than the browser's current local date. Identical rebuilds still advance the chunk `updatedAt` so the UI does not repeatedly request the same daily refresh.
