@@ -336,6 +336,51 @@ describe("buildLegacyDashboardSnapshot", () => {
       vi.useRealTimers();
     }
   });
+  it("keeps route-family machine assignment stable until load improvement is material", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: [
+        ...[
+          ["JC-001", "M101"],
+          ["JC-002", "M102"],
+          ["JC-003", "M103"],
+        ].flatMap(([jcNo, partNo]) => [
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: { jcNo, partCode: partNo, optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-24" },
+          },
+          {
+            entryType: "route",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 3600, loadingUnloading: 0 },
+          },
+        ]),
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: { machineNo: "ADB503", machineType: "AUTOMATIC", status: "Active" },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-24T00:00:00.000Z",
+          payload: { machineNo: "ADB504", machineType: "AUTOMATIC", status: "Active" },
+        },
+      ],
+    });
+
+    const machineByPart = new Map(snapshot.productionControl.machinePlanDetailRows.map((row) => [row.partCode, row.machine]));
+
+    expect(machineByPart.get("M101")).toBe("ADB503");
+    expect(machineByPart.get("M102")).toBe("ADB503");
+    expect(machineByPart.get("M103")).toBe("ADB504");
+  });
   it("uses the latest canonical route row when old imports use option-prefixed setup numbers", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",

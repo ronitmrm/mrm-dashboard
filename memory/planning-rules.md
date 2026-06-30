@@ -96,6 +96,17 @@ Relevant code:
 
 - `apps/web/components/mrmpl-dashboard.tsx` - `JobCardTileBoard` passes planned setup rows into job-card tracking/search/filter helpers.
 
+## Machine assignment stability band
+
+Date: 2026-06-30
+
+When recalculating route-machine-family assignments, compatible physical machines must not churn just because another machine is marginally lighter. Use the physical machine number as the stable default, and only let planned days already loaded, planned quantity already loaded, next available date, or current load override that stable order when the improvement is material. Current thresholds are 2 planning days for planned-days/date gaps, one setup-day of quantity for planned quantity, and 2 queued setups for current load. Production actuals, `raw_material_at_machine` or later shop-floor locks, explicit planner machine switches, and machine-unavailable constraints still override this stability band.
+
+Relevant code:
+
+- `apps/web/lib/legacy-dashboard-analysis.ts` - `candidatePhysicalMachines` and `compareMachineAssignmentCandidate` apply the stability bands.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `keeps route-family machine assignment stable until load improvement is material`.
+
 ## Snapshot owner scope
 
 Date: 2026-06-30

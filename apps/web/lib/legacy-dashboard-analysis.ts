@@ -97,6 +97,8 @@ const interSetupTransferBufferDays = 1;
 const planningSetupBufferDays = 1;
 const planningDispatchTargetDays = 25;
 const minimumParallelMachineWorkDays = 15;
+const machineAssignmentStableDayBand = 2;
+const machineAssignmentStableLoadBand = 2;
 const defaultPlanningCalendar: PlanningCalendar = { holidayDates: new Set<string>() };
 const downtimeReasonFields: Array<[string, string[]]> = [
   ["QC Approval", ["QC APPROVAL DOWNTIME (MIN)", "QC APPROVAL", "QCDown"]],
@@ -2372,7 +2374,7 @@ function machinePlanDetails(
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
           machineAssignment: machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
           parallelMachineCount: assignedMachines.length,
-          planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for combined downstream WIP demand plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; started shop-floor or production-actual machines stay locked during recalculation; parallel machines require at least ${minimumParallelMachineWorkDays} production days each; compatible machines are selected by lower planned utilization first`,
+          planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for combined downstream WIP demand plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; compatible machines use stability bands so only material load/date gains change the physical machine; parallel machines require at least ${minimumParallelMachineWorkDays} production days each`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -3418,7 +3420,7 @@ function assignedPhysicalMachines({
   planningCalendar: PlanningCalendar;
 }) {
   const overrideMachine = override ? rowText(override, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE") : "";
-  const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, unavailableMachines, machineLoad, machineNextSetupDate, machinePlannedDays, machinePlannedQty);
+  const candidates = candidatePhysicalMachines(routeMachine, machineType, machineRows, unavailableMachines, machineLoad, machineNextSetupDate, machinePlannedDays, machinePlannedQty, cycle, readyDate, planningCalendar);
   const productionActualMachineList = [...(productionActualMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const lockedMachineList = [...(lockedMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   if (productionActualMachineList.length) return productionActualMachineList;
@@ -3649,18 +3651,80 @@ function candidatePhysicalMachines(
   machineNextSetupDate: Map<string, string>,
   machinePlannedDays: Map<string, number>,
   machinePlannedQty: Map<string, number>,
+  cycle: Record<string, unknown> | undefined,
+  readyDate: string,
+  planningCalendar: PlanningCalendar,
 ) {
+  const plannedQtyBand = Math.max(1, Math.ceil(cycleDailyQty(cycle)));
   return activePhysicalMachineRows(routeMachine, machineType, machineRows)
     .filter((row) => !unavailableMachines.has(canonicalKey(row.machine)))
-    .sort((a, b) =>
-      (machinePlannedDays.get(canonicalKey(a.machine)) ?? 0) - (machinePlannedDays.get(canonicalKey(b.machine)) ?? 0) ||
-      (machinePlannedQty.get(canonicalKey(a.machine)) ?? 0) - (machinePlannedQty.get(canonicalKey(b.machine)) ?? 0) ||
-      (machineNextSetupDate.get(canonicalKey(a.machine)) ?? "").localeCompare(machineNextSetupDate.get(canonicalKey(b.machine)) ?? "") ||
-      (machineLoad.get(canonicalKey(a.machine)) ?? 0) - (machineLoad.get(canonicalKey(b.machine)) ?? 0) ||
-      a.machine.localeCompare(b.machine, undefined, { numeric: true }),
-    );
+    .sort((a, b) => compareMachineAssignmentCandidate(a, b, {
+      machineLoad,
+      machineNextSetupDate,
+      machinePlannedDays,
+      machinePlannedQty,
+      plannedQtyBand,
+      readyDate,
+      planningCalendar,
+    }));
 }
 
+function compareMachineAssignmentCandidate(
+  a: { machine: string },
+  b: { machine: string },
+  context: {
+    machineLoad: Map<string, number>;
+    machineNextSetupDate: Map<string, string>;
+    machinePlannedDays: Map<string, number>;
+    machinePlannedQty: Map<string, number>;
+    plannedQtyBand: number;
+    readyDate: string;
+    planningCalendar: PlanningCalendar;
+  },
+) {
+  const aKey = canonicalKey(a.machine);
+  const bKey = canonicalKey(b.machine);
+  const plannedDaysDiff = substantialMetricDiff((context.machinePlannedDays.get(aKey) ?? 0) - (context.machinePlannedDays.get(bKey) ?? 0), machineAssignmentStableDayBand);
+  if (plannedDaysDiff) return plannedDaysDiff;
+  const plannedQtyDiff = substantialMetricDiff((context.machinePlannedQty.get(aKey) ?? 0) - (context.machinePlannedQty.get(bKey) ?? 0), context.plannedQtyBand);
+  if (plannedQtyDiff) return plannedQtyDiff;
+  const nextAvailableDiff = substantialMetricDiff(planningDateGap(
+    context.machineNextSetupDate.get(aKey) ?? "",
+    context.machineNextSetupDate.get(bKey) ?? "",
+    context.readyDate,
+    context.planningCalendar,
+  ), machineAssignmentStableDayBand);
+  if (nextAvailableDiff) return nextAvailableDiff;
+  const loadDiff = substantialMetricDiff((context.machineLoad.get(aKey) ?? 0) - (context.machineLoad.get(bKey) ?? 0), machineAssignmentStableLoadBand);
+  if (loadDiff) return loadDiff;
+  return a.machine.localeCompare(b.machine, undefined, { numeric: true });
+}
+
+function substantialMetricDiff(diff: number, band: number) {
+  return Math.abs(diff) >= band ? diff : 0;
+}
+
+function planningDateGap(leftDate: string, rightDate: string, fallbackDate: string, planningCalendar: PlanningCalendar) {
+  const left = parseDate(leftDate) || parseDate(fallbackDate) || "";
+  const right = parseDate(rightDate) || parseDate(fallbackDate) || "";
+  if (!left || !right || left === right) return 0;
+  const start = left < right ? left : right;
+  const end = left < right ? right : left;
+  const gap = planningDaysBetween(start, end, planningCalendar);
+  return left > right ? gap : -gap;
+}
+
+function planningDaysBetween(startDate: string, endDate: string, planningCalendar: PlanningCalendar) {
+  let current = startDate;
+  let days = 0;
+  let guard = 0;
+  while (current && current < endDate && guard < 5000) {
+    current = addCalendarDays(current, 1);
+    if (current <= endDate && isPlanningDate(current, planningCalendar)) days += 1;
+    guard += 1;
+  }
+  return days;
+}
 function activePhysicalMachineRows(
   routeMachine: string,
   machineType: string,
