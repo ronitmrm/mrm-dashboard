@@ -94,6 +94,11 @@ type DashboardApiResult = {
   message: string;
 };
 
+type PlanningRefreshLock = {
+  baselineRequestedAtMs: number | null;
+  baselineCompletedAtMs: number | null;
+};
+
 type DataEntrySpec = {
   entryType: string;
   title: string;
@@ -329,6 +334,8 @@ function DashboardShell() {
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
   const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
   const [optimisticShopFloorStatuses, setOptimisticShopFloorStatuses] = useState<ShopFloorStatusPatch[]>([]);
+  const [planningRefreshLock, setPlanningRefreshLock] = useState<PlanningRefreshLock | null>(null);
+  const lastStalePlanningRefreshKeyRef = useRef<string | undefined>(undefined);
   const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
@@ -349,14 +356,22 @@ function DashboardShell() {
     api.dashboard.correctionCandidates,
     activeTab === "correctionsTab" ? { limit: 200 } : "skip",
   );
+  const isPlanningRefreshLockActive = planningRefreshLock
+    ? !refreshLockHasSettled(planningRefreshLock, dashboardRefreshStatus)
+    : false;
 
   useEffect(() => {
-    if (shouldRefreshStalePlanningSnapshot(asRecord(dashboardPayload))) {
-      void refreshSnapshot({});
-    }
-  }, [dashboardPayload, refreshSnapshot]);
+    const dashboardRecord = asRecord(dashboardPayload);
+    if (!shouldRefreshStalePlanningSnapshot(dashboardRecord)) return;
+    if (isPlanningRefreshLockActive || dashboardRefreshStatus?.isRefreshing) return;
+    const staleRefreshKey = str(dashboardRecord.snapshotCacheUpdatedAt) || str(dashboardRecord.updatedAt) || str(dashboardRecord.cacheStatus) || "missing";
+    if (lastStalePlanningRefreshKeyRef.current === staleRefreshKey) return;
+    lastStalePlanningRefreshKeyRef.current = staleRefreshKey;
+    void refreshSnapshot({});
+  }, [dashboardPayload, dashboardRefreshStatus?.isRefreshing, isPlanningRefreshLockActive, refreshSnapshot]);
 
   async function refreshDashboardSnapshot(force = true) {
+    setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus));
     setIsRefreshingSnapshot(true);
     setActionStatus(null);
     try {
@@ -370,7 +385,9 @@ function DashboardShell() {
           : "Planning recalculated from latest data.",
       });
       if (!result.skipped) setOptimisticShopFloorStatuses([]);
+      if (result.skipped) setPlanningRefreshLock(null);
     } catch (err) {
+      setPlanningRefreshLock(null);
       setActionStatus({
         tone: "destructive",
         message: err instanceof Error ? err.message : "Snapshot refresh failed.",
@@ -383,6 +400,9 @@ function DashboardShell() {
   async function submitAction(path: string, body: Record<string, unknown>) {
     setActionStatus(null);
     const queuePlanningRefresh = shouldQueuePlanningRefresh(path, body);
+    if (queuePlanningRefresh) {
+      setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus));
+    }
     try {
       const apiResult = path === "data-import"
         ? await postDashboardApi(path, body)
@@ -412,6 +432,7 @@ function DashboardShell() {
         setActiveTab(returnTab);
       }
     } catch (err) {
+      if (queuePlanningRefresh) setPlanningRefreshLock(null);
       setActionStatus({
         tone: "destructive",
         message: err instanceof Error ? err.message : "Action failed.",
@@ -462,7 +483,8 @@ function DashboardShell() {
     [basePayload, optimisticShopFloorStatuses],
   );
   const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
-  const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true;
+  const isRefreshStatusLoading = dashboardRefreshStatus === undefined;
+  const isSnapshotRefreshActive = isRefreshingSnapshot || isRefreshStatusLoading || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
 
   const view = useMemo(
     () => toDashboardViewModel(payload),
@@ -557,7 +579,29 @@ function DashboardShell() {
           )}
         </main>
       </SidebarInset>
+      {isSnapshotRefreshActive ? (
+        <PlanningRecalculationOverlay status={str(dashboardRefreshStatus?.status)} />
+      ) : null}
     </SidebarProvider>
+  );
+}
+
+function PlanningRecalculationOverlay({ status }: { status: string }) {
+  const title = status === "queued"
+    ? "Planning recalculation queued"
+    : status === "running"
+    ? "Recalculating planning"
+    : "Checking planning recalculation";
+  return (
+    <div className="fixed inset-0 z-50 grid cursor-wait place-items-center bg-background/70 p-4 backdrop-blur-sm" aria-live="polite" aria-busy="true">
+      <div className="flex max-w-sm items-center gap-3 rounded-md border bg-background px-4 py-3 shadow-lg">
+        <RefreshCw className="size-5 shrink-0 animate-spin text-primary" />
+        <div className="grid gap-1">
+          <div className="text-sm font-medium">{title}</div>
+          <div className="text-xs text-muted-foreground">Please wait before saving another task.</div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -4208,6 +4252,28 @@ function optionalNumber(value: unknown) {
   if (value === undefined || value === null || value === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function numberOrNull(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function refreshLockFromStatus(status: { requestedAtMs?: unknown; completedAtMs?: unknown } | undefined): PlanningRefreshLock {
+  return {
+    baselineRequestedAtMs: numberOrNull(status?.requestedAtMs),
+    baselineCompletedAtMs: numberOrNull(status?.completedAtMs),
+  };
+}
+
+function refreshLockHasSettled(lock: PlanningRefreshLock, status: { status?: unknown; isRefreshing?: unknown; requestedAtMs?: unknown; completedAtMs?: unknown } | undefined) {
+  if (!status || status.isRefreshing) return false;
+  const currentStatus = str(status.status);
+  if (currentStatus !== "idle" && currentStatus !== "failed") return false;
+  const requestedAtMs = numberOrNull(status.requestedAtMs);
+  const completedAtMs = numberOrNull(status.completedAtMs);
+  const sawNewRequest = requestedAtMs !== lock.baselineRequestedAtMs;
+  const sawNewCompletion = completedAtMs !== lock.baselineCompletedAtMs;
+  return sawNewRequest && (sawNewCompletion || currentStatus === "failed");
 }
 
 function numeric(value: unknown) {
