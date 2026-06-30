@@ -3186,21 +3186,23 @@ function JobCardTileBoard({
   const itemCodeOptions = useMemo(() => uniqueValues(rows.map(itemCode).filter(Boolean)), [rows]);
   const machineOptions = useMemo(() => plannedMachineOptions(plannedRows, machineBoardRows(machineRows, plannedRows)), [machineRows, plannedRows]);
   const filteredRows = useMemo(
-    () => rows.filter((row) =>
-      rowMatchesFieldQuery(row, query, searchField) &&
-      typedFilterMatches(jobCardNumber(row), jobCardFilter) &&
-      typedFilterMatches(itemCode(row), itemCodeFilter) &&
-      jobCardMatchesMachine(row, machineFilter, plannedByJobCard, plannedByPart) &&
-      (trackingState === "all" || jobCardTrackingState(row) === trackingState) &&
-      (rmStatusFilter === "all" || (rmStatusFilter === "received" ? displayValue(row.rmStatus) === "Received" : displayValue(row.rmStatus) !== "Received")) &&
-      (productionStatusFilter === "all" || (productionStatusFilter === "in-production" ? jobCardHasProduction(row) : !jobCardHasProduction(row))),
-    ),
+    () => rows.filter((row) => {
+      const setupRows = plannedRowsForJobCard(row, plannedByJobCard, plannedByPart);
+      const hasProduction = jobCardHasProduction(row, setupRows);
+      return rowMatchesFieldQuery(row, query, searchField, setupRows) &&
+        typedFilterMatches(jobCardNumber(row), jobCardFilter) &&
+        typedFilterMatches(itemCode(row), itemCodeFilter) &&
+        jobCardMatchesMachine(row, machineFilter, plannedByJobCard, plannedByPart) &&
+        (trackingState === "all" || jobCardTrackingState(row, setupRows) === trackingState) &&
+        (rmStatusFilter === "all" || (rmStatusFilter === "received" ? displayValue(row.rmStatus) === "Received" : displayValue(row.rmStatus) !== "Received")) &&
+        (productionStatusFilter === "all" || (productionStatusFilter === "in-production" ? hasProduction : !hasProduction));
+    }),
     [itemCodeFilter, jobCardFilter, machineFilter, plannedByJobCard, plannedByPart, productionStatusFilter, query, rmStatusFilter, rows, searchField, trackingState],
   );
   const needsAction = actionNeededCount;
   const pendingRm = rows.filter((row) => displayValue(row.rmStatus) !== "Received").length;
-  const ready = rows.filter((row) => jobCardTrackingState(row) === "Ready").length;
-  const inProduction = rows.filter((row) => jobCardTrackingState(row) === "In production").length;
+  const ready = rows.filter((row) => jobCardTrackingState(row, plannedRowsForJobCard(row, plannedByJobCard, plannedByPart)) === "Ready").length;
+  const inProduction = rows.filter((row) => jobCardTrackingState(row, plannedRowsForJobCard(row, plannedByJobCard, plannedByPart)) === "In production").length;
 
   function clearJobCardFilters() {
     setQuery("");
@@ -3319,7 +3321,7 @@ function JobCardTileBoard({
                   <JobCardTile
                     key={`${str(row.jcNo || row.JobCardNo || row.jobCard) || "job-card"}-${index}`}
                     row={row}
-                    setupRows={plannedByJobCard.get(machineKey(jobCardNumber(row))) ?? plannedByPart.get(machineKey(itemCode(row))) ?? []}
+                    setupRows={plannedRowsForJobCard(row, plannedByJobCard, plannedByPart)}
                   />
                 ))}
               </div>
@@ -3340,7 +3342,7 @@ function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: Das
   const partCode = displayValue(row.partCode || row["PART CODE"] || row.itemCode);
   const option = displayValue(row.optionNumber || row.selectedOption || row.option);
   const blocker = displayValue(row.planningBlocker || row.nextAction || row.routeStatus);
-  const trackingState = jobCardTrackingState(row);
+  const trackingState = jobCardTrackingState(row, setupRows);
   const schedule = jobCardScheduleSummary(row, setupRows);
 
   return (
@@ -4372,7 +4374,7 @@ function machineMasterStatusText(row: DashboardPayload) {
   return rawStatus;
 }
 
-function jobCardTrackingState(row: DashboardPayload) {
+function jobCardTrackingState(row: DashboardPayload, setupRows: DashboardPayload[] = []) {
   const dispatchStatus = str(row.dispatchStatus).toLowerCase();
   if (dispatchStatus.includes("dispatch")) return "Dispatch";
 
@@ -4389,7 +4391,7 @@ function jobCardTrackingState(row: DashboardPayload) {
     return "Needs action";
   }
 
-  if (jobCardHasProduction(row)) {
+  if (jobCardHasProduction(row, setupRows)) {
     return "In production";
   }
 
@@ -4400,18 +4402,14 @@ function jobCardTrackingState(row: DashboardPayload) {
   return "Pending";
 }
 
-function jobCardHasProduction(row: DashboardPayload) {
-  return str(row.runningStatus).toLowerCase() === "running" ||
-    str(row.shopFloorStage).toLowerCase() === "operator_started" ||
-    Number(row.rawRows) > 0 ||
-    Number(row.rawOutputQty) > 0 ||
-    Number(row.rawActualQty) > 0;
+function jobCardHasProduction(row: DashboardPayload, setupRows: DashboardPayload[] = []) {
+  return shopFloorItemIsCurrent(row) || setupRows.some(shopFloorItemIsCurrent);
 }
 
-function rowMatchesFieldQuery(row: DashboardPayload, query: string, field: string) {
+function rowMatchesFieldQuery(row: DashboardPayload, query: string, field: string, setupRows: DashboardPayload[] = []) {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return true;
-  return rowFieldSearchText(row, field).includes(normalizedQuery);
+  return rowFieldSearchText(row, field, setupRows).includes(normalizedQuery);
 }
 
 function rowMatchesMachineQuery(row: DashboardPayload, query: string, field: string, plannedByMachine: Map<string, DashboardPayload[]>) {
@@ -4423,7 +4421,7 @@ function rowMatchesMachineQuery(row: DashboardPayload, query: string, field: str
   return `${machineText} ${planText}`.includes(normalizedQuery);
 }
 
-function rowFieldSearchText(row: DashboardPayload, field: string) {
+function rowFieldSearchText(row: DashboardPayload, field: string, setupRows: DashboardPayload[] = []) {
   const values = field === "jobCard"
     ? [row.jcNo, row.JobCardNo, row.jobCard]
     : field === "part"
@@ -4433,7 +4431,7 @@ function rowFieldSearchText(row: DashboardPayload, field: string) {
         : field === "route"
           ? [row.optionNumber, row.selectedOption, row.option, row.routeStatus, row.cycleStatus, row.toolingStatus, row.setupNo, row.setupName]
           : field === "status"
-            ? [jobCardTrackingState(row), row.rmStatus, row.dispatchStatus, row.runningStatus, row.routeStatus, row.cycleStatus, row.toolingStatus]
+            ? [jobCardTrackingState(row, setupRows), row.rmStatus, row.dispatchStatus, row.runningStatus, row.routeStatus, row.cycleStatus, row.toolingStatus]
             : field === "machine"
               ? [row.machine, row.machineNo, row["MACHINE NO"], row["M/C NO"], row["MACHINE NO."]]
               : field === "machineType"
@@ -4467,6 +4465,14 @@ function groupPlannedRowsByJobCard(rows: DashboardPayload[]) {
     grouped.set(key, existing);
   }
   return sortGroupedRows(grouped, jobCardSetupSort);
+}
+
+function plannedRowsForJobCard(
+  row: DashboardPayload,
+  plannedByJobCard: Map<string, DashboardPayload[]>,
+  plannedByPart: Map<string, DashboardPayload[]>,
+) {
+  return plannedByJobCard.get(machineKey(jobCardNumber(row))) ?? plannedByPart.get(machineKey(itemCode(row))) ?? [];
 }
 
 function groupPlannedRowsByPart(rows: DashboardPayload[]) {

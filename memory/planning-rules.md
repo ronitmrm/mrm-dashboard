@@ -82,3 +82,13 @@ Relevant code:
 
 - `apps/web/lib/planning-refresh-policy.ts` - automatic refresh allow-list.
 - `apps/web/convex/dashboard.ts` - `saveDataEntry` and `reverseEntry` queue the snapshot refresh.
+
+## Canonical dashboard source for live setup state
+
+Date: 2026-06-30
+
+Per-machine/per-setup live state must be read from `productionControl.machinePlanDetailRows`. Machine Detail, Shop Floor Status, role task tabs, and Job Card schedule/status badges should derive running/shop-floor state from those setup rows instead of independently trusting duplicated fields on `jobCardStatusTiles`. Job-card tile rows remain the source for static work-order fields such as job card, part, FG PO, order quantity, RM, route/cycle/tooling readiness, and planning blocker.
+
+Relevant code:
+
+- `apps/web/components/mrmpl-dashboard.tsx` - `JobCardTileBoard` passes planned setup rows into job-card tracking/search/filter helpers.
