@@ -105,23 +105,23 @@ function compatibleDestinationMachines(
 ) {
   const machines = new Set<string>();
   for (const affected of affectedRows) {
-    const routeFamily = machineKey(rowText(affected, "routeMachine"));
-    const machineType = machineKey(rowText(affected, "machineType"));
+    const routeMachine = rowText(affected, "routeMachine");
+    const machineType = rowText(affected, "machineType");
     for (const row of machineRows) {
       if (!machineRowIsActive(row)) continue;
       const machine = machineValue(row);
       const key = machineKey(machine);
       if (!key || key === targetMachine) continue;
-      const rowType = machineKey(rowText(row, "machineType", "type", "TYPE", "MACHINE TYPE"));
-      if ((routeFamily && key.startsWith(routeFamily)) || (machineType && rowType === machineType)) machines.add(machine);
+      const rowType = rowText(row, "machineType", "type", "TYPE", "MACHINE TYPE");
+      if (machineCodeMatches(routeMachine, machine) && machineTypeCompatible(machineType, rowType)) machines.add(machine);
     }
     for (const row of plannedRows) {
       const machine = machineValue(row);
       const key = machineKey(machine);
       if (!key || key === targetMachine) continue;
-      const rowRoute = machineKey(rowText(row, "routeMachine"));
-      const rowType = machineKey(rowText(row, "machineType"));
-      if ((routeFamily && (key.startsWith(routeFamily) || rowRoute === routeFamily)) || (machineType && rowType === machineType)) machines.add(machine);
+      const rowRoute = rowText(row, "routeMachine");
+      const rowType = rowText(row, "machineType");
+      if ((machineCodeMatches(routeMachine, machine) || machineCodeMatches(routeMachine, rowRoute)) && machineTypeCompatible(machineType, rowType)) machines.add(machine);
     }
   }
   return [...machines].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
@@ -278,6 +278,24 @@ function rowText(row: MachineConstraintReviewRow, ...keys: string[]) {
 
 function machineKey(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
+}
+
+function machineFamilyKey(value: unknown) {
+  const normalized = String(value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const match = normalized.match(/^([A-Z]+)(\d)/);
+  return match ? `${match[1]}${match[2]}`.toLowerCase() : normalized.toLowerCase();
+}
+
+function machineCodeMatches(routeMachine: unknown, actualMachine: unknown) {
+  const routeFamily = machineFamilyKey(routeMachine);
+  const actualFamily = machineFamilyKey(actualMachine);
+  return Boolean(routeFamily && actualFamily && routeFamily === actualFamily);
+}
+
+function machineTypeCompatible(sourceType: unknown, targetType: unknown) {
+  const source = machineKey(sourceType);
+  const target = machineKey(targetType);
+  return !source || !target || source === target;
 }
 
 function groupRank(kind: MachineConstraintQueueReviewKind) {

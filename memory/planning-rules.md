@@ -190,13 +190,14 @@ Relevant code:
 
 Date: 2026-07-01
 
-When a planner chooses review-before-save for a machine-unavailable/breakdown action, the review must show the affected rows on the unavailable machine and only the queue that the planner is directly deciding. For `shift_required` or `shift_all`, show compatible destination queues where the unavailable-machine work can be shifted. For `delay`, show the later queue on the same unavailable machine. Do not show downstream setup queues in this review step; downstream same-part/setup WIP changes are recalculated automatically after the planner saves the machine action.
+When a planner chooses review-before-save for a machine-unavailable/breakdown action, the review must show the affected rows on the unavailable machine and only the queue that the planner is directly deciding. For `shift_required` or `shift_all`, show compatible destination queues where the unavailable-machine work can be shifted; compatibility must follow the planning route-machine family rule, so machine type alone must not pull in unrelated machine families. For `delay`, show the later queue on the same unavailable machine. Do not show downstream setup queues in this review step; downstream same-part/setup WIP changes are recalculated automatically after the planner saves the machine action.
 
 Relevant code:
 
-- `apps/web/lib/machine-constraint-review.ts` - computes destination, same-machine, and downstream queue review groups.
+- `apps/web/lib/machine-constraint-review.ts` - computes route-family destination, same-machine, and optional downstream queue review groups.
 - `apps/web/components/mrmpl-dashboard.tsx` - renders the queue review panel and confirmation gate.
-- `apps/web/lib/machine-constraint-review.test.ts` - regression for destination and downstream queue visibility before save.
+- `apps/web/lib/machine-constraint-review.test.ts` - regression for destination-only review, automatic downstream cascade, and DT501-style same-type unrelated machine exclusion.
+
 ## Part-specific machine switch queue review
 
 Date: 2026-07-01

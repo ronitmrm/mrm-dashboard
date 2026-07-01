@@ -173,4 +173,56 @@ describe("machineConstraintQueueReview", () => {
       { kind: "destination", machine: "A511" },
     ]);
   });
+
+  it("does not show unrelated same-type machines as shift destinations", () => {
+    const affected = {
+      jcNo: "JC-090",
+      partCode: "M127",
+      optionNumber: "1",
+      setupNo: "1",
+      routeMachine: "DT5",
+      machine: "DT501",
+      machineType: "MANUAL",
+      plannedProductionStartDate: "1-July-26",
+    };
+    const review = machineConstraintQueueReview({
+      machineNo: "DT501",
+      rescheduleAction: "shift_required",
+      affectedRows: [affected],
+      includeSameMachineLater: false,
+      includeDownstream: false,
+      machineRows: [
+        { machineNo: "DT502", machineType: "MANUAL", status: "Active" },
+        { machineNo: "SAD903", machineType: "MANUAL", status: "Active" },
+        { machineNo: "SA705", machineType: "MANUAL", status: "Active" },
+      ],
+      plannedRows: [
+        affected,
+        {
+          jcNo: "JC-888",
+          partCode: "M88",
+          optionNumber: "1",
+          setupNo: "1",
+          routeMachine: "SAD9",
+          machine: "SAD903",
+          machineType: "MANUAL",
+          plannedProductionStartDate: "9-July-26",
+        },
+        {
+          jcNo: "JC-777",
+          partCode: "M77",
+          optionNumber: "1",
+          setupNo: "1",
+          routeMachine: "DT5",
+          machine: "DT502",
+          machineType: "MANUAL",
+          plannedProductionStartDate: "10-July-26",
+        },
+      ],
+    });
+
+    expect(review.map((group) => ({ kind: group.kind, machine: group.machine }))).toEqual([
+      { kind: "destination", machine: "DT502" },
+    ]);
+  });
 });
