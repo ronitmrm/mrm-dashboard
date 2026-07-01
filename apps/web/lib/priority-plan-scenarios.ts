@@ -19,12 +19,14 @@ export function priorityPlanWindow({
   targetEndDate,
   blockers,
   preemptedBlockerKeys = new Set<string>(),
+  heldBlockerKeys = new Set<string>(),
   minimumStartDate,
 }: {
   targetStartDate: unknown;
   targetEndDate: unknown;
   blockers: PriorityPlanWindowBlocker[];
   preemptedBlockerKeys?: Set<string>;
+  heldBlockerKeys?: Set<string>;
   minimumStartDate?: unknown;
 }): PriorityPlanWindow {
   const targetStart = normalizedDate(targetStartDate);
@@ -37,8 +39,12 @@ export function priorityPlanWindow({
     start: normalizedDate(blocker.startDate),
     end: normalizedDate(blocker.endDate) ?? normalizedDate(blocker.startDate),
   }));
-  const preempted = parsedBlockers.filter((blocker) => blocker.state === "queued" || preemptedBlockerKeys.has(blocker.key));
-  const notPreempted = parsedBlockers.filter((blocker) => blocker.state !== "queued" && !preemptedBlockerKeys.has(blocker.key));
+  const preempted = parsedBlockers.filter((blocker) =>
+    (blocker.state === "queued" && !heldBlockerKeys.has(blocker.key)) || preemptedBlockerKeys.has(blocker.key),
+  );
+  const notPreempted = parsedBlockers.filter((blocker) =>
+    (blocker.state !== "queued" && !preemptedBlockerKeys.has(blocker.key)) || heldBlockerKeys.has(blocker.key),
+  );
   const earliestPreemptedStart = minDate(...preempted.map((blocker) => blocker.start).filter(Boolean) as Date[]);
   const blockingEnd = maxDate(...notPreempted.map((blocker) => blocker.end).filter(Boolean) as Date[]);
   const earliestStart = minDate(targetStart, earliestPreemptedStart) ?? targetStart;

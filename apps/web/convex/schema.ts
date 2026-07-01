@@ -77,6 +77,12 @@ export default defineSchema({
       machine: v.string(),
       finishedQty: v.optional(v.number()),
     }))),
+    queueBeforeSetups: v.optional(v.array(v.object({
+      targetSetupNo: v.string(),
+      jcNo: v.string(),
+      setupNo: v.string(),
+      machine: v.string(),
+    }))),
     remark: v.optional(v.string()),
     createdAt: v.string(),
   }).index("by_owner", ["ownerId"]),

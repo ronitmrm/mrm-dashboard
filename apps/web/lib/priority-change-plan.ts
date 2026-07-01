@@ -25,6 +25,13 @@ export type PriorityPlanStep = {
   blockers: PriorityPlanBlocker[];
 };
 
+export type PriorityPlanSetupReference = {
+  targetSetupNo: string;
+  jcNo: string;
+  setupNo: string;
+  machine: string;
+};
+
 export function priorityChangePlan(productionControl: DashboardPayload, partCode: string, jcNo: string): { steps: PriorityPlanStep[] } {
   const plannedRows = asArray(productionControl.machinePlanDetailRows).filter((row) => !shopFloorItemIsFinished(row));
   const targetPartKey = machineKey(partCode);
@@ -59,7 +66,12 @@ export function priorityChangePlan(productionControl: DashboardPayload, partCode
   };
 }
 
-export function priorityPlanStepWindow(step: PriorityPlanStep, selectedInterruptions: Record<string, boolean>, minimumStartDate?: unknown) {
+export function priorityPlanStepWindow(
+  step: PriorityPlanStep,
+  selectedInterruptions: Record<string, boolean>,
+  queueAfterKey?: string,
+  minimumStartDate?: unknown,
+) {
   return priorityPlanWindow({
     targetStartDate: step.startDate,
     targetEndDate: step.endDate,
@@ -67,19 +79,63 @@ export function priorityPlanStepWindow(step: PriorityPlanStep, selectedInterrupt
     preemptedBlockerKeys: new Set(step.blockers
       .filter((blocker) => selectedInterruptions[blocker.key])
       .map((blocker) => blocker.key)),
+    heldBlockerKeys: priorityPlanHeldBlockerKeys(step, queueAfterKey),
     minimumStartDate,
   });
 }
 
-export function priorityPlanStepWindows(steps: PriorityPlanStep[], selectedInterruptions: Record<string, boolean>) {
+export function priorityPlanStepWindows(
+  steps: PriorityPlanStep[],
+  selectedInterruptions: Record<string, boolean>,
+  queueAfterByStep: Record<string, string> = {},
+) {
   const windows = new Map<string, PriorityPlanWindow>();
   let minimumStartDate = "";
   for (const step of steps) {
-    const window = priorityPlanStepWindow(step, selectedInterruptions, minimumStartDate);
+    const window = priorityPlanStepWindow(step, selectedInterruptions, queueAfterByStep[step.key], minimumStartDate);
     windows.set(step.key, window);
     minimumStartDate = nextCalendarDateLabel(window.endDate);
   }
   return windows;
+}
+
+export function priorityPlanHeldBlockers(step: PriorityPlanStep, queueAfterKey?: string) {
+  if (!queueAfterKey) return [];
+  const queuedBlockers = step.blockers.filter((blocker) => blocker.state === "queued");
+  const queueIndex = queuedBlockers.findIndex((blocker) => blocker.key === queueAfterKey);
+  if (queueIndex < 0) return [];
+  return queuedBlockers.slice(0, queueIndex + 1);
+}
+
+export function priorityPlanQueueBeforeSetups(
+  steps: PriorityPlanStep[],
+  queueAfterByStep: Record<string, string>,
+): PriorityPlanSetupReference[] {
+  const rows: PriorityPlanSetupReference[] = [];
+  const seen = new Set<string>();
+  for (const step of steps) {
+    for (const blocker of priorityPlanHeldBlockers(step, queueAfterByStep[step.key])) {
+      const reference = {
+        targetSetupNo: step.setupNo,
+        jcNo: blocker.jcNo,
+        setupNo: blocker.setupNo,
+        machine: blocker.machine,
+      };
+      const key = setupReferenceKey(reference);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(reference);
+    }
+  }
+  return rows;
+}
+
+function priorityPlanHeldBlockerKeys(step: PriorityPlanStep, queueAfterKey?: string) {
+  return new Set(priorityPlanHeldBlockers(step, queueAfterKey).map((blocker) => blocker.key));
+}
+
+function setupReferenceKey(reference: PriorityPlanSetupReference) {
+  return [reference.targetSetupNo, reference.jcNo, reference.setupNo, reference.machine].map(machineKey).join("|");
 }
 
 function priorityPlanBlocksTarget(row: DashboardPayload, targetDate: number) {

@@ -946,6 +946,7 @@ function buildProductionControl({
       priorityInterruptedMachine: plannerPriority ? rowText(plannerPriority, "interruptedMachine", "INTERRUPTED MACHINE", "STOPPED MACHINE") : "",
       priorityInterruptedFinishedQty: plannerPriority ? safeNumber(rowValue(plannerPriority, "interruptedFinishedQty", "INTERRUPTED FINISHED QTY", "FINISHED QTY")) : 0,
       priorityInterruptedSetups: Array.isArray(plannerPriority?.interruptedSetups) ? plannerPriority.interruptedSetups : [],
+      priorityQueueBeforeSetups: Array.isArray(plannerPriority?.queueBeforeSetups) ? plannerPriority.queueBeforeSetups : [],
       priorityRemark: plannerPriority ? rowText(plannerPriority, "remark", "REMARK") : "",
       routeStatus,
       cycleStatus: missingCycle.length ? `Missing setup ${compactJoin(missingCycle)}` : "Ready",
@@ -2353,6 +2354,7 @@ function machinePlanDetails(
         priorityInterruptedMachine: rowText(row, "priorityInterruptedMachine"),
         priorityInterruptedFinishedQty: safeNumber(rowValue(row, "priorityInterruptedFinishedQty")),
         priorityInterruptedSetups: Array.isArray(row.priorityInterruptedSetups) ? row.priorityInterruptedSetups : [],
+        priorityQueueBeforeSetups: Array.isArray(row.priorityQueueBeforeSetups) ? row.priorityQueueBeforeSetups : [],
         priorityRemark: rowText(row, "priorityRemark"),
         rawOutputQty: round(productionActual?.outputQty ?? 0),
         rawActualQty: round(productionActual?.actualQty ?? 0),
@@ -2882,15 +2884,23 @@ function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>
   const aActualStart = lockedProductionStartDate(a);
   const bActualStart = lockedProductionStartDate(b);
   const priorityDiff = safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"));
-  if (priorityDiff > 0 && canPriorityPreempt(a, b)) return priorityDiff;
-  if (priorityDiff < 0 && canPriorityPreempt(b, a)) return priorityDiff;
+  const aHeldBeforeB = priorityKeepsRowBefore(b, a);
+  const bHeldBeforeA = priorityKeepsRowBefore(a, b);
+  if (aHeldBeforeB && !bHeldBeforeA) return -1;
+  if (bHeldBeforeA && !aHeldBeforeB) return 1;
+  const allowedPriorityDiff = priorityDiff > 0
+    ? (canPriorityPreempt(a, b) ? priorityDiff : 0)
+    : priorityDiff < 0
+      ? (canPriorityPreempt(b, a) ? priorityDiff : 0)
+      : 0;
+  if (allowedPriorityDiff) return allowedPriorityDiff;
   if (aActualStart || bActualStart) {
     if (aActualStart && bActualStart) return aActualStart.localeCompare(bActualStart);
     return aActualStart ? -1 : 1;
   }
   const familyTargetDiff = compareFamilyIdleGapSortDates(a, b);
   return priorityQueueStateRank(a) - priorityQueueStateRank(b) ||
-    priorityDiff ||
+    allowedPriorityDiff ||
     familyTargetDiff ||
     machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) ||
     rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }) ||
@@ -2932,7 +2942,7 @@ function applyPriorityInterruptionQuantities(details: Array<Record<string, unkno
 function canPriorityPreempt(blockingRow: Record<string, unknown>, priorityRow: Record<string, unknown>) {
   if (safeNumber(rowValue(priorityRow, "plannerPriorityScore")) <= safeNumber(rowValue(blockingRow, "plannerPriorityScore"))) return false;
   const state = priorityQueueState(blockingRow);
-  if (state === "idle") return true;
+  if (state === "idle") return !priorityKeepsRowBefore(priorityRow, blockingRow);
   const mode = priorityApprovalMode(priorityRow);
   if (state === "started_not_running") {
     if (mode !== "allow_started_not_running" && mode !== "allow_stop_running") return false;
@@ -2967,6 +2977,35 @@ function priorityInterruptedSetups(priorityRow: Record<string, unknown>) {
       finishedQty: safeNumber(rowValue(item, "finishedQty", "FINISHED QTY")),
     }))
     .filter((item) => item.jcNo && item.setupNo);
+}
+
+
+function priorityQueueBeforeSetups(priorityRow: Record<string, unknown>) {
+  const raw = priorityRow.queueBeforeSetups || priorityRow.priorityQueueBeforeSetups;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
+    .map((item) => item as Record<string, unknown>)
+    .map((item) => ({
+      targetSetupNo: canonicalKey(rowText(item, "targetSetupNo", "TARGET SETUP NO", "targetSetup", "prioritySetupNo")),
+      jcNo: canonicalKey(rowText(item, "jcNo", "JC NO", "jobCard")),
+      setupNo: canonicalKey(rowText(item, "setupNo", "SETUP NO", "setup")),
+      machine: canonicalKey(rowText(item, "machine", "machineNo", "MACHINE NO", "M/C NO")),
+    }))
+    .filter((item) => item.targetSetupNo && item.jcNo && item.setupNo);
+}
+
+function priorityKeepsRowBefore(priorityRow: Record<string, unknown>, blockingRow: Record<string, unknown>) {
+  const prioritySetupNo = canonicalKey(rowText(priorityRow, "setupNo", "SETUP NO", "SETUP"));
+  return priorityQueueBeforeSetups(priorityRow).some((queueBefore) =>
+    queueBefore.targetSetupNo === prioritySetupNo && priorityQueueBeforeMatchesRow(queueBefore, blockingRow),
+  );
+}
+
+function priorityQueueBeforeMatchesRow(queueBefore: ReturnType<typeof priorityQueueBeforeSetups>[number], row: Record<string, unknown>) {
+  return queueBefore.jcNo === canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"))
+    && queueBefore.setupNo === canonicalKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))
+    && (!queueBefore.machine || queueBefore.machine === canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO")));
 }
 
 function priorityInterruptionMatchesRow(interruption: ReturnType<typeof priorityInterruptedSetups>[number], row: Record<string, unknown>) {

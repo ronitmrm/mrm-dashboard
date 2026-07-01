@@ -58,4 +58,19 @@ describe("priorityPlanWindow", () => {
       endDate: "17-July-26",
     });
   });
+  it("waits behind a queued blocker that the planner keeps ahead", () => {
+    expect(priorityPlanWindow({
+      targetStartDate: "27-July-26",
+      targetEndDate: "27-July-26",
+      blockers: [
+        { key: "m108", state: "queued", startDate: "5-July-26", endDate: "25-July-26" },
+        { key: "m61", state: "queued", startDate: "26-July-26", endDate: "26-July-26" },
+      ],
+      heldBlockerKeys: new Set(["m108"]),
+      minimumStartDate: "17-July-26",
+    })).toEqual({
+      startDate: "26-July-26",
+      endDate: "26-July-26",
+    });
+  });
 });

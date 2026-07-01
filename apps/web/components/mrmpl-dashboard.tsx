@@ -72,7 +72,7 @@ import {
   toDashboardViewModel,
 } from "@/lib/dashboard-view-model";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot } from "@/lib/planning-refresh-policy";
-import { priorityChangePlan, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
+import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
 import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
   applyShopFloorStatusPatches,
@@ -943,6 +943,7 @@ function PlannerPriorityForm({
   const [remark, setRemark] = useState("");
   const [planReady, setPlanReady] = useState(false);
   const [selectedInterruptions, setSelectedInterruptions] = useState<Record<string, boolean>>({});
+  const [queueAfterByStep, setQueueAfterByStep] = useState<Record<string, string>>({});
   const [finishedQtyByInterruption, setFinishedQtyByInterruption] = useState<Record<string, string>>({});
   const [confirmedPrioritySteps, setConfirmedPrioritySteps] = useState<Record<string, boolean>>({});
   const jobCardOptions = useMemo(() => uniqueValues(workOrders
@@ -952,7 +953,7 @@ function PlannerPriorityForm({
   const selectedPart = partCode || itemOptions[0] || "";
   const selectedJc = jcNo && jobCardOptions.includes(jcNo) ? jcNo : "";
   const priorityPlan = useMemo(() => priorityChangePlan(productionControl, selectedPart, selectedJc), [productionControl, selectedPart, selectedJc]);
-  const priorityStepWindows = useMemo(() => priorityPlanStepWindows(priorityPlan.steps, selectedInterruptions), [priorityPlan.steps, selectedInterruptions]);
+  const priorityStepWindows = useMemo(() => priorityPlanStepWindows(priorityPlan.steps, selectedInterruptions, queueAfterByStep), [priorityPlan.steps, selectedInterruptions, queueAfterByStep]);
   const selectedBlockers = priorityPlan.steps
     .flatMap((step) => step.blockers)
     .filter((blocker) => selectedInterruptions[blocker.key]);
@@ -973,6 +974,7 @@ function PlannerPriorityForm({
   function resetPlanReview() {
     setPlanReady(false);
     setSelectedInterruptions({});
+    setQueueAfterByStep({});
     setFinishedQtyByInterruption({});
     setConfirmedPrioritySteps({});
   }
@@ -994,6 +996,9 @@ function PlannerPriorityForm({
     setSelectedInterruptions((current) => Object.fromEntries(
       Object.entries(current).filter(([key]) => !downstreamBlockerKeys.has(key)),
     ));
+    setQueueAfterByStep((current) => Object.fromEntries(
+      Object.entries(current).filter(([key]) => keepKeys.has(key)),
+    ));
     setFinishedQtyByInterruption((current) => Object.fromEntries(
       Object.entries(current).filter(([key]) => !downstreamBlockerKeys.has(key)),
     ));
@@ -1006,6 +1011,7 @@ function PlannerPriorityForm({
       return;
     }
     if ((!selectedPart && !selectedJc) || hasSelectedRunningWithoutQty || !allStepsConfirmed) return;
+    const queueBeforeSetups = priorityPlanQueueBeforeSetups(priorityPlan.steps, queueAfterByStep);
     const interruptedSetups = selectedBlockers.map((blocker) => ({
       jcNo: blocker.jcNo,
       setupNo: blocker.setupNo,
@@ -1030,6 +1036,7 @@ function PlannerPriorityForm({
       interruptedMachine: firstInterruption?.machine || "",
       interruptedFinishedQty: firstInterruption?.finishedQty,
       interruptedSetups,
+      queueBeforeSetups,
       remark,
     });
     setRemark("");
@@ -1124,8 +1131,15 @@ function PlannerPriorityForm({
                   previousSetupLabel={index > 0 ? `Setup ${priorityPlan.steps[index - 1]?.setupNo}` : ""}
                   plannedWindow={priorityStepWindows.get(step.key) ?? { startDate: step.startDate, endDate: step.endDate }}
                   selectedInterruptions={selectedInterruptions}
+                  queueAfterKey={queueAfterByStep[step.key] ?? ""}
                   finishedQtyByInterruption={finishedQtyByInterruption}
                   setSelectedInterruptions={setSelectedInterruptions}
+                  onQueueAfterChange={(value) => setQueueAfterByStep((current) => {
+                    const next = { ...current };
+                    if (value) next[step.key] = value;
+                    else delete next[step.key];
+                    return next;
+                  })}
                   setFinishedQtyByInterruption={setFinishedQtyByInterruption}
                   onConfirm={() => confirmPriorityStep(step.key)}
                   onEdit={() => editPriorityStep(step.key)}
@@ -1155,8 +1169,10 @@ function PriorityPlanStepReview({
   previousSetupLabel,
   plannedWindow,
   selectedInterruptions,
+  queueAfterKey,
   finishedQtyByInterruption,
   setSelectedInterruptions,
+  onQueueAfterChange,
   setFinishedQtyByInterruption,
   onConfirm,
   onEdit,
@@ -1166,8 +1182,10 @@ function PriorityPlanStepReview({
   previousSetupLabel: string;
   plannedWindow: PriorityPlanWindow;
   selectedInterruptions: Record<string, boolean>;
+  queueAfterKey: string;
   finishedQtyByInterruption: Record<string, string>;
   setSelectedInterruptions: Dispatch<SetStateAction<Record<string, boolean>>>;
+  onQueueAfterChange: (value: string) => void;
   setFinishedQtyByInterruption: Dispatch<SetStateAction<Record<string, string>>>;
   onConfirm: () => void;
   onEdit: () => void;
@@ -1183,11 +1201,24 @@ function PriorityPlanStepReview({
   const selectedStartedCount = step.blockers.filter((blocker) =>
     blocker.state === "started_not_running" && selectedInterruptions[blocker.key],
   ).length;
-  const planMode = selectedRunningCount
+  const queuedBlockers = step.blockers.filter((blocker) => blocker.state === "queued");
+  const heldQueueBlockers = priorityPlanHeldBlockers(step, queueAfterKey);
+  const heldQueueBlockerKeys = new Set(heldQueueBlockers.map((blocker) => blocker.key));
+  const interruptMode = selectedRunningCount
     ? `Stop ${selectedRunningCount} running setup${selectedRunningCount === 1 ? "" : "s"}`
     : selectedStartedCount
       ? `Move ${selectedStartedCount} started setup${selectedStartedCount === 1 ? "" : "s"}`
-      : "Do not stop running machine";
+      : runningBlockerCount
+        ? "Do not stop running machine"
+        : "";
+  const queueMode = queuedBlockers.length
+    ? heldQueueBlockers.length === 0
+      ? "Position 1 on queued machine work"
+      : heldQueueBlockers.length === queuedBlockers.length
+        ? "Current queue position"
+        : `After ${heldQueueBlockers.length} queued setup${heldQueueBlockers.length === 1 ? "" : "s"}`
+    : "No queued setup ahead";
+  const planMode = [interruptMode, queueMode].filter(Boolean).join("; ");
 
   return (
     <div className="grid gap-2 rounded-lg border bg-background p-3">
@@ -1232,6 +1263,21 @@ function PriorityPlanStepReview({
         </div>
       ) : null}
 
+      {state === "active" && queuedBlockers.length ? (
+        <Field label="Machine queue position">
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={queueAfterKey}
+            onChange={(event) => onQueueAfterChange(event.target.value)}
+          >
+            <option value="">Position 1 - before movable queued work</option>
+            {queuedBlockers.map((blocker, index) => (
+              <option key={blocker.key} value={blocker.key}>{queuePositionOptionLabel(blocker, index, queuedBlockers.length)}</option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+
       {state === "active" && step.blockers.length ? (
         <div className="grid gap-2">
           {step.blockers.map((blocker) => {
@@ -1252,7 +1298,7 @@ function PriorityPlanStepReview({
                       {blocker.state === "running" ? (selected ? "Stop selected" : "Stop this setup") : (selected ? "Move approved" : "Approve queue move")}
                     </Button>
                   ) : (
-                    <Badge variant="outline">Queue will move</Badge>
+                    <Badge variant={heldQueueBlockerKeys.has(blocker.key) ? "secondary" : "outline"}>{heldQueueBlockerKeys.has(blocker.key) ? "Kept ahead" : "Moves after priority"}</Badge>
                   )}
                   {selected && blocker.state === "running" ? (
                     <Field label="Finished qty">
@@ -1292,6 +1338,12 @@ function PriorityPlanStepReview({
   );
 }
 
+
+function queuePositionOptionLabel(blocker: PriorityPlanStep["blockers"][number], index: number, total: number) {
+  const position = index + 2;
+  const prefix = index === total - 1 ? "Current position" : `Position ${position}`;
+  return `${prefix} - after ${blocker.itemCode} / ${blocker.jcNo} / setup ${blocker.setupNo}`;
+}
 function PriorityScenarioCard({
   title,
   window,
@@ -3327,7 +3379,7 @@ function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: Das
             {setupRows.map((setup, index) => (
               <div key={`${displayValue(setup.setupNo)}-${displayValue(setup.machine)}-${index}`} className="rounded-md border bg-muted/10 p-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-medium">Setup {displayValue(setup.setupNo)} · {displayValue(setup.machine)}</div>
+                  <div className="text-sm font-medium">Setup {displayValue(setup.setupNo)} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {displayValue(setup.machine)}</div>
                   <StatusBadge value={setup.runningStatus} />
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -3900,6 +3952,7 @@ type DashboardActionMutations = {
     interruptedMachine?: string;
     interruptedFinishedQty?: number;
     interruptedSetups?: Array<{ jcNo: string; setupNo: string; machine: string; finishedQty?: number }>;
+    queueBeforeSetups?: Array<{ targetSetupNo: string; jcNo: string; setupNo: string; machine: string }>;
     remark?: string;
   }) => Promise<unknown>;
   saveMachineConstraint: (args: {
@@ -3988,6 +4041,7 @@ async function runDashboardAction(
       interruptedMachine: optionalText(body.interruptedMachine),
       interruptedFinishedQty: optionalNumber(body.interruptedFinishedQty),
       interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
+      queueBeforeSetups: priorityQueueBeforeSetups(body.queueBeforeSetups),
       remark: optionalText(body.remark),
     });
     return "Priority saved.";
@@ -4129,6 +4183,20 @@ function priorityInterruptedSetups(value: unknown) {
   return rows.length ? rows : undefined;
 }
 
+
+function priorityQueueBeforeSetups(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const rows = value
+    .map((row) => asRecord(row))
+    .map((row) => ({
+      targetSetupNo: text(row.targetSetupNo),
+      jcNo: text(row.jcNo),
+      setupNo: text(row.setupNo),
+      machine: text(row.machine),
+    }))
+    .filter((row) => row.targetSetupNo && row.jcNo && row.setupNo && row.machine);
+  return rows.length ? rows : undefined;
+}
 function formPayload(form: FormData, fields: LegacyField[]) {
   const payload: Record<string, unknown> = {};
   for (const field of fields) {
@@ -4210,7 +4278,7 @@ function routeOptionText(option: DashboardPayload, fallback: string) {
     str(option.setupCount || option.numberOfSetups) ? `${str(option.setupCount || option.numberOfSetups)} setups` : "",
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join(" ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ");
 }
 
 function readFileAsDataUrl(file: File) {

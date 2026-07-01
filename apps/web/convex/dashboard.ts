@@ -139,6 +139,12 @@ const plannerPriorityValidator = {
     machine: v.string(),
     finishedQty: optionalNumber,
   }))),
+  queueBeforeSetups: v.optional(v.array(v.object({
+    targetSetupNo: v.string(),
+    jcNo: v.string(),
+    setupNo: v.string(),
+    machine: v.string(),
+  }))),
   remark: optionalString,
   createdAt: optionalString,
 };
@@ -1203,6 +1209,12 @@ export const savePlannerPriority = mutation({
       setupNo: v.string(),
       machine: v.string(),
       finishedQty: optionalNumber,
+    }))),
+    queueBeforeSetups: v.optional(v.array(v.object({
+      targetSetupNo: v.string(),
+      jcNo: v.string(),
+      setupNo: v.string(),
+      machine: v.string(),
     }))),
     remark: optionalString,
   },

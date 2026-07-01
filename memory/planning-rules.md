@@ -136,3 +136,16 @@ Relevant code:
 - `apps/web/lib/priority-change-plan.ts` - builds target setup rows and sequence-aware preview windows.
 - `apps/web/lib/priority-plan-scenarios.ts` - supports a downstream minimum start date for machine-window scenarios.
 - `apps/web/lib/priority-change-plan.test.ts` - regression for M62-style setup 1 delayed on AC701 while setup 2/3 machines are free.
+
+## Priority queue position is planner-controlled
+
+Date: 2026-07-01
+
+A priority change must not hard-code downstream machine queue placement. For each setup, the planner can place the priority setup at position 1, after a selected queued setup, or at the current queue position. The preview and the actual recalculation both persist this as `queueBeforeSetups`: setup rows listed there must remain ahead of the priority setup for that specific target setup number. This lets a downstream machine fill useful work before WIP is available without silently delaying the priority part beyond the planner's chosen position.
+
+Relevant code:
+
+- `apps/web/lib/priority-change-plan.ts` - preview queue-position choices and `queueBeforeSetups` payload.
+- `apps/web/components/mrmpl-dashboard.tsx` - planner decision console queue-position selector.
+- `apps/web/lib/legacy-dashboard-analysis.ts` - machine queue sorter honors held queue rows before applying priority preemption.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression for keeping a selected SA705 queued setup ahead of M62 priority work.
