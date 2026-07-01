@@ -149,3 +149,13 @@ Relevant code:
 - `apps/web/components/mrmpl-dashboard.tsx` - planner decision console queue-position selector.
 - `apps/web/lib/legacy-dashboard-analysis.ts` - machine queue sorter honors held queue rows before applying priority preemption.
 - `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression for keeping a selected SA705 queued setup ahead of M62 priority work.
+## Priority queue placement preview UI
+
+Date: 2026-07-01
+
+The planner decision console should show priority queue placement as a draggable priority setup tile inside the affected machine queue, not as a dropdown. Moving the tile before/after queued setups updates `queueAfterByStep`, which recalculates the probable setup windows for all target setups immediately. The saved backend contract remains `queueBeforeSetups`, so execution still honors the queued setup rows that the planner left ahead of the priority setup.
+
+Relevant code:
+
+- `apps/web/components/mrmpl-dashboard.tsx` - `PriorityQueuePlacementBoard` and `PrioritySetupPreviewSummary`.
+- `apps/web/lib/priority-change-plan.ts` - queue placement state feeds `priorityPlanStepWindows` and `priorityPlanQueueBeforeSetups`.

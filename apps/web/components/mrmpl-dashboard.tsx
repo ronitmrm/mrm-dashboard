@@ -1,10 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type DragEvent, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import Image from "next/image";
 import {
+  ArrowDown,
+  ArrowUp,
   CalendarDays,
   ChevronDown,
   ChevronRight,
@@ -13,6 +15,7 @@ import {
   Database,
   Factory,
   Gauge,
+  GripVertical,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -1122,7 +1125,14 @@ function PlannerPriorityForm({
             </div>
           )}
           {priorityPlan.steps.length ? (
-            <div className="grid gap-2">
+            <>
+              <PrioritySetupPreviewSummary
+                steps={priorityPlan.steps}
+                windows={priorityStepWindows}
+                confirmedSteps={confirmedPrioritySteps}
+                activeStepKey={activeStepIndex >= 0 ? priorityPlan.steps[activeStepIndex]?.key ?? "" : ""}
+              />
+              <div className="grid gap-2">
               {priorityPlan.steps.map((step, index) => (
                 <PriorityPlanStepReview
                   key={step.key}
@@ -1145,7 +1155,8 @@ function PlannerPriorityForm({
                   onEdit={() => editPriorityStep(step.key)}
                 />
               ))}
-            </div>
+              </div>
+            </>
           ) : (
             <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">No planned setup was found for this item / JC in the current machine plan.</div>
           )}
@@ -1163,6 +1174,43 @@ function PlannerPriorityForm({
   );
 }
 
+function PrioritySetupPreviewSummary({
+  steps,
+  windows,
+  confirmedSteps,
+  activeStepKey,
+}: {
+  steps: PriorityPlanStep[];
+  windows: Map<string, PriorityPlanWindow>;
+  confirmedSteps: Record<string, boolean>;
+  activeStepKey: string;
+}) {
+  return (
+    <div className="grid gap-2 rounded-md border bg-background p-3">
+      <div className="text-xs font-medium text-muted-foreground">Probable setup dates</div>
+      <div className="grid gap-2 md:grid-cols-3">
+        {steps.map((step) => {
+          const window = windows.get(step.key) ?? { startDate: step.startDate, endDate: step.endDate };
+          const stateLabel = confirmedSteps[step.key]
+            ? "Confirmed"
+            : step.key === activeStepKey
+              ? "Editing"
+              : "Queued preview";
+          return (
+            <div key={step.key} className="grid gap-1 rounded-md border bg-muted/20 p-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-medium">Setup {step.setupNo}</div>
+                <Badge variant={confirmedSteps[step.key] ? "outline" : "secondary"}>{stateLabel}</Badge>
+              </div>
+              <div className="text-sm font-semibold">{window.startDate || "-"} to {window.endDate || "-"}</div>
+              <div className="text-xs text-muted-foreground">{step.machine} - {step.itemCode} / {step.jcNo}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 function PriorityPlanStepReview({
   step,
   state,
@@ -1203,7 +1251,7 @@ function PriorityPlanStepReview({
   ).length;
   const queuedBlockers = step.blockers.filter((blocker) => blocker.state === "queued");
   const heldQueueBlockers = priorityPlanHeldBlockers(step, queueAfterKey);
-  const heldQueueBlockerKeys = new Set(heldQueueBlockers.map((blocker) => blocker.key));
+
   const interruptMode = selectedRunningCount
     ? `Stop ${selectedRunningCount} running setup${selectedRunningCount === 1 ? "" : "s"}`
     : selectedStartedCount
@@ -1228,7 +1276,7 @@ function PriorityPlanStepReview({
           <div className="text-xs text-muted-foreground">
             {state === "confirmed"
               ? `Confirmed on ${step.machine} - ${plannedWindow.startDate || "-"} to ${plannedWindow.endDate || "-"}`
-              : `Target machine ${step.machine} - dates pending planner action`}
+              : `Preview on ${step.machine} - ${plannedWindow.startDate || "-"} to ${plannedWindow.endDate || "-"}`}
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
@@ -1258,29 +1306,25 @@ function PriorityPlanStepReview({
       ) : null}
 
       {state === "active" ? (
-        <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
-          Choose the action for this setup, then confirm to calculate its planned start and end dates.
-        </div>
+        <PriorityScenarioCard
+          title="Probable setup plan"
+          window={plannedWindow}
+          detail={planMode || "No queue impact"}
+        />
       ) : null}
 
       {state === "active" && queuedBlockers.length ? (
-        <Field label="Machine queue position">
-          <select
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={queueAfterKey}
-            onChange={(event) => onQueueAfterChange(event.target.value)}
-          >
-            <option value="">Position 1 - before movable queued work</option>
-            {queuedBlockers.map((blocker, index) => (
-              <option key={blocker.key} value={blocker.key}>{queuePositionOptionLabel(blocker, index, queuedBlockers.length)}</option>
-            ))}
-          </select>
-        </Field>
+        <PriorityQueuePlacementBoard
+          step={step}
+          queueAfterKey={queueAfterKey}
+          plannedWindow={plannedWindow}
+          onQueueAfterChange={onQueueAfterChange}
+        />
       ) : null}
 
-      {state === "active" && step.blockers.length ? (
+      {state === "active" && step.blockers.some((blocker) => blocker.requiresApproval) ? (
         <div className="grid gap-2">
-          {step.blockers.map((blocker) => {
+          {step.blockers.filter((blocker) => blocker.requiresApproval).map((blocker) => {
             const selected = Boolean(selectedInterruptions[blocker.key]);
             return (
               <div key={blocker.key} className="grid gap-2 rounded-md border p-2 md:grid-cols-[1fr_auto] md:items-center">
@@ -1289,17 +1333,13 @@ function PriorityPlanStepReview({
                   <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} to {blocker.endDate} - {blocker.label}</div>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
-                  {blocker.requiresApproval ? (
-                    <Button
-                      type="button"
-                      variant={selected ? "default" : "outline"}
-                      onClick={() => setSelectedInterruptions((current) => ({ ...current, [blocker.key]: !selected }))}
-                    >
-                      {blocker.state === "running" ? (selected ? "Stop selected" : "Stop this setup") : (selected ? "Move approved" : "Approve queue move")}
-                    </Button>
-                  ) : (
-                    <Badge variant={heldQueueBlockerKeys.has(blocker.key) ? "secondary" : "outline"}>{heldQueueBlockerKeys.has(blocker.key) ? "Kept ahead" : "Moves after priority"}</Badge>
-                  )}
+                  <Button
+                    type="button"
+                    variant={selected ? "default" : "outline"}
+                    onClick={() => setSelectedInterruptions((current) => ({ ...current, [blocker.key]: !selected }))}
+                  >
+                    {blocker.state === "running" ? (selected ? "Stop selected" : "Stop this setup") : (selected ? "Move approved" : "Approve queue move")}
+                  </Button>
                   {selected && blocker.state === "running" ? (
                     <Field label="Finished qty">
                       <Input
@@ -1339,10 +1379,199 @@ function PriorityPlanStepReview({
 }
 
 
-function queuePositionOptionLabel(blocker: PriorityPlanStep["blockers"][number], index: number, total: number) {
-  const position = index + 2;
-  const prefix = index === total - 1 ? "Current position" : `Position ${position}`;
-  return `${prefix} - after ${blocker.itemCode} / ${blocker.jcNo} / setup ${blocker.setupNo}`;
+function PriorityQueuePlacementBoard({
+  step,
+  queueAfterKey,
+  plannedWindow,
+  onQueueAfterChange,
+}: {
+  step: PriorityPlanStep;
+  queueAfterKey: string;
+  plannedWindow: PriorityPlanWindow;
+  onQueueAfterChange: (value: string) => void;
+}) {
+  const queuedBlockers = step.blockers.filter((blocker) => blocker.state === "queued");
+  const placementIndex = priorityQueuePlacementIndex(queuedBlockers, queueAfterKey);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  function placeAt(index: number) {
+    const boundedIndex = Math.max(0, Math.min(index, queuedBlockers.length));
+    const afterKey = boundedIndex > 0 ? queuedBlockers[boundedIndex - 1]?.key ?? "" : "";
+    onQueueAfterChange(afterKey);
+  }
+
+  function dragPriority(event: DragEvent<HTMLDivElement>) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", step.key);
+  }
+
+  function allowDrop(event: DragEvent<HTMLButtonElement>, index: number) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverIndex(index);
+  }
+
+  function dropPriority(event: DragEvent<HTMLButtonElement>, index: number) {
+    event.preventDefault();
+    const sourceKey = event.dataTransfer.getData("text/plain");
+    setDragOverIndex(null);
+    if (sourceKey && sourceKey !== step.key) return;
+    placeAt(index);
+  }
+
+  return (
+    <div className="grid gap-2 rounded-md border bg-muted/20 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-medium text-muted-foreground">{step.machine} queue placement</div>
+          <div className="text-sm font-semibold">{plannedWindow.startDate || "-"} to {plannedWindow.endDate || "-"}</div>
+        </div>
+        <Badge variant="secondary">{placementIndex === 0 ? "Position 1" : `After ${placementIndex} setup${placementIndex === 1 ? "" : "s"}`}</Badge>
+      </div>
+      <div className="grid gap-1">
+        {Array.from({ length: queuedBlockers.length + 1 }, (_, index) => (
+          <Fragment key={`${step.key}-slot-${index}`}>
+            <PriorityQueueDropZone
+              active={dragOverIndex === index}
+              current={placementIndex === index}
+              label={priorityQueueDropLabel(index, queuedBlockers)}
+              onClick={() => placeAt(index)}
+              onDragOver={(event) => allowDrop(event, index)}
+              onDragLeave={() => setDragOverIndex((current) => current === index ? null : current)}
+              onDrop={(event) => dropPriority(event, index)}
+            />
+            {placementIndex === index ? (
+              <PriorityQueuePriorityTile
+                step={step}
+                plannedWindow={plannedWindow}
+                onDragStart={dragPriority}
+                onDragEnd={() => setDragOverIndex(null)}
+              />
+            ) : null}
+            {index < queuedBlockers.length ? (
+              <PriorityQueueBlockerTile
+                blocker={queuedBlockers[index]!}
+                keptAhead={index < placementIndex}
+                onPlaceBefore={() => placeAt(index)}
+                onPlaceAfter={() => placeAt(index + 1)}
+              />
+            ) : null}
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PriorityQueueDropZone({
+  active,
+  current,
+  label,
+  onClick,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: {
+  active: boolean;
+  current: boolean;
+  label: string;
+  onClick: () => void;
+  onDragOver: (event: DragEvent<HTMLButtonElement>) => void;
+  onDragLeave: () => void;
+  onDrop: (event: DragEvent<HTMLButtonElement>) => void;
+}) {
+  const className = [
+    "h-3 rounded-full border transition-colors",
+    current ? "border-primary bg-primary/25" : "border-dashed border-transparent bg-transparent hover:border-primary/50 hover:bg-primary/10",
+    active ? "border-primary bg-primary/20" : "",
+  ].filter(Boolean).join(" ");
+
+  return (
+    <button
+      type="button"
+      className={className}
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      <span className="sr-only">{label}</span>
+    </button>
+  );
+}
+
+function PriorityQueuePriorityTile({
+  step,
+  plannedWindow,
+  onDragStart,
+  onDragEnd,
+}: {
+  step: PriorityPlanStep;
+  plannedWindow: PriorityPlanWindow;
+  onDragStart: (event: DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
+}) {
+  return (
+    <div
+      className="grid cursor-grab gap-2 rounded-md border border-primary/50 bg-primary/10 p-2 active:cursor-grabbing md:grid-cols-[auto_1fr_auto] md:items-center"
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+    >
+      <GripVertical className="size-4 text-primary" aria-hidden="true" />
+      <div>
+        <div className="text-sm font-semibold">{step.itemCode} / {step.jcNo} / Setup {step.setupNo}</div>
+        <div className="text-xs text-muted-foreground">{step.machine} - {plannedWindow.startDate || "-"} to {plannedWindow.endDate || "-"}</div>
+      </div>
+      <Badge>Priority</Badge>
+    </div>
+  );
+}
+
+function PriorityQueueBlockerTile({
+  blocker,
+  keptAhead,
+  onPlaceBefore,
+  onPlaceAfter,
+}: {
+  blocker: PriorityPlanStep["blockers"][number];
+  keptAhead: boolean;
+  onPlaceBefore: () => void;
+  onPlaceAfter: () => void;
+}) {
+  return (
+    <div className="grid gap-2 rounded-md border bg-background p-2 md:grid-cols-[1fr_auto] md:items-center">
+      <div>
+        <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
+        <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} to {blocker.endDate}</div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge variant={keptAhead ? "secondary" : "outline"}>{keptAhead ? "Ahead of priority" : "After priority"}</Badge>
+        <div className="flex gap-1">
+          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority before ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place priority before this setup" onClick={onPlaceBefore}>
+            <ArrowUp className="size-3" />
+          </Button>
+          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority after ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place priority after this setup" onClick={onPlaceAfter}>
+            <ArrowDown className="size-3" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function priorityQueuePlacementIndex(queuedBlockers: PriorityPlanStep["blockers"], queueAfterKey: string) {
+  if (!queueAfterKey) return 0;
+  const blockerIndex = queuedBlockers.findIndex((blocker) => blocker.key === queueAfterKey);
+  return blockerIndex < 0 ? 0 : blockerIndex + 1;
+}
+
+function priorityQueueDropLabel(index: number, queuedBlockers: PriorityPlanStep["blockers"]) {
+  if (index === 0) return "Place priority at position 1";
+  const blocker = queuedBlockers[index - 1];
+  return blocker ? `Place priority after ${blocker.itemCode} / ${blocker.jcNo} / setup ${blocker.setupNo}` : "Place priority at current queue position";
 }
 function PriorityScenarioCard({
   title,
