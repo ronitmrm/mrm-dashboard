@@ -185,3 +185,15 @@ Relevant code:
 - `apps/web/components/mrmpl-dashboard.tsx` - machine issue review requires produced quantity for running rows and records system-recalculation/review choice.
 - `apps/web/lib/legacy-dashboard-analysis.ts` - splits produced quantity from remaining quantity and schedules the remaining quantity on alternates using all planning rules, including the 25-day dispatch target.
 - `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `moves remaining running breakdown quantity to an alternate machine using system planning rules`.
+
+## Machine breakdown queue review
+
+Date: 2026-07-01
+
+When a planner chooses review-before-save for a machine-unavailable/breakdown action, the review must show more than the rows on the unavailable machine. It must also show compatible destination queues that may receive shifted or remaining quantity, later rows on the unavailable machine that may be delayed, and downstream setup queues for the same job cards that may move because WIP availability changes. Saving in review mode should require explicit planner confirmation that these queues were reviewed.
+
+Relevant code:
+
+- `apps/web/lib/machine-constraint-review.ts` - computes destination, same-machine, and downstream queue review groups.
+- `apps/web/components/mrmpl-dashboard.tsx` - renders the queue review panel and confirmation gate.
+- `apps/web/lib/machine-constraint-review.test.ts` - regression for destination and downstream queue visibility before save.

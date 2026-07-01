@@ -74,6 +74,7 @@ import {
   jobCardScheduleSummary,
   toDashboardViewModel,
 } from "@/lib/dashboard-view-model";
+import { machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot } from "@/lib/planning-refresh-policy";
 import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
 import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
@@ -922,7 +923,8 @@ function MachineConstraintPlannerForm({
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
 }) {
   const plannedRows = asArray(productionControl.machinePlanDetailRows);
-  const machineOptions = useMemo(() => plannedMachineOptions(plannedRows), [plannedRows]);
+  const machineRows = asArray(productionControl.machinePlanningRows);
+  const machineOptions = useMemo(() => plannedMachineOptions(plannedRows, machineBoardRows(machineRows, plannedRows)), [machineRows, plannedRows]);
   const [machineNo, setMachineNo] = useState("");
   const [unavailableFrom, setUnavailableFrom] = useState("");
   const [unavailableTo, setUnavailableTo] = useState("");
@@ -932,11 +934,19 @@ function MachineConstraintPlannerForm({
   const [reviewReady, setReviewReady] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [producedQtyByRow, setProducedQtyByRow] = useState<Record<string, string>>({});
+  const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false);
   const affectedRows = useMemo(() => machineIssueAffectedRows(plannedRows, {
     machineNo,
     unavailableFrom,
     unavailableTo,
   }), [machineNo, plannedRows, unavailableFrom, unavailableTo]);
+  const queueReviewGroups = useMemo(() => machineConstraintQueueReview({
+    plannedRows,
+    machineRows,
+    affectedRows,
+    machineNo,
+    rescheduleAction,
+  }), [affectedRows, machineNo, machineRows, plannedRows, rescheduleAction]);
   const runningRows = affectedRows.filter(machineIssueRowNeedsProducedQty);
   const lockedCount = affectedRows.filter(machineIssueRowIsLocked).length;
   const plannedCount = affectedRows.length - lockedCount;
@@ -946,16 +956,19 @@ function MachineConstraintPlannerForm({
     const orderQty = Number(row.totalOrderPcs || row.orderPcs);
     return rawValue === "" || !Number.isFinite(value) || value < 0 || (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty);
   });
+  const queueReviewRequired = planningMode === "review_then_plan";
   const canReview = Boolean(machineNo.trim() && unavailableFrom);
-  const canSave = canReview && Boolean(reason.trim()) && reviewReady && !missingProducedQty;
+  const canSave = canReview && Boolean(reason.trim()) && reviewReady && !missingProducedQty && (!queueReviewRequired || queueReviewConfirmed);
 
   function updateField(setter: Dispatch<SetStateAction<string>>, value: string) {
     setter(value);
     setReviewReady(false);
+    setQueueReviewConfirmed(false);
   }
 
   function updatePlanningInput(setter: Dispatch<SetStateAction<string>>, value: string) {
     setter(value);
+    setQueueReviewConfirmed(false);
   }
 
   function updateProducedQty(row: DashboardPayload, value: string) {
@@ -986,7 +999,7 @@ function MachineConstraintPlannerForm({
         planningMode,
         interruptedSetups,
         reason,
-        remark: `Reviewed ${affectedRows.length} affected setup rows; ${lockedCount} locked; ${plannedCount} planned; ${runningRows.length} running rows captured with produced quantity; ${planningMode}`,
+        remark: `Reviewed ${affectedRows.length} affected setup rows; ${lockedCount} locked; ${plannedCount} planned; ${runningRows.length} running rows captured with produced quantity; ${queueReviewGroups.length} queue review groups; ${planningMode}`,
       });
       setMachineNo("");
       setUnavailableFrom("");
@@ -995,6 +1008,7 @@ function MachineConstraintPlannerForm({
       setPlanningMode("system_recalculate");
       setReason("");
       setProducedQtyByRow({});
+      setQueueReviewConfirmed(false);
       setReviewReady(false);
     } finally {
       setIsSubmitting(false);
@@ -1081,20 +1095,73 @@ function MachineConstraintPlannerForm({
           ) : (
             <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup rows overlap this unavailable window.</div>
           )}
+          {queueReviewRequired ? (
+            <>
+              <MachineConstraintQueueReviewPanel groups={queueReviewGroups} />
+              <label className="flex items-start gap-2 rounded-md border bg-background p-2 text-sm">
+                <input
+                  className="mt-1"
+                  type="checkbox"
+                  checked={queueReviewConfirmed}
+                  onChange={(event) => setQueueReviewConfirmed(event.target.checked)}
+                />
+                <span>Queue reviewed; save this breakdown and recalculate planning.</span>
+              </label>
+            </>
+          ) : null}
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && !canSave)}>
           <Wrench className="size-4" />
-          {reviewReady ? "Save and replan remaining qty" : "Review affected queue"}
+          {reviewReady ? queueReviewRequired ? "Save after queue review" : "Save and replan remaining qty" : "Review affected queue"}
         </Button>
         {reviewReady ? (
-          <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setReviewReady(false)}>
+          <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
             Recheck inputs
           </Button>
         ) : null}
       </div>
     </form>
+  );
+}
+function MachineConstraintQueueReviewPanel({ groups }: { groups: MachineConstraintQueueReviewGroup[] }) {
+  return (
+    <div className="grid gap-2 rounded-md border border-dashed bg-background p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-sm font-medium">Replanned queue review</div>
+        <StatusBadge value={`${formatNumber(groups.length)} queue groups`} />
+      </div>
+      {groups.length ? (
+        <div className="grid gap-2">
+          {groups.map((group) => (
+            <div key={`${group.kind}-${group.machine}`} className="grid gap-2 rounded-md border bg-muted/10 p-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-medium">{group.title}</div>
+                <StatusBadge value={group.kind === "destination" ? "Destination queue" : group.kind === "downstream" ? "Downstream WIP queue" : "Same machine queue"} />
+              </div>
+              <div className="text-xs text-muted-foreground">{group.description}</div>
+              {group.rows.length ? (
+                <div className="grid gap-1">
+                  {group.rows.map((row, index) => (
+                    <div key={`${group.machine}-${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`} className="grid gap-1 rounded border bg-background px-2 py-1">
+                      <div className="text-xs font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded border border-dashed bg-background px-2 py-1 text-xs text-muted-foreground">{group.emptyMessage || "No current planned rows in this queue."}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-md border border-dashed bg-background p-2 text-sm text-muted-foreground">No destination or downstream queues were identified from the current plan.</div>
+      )}
+    </div>
   );
 }
 function PlannerPriorityForm({
