@@ -173,3 +173,15 @@ Relevant code:
 - `apps/web/lib/legacy-dashboard-analysis.ts` - machine-unavailable windows feed assignment and production-date delay.
 - `apps/web/components/mrmpl-dashboard.tsx` - `MachineConstraintPlannerForm` shows affected queue before saving.
 - `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `delays a locked running setup on an unavailable machine and cascades that machine queue`.
+
+## Running breakdown quantity split
+
+Date: 2026-07-01
+
+If a machine-unavailable/breakdown window is saved while the affected machine is running, the planner must enter the produced quantity for that running setup before the issue is saved. Planning treats that quantity as real produced WIP on the stopped machine and replans only the remaining quantity onto compatible alternate machines when possible. Alternate-machine selection still uses the normal route-machine rules and must keep the 25-day dispatch target from RM inward date in mind. If no viable alternate exists, the remaining quantity is delayed after the unavailable window on the original locked machine.
+
+Relevant code:
+
+- `apps/web/components/mrmpl-dashboard.tsx` - machine issue review requires produced quantity for running rows and records plan-by-rule/review choice.
+- `apps/web/lib/legacy-dashboard-analysis.ts` - splits produced quantity from remaining quantity and schedules the remaining quantity on alternates under the dispatch target.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `moves remaining running breakdown quantity to an alternate machine using the dispatch rule`.

@@ -61,12 +61,42 @@ type WipProductionStream = {
   dailyQty: number;
 };
 
+type PlanningProductionActual = {
+  startDate: string;
+  latestDate: string;
+  outputQty: number;
+  actualQty: number;
+  rows: number;
+  dates: Set<string>;
+};
+
+type MachineUnavailableInterruption = {
+  jcNo: string;
+  setupNo: string;
+  machine: string;
+  finishedQty: number;
+};
+
 type MachineUnavailableWindow = {
   machine: string;
   fromDate: string;
   toDate: string;
   action: string;
   reason: string;
+  interruptedSetups: MachineUnavailableInterruption[];
+};
+
+type MachineUnavailableSetupInterruption = MachineUnavailableInterruption & {
+  window: MachineUnavailableWindow;
+};
+
+type MachineUnavailableSplitPlan = {
+  producedMachineKey: string;
+  remainingMachineKeys: Set<string>;
+  orderPcsByMachine: Map<string, number>;
+  producedActualByMachine: Map<string, PlanningProductionActual>;
+  producedQty: number;
+  remainingQty: number;
 };
 
 const rejectionEntryCount = 5;
@@ -2248,7 +2278,14 @@ function machinePlanDetails(
         routeMachine,
       }));
       if (routePlanningBlocked && !productionActualMachines.size && !lockedShopFloorMachines.size) continue;
-      const assignedMachines = assignedPhysicalMachines({
+      const interruptedLockedMachines = new Set([...lockedShopFloorMachines, ...productionActualMachines]);
+      const readyDateForAssignment = operationReadyDate || plannedSetupDate(rmInwardDate, routeIndex, planningCalendar);
+      const breakdownInterruption = machineUnavailableInterruptionForSetup(machineUnavailableWindows, {
+        jcNo: rowText(row, "jcNo"),
+        setupNo: displaySetupNo,
+        lockedMachines: interruptedLockedMachines,
+      });
+      let assignedMachines = assignedPhysicalMachines({
         routeMachine,
         machineType,
         orderPcs: setupOrderPcs,
@@ -2259,7 +2296,7 @@ function machinePlanDetails(
         machineNextSetupDate,
         machinePlannedDays,
         machinePlannedQty,
-        readyDate: operationReadyDate || plannedSetupDate(rmInwardDate, routeIndex, planningCalendar),
+        readyDate: readyDateForAssignment,
         deadlineDate: dispatchDeadlineDate,
         override,
         productionActualMachines: productionActualMachines.size ? productionActualMachines : undefined,
@@ -2267,17 +2304,51 @@ function machinePlanDetails(
         previousMachines: previousMachines?.size ? previousMachines : undefined,
         planningCalendar,
       });
+      if (breakdownInterruption && setupOrderPcs > breakdownInterruption.finishedQty) {
+        const remainingQty = Math.max(setupOrderPcs - Math.max(breakdownInterruption.finishedQty, 0), 0);
+        const remainingMachines = assignedPhysicalMachines({
+          routeMachine,
+          machineType,
+          orderPcs: remainingQty,
+          cycle,
+          machineRows,
+          machineUnavailableWindows,
+          machineLoad,
+          machineNextSetupDate,
+          machinePlannedDays,
+          machinePlannedQty,
+          readyDate: maxDateValue(readyDateForAssignment, breakdownInterruption.window.fromDate),
+          deadlineDate: dispatchDeadlineDate,
+          override,
+          previousMachines: previousMachines?.size ? previousMachines : undefined,
+          planningCalendar,
+        }).filter((machine) => canonicalKey(machine) !== canonicalKey(breakdownInterruption.machine));
+        if (remainingMachines.length) assignedMachines = [breakdownInterruption.machine, ...remainingMachines];
+      }
       if (!assignedMachines.length) {
         routePlanningBlocked = true;
         operationReadyCanPullForward = false;
         continue;
       }
       routePlanningBlocked = false;
-      const machineOrderPcs = assignedMachineOrderPcs(setupOrderPcs, assignedMachines.length);
+      const unavailableSplitPlan = machineUnavailableSplitPlan({
+        setupOrderPcs,
+        assignedMachines,
+        interruption: breakdownInterruption,
+        planningCalendar,
+      });
+      const fallbackMachineOrderPcs = assignedMachineOrderPcs(setupOrderPcs, assignedMachines.length);
       const routeProductionEndDates: string[] = [];
       const routeProductionStreams: WipProductionStream[] = [];
       const routeProductionActuals: Array<{ latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }> = [];
       for (const machine of assignedMachines) {
+        const machineKeyValue = canonicalKey(machine);
+        const machineOrderPcs = unavailableSplitPlan?.orderPcsByMachine.get(machineKeyValue) ?? fallbackMachineOrderPcs;
+        const splitRole = unavailableSplitPlan?.producedMachineKey === machineKeyValue
+          ? "produced_on_unavailable_machine"
+          : unavailableSplitPlan?.remainingMachineKeys.has(machineKeyValue)
+            ? "remaining_moved_to_alternate_machine"
+            : "";
         const shopFloorStatus = findShopFloorStatus(shopFloorStatusBySetup, {
           jcNo: rowText(row, "jcNo"),
           partCode,
@@ -2285,7 +2356,7 @@ function machinePlanDetails(
           setupNo,
           machine,
         });
-        const productionActual = rawBySetup.get(productionSetupKey({
+        let productionActual = rawBySetup.get(productionSetupKey({
           jcNo: rowText(row, "jcNo"),
           partCode,
           setupNo: displaySetupNo,
@@ -2296,6 +2367,7 @@ function machinePlanDetails(
           setupNo,
           machine,
         })) ?? (productionActualAnyMachine?.machines.has(machine) ? productionActualAnyMachine : undefined);
+        productionActual = mergedProductionActual(productionActual, unavailableSplitPlan?.producedActualByMachine.get(machineKeyValue));
         const taskWorkflowStage = normalizeSetupLifecycleStage(shopFloorStatus ? rowText(shopFloorStatus, "stage") : "");
         const taskWorkflowStarted = setupLifecycleStageRank(taskWorkflowStage) >= setupLifecycleStageRank("operator_started");
         const rawProductionWithoutWorkflow = Boolean(productionActual?.rows && !taskWorkflowStarted);
@@ -2307,8 +2379,9 @@ function machinePlanDetails(
         const shopFloorCompletedAt = shopFloorStatus ? rowText(shopFloorStatus, "completedAt", "createdAt") : "";
         const shopFloorDoneBy = shopFloorStatus ? rowText(shopFloorStatus, "doneBy") : "";
         const staticBaseReadyDate = routeIndex === 0 ? addDays(parseDate(rmInwardDate) || rmInwardDate, 0, planningCalendar) : plannedSetupDate(rmInwardDate, routeIndex, planningCalendar);
-        const baseSetupDate = operationReadyDate || staticBaseReadyDate;
-        const machineKeyValue = canonicalKey(machine);
+        const baseSetupDate = splitRole === "remaining_moved_to_alternate_machine"
+          ? maxDateValue(operationReadyDate || staticBaseReadyDate, breakdownInterruption?.window.fromDate ?? "")
+          : operationReadyDate || staticBaseReadyDate;
         const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
         const plannedCompletionDate = plannedStartDate;
         const setupCompletionDate = settingDone ? parseDate(shopFloorCompletedAt) || shopFloorCompletedAt : "";
@@ -2393,7 +2466,10 @@ function machinePlanDetails(
         shopFloorTaskBlocker: taskReadiness.blocker,
         planVsActual: setupPlanVsActual(plannedCompletionDate, setupCompletionDate),
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
-          machineAssignment: machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
+        machineUnavailableSplitRole: splitRole,
+        machineUnavailableProducedQty: splitRole ? unavailableSplitPlan?.producedQty ?? 0 : 0,
+        machineUnavailableRemainingQty: splitRole ? unavailableSplitPlan?.remainingQty ?? 0 : 0,
+          machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity planned by 25-day rule" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
           parallelMachineCount: assignedMachines.length,
           planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for combined downstream WIP demand plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; downstream setups are assigned independently; parallel machines require at least ${minimumParallelMachineWorkDays} production days each`,
         };
@@ -3461,10 +3537,46 @@ function activeMachineUnavailableWindows(machineConstraints: ActionRow[]): Machi
         toDate,
         action: rowText(row, "rescheduleAction", "STATUS") || "shift_required",
         reason: rowText(row, "reason", "REASON", "remark", "REMARK"),
+        interruptedSetups: machineUnavailableInterruptedSetups(row),
       };
     })
     .filter((window) => window.machine && window.fromDate && window.toDate)
     .sort((left, right) => left.fromDate.localeCompare(right.fromDate) || left.machine.localeCompare(right.machine, undefined, { numeric: true }));
+}
+
+function machineUnavailableInterruptedSetups(row: Record<string, unknown>): MachineUnavailableInterruption[] {
+  const raw = row.interruptedSetups;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
+    .map((item) => item as Record<string, unknown>)
+    .map((item) => ({
+      jcNo: canonicalKey(rowText(item, "jcNo", "JC NO", "jobCard")),
+      setupNo: canonicalKey(rowText(item, "setupNo", "SETUP NO", "setup")),
+      machine: canonicalKey(rowText(item, "machine", "machineNo", "MACHINE NO", "M/C NO")),
+      finishedQty: safeNumber(rowValue(item, "finishedQty", "FINISHED QTY", "producedQty", "PRODUCED QTY")),
+    }))
+    .filter((item) => item.jcNo && item.setupNo && item.machine);
+}
+
+function machineUnavailableInterruptionForSetup(
+  windows: MachineUnavailableWindow[],
+  target: { jcNo: string; setupNo: string; lockedMachines: Set<string> },
+): MachineUnavailableSetupInterruption | undefined {
+  const jcKey = canonicalKey(target.jcNo);
+  const setupKey = canonicalKey(target.setupNo);
+  const lockedMachineList = [...target.lockedMachines].filter(Boolean);
+  const lockedMachineKeys = new Set(lockedMachineList.map(canonicalKey));
+  if (!jcKey || !setupKey || !lockedMachineKeys.size) return undefined;
+  for (const window of windows) {
+    for (const interruption of window.interruptedSetups) {
+      if (interruption.jcNo !== jcKey || interruption.setupNo !== setupKey) continue;
+      if (!lockedMachineKeys.has(interruption.machine)) continue;
+      const lockedMachine = lockedMachineList.find((machine) => canonicalKey(machine) === interruption.machine) ?? interruption.machine;
+      return { ...interruption, machine: lockedMachine, finishedQty: Math.max(0, interruption.finishedQty), window };
+    }
+  }
+  return undefined;
 }
 
 function machineUnavailableWindowsFor(windows: MachineUnavailableWindow[], machine: string) {
@@ -3536,9 +3648,69 @@ function machineUnavailableRemainingProductionEnd(
   const resumeDate = machineUnavailableResumeDate(window, planningCalendar);
   if (!resumeDate) return "";
   const remainingQty = Math.max((meta.orderPcs ?? 0) - (meta.productionActual?.actualQty ?? 0), 0);
-  if (!remainingQty) return resumeDate;
+  if (!remainingQty) return "";
   return plannedProductionEnd(resumeDate, remainingQty, meta.cycle, undefined, planningCalendar);
 }
+function machineUnavailableSplitPlan({
+  setupOrderPcs,
+  assignedMachines,
+  interruption,
+  planningCalendar,
+}: {
+  setupOrderPcs: number;
+  assignedMachines: string[];
+  interruption?: MachineUnavailableSetupInterruption;
+  planningCalendar: PlanningCalendar;
+}): MachineUnavailableSplitPlan | undefined {
+  if (!interruption || !assignedMachines.length) return undefined;
+  const producedMachineKey = canonicalKey(interruption.machine);
+  const remainingMachines = assignedMachines.filter((machine) => canonicalKey(machine) !== producedMachineKey);
+  if (!producedMachineKey) return undefined;
+  const producedQty = Math.min(setupOrderPcs, Math.max(0, interruption.finishedQty));
+  const remainingQty = Math.max(setupOrderPcs - producedQty, 0);
+  const orderPcsByMachine = new Map<string, number>();
+  const remainingMachineQty = assignedMachineOrderPcs(remainingQty, remainingMachines.length);
+  const remainingMachineKeys = new Set<string>();
+  if (remainingMachines.length) orderPcsByMachine.set(producedMachineKey, producedQty);
+  for (const machine of remainingMachines) {
+    const machineKeyValue = canonicalKey(machine);
+    if (!machineKeyValue) continue;
+    remainingMachineKeys.add(machineKeyValue);
+    orderPcsByMachine.set(machineKeyValue, remainingMachineQty);
+  }
+  const actualDate = addDays(interruption.window.fromDate, 0, planningCalendar);
+  const producedActualByMachine = new Map<string, PlanningProductionActual>();
+  if (actualDate && producedQty > 0) {
+    producedActualByMachine.set(producedMachineKey, {
+      startDate: actualDate,
+      latestDate: actualDate,
+      outputQty: producedQty,
+      actualQty: producedQty,
+      rows: 1,
+      dates: new Set([actualDate]),
+    });
+  }
+  return { producedMachineKey, remainingMachineKeys, orderPcsByMachine, producedActualByMachine, producedQty, remainingQty };
+}
+
+function mergedProductionActual(
+  actual: PlanningProductionActual | undefined,
+  manualActual: PlanningProductionActual | undefined,
+) {
+  if (!manualActual) return actual;
+  if (!actual) return manualActual;
+  const dates = new Set([...actual.dates, ...manualActual.dates]);
+  return {
+    ...actual,
+    startDate: actual.startDate || manualActual.startDate,
+    latestDate: maxDateValue(actual.latestDate, manualActual.latestDate),
+    outputQty: Math.max(actual.outputQty, manualActual.outputQty),
+    actualQty: Math.max(actual.actualQty, manualActual.actualQty),
+    rows: Math.max(actual.rows, manualActual.rows),
+    dates,
+  };
+}
+
 function firstOverlappingMachineUnavailableWindow(windows: MachineUnavailableWindow[], startDate: string, endDate: string) {
   const start = parseDate(startDate) || startDate;
   const end = parseDate(endDate) || endDate;

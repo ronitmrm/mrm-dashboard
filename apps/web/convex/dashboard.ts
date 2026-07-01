@@ -155,6 +155,13 @@ const machineConstraintValidator = {
   reason: v.string(),
   remark: optionalString,
   rescheduleAction: optionalString,
+  planningMode: optionalString,
+  interruptedSetups: v.optional(v.array(v.object({
+    jcNo: v.string(),
+    setupNo: v.string(),
+    machine: v.string(),
+    finishedQty: optionalNumber,
+  }))),
   createdAt: optionalString,
 };
 const planOverrideValidator = {
@@ -1233,6 +1240,13 @@ export const saveMachineConstraint = mutation({
     reason: v.string(),
     remark: optionalString,
     rescheduleAction: optionalString,
+    planningMode: optionalString,
+    interruptedSetups: v.optional(v.array(v.object({
+      jcNo: v.string(),
+      setupNo: v.string(),
+      machine: v.string(),
+      finishedQty: optionalNumber,
+    }))),
   },
   handler: async (ctx, args) => {
     const result = await insertOwnerRow(ctx, "machineConstraints", args);

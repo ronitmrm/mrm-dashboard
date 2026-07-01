@@ -94,6 +94,13 @@ export default defineSchema({
     reason: v.string(),
     remark: v.optional(v.string()),
     rescheduleAction: v.optional(v.string()),
+    planningMode: v.optional(v.string()),
+    interruptedSetups: v.optional(v.array(v.object({
+      jcNo: v.string(),
+      setupNo: v.string(),
+      machine: v.string(),
+      finishedQty: v.optional(v.number()),
+    }))),
     createdAt: v.string(),
   }).index("by_owner", ["ownerId"]),
   planOverrides: defineTable({

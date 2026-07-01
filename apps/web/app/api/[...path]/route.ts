@@ -201,6 +201,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         reason: String(body.reason || ""),
         remark: body.remark ? String(body.remark) : undefined,
         rescheduleAction: body.rescheduleAction ? String(body.rescheduleAction) : undefined,
+        planningMode: body.planningMode ? String(body.planningMode) : undefined,
+        interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
       });
       return json(await withPlanningRefresh(path, body, { ...result, message: "Machine issue saved." }));
     }

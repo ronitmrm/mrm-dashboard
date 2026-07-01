@@ -301,7 +301,173 @@ describe("buildLegacyDashboardSnapshot", () => {
       vi.useRealTimers();
     }
   });
-  it("locks route-family assignment once raw material is at the physical machine", () => {
+  it("moves remaining running breakdown quantity to an alternate machine using the dispatch rule", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        machineConstraints: [
+          {
+            machineNo: "A510",
+            unavailableFrom: "2026-07-01",
+            unavailableTo: "2026-07-06",
+            reason: "Breakdown",
+            rescheduleAction: "shift_required",
+            planningMode: "plan_by_rule",
+            interruptedSetups: [
+              { jcNo: "JC-RUNNING-A5", setupNo: "1", machine: "A510", finishedQty: 3 },
+            ],
+            status: "Active",
+            createdAt: "2026-07-01T10:16:31.528Z",
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { jcNo: "JC-RUNNING-A5", partCode: "M22", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+          },
+          {
+            entryType: "route",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M22", optionNumber: "1", setupNo: "1", machineUsed: "A5", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M22", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo: "A510", machineType: "AUTOMATIC", status: "Active" },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo: "A511", machineType: "AUTOMATIC", status: "Active" },
+          },
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-07-01T08:00:00.000Z",
+            payload: {
+              jcNo: "JC-RUNNING-A5",
+              partCode: "M22",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "A510",
+              stage: "operator_started",
+              completedAt: "2026-07-01T08:00:00.000Z",
+            },
+          },
+        ],
+      });
+
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-RUNNING-A5");
+      const produced = rows.find((row) => row.machine === "A510");
+      const remaining = rows.find((row) => row.machine === "A511");
+
+      expect(produced).toMatchObject({
+        machine: "A510",
+        orderPcs: 3,
+        totalOrderPcs: 10,
+        rawActualQty: 3,
+        runningStatus: "Running",
+        machineUnavailableSplitRole: "produced_on_unavailable_machine",
+      });
+      expect(remaining).toMatchObject({
+        machine: "A511",
+        orderPcs: 7,
+        totalOrderPcs: 10,
+        runningStatus: "Planned",
+        plannedProductionStartDate: "1-July-26",
+        plannedProductionEndDate: "8-July-26",
+        machineUnavailableSplitRole: "remaining_moved_to_alternate_machine",
+      });
+      expect(dashboardDateKey(remaining?.plannedProductionEndDate)).toBeLessThanOrEqual(dashboardDateKey("26-July-26"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("counts produced breakdown quantity before delaying remaining quantity when no alternate exists", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        machineConstraints: [
+          {
+            machineNo: "A510",
+            unavailableFrom: "2026-07-01",
+            unavailableTo: "2026-07-06",
+            reason: "Breakdown",
+            rescheduleAction: "shift_required",
+            planningMode: "plan_by_rule",
+            interruptedSetups: [
+              { jcNo: "JC-RUNNING-A5-SOLO", setupNo: "1", machine: "A510", finishedQty: 3 },
+            ],
+            status: "Active",
+            createdAt: "2026-07-01T10:16:31.528Z",
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { jcNo: "JC-RUNNING-A5-SOLO", partCode: "M22", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+          },
+          {
+            entryType: "route",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M22", optionNumber: "1", setupNo: "1", machineUsed: "A5", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M22", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo: "A510", machineType: "AUTOMATIC", status: "Active" },
+          },
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-07-01T08:00:00.000Z",
+            payload: {
+              jcNo: "JC-RUNNING-A5-SOLO",
+              partCode: "M22",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "A510",
+              stage: "operator_started",
+              completedAt: "2026-07-01T08:00:00.000Z",
+            },
+          },
+        ],
+      });
+
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-RUNNING-A5-SOLO");
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        machine: "A510",
+        orderPcs: 10,
+        totalOrderPcs: 10,
+        rawActualQty: 3,
+        runningStatus: "Running",
+        machineUnavailableProducedQty: 3,
+        machineUnavailableRemainingQty: 7,
+      });
+      expect(dashboardDateKey(rows[0]?.plannedProductionEndDate)).toBeGreaterThanOrEqual(dashboardDateKey("7-July-26"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });  it("locks route-family assignment once raw material is at the physical machine", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-30T12:00:00.000Z"));
 

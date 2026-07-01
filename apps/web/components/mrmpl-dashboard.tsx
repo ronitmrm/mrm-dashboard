@@ -927,22 +927,40 @@ function MachineConstraintPlannerForm({
   const [unavailableFrom, setUnavailableFrom] = useState("");
   const [unavailableTo, setUnavailableTo] = useState("");
   const [rescheduleAction, setRescheduleAction] = useState("shift_required");
+  const [planningMode, setPlanningMode] = useState("plan_by_rule");
   const [reason, setReason] = useState("");
   const [reviewReady, setReviewReady] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [producedQtyByRow, setProducedQtyByRow] = useState<Record<string, string>>({});
   const affectedRows = useMemo(() => machineIssueAffectedRows(plannedRows, {
     machineNo,
     unavailableFrom,
     unavailableTo,
   }), [machineNo, plannedRows, unavailableFrom, unavailableTo]);
+  const runningRows = affectedRows.filter(machineIssueRowNeedsProducedQty);
   const lockedCount = affectedRows.filter(machineIssueRowIsLocked).length;
   const plannedCount = affectedRows.length - lockedCount;
+  const missingProducedQty = runningRows.some((row) => {
+    const rawValue = producedQtyByRow[machineIssueRowKey(row)]?.trim() ?? "";
+    const value = Number(rawValue);
+    const orderQty = Number(row.totalOrderPcs || row.orderPcs);
+    return rawValue === "" || !Number.isFinite(value) || value < 0 || (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty);
+  });
   const canReview = Boolean(machineNo.trim() && unavailableFrom);
-  const canSave = canReview && Boolean(reason.trim()) && reviewReady;
+  const canSave = canReview && Boolean(reason.trim()) && reviewReady && !missingProducedQty;
 
   function updateField(setter: Dispatch<SetStateAction<string>>, value: string) {
     setter(value);
     setReviewReady(false);
+  }
+
+  function updatePlanningInput(setter: Dispatch<SetStateAction<string>>, value: string) {
+    setter(value);
+  }
+
+  function updateProducedQty(row: DashboardPayload, value: string) {
+    const key = machineIssueRowKey(row);
+    setProducedQtyByRow((current) => ({ ...current, [key]: value }));
   }
 
   async function saveMachineIssue(event: FormEvent<HTMLFormElement>) {
@@ -954,19 +972,29 @@ function MachineConstraintPlannerForm({
     if (!canSave || isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const interruptedSetups = runningRows.map((row) => ({
+        jcNo: jobCardNumber(row),
+        setupNo: displayValue(row.setupNo),
+        machine: machineValue(row, "machine"),
+        finishedQty: Number(producedQtyByRow[machineIssueRowKey(row)] ?? 0),
+      }));
       await submitAction("machine-constraint", {
         machineNo,
         unavailableFrom,
         unavailableTo,
         rescheduleAction,
+        planningMode,
+        interruptedSetups,
         reason,
-        remark: `Reviewed ${affectedRows.length} affected setup rows; ${lockedCount} locked; ${plannedCount} planned`,
+        remark: `Reviewed ${affectedRows.length} affected setup rows; ${lockedCount} locked; ${plannedCount} planned; ${runningRows.length} running rows captured with produced quantity; ${planningMode}`,
       });
       setMachineNo("");
       setUnavailableFrom("");
       setUnavailableTo("");
       setRescheduleAction("shift_required");
+      setPlanningMode("plan_by_rule");
       setReason("");
+      setProducedQtyByRow({});
       setReviewReady(false);
     } finally {
       setIsSubmitting(false);
@@ -977,7 +1005,7 @@ function MachineConstraintPlannerForm({
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={saveMachineIssue}>
       <div>
         <div className="text-sm font-medium">2. Machine unavailable / breakdown</div>
-        <div className="text-xs text-muted-foreground">Review affected planned rows before saving the machine issue.</div>
+        <div className="text-xs text-muted-foreground">Running rows need produced quantity before remaining quantity is planned elsewhere.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
         <Field label="Machine unavailable">
@@ -999,6 +1027,12 @@ function MachineConstraintPlannerForm({
             <option value="delay">delay plan</option>
           </select>
         </Field>
+        <Field label="Planning confirmation">
+          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={planningMode} onChange={(event) => updatePlanningInput(setPlanningMode, event.target.value)}>
+            <option value="plan_by_rule">Plan by 25-day rule</option>
+            <option value="review_then_plan">Review queue before saving</option>
+          </select>
+        </Field>
         <Field label="Reason">
           <Input value={reason} placeholder="Breakdown / quality hold" required onChange={(event) => setReason(event.target.value)} />
         </Field>
@@ -1009,20 +1043,40 @@ function MachineConstraintPlannerForm({
             <span>{formatNumber(affectedRows.length)} affected setup rows</span>
             <span>{formatNumber(lockedCount)} locked on machine</span>
             <span>{formatNumber(plannedCount)} planned/unlocked</span>
+            <span>{formatNumber(runningRows.length)} running quantity inputs</span>
           </div>
           {affectedRows.length ? (
-            <div className="grid max-h-56 gap-2 overflow-y-auto pr-1">
-              {affectedRows.map((row, index) => (
-                <div key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`} className="grid gap-1 rounded-md border bg-background p-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-                    <StatusBadge value={machineIssueRowIsLocked(row) ? "Delay locked setup" : "Shift if alternate exists"} />
+            <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
+              {affectedRows.map((row, index) => {
+                const needsProducedQty = machineIssueRowNeedsProducedQty(row);
+                const producedKey = machineIssueRowKey(row);
+                const orderQty = Number(row.totalOrderPcs || row.orderPcs);
+                return (
+                  <div key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`} className="grid gap-2 rounded-md border bg-background p-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
+                      <StatusBadge value={needsProducedQty ? "Produced qty required" : machineIssueRowIsLocked(row) ? "Delay locked setup" : "Shift if alternate exists"} />
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+                    </div>
+                    {needsProducedQty ? (
+                      <Field label="Produced qty">
+                        <Input
+                          type="number"
+                          min="0"
+                          max={Number.isFinite(orderQty) && orderQty > 0 ? orderQty : undefined}
+                          step="1"
+                          value={producedQtyByRow[producedKey] ?? ""}
+                          placeholder="0"
+                          required
+                          onChange={(event) => updateProducedQty(row, event.target.value)}
+                        />
+                      </Field>
+                    ) : null}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {machineValue(row, "machine")} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup rows overlap this unavailable window.</div>
@@ -1032,7 +1086,7 @@ function MachineConstraintPlannerForm({
       <div className="flex flex-wrap gap-2">
         <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && !canSave)}>
           <Wrench className="size-4" />
-          {reviewReady ? "Save reviewed machine issue" : "Review affected queue"}
+          {reviewReady ? "Save and replan remaining qty" : "Review affected queue"}
         </Button>
         {reviewReady ? (
           <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setReviewReady(false)}>
@@ -4303,6 +4357,8 @@ type DashboardActionMutations = {
     reason: string;
     remark?: string;
     rescheduleAction?: string;
+    planningMode?: string;
+    interruptedSetups?: Array<{ jcNo: string; setupNo: string; machine: string; finishedQty?: number }>;
   }) => Promise<unknown>;
   savePlanOverride: (args: {
     target: string;
@@ -4396,6 +4452,8 @@ async function runDashboardAction(
       reason: text(body.reason),
       remark: optionalText(body.remark),
       rescheduleAction: optionalText(body.rescheduleAction),
+      planningMode: optionalText(body.planningMode),
+      interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
     });
     return "Machine issue saved.";
   }
@@ -4729,6 +4787,19 @@ function machineIssueRowIsLocked(row: DashboardPayload) {
   return shopFloorItemIsCurrent(row)
     || runningStatus === "setup complete"
     || ["raw_material_at_machine", "presetting", "setting", "quality_approval"].includes(stage);
+}
+function machineIssueRowNeedsProducedQty(row: DashboardPayload) {
+  const runningStatus = str(row.runningStatus).toLowerCase();
+  const stage = str(row.shopFloorStage);
+  return runningStatus === "running"
+    || ["operator_started", "worker_start"].includes(stage)
+    || Number(row.rawRows) > 0
+    || Number(row.rawOutputQty) > 0
+    || Number(row.rawActualQty) > 0;
+}
+
+function machineIssueRowKey(row: DashboardPayload) {
+  return [jobCardNumber(row), displayValue(row.setupNo), machineValue(row, "machine")].map(machineKey).join("|");
 }
 function machineValue(row: DashboardPayload, type: "machine" | "machineType") {
   if (type === "machine") {
