@@ -890,24 +890,7 @@ function PlannerDecisionConsole({
       </CardHeader>
       <CardContent className="grid gap-4">
         <PlannerPriorityForm productionControl={productionControl} submitAction={submitAction} />
-        <LegacyActionForm
-          title="2. Machine unavailable / breakdown"
-          description="Use when the machine itself cannot be used."
-          fields={[
-            { name: "machineNo", label: "Machine unavailable", placeholder: "ADB901", required: true },
-            { name: "unavailableFrom", label: "From", type: "date" },
-            { name: "unavailableTo", label: "To", type: "date" },
-            {
-              name: "rescheduleAction",
-              label: "Plan action",
-              options: ["shift_required", "shift_all", "delay"],
-              defaultValue: "shift_required",
-            },
-            { name: "reason", label: "Reason", placeholder: "Breakdown / quality hold", required: true },
-          ]}
-          buttonLabel="Save machine issue"
-          onSubmit={(body) => submitAction("machine-constraint", body)}
-        />
+        <MachineConstraintPlannerForm productionControl={productionControl} submitAction={submitAction} />
         <LegacyActionForm
           title="3. Part-specific machine switch"
           description="Use when this job card or setup cannot run on the planned machine."
@@ -931,6 +914,135 @@ function PlannerDecisionConsole({
   );
 }
 
+function MachineConstraintPlannerForm({
+  productionControl,
+  submitAction,
+}: {
+  productionControl: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+}) {
+  const plannedRows = asArray(productionControl.machinePlanDetailRows);
+  const machineOptions = useMemo(() => plannedMachineOptions(plannedRows), [plannedRows]);
+  const [machineNo, setMachineNo] = useState("");
+  const [unavailableFrom, setUnavailableFrom] = useState("");
+  const [unavailableTo, setUnavailableTo] = useState("");
+  const [rescheduleAction, setRescheduleAction] = useState("shift_required");
+  const [reason, setReason] = useState("");
+  const [reviewReady, setReviewReady] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const affectedRows = useMemo(() => machineIssueAffectedRows(plannedRows, {
+    machineNo,
+    unavailableFrom,
+    unavailableTo,
+  }), [machineNo, plannedRows, unavailableFrom, unavailableTo]);
+  const lockedCount = affectedRows.filter(machineIssueRowIsLocked).length;
+  const plannedCount = affectedRows.length - lockedCount;
+  const canReview = Boolean(machineNo.trim() && unavailableFrom);
+  const canSave = canReview && Boolean(reason.trim()) && reviewReady;
+
+  function updateField(setter: Dispatch<SetStateAction<string>>, value: string) {
+    setter(value);
+    setReviewReady(false);
+  }
+
+  async function saveMachineIssue(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!reviewReady) {
+      setReviewReady(true);
+      return;
+    }
+    if (!canSave || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await submitAction("machine-constraint", {
+        machineNo,
+        unavailableFrom,
+        unavailableTo,
+        rescheduleAction,
+        reason,
+        remark: `Reviewed ${affectedRows.length} affected setup rows; ${lockedCount} locked; ${plannedCount} planned`,
+      });
+      setMachineNo("");
+      setUnavailableFrom("");
+      setUnavailableTo("");
+      setRescheduleAction("shift_required");
+      setReason("");
+      setReviewReady(false);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={saveMachineIssue}>
+      <div>
+        <div className="text-sm font-medium">2. Machine unavailable / breakdown</div>
+        <div className="text-xs text-muted-foreground">Review affected planned rows before saving the machine issue.</div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+        <Field label="Machine unavailable">
+          <Input list="machine-constraint-machine-options" value={machineNo} placeholder="ADB901" required onChange={(event) => updateField(setMachineNo, event.target.value)} />
+          <datalist id="machine-constraint-machine-options">
+            {machineOptions.map((option) => <option key={option} value={option} />)}
+          </datalist>
+        </Field>
+        <Field label="From">
+          <Input type="date" value={unavailableFrom} required onChange={(event) => updateField(setUnavailableFrom, event.target.value)} />
+        </Field>
+        <Field label="To">
+          <Input type="date" value={unavailableTo} onChange={(event) => updateField(setUnavailableTo, event.target.value)} />
+        </Field>
+        <Field label="Plan action">
+          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={rescheduleAction} onChange={(event) => updateField(setRescheduleAction, event.target.value)}>
+            <option value="shift_required">shift required</option>
+            <option value="shift_all">shift all</option>
+            <option value="delay">delay plan</option>
+          </select>
+        </Field>
+        <Field label="Reason">
+          <Input value={reason} placeholder="Breakdown / quality hold" required onChange={(event) => setReason(event.target.value)} />
+        </Field>
+      </div>
+      {reviewReady ? (
+        <div className="grid gap-2 rounded-md border bg-muted/15 p-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{formatNumber(affectedRows.length)} affected setup rows</span>
+            <span>{formatNumber(lockedCount)} locked on machine</span>
+            <span>{formatNumber(plannedCount)} planned/unlocked</span>
+          </div>
+          {affectedRows.length ? (
+            <div className="grid max-h-56 gap-2 overflow-y-auto pr-1">
+              {affectedRows.map((row, index) => (
+                <div key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`} className="grid gap-1 rounded-md border bg-background p-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
+                    <StatusBadge value={machineIssueRowIsLocked(row) ? "Delay locked setup" : "Shift if alternate exists"} />
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {machineValue(row, "machine")} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup rows overlap this unavailable window.</div>
+          )}
+        </div>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && !canSave)}>
+          <Wrench className="size-4" />
+          {reviewReady ? "Save reviewed machine issue" : "Review affected queue"}
+        </Button>
+        {reviewReady ? (
+          <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setReviewReady(false)}>
+            Recheck inputs
+          </Button>
+        ) : null}
+      </div>
+    </form>
+  );
+}
 function PlannerPriorityForm({
   productionControl,
   submitAction,
@@ -4585,6 +4697,39 @@ function nextPlanningHolidayLabel(rows: DashboardPayload[]) {
   return next?.label ?? "-";
 }
 
+function machineIssueAffectedRows(
+  rows: DashboardPayload[],
+  issue: { machineNo: string; unavailableFrom: string; unavailableTo: string },
+) {
+  const targetMachine = machineKey(issue.machineNo);
+  if (!targetMachine) return [];
+  const windowStart = dateSortValue(issue.unavailableFrom);
+  const rawWindowEnd = dateSortValue(issue.unavailableTo || issue.unavailableFrom);
+  const hasWindow = windowStart !== Number.MAX_SAFE_INTEGER;
+  const windowEnd = rawWindowEnd === Number.MAX_SAFE_INTEGER ? windowStart : rawWindowEnd;
+  const start = Math.min(windowStart, windowEnd);
+  const end = Math.max(windowStart, windowEnd);
+  return rows
+    .filter((row) => machineKey(machineValue(row, "machine")) === targetMachine)
+    .filter((row) => !hasWindow || machineIssueRowOverlaps(row, start, end))
+    .sort(machinePlanDisplaySort);
+}
+
+function machineIssueRowOverlaps(row: DashboardPayload, windowStart: number, windowEnd: number) {
+  const rowStart = dateSortValue(row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
+  if (rowStart === Number.MAX_SAFE_INTEGER) return true;
+  const rawRowEnd = dateSortValue(row.plannedProductionEndDate || row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
+  const rowEnd = rawRowEnd === Number.MAX_SAFE_INTEGER ? rowStart : rawRowEnd;
+  return rowStart <= windowEnd && rowEnd >= windowStart;
+}
+
+function machineIssueRowIsLocked(row: DashboardPayload) {
+  const stage = str(row.shopFloorStage);
+  const runningStatus = str(row.runningStatus).toLowerCase();
+  return shopFloorItemIsCurrent(row)
+    || runningStatus === "setup complete"
+    || ["raw_material_at_machine", "presetting", "setting", "quality_approval"].includes(stage);
+}
 function machineValue(row: DashboardPayload, type: "machine" | "machineType") {
   if (type === "machine") {
     return displayValue(row.machine || row.machineNo || row["MACHINE NO"] || row["M/C NO"] || row["MACHINE NO."]);

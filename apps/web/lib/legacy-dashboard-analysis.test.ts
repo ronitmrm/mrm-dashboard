@@ -219,6 +219,88 @@ describe("buildLegacyDashboardSnapshot", () => {
     });
   });
 
+  it("delays a locked running setup on an unavailable machine and cascades that machine queue", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        machineConstraints: [
+          {
+            machineNo: "A510",
+            unavailableFrom: "2026-07-01",
+            unavailableTo: "2026-07-06",
+            reason: "Breakdown",
+            rescheduleAction: "shift_required",
+            status: "Active",
+            createdAt: "2026-07-01T10:16:31.528Z",
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { jcNo: "JC-RUNNING-A5", partCode: "M22", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-01" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:01:00.000Z",
+            payload: { jcNo: "JC-FOLLOW-A5", partCode: "M23", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-07-01" },
+          },
+          ...["M22", "M23"].flatMap((partNo) => [
+            {
+              entryType: "route",
+              createdAt: "2026-07-01T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "A5", machineType: "AUTOMATIC" },
+            },
+            {
+              entryType: "cycle",
+              createdAt: "2026-07-01T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            },
+          ]),
+          {
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo: "A510", machineType: "AUTOMATIC", status: "Active" },
+          },
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-07-01T08:00:00.000Z",
+            payload: {
+              jcNo: "JC-RUNNING-A5",
+              partCode: "M22",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "A510",
+              stage: "operator_started",
+              completedAt: "2026-07-01T08:00:00.000Z",
+            },
+          },
+        ],
+      });
+
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "A510");
+      const running = rows.find((row) => row.jcNo === "JC-RUNNING-A5");
+      const follower = rows.find((row) => row.jcNo === "JC-FOLLOW-A5");
+
+      expect(running).toMatchObject({
+        machine: "A510",
+        runningStatus: "Running",
+        plannedProductionStartDate: "7-July-26",
+        plannedProductionEndDate: "8-July-26",
+      });
+      expect(follower).toMatchObject({
+        machine: "A510",
+        setupPlannedDate: "9-July-26",
+        plannedProductionStartDate: "9-July-26",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("locks route-family assignment once raw material is at the physical machine", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-30T12:00:00.000Z"));

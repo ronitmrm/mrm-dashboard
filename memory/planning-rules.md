@@ -159,3 +159,17 @@ Relevant code:
 
 - `apps/web/components/mrmpl-dashboard.tsx` - `PriorityQueuePlacementBoard` and `PrioritySetupPreviewSummary`.
 - `apps/web/lib/priority-change-plan.ts` - queue placement state feeds `priorityPlanStepWindows` and `priorityPlanQueueBeforeSetups`.
+
+## Machine unavailable / breakdown planning
+
+Date: 2026-07-01
+
+Machine-unavailable constraints are date-window constraints, not only machine-selection filters. During recalculation, `shift_required` and `shift_all` should avoid the unavailable physical machine only when an unlocked setup has a viable alternate. If a setup is already physically locked by raw-material-at-machine or later shop-floor progress, or if no alternate machine exists, the setup stays on that machine and the production forecast moves after the unavailable window. That delayed production end must cascade through the rest of that machine queue and downstream setup WIP dates.
+
+The planner console should review affected setup rows before saving a machine issue. Locked rows are shown as delayed on the current machine; planned/unlocked rows are shown as shift-if-alternate candidates.
+
+Relevant code:
+
+- `apps/web/lib/legacy-dashboard-analysis.ts` - machine-unavailable windows feed assignment and production-date delay.
+- `apps/web/components/mrmpl-dashboard.tsx` - `MachineConstraintPlannerForm` shows affected queue before saving.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `delays a locked running setup on an unavailable machine and cascades that machine queue`.
