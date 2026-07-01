@@ -392,6 +392,93 @@ describe("buildLegacyDashboardSnapshot", () => {
       vi.useRealTimers();
     }
   });
+  it("honors reviewed destination queue placement for a machine-unavailable shift", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        machineConstraints: [
+          {
+            machineNo: "A510",
+            unavailableFrom: "2026-07-01",
+            unavailableTo: "2026-07-04",
+            reason: "Breakdown",
+            rescheduleAction: "shift_required",
+            planningMode: "review_then_plan",
+            queuePlacements: [
+              {
+                targetJcNo: "JC-MOVE-A5",
+                targetPartCode: "M22",
+                targetSetupNo: "1",
+                targetSourceMachine: "A510",
+                targetMachine: "A511",
+                queueBeforeSetups: [
+                  { jcNo: "JC-BLOCK-A5", setupNo: "1", machine: "A511" },
+                ],
+              },
+            ],
+            status: "Active",
+            createdAt: "2026-07-01T10:16:31.528Z",
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { jcNo: "JC-MOVE-A5", partCode: "M22", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-01" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:01:00.000Z",
+            payload: { jcNo: "JC-BLOCK-A5", partCode: "M20", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-02" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:02:00.000Z",
+            payload: { jcNo: "JC-FOLLOW-A5", partCode: "M23", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-01" },
+          },
+          ...["M20", "M22", "M23"].flatMap((partNo) => [
+            {
+              entryType: "route",
+              createdAt: "2026-07-01T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "A5", machineType: "AUTOMATIC" },
+            },
+            {
+              entryType: "cycle",
+              createdAt: "2026-07-01T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            },
+          ]),
+          {
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo: "A510", machineType: "AUTOMATIC", status: "Active" },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo: "A511", machineType: "AUTOMATIC", status: "Active" },
+          },
+        ],
+      });
+
+      const blocker = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-BLOCK-A5");
+      const moved = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-MOVE-A5");
+
+      expect(blocker).toMatchObject({ machine: "A511", partCode: "M20" });
+      expect(moved).toMatchObject({
+        machine: "A511",
+        partCode: "M22",
+        machineUnavailableQueuePlacementTarget: true,
+      });
+      expect(dashboardDateKey(moved?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(blocker?.plannedProductionEndDate));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("counts produced breakdown quantity before delaying remaining quantity when no alternate exists", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));

@@ -209,3 +209,16 @@ Relevant code:
 - `apps/web/components/mrmpl-dashboard.tsx` - `PartMachineSwitchPlannerForm` replaces the legacy generic switch form with queue review and confirmation.
 - `apps/web/lib/machine-constraint-review.ts` - supports explicit destination machines and optional source-machine queue suppression.
 - `apps/web/lib/machine-constraint-review.test.ts` - regression coverage for selected-destination-only review and no source-machine later queue in part switches.
+
+## Machine breakdown moved-item queue placement
+
+Date: 2026-07-01
+
+When `review_then_plan` is selected for a machine-unavailable/breakdown action with `shift_required` or `shift_all`, the affected movable setup rows must be shown as draggable tiles in the compatible destination queue review. The planner's tile placement is saved as `queuePlacements`, including the target setup, destination machine, and existing queue rows kept ahead of that moved setup. During recalculation, the destination machine from the reviewed placement is preferred for that moved setup, listed blockers stay ahead, and active/running destination rows still cannot be bypassed. Family idle-gap balancing must not silently insert other work ahead of a reviewed moved setup unless the planner explicitly kept that work ahead.
+
+Relevant code:
+
+- `apps/web/components/mrmpl-dashboard.tsx` - `MachineConstraintQueuePlacementBoard` and `machineConstraintQueuePlacements`.
+- `apps/web/convex/dashboard.ts` and `apps/web/convex/schema.ts` - machine constraint `queuePlacements` persistence.
+- `apps/web/lib/legacy-dashboard-analysis.ts` - machine-unavailable placement parsing, assignment override, final queue ordering, and idle-gap guard.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `honors reviewed destination queue placement for a machine-unavailable shift`.

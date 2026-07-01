@@ -923,6 +923,7 @@ function MachineConstraintPlannerForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [producedQtyByRow, setProducedQtyByRow] = useState<Record<string, string>>({});
   const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false);
+  const [queueAfterByRow, setQueueAfterByRow] = useState<Record<string, string>>({});
   const affectedRows = useMemo(() => machineIssueAffectedRows(plannedRows, {
     machineNo,
     unavailableFrom,
@@ -947,6 +948,10 @@ function MachineConstraintPlannerForm({
     return rawValue === "" || !Number.isFinite(value) || value < 0 || (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty);
   });
   const queueReviewRequired = planningMode === "review_then_plan";
+  const movableAffectedRows = useMemo(
+    () => machineConstraintMovableRows(affectedRows, rescheduleAction),
+    [affectedRows, rescheduleAction],
+  );
   const canReview = Boolean(machineNo.trim() && unavailableFrom);
   const canSave = canReview && Boolean(reason.trim()) && reviewReady && !missingProducedQty && (!queueReviewRequired || queueReviewConfirmed);
 
@@ -954,11 +959,13 @@ function MachineConstraintPlannerForm({
     setter(value);
     setReviewReady(false);
     setQueueReviewConfirmed(false);
+    setQueueAfterByRow({});
   }
 
   function updatePlanningInput(setter: Dispatch<SetStateAction<string>>, value: string) {
     setter(value);
     setQueueReviewConfirmed(false);
+    setQueueAfterByRow({});
   }
 
   function updateProducedQty(row: DashboardPayload, value: string) {
@@ -981,6 +988,7 @@ function MachineConstraintPlannerForm({
         machine: machineValue(row, "machine"),
         finishedQty: Number(producedQtyByRow[machineIssueRowKey(row)] ?? 0),
       }));
+      const queuePlacements = machineConstraintQueuePlacements(queueReviewGroups, movableAffectedRows, queueAfterByRow);
       await submitAction("machine-constraint", {
         machineNo,
         unavailableFrom,
@@ -988,8 +996,9 @@ function MachineConstraintPlannerForm({
         rescheduleAction,
         planningMode,
         interruptedSetups,
+        queuePlacements,
         reason,
-        remark: `Reviewed ${affectedRows.length} affected setup rows; ${lockedCount} locked; ${plannedCount} planned; ${runningRows.length} running rows captured with produced quantity; ${queueReviewGroups.length} queue review groups; ${planningMode}`,
+        remark: `Reviewed ${affectedRows.length} affected setup rows; ${lockedCount} locked; ${plannedCount} planned; ${runningRows.length} running rows captured with produced quantity; ${queueReviewGroups.length} queue review groups; ${queuePlacements.length} queue placements; ${planningMode}`,
       });
       setMachineNo("");
       setUnavailableFrom("");
@@ -998,6 +1007,7 @@ function MachineConstraintPlannerForm({
       setPlanningMode("system_recalculate");
       setReason("");
       setProducedQtyByRow({});
+      setQueueAfterByRow({});
       setQueueReviewConfirmed(false);
       setReviewReady(false);
     } finally {
@@ -1087,7 +1097,17 @@ function MachineConstraintPlannerForm({
           )}
           {queueReviewRequired ? (
             <>
-              <MachineConstraintQueueReviewPanel groups={queueReviewGroups} />
+              <MachineConstraintQueueReviewPanel
+                groups={queueReviewGroups}
+                movableRows={movableAffectedRows}
+                queueAfterByRow={queueAfterByRow}
+                onQueueAfterChange={(rowKey, value) => setQueueAfterByRow((current) => {
+                  const next = { ...current };
+                  if (value) next[rowKey] = value;
+                  else delete next[rowKey];
+                  return next;
+                })}
+              />
               <label className="flex items-start gap-2 rounded-md border bg-background p-2 text-sm">
                 <input
                   className="mt-1"
@@ -1282,11 +1302,28 @@ function PartMachineSwitchPlannerForm({
     </form>
   );
 }
-function MachineConstraintQueueReviewPanel({ groups }: { groups: MachineConstraintQueueReviewGroup[] }) {
+function MachineConstraintQueueReviewPanel({
+  groups,
+  movableRows = [],
+  queueAfterByRow = {},
+  onQueueAfterChange,
+}: {
+  groups: MachineConstraintQueueReviewGroup[];
+  movableRows?: DashboardPayload[];
+  queueAfterByRow?: Record<string, string>;
+  onQueueAfterChange?: (rowKey: string, value: string) => void;
+}) {
+  const destinationGroups = groups.filter((group) => group.kind === "destination");
+  const defaultDestinationMachine = destinationGroups[0]?.machine ?? "";
+  const canPlaceTiles = Boolean(onQueueAfterChange && movableRows.length && destinationGroups.length);
+
   return (
     <div className="grid gap-2 rounded-md border border-dashed bg-background p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-medium">Replanned queue review</div>
+        <div>
+          <div className="text-sm font-medium">Replanned queue review</div>
+          {canPlaceTiles ? <div className="text-xs text-muted-foreground">Drag each affected setup tile to the planned position before saving.</div> : null}
+        </div>
         <StatusBadge value={`${formatNumber(groups.length)} queue groups`} />
       </div>
       {groups.length ? (
@@ -1298,19 +1335,16 @@ function MachineConstraintQueueReviewPanel({ groups }: { groups: MachineConstrai
                 <StatusBadge value={group.kind === "destination" ? "Destination queue" : group.kind === "downstream" ? "Downstream WIP queue" : "Same machine queue"} />
               </div>
               <div className="text-xs text-muted-foreground">{group.description}</div>
-              {group.rows.length ? (
-                <div className="grid gap-1">
-                  {group.rows.map((row, index) => (
-                    <div key={`${group.machine}-${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`} className="grid gap-1 rounded border bg-background px-2 py-1">
-                      <div className="text-xs font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              {canPlaceTiles && group.kind === "destination" && onQueueAfterChange ? (
+                <MachineConstraintQueuePlacementBoard
+                  group={group}
+                  movableRows={movableRows}
+                  queueAfterByRow={queueAfterByRow}
+                  defaultDestinationMachine={defaultDestinationMachine}
+                  onQueueAfterChange={onQueueAfterChange}
+                />
               ) : (
-                <div className="rounded border border-dashed bg-background px-2 py-1 text-xs text-muted-foreground">{group.emptyMessage || "No current planned rows in this queue."}</div>
+                <MachineConstraintStaticQueueRows group={group} />
               )}
             </div>
           ))}
@@ -1319,6 +1353,135 @@ function MachineConstraintQueueReviewPanel({ groups }: { groups: MachineConstrai
         <div className="rounded-md border border-dashed bg-background p-2 text-sm text-muted-foreground">No destination or downstream queues were identified from the current plan.</div>
       )}
     </div>
+  );
+}
+
+function MachineConstraintQueuePlacementBoard({
+  group,
+  movableRows,
+  queueAfterByRow,
+  defaultDestinationMachine,
+  onQueueAfterChange,
+}: {
+  group: MachineConstraintQueueReviewGroup;
+  movableRows: DashboardPayload[];
+  queueAfterByRow: Record<string, string>;
+  defaultDestinationMachine: string;
+  onQueueAfterChange: (rowKey: string, value: string) => void;
+}) {
+  const groupMachineKey = machineKey(group.machine);
+  const movableKeys = new Set(movableRows.map(machineIssueRowKey));
+  const placedRows = movableRows.filter((row) => {
+    const placement = machineConstraintPlacementParts(queueAfterByRow[machineIssueRowKey(row)], defaultDestinationMachine);
+    return placement.machineKey === groupMachineKey;
+  });
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  function placeRow(rowKey: string, index: number) {
+    const boundedIndex = Math.max(0, Math.min(index, group.rows.length));
+    const afterKey = boundedIndex > 0 ? machineConstraintQueueRowKey(group.rows[boundedIndex - 1]!) : "";
+    onQueueAfterChange(rowKey, machineConstraintPlacementValue(group.machine, afterKey));
+  }
+
+  function allowDrop(event: DragEvent<HTMLButtonElement>, index: number) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverIndex(index);
+  }
+
+  function dropMoveTile(event: DragEvent<HTMLButtonElement>, index: number) {
+    event.preventDefault();
+    const sourceKey = event.dataTransfer.getData("text/plain");
+    setDragOverIndex(null);
+    if (!sourceKey || !movableKeys.has(sourceKey)) return;
+    placeRow(sourceKey, index);
+  }
+
+  return (
+    <div className="grid gap-1 rounded-md border bg-background p-2">
+      {Array.from({ length: group.rows.length + 1 }, (_, index) => {
+        const slotRows = placedRows.filter((row) => machineConstraintQueuePlacementIndex(group.rows, machineConstraintPlacementParts(queueAfterByRow[machineIssueRowKey(row)], defaultDestinationMachine).afterKey) === index);
+        return (
+          <Fragment key={`${group.machine}-slot-${index}`}>
+            <PriorityQueueDropZone
+              active={dragOverIndex === index}
+              current={slotRows.length > 0}
+              label={machineConstraintQueueDropLabel(index, group.rows)}
+              onClick={() => undefined}
+              onDragOver={(event) => allowDrop(event, index)}
+              onDragLeave={() => setDragOverIndex((current) => current === index ? null : current)}
+              onDrop={(event) => dropMoveTile(event, index)}
+            />
+            {slotRows.map((row) => (
+              <MachineConstraintMoveTile
+                key={`${group.machine}-${machineIssueRowKey(row)}`}
+                row={row}
+                targetMachine={group.machine}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", machineIssueRowKey(row));
+                }}
+                onDragEnd={() => setDragOverIndex(null)}
+              />
+            ))}
+            {index < group.rows.length ? (
+              <MachineConstraintQueueRowTile row={group.rows[index]!} />
+            ) : null}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function MachineConstraintMoveTile({
+  row,
+  targetMachine,
+  onDragStart,
+  onDragEnd,
+}: {
+  row: DashboardPayload;
+  targetMachine: string;
+  onDragStart: (event: DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
+}) {
+  return (
+    <div
+      className="grid cursor-grab gap-2 rounded-md border border-primary/50 bg-primary/10 p-2 active:cursor-grabbing md:grid-cols-[auto_1fr_auto] md:items-center"
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+    >
+      <GripVertical className="size-4 text-primary" aria-hidden="true" />
+      <div>
+        <div className="text-sm font-semibold">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
+        <div className="text-xs text-muted-foreground">Move remaining/planned quantity to {targetMachine} | Current {machineValue(row, "machine")} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)}</div>
+      </div>
+      <Badge>Move</Badge>
+    </div>
+  );
+}
+
+function MachineConstraintQueueRowTile({ row }: { row: DashboardPayload }) {
+  return (
+    <div className="grid gap-1 rounded border bg-background px-2 py-1">
+      <div className="text-xs font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
+      <div className="text-xs text-muted-foreground">
+        {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+      </div>
+    </div>
+  );
+}
+
+function MachineConstraintStaticQueueRows({ group }: { group: MachineConstraintQueueReviewGroup }) {
+  return group.rows.length ? (
+    <div className="grid gap-1">
+      {group.rows.map((row, index) => (
+        <MachineConstraintQueueRowTile key={`${group.machine}-${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`} row={row} />
+      ))}
+    </div>
+  ) : (
+    <div className="rounded border border-dashed bg-background px-2 py-1 text-xs text-muted-foreground">{group.emptyMessage || "No current planned rows in this queue."}</div>
   );
 }
 function PlannerPriorityForm({
@@ -3998,7 +4161,7 @@ function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: Das
             {setupRows.map((setup, index) => (
               <div key={`${displayValue(setup.setupNo)}-${displayValue(setup.machine)}-${index}`} className="rounded-md border bg-muted/10 p-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-medium">Setup {displayValue(setup.setupNo)} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {displayValue(setup.machine)}</div>
+                  <div className="text-sm font-medium">Setup {displayValue(setup.setupNo)} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {displayValue(setup.machine)}</div>
                   <StatusBadge value={setup.runningStatus} />
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -4583,6 +4746,14 @@ type DashboardActionMutations = {
     rescheduleAction?: string;
     planningMode?: string;
     interruptedSetups?: Array<{ jcNo: string; setupNo: string; machine: string; finishedQty?: number }>;
+    queuePlacements?: Array<{
+      targetJcNo: string;
+      targetPartCode?: string;
+      targetSetupNo: string;
+      targetSourceMachine?: string;
+      targetMachine: string;
+      queueBeforeSetups?: Array<{ jcNo: string; setupNo: string; machine: string }>;
+    }>;
   }) => Promise<unknown>;
   savePlanOverride: (args: {
     target: string;
@@ -4678,6 +4849,7 @@ async function runDashboardAction(
       rescheduleAction: optionalText(body.rescheduleAction),
       planningMode: optionalText(body.planningMode),
       interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
+      queuePlacements: machineConstraintQueuePlacementsInput(body.queuePlacements),
     });
     return "Machine issue saved.";
   }
@@ -4807,6 +4979,30 @@ function priorityInterruptedSetups(value: unknown) {
 }
 
 
+function machineConstraintQueuePlacementsInput(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const rows = value
+    .map((row) => asRecord(row))
+    .map((row) => {
+      const queueBeforeSetups = Array.isArray(row.queueBeforeSetups)
+        ? row.queueBeforeSetups.map((queueRow) => asRecord(queueRow)).map((queueRow) => ({
+          jcNo: text(queueRow.jcNo),
+          setupNo: text(queueRow.setupNo),
+          machine: text(queueRow.machine),
+        })).filter((queueRow) => queueRow.jcNo && queueRow.setupNo && queueRow.machine)
+        : [];
+      return {
+        targetJcNo: text(row.targetJcNo),
+        targetPartCode: optionalText(row.targetPartCode),
+        targetSetupNo: text(row.targetSetupNo),
+        targetSourceMachine: optionalText(row.targetSourceMachine),
+        targetMachine: text(row.targetMachine),
+        queueBeforeSetups,
+      };
+    })
+    .filter((row) => row.targetJcNo && row.targetSetupNo && row.targetMachine);
+  return rows.length ? rows : undefined;
+}
 function priorityQueueBeforeSetups(value: unknown) {
   if (!Array.isArray(value)) return undefined;
   const rows = value
@@ -4901,7 +5097,7 @@ function routeOptionText(option: DashboardPayload, fallback: string) {
     str(option.setupCount || option.numberOfSetups) ? `${str(option.setupCount || option.numberOfSetups)} setups` : "",
   ]
     .filter(Boolean)
-    .join(" ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ");
+    .join(" ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ");
 }
 
 function readFileAsDataUrl(file: File) {
@@ -4979,6 +5175,86 @@ function nextPlanningHolidayLabel(rows: DashboardPayload[]) {
   return next?.label ?? "-";
 }
 
+type MachineConstraintQueuePlacementPayload = {
+  targetJcNo: string;
+  targetPartCode: string;
+  targetSetupNo: string;
+  targetSourceMachine: string;
+  targetMachine: string;
+  queueBeforeSetups: Array<{ jcNo: string; setupNo: string; machine: string }>;
+};
+
+const machineConstraintPlacementSeparator = "::after::";
+
+function machineConstraintMovableRows(rows: DashboardPayload[], rescheduleAction: string) {
+  if (machineKey(rescheduleAction) === "delay") return [];
+  return rows.filter((row) => machineIssueRowNeedsProducedQty(row) || !machineIssueRowIsLocked(row));
+}
+
+function machineConstraintQueuePlacements(
+  groups: MachineConstraintQueueReviewGroup[],
+  movableRows: DashboardPayload[],
+  queueAfterByRow: Record<string, string>,
+): MachineConstraintQueuePlacementPayload[] {
+  const destinationGroups = groups.filter((group) => group.kind === "destination");
+  const defaultDestinationMachine = destinationGroups[0]?.machine ?? "";
+  if (!defaultDestinationMachine) return [];
+  const placements: MachineConstraintQueuePlacementPayload[] = [];
+  const seen = new Set<string>();
+  for (const row of movableRows) {
+    const rowKey = machineIssueRowKey(row);
+    const placement = machineConstraintPlacementParts(queueAfterByRow[rowKey], defaultDestinationMachine);
+    const group = destinationGroups.find((candidate) => machineKey(candidate.machine) === placement.machineKey);
+    if (!group) continue;
+    const placementIndex = machineConstraintQueuePlacementIndex(group.rows, placement.afterKey);
+    const queueBeforeSetups = group.rows.slice(0, placementIndex).map((queueRow) => ({
+      jcNo: jobCardNumber(queueRow),
+      setupNo: displayValue(queueRow.setupNo),
+      machine: machineValue(queueRow, "machine"),
+    })).filter((queueRow) => queueRow.jcNo && queueRow.setupNo && queueRow.machine);
+    const payload = {
+      targetJcNo: jobCardNumber(row),
+      targetPartCode: itemCode(row),
+      targetSetupNo: displayValue(row.setupNo),
+      targetSourceMachine: machineValue(row, "machine"),
+      targetMachine: group.machine,
+      queueBeforeSetups,
+    };
+    const key = [payload.targetJcNo, payload.targetSetupNo, payload.targetSourceMachine, payload.targetMachine].map(machineKey).join("|");
+    if (!payload.targetJcNo || !payload.targetSetupNo || !payload.targetMachine || seen.has(key)) continue;
+    seen.add(key);
+    placements.push(payload);
+  }
+  return placements;
+}
+
+function machineConstraintPlacementValue(machine: string, afterKey: string) {
+  return `${machineKey(machine)}${machineConstraintPlacementSeparator}${afterKey}`;
+}
+
+function machineConstraintPlacementParts(value: string | undefined, defaultMachine: string) {
+  const [machineValuePart = "", ...afterParts] = (value || "").split(machineConstraintPlacementSeparator);
+  return {
+    machineKey: machineValuePart || machineKey(defaultMachine),
+    afterKey: afterParts.join(machineConstraintPlacementSeparator),
+  };
+}
+
+function machineConstraintQueuePlacementIndex(rows: DashboardPayload[], afterKey: string) {
+  if (!afterKey) return 0;
+  const rowIndex = rows.findIndex((row) => machineConstraintQueueRowKey(row) === afterKey);
+  return rowIndex < 0 ? 0 : rowIndex + 1;
+}
+
+function machineConstraintQueueRowKey(row: DashboardPayload) {
+  return [jobCardNumber(row), displayValue(row.setupNo), machineValue(row, "machine")].map(machineKey).join("|");
+}
+
+function machineConstraintQueueDropLabel(index: number, rows: DashboardPayload[]) {
+  if (index === 0) return "Place moved setup at position 1";
+  const row = rows[index - 1];
+  return row ? `Place moved setup after ${itemCode(row)} / ${jobCardNumber(row)} / setup ${displayValue(row.setupNo)}` : "Place moved setup at the end of this queue";
+}
 function machineIssueAffectedRows(
   rows: DashboardPayload[],
   issue: { machineNo: string; unavailableFrom: string; unavailableTo: string },

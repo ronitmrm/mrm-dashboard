@@ -77,6 +77,21 @@ type MachineUnavailableInterruption = {
   finishedQty: number;
 };
 
+type MachineUnavailableQueueBeforeSetup = {
+  jcNo: string;
+  setupNo: string;
+  machine: string;
+};
+
+type MachineUnavailableQueuePlacement = {
+  targetJcNo: string;
+  targetPartCode: string;
+  targetSetupNo: string;
+  targetSourceMachine: string;
+  targetMachine: string;
+  queueBeforeSetups: MachineUnavailableQueueBeforeSetup[];
+};
+
 type MachineUnavailableWindow = {
   machine: string;
   fromDate: string;
@@ -84,6 +99,7 @@ type MachineUnavailableWindow = {
   action: string;
   reason: string;
   interruptedSetups: MachineUnavailableInterruption[];
+  queuePlacements: MachineUnavailableQueuePlacement[];
 };
 
 type MachineUnavailableSetupInterruption = MachineUnavailableInterruption & {
@@ -2285,6 +2301,14 @@ function machinePlanDetails(
         setupNo: displaySetupNo,
         lockedMachines: interruptedLockedMachines,
       });
+      const machineUnavailablePlacement = machineUnavailableQueuePlacementForSetup(machineUnavailableWindows, {
+        jcNo: rowText(row, "jcNo"),
+        partCode,
+        setupNo: displaySetupNo,
+      });
+      const machineUnavailableOverride = machineUnavailablePlacement?.targetMachine
+        ? { toMachine: machineUnavailablePlacement.targetMachine } as ActionRow
+        : undefined;
       let assignedMachines = assignedPhysicalMachines({
         routeMachine,
         machineType,
@@ -2298,7 +2322,7 @@ function machinePlanDetails(
         machinePlannedQty,
         readyDate: readyDateForAssignment,
         deadlineDate: dispatchDeadlineDate,
-        override,
+        override: interruptedLockedMachines.size ? override : machineUnavailableOverride ?? override,
         productionActualMachines: productionActualMachines.size ? productionActualMachines : undefined,
         lockedMachines: lockedShopFloorMachines.size ? lockedShopFloorMachines : undefined,
         previousMachines: previousMachines?.size ? previousMachines : undefined,
@@ -2319,7 +2343,7 @@ function machinePlanDetails(
           machinePlannedQty,
           readyDate: maxDateValue(readyDateForAssignment, breakdownInterruption.window.fromDate),
           deadlineDate: dispatchDeadlineDate,
-          override,
+          override: machineUnavailableOverride ?? override,
           previousMachines: previousMachines?.size ? previousMachines : undefined,
           planningCalendar,
         }).filter((machine) => canonicalKey(machine) !== canonicalKey(breakdownInterruption.machine));
@@ -2406,6 +2430,7 @@ function machinePlanDetails(
         }
         if (machineKeyValue && plannedProductionEndDate) machineNextSetupDate.set(machineKeyValue, nextMachineAvailableDate(plannedProductionEndDate, planningCalendar));
         const taskReadiness = shopFloorTaskReadiness(operationReadyCanPullForward, plannedStartDate);
+        const machineUnavailableQueueBeforeSetups = machineUnavailableQueueBeforeSetupsForMachine(machineUnavailablePlacement, machine);
         const detail = {
         machine,
         routeMachine,
@@ -2469,9 +2494,11 @@ function machinePlanDetails(
         machineUnavailableSplitRole: splitRole,
         machineUnavailableProducedQty: splitRole ? unavailableSplitPlan?.producedQty ?? 0 : 0,
         machineUnavailableRemainingQty: splitRole ? unavailableSplitPlan?.remainingQty ?? 0 : 0,
-          machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
-          parallelMachineCount: assignedMachines.length,
-          planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for combined downstream WIP demand plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; downstream setups are assigned independently; parallel machines require at least ${minimumParallelMachineWorkDays} production days each`,
+        machineUnavailableQueueBeforeSetups,
+        machineUnavailableQueuePlacementTarget: Boolean(machineUnavailablePlacement && machineUnavailablePlacement.targetMachine === canonicalKey(machine)),
+        machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
+        parallelMachineCount: assignedMachines.length,
+        planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for combined downstream WIP demand plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; downstream setups are assigned independently; parallel machines require at least ${minimumParallelMachineWorkDays} production days each`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -2706,6 +2733,7 @@ function familyIdleGapCandidate(
   return details
     .filter((row) => isFamilyIdleGapCandidate(row, gap))
     .filter((row) => !setupAlreadyOnMachine(details, row, gap.targetMachine))
+    .filter((row) => !machineUnavailablePlacementRejectsGapCandidate(details, row, gap.targetMachine))
     .sort((a, b) =>
       (safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"))) ||
       queueReadyDate(a).localeCompare(queueReadyDate(b)) ||
@@ -2722,6 +2750,7 @@ function leadingFamilyIdleGapCandidate(
   return details
     .filter((row) => isLeadingFamilyIdleGapCandidate(row, gap))
     .filter((row) => !setupAlreadyOnMachine(details, row, gap.targetMachine))
+    .filter((row) => !machineUnavailablePlacementRejectsGapCandidate(details, row, gap.targetMachine))
     .sort((a, b) =>
       (safeNumber(rowValue(b, "plannerPriorityScore")) - safeNumber(rowValue(a, "plannerPriorityScore"))) ||
       queueReadyDate(a).localeCompare(queueReadyDate(b)) ||
@@ -2730,6 +2759,12 @@ function leadingFamilyIdleGapCandidate(
     )[0];
 }
 
+function machineUnavailablePlacementRejectsGapCandidate(details: Array<Record<string, unknown>>, candidate: Record<string, unknown>, targetMachine: string) {
+  const targetMachineKey = canonicalKey(targetMachine);
+  if (!targetMachineKey) return false;
+  const candidateOnTarget = { ...candidate, machine: targetMachine };
+  return details.some((row) => canonicalKey(rowText(row, "machine")) === targetMachineKey && machineUnavailablePlacesRowBefore(row, candidateOnTarget));
+}
 function isLeadingFamilyIdleGapCandidate(row: Record<string, unknown>, gap: { targetMachine: string; targetMachineType: string; gapEnd: string; excludedKeys: Set<string>; planningCalendar: PlanningCalendar }) {
   if (gap.excludedKeys.has(scheduleRowKey(row))) return false;
   if (familyIdleGapRejectedForMachine(row, gap.targetMachine)) return false;
@@ -2999,15 +3034,57 @@ function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>
     if (aActualStart && bActualStart) return aActualStart.localeCompare(bActualStart);
     return aActualStart ? -1 : 1;
   }
+  const stateRankDiff = priorityQueueStateRank(a) - priorityQueueStateRank(b);
+  if (stateRankDiff) return stateRankDiff;
+  const aMachineHeldBeforeB = machineUnavailableKeepsRowBefore(b, a);
+  const bMachineHeldBeforeA = machineUnavailableKeepsRowBefore(a, b);
+  if (aMachineHeldBeforeB && !bMachineHeldBeforeA) return -1;
+  if (bMachineHeldBeforeA && !aMachineHeldBeforeB) return 1;
+  const aPlacedBeforeB = machineUnavailablePlacesRowBefore(a, b);
+  const bPlacedBeforeA = machineUnavailablePlacesRowBefore(b, a);
+  if (aPlacedBeforeB && !bPlacedBeforeA) return -1;
+  if (bPlacedBeforeA && !aPlacedBeforeB) return 1;
   const familyTargetDiff = compareFamilyIdleGapSortDates(a, b);
-  return priorityQueueStateRank(a) - priorityQueueStateRank(b) ||
-    allowedPriorityDiff ||
-    familyTargetDiff ||
+  return familyTargetDiff ||
     machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) ||
     rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo"));
 }
 
+function machineUnavailableKeepsRowBefore(targetRow: Record<string, unknown>, blockingRow: Record<string, unknown>) {
+  return machineUnavailableQueueBeforeSetupsForSort(targetRow).some((queueBefore) => machineUnavailableQueueBeforeMatchesRow(queueBefore, blockingRow));
+}
+
+function machineUnavailablePlacesRowBefore(targetRow: Record<string, unknown>, otherRow: Record<string, unknown>) {
+  if (!machineUnavailableHasQueuePlacement(targetRow)) return false;
+  if (scheduleRowKey(targetRow) === scheduleRowKey(otherRow)) return false;
+  if (canonicalKey(rowText(targetRow, "machine", "machineNo")) !== canonicalKey(rowText(otherRow, "machine", "machineNo"))) return false;
+  return !machineUnavailableKeepsRowBefore(targetRow, otherRow);
+}
+
+function machineUnavailableHasQueuePlacement(row: Record<string, unknown>) {
+  return rowValue(row, "machineUnavailableQueuePlacementTarget") === true || rowText(row, "machineUnavailableQueuePlacementTarget").toLowerCase() === "true";
+}
+
+function machineUnavailableQueueBeforeSetupsForSort(row: Record<string, unknown>): MachineUnavailableQueueBeforeSetup[] {
+  const raw = row.machineUnavailableQueueBeforeSetups;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
+    .map((item) => item as Record<string, unknown>)
+    .map((item) => ({
+      jcNo: canonicalKey(rowText(item, "jcNo", "JC NO", "jobCard")),
+      setupNo: canonicalKey(rowText(item, "setupNo", "SETUP NO", "setup")),
+      machine: canonicalKey(rowText(item, "machine", "machineNo", "MACHINE NO", "M/C NO")),
+    }))
+    .filter((item) => item.jcNo && item.setupNo && item.machine);
+}
+
+function machineUnavailableQueueBeforeMatchesRow(queueBefore: MachineUnavailableQueueBeforeSetup, row: Record<string, unknown>) {
+  return queueBefore.jcNo === canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"))
+    && queueBefore.setupNo === canonicalKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))
+    && (!queueBefore.machine || queueBefore.machine === canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO")));
+}
 function applyPriorityInterruptionQuantities(details: Array<Record<string, unknown>>) {
   const stopApprovals = details.filter((row) => priorityApprovalMode(row) === "allow_stop_running" && priorityApprovalHasFinishedQty(row));
   for (const approval of stopApprovals) {
@@ -3232,6 +3309,8 @@ function shouldReserveMachineQueueSlot(first: Record<string, unknown>, queue: Ar
 
 function shouldHoldMachineQueuePosition(ahead: Record<string, unknown>, candidate: Record<string, unknown>) {
   if (priorityQueueState(ahead) !== "idle") return true;
+  if (machineUnavailableKeepsRowBefore(candidate, ahead)) return true;
+  if (machineUnavailablePlacesRowBefore(candidate, ahead)) return false;
   return canPriorityPreempt(candidate, ahead);
 }
 
@@ -3538,6 +3617,7 @@ function activeMachineUnavailableWindows(machineConstraints: ActionRow[]): Machi
         action: rowText(row, "rescheduleAction", "STATUS") || "shift_required",
         reason: rowText(row, "reason", "REASON", "remark", "REMARK"),
         interruptedSetups: machineUnavailableInterruptedSetups(row),
+        queuePlacements: machineUnavailableQueuePlacements(row),
       };
     })
     .filter((window) => window.machine && window.fromDate && window.toDate)
@@ -3559,6 +3639,60 @@ function machineUnavailableInterruptedSetups(row: Record<string, unknown>): Mach
     .filter((item) => item.jcNo && item.setupNo && item.machine);
 }
 
+function machineUnavailableQueuePlacements(row: Record<string, unknown>): MachineUnavailableQueuePlacement[] {
+  const raw = row.queuePlacements;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
+    .map((item) => item as Record<string, unknown>)
+    .map((item) => {
+      const rawQueueBefore = item.queueBeforeSetups;
+      const queueBeforeSetups = Array.isArray(rawQueueBefore)
+        ? rawQueueBefore
+          .filter((queueItem) => typeof queueItem === "object" && queueItem !== null && !Array.isArray(queueItem))
+          .map((queueItem) => queueItem as Record<string, unknown>)
+          .map((queueItem) => ({
+            jcNo: canonicalKey(rowText(queueItem, "jcNo", "JC NO", "jobCard")),
+            setupNo: canonicalKey(rowText(queueItem, "setupNo", "SETUP NO", "setup")),
+            machine: canonicalKey(rowText(queueItem, "machine", "machineNo", "MACHINE NO", "M/C NO")),
+          }))
+          .filter((queueItem) => queueItem.jcNo && queueItem.setupNo && queueItem.machine)
+        : [];
+      return {
+        targetJcNo: canonicalKey(rowText(item, "targetJcNo", "jcNo", "JC NO", "jobCard")),
+        targetPartCode: canonicalKey(rowText(item, "targetPartCode", "partCode", "PART CODE", "partNo")),
+        targetSetupNo: canonicalKey(rowText(item, "targetSetupNo", "setupNo", "SETUP NO", "setup")),
+        targetSourceMachine: canonicalKey(rowText(item, "targetSourceMachine", "sourceMachine", "fromMachine", "machine")),
+        targetMachine: canonicalKey(rowText(item, "targetMachine", "toMachine", "machine", "machineNo")),
+        queueBeforeSetups,
+      };
+    })
+    .filter((item) => item.targetJcNo && item.targetSetupNo && item.targetMachine);
+}
+
+function machineUnavailableQueuePlacementForSetup(
+  windows: MachineUnavailableWindow[],
+  target: { jcNo: string; partCode: string; setupNo: string },
+): MachineUnavailableQueuePlacement | undefined {
+  const jcKey = canonicalKey(target.jcNo);
+  const partKey = canonicalKey(target.partCode);
+  const setupKey = canonicalKey(target.setupNo);
+  if (!jcKey || !setupKey) return undefined;
+  for (const window of windows) {
+    for (const placement of window.queuePlacements) {
+      if (placement.targetJcNo !== jcKey) continue;
+      if (placement.targetPartCode && partKey && placement.targetPartCode !== partKey) continue;
+      if (placement.targetSetupNo !== setupKey) continue;
+      return placement;
+    }
+  }
+  return undefined;
+}
+
+function machineUnavailableQueueBeforeSetupsForMachine(placement: MachineUnavailableQueuePlacement | undefined, machine: string) {
+  if (!placement) return [];
+  return placement.targetMachine === canonicalKey(machine) ? placement.queueBeforeSetups : [];
+}
 function machineUnavailableInterruptionForSetup(
   windows: MachineUnavailableWindow[],
   target: { jcNo: string; setupNo: string; lockedMachines: Set<string> },

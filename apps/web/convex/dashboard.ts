@@ -162,6 +162,18 @@ const machineConstraintValidator = {
     machine: v.string(),
     finishedQty: optionalNumber,
   }))),
+  queuePlacements: v.optional(v.array(v.object({
+    targetJcNo: v.string(),
+    targetPartCode: optionalString,
+    targetSetupNo: v.string(),
+    targetSourceMachine: optionalString,
+    targetMachine: v.string(),
+    queueBeforeSetups: v.optional(v.array(v.object({
+      jcNo: v.string(),
+      setupNo: v.string(),
+      machine: v.string(),
+    }))),
+  }))),
   createdAt: optionalString,
 };
 const planOverrideValidator = {
@@ -1247,6 +1259,18 @@ export const saveMachineConstraint = mutation({
       machine: v.string(),
       finishedQty: optionalNumber,
     }))),
+  queuePlacements: v.optional(v.array(v.object({
+    targetJcNo: v.string(),
+    targetPartCode: optionalString,
+    targetSetupNo: v.string(),
+    targetSourceMachine: optionalString,
+    targetMachine: v.string(),
+    queueBeforeSetups: v.optional(v.array(v.object({
+      jcNo: v.string(),
+      setupNo: v.string(),
+      machine: v.string(),
+    }))),
+  }))),
   },
   handler: async (ctx, args) => {
     const result = await insertOwnerRow(ctx, "machineConstraints", args);

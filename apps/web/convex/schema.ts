@@ -101,6 +101,18 @@ export default defineSchema({
       machine: v.string(),
       finishedQty: v.optional(v.number()),
     }))),
+    queuePlacements: v.optional(v.array(v.object({
+      targetJcNo: v.string(),
+      targetPartCode: v.optional(v.string()),
+      targetSetupNo: v.string(),
+      targetSourceMachine: v.optional(v.string()),
+      targetMachine: v.string(),
+      queueBeforeSetups: v.optional(v.array(v.object({
+        jcNo: v.string(),
+        setupNo: v.string(),
+        machine: v.string(),
+      }))),
+    }))),
     createdAt: v.string(),
   }).index("by_owner", ["ownerId"]),
   planOverrides: defineTable({
