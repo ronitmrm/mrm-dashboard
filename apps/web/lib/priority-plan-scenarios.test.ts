@@ -46,4 +46,16 @@ describe("priorityPlanWindow", () => {
       endDate: "2-July-26",
     });
   });
+
+  it("respects a downstream minimum start from the previous setup", () => {
+    expect(priorityPlanWindow({
+      targetStartDate: "5-July-26",
+      targetEndDate: "5-July-26",
+      blockers: [],
+      minimumStartDate: "17-July-26",
+    })).toEqual({
+      startDate: "17-July-26",
+      endDate: "17-July-26",
+    });
+  });
 });

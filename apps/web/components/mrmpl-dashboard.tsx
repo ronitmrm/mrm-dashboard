@@ -72,7 +72,8 @@ import {
   toDashboardViewModel,
 } from "@/lib/dashboard-view-model";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot } from "@/lib/planning-refresh-policy";
-import { priorityPlanWindow, type PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
+import { priorityChangePlan, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
+import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
   applyShopFloorStatusPatches,
   shopFloorStatusPatchFromAction,
@@ -951,6 +952,7 @@ function PlannerPriorityForm({
   const selectedPart = partCode || itemOptions[0] || "";
   const selectedJc = jcNo && jobCardOptions.includes(jcNo) ? jcNo : "";
   const priorityPlan = useMemo(() => priorityChangePlan(productionControl, selectedPart, selectedJc), [productionControl, selectedPart, selectedJc]);
+  const priorityStepWindows = useMemo(() => priorityPlanStepWindows(priorityPlan.steps, selectedInterruptions), [priorityPlan.steps, selectedInterruptions]);
   const selectedBlockers = priorityPlan.steps
     .flatMap((step) => step.blockers)
     .filter((blocker) => selectedInterruptions[blocker.key]);
@@ -961,7 +963,9 @@ function PlannerPriorityForm({
   const firstUnconfirmedStepIndex = priorityPlan.steps.findIndex((step) => !confirmedPrioritySteps[step.key]);
   const allStepsConfirmed = priorityPlan.steps.length > 0 && firstUnconfirmedStepIndex === -1;
   const activeStepIndex = allStepsConfirmed ? -1 : firstUnconfirmedStepIndex;
-  const confirmedWindows = confirmedSteps.map((step) => priorityStepWindow(step, selectedInterruptions));
+  const confirmedWindows = confirmedSteps
+    .map((step) => priorityStepWindows.get(step.key))
+    .filter((window): window is PriorityPlanWindow => Boolean(window));
   const itemPlanWindow = allStepsConfirmed && confirmedWindows.length
     ? { startDate: confirmedWindows[0]?.startDate ?? "", endDate: confirmedWindows.at(-1)?.endDate ?? "" }
     : undefined;
@@ -1118,6 +1122,7 @@ function PlannerPriorityForm({
                   step={step}
                   state={confirmedPrioritySteps[step.key] ? "confirmed" : index === activeStepIndex ? "active" : "locked"}
                   previousSetupLabel={index > 0 ? `Setup ${priorityPlan.steps[index - 1]?.setupNo}` : ""}
+                  plannedWindow={priorityStepWindows.get(step.key) ?? { startDate: step.startDate, endDate: step.endDate }}
                   selectedInterruptions={selectedInterruptions}
                   finishedQtyByInterruption={finishedQtyByInterruption}
                   setSelectedInterruptions={setSelectedInterruptions}
@@ -1148,6 +1153,7 @@ function PriorityPlanStepReview({
   step,
   state,
   previousSetupLabel,
+  plannedWindow,
   selectedInterruptions,
   finishedQtyByInterruption,
   setSelectedInterruptions,
@@ -1158,6 +1164,7 @@ function PriorityPlanStepReview({
   step: PriorityPlanStep;
   state: "active" | "confirmed" | "locked";
   previousSetupLabel: string;
+  plannedWindow: PriorityPlanWindow;
   selectedInterruptions: Record<string, boolean>;
   finishedQtyByInterruption: Record<string, string>;
   setSelectedInterruptions: Dispatch<SetStateAction<Record<string, boolean>>>;
@@ -1165,7 +1172,6 @@ function PriorityPlanStepReview({
   onConfirm: () => void;
   onEdit: () => void;
 }) {
-  const plannedWindow = priorityStepWindow(step, selectedInterruptions);
   const selectedRunningKeys = step.blockers
     .filter((blocker) => blocker.state === "running" && selectedInterruptions[blocker.key])
     .map((blocker) => blocker.key);
@@ -1302,112 +1308,6 @@ function PriorityScenarioCard({
       <div className="text-xs text-muted-foreground">{detail}</div>
     </div>
   );
-}
-
-function priorityStepWindow(step: PriorityPlanStep, selectedInterruptions: Record<string, boolean>) {
-  return priorityPlanWindow({
-    targetStartDate: step.startDate,
-    targetEndDate: step.endDate,
-    blockers: step.blockers,
-    preemptedBlockerKeys: new Set(step.blockers
-      .filter((blocker) => selectedInterruptions[blocker.key])
-      .map((blocker) => blocker.key)),
-  });
-}
-
-type PriorityPlanBlocker = {
-  key: string;
-  jcNo: string;
-  itemCode: string;
-  setupNo: string;
-  machine: string;
-  startDate: string;
-  endDate: string;
-  state: "running" | "started_not_running" | "queued";
-  label: string;
-  requiresApproval: boolean;
-};
-
-type PriorityPlanStep = {
-  key: string;
-  jcNo: string;
-  itemCode: string;
-  setupNo: string;
-  machine: string;
-  startDate: string;
-  endDate: string;
-  blockers: PriorityPlanBlocker[];
-};
-
-function priorityChangePlan(productionControl: DashboardPayload, partCode: string, jcNo: string): { steps: PriorityPlanStep[] } {
-  const plannedRows = asArray(productionControl.machinePlanDetailRows).filter((row) => !shopFloorItemIsFinished(row));
-  const targetPartKey = machineKey(partCode);
-  const targetJcKey = machineKey(jcNo);
-  const targetRows = plannedRows
-    .filter((row) => !targetPartKey || machineKey(itemCode(row)) === targetPartKey)
-    .filter((row) => !targetJcKey || machineKey(jobCardNumber(row)) === targetJcKey)
-    .sort(jobCardSetupSort);
-
-  return {
-    steps: targetRows.map((targetRow) => {
-      const targetMachine = machineValue(targetRow, "machine");
-      const targetMachineKey = machineKey(targetMachine);
-      const targetDate = dateSortValue(plannedSetupDate(targetRow));
-      const blockers = plannedRows
-        .filter((row) => priorityPlanRowKey(row) !== priorityPlanRowKey(targetRow))
-        .filter((row) => machineKey(machineValue(row, "machine")) === targetMachineKey)
-        .filter((row) => priorityPlanBlocksTarget(row, targetDate))
-        .sort(machinePlanDisplaySort)
-        .map(priorityPlanBlocker);
-      return {
-        key: priorityPlanRowKey(targetRow),
-        jcNo: jobCardNumber(targetRow),
-        itemCode: itemCode(targetRow),
-        setupNo: displayValue(targetRow.setupNo),
-        machine: targetMachine,
-        startDate: displayValue(plannedSetupDate(targetRow)),
-        endDate: displayValue(targetRow.plannedProductionEndDate || targetRow.endDate),
-        blockers,
-      };
-    }),
-  };
-}
-
-function priorityPlanBlocksTarget(row: DashboardPayload, targetDate: number) {
-  const state = priorityPlanBlockerState(row);
-  if (state === "running" || state === "started_not_running") return true;
-  const rowDate = dateSortValue(plannedSetupDate(row));
-  return rowDate <= targetDate;
-}
-
-function priorityPlanBlocker(row: DashboardPayload): PriorityPlanBlocker {
-  const state = priorityPlanBlockerState(row);
-  return {
-    key: priorityPlanRowKey(row),
-    jcNo: jobCardNumber(row),
-    itemCode: itemCode(row),
-    setupNo: displayValue(row.setupNo),
-    machine: machineValue(row, "machine"),
-    startDate: displayValue(plannedSetupDate(row)),
-    endDate: displayValue(row.plannedProductionEndDate || row.endDate),
-    state,
-    label: state === "running" ? "Running now" : state === "started_not_running" ? "Started, not running" : "Planned before target",
-    requiresApproval: state === "running" || state === "started_not_running",
-  };
-}
-
-function priorityPlanBlockerState(row: DashboardPayload): PriorityPlanBlocker["state"] {
-  if (shopFloorItemIsCurrent(row)) return "running";
-  const runningStatus = str(row.runningStatus).toLowerCase();
-  const stageIndex = shopFloorStageIndex(str(row.shopFloorStage));
-  if (runningStatus === "setup complete" || stageIndex >= 0) return "started_not_running";
-  return "queued";
-}
-
-function priorityPlanRowKey(row: DashboardPayload) {
-  return [jobCardNumber(row), itemCode(row), displayValue(row.optionNumber), displayValue(row.setupNo), machineValue(row, "machine")]
-    .map(machineKey)
-    .join("|");
 }
 
 function RouteChangePlannerForm({

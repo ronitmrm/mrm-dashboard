@@ -125,3 +125,14 @@ The planning audit must not validate downstream setup sequence by simply compari
 Relevant local audit artifact:
 
 - `.handoff/run-planning-audit.mjs` - current local audit script used for the 2026-07-01 planning audit.
+## Priority preview respects setup dependency
+
+Date: 2026-07-01
+
+The planner decision console's probable priority plan is only a preview, but it must still respect setup sequence. When setup 1 is delayed by a non-stoppable running machine, later setup preview windows must be pushed behind the setup 1 preview window even if their own machines are free. This prevents a priority preview from showing setup 2/3 before WIP from setup 1 can exist.
+
+Relevant code:
+
+- `apps/web/lib/priority-change-plan.ts` - builds target setup rows and sequence-aware preview windows.
+- `apps/web/lib/priority-plan-scenarios.ts` - supports a downstream minimum start date for machine-window scenarios.
+- `apps/web/lib/priority-change-plan.test.ts` - regression for M62-style setup 1 delayed on AC701 while setup 2/3 machines are free.

@@ -19,11 +19,13 @@ export function priorityPlanWindow({
   targetEndDate,
   blockers,
   preemptedBlockerKeys = new Set<string>(),
+  minimumStartDate,
 }: {
   targetStartDate: unknown;
   targetEndDate: unknown;
   blockers: PriorityPlanWindowBlocker[];
   preemptedBlockerKeys?: Set<string>;
+  minimumStartDate?: unknown;
 }): PriorityPlanWindow {
   const targetStart = normalizedDate(targetStartDate);
   const targetEnd = normalizedDate(targetEndDate) ?? targetStart;
@@ -40,9 +42,18 @@ export function priorityPlanWindow({
   const earliestPreemptedStart = minDate(...preempted.map((blocker) => blocker.start).filter(Boolean) as Date[]);
   const blockingEnd = maxDate(...notPreempted.map((blocker) => blocker.end).filter(Boolean) as Date[]);
   const earliestStart = minDate(targetStart, earliestPreemptedStart) ?? targetStart;
-  const start = maxDate(earliestStart, blockingEnd ? addCalendarDays(blockingEnd, 1) : undefined) ?? targetStart;
+  const start = maxDate(
+    earliestStart,
+    blockingEnd ? addCalendarDays(blockingEnd, 1) : undefined,
+    normalizedDate(minimumStartDate),
+  ) ?? targetStart;
   const end = addCalendarDays(start, durationDays - 1);
   return { startDate: dateLabel(start), endDate: dateLabel(end) };
+}
+
+export function nextCalendarDateLabel(value: unknown) {
+  const date = normalizedDate(value);
+  return date ? dateLabel(addCalendarDays(date, 1)) : "";
 }
 
 function normalizedDate(value: unknown) {
