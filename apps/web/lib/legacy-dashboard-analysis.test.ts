@@ -301,7 +301,7 @@ describe("buildLegacyDashboardSnapshot", () => {
       vi.useRealTimers();
     }
   });
-  it("moves remaining running breakdown quantity to an alternate machine using the dispatch rule", () => {
+  it("moves remaining running breakdown quantity to an alternate machine using system planning rules", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
 
@@ -316,7 +316,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             unavailableTo: "2026-07-06",
             reason: "Breakdown",
             rescheduleAction: "shift_required",
-            planningMode: "plan_by_rule",
+            planningMode: "system_recalculate",
             interruptedSetups: [
               { jcNo: "JC-RUNNING-A5", setupNo: "1", machine: "A510", finishedQty: 3 },
             ],
@@ -407,7 +407,7 @@ describe("buildLegacyDashboardSnapshot", () => {
             unavailableTo: "2026-07-06",
             reason: "Breakdown",
             rescheduleAction: "shift_required",
-            planningMode: "plan_by_rule",
+            planningMode: "system_recalculate",
             interruptedSetups: [
               { jcNo: "JC-RUNNING-A5-SOLO", setupNo: "1", machine: "A510", finishedQty: 3 },
             ],

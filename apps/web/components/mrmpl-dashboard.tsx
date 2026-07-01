@@ -927,7 +927,7 @@ function MachineConstraintPlannerForm({
   const [unavailableFrom, setUnavailableFrom] = useState("");
   const [unavailableTo, setUnavailableTo] = useState("");
   const [rescheduleAction, setRescheduleAction] = useState("shift_required");
-  const [planningMode, setPlanningMode] = useState("plan_by_rule");
+  const [planningMode, setPlanningMode] = useState("system_recalculate");
   const [reason, setReason] = useState("");
   const [reviewReady, setReviewReady] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -992,7 +992,7 @@ function MachineConstraintPlannerForm({
       setUnavailableFrom("");
       setUnavailableTo("");
       setRescheduleAction("shift_required");
-      setPlanningMode("plan_by_rule");
+      setPlanningMode("system_recalculate");
       setReason("");
       setProducedQtyByRow({});
       setReviewReady(false);
@@ -1029,7 +1029,7 @@ function MachineConstraintPlannerForm({
         </Field>
         <Field label="Planning confirmation">
           <select className="h-9 rounded-md border bg-background px-3 text-sm" value={planningMode} onChange={(event) => updatePlanningInput(setPlanningMode, event.target.value)}>
-            <option value="plan_by_rule">Plan by 25-day rule</option>
+            <option value="system_recalculate">System recalculation (all planning rules)</option>
             <option value="review_then_plan">Review queue before saving</option>
           </select>
         </Field>

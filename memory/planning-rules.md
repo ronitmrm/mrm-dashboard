@@ -182,6 +182,6 @@ If a machine-unavailable/breakdown window is saved while the affected machine is
 
 Relevant code:
 
-- `apps/web/components/mrmpl-dashboard.tsx` - machine issue review requires produced quantity for running rows and records plan-by-rule/review choice.
-- `apps/web/lib/legacy-dashboard-analysis.ts` - splits produced quantity from remaining quantity and schedules the remaining quantity on alternates under the dispatch target.
-- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `moves remaining running breakdown quantity to an alternate machine using the dispatch rule`.
+- `apps/web/components/mrmpl-dashboard.tsx` - machine issue review requires produced quantity for running rows and records system-recalculation/review choice.
+- `apps/web/lib/legacy-dashboard-analysis.ts` - splits produced quantity from remaining quantity and schedules the remaining quantity on alternates using all planning rules, including the 25-day dispatch target.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `moves remaining running breakdown quantity to an alternate machine using system planning rules`.
