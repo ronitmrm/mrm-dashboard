@@ -197,3 +197,14 @@ Relevant code:
 - `apps/web/lib/machine-constraint-review.ts` - computes destination, same-machine, and downstream queue review groups.
 - `apps/web/components/mrmpl-dashboard.tsx` - renders the queue review panel and confirmation gate.
 - `apps/web/lib/machine-constraint-review.test.ts` - regression for destination and downstream queue visibility before save.
+## Part-specific machine switch queue review
+
+Date: 2026-07-01
+
+A part-specific machine switch is not a whole-machine queue move. Before saving the switch, the planner must review the selected job/part/setup row, the chosen destination machine queue, and downstream setup queues for the same job card that may move because WIP availability changes. The review must not show the source machine's later queue as if those rows are being shifted; only the selected setup moves from the source machine to the destination machine.
+
+Relevant code:
+
+- `apps/web/components/mrmpl-dashboard.tsx` - `PartMachineSwitchPlannerForm` replaces the legacy generic switch form with queue review and confirmation.
+- `apps/web/lib/machine-constraint-review.ts` - supports explicit destination machines and optional source-machine queue suppression.
+- `apps/web/lib/machine-constraint-review.test.ts` - regression coverage for selected-destination-only review and no source-machine later queue in part switches.

@@ -17,6 +17,8 @@ export function machineConstraintQueueReview({
   affectedRows,
   machineNo,
   rescheduleAction,
+  explicitDestinationMachines,
+  includeSameMachineLater = true,
   maxRowsPerQueue = 8,
 }: {
   plannedRows: MachineConstraintReviewRow[];
@@ -24,6 +26,8 @@ export function machineConstraintQueueReview({
   affectedRows: MachineConstraintReviewRow[];
   machineNo: string;
   rescheduleAction: string;
+  explicitDestinationMachines?: string[];
+  includeSameMachineLater?: boolean;
   maxRowsPerQueue?: number;
 }): MachineConstraintQueueReviewGroup[] {
   const targetMachine = machineKey(machineNo);
@@ -41,33 +45,38 @@ export function machineConstraintQueueReview({
   }
 
   if (machineKey(rescheduleAction) !== "delay") {
-    for (const machine of compatibleDestinationMachines(affectedRows, machineRows, plannedRows, targetMachine)) {
+    const destinationMachines = explicitDestinationMachines?.length
+      ? uniqueMachineValues(explicitDestinationMachines).filter((machine) => machineKey(machine) !== targetMachine)
+      : compatibleDestinationMachines(affectedRows, machineRows, plannedRows, targetMachine);
+    for (const machine of destinationMachines) {
       const queueRows = queueRowsForMachine(plannedRows, machine, affectedKeys, maxRowsPerQueue);
       addGroup({
         kind: "destination",
         machine,
         title: `${machine} destination queue`,
-        description: "Compatible queue that can receive shifted or remaining quantity; rows here may move if this breakdown is saved.",
+        description: "Compatible queue that can receive shifted or remaining quantity; rows here may move if this planner action is saved.",
         rows: queueRows,
         emptyMessage: "No current planned rows on this compatible machine.",
       });
     }
   }
 
-  const laterRows = plannedRows
-    .filter((row) => machineKey(machineValue(row)) === targetMachine)
-    .filter((row) => !affectedKeys.has(setupIdentityKey(row)))
-    .filter((row) => rowStartSortValue(row) >= affectedWindowStart(affectedRows))
-    .sort(machinePlanSort)
-    .slice(0, maxRowsPerQueue);
-  if (laterRows.length) {
-    addGroup({
-      kind: "same_machine_later",
-      machine: displayMachine(machineNo),
-      title: `${displayMachine(machineNo)} later queue`,
-      description: "Later rows on the unavailable machine can be delayed if locked work must wait for the machine to return.",
-      rows: laterRows,
-    });
+  if (includeSameMachineLater) {
+    const laterRows = plannedRows
+      .filter((row) => machineKey(machineValue(row)) === targetMachine)
+      .filter((row) => !affectedKeys.has(setupIdentityKey(row)))
+      .filter((row) => rowStartSortValue(row) >= affectedWindowStart(affectedRows))
+      .sort(machinePlanSort)
+      .slice(0, maxRowsPerQueue);
+    if (laterRows.length) {
+      addGroup({
+        kind: "same_machine_later",
+        machine: displayMachine(machineNo),
+        title: `${displayMachine(machineNo)} later queue`,
+        description: "Later rows on the unavailable machine can be delayed if locked work must wait for the machine to return.",
+        rows: laterRows,
+      });
+    }
   }
 
   for (const machine of downstreamMachines(affectedRows, plannedRows, targetMachine)) {
@@ -76,7 +85,7 @@ export function machineConstraintQueueReview({
       kind: "downstream",
       machine,
       title: `${machine} downstream setup queue`,
-      description: "Later setups for affected job cards may move because WIP availability changes after this breakdown.",
+      description: "Later setups for affected job cards may move because WIP availability changes after this planner action.",
       rows,
     });
   }
@@ -112,6 +121,19 @@ function compatibleDestinationMachines(
     }
   }
   return [...machines].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+}
+
+function uniqueMachineValues(values: string[]) {
+  const seen = new Set<string>();
+  const machines: string[] = [];
+  for (const value of values) {
+    const machine = displayMachine(value);
+    const key = machineKey(machine);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    machines.push(machine);
+  }
+  return machines.sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
 }
 
 function queueRowsForMachine(

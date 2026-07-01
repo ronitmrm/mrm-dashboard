@@ -892,19 +892,7 @@ function PlannerDecisionConsole({
       <CardContent className="grid gap-4">
         <PlannerPriorityForm productionControl={productionControl} submitAction={submitAction} />
         <MachineConstraintPlannerForm productionControl={productionControl} submitAction={submitAction} />
-        <LegacyActionForm
-          title="3. Part-specific machine switch"
-          description="Use when this job card or setup cannot run on the planned machine."
-          fields={[
-            { name: "target", label: "Switch job card / part", placeholder: "JC-007 or M71", required: true },
-            { name: "setupNo", label: "Setup no.", placeholder: "20", required: true },
-            { name: "fromMachine", label: "From machine", placeholder: "ADB901", required: true },
-            { name: "toMachine", label: "Plan on machine", placeholder: "ADB902", required: true },
-            { name: "reason", label: "Reason", placeholder: "Cannot set this part on planned machine", required: true },
-          ]}
-          buttonLabel="Switch plan"
-          onSubmit={(body) => submitAction("plan-override", body)}
-        />
+        <PartMachineSwitchPlannerForm productionControl={productionControl} submitAction={submitAction} />
         <RouteChangePlannerForm productionControl={productionControl} submitAction={submitAction} />
         <Button type="button" variant="outline" onClick={() => void submitAction("reschedule", {})}>
           <Settings2 className="size-4" />
@@ -1115,6 +1103,172 @@ function MachineConstraintPlannerForm({
         <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && !canSave)}>
           <Wrench className="size-4" />
           {reviewReady ? queueReviewRequired ? "Save after queue review" : "Save and replan remaining qty" : "Review affected queue"}
+        </Button>
+        {reviewReady ? (
+          <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
+            Recheck inputs
+          </Button>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+function PartMachineSwitchPlannerForm({
+  productionControl,
+  submitAction,
+}: {
+  productionControl: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+}) {
+  const plannedRows = asArray(productionControl.machinePlanDetailRows);
+  const machineRows = asArray(productionControl.machinePlanningRows);
+  const machineOptions = useMemo(() => plannedMachineOptions(plannedRows, machineBoardRows(machineRows, plannedRows)), [machineRows, plannedRows]);
+  const targetOptions = useMemo(() => uniqueValues(plannedRows
+    .flatMap((row) => [jobCardNumber(row), itemCode(row)])
+    .filter((value) => value !== "-")), [plannedRows]);
+  const [target, setTarget] = useState("");
+  const [setupNo, setSetupNo] = useState("");
+  const [fromMachine, setFromMachine] = useState("");
+  const [toMachine, setToMachine] = useState("");
+  const [reason, setReason] = useState("");
+  const [reviewReady, setReviewReady] = useState(false);
+  const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const setupOptions = useMemo(() => uniqueValues(plannedRows
+    .filter((row) => partMachineSwitchTargetMatches(row, target))
+    .map((row) => displayValue(row.setupNo))
+    .filter((value) => value !== "-")), [plannedRows, target]);
+  const fromMachineOptions = useMemo(() => uniqueValues(plannedRows
+    .filter((row) => partMachineSwitchTargetMatches(row, target))
+    .filter((row) => !setupNo.trim() || machineKey(displayValue(row.setupNo)) === machineKey(setupNo))
+    .map((row) => machineValue(row, "machine"))
+    .filter((value) => value !== "-")), [plannedRows, setupNo, target]);
+  const selectedRows = useMemo(() => partMachineSwitchAffectedRows(plannedRows, {
+    target,
+    setupNo,
+    fromMachine,
+  }), [fromMachine, plannedRows, setupNo, target]);
+  const queueReviewGroups = useMemo(() => machineConstraintQueueReview({
+    plannedRows,
+    machineRows,
+    affectedRows: selectedRows,
+    machineNo: fromMachine,
+    rescheduleAction: "shift_required",
+    explicitDestinationMachines: toMachine.trim() ? [toMachine] : [],
+    includeSameMachineLater: false,
+  }), [fromMachine, machineRows, plannedRows, selectedRows, toMachine]);
+  const canReview = Boolean(target.trim() && setupNo.trim() && fromMachine.trim() && toMachine.trim())
+    && machineKey(fromMachine) !== machineKey(toMachine);
+  const canSave = canReview && Boolean(reason.trim()) && reviewReady && selectedRows.length > 0 && queueReviewConfirmed;
+
+  function updateField(setter: Dispatch<SetStateAction<string>>, value: string) {
+    setter(value);
+    setReviewReady(false);
+    setQueueReviewConfirmed(false);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!reviewReady) {
+      setReviewReady(true);
+      return;
+    }
+    if (!canSave || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await submitAction("plan-override", {
+        target,
+        setupNo,
+        fromMachine,
+        toMachine,
+        reason,
+      });
+      setTarget("");
+      setSetupNo("");
+      setFromMachine("");
+      setToMachine("");
+      setReason("");
+      setReviewReady(false);
+      setQueueReviewConfirmed(false);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+      <div>
+        <div className="text-sm font-medium">3. Part-specific machine switch</div>
+        <div className="text-xs text-muted-foreground">Move only the selected part/setup to another machine after reviewing that target queue and downstream WIP queues.</div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-5">
+        <Field label="Switch job card / part">
+          <Input list="part-machine-switch-target-options" value={target} placeholder="JC-007 or M71" required onChange={(event) => updateField(setTarget, event.target.value)} />
+          <datalist id="part-machine-switch-target-options">
+            {targetOptions.map((option) => <option key={option} value={option} />)}
+          </datalist>
+        </Field>
+        <Field label="Setup no.">
+          <Input list="part-machine-switch-setup-options" value={setupNo} placeholder="1" required onChange={(event) => updateField(setSetupNo, event.target.value)} />
+          <datalist id="part-machine-switch-setup-options">
+            {setupOptions.map((option) => <option key={option} value={option} />)}
+          </datalist>
+        </Field>
+        <Field label="From machine">
+          <Input list="part-machine-switch-from-options" value={fromMachine} placeholder="ADB901" required onChange={(event) => updateField(setFromMachine, event.target.value)} />
+          <datalist id="part-machine-switch-from-options">
+            {fromMachineOptions.map((option) => <option key={option} value={option} />)}
+          </datalist>
+        </Field>
+        <Field label="Plan on machine">
+          <Input list="part-machine-switch-to-options" value={toMachine} placeholder="ADB902" required onChange={(event) => updateField(setToMachine, event.target.value)} />
+          <datalist id="part-machine-switch-to-options">
+            {machineOptions.map((option) => <option key={option} value={option} />)}
+          </datalist>
+        </Field>
+        <Field label="Reason">
+          <Input value={reason} placeholder="Planner approved machine switch" required onChange={(event) => setReason(event.target.value)} />
+        </Field>
+      </div>
+      {reviewReady ? (
+        <div className="grid gap-2 rounded-md border bg-muted/15 p-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{formatNumber(selectedRows.length)} selected setup rows</span>
+            <span>{displayValue(fromMachine)} to {displayValue(toMachine)}</span>
+          </div>
+          {selectedRows.length ? (
+            <div className="grid max-h-56 gap-2 overflow-y-auto pr-1">
+              {selectedRows.map((row, index) => (
+                <div key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${machineValue(row, "machine")}-${index}`} className="grid gap-1 rounded-md border bg-background p-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
+                    <StatusBadge value="Selected setup" />
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup row matches this job card/part, setup number, and source machine.</div>
+          )}
+          <MachineConstraintQueueReviewPanel groups={queueReviewGroups} />
+          <label className="flex items-start gap-2 rounded-md border bg-background p-2 text-sm">
+            <input
+              className="mt-1"
+              type="checkbox"
+              checked={queueReviewConfirmed}
+              onChange={(event) => setQueueReviewConfirmed(event.target.checked)}
+            />
+            <span>Queue reviewed; save this part-specific machine switch and recalculate planning.</span>
+          </label>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && !canSave)}>
+          <Route className="size-4" />
+          {reviewReady ? "Save machine switch" : "Review switch queue"}
         </Button>
         {reviewReady ? (
           <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
@@ -4868,6 +5022,27 @@ function machineIssueRowNeedsProducedQty(row: DashboardPayload) {
 function machineIssueRowKey(row: DashboardPayload) {
   return [jobCardNumber(row), displayValue(row.setupNo), machineValue(row, "machine")].map(machineKey).join("|");
 }
+
+function partMachineSwitchAffectedRows(
+  rows: DashboardPayload[],
+  issue: { target: string; setupNo: string; fromMachine: string },
+) {
+  const setupKey = machineKey(issue.setupNo);
+  const fromMachineKey = machineKey(issue.fromMachine);
+  if (!machineKey(issue.target) || !setupKey || !fromMachineKey) return [];
+  return rows
+    .filter((row) => partMachineSwitchTargetMatches(row, issue.target))
+    .filter((row) => machineKey(displayValue(row.setupNo)) === setupKey)
+    .filter((row) => machineKey(machineValue(row, "machine")) === fromMachineKey)
+    .sort(machinePlanDisplaySort);
+}
+
+function partMachineSwitchTargetMatches(row: DashboardPayload, target: string) {
+  const targetKey = machineKey(target);
+  if (!targetKey) return true;
+  return machineKey(jobCardNumber(row)) === targetKey || machineKey(itemCode(row)) === targetKey;
+}
+
 function machineValue(row: DashboardPayload, type: "machine" | "machineType") {
   if (type === "machine") {
     return displayValue(row.machine || row.machineNo || row["MACHINE NO"] || row["M/C NO"] || row["MACHINE NO."]);

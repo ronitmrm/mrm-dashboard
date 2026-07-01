@@ -71,4 +71,104 @@ describe("machineConstraintQueueReview", () => {
 
     expect(review.some((group) => group.kind === "destination")).toBe(false);
   });
+
+  it("limits destination queue review to the selected target machine for a part switch", () => {
+    const affected = {
+      jcNo: "JC-014",
+      partCode: "M24",
+      optionNumber: "1",
+      setupNo: "1",
+      routeMachine: "A5",
+      machine: "A510",
+      machineType: "AUTO",
+      plannedProductionStartDate: "1-July-26",
+    };
+    const review = machineConstraintQueueReview({
+      machineNo: "A510",
+      rescheduleAction: "shift_required",
+      affectedRows: [affected],
+      explicitDestinationMachines: ["A511"],
+      includeSameMachineLater: false,
+      machineRows: [
+        { machineNo: "A511", machineType: "AUTO", status: "Active" },
+        { machineNo: "A512", machineType: "AUTO", status: "Active" },
+      ],
+      plannedRows: [
+        affected,
+        {
+          jcNo: "JC-998",
+          partCode: "M98",
+          optionNumber: "1",
+          setupNo: "1",
+          routeMachine: "A5",
+          machine: "A511",
+          machineType: "AUTO",
+          plannedProductionStartDate: "9-July-26",
+        },
+        {
+          jcNo: "JC-999",
+          partCode: "M99",
+          optionNumber: "1",
+          setupNo: "1",
+          routeMachine: "A5",
+          machine: "A512",
+          machineType: "AUTO",
+          plannedProductionStartDate: "10-July-26",
+        },
+        {
+          jcNo: "JC-014",
+          partCode: "M24",
+          optionNumber: "1",
+          setupNo: "2",
+          routeMachine: "S7",
+          machine: "S710",
+          machineType: "SECONDARY",
+          plannedProductionStartDate: "13-July-26",
+        },
+      ],
+    });
+
+    expect(review.filter((group) => group.kind === "destination").map((group) => group.machine)).toEqual(["A511"]);
+    expect(review.some((group) => group.machine === "A512")).toBe(false);
+    expect(review.find((group) => group.kind === "downstream")?.machine).toBe("S710");
+  });
+
+  it("hides the source-machine later queue when reviewing a part switch", () => {
+    const affected = {
+      jcNo: "JC-014",
+      partCode: "M24",
+      optionNumber: "1",
+      setupNo: "1",
+      routeMachine: "A5",
+      machine: "A510",
+      machineType: "AUTO",
+      plannedProductionStartDate: "1-July-26",
+    };
+    const review = machineConstraintQueueReview({
+      machineNo: "A510",
+      rescheduleAction: "shift_required",
+      affectedRows: [affected],
+      explicitDestinationMachines: ["A511"],
+      includeSameMachineLater: false,
+      machineRows: [{ machineNo: "A511", machineType: "AUTO", status: "Active" }],
+      plannedRows: [
+        affected,
+        {
+          jcNo: "JC-888",
+          partCode: "M88",
+          optionNumber: "1",
+          setupNo: "1",
+          routeMachine: "A5",
+          machine: "A510",
+          machineType: "AUTO",
+          plannedProductionStartDate: "9-July-26",
+        },
+      ],
+    });
+
+    expect(review.some((group) => group.kind === "same_machine_later")).toBe(false);
+    expect(review.map((group) => ({ kind: group.kind, machine: group.machine }))).toEqual([
+      { kind: "destination", machine: "A511" },
+    ]);
+  });
 });
