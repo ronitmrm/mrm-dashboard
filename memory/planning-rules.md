@@ -77,14 +77,15 @@ Relevant code:
 
 ## Operational actions queue planning refresh
 
-Date: 2026-06-30
+Date: 2026-07-01
 
-Operational rows that can change planning state must queue a planning recalculation automatically. This includes production entries (`software_raw`), RM inward, shop-floor workflow status, FPIR, and corrections that reverse those data-entry types. Master/structural changes such as route, cycle, machine master, and work-order imports stay manual through the Recalculate planning button to avoid broad unnecessary Convex snapshot rebuilds.
+Workflow progress should still save and reflect in the dashboard immediately, but it should not always queue the expensive planning recalculation. Automatic planning refresh is reserved for rows that can change planning dates/capacity: production entries (`software_raw`), RM inward, machine start (`shop_floor_status` stage `operator_started`), item completion (`shop_floor_status` stage `item_complete`), and corrections that reverse those planning-impacting rows. RM-at-machine, presetting, setting, quality approval, and FPIR/report saves are workflow progress only; they should update task state without rebuilding the plan. Master/structural changes such as route, cycle, machine master, and work-order imports stay manual through the Recalculate planning button to avoid broad unnecessary Convex snapshot rebuilds.
 
 Relevant code:
 
-- `apps/web/lib/planning-refresh-policy.ts` - automatic refresh allow-list.
-- `apps/web/convex/dashboard.ts` - `saveDataEntry` and `reverseEntry` queue the snapshot refresh.
+- `apps/web/lib/planning-refresh-policy.ts` - automatic refresh allow-list and shop-floor stage filter.
+- `apps/web/convex/dashboard.ts` - `saveDataEntry` and `reverseEntry` pass workflow payloads into the refresh policy.
+- `apps/web/lib/shop-floor-optimistic.ts` - current-browser task state updates without waiting for a planning snapshot rebuild.
 
 ## Canonical dashboard source for live setup state
 

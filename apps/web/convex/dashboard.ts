@@ -1308,7 +1308,7 @@ export const saveDataEntry = mutation({
         ...ownerFields,
         createdAt: now(),
       });
-      if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType })) {
+      if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType, payload: args.payload })) {
         await queueDashboardRefresh(ctx);
       }
       return { ok: true, id: args.id };
@@ -1332,14 +1332,14 @@ export const saveDataEntry = mutation({
           ...ownerFields,
           createdAt: now(),
         });
-        if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType })) {
+        if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType, payload: args.payload })) {
           await queueDashboardRefresh(ctx);
         }
         return { ok: true, id: existing._id };
       }
     }
     const result = await insertOwnerRow(ctx, "dataEntries", args);
-    if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType })) {
+    if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType, payload: args.payload })) {
       await queueDashboardRefresh(ctx);
     }
     return result;
@@ -1371,6 +1371,7 @@ export const reverseEntry = mutation({
     if (shouldQueuePlanningRefresh("reverse-entry", {
       targetTable: args.targetTable,
       entryType: targetDataEntry?.entryType,
+      payload: targetDataEntry?.payload,
     })) {
       await queueDashboardRefresh(ctx);
     }

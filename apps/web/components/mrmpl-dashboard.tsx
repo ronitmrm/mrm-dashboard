@@ -425,7 +425,7 @@ function DashboardShell() {
       }
       setActionStatus({
         tone: "default",
-        message: `${message} ${planningRefreshStatusMessage(queuePlanningRefresh)}`,
+        message: `${message} ${planningRefreshStatusMessage(queuePlanningRefresh, path, body)}`,
       });
       const returnTab = str(body.returnTab) as DashboardTabId;
       if (returnTab && navItems.some((item) => item.id === returnTab)) {

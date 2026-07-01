@@ -7,11 +7,21 @@ describe("planning refresh policy", () => {
     expect(shouldQueuePlanningRefresh("planner-priority")).toBe(true);
     expect(shouldQueuePlanningRefresh("mark-complete")).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "software_raw" })).toBe(true);
-    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status" })).toBe(true);
-    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "first_piece_inspection_report" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "operator_started" } })).toBe(true);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "item_complete" } })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "rm_inward" })).toBe(true);
-    expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "shop_floor_status" })).toBe(true);
-    expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "first_piece_inspection_report" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "shop_floor_status", payload: { stage: "operator_started" } })).toBe(true);
+    expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "shop_floor_status", payload: { stage: "item_complete" } })).toBe(true);
+  });
+
+  it("does not recalculate for workflow progress that does not move planning dates", () => {
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "raw_material_at_machine" } })).toBe(false);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "presetting" } })).toBe(false);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "setting" } })).toBe(false);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "quality_approval" } })).toBe(false);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "first_piece_inspection_report" })).toBe(false);
+    expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "shop_floor_status", payload: { stage: "quality_approval" } })).toBe(false);
+    expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "first_piece_inspection_report" })).toBe(false);
   });
 
   it("leaves master and structural imports for manual recalculation", () => {
@@ -21,9 +31,13 @@ describe("planning refresh policy", () => {
     expect(shouldQueuePlanningRefresh("data-import", { entryType: "work_order" })).toBe(false);
   });
 
-  it("tells users whether recalculation was queued or left manual", () => {
+  it("tells users whether recalculation was queued, unnecessary, or left manual", () => {
     expect(planningRefreshStatusMessage(true)).toBe("Planning recalculation queued.");
     expect(planningRefreshStatusMessage(false)).toBe("Use Recalculate planning after master changes.");
+    expect(planningRefreshStatusMessage(false, "data-entry", {
+      entryType: "shop_floor_status",
+      payload: { stage: "raw_material_at_machine" },
+    })).toBe("Planning recalculation not required for this workflow step.");
   });
 
   it("refreshes ready planning snapshots from an earlier calendar day", () => {
