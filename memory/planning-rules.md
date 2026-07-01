@@ -115,3 +115,12 @@ Relevant code:
 Date: 2026-06-30
 
 Planning snapshots still include legacy owner-scoped workbook/master rows because historical imports stored work orders and RM inward rows that way. For shop-floor status conflict resolution, current global status rows must take precedence over legacy owner-scoped active rows on the same machine; otherwise an old owner-scoped active setup can suppress a newer global RM-at-machine entry. This was observed on M93/JC-067 on ADB503.
+## Planning audit WIP sequence check
+
+Date: 2026-07-01
+
+The planning audit must not validate downstream setup sequence by simply comparing setup start dates across split/parallel machine rows. The correct audit rule mirrors planning: use cycle master daily capacity (`cycleTime + loadingUnloading`) to calculate pooled WIP from all previous-setup machine streams, apply the one planning-day WIP availability buffer, and compare that against the downstream setup's active machine demand. A future row that is already held with `Previous setup WIP buffer is not ready` is not a high-severity violation because the shop-floor task is correctly blocked; flag only rows that are released/active or missing that blocker while WIP is still short.
+
+Relevant local audit artifact:
+
+- `.handoff/run-planning-audit.mjs` - current local audit script used for the 2026-07-01 planning audit.
