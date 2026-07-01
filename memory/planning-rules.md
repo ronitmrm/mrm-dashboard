@@ -190,7 +190,7 @@ Relevant code:
 
 Date: 2026-07-01
 
-When a planner chooses review-before-save for a machine-unavailable/breakdown action, the review must show more than the rows on the unavailable machine. It must also show compatible destination queues that may receive shifted or remaining quantity, later rows on the unavailable machine that may be delayed, and downstream setup queues for the same job cards that may move because WIP availability changes. Saving in review mode should require explicit planner confirmation that these queues were reviewed.
+When a planner chooses review-before-save for a machine-unavailable/breakdown action, the review must show the affected rows on the unavailable machine and only the queue that the planner is directly deciding. For `shift_required` or `shift_all`, show compatible destination queues where the unavailable-machine work can be shifted. For `delay`, show the later queue on the same unavailable machine. Do not show downstream setup queues in this review step; downstream same-part/setup WIP changes are recalculated automatically after the planner saves the machine action.
 
 Relevant code:
 
@@ -201,7 +201,7 @@ Relevant code:
 
 Date: 2026-07-01
 
-A part-specific machine switch is not a whole-machine queue move. Before saving the switch, the planner must review the selected job/part/setup row, the chosen destination machine queue, and downstream setup queues for the same job card that may move because WIP availability changes. The review must not show the source machine's later queue as if those rows are being shifted; only the selected setup moves from the source machine to the destination machine.
+A part-specific machine switch is not a whole-machine queue move. Before saving the switch, the planner must review the selected job/part/setup row and the chosen destination machine queue only. The review must not show the source machine's later queue or downstream setup queues as if those rows are being directly moved; once the selected setup is shifted, normal planning recalculation applies downstream same-part/setup WIP rules automatically.
 
 Relevant code:
 

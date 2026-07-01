@@ -934,6 +934,8 @@ function MachineConstraintPlannerForm({
     affectedRows,
     machineNo,
     rescheduleAction,
+    includeSameMachineLater: machineKey(rescheduleAction) === "delay",
+    includeDownstream: false,
   }), [affectedRows, machineNo, machineRows, plannedRows, rescheduleAction]);
   const runningRows = affectedRows.filter(machineIssueRowNeedsProducedQty);
   const lockedCount = affectedRows.filter(machineIssueRowIsLocked).length;
@@ -1156,6 +1158,7 @@ function PartMachineSwitchPlannerForm({
     rescheduleAction: "shift_required",
     explicitDestinationMachines: toMachine.trim() ? [toMachine] : [],
     includeSameMachineLater: false,
+    includeDownstream: false,
   }), [fromMachine, machineRows, plannedRows, selectedRows, toMachine]);
   const canReview = Boolean(target.trim() && setupNo.trim() && fromMachine.trim() && toMachine.trim())
     && machineKey(fromMachine) !== machineKey(toMachine);

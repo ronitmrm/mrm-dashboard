@@ -72,7 +72,7 @@ describe("machineConstraintQueueReview", () => {
     expect(review.some((group) => group.kind === "destination")).toBe(false);
   });
 
-  it("limits destination queue review to the selected target machine for a part switch", () => {
+  it("limits queue review to the selected target machine for a part switch", () => {
     const affected = {
       jcNo: "JC-014",
       partCode: "M24",
@@ -89,6 +89,7 @@ describe("machineConstraintQueueReview", () => {
       affectedRows: [affected],
       explicitDestinationMachines: ["A511"],
       includeSameMachineLater: false,
+      includeDownstream: false,
       machineRows: [
         { machineNo: "A511", machineType: "AUTO", status: "Active" },
         { machineNo: "A512", machineType: "AUTO", status: "Active" },
@@ -130,7 +131,7 @@ describe("machineConstraintQueueReview", () => {
 
     expect(review.filter((group) => group.kind === "destination").map((group) => group.machine)).toEqual(["A511"]);
     expect(review.some((group) => group.machine === "A512")).toBe(false);
-    expect(review.find((group) => group.kind === "downstream")?.machine).toBe("S710");
+    expect(review.some((group) => group.kind === "downstream")).toBe(false);
   });
 
   it("hides the source-machine later queue when reviewing a part switch", () => {
@@ -150,6 +151,7 @@ describe("machineConstraintQueueReview", () => {
       affectedRows: [affected],
       explicitDestinationMachines: ["A511"],
       includeSameMachineLater: false,
+      includeDownstream: false,
       machineRows: [{ machineNo: "A511", machineType: "AUTO", status: "Active" }],
       plannedRows: [
         affected,

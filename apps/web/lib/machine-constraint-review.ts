@@ -19,6 +19,7 @@ export function machineConstraintQueueReview({
   rescheduleAction,
   explicitDestinationMachines,
   includeSameMachineLater = true,
+  includeDownstream = true,
   maxRowsPerQueue = 8,
 }: {
   plannedRows: MachineConstraintReviewRow[];
@@ -28,6 +29,7 @@ export function machineConstraintQueueReview({
   rescheduleAction: string;
   explicitDestinationMachines?: string[];
   includeSameMachineLater?: boolean;
+  includeDownstream?: boolean;
   maxRowsPerQueue?: number;
 }): MachineConstraintQueueReviewGroup[] {
   const targetMachine = machineKey(machineNo);
@@ -79,15 +81,17 @@ export function machineConstraintQueueReview({
     }
   }
 
-  for (const machine of downstreamMachines(affectedRows, plannedRows, targetMachine)) {
-    const rows = downstreamRowsForMachine(affectedRows, plannedRows, machine, maxRowsPerQueue);
-    addGroup({
-      kind: "downstream",
-      machine,
-      title: `${machine} downstream setup queue`,
-      description: "Later setups for affected job cards may move because WIP availability changes after this planner action.",
-      rows,
-    });
+  if (includeDownstream) {
+    for (const machine of downstreamMachines(affectedRows, plannedRows, targetMachine)) {
+      const rows = downstreamRowsForMachine(affectedRows, plannedRows, machine, maxRowsPerQueue);
+      addGroup({
+        kind: "downstream",
+        machine,
+        title: `${machine} downstream setup queue`,
+        description: "Later setups for affected job cards may move because WIP availability changes after this planner action.",
+        rows,
+      });
+    }
   }
 
   return groups.sort((left, right) => groupRank(left.kind) - groupRank(right.kind) || left.machine.localeCompare(right.machine, undefined, { numeric: true }));
