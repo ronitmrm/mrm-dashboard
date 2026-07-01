@@ -10,6 +10,8 @@ describe("planning refresh policy", () => {
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "operator_started" } })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "item_complete" } })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "rm_inward" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "machineConstraints" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "plannerPriorities" })).toBe(true);
     expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "shop_floor_status", payload: { stage: "operator_started" } })).toBe(true);
     expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "shop_floor_status", payload: { stage: "item_complete" } })).toBe(true);
   });

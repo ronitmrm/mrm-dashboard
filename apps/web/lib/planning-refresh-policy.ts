@@ -19,6 +19,13 @@ const autoRefreshShopFloorStages = new Set([
 
 const autoRefreshTargetTables = new Set([
   "productionEntries",
+  "routeSelections",
+  "plannerPriorities",
+  "machineConstraints",
+  "planOverrides",
+  "routeChanges",
+  "dispatchApprovals",
+  "setupCompletions",
 ]);
 
 export function shouldQueuePlanningRefresh(path: string, body: Record<string, unknown> = {}) {
