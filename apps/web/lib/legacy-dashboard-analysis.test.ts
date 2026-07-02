@@ -4871,6 +4871,87 @@ describe("buildLegacyDashboardSnapshot", () => {
     });
   });
 
+
+  it("exposes setup checklist master rows and the latest setup checklist session", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: [
+        {
+          _id: "check-master-1",
+          entryType: "setup_checklist_master",
+          key: "1|1|fixture-ready",
+          createdAt: "2026-07-02T08:00:00.000Z",
+          payload: {
+            version: "1",
+            sequence: 1,
+            checkPoint: "Fixture ready",
+            inputType: "checkbox",
+            required: "Yes",
+            status: "Active",
+          },
+        },
+        {
+          _id: "check-master-2",
+          entryType: "setup_checklist_master",
+          key: "1|2|tooling-ready",
+          createdAt: "2026-07-02T08:01:00.000Z",
+          payload: {
+            version: "1",
+            sequence: 2,
+            checkPoint: "Tooling ready",
+            inputType: "checkbox",
+            required: "Yes",
+            status: "Active",
+          },
+        },
+        {
+          _id: "check-session-old",
+          entryType: "setup_checklist_session",
+          key: "jc-check|m-check|1|1|c901",
+          createdAt: "2026-07-02T09:00:00.000Z",
+          payload: {
+            sessionId: "jc-check|m-check|1|1|c901",
+            jcNo: "JC-CHECK",
+            partCode: "M-CHECK",
+            optionNumber: "1",
+            setupNo: "1",
+            machine: "C901",
+            status: "In progress",
+            startedBy: "A1",
+          },
+        },
+        {
+          _id: "check-session-new",
+          entryType: "setup_checklist_session",
+          key: "jc-check|m-check|1|1|c901",
+          createdAt: "2026-07-02T10:00:00.000Z",
+          payload: {
+            sessionId: "jc-check|m-check|1|1|c901",
+            jcNo: "JC-CHECK",
+            partCode: "M-CHECK",
+            optionNumber: "1",
+            setupNo: "1",
+            machine: "C901",
+            status: "Completed",
+            endedBy: "A2",
+          },
+        },
+      ],
+    });
+
+    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
+      setupChecklistMasterRows: Array<Record<string, unknown>>;
+      setupChecklistSessionRows: Array<Record<string, unknown>>;
+    };
+
+    expect(productionControl.setupChecklistMasterRows).toHaveLength(2);
+    expect(productionControl.setupChecklistSessionRows).toHaveLength(1);
+    expect(productionControl.setupChecklistSessionRows[0]).toMatchObject({
+      status: "Completed",
+      endedBy: "A2",
+    });
+  });
   it("waits for the later setup 1 stream when stopped-machine WIP cannot feed 15 days", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));

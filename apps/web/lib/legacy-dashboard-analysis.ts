@@ -265,7 +265,9 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const workOrderRows = entryRows(byType, "work_order");
   const rmInwardRows = entryRows(byType, "rm_inward");
   const planningHolidayRows = latestEntryRowsByKey(entryRows(byType, "planning_holiday"), planningHolidayEntryKey);
-  const setupChecklistRows: Record<string, unknown>[] = [];
+  const setupChecklistRows = entryRows(byType, "setup_checklist");
+  const setupChecklistMasterRows = entryRows(byType, "setup_checklist_master");
+  const setupChecklistSessionRows = latestEntryRowsByKey(entryRows(byType, "setup_checklist_session"), setupChecklistSessionEntryKey);
   const shopFloorStatusRows = singleActiveShopFloorStatusRows(
     latestEntryRowsByKey(entryRows(byType, "shop_floor_status"), shopFloorStatusEntryKey),
   );
@@ -287,6 +289,8 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     employeeRows,
     meetingRows,
     setupChecklistRows,
+    setupChecklistMasterRows,
+    setupChecklistSessionRows,
     shopFloorStatusRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
@@ -319,6 +323,8 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     workOrderRows.length ||
     rmInwardRows.length ||
     setupChecklistRows.length ||
+    setupChecklistMasterRows.length ||
+    setupChecklistSessionRows.length ||
     employeeRows.length ||
     entryRows(byType, "machine_master").length
   ) return snapshot;
@@ -335,6 +341,8 @@ function buildProductionAnalysis({
   employeeRows,
   meetingRows,
   setupChecklistRows,
+  setupChecklistMasterRows,
+  setupChecklistSessionRows,
   shopFloorStatusRows,
   firstPieceInspectionMasterRows,
   firstPieceInspectionReportRows,
@@ -366,6 +374,8 @@ function buildProductionAnalysis({
   employeeRows: Record<string, unknown>[];
   meetingRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
+  setupChecklistMasterRows: Record<string, unknown>[];
+  setupChecklistSessionRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
   firstPieceInspectionMasterRows: Record<string, unknown>[];
   firstPieceInspectionReportRows: Record<string, unknown>[];
@@ -676,6 +686,8 @@ function buildProductionAnalysis({
     machineRows,
     dispatchRows,
     setupChecklistRows,
+    setupChecklistMasterRows,
+    setupChecklistSessionRows,
     shopFloorStatusRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
@@ -848,6 +860,8 @@ function buildProductionControl({
   machineRows,
   dispatchRows,
   setupChecklistRows,
+  setupChecklistMasterRows,
+  setupChecklistSessionRows,
   shopFloorStatusRows,
   firstPieceInspectionMasterRows,
   firstPieceInspectionReportRows,
@@ -870,6 +884,8 @@ function buildProductionControl({
   machineRows: Record<string, unknown>[];
   dispatchRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
+  setupChecklistMasterRows: Record<string, unknown>[];
+  setupChecklistSessionRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
   firstPieceInspectionMasterRows: Record<string, unknown>[];
   firstPieceInspectionReportRows: Record<string, unknown>[];
@@ -1171,6 +1187,8 @@ function buildProductionControl({
     jobCardSetupProgressRows: setupCompletions,
     setupChecklistHistoryRows,
     setupChecklistMismatchRows,
+    setupChecklistMasterRows,
+    setupChecklistSessionRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
   };
@@ -1434,6 +1452,16 @@ function shopFloorStatusEntryKey(row: Record<string, unknown>) {
 
 function firstPieceReportEntryKey(row: Record<string, unknown>) {
   return setupChecklistKey({
+    jcNo: rowText(row, "jcNo", "JC NO.", "JC NO"),
+    partCode: rowText(row, "partCode", "partNo", "PART CODE", "PART NO"),
+    optionNumber: rowText(row, "optionNumber", "OPTION NUMBER", "OPTION NO"),
+    setupNo: rowText(row, "setupNo", "SETUP NO.", "SETUP NO", "SET UP"),
+    machine: rowText(row, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO."),
+  });
+}
+
+function setupChecklistSessionEntryKey(row: Record<string, unknown>) {
+  return rowText(row, "sessionId") || setupChecklistKey({
     jcNo: rowText(row, "jcNo", "JC NO.", "JC NO"),
     partCode: rowText(row, "partCode", "partNo", "PART CODE", "PART NO"),
     optionNumber: rowText(row, "optionNumber", "OPTION NUMBER", "OPTION NO"),

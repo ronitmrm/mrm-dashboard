@@ -287,6 +287,22 @@ const dataEntrySpecs: DataEntrySpec[] = [
     ],
   },
   {
+    entryType: "setup_checklist_master",
+    title: "Setup checklist master",
+    description: "Versioned machinist checklist used from pre setting start through setting completion.",
+    fields: [
+      { name: "version", label: "Version", required: true },
+      { name: "sequence", label: "Sequence", type: "number", required: true },
+      { name: "checkPoint", label: "Check point", required: true },
+      { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
+      { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
+      { name: "section", label: "Section", defaultValue: "Pre setting / setting" },
+      { name: "effectiveFrom", label: "Effective from", type: "date" },
+      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      { name: "remark", label: "Remark" },
+    ],
+  },
+  {
     entryType: "software_raw",
     title: "Software production output",
     description: "Daily production rows from the shop-floor software.",
@@ -2899,7 +2915,7 @@ type ShopFloorStageId =
 
 const shopFloorStages: Array<{ id: ShopFloorStageId; label: string; role: string; button: string }> = [
   { id: "raw_material_at_machine", label: "Raw material at the machine", role: "Shop floor", button: "RM at machine" },
-  { id: "presetting", label: "Pre setting done", role: "Assistant machinist", button: "Pre setting done" },
+  { id: "presetting", label: "Pre setting started", role: "Assistant machinist", button: "Start pre setting" },
   { id: "setting", label: "Setting done", role: "Assistant machinist", button: "Setting done" },
   { id: "quality_approval", label: "Quality approval", role: "Quality", button: "Quality approved" },
   { id: "operator_started", label: "Operator assigned and machine started", role: "Machinist", button: "Start machine" },
@@ -2987,6 +3003,15 @@ function ShopFloorStatusPanel({
     await submitAction("data-entry", {
       entryType: "shop_floor_status",
       key: dataEntryKey("shop_floor_status", payload),
+      payload,
+    });
+  }
+
+  async function saveSetupChecklistSession(row: DashboardPayload, session: DashboardPayload) {
+    const payload = setupChecklistSessionPayload(row, session);
+    await submitAction("data-entry", {
+      entryType: "setup_checklist_session",
+      key: dataEntryKey("setup_checklist_session", payload),
       payload,
     });
   }
@@ -3085,7 +3110,14 @@ function ShopFloorStatusPanel({
                       )}
                     </TableCell>
                     <TableCell className="align-middle">
-                      <ShopFloorRowAction current={row.current} next={row.next} onSaveStage={saveStage} />
+                      <ShopFloorRowAction
+                        current={row.current}
+                        next={row.next}
+                        onSaveStage={saveStage}
+                        onSaveSetupChecklistSession={saveSetupChecklistSession}
+                        setupChecklistMasters={asArray(productionControl.setupChecklistMasterRows)}
+                        setupChecklistSessions={asArray(productionControl.setupChecklistSessionRows)}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -3183,6 +3215,15 @@ function RoleTaskPanel({
     });
   }
 
+  async function saveSetupChecklistSession(row: DashboardPayload, session: DashboardPayload) {
+    const payload = setupChecklistSessionPayload(row, session);
+    await submitAction("data-entry", {
+      entryType: "setup_checklist_session",
+      key: dataEntryKey("setup_checklist_session", payload),
+      payload,
+    });
+  }
+
   return (
     <section className="grid gap-4">
       <Card>
@@ -3272,7 +3313,10 @@ function RoleTaskPanel({
                             onSaveStage={saveStage}
                             onSaveFirstPieceReport={enableFirstPieceInspection ? saveFirstPieceReport : undefined}
                             inspectionMasters={enableFirstPieceInspection ? asArray(productionControl.firstPieceInspectionMasterRows) : []}
-                            openDataEntry={enableFirstPieceInspection ? openDataEntry : undefined}
+                            setupChecklistMasters={asArray(productionControl.setupChecklistMasterRows)}
+                            setupChecklistSessions={asArray(productionControl.setupChecklistSessionRows)}
+                            onSaveSetupChecklistSession={saveSetupChecklistSession}
+                            openDataEntry={openDataEntry}
                           />
                         )}
                       </TableCell>
@@ -3358,7 +3402,6 @@ function FirstPieceInspectionPanel({
       payload,
     });
   }
-
   return (
     <section className="grid gap-4">
       <Card>
@@ -3455,25 +3498,43 @@ function ShopFloorRowAction({
   next,
   onSaveStage,
   onSaveFirstPieceReport,
+  onSaveSetupChecklistSession,
   inspectionMasters = [],
+  setupChecklistMasters = [],
+  setupChecklistSessions = [],
   openDataEntry,
 }: {
   current?: DashboardPayload;
   next?: DashboardPayload;
   onSaveStage: (row: DashboardPayload, stage: ShopFloorStageId, extra?: Record<string, unknown>) => Promise<void>;
   onSaveFirstPieceReport?: (row: DashboardPayload, report: DashboardPayload) => Promise<void>;
+  onSaveSetupChecklistSession?: (row: DashboardPayload, session: DashboardPayload) => Promise<void>;
   inspectionMasters?: DashboardPayload[];
+  setupChecklistMasters?: DashboardPayload[];
+  setupChecklistSessions?: DashboardPayload[];
   openDataEntry?: (entryType: string, defaults?: Record<string, unknown>) => void;
 }) {
   const [doneBy, setDoneBy] = useState("");
   const [worker, setWorker] = useState("");
   const [remark, setRemark] = useState("");
   const [inspectionReadings, setInspectionReadings] = useState<Record<string, string[]>>({});
+  const [setupChecklistValues, setSetupChecklistValues] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const row = next ?? current;
   const stage = str(row?.shopFloorStage) as ShopFloorStageId;
   const stageIndex = shopFloorStageIndex(stage);
   const nextStage = next ? shopFloorStages.find((_, index) => index === stageIndex + 1) : undefined;
+  const currentChecklistSession = useMemo(() => next ? setupChecklistSessionForRow(setupChecklistSessions, next) : undefined, [next, setupChecklistSessions]);
+  const activeChecklistMasters = useMemo(() => activeSetupChecklistMasterRows(setupChecklistMasters), [setupChecklistMasters]);
+  const checklistPhase = nextStage?.id === "presetting" ? "start" : nextStage?.id === "setting" ? "end" : "";
+  const setupChecklistItems = useMemo(() => {
+    if (checklistPhase === "end" && Array.isArray(currentChecklistSession?.items)) return currentChecklistSession.items as DashboardPayload[];
+    return setupChecklistItemsFromMaster(activeChecklistMasters);
+  }, [activeChecklistMasters, checklistPhase, currentChecklistSession]);
+  const needsSetupChecklist = Boolean(checklistPhase && onSaveSetupChecklistSession);
+  const setupChecklistReady = !needsSetupChecklist
+    || (checklistPhase === "start" && activeChecklistMasters.length > 0 && setupChecklistValuesComplete(setupChecklistItems, setupChecklistValues, checklistPhase))
+    || (checklistPhase === "end" && Boolean(currentChecklistSession) && setupChecklistValuesComplete(setupChecklistItems, setupChecklistValues, checklistPhase));
   const firstPieceMasters = useMemo(() => next && nextStage?.id === "quality_approval"
     ? matchingFirstPieceInspectionMasters(inspectionMasters, next)
     : [], [inspectionMasters, next, nextStage?.id]);
@@ -3490,9 +3551,15 @@ function ShopFloorRowAction({
     });
   }
 
+  function updateSetupChecklistValue(item: DashboardPayload, value: string) {
+    const itemKey = setupChecklistItemKey(item);
+    setSetupChecklistValues((currentValues) => ({ ...currentValues, [itemKey]: value }));
+  }
+
   async function submitNextStage() {
     if (!next || !nextStage || isSubmitting) return;
     if (nextStage.id === "quality_approval" && !canSubmitInspection) return;
+    if (needsSetupChecklist && !setupChecklistReady) return;
     setIsSubmitting(true);
     try {
       const taskCompletedAt = new Date().toISOString();
@@ -3520,16 +3587,33 @@ function ShopFloorRowAction({
           remark,
         });
       }
+      let setupChecklist: DashboardPayload | undefined;
+      if (needsSetupChecklist && onSaveSetupChecklistSession) {
+        setupChecklist = setupChecklistSessionForStage({
+          row: next,
+          phase: checklistPhase,
+          values: setupChecklistValues,
+          items: setupChecklistItems,
+          masterRows: activeChecklistMasters,
+          existingSession: currentChecklistSession,
+          doneBy,
+          remark,
+          completedAt: taskCompletedAt,
+        });
+        await onSaveSetupChecklistSession(next, setupChecklist);
+      }
       await onSaveStage(next, nextStage.id, {
         doneBy,
         worker: nextStage.id === "operator_started" ? worker : "",
         remark,
         firstPieceInspection,
+        setupChecklist,
       });
       setDoneBy("");
       setWorker("");
       setRemark("");
       setInspectionReadings({});
+      setSetupChecklistValues({});
     } finally {
       setIsSubmitting(false);
     }
@@ -3591,6 +3675,17 @@ function ShopFloorRowAction({
           {nextStage.id === "operator_started" ? (
             <Input className="h-8" value={remark} placeholder="Remark" onChange={(event) => setRemark(event.target.value)} />
           ) : null}
+          {needsSetupChecklist ? (
+            <SetupChecklistForm
+              row={next}
+              phase={checklistPhase}
+              items={setupChecklistItems}
+              session={currentChecklistSession}
+              values={setupChecklistValues}
+              onValueChange={updateSetupChecklistValue}
+              onAddMaster={openDataEntry}
+            />
+          ) : null}
           {needsFirstPieceInspection ? (
             <FirstPieceInspectionForm
               row={next}
@@ -3600,7 +3695,7 @@ function ShopFloorRowAction({
               onAddMaster={openDataEntry}
             />
           ) : null}
-          <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection || isSubmitting} onClick={() => void submitNextStage()}>
+          <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection || !setupChecklistReady || isSubmitting} onClick={() => void submitNextStage()}>
             <CheckCircle2 className="size-4" />
             {nextStage.button}
           </Button>
@@ -3612,6 +3707,100 @@ function ShopFloorRowAction({
   );
 }
 
+function SetupChecklistForm({
+  row,
+  phase,
+  items,
+  session,
+  values,
+  onValueChange,
+  onAddMaster,
+}: {
+  row: DashboardPayload;
+  phase: string;
+  items: DashboardPayload[];
+  session?: DashboardPayload;
+  values: Record<string, string>;
+  onValueChange: (item: DashboardPayload, value: string) => void;
+  onAddMaster?: (entryType: string, defaults?: Record<string, unknown>) => void;
+}) {
+  const defaults = setupChecklistMasterDefaults();
+  if (phase === "start" && !items.length) {
+    return (
+      <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
+        <div className="font-medium text-amber-900 dark:text-amber-100">Setup checklist master missing</div>
+        <div className="text-amber-800 dark:text-amber-200">Add active checklist master rows before pre setting can start.</div>
+        {onAddMaster ? (
+          <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onAddMaster("setup_checklist_master", defaults)}>
+            Add checklist master
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+  if (phase === "end" && !session) {
+    return (
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+        Pre setting checklist session is missing. Start pre setting for this setup before saving setting done.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium">Setup checklist {phase === "start" ? "start" : "completion"}</div>
+          <div className="text-xs text-muted-foreground">
+            {itemCode(row)} / JC {jobCardNumber(row)} / Option {displayValue(row.optionNumber)} / Setup {displayValue(row.setupNo)} / Machine {displayValue(row.machine)} / {formatDate(new Date().toISOString())}
+          </div>
+        </div>
+        <StatusBadge value={`Version ${displayValue(session?.masterVersion || items[0]?.version)}`} />
+      </div>
+      <div className="overflow-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="min-w-12">Seq</TableHead>
+              <TableHead className="min-w-72">Check point</TableHead>
+              <TableHead className="min-w-36">Entry</TableHead>
+              <TableHead className="min-w-28">Required</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((item, index) => {
+              const itemKey = setupChecklistItemKey(item, index);
+              const inputType = str(item.inputType || "checkbox").toLowerCase();
+              const existingValue = setupChecklistExistingValue(item, phase);
+              const value = values[itemKey] ?? existingValue;
+              return (
+                <TableRow key={itemKey}>
+                  <TableCell>{displayValue(item.sequence || index + 1)}</TableCell>
+                  <TableCell>
+                    <div className="font-medium">{displayValue(item.checkPoint)}</div>
+                    <div className="text-xs text-muted-foreground">{displayValue(item.section)}</div>
+                  </TableCell>
+                  <TableCell>
+                    {inputType === "checkbox" ? (
+                      <select className="h-8 rounded-md border bg-background px-2 text-sm" value={value} onChange={(event) => onValueChange(item, event.target.value)}>
+                        <option value="">Select</option>
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
+                      </select>
+                    ) : (
+                      <Input className="h-8 min-w-28" type={inputType === "number" ? "number" : "text"} value={value} onChange={(event) => onValueChange(item, event.target.value)} />
+                    )}
+                  </TableCell>
+                  <TableCell>{setupChecklistItemRequired(item) ? "Yes" : "No"}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
 function FirstPieceInspectionForm({
   row,
   masters,
@@ -3784,7 +3973,6 @@ function WorkOrderGapTable({
       || (rmFilter === "waiting" && str(row.rmStatus) !== "Received");
     return matchesGap && matchesRm;
   });
-
   return (
     <Card>
       <CardHeader>
@@ -4105,8 +4293,7 @@ function DataEntryForm({
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   defaults: Record<string, unknown>;
 }) {
-  const defaultsKey = JSON.stringify(defaults);
-  return (
+  const defaultsKey = JSON.stringify(defaults);  return (
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
@@ -4266,7 +4453,6 @@ function CorrectionsPanel({
     });
     setReasonById((current) => ({ ...current, [targetId]: "" }));
   }
-
   return (
     <Card>
       <CardHeader>
@@ -6473,6 +6659,22 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       "fpi",
     ].map((value) => str(value).toLowerCase()).join("|");
   }
+  if (entryType === "setup_checklist_master") {
+    return [
+      payload.version,
+      payload.sequence,
+      payload.checkPoint,
+    ].map((value) => str(value).toLowerCase()).join("|");
+  }
+  if (entryType === "setup_checklist_session") {
+    return str(payload.sessionId) || [
+      payload.jcNo,
+      payload.partCode,
+      payload.optionNumber,
+      payload.setupNo,
+      payload.machine,
+    ].map((value) => str(value).toLowerCase()).join("|");
+  }
   if (entryType === "setup_checklist") {
     return [
       payload.jcNo,
@@ -6508,6 +6710,137 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   return "";
 }
 
+function setupChecklistSessionId(row: DashboardPayload) {
+  return [
+    jobCardNumber(row),
+    itemCode(row),
+    displayValue(row.optionNumber),
+    displayValue(row.setupNo),
+    displayValue(row.machine),
+  ].map((value) => str(value).toLowerCase()).join("|");
+}
+
+function setupChecklistSessionPayload(row: DashboardPayload, session: DashboardPayload) {
+  return {
+    jcNo: jobCardNumber(row),
+    partCode: itemCode(row),
+    optionNumber: displayValue(row.optionNumber),
+    setupNo: displayValue(row.setupNo),
+    setupName: displayValue(row.setupName),
+    machine: displayValue(row.machine),
+    machineType: displayValue(row.machineType),
+    sessionId: setupChecklistSessionId(row),
+    ...session,
+  };
+}
+
+function setupChecklistSessionForRow(sessions: DashboardPayload[], row: DashboardPayload) {
+  const sessionId = setupChecklistSessionId(row);
+  return sessions.find((session) => str(session.sessionId) === sessionId)
+    ?? sessions.find((session) => setupChecklistSessionId(session) === sessionId);
+}
+
+function activeSetupChecklistMasterRows(rows: DashboardPayload[]) {
+  const activeRows = rows.filter((row) => str(row.status || "Active").toLowerCase() !== "inactive");
+  const latestVersion = activeRows
+    .map((row) => str(row.version || "1"))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    .at(-1);
+  return activeRows
+    .filter((row) => str(row.version || "1") === latestVersion)
+    .sort((a, b) => (optionalNumber(a.sequence) ?? 0) - (optionalNumber(b.sequence) ?? 0));
+}
+
+function setupChecklistItemsFromMaster(rows: DashboardPayload[]) {
+  return rows.map((row, index) => ({
+    version: displayValue(row.version || "1"),
+    sequence: optionalNumber(row.sequence) ?? index + 1,
+    checkPoint: displayValue(row.checkPoint),
+    inputType: displayValue(row.inputType || "checkbox"),
+    required: displayValue(row.required || "Yes"),
+    section: displayValue(row.section || "Pre setting / setting"),
+    masterCreatedAt: displayValue(row.createdAt),
+  }));
+}
+
+function setupChecklistItemKey(item: DashboardPayload, fallbackIndex = 0) {
+  return [item.version, item.sequence ?? fallbackIndex + 1, item.checkPoint].map((value) => str(value).toLowerCase()).join("|");
+}
+
+function setupChecklistItemRequired(item: DashboardPayload) {
+  return str(item.required || "Yes").toLowerCase() !== "no";
+}
+
+function setupChecklistExistingValue(item: DashboardPayload, phase: string) {
+  return displayValue(phase === "start" ? item.startValue : item.endValue) === "-" ? "" : displayValue(phase === "start" ? item.startValue : item.endValue);
+}
+
+function setupChecklistValuesComplete(items: DashboardPayload[], values: Record<string, string>, phase: string) {
+  if (!items.length) return false;
+  return items.every((item, index) => {
+    if (!setupChecklistItemRequired(item)) return true;
+    const value = values[setupChecklistItemKey(item, index)] ?? setupChecklistExistingValue(item, phase);
+    return Boolean(str(value));
+  });
+}
+
+function setupChecklistSessionForStage({
+  row,
+  phase,
+  values,
+  items,
+  masterRows,
+  existingSession,
+  doneBy,
+  remark,
+  completedAt,
+}: {
+  row: DashboardPayload;
+  phase: string;
+  values: Record<string, string>;
+  items: DashboardPayload[];
+  masterRows: DashboardPayload[];
+  existingSession?: DashboardPayload;
+  doneBy: string;
+  remark: string;
+  completedAt: string;
+}) {
+  const masterVersion = str(existingSession?.masterVersion || items[0]?.version || masterRows[0]?.version || "1");
+  const sessionItems = items.map((item, index) => {
+    const itemKey = setupChecklistItemKey(item, index);
+    const value = values[itemKey] ?? setupChecklistExistingValue(item, phase);
+    return phase === "start"
+      ? { ...item, startValue: value }
+      : { ...item, endValue: value };
+  });
+  return {
+    ...(existingSession ?? {}),
+    sessionId: setupChecklistSessionId(row),
+    masterVersion,
+    masterEffectiveFrom: displayValue(masterRows[0]?.effectiveFrom || existingSession?.masterEffectiveFrom),
+    status: phase === "start" ? "In progress" : "Completed",
+    startedAt: phase === "start" ? completedAt : existingSession?.startedAt,
+    startedBy: phase === "start" ? doneBy : existingSession?.startedBy,
+    startRemark: phase === "start" ? remark : existingSession?.startRemark,
+    endedAt: phase === "end" ? completedAt : existingSession?.endedAt,
+    endedBy: phase === "end" ? doneBy : existingSession?.endedBy,
+    endRemark: phase === "end" ? remark : existingSession?.endRemark,
+    items: sessionItems,
+  };
+}
+
+function setupChecklistMasterDefaults() {
+  return {
+    version: new Date().toISOString().slice(0, 10).replaceAll("-", ""),
+    sequence: "",
+    checkPoint: "",
+    inputType: "checkbox",
+    required: "Yes",
+    section: "Pre setting / setting",
+    effectiveFrom: new Date().toISOString().slice(0, 10),
+    status: "Active",
+  };
+}
 function firstPieceMasterDefaults(row: DashboardPayload) {
   return {
     jcNo: jobCardNumber(row) !== "-" ? jobCardNumber(row) : "",

@@ -298,3 +298,15 @@ Relevant code:
 - `apps/web/components/mrmpl-dashboard.tsx` - part-specific switch target blocker stop/quantity UI.
 - `apps/web/lib/legacy-dashboard-analysis.ts` - plan override interruption quantities and queue preemption for explicitly stopped target blockers.
 - `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `lets a part-specific machine switch stop a target running setup before placing the switched tile`.
+
+## Setup checklist lifecycle
+
+Date: 2026-07-02
+
+Machinist setup checklist is a versioned workflow task, not a planning recalculation trigger. Active rows in `setup_checklist_master` define the checklist version used for new setup work. When the assistant machinist starts pre setting, the dashboard creates a `setup_checklist_session` for that specific job card, part, option, setup, and machine, copying the current master checklist into the session so multiple machinists or multiple browser tabs work on separate setup instances without being affected by later master edits. When setting is marked done, the same session is completed. If the master is missing, pre setting is blocked; if the session is missing, setting completion is blocked.
+
+Relevant code:
+
+- `apps/web/components/mrmpl-dashboard.tsx` - `ShopFloorRowAction` and `SetupChecklistForm` manage checklist start/completion around pre setting and setting.
+- `apps/web/lib/legacy-dashboard-analysis.ts` - setup checklist master/session rows are exposed in `productionControl`.
+- `apps/web/convex/dashboard.ts` - setup checklist master/session entry types are included in the snapshot.
