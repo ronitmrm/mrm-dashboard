@@ -375,14 +375,14 @@ describe("buildLegacyDashboardSnapshot", () => {
         orderPcs: 3,
         totalOrderPcs: 10,
         rawActualQty: 3,
-        runningStatus: "Running",
+        runningStatus: "Breakdown stopped",
         machineUnavailableSplitRole: "produced_on_unavailable_machine",
       });
       expect(remaining).toMatchObject({
         machine: "A511",
         orderPcs: 7,
         totalOrderPcs: 10,
-        runningStatus: "Planned",
+        runningStatus: "Plan shifted",
         plannedProductionStartDate: "1-July-26",
         plannedProductionEndDate: "8-July-26",
         machineUnavailableSplitRole: "remaining_moved_to_alternate_machine",
@@ -546,7 +546,7 @@ describe("buildLegacyDashboardSnapshot", () => {
         orderPcs: 10,
         totalOrderPcs: 10,
         rawActualQty: 3,
-        runningStatus: "Running",
+        runningStatus: "Breakdown stopped",
         machineUnavailableProducedQty: 3,
         machineUnavailableRemainingQty: 7,
       });

@@ -4710,7 +4710,7 @@ function statusBadgeToneClass(normalized: string) {
   if (normalized.includes("in production") || normalized.includes("running")) return "border-sky-300 bg-sky-50 text-sky-800";
   if (normalized.includes("ready") || normalized.includes("received") || normalized.includes("dispatch") || normalized.includes("setup complete") || normalized.includes("on time")) return "border-emerald-300 bg-emerald-50 text-emerald-800";
   if (normalized.includes("early")) return "border-sky-300 bg-sky-50 text-sky-800";
-  if (normalized.includes("waiting") || normalized.includes("pending")) return "border-amber-300 bg-amber-50 text-amber-800";
+  if (normalized.includes("waiting") || normalized.includes("pending") || normalized.includes("shifted")) return "border-amber-300 bg-amber-50 text-amber-800";
   if (
     normalized.includes("delayed") ||
     normalized.includes("need") ||

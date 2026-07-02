@@ -2431,6 +2431,17 @@ function machinePlanDetails(
         if (machineKeyValue && plannedProductionEndDate) machineNextSetupDate.set(machineKeyValue, nextMachineAvailableDate(plannedProductionEndDate, planningCalendar));
         const taskReadiness = shopFloorTaskReadiness(operationReadyCanPullForward, plannedStartDate);
         const machineUnavailableQueueBeforeSetups = machineUnavailableQueueBeforeSetupsForMachine(machineUnavailablePlacement, machine);
+        const runningStatus = splitRole === "produced_on_unavailable_machine"
+          ? "Breakdown stopped"
+          : splitRole === "remaining_moved_to_alternate_machine"
+            ? "Plan shifted"
+            : itemComplete
+              ? "Complete"
+              : productionActual?.rows || machineStarted
+                ? "Running"
+                : settingDone
+                  ? "Setup complete"
+                  : "Planned";
         const detail = {
         machine,
         routeMachine,
@@ -2463,7 +2474,7 @@ function machinePlanDetails(
         rawActualQty: round(productionActual?.actualQty ?? 0),
         rawRejectQty: 0,
         rawRows: productionActual?.rows ?? 0,
-        runningStatus: itemComplete ? "Complete" : (productionActual?.rows || machineStarted ? "Running" : (settingDone ? "Setup complete" : "Planned")),
+        runningStatus,
         plannedDate: dateLabel(plannedStartDate),
         completionDate: dateLabel(setupCompletionDate),
         setupPlannedDate: dateLabel(plannedStartDate),
