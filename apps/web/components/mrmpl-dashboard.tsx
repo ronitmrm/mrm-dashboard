@@ -1023,10 +1023,17 @@ function MachineConstraintPlannerForm({
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
         <Field label="Machine unavailable">
-          <Input list="machine-constraint-machine-options" value={machineNo} placeholder="ADB901" required onChange={(event) => updateField(setMachineNo, event.target.value)} />
-          <datalist id="machine-constraint-machine-options">
-            {machineOptions.map((option) => <option key={option} value={option} />)}
-          </datalist>
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={machineNo}
+            required
+            onChange={(event) => updateField(setMachineNo, event.target.value)}
+          >
+            <option value="">Select machine</option>
+            {machineOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
         </Field>
         <Field label="From">
           <Input type="date" value={unavailableFrom} required onChange={(event) => updateField(setUnavailableFrom, event.target.value)} />
@@ -1226,28 +1233,68 @@ function PartMachineSwitchPlannerForm({
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-5">
         <Field label="Switch job card / part">
-          <Input list="part-machine-switch-target-options" value={target} placeholder="JC-007 or M71" required onChange={(event) => updateField(setTarget, event.target.value)} />
-          <datalist id="part-machine-switch-target-options">
-            {targetOptions.map((option) => <option key={option} value={option} />)}
-          </datalist>
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={target}
+            required
+            onChange={(event) => {
+              updateField(setTarget, event.target.value);
+              setSetupNo("");
+              setFromMachine("");
+              setToMachine("");
+            }}
+          >
+            <option value="">Select job card / part</option>
+            {targetOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
         </Field>
         <Field label="Setup no.">
-          <Input list="part-machine-switch-setup-options" value={setupNo} placeholder="1" required onChange={(event) => updateField(setSetupNo, event.target.value)} />
-          <datalist id="part-machine-switch-setup-options">
-            {setupOptions.map((option) => <option key={option} value={option} />)}
-          </datalist>
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={setupNo}
+            required
+            onChange={(event) => {
+              updateField(setSetupNo, event.target.value);
+              setFromMachine("");
+              setToMachine("");
+            }}
+          >
+            <option value="">Select setup</option>
+            {setupOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
         </Field>
         <Field label="From machine">
-          <Input list="part-machine-switch-from-options" value={fromMachine} placeholder="ADB901" required onChange={(event) => updateField(setFromMachine, event.target.value)} />
-          <datalist id="part-machine-switch-from-options">
-            {fromMachineOptions.map((option) => <option key={option} value={option} />)}
-          </datalist>
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={fromMachine}
+            required
+            onChange={(event) => {
+              updateField(setFromMachine, event.target.value);
+              setToMachine("");
+            }}
+          >
+            <option value="">Select source machine</option>
+            {fromMachineOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
         </Field>
         <Field label="Plan on machine">
-          <Input list="part-machine-switch-to-options" value={toMachine} placeholder="ADB902" required onChange={(event) => updateField(setToMachine, event.target.value)} />
-          <datalist id="part-machine-switch-to-options">
-            {machineOptions.map((option) => <option key={option} value={option} />)}
-          </datalist>
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={toMachine}
+            required
+            onChange={(event) => updateField(setToMachine, event.target.value)}
+          >
+            <option value="">Select target machine</option>
+            {machineOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
         </Field>
         <Field label="Reason">
           <Input value={reason} placeholder="Planner approved machine switch" required onChange={(event) => setReason(event.target.value)} />
