@@ -74,7 +74,7 @@ import {
   jobCardScheduleSummary,
   toDashboardViewModel,
 } from "@/lib/dashboard-view-model";
-import { machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
+import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot } from "@/lib/planning-refresh-policy";
 import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
 import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
@@ -1151,10 +1151,10 @@ function PartMachineSwitchPlannerForm({
 }) {
   const plannedRows = asArray(productionControl.machinePlanDetailRows);
   const machineRows = asArray(productionControl.machinePlanningRows);
-  const machineOptions = useMemo(() => plannedMachineOptions(plannedRows, machineBoardRows(machineRows, plannedRows)), [machineRows, plannedRows]);
-  const targetOptions = useMemo(() => uniqueValues(plannedRows
-    .flatMap((row) => [jobCardNumber(row), itemCode(row)])
+  const itemOptions = useMemo(() => uniqueValues(plannedRows
+    .map((row) => itemCode(row))
     .filter((value) => value !== "-")), [plannedRows]);
+  const [selectedItem, setSelectedItem] = useState("");
   const [target, setTarget] = useState("");
   const [setupNo, setSetupNo] = useState("");
   const [fromMachine, setFromMachine] = useState("");
@@ -1163,6 +1163,10 @@ function PartMachineSwitchPlannerForm({
   const [reviewReady, setReviewReady] = useState(false);
   const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const jobCardOptions = useMemo(() => uniqueValues(plannedRows
+    .filter((row) => machineKey(itemCode(row)) === machineKey(selectedItem))
+    .map((row) => jobCardNumber(row))
+    .filter((value) => value !== "-")), [plannedRows, selectedItem]);
   const setupOptions = useMemo(() => uniqueValues(plannedRows
     .filter((row) => partMachineSwitchTargetMatches(row, target))
     .map((row) => displayValue(row.setupNo))
@@ -1177,6 +1181,12 @@ function PartMachineSwitchPlannerForm({
     setupNo,
     fromMachine,
   }), [fromMachine, plannedRows, setupNo, target]);
+  const targetMachineOptions = useMemo(() => compatibleDestinationMachineOptions({
+    affectedRows: selectedRows,
+    machineRows,
+    plannedRows,
+    sourceMachine: fromMachine,
+  }), [fromMachine, machineRows, plannedRows, selectedRows]);
   const queueReviewGroups = useMemo(() => machineConstraintQueueReview({
     plannedRows,
     machineRows,
@@ -1187,7 +1197,7 @@ function PartMachineSwitchPlannerForm({
     includeSameMachineLater: false,
     includeDownstream: false,
   }), [fromMachine, machineRows, plannedRows, selectedRows, toMachine]);
-  const canReview = Boolean(target.trim() && setupNo.trim() && fromMachine.trim() && toMachine.trim())
+  const canReview = Boolean(selectedItem.trim() && target.trim() && setupNo.trim() && fromMachine.trim() && toMachine.trim())
     && machineKey(fromMachine) !== machineKey(toMachine);
   const canSave = canReview && Boolean(reason.trim()) && reviewReady && selectedRows.length > 0 && queueReviewConfirmed;
 
@@ -1213,6 +1223,7 @@ function PartMachineSwitchPlannerForm({
         toMachine,
         reason,
       });
+      setSelectedItem("");
       setTarget("");
       setSetupNo("");
       setFromMachine("");
@@ -1231,8 +1242,27 @@ function PartMachineSwitchPlannerForm({
         <div className="text-sm font-medium">3. Part-specific machine switch</div>
         <div className="text-xs text-muted-foreground">Move only the selected part/setup to another machine after reviewing that target queue and downstream WIP queues.</div>
       </div>
-      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-5">
-        <Field label="Switch job card / part">
+      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-6">
+        <Field label="Item code">
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={selectedItem}
+            required
+            onChange={(event) => {
+              updateField(setSelectedItem, event.target.value);
+              setTarget("");
+              setSetupNo("");
+              setFromMachine("");
+              setToMachine("");
+            }}
+          >
+            <option value="">Select item</option>
+            {itemOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Job card">
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={target}
@@ -1244,8 +1274,8 @@ function PartMachineSwitchPlannerForm({
               setToMachine("");
             }}
           >
-            <option value="">Select job card / part</option>
-            {targetOptions.map((option) => (
+            <option value="">Select job card</option>
+            {jobCardOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
@@ -1291,7 +1321,7 @@ function PartMachineSwitchPlannerForm({
             onChange={(event) => updateField(setToMachine, event.target.value)}
           >
             <option value="">Select target machine</option>
-            {machineOptions.map((option) => (
+            {targetMachineOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>

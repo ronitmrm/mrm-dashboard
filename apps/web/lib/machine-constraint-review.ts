@@ -97,6 +97,20 @@ export function machineConstraintQueueReview({
   return groups.sort((left, right) => groupRank(left.kind) - groupRank(right.kind) || left.machine.localeCompare(right.machine, undefined, { numeric: true }));
 }
 
+export function compatibleDestinationMachineOptions({
+  affectedRows,
+  machineRows,
+  plannedRows,
+  sourceMachine,
+}: {
+  affectedRows: MachineConstraintReviewRow[];
+  machineRows: MachineConstraintReviewRow[];
+  plannedRows: MachineConstraintReviewRow[];
+  sourceMachine: string;
+}) {
+  return compatibleDestinationMachines(affectedRows, machineRows, plannedRows, machineKey(sourceMachine));
+}
+
 function compatibleDestinationMachines(
   affectedRows: MachineConstraintReviewRow[],
   machineRows: MachineConstraintReviewRow[],
