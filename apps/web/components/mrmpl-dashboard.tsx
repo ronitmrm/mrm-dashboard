@@ -1401,6 +1401,7 @@ function MachineConstraintQueuePlacementBoard({
     <div className="grid gap-1 rounded-md border bg-background p-2">
       {Array.from({ length: group.rows.length + 1 }, (_, index) => {
         const slotRows = placedRows.filter((row) => machineConstraintQueuePlacementIndex(group.rows, machineConstraintPlacementParts(queueAfterByRow[machineIssueRowKey(row)], defaultDestinationMachine).afterKey) === index);
+        const slotPreviewWindows = machineConstraintSlotPreviewWindows(group.rows, slotRows, index);
         return (
           <Fragment key={`${group.machine}-slot-${index}`}>
             <PriorityQueueDropZone
@@ -1417,6 +1418,7 @@ function MachineConstraintQueuePlacementBoard({
                 key={`${group.machine}-${machineIssueRowKey(row)}`}
                 row={row}
                 targetMachine={group.machine}
+                previewWindow={slotPreviewWindows.get(machineIssueRowKey(row))}
                 onDragStart={(event) => {
                   event.dataTransfer.effectAllowed = "move";
                   event.dataTransfer.setData("text/plain", machineIssueRowKey(row));
@@ -1434,14 +1436,97 @@ function MachineConstraintQueuePlacementBoard({
   );
 }
 
+function machineConstraintSlotPreviewWindows(rows: DashboardPayload[], slotRows: DashboardPayload[], slotIndex: number) {
+  const windows = new Map<string, { startDate: string; endDate: string }>();
+  let nextStart = slotIndex > 0
+    ? nextCalendarDateLabelForReview(rows[slotIndex - 1]?.plannedProductionEndDate || rows[slotIndex - 1]?.setupPlannedDate || rows[slotIndex - 1]?.plannedDate)
+    : "";
+
+  for (const row of slotRows) {
+    const originalStart = parseReviewDateLabel(row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
+    const originalEnd = parseReviewDateLabel(row.plannedProductionEndDate || row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
+    const durationDays = originalStart && originalEnd
+      ? Math.max(1, Math.round((originalEnd.getTime() - originalStart.getTime()) / 86400000) + 1)
+      : 1;
+    const startDate = nextStart || displayValue(row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
+    const endDate = addCalendarDaysLabelForReview(startDate, durationDays - 1) || displayValue(row.plannedProductionEndDate || row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
+    windows.set(machineIssueRowKey(row), { startDate, endDate });
+    nextStart = nextCalendarDateLabelForReview(endDate);
+  }
+
+  return windows;
+}
+
+function nextCalendarDateLabelForReview(value: unknown) {
+  return addCalendarDaysLabelForReview(value, 1);
+}
+
+function addCalendarDaysLabelForReview(value: unknown, days: number) {
+  const date = parseReviewDateLabel(value);
+  if (!date) return "";
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return formatReviewDateLabel(next);
+}
+
+function parseReviewDateLabel(value: unknown) {
+  const textValue = str(value);
+  if (!textValue || textValue === "-") return undefined;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(textValue);
+  if (iso?.[1] && iso[2] && iso[3]) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  const dashboard = /^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/.exec(textValue);
+  if (dashboard?.[1] && dashboard[2] && dashboard[3]) {
+    const month = reviewMonthNumber(dashboard[2]);
+    const year = Number(dashboard[3].length === 2 ? `20${dashboard[3]}` : dashboard[3]);
+    if (month) return new Date(year, month - 1, Number(dashboard[1]));
+  }
+  const parsed = new Date(textValue);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+function formatReviewDateLabel(date: Date) {
+  const month = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][date.getMonth()] ?? "";
+  return `${date.getDate()}-${month}-${String(date.getFullYear()).slice(-2)}`;
+}
+
+function reviewMonthNumber(value: string) {
+  const months: Record<string, number> = {
+    january: 1,
+    jan: 1,
+    february: 2,
+    feb: 2,
+    march: 3,
+    mar: 3,
+    april: 4,
+    apr: 4,
+    may: 5,
+    june: 6,
+    jun: 6,
+    july: 7,
+    jul: 7,
+    august: 8,
+    aug: 8,
+    september: 9,
+    sep: 9,
+    october: 10,
+    oct: 10,
+    november: 11,
+    nov: 11,
+    december: 12,
+    dec: 12,
+  };
+  return months[value.toLowerCase()] ?? 0;
+}
 function MachineConstraintMoveTile({
   row,
   targetMachine,
+  previewWindow,
   onDragStart,
   onDragEnd,
 }: {
   row: DashboardPayload;
   targetMachine: string;
+  previewWindow?: { startDate: string; endDate: string };
   onDragStart: (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
 }) {
@@ -1455,7 +1540,7 @@ function MachineConstraintMoveTile({
       <GripVertical className="size-4 text-primary" aria-hidden="true" />
       <div>
         <div className="text-sm font-semibold">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-        <div className="text-xs text-muted-foreground">Move remaining/planned quantity to {targetMachine} | Current {machineValue(row, "machine")} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)}</div>
+        <div className="text-xs text-muted-foreground">Move remaining/planned quantity to {targetMachine} | Current {machineValue(row, "machine")} | Preview {displayValue(previewWindow?.startDate || row.plannedProductionStartDate)} to {displayValue(previewWindow?.endDate || row.plannedProductionEndDate)}</div>
       </div>
       <Badge>Move</Badge>
     </div>
