@@ -315,13 +315,19 @@ Relevant code:
 
 Date: 2026-07-02
 
-The hard-copy conventional production card is being digitized from `MRM-QA-008-01-REV-01.xlsx`. The first digital workflow is attached to the running machine row in Shop Floor Status. Saving the card writes the full hard-copy replacement as `production_card` data-entry and also writes a `software_raw` production row so planning, actual production, target, and efficiency continue to use the canonical production pipeline. The target pieces are calculated from machine start/end time minus break and downtime minutes using `(cycleTime + loadingUnloading)` from the cycle master exposed on `machinePlanDetailRows`. Efficiency is actual produced quantity divided by calculated target.
+The hard-copy conventional production card from `MRM-QA-008-01-REV-01.xlsx` is digitized through the role task tabs, not through Shop Floor Status running-machine rows. Do not reattach or open the production card from `ShopFloorStatusPanel` / running machine row actions.
+
+The role tabs each show a generic entry form where the user selects the machine/item/job/setup first:
+
+- Shop Floor Tasks records stoppage/task details.
+- Quality Control Tasks records QC approval, rejection, and hold details.
+- Machinist Tasks records production start/end, output, cycle target, efficiency, weights, and tooling checks.
+
+All three roles write `production_card` data-entry rows with `cardRole` included in the payload and card identifier so shop-floor, quality, and machinist entries do not overwrite each other. Only the machinist production-card save also writes `software_raw`; that keeps planning, actual production, target, and efficiency on the canonical production pipeline without letting shop-floor or QC notes create production output.
 
 Relevant code:
 
-- `apps/web/components/mrmpl-dashboard.tsx` - `ProductionCardForm` on running shop-floor rows saves production card and production output.
-- `apps/web/lib/legacy-dashboard-analysis.ts` - exposes `cycleTime`, `loadingUnloading`, and latest `productionCardRows` in `productionControl`.
-- `apps/web/convex/dashboard.ts` - includes `production_card` data entries in the snapshot.
+- `apps/web/components/mrmpl-dashboard.tsx` - `RoleTaskPanel` renders `ProductionCardRoleEntryForm` in role tabs, `ShopFloorRowAction` excludes production-card UI, and `productionCardPayload` / `productionCardId` persist role-specific card records.
 
 ## Optimistic setup checklist sessions
 
