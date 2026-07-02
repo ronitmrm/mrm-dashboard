@@ -2529,6 +2529,7 @@ function machinePlanDetails(
         shopFloorTaskBlocker: taskReadiness.blocker,
         planVsActual: setupPlanVsActual(plannedCompletionDate, setupCompletionDate),
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
+        planOverrideInterruptedSetups: override && Array.isArray(override.interruptedSetups) ? override.interruptedSetups : [],
         machineUnavailableSplitRole: splitRole,
         machineUnavailableProducedQty: splitRole ? unavailableSplitPlan?.producedQty ?? 0 : 0,
         machineUnavailableRemainingQty: splitRole ? unavailableSplitPlan?.remainingQty ?? 0 : 0,
@@ -2995,6 +2996,7 @@ function planningScheduleSignature(details: Array<Record<string, unknown>>) {
 
 function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planningCalendar: PlanningCalendar) {
   applyPriorityInterruptionQuantities(details);
+  applyPlanOverrideInterruptionQuantities(details);
   const byMachine = new Map<string, Array<Record<string, unknown>>>();
   for (const row of details) {
     const machine = rowText(row, "machine");
@@ -3068,6 +3070,10 @@ function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>
       ? (canPriorityPreempt(b, a) ? priorityDiff : 0)
       : 0;
   if (allowedPriorityDiff) return allowedPriorityDiff;
+  const aPlanOverridePreemptsB = planOverridePlacesRowBeforeStoppedRow(a, b);
+  const bPlanOverridePreemptsA = planOverridePlacesRowBeforeStoppedRow(b, a);
+  if (aPlanOverridePreemptsB && !bPlanOverridePreemptsA) return -1;
+  if (bPlanOverridePreemptsA && !aPlanOverridePreemptsB) return 1;
   if (aActualStart || bActualStart) {
     if (aActualStart && bActualStart) return aActualStart.localeCompare(bActualStart);
     return aActualStart ? -1 : 1;
@@ -3123,6 +3129,65 @@ function machineUnavailableQueueBeforeMatchesRow(queueBefore: MachineUnavailable
     && queueBefore.setupNo === canonicalKey(rowText(row, "setupNo", "SETUP NO", "SETUP"))
     && (!queueBefore.machine || queueBefore.machine === canonicalKey(rowText(row, "machine", "machineNo", "MACHINE NO", "M/C NO")));
 }
+function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, unknown>>) {
+  const stopOverrides = details.filter((row) => planOverrideInterruptionHasFinishedQty(row));
+  for (const overrideRow of stopOverrides) {
+    const setupInterruptions = planOverrideInterruptedSetups(overrideRow);
+    for (const row of details) {
+      const matchingInterruption = setupInterruptions.find((interruption) => priorityInterruptionMatchesRow(interruption, row));
+      if (!matchingInterruption || matchingInterruption.finishedQty <= 0) continue;
+      const meta = planningMeta(row);
+      const currentActual = meta.productionActual ?? {
+        latestDate: actualProductionStartDate(meta) || parseDate(rowText(row, "setupPlannedDate")) || "",
+        outputQty: 0,
+        actualQty: 0,
+        dates: new Set<string>(),
+      };
+      const actualQty = Math.max(currentActual.actualQty ?? 0, matchingInterruption.finishedQty);
+      const outputQty = Math.max(currentActual.outputQty ?? 0, matchingInterruption.finishedQty);
+      meta.productionActual = {
+        ...currentActual,
+        latestDate: currentActual.latestDate || currentActual.startDate || parseDate(rowText(row, "setupPlannedDate")) || "",
+        outputQty,
+        actualQty,
+      };
+      row.rawOutputQty = round(outputQty);
+      row.rawActualQty = round(actualQty);
+      row.planOverrideStoppedByJcNo = rowText(overrideRow, "target", "jcNo");
+      row.planOverrideRemainingQty = round(Math.max((meta.totalOrderPcs ?? meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs"))) - actualQty, 0));
+    }
+  }
+}
+
+function planOverrideInterruptionHasFinishedQty(row: Record<string, unknown>) {
+  return planOverrideInterruptedSetups(row).some((interruption) => interruption.finishedQty > 0);
+}
+
+function planOverrideInterruptedSetups(row: Record<string, unknown>) {
+  const raw = row.planOverrideInterruptedSetups || row.interruptedSetups;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
+    .map((item) => item as Record<string, unknown>)
+    .map((item) => ({
+      jcNo: canonicalKey(rowText(item, "jcNo", "JC NO", "jobCard")),
+      setupNo: canonicalKey(rowText(item, "setupNo", "SETUP NO", "setup")),
+      machine: canonicalKey(rowText(item, "machine", "machineNo", "MACHINE NO", "M/C NO")),
+      finishedQty: safeNumber(rowValue(item, "finishedQty", "FINISHED QTY", "producedQty", "PRODUCED QTY")),
+    }))
+    .filter((item) => item.jcNo && item.setupNo);
+}
+
+function planOverridePlacesRowBeforeStoppedRow(targetRow: Record<string, unknown>, blockingRow: Record<string, unknown>) {
+  if (!machineUnavailableHasQueuePlacement(targetRow)) return false;
+  if (scheduleRowKey(targetRow) === scheduleRowKey(blockingRow)) return false;
+  if (canonicalKey(rowText(targetRow, "machine", "machineNo")) !== canonicalKey(rowText(blockingRow, "machine", "machineNo"))) return false;
+  if (machineUnavailableKeepsRowBefore(targetRow, blockingRow)) return false;
+  return planOverrideInterruptedSetups(targetRow).some((interruption) =>
+    interruption.finishedQty > 0 && priorityInterruptionMatchesRow(interruption, blockingRow),
+  );
+}
+
 function applyPriorityInterruptionQuantities(details: Array<Record<string, unknown>>) {
   const stopApprovals = details.filter((row) => priorityApprovalMode(row) === "allow_stop_running" && priorityApprovalHasFinishedQty(row));
   for (const approval of stopApprovals) {

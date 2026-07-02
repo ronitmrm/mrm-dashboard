@@ -270,3 +270,15 @@ Relevant code:
 - `apps/web/convex/dashboard.ts` and `apps/web/convex/schema.ts` - plan overrides persist `interruptedSetups` and `queuePlacements`.
 - `apps/web/lib/legacy-dashboard-analysis.ts` - plan overrides reuse interruption split and queue placement ordering.
 - `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `splits a running part-specific machine switch and honors target queue placement`.
+
+## Part-specific machine switch target running approval
+
+Date: 2026-07-02
+
+When a part-specific machine switch targets a machine that already has a running setup, the planner must explicitly choose whether to stop that target-machine running setup, matching the priority-change flow. If the planner does not stop it, the running setup remains a queue barrier and the switched tile must schedule behind it even if the tile was dragged above it. If the planner stops it, the UI must ask for produced quantity for that target running setup; planning records that quantity as produced WIP for the stopped target setup and allows the switched tile to be placed ahead of that stopped blocker according to the reviewed queue placement. The switched source setup still separately asks for produced quantity when it is running, because production may be entered later.
+
+Relevant code:
+
+- `apps/web/components/mrmpl-dashboard.tsx` - part-specific switch target blocker stop/quantity UI.
+- `apps/web/lib/legacy-dashboard-analysis.ts` - plan override interruption quantities and queue preemption for explicitly stopped target blockers.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `lets a part-specific machine switch stop a target running setup before placing the switched tile`.
