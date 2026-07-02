@@ -873,7 +873,67 @@ describe("buildLegacyDashboardSnapshot", () => {
     }
   });
 
-  it("uses the newest part-specific switch to move a delayed setup off the source machine", () => {
+  it("flags conflicting active part-specific machine switches for planner choice", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      planOverrides: [
+        {
+          target: "JC-M24-CONFLICT",
+          setupNo: "1",
+          fromMachine: "ADB503",
+          toMachine: "ADB503",
+          reason: "Keep on source",
+          status: "Active",
+          createdAt: "2026-07-02T09:00:00.000Z",
+        },
+        {
+          target: "JC-M24-CONFLICT",
+          setupNo: "1",
+          fromMachine: "ADB503",
+          toMachine: "ADB504",
+          reason: "Move to alternate",
+          status: "Active",
+          createdAt: "2026-07-02T10:00:00.000Z",
+        },
+      ],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-07-01T00:00:00.000Z",
+          payload: { jcNo: "JC-M24-CONFLICT", partCode: "M24", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-07-01T00:00:00.000Z",
+          payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-07-01T00:00:00.000Z",
+          payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", cycleTime: 28800, loadingUnloading: 0 },
+        },
+        ...[
+          ["ADB503", "AUTOMATIC"],
+          ["ADB504", "AUTOMATIC"],
+        ].map(([machineNo, machineType]) => ({
+          entryType: "machine_master",
+          createdAt: "2026-07-01T00:00:00.000Z",
+          payload: { machineNo, machineType, status: "Active" },
+        })),
+      ],
+    });
+
+    const row = snapshot.productionControl.machinePlanDetailRows.find((planRow) => planRow.jcNo === "JC-M24-CONFLICT" && planRow.setupNo === "1");
+    expect(row).toMatchObject({
+      planOverrideReason: "",
+      plannerActionConflict: expect.stringContaining("Planner action conflict"),
+    });
+    expect(row?.plannerActionRequired).toContain("Choose one action to keep");
+    expect(snapshot.productionControl.plannerActionConflicts).toHaveLength(1);
+    expect(snapshot.productionControl.plannerActionConflicts[0]?.choices).toHaveLength(2);
+  });
+  it("uses a part-specific switch to move a delayed setup off the source machine", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-02T12:00:00.000Z"));
 
@@ -896,15 +956,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         ],
         planOverrides: [
-          {
-            target: "JC-M24-DELAY",
-            setupNo: "1",
-            fromMachine: "ADB503",
-            toMachine: "ADB503",
-            reason: "Older switch decision",
-            status: "Active",
-            createdAt: "2026-07-01T09:00:00.000Z",
-          },
+
           {
             target: "JC-M24-DELAY",
             setupNo: "1",

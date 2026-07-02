@@ -420,6 +420,7 @@ export function buildDashboardSnapshot(input: DashboardInput) {
       setupChecklistMismatchRows: [],
       validationIssues: [],
       plannerActionLog: [],
+      plannerActionConflicts: [],
       routeSelectionRequired: [],
       routeOptions: [],
       routingSummary: {},

@@ -213,6 +213,19 @@ Relevant code:
 
 If multiple active switch/plan override rows exist for the same job card or part setup, planning must apply the newest matching decision by `createdAt`. Older active delayed-plan decisions must not keep a setup on the source machine after the planner saves a newer part-specific switch to a different target machine. Route setup numbers stored as option-prefixed values such as `1.1` must match planner-facing setup numbers such as `1` for option 1. This specifically covers delayed setup rows such as M24 setup 1 on ADB503 later moved to ADB504.
 
+## Planner action conflict resolution
+
+Date: 2026-07-02
+
+When multiple active part-specific machine-switch overrides match the same job/part setup but disagree on target machine or queue placement, planning must not silently choose one. The affected setup row is marked with a planner action conflict and `plannerActionRequired`, and the planner console shows the conflicting switch decisions. The planner resolves the conflict by choosing which decision to keep; the UI reverses the other active `planOverrides` rows through the Corrections flow so history is preserved.
+
+A later part-specific switch after a machine-unavailable delay is not automatically a conflict; it is a valid explicit planner decision unless another active switch for the same setup disagrees with it.
+
+Relevant code:
+
+- `apps/web/lib/legacy-dashboard-analysis.ts` - `planOverrideDecisionForSetup`, conflict detection, and `plannerActionConflicts` snapshot rows.
+- `apps/web/components/mrmpl-dashboard.tsx` - `PlannerActionConflictPanel` lets the planner keep one switch and reverse the others.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `flags conflicting active part-specific machine switches for planner choice`.
 ## Machine breakdown moved-item queue placement
 
 Date: 2026-07-01

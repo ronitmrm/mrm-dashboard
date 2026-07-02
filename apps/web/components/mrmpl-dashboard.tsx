@@ -890,6 +890,7 @@ function PlannerDecisionConsole({
         <CardDescription>Priority changes, machine breakdowns, part-specific machine switches, and mid-route changes.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
+        <PlannerActionConflictPanel productionControl={productionControl} submitAction={submitAction} />
         <PlannerPriorityForm productionControl={productionControl} submitAction={submitAction} />
         <MachineConstraintPlannerForm productionControl={productionControl} submitAction={submitAction} />
         <PartMachineSwitchPlannerForm productionControl={productionControl} submitAction={submitAction} />
@@ -1777,6 +1778,68 @@ function MachineConstraintStaticQueueRows({ group }: { group: MachineConstraintQ
     </div>
   ) : (
     <div className="rounded border border-dashed bg-background px-2 py-1 text-xs text-muted-foreground">{group.emptyMessage || "No current planned rows in this queue."}</div>
+  );
+}
+function PlannerActionConflictPanel({
+  productionControl,
+  submitAction,
+}: {
+  productionControl: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+}) {
+  const conflicts = asArray(productionControl.plannerActionConflicts);
+  const [resolvingKey, setResolvingKey] = useState("");
+  if (!conflicts.length) return null;
+
+  async function keepChoice(conflict: DashboardPayload, choice: DashboardPayload) {
+    const choices = asArray(conflict.choices);
+    const keepId = displayValue(choice.targetId);
+    if (!keepId || keepId === "-") return;
+    setResolvingKey(`${displayValue(conflict.jcNo)}-${displayValue(conflict.setupNo)}-${keepId}`);
+    try {
+      for (const other of choices) {
+        const targetId = displayValue(other.targetId);
+        if (!targetId || targetId === "-" || targetId === keepId) continue;
+        await submitAction("reverse-entry", {
+          targetTable: displayValue(other.targetTable) !== "-" ? displayValue(other.targetTable) : "planOverrides",
+          targetId,
+          targetKey: displayValue(other.targetKey) !== "-" ? displayValue(other.targetKey) : "",
+          targetLabel: displayValue(other.targetLabel) !== "-" ? displayValue(other.targetLabel) : "",
+          reason: `Planner resolved conflicting machine switch and kept ${displayValue(choice.targetLabel)}`,
+          correctedBy: "Planner",
+        });
+      }
+    } finally {
+      setResolvingKey("");
+    }
+  }
+
+  return (
+    <div className="grid gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+      <div>
+        <div className="text-sm font-semibold text-destructive">Planner action conflicts</div>
+        <div className="text-xs text-muted-foreground">Choose which active planner decision should remain. Other conflicting switch rows will be reversed with history preserved.</div>
+      </div>
+      {conflicts.map((conflict, index) => (
+        <div key={`${displayValue(conflict.jcNo)}-${displayValue(conflict.setupNo)}-${index}`} className="grid gap-2 rounded-md border bg-background p-3">
+          <div className="text-sm font-medium">{displayValue(conflict.message)}</div>
+          <div className="text-xs text-muted-foreground">
+            {displayValue(conflict.partCode)} / {displayValue(conflict.jcNo)} / setup {displayValue(conflict.setupNo)}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {asArray(conflict.choices).map((choice, choiceIndex) => {
+              const key = `${displayValue(conflict.jcNo)}-${displayValue(conflict.setupNo)}-${displayValue(choice.targetId)}`;
+              return (
+                <Button key={`${displayValue(choice.targetId)}-${choiceIndex}`} type="button" size="sm" variant="outline" onClick={() => void keepChoice(conflict, choice)} disabled={Boolean(resolvingKey)}>
+                  <CheckCircle2 className="size-4" />
+                  {resolvingKey === key ? "Resolving" : displayValue(choice.targetLabel)}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 function PlannerPriorityForm({

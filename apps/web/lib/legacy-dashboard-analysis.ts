@@ -1052,6 +1052,7 @@ function buildProductionControl({
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
   const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
   const workflowExceptionRows = machinePlanDetailRows.filter((row) => row.rawProductionWithoutWorkflow);
+  const plannerActionConflicts = plannerActionConflictRows(machinePlanDetailRows);
   const setupChecklistHistoryRows: Record<string, unknown>[] = [];
   const setupChecklistMismatchRows: Record<string, unknown>[] = [];
   const machinePlanReady = workOrderOutputRows.filter((row) => row.rmStatus === "Received" && !row.routeStatus.includes("missing") && row.cycleStatus === "Ready" && row.toolingStatus === "Ready" && row.machineMasterStatus === "Ready").length;
@@ -1101,6 +1102,7 @@ function buildProductionControl({
       activeRouteChanges,
       plannerActionLog: plannerActionLog.length,
       workflowExceptions: workflowExceptionRows.length,
+      plannerActionConflicts: plannerActionConflicts.length,
       setupChecklistMismatches: 0,
       compulsoryMachineShifts: planOverrides.length,
       latestRawDate: dateLabel(latestRawDate),
@@ -1162,6 +1164,7 @@ function buildProductionControl({
     })),
     routeOptions: routeSelections,
     plannerActionLog,
+    plannerActionConflicts,
     setupFlow: [],
     dispatchRows: dispatchApprovals,
     dispatchLoss: dispatchRows,
@@ -1173,6 +1176,27 @@ function buildProductionControl({
   };
 }
 
+function plannerActionConflictRows(machinePlanDetailRows: Record<string, unknown>[]) {
+  const conflicts = new Map<string, Record<string, unknown>>();
+  for (const row of machinePlanDetailRows) {
+    const message = rowText(row, "plannerActionConflict");
+    const choices = Array.isArray(row.plannerActionConflictChoices) ? row.plannerActionConflictChoices : [];
+    if (!message || !choices.length) continue;
+    const key = [rowText(row, "jcNo"), canonicalKey(rowText(row, "partCode")), rowText(row, "optionNumber"), rowText(row, "setupNo"), message].join("|");
+    if (conflicts.has(key)) continue;
+    conflicts.set(key, {
+      target: rowText(row, "jcNo") || rowText(row, "partCode"),
+      partCode: rowText(row, "partCode"),
+      jcNo: rowText(row, "jcNo"),
+      optionNumber: rowText(row, "optionNumber"),
+      setupNo: rowText(row, "setupNo"),
+      machine: rowText(row, "machine"),
+      message,
+      choices,
+    });
+  }
+  return [...conflicts.values()];
+}
 function buildSetupAnalytics(rows: Record<string, unknown>[], filters: DashboardFilters) {
   const daily = new Map<string, { dateKey: string; date: string; setter: string; settings: number; totalMinutes: number; machines: Set<string>; itemSetups: Set<string> }>();
   const monthly = new Map<string, { monthKey: string; month: string; setter: string; settings: number; totalMinutes: number; machines: Set<string>; itemSetups: Set<string> }>();
@@ -2277,7 +2301,9 @@ function machinePlanDetails(
       const displaySetupNo = setupStepKey(setupNo, optionNumber) || setupNo;
       const setupOrderPcs = remainingQtyBySetup.get(canonicalKey(displaySetupNo)) ?? safeNumber(rowValue(row, "orderPcs"));
       const machineType = rowText(route, "MACHINE TYPE", "machineType");
-      const override = planOverrideForSetup(planOverrides, row, setupNo, displaySetupNo);
+      const overrideDecision = planOverrideDecisionForSetup(planOverrides, row, setupNo, displaySetupNo);
+      const override = overrideDecision.override;
+      const planOverrideConflict = overrideDecision.conflict;
       const cycle = cycleByKey.get(masterKey(route));
       const productionActualAnyMachine = rawBySetupAnyMachine.get(productionSetupBaseKey({
         jcNo: rowText(row, "jcNo"),
@@ -2524,11 +2550,16 @@ function machinePlanDetails(
         shopFloorRemark: shopFloorStatus ? rowText(shopFloorStatus, "remark") : "",
         shopFloorUpdatedAt: shopFloorStatus ? rowText(shopFloorStatus, "completedAt", "createdAt") : "",
         rawProductionWithoutWorkflow,
-        plannerActionRequired: rawProductionWithoutWorkflow ? "Raw production exists but machinist start task is missing" : "",
+        plannerActionRequired: uniqueTextValues([
+          rawProductionWithoutWorkflow ? "Raw production exists but machinist start task is missing" : "",
+          planOverrideConflict ? planOverrideConflict.message : "",
+        ]).join("; "),
         shopFloorTaskReady: taskReadiness.ready,
         shopFloorTaskBlocker: taskReadiness.blocker,
         planVsActual: setupPlanVsActual(plannedCompletionDate, setupCompletionDate),
         planOverrideReason: override ? rowText(override, "reason", "REASON") : "",
+        plannerActionConflict: planOverrideConflict ? planOverrideConflict.message : "",
+        plannerActionConflictChoices: planOverrideConflict ? planOverrideConflict.choices : [],
         planOverrideInterruptedSetups: override && Array.isArray(override.interruptedSetups) ? override.interruptedSetups : [],
         machineUnavailableSplitRole: splitRole,
         machineUnavailableProducedQty: splitRole ? unavailableSplitPlan?.producedQty ?? 0 : 0,
@@ -3982,11 +4013,18 @@ function machineUnavailableMessage(window: MachineUnavailableWindow) {
   const reason = window.reason ? ` (${window.reason})` : "";
   return `Machine ${window.machine} unavailable ${dateLabel(window.fromDate)} to ${dateLabel(window.toDate)}${reason}; forecast moved after availability`;
 }
-function planOverrideForSetup(planOverrides: ActionRow[], workOrder: Record<string, unknown>, setupNo: string, displaySetupNo?: string) {
+function planOverrideDecisionForSetup(planOverrides: ActionRow[], workOrder: Record<string, unknown>, setupNo: string, displaySetupNo?: string) {
+  const matches = matchingPlanOverridesForSetup(planOverrides, workOrder, setupNo, displaySetupNo);
+  const conflict = planOverrideConflictForMatches(matches, workOrder, displaySetupNo || setupNo);
+  if (conflict) return { override: undefined, conflict };
+  return { override: matches.sort((left, right) => rowCreatedAtMs(right) - rowCreatedAtMs(left))[0], conflict: undefined };
+}
+
+function matchingPlanOverridesForSetup(planOverrides: ActionRow[], workOrder: Record<string, unknown>, setupNo: string, displaySetupNo?: string) {
   const jcKey = canonicalKey(rowText(workOrder, "jcNo", "JC NO.", "JC NO"));
   const partKey = canonicalKey(rowText(workOrder, "partCode", "PART CODE", "PART NO"));
   const setupKeys = new Set([canonicalKey(setupNo), canonicalKey(displaySetupNo ?? "")].filter(Boolean));
-  const matches = planOverrides.filter((row) => {
+  return planOverrides.filter((row) => {
     if (!isActivePlannerDecision(rowText(row, "status", "STATUS"))) return false;
     const targetKey = canonicalKey(rowText(row, "target", "jcNo", "JC NO.", "JC NO", "partCode", "PART CODE", "PART NO"));
     const rowJcKey = canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"));
@@ -3997,7 +4035,48 @@ function planOverrideForSetup(planOverrides: ActionRow[], workOrder: Record<stri
     const setupMatches = !rowSetupKey || setupKeys.has(rowSetupKey);
     return (targetMatches || rowMatches) && setupMatches;
   });
-  return matches.sort((left, right) => rowCreatedAtMs(right) - rowCreatedAtMs(left))[0];
+}
+
+function planOverrideConflictForMatches(matches: ActionRow[], workOrder: Record<string, unknown>, setupNo: string) {
+  if (matches.length < 2) return undefined;
+  const activeDecisions = matches
+    .map((row) => ({ row, signature: planOverrideDecisionSignature(row) }))
+    .filter((entry) => entry.signature);
+  const signatures = new Set(activeDecisions.map((entry) => entry.signature));
+  if (signatures.size < 2) return undefined;
+  const choices = activeDecisions
+    .sort((left, right) => rowCreatedAtMs(right.row) - rowCreatedAtMs(left.row))
+    .map((entry) => planOverrideConflictChoice(entry.row));
+  const target = rowText(workOrder, "jcNo", "JC NO.", "JC NO") || rowText(workOrder, "partCode", "PART CODE", "PART NO");
+  return {
+    message: `Planner action conflict: ${target || "selected setup"} setup ${setupNo || "-"} has ${choices.length} active machine-switch decisions. Choose one action to keep.`,
+    choices,
+  };
+}
+
+function planOverrideDecisionSignature(row: ActionRow) {
+  const targetMachine = canonicalKey(rowText(row, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE"));
+  if (!targetMachine) return "";
+  const placements = machineUnavailableQueuePlacements(row)
+    .map((placement) => `${placement.targetMachine}:${placement.queueBeforeSetups.map((item) => `${item.jcNo}/${item.setupNo}/${item.machine}`).join(",")}`)
+    .sort()
+    .join("|");
+  return `${targetMachine}|${placements}`;
+}
+
+function planOverrideConflictChoice(row: ActionRow) {
+  return {
+    targetTable: "planOverrides",
+    targetId: rowText(row, "_id", "id"),
+    targetKey: [rowText(row, "target"), rowText(row, "setupNo", "SETUP NO.", "SETUP NO"), rowText(row, "fromMachine"), rowText(row, "toMachine")].filter(Boolean).join(" / "),
+    targetLabel: `Keep ${rowText(row, "target") || "setup"} on ${rowText(row, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE") || "target machine"}`,
+    target: rowText(row, "target"),
+    setupNo: rowText(row, "setupNo", "SETUP NO.", "SETUP NO"),
+    fromMachine: rowText(row, "fromMachine", "FROM MACHINE"),
+    toMachine: rowText(row, "toMachine", "TO MACHINE", "PLAN ON MACHINE", "TARGET MACHINE"),
+    reason: rowText(row, "reason", "REASON"),
+    createdAt: rowText(row, "createdAt", "CREATED AT", "timestamp", "updatedAt"),
+  };
 }
 
 function rowCreatedAtMs(row: Record<string, unknown>) {
