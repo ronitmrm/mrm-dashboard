@@ -211,7 +211,7 @@ Relevant code:
 - `apps/web/lib/machine-constraint-review.test.ts` - regression coverage for selected-destination-only review and no source-machine later queue in part switches.
 - `apps/web/lib/legacy-dashboard-analysis.ts` - `planOverrideForSetup` applies the newest active matching override.
 
-If multiple active switch/plan override rows exist for the same job card or part setup, planning must apply the newest matching decision by `createdAt`. Older active delayed-plan decisions must not keep a setup on the source machine after the planner saves a newer part-specific switch to a different target machine. This specifically covers delayed setup rows such as M24 setup 1 on ADB503 later moved to ADB504.
+If multiple active switch/plan override rows exist for the same job card or part setup, planning must apply the newest matching decision by `createdAt`. Older active delayed-plan decisions must not keep a setup on the source machine after the planner saves a newer part-specific switch to a different target machine. Route setup numbers stored as option-prefixed values such as `1.1` must match planner-facing setup numbers such as `1` for option 1. This specifically covers delayed setup rows such as M24 setup 1 on ADB503 later moved to ADB504.
 
 ## Machine breakdown moved-item queue placement
 

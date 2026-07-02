@@ -2277,7 +2277,7 @@ function machinePlanDetails(
       const displaySetupNo = setupStepKey(setupNo, optionNumber) || setupNo;
       const setupOrderPcs = remainingQtyBySetup.get(canonicalKey(displaySetupNo)) ?? safeNumber(rowValue(row, "orderPcs"));
       const machineType = rowText(route, "MACHINE TYPE", "machineType");
-      const override = planOverrideForSetup(planOverrides, row, setupNo);
+      const override = planOverrideForSetup(planOverrides, row, setupNo, displaySetupNo);
       const cycle = cycleByKey.get(masterKey(route));
       const productionActualAnyMachine = rawBySetupAnyMachine.get(productionSetupBaseKey({
         jcNo: rowText(row, "jcNo"),
@@ -3982,10 +3982,10 @@ function machineUnavailableMessage(window: MachineUnavailableWindow) {
   const reason = window.reason ? ` (${window.reason})` : "";
   return `Machine ${window.machine} unavailable ${dateLabel(window.fromDate)} to ${dateLabel(window.toDate)}${reason}; forecast moved after availability`;
 }
-function planOverrideForSetup(planOverrides: ActionRow[], workOrder: Record<string, unknown>, setupNo: string) {
+function planOverrideForSetup(planOverrides: ActionRow[], workOrder: Record<string, unknown>, setupNo: string, displaySetupNo?: string) {
   const jcKey = canonicalKey(rowText(workOrder, "jcNo", "JC NO.", "JC NO"));
   const partKey = canonicalKey(rowText(workOrder, "partCode", "PART CODE", "PART NO"));
-  const setupKey = canonicalKey(setupNo);
+  const setupKeys = new Set([canonicalKey(setupNo), canonicalKey(displaySetupNo ?? "")].filter(Boolean));
   const matches = planOverrides.filter((row) => {
     if (!isActivePlannerDecision(rowText(row, "status", "STATUS"))) return false;
     const targetKey = canonicalKey(rowText(row, "target", "jcNo", "JC NO.", "JC NO", "partCode", "PART CODE", "PART NO"));
@@ -3994,7 +3994,7 @@ function planOverrideForSetup(planOverrides: ActionRow[], workOrder: Record<stri
     const rowSetupKey = canonicalKey(rowText(row, "setupNo", "SETUP NO.", "SETUP NO"));
     const targetMatches = Boolean(targetKey && (targetKey === jcKey || targetKey === partKey));
     const rowMatches = Boolean((rowJcKey && rowJcKey === jcKey) || (rowPartKey && rowPartKey === partKey));
-    const setupMatches = !rowSetupKey || rowSetupKey === setupKey;
+    const setupMatches = !rowSetupKey || setupKeys.has(rowSetupKey);
     return (targetMatches || rowMatches) && setupMatches;
   });
   return matches.sort((left, right) => rowCreatedAtMs(right) - rowCreatedAtMs(left))[0];

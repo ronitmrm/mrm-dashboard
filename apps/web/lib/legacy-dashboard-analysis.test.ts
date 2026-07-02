@@ -413,7 +413,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "route",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+            payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
           },
           {
             entryType: "cycle",
@@ -934,12 +934,12 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "route",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+            payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
           },
           {
             entryType: "cycle",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", cycleTime: 28800, loadingUnloading: 0 },
           },
           ...[
             ["ADB503", "AUTOMATIC"],
@@ -1087,12 +1087,12 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "route",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+            payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
           },
           {
             entryType: "cycle",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", cycleTime: 28800, loadingUnloading: 0 },
           },
           {
             entryType: "machine_master",
