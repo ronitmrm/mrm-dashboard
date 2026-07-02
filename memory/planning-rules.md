@@ -217,7 +217,7 @@ If multiple active switch/plan override rows exist for the same job card or part
 
 Date: 2026-07-02
 
-When multiple active part-specific machine-switch overrides match the same job/part setup but disagree on target machine or queue placement, planning must not silently choose one. During part-specific machine switch review, the probable-plan panel must detect the existing active conflicting switch before save, show it to the planner, and keep Save disabled until the planner either keeps the existing action or reverses it through Corrections. The affected setup row is still marked with a planner action conflict and `plannerActionRequired` as a fallback for old data or race conditions; the conflict panel can resolve those rows while preserving history.
+When multiple active part-specific machine-switch overrides match the same job/part setup but disagree on target machine or queue placement, planning must not silently choose one. During every planner action review/probable-plan flow, including priority change, machine unavailable/breakdown, and part-specific machine switch, the panel must detect existing active conflicting planner actions before save, show them to the planner, and keep Save disabled until the planner either keeps the existing action or reverses it through Corrections. The affected setup row is still marked with a planner action conflict and `plannerActionRequired` as a fallback for old data or race conditions; the conflict panel can resolve those rows while preserving history.
 
 A later part-specific switch after a machine-unavailable delay is not automatically a conflict; it is a valid explicit planner decision unless another active switch for the same setup disagrees with it.
 

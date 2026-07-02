@@ -922,6 +922,7 @@ function MachineConstraintPlannerForm({
   const [reason, setReason] = useState("");
   const [reviewReady, setReviewReady] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resolvedMachineConflictIds, setResolvedMachineConflictIds] = useState<Set<string>>(() => new Set());
   const [producedQtyByRow, setProducedQtyByRow] = useState<Record<string, string>>({});
   const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false);
   const [queueAfterByRow, setQueueAfterByRow] = useState<Record<string, string>>({});
@@ -953,20 +954,32 @@ function MachineConstraintPlannerForm({
     () => machineConstraintMovableRows(affectedRows, rescheduleAction),
     [affectedRows, rescheduleAction],
   );
+  const proposedMachineQueuePlacements = useMemo(() => machineConstraintQueuePlacements(queueReviewGroups, movableAffectedRows, queueAfterByRow), [movableAffectedRows, queueAfterByRow, queueReviewGroups]);
+  const machineConstraintConflicts = useMemo(() => machineConstraintPreSaveConflicts(asArray(productionControl.machineConstraintRows), {
+    machineNo,
+    unavailableFrom,
+    unavailableTo,
+    rescheduleAction,
+    planningMode,
+    queuePlacements: proposedMachineQueuePlacements,
+    resolvedIds: resolvedMachineConflictIds,
+  }), [machineNo, planningMode, productionControl.machineConstraintRows, proposedMachineQueuePlacements, resolvedMachineConflictIds, rescheduleAction, unavailableFrom, unavailableTo]);
   const canReview = Boolean(machineNo.trim() && unavailableFrom);
-  const canSave = canReview && Boolean(reason.trim()) && reviewReady && !missingProducedQty && (!queueReviewRequired || queueReviewConfirmed);
+  const canSave = canReview && Boolean(reason.trim()) && reviewReady && !missingProducedQty && !machineConstraintConflicts.length && (!queueReviewRequired || queueReviewConfirmed);
 
   function updateField(setter: Dispatch<SetStateAction<string>>, value: string) {
     setter(value);
     setReviewReady(false);
     setQueueReviewConfirmed(false);
     setQueueAfterByRow({});
+    setResolvedMachineConflictIds(new Set());
   }
 
   function updatePlanningInput(setter: Dispatch<SetStateAction<string>>, value: string) {
     setter(value);
     setQueueReviewConfirmed(false);
     setQueueAfterByRow({});
+    setResolvedMachineConflictIds(new Set());
   }
 
   function updateProducedQty(row: DashboardPayload, value: string) {
@@ -974,6 +987,19 @@ function MachineConstraintPlannerForm({
     setProducedQtyByRow((current) => ({ ...current, [key]: value }));
   }
 
+  async function reverseMachineConstraintConflict(conflict: DashboardPayload) {
+    const targetId = displayValue(conflict.targetId);
+    if (!targetId || targetId === "-") return;
+    await submitAction("reverse-entry", {
+      targetTable: "machineConstraints",
+      targetId,
+      targetKey: displayValue(conflict.targetKey) !== "-" ? displayValue(conflict.targetKey) : "",
+      targetLabel: displayValue(conflict.targetLabel) !== "-" ? displayValue(conflict.targetLabel) : "",
+      reason: `Planner replacing conflicting machine unavailable action for ${machineNo}`,
+      correctedBy: "Planner",
+    });
+    setResolvedMachineConflictIds((current) => new Set([...current, targetId]));
+  }
   async function saveMachineIssue(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!reviewReady) {
@@ -989,7 +1015,7 @@ function MachineConstraintPlannerForm({
         machine: machineValue(row, "machine"),
         finishedQty: Number(producedQtyByRow[machineIssueRowKey(row)] ?? 0),
       }));
-      const queuePlacements = machineConstraintQueuePlacements(queueReviewGroups, movableAffectedRows, queueAfterByRow);
+      const queuePlacements = proposedMachineQueuePlacements;
       await submitAction("machine-constraint", {
         machineNo,
         unavailableFrom,
@@ -1103,6 +1129,13 @@ function MachineConstraintPlannerForm({
           ) : (
             <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup rows overlap this unavailable window.</div>
           )}
+          <PlannerPreSaveConflictReview
+            conflicts={machineConstraintConflicts}
+            title="Conflicting machine action found"
+            description="This machine action cannot be saved while another active unavailable/breakdown decision overlaps the same machine with a different action or queue choice."
+            onKeepExisting={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}
+            onReverseExisting={reverseMachineConstraintConflict}
+          />
           {queueReviewRequired ? (
             <>
               <MachineConstraintQueueReviewPanel
@@ -1897,6 +1930,44 @@ function PlannerActionConflictPanel({
     </div>
   );
 }
+function PlannerPreSaveConflictReview({
+  conflicts,
+  title,
+  description,
+  onKeepExisting,
+  onReverseExisting,
+}: {
+  conflicts: DashboardPayload[];
+  title: string;
+  description: string;
+  onKeepExisting: () => void;
+  onReverseExisting: (conflict: DashboardPayload) => void | Promise<void>;
+}) {
+  if (!conflicts.length) return null;
+  return (
+    <div className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+      <div>
+        <div className="text-sm font-medium text-destructive">{title}</div>
+        <div className="text-xs text-muted-foreground">{description}</div>
+      </div>
+      {conflicts.map((conflict, index) => (
+        <div key={`${displayValue(conflict.targetId)}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-2">
+          <div>
+            <div className="text-sm font-medium">{displayValue(conflict.targetLabel)}</div>
+            <div className="text-xs text-muted-foreground">{displayValue(conflict.targetKey)} | {displayValue(conflict.createdAt)}</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={onKeepExisting}>Keep existing</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => void onReverseExisting(conflict)}>
+              <Undo2 className="size-4" />
+              Reverse existing
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 function PlannerPriorityForm({
   productionControl,
   submitAction,
@@ -1915,6 +1986,7 @@ function PlannerPriorityForm({
   const [queueAfterByStep, setQueueAfterByStep] = useState<Record<string, string>>({});
   const [finishedQtyByInterruption, setFinishedQtyByInterruption] = useState<Record<string, string>>({});
   const [confirmedPrioritySteps, setConfirmedPrioritySteps] = useState<Record<string, boolean>>({});
+  const [resolvedPriorityConflictIds, setResolvedPriorityConflictIds] = useState<Set<string>>(() => new Set());
   const jobCardOptions = useMemo(() => uniqueValues(workOrders
     .filter((row) => !partCode || machineKey(itemCode(row)) === machineKey(partCode))
     .map(jobCardNumber)
@@ -1939,6 +2011,14 @@ function PlannerPriorityForm({
   const itemPlanWindow = allStepsConfirmed && confirmedWindows.length
     ? { startDate: confirmedWindows[0]?.startDate ?? "", endDate: confirmedWindows.at(-1)?.endDate ?? "" }
     : undefined;
+  const priorityConflicts = useMemo(() => plannerPriorityPreSaveConflicts(asArray(productionControl.plannerActionLog).filter((row) => displayValue(row.actionType) === "Priority"), {
+    target: selectedJc || selectedPart,
+    jcNo: selectedJc,
+    partCode: selectedPart,
+    priority,
+    queueBeforeSetups: priorityPlanQueueBeforeSetups(priorityPlan.steps, queueAfterByStep),
+    resolvedIds: resolvedPriorityConflictIds,
+  }), [productionControl.plannerActionLog, priority, priorityPlan.steps, queueAfterByStep, resolvedPriorityConflictIds, selectedJc, selectedPart]);
 
   function resetPlanReview() {
     setPlanReady(false);
@@ -1946,6 +2026,7 @@ function PlannerPriorityForm({
     setQueueAfterByStep({});
     setFinishedQtyByInterruption({});
     setConfirmedPrioritySteps({});
+    setResolvedPriorityConflictIds(new Set());
   }
 
   function confirmPriorityStep(stepKey: string) {
@@ -1973,13 +2054,26 @@ function PlannerPriorityForm({
     ));
   }
 
+  async function reversePriorityConflict(conflict: DashboardPayload) {
+    const targetId = displayValue(conflict.targetId);
+    if (!targetId || targetId === "-") return;
+    await submitAction("reverse-entry", {
+      targetTable: "plannerPriorities",
+      targetId,
+      targetKey: displayValue(conflict.targetKey) !== "-" ? displayValue(conflict.targetKey) : "",
+      targetLabel: displayValue(conflict.targetLabel) !== "-" ? displayValue(conflict.targetLabel) : "",
+      reason: `Planner replacing conflicting priority action with ${selectedJc || selectedPart} ${priority}`,
+      correctedBy: "Planner",
+    });
+    setResolvedPriorityConflictIds((current) => new Set([...current, targetId]));
+  }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!planReady) {
       setPlanReady(true);
       return;
     }
-    if ((!selectedPart && !selectedJc) || hasSelectedRunningWithoutQty || !allStepsConfirmed) return;
+    if ((!selectedPart && !selectedJc) || hasSelectedRunningWithoutQty || !allStepsConfirmed || priorityConflicts.length > 0) return;
     const queueBeforeSetups = priorityPlanQueueBeforeSetups(priorityPlan.steps, queueAfterByStep);
     const interruptedSetups = selectedBlockers.map((blocker) => ({
       jcNo: blocker.jcNo,
@@ -2129,10 +2223,17 @@ function PlannerPriorityForm({
           {hasSelectedRunningWithoutQty ? (
             <div className="text-xs text-destructive">Enter finished quantity for every running setup selected to stop.</div>
           ) : null}
+          <PlannerPreSaveConflictReview
+            conflicts={priorityConflicts}
+            title="Conflicting priority action found"
+            description="This priority cannot be applied while another active priority decision exists for the same item or job card with different priority or queue choices."
+            onKeepExisting={resetPlanReview}
+            onReverseExisting={reversePriorityConflict}
+          />
         </div>
       ) : null}
 
-      <Button className="w-fit" type="submit" disabled={planReady && (priorityPlan.steps.length === 0 || hasSelectedRunningWithoutQty || !allStepsConfirmed)}>
+      <Button className="w-fit" type="submit" disabled={planReady && (priorityPlan.steps.length === 0 || hasSelectedRunningWithoutQty || !allStepsConfirmed || priorityConflicts.length > 0)}>
         <Wrench className="size-4" />
         {planReady ? "Apply confirmed priority" : "Show probable plan"}
       </Button>
@@ -5704,6 +5805,109 @@ function partMachineSwitchDecisionSignature(toMachine: string, queuePlacements: 
     .map((placement) => `${placement.targetMachine}:${placement.before}`)
     .join("|");
   return `${targetMachine}|${placementSignature}`;
+}
+function plannerPriorityPreSaveConflicts(
+  rows: DashboardPayload[],
+  proposed: {
+    target: string;
+    jcNo: string;
+    partCode: string;
+    priority: string;
+    queueBeforeSetups: Array<{ targetSetupNo: string; jcNo: string; setupNo: string; machine: string }>;
+    resolvedIds: Set<string>;
+  },
+) {
+  const targetKeys = new Set([proposed.target, proposed.jcNo, proposed.partCode].map(machineKey).filter(Boolean));
+  const proposedSignature = plannerPriorityDecisionSignature(proposed.priority, proposed.queueBeforeSetups);
+  if (!targetKeys.size || !proposedSignature) return [];
+  return rows
+    .filter((row) => {
+      const targetId = displayValue(row._id || row.targetId);
+      if (proposed.resolvedIds.has(targetId)) return false;
+      const rowKeys = [row.target, row.jcNo, row.partCode].map((value) => machineKey(displayValue(value))).filter(Boolean);
+      if (!rowKeys.some((key) => targetKeys.has(key))) return false;
+      const existingSignature = plannerPriorityDecisionSignature(displayValue(row.priority), asArray(row.queueBeforeSetups).map((queueRow) => ({
+        targetSetupNo: displayValue(queueRow.targetSetupNo),
+        jcNo: displayValue(queueRow.jcNo),
+        setupNo: displayValue(queueRow.setupNo),
+        machine: displayValue(queueRow.machine),
+      })));
+      return Boolean(existingSignature && existingSignature !== proposedSignature);
+    })
+    .map((row) => ({
+      ...row,
+      targetTable: "plannerPriorities",
+      targetId: displayValue(row._id || row.targetId),
+      targetKey: [displayValue(row.target), displayValue(row.jcNo), displayValue(row.partCode), displayValue(row.priority)].filter((value) => value !== "-").join(" / "),
+      targetLabel: `Existing priority ${displayValue(row.priority)} for ${displayValue(row.target)}`,
+      createdAt: displayValue(row.createdAt),
+    }));
+}
+
+function plannerPriorityDecisionSignature(priority: string, queueBeforeSetups: Array<{ targetSetupNo: string; jcNo: string; setupNo: string; machine: string }>) {
+  const priorityKey = machineKey(priority || "Normal");
+  const queueSignature = queueBeforeSetups
+    .map((row) => [row.targetSetupNo, row.jcNo, row.setupNo, row.machine].map(machineKey).join("/"))
+    .sort()
+    .join(",");
+  return `${priorityKey}|${queueSignature}`;
+}
+
+function machineConstraintPreSaveConflicts(
+  rows: DashboardPayload[],
+  proposed: {
+    machineNo: string;
+    unavailableFrom: string;
+    unavailableTo: string;
+    rescheduleAction: string;
+    planningMode: string;
+    queuePlacements: MachineConstraintQueuePlacementPayload[];
+    resolvedIds: Set<string>;
+  },
+) {
+  const machine = machineKey(proposed.machineNo);
+  const proposedSignature = machineConstraintDecisionSignature(proposed.rescheduleAction, proposed.planningMode, proposed.queuePlacements);
+  if (!machine || !proposed.unavailableFrom || !proposedSignature) return [];
+  return rows
+    .filter((row) => {
+      const targetId = displayValue(row._id || row.targetId);
+      if (proposed.resolvedIds.has(targetId)) return false;
+      if (machineKey(displayValue(row.machineNo)) !== machine) return false;
+      if (!dateRangesOverlap(proposed.unavailableFrom, proposed.unavailableTo || proposed.unavailableFrom, displayValue(row.unavailableFrom), displayValue(row.unavailableTo || row.unavailableFrom))) return false;
+      const existingSignature = machineConstraintDecisionSignature(displayValue(row.rescheduleAction), displayValue(row.planningMode), asArray(row.queuePlacements) as MachineConstraintQueuePlacementPayload[]);
+      return Boolean(existingSignature && existingSignature !== proposedSignature);
+    })
+    .map((row) => ({
+      ...row,
+      targetTable: "machineConstraints",
+      targetId: displayValue(row._id || row.targetId),
+      targetKey: [displayValue(row.machineNo), displayValue(row.unavailableFrom), displayValue(row.unavailableTo), displayValue(row.rescheduleAction)].filter((value) => value !== "-").join(" / "),
+      targetLabel: `Existing ${displayValue(row.rescheduleAction || "machine action")} on ${displayValue(row.machineNo)}`,
+      createdAt: displayValue(row.createdAt),
+    }));
+}
+
+function machineConstraintDecisionSignature(rescheduleAction: string, planningMode: string, queuePlacements: MachineConstraintQueuePlacementPayload[]) {
+  const actionKey = machineKey(rescheduleAction || "shift_required");
+  const modeKey = machineKey(planningMode || "system_recalculate");
+  const placementSignature = queuePlacements
+    .map((placement) => [
+      placement.targetJcNo,
+      placement.targetSetupNo,
+      placement.targetSourceMachine,
+      placement.targetMachine,
+      ...(placement.queueBeforeSetups ?? []).map((row) => `${row.jcNo}/${row.setupNo}/${row.machine}`),
+    ].map(machineKey).join("/"))
+    .sort()
+    .join("|");
+  return `${actionKey}|${modeKey}|${placementSignature}`;
+}
+
+function dateRangesOverlap(leftFrom: string, leftTo: string, rightFrom: string, rightTo: string) {
+  if (!leftFrom || !rightFrom) return false;
+  const leftEnd = leftTo || leftFrom;
+  const rightEnd = rightTo || rightFrom;
+  return leftFrom <= rightEnd && rightFrom <= leftEnd;
 }
 function machineConstraintPlacementValue(machine: string, afterKey: string) {
   return `${machineKey(machine)}${machineConstraintPlacementSeparator}${afterKey}`;
