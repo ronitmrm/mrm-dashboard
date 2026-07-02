@@ -3764,7 +3764,12 @@ function candidateMachineAvailableForAssignment(
 }
 
 function machineUnavailableWindowWantsAlternate(window: MachineUnavailableWindow) {
-  return canonicalKey(window.action) !== "DELAY";
+  return canonicalKey(window.action) !== "delay";
+}
+
+function machineHasDelayUnavailableWindow(machine: string, windows: MachineUnavailableWindow[]) {
+  const machineKeyValue = canonicalKey(machine);
+  return Boolean(machineKeyValue) && windows.some((window) => window.machine === machineKeyValue && !machineUnavailableWindowWantsAlternate(window));
 }
 
 function machineUnavailableProductionDelay(
@@ -3968,12 +3973,14 @@ function assignedPhysicalMachines({
   const productionActualMachineList = [...(productionActualMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const lockedMachineList = [...(lockedMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const previousMachineList = [...(previousMachines ?? new Set<string>())].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const delayMachineList = previousMachineList.filter((machine) => machineHasDelayUnavailableWindow(machine, machineUnavailableWindows));
   if (productionActualMachineList.length) return productionActualMachineList;
   if (overrideMachine) {
     const exactOverride = assignableCandidates.find((row) => canonicalKey(row.machine) === canonicalKey(overrideMachine));
     if (exactOverride) return [exactOverride.machine];
   }
   if (lockedMachineList.length) return lockedMachineList;
+  if (delayMachineList.length) return delayMachineList;
   if (!assignableCandidates.length) return [];
   const assignmentCandidates = stableMachineAssignmentCandidates(assignableCandidates, previousMachineList, {
     machineLoad,

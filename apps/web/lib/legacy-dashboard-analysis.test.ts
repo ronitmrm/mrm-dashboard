@@ -301,6 +301,86 @@ describe("buildLegacyDashboardSnapshot", () => {
       vi.useRealTimers();
     }
   });
+  it("keeps delay-plan work on the unavailable machine and pushes its dates", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+
+    try {
+      const first = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { jcNo: "JC-DELAY-ADB", partCode: "M-ADB", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-01" },
+          },
+          {
+            entryType: "route",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M-ADB", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M-ADB", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+          },
+          ...["ADB503", "ADB504"].map((machineNo) => ({
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo, machineType: "AUTOMATIC", status: "Active" },
+          })),
+        ],
+      });
+      const previous = first.productionControl.machinePlanDetailRows.map((row) => ({ ...row, machine: row.machine === "ADB504" ? "ADB503" : row.machine }));
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        previousMachinePlanDetailRows: previous,
+        machineConstraints: [
+          {
+            machineNo: "ADB503",
+            unavailableFrom: "2026-07-02",
+            unavailableTo: "2026-07-06",
+            reason: "Breakdown",
+            rescheduleAction: "delay",
+            status: "Active",
+            createdAt: "2026-07-01T10:16:31.528Z",
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { jcNo: "JC-DELAY-ADB", partCode: "M-ADB", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-01" },
+          },
+          {
+            entryType: "route",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M-ADB", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M-ADB", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+          },
+          ...["ADB503", "ADB504"].map((machineNo) => ({
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo, machineType: "AUTOMATIC", status: "Active" },
+          })),
+        ],
+      });
+
+      expect(snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-DELAY-ADB")).toMatchObject({
+        machine: "ADB503",
+        plannedProductionStartDate: "7-July-26",
+        machineUnavailableReason: expect.stringContaining("Breakdown"),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("moves remaining running breakdown quantity to an alternate machine using system planning rules", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));

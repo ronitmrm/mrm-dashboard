@@ -5682,7 +5682,7 @@ function machineMatchesItemCode(machine: string, itemCodeFilter: string, planned
 function machineIsRunning(machine: string, plannedByMachine: Map<string, DashboardPayload[]>) {
   const rows = plannedByMachine.get(machineKey(machine)) ?? [];
   return rows.some((row) => {
-    if (planningRowIsBreakdownStopped(row) || planningRowIsShiftedAfterBreakdown(row)) return false;
+    if (planningRowIsBreakdownStopped(row) || planningRowIsShiftedAfterBreakdown(row) || planningRowHasUnavailableBreakdown(row)) return false;
     return str(row.runningStatus).toLowerCase() === "running" || Number(row.rawRows) > 0 || Number(row.rawOutputQty) > 0 || Number(row.rawActualQty) > 0;
   });
 }
@@ -5790,7 +5790,7 @@ function shopFloorPlanKey(row: DashboardPayload) {
 
 function machinePlanningStatus(rows: DashboardPayload[]) {
   if (!rows.length) return "No plan";
-  if (rows.some(planningRowIsBreakdownStopped)) return "Breakdown";
+  if (rows.some((row) => planningRowIsBreakdownStopped(row) || planningRowHasUnavailableBreakdown(row))) return "Breakdown";
   if (rows.some((row) => str(row.runningStatus).toLowerCase() === "setup complete")) return "Setup complete";
   return "Planned";
 }
@@ -5830,6 +5830,11 @@ function planningRowIsBreakdownStopped(row: DashboardPayload) {
 function planningRowIsShiftedAfterBreakdown(row: DashboardPayload) {
   const status = str(row.runningStatus).toLowerCase();
   return status === "plan shifted" || status === "plan delayed";
+}
+
+function planningRowHasUnavailableBreakdown(row: DashboardPayload) {
+  const text = [row.machineUnavailableReason, row.plannerActionRequired].map(str).join(" ").toLowerCase();
+  return text.includes("breakdown") || text.includes("unavailable");
 }
 
 function machineKey(value: unknown) {

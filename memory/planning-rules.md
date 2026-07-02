@@ -245,3 +245,15 @@ Relevant code:
 - `apps/web/lib/legacy-dashboard-analysis.ts` - breakdown split assignments can create both a stopped produced row and a same-machine delayed remaining row.
 - `apps/web/components/mrmpl-dashboard.tsx` - machine tile current/running helpers ignore stopped/shifted/delayed breakdown rows and show machine plan `Breakdown`.
 - `apps/web/lib/legacy-dashboard-analysis.test.ts` - no-alternate breakdown regression expects separate `Breakdown stopped` and `Plan delayed` rows.
+
+## Delay-plan machine unavailable action
+
+Date: 2026-07-02
+
+For a machine-unavailable action with `rescheduleAction: delay`, the selected machine must not be treated like a shift-required exclusion. Any setup that was already planned on that physical machine should remain on that machine and have its setup/production dates pushed after the unavailable window. Machine tiles should show the plan state as `Breakdown`/not running for rows carrying a machine-unavailable breakdown reason, and should not display a focused setup while the machine is unavailable.
+
+Relevant code:
+
+- `apps/web/lib/legacy-dashboard-analysis.ts` - `machineUnavailableWindowWantsAlternate` must compare against normalized `delay`, and `assignedPhysicalMachines` preserves previous delay-window machines.
+- `apps/web/components/mrmpl-dashboard.tsx` - machine card plan/current helpers treat unavailable breakdown rows as breakdown/not running/no focused setup.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `keeps delay-plan work on the unavailable machine and pushes its dates`.
