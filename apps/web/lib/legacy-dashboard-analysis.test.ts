@@ -4371,7 +4371,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     });
   });
 
-  it("does not run downstream setup ahead of cumulative WIP after a breakdown split", () => {
+  it("waits for the later setup 1 stream when stopped-machine WIP cannot feed 15 days", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
 
@@ -4473,7 +4473,7 @@ describe("buildLegacyDashboardSnapshot", () => {
         orderPcs: 10,
         totalOrderPcs: 10,
       });
-      expect(dashboardDateKey(setupTwo?.plannedProductionStartDate)).toBeGreaterThan(dashboardDateKey("6-July-26"));
+      expect(dashboardDateKey(setupTwo?.plannedProductionStartDate)).toBeGreaterThanOrEqual(dashboardDateKey(remainingSetupOne?.plannedProductionStartDate));
     } finally {
       vi.useRealTimers();
     }

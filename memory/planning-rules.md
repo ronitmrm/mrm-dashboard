@@ -227,9 +227,9 @@ Relevant code:
 
 Date: 2026-07-02
 
-A downstream setup may start before the previous setup has completed only when the previous setup's cumulative produced/planned WIP can feed the downstream setup continuously for its planned run. The planner must not release setup 2 only because an initial buffer exists if that buffer would be consumed before the remaining setup 1 quantity becomes available. For breakdown splits, use the actual produced quantity on the stopped machine plus future remaining-quantity streams that start after the latest actual production date; do not reuse the stale ideal cycle stream from before the breakdown/under-production event.
+A downstream setup may start before the previous setup has completed only when the previous setup's cumulative produced/planned WIP can feed the downstream setup continuously for its planned run. For breakdown splits, stopped-machine WIP may unlock the next setup only when that produced quantity can feed the downstream setup for 15 planning days or complete the order, whichever quantity is lower. If stopped-machine WIP is below that threshold, the downstream setup must wait for the later remaining-quantity setup 1 stream, while still counting the stopped-machine quantity as available WIP once the delayed run starts. Do not reuse the stale ideal cycle stream from before the breakdown/under-production event.
 
 Relevant code:
 
 - `apps/web/lib/legacy-dashboard-analysis.ts` - `plannedWipBufferReadyDate`, `downstreamWipFeasibleStartDate`, and `downstreamWipRunIsFeasible` calculate cumulative WIP availability through the downstream run.
-- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `does not run downstream setup ahead of cumulative WIP after a breakdown split`.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `waits for the later setup 1 stream when stopped-machine WIP cannot feed 15 days`.

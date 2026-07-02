@@ -2498,7 +2498,7 @@ function machinePlanDetails(
         machineUnavailableQueuePlacementTarget: Boolean(machineUnavailablePlacement && machineUnavailablePlacement.targetMachine === canonicalKey(machine)),
         machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
         parallelMachineCount: assignedMachines.length,
-        planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for cumulative downstream WIP availability through the full run plus ${wipAvailabilityBufferDays} buffer day; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; downstream setups are assigned independently; parallel machines require at least ${minimumParallelMachineWorkDays} production days each`,
+        planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for cumulative downstream WIP availability through the full run plus ${wipAvailabilityBufferDays} buffer day; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; downstream setups are assigned independently; parallel machines require at least ${minimumParallelMachineWorkDays} production days each`,
         };
         Object.defineProperty(detail, "__planningMeta", {
           enumerable: false,
@@ -4101,9 +4101,14 @@ function plannedWipBufferReadyDate({
   const nextDailyQty = cycleDailyQty(nextCycle) * Math.max(1, nextMachineCount);
   if (!previousDailyQty || !nextDailyQty) return "";
 
+  const actualQty = Math.min(orderPcs, sum(actualStreams.map((stream) => stream.quantity)));
+  const stoppedMachineUnlockQty = Math.min(orderPcs, nextDailyQty * minimumParallelMachineWorkDays);
+  const stoppedMachineWipCanStartDownstream = !actualStreams.length || actualQty >= stoppedMachineUnlockQty;
   const bufferDays = previousDailyQty < nextDailyQty ? 3 : 2;
   const requiredBufferQty = Math.min(orderPcs, nextDailyQty * bufferDays);
-  const firstStart = supplyStreams.map((stream) => stream.startDate).sort()[0];
+  const firstStart = stoppedMachineWipCanStartDownstream
+    ? supplyStreams.map((stream) => stream.startDate).sort()[0]
+    : futurePlannedStreams.map((stream) => stream.startDate).sort()[0];
   if (!firstStart) return "";
   let date = firstStart;
   const lastPossibleDate = maxDateValue(...supplyStreams.map((stream) => stream.endDate)) || addDays(date, Math.max(365, Math.ceil(orderPcs / previousDailyQty) + supplyStreams.length + 30), planningCalendar);
