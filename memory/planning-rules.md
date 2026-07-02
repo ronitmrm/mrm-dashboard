@@ -222,3 +222,14 @@ Relevant code:
 - `apps/web/convex/dashboard.ts` and `apps/web/convex/schema.ts` - machine constraint `queuePlacements` persistence.
 - `apps/web/lib/legacy-dashboard-analysis.ts` - machine-unavailable placement parsing, assignment override, final queue ordering, and idle-gap guard.
 - `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `honors reviewed destination queue placement for a machine-unavailable shift`.
+
+## Cumulative WIP feasibility for downstream setups
+
+Date: 2026-07-02
+
+A downstream setup may start before the previous setup has completed only when the previous setup's cumulative produced/planned WIP can feed the downstream setup continuously for its planned run. The planner must not release setup 2 only because an initial buffer exists if that buffer would be consumed before the remaining setup 1 quantity becomes available. For breakdown splits, use the actual produced quantity on the stopped machine plus future remaining-quantity streams that start after the latest actual production date; do not reuse the stale ideal cycle stream from before the breakdown/under-production event.
+
+Relevant code:
+
+- `apps/web/lib/legacy-dashboard-analysis.ts` - `plannedWipBufferReadyDate`, `downstreamWipFeasibleStartDate`, and `downstreamWipRunIsFeasible` calculate cumulative WIP availability through the downstream run.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `does not run downstream setup ahead of cumulative WIP after a breakdown split`.

@@ -2165,7 +2165,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(setupTwoRows).toEqual(expect.arrayContaining([
       expect.objectContaining({
         parallelMachineCount: 2,
-        setupPlannedDate: "6-July-26",
+        setupPlannedDate: "18-July-26",
       }),
     ]));
   });
@@ -3793,7 +3793,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     });
 
     expect(snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-003" && row.setupNo === "2")).toMatchObject({
-      setupPlannedDate: "28-July-26",
+      setupPlannedDate: "27-July-26",
     });
   });
 
@@ -3930,7 +3930,7 @@ describe("buildLegacyDashboardSnapshot", () => {
       setupPlannedDate: "4-July-26",
     });
     expect(c501Rows.find((row) => row.jcNo === "JC-A" && row.setupNo === "2")).toMatchObject({
-      setupPlannedDate: "12-July-26",
+      setupPlannedDate: "11-July-26",
     });
   });
 
@@ -4031,7 +4031,7 @@ describe("buildLegacyDashboardSnapshot", () => {
       setupPlannedDate: "7-July-26",
     });
     expect(c501Rows.find((row) => row.jcNo === "JC-B")).toMatchObject({
-      setupPlannedDate: "12-July-26",
+      setupPlannedDate: "11-July-26",
       shopFloorTaskReady: false,
       shopFloorTaskBlocker: expect.stringContaining("Previous setup WIP buffer is not ready"),
     });
@@ -4371,6 +4371,113 @@ describe("buildLegacyDashboardSnapshot", () => {
     });
   });
 
+  it("does not run downstream setup ahead of cumulative WIP after a breakdown split", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        machineConstraints: [
+          {
+            machineNo: "A510",
+            unavailableFrom: "2026-07-01",
+            unavailableTo: "2026-07-06",
+            reason: "Breakdown",
+            rescheduleAction: "shift_required",
+            planningMode: "review_then_plan",
+            interruptedSetups: [
+              { jcNo: "JC-WIP-CHAIN", setupNo: "1", machine: "A510", finishedQty: 2 },
+            ],
+            queuePlacements: [
+              {
+                targetJcNo: "JC-WIP-CHAIN",
+                targetPartCode: "M10",
+                targetSetupNo: "1",
+                targetSourceMachine: "A510",
+                targetMachine: "A511",
+                queueBeforeSetups: [
+                  { jcNo: "JC-A511-BLOCK", setupNo: "1", machine: "A511" },
+                ],
+              },
+            ],
+            status: "Active",
+            createdAt: "2026-07-01T10:16:31.528Z",
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { jcNo: "JC-WIP-CHAIN", partCode: "M10", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:01:00.000Z",
+            payload: { jcNo: "JC-A511-BLOCK", partCode: "M99", optionNumber: "1", orderPcs: 6, rmInwardDate: "2026-07-01" },
+          },
+          ...[
+            ["M10", "1", "A5", "AUTOMATIC"],
+            ["M10", "2", "TR503", "THREADING"],
+            ["M99", "1", "A5", "AUTOMATIC"],
+          ].flatMap(([partNo, setupNo, machineUsed, machineType]) => [
+            {
+              entryType: "route",
+              createdAt: "2026-07-01T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo, machineUsed, machineType },
+            },
+            {
+              entryType: "cycle",
+              createdAt: "2026-07-01T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo, cycleTime: 28800, loadingUnloading: 0 },
+            },
+          ]),
+          ...[
+            ["A510", "AUTOMATIC"],
+            ["A511", "AUTOMATIC"],
+            ["TR503", "THREADING"],
+          ].map(([machineNo, machineType]) => ({
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo, machineType, status: "Active" },
+          })),
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-07-01T08:00:00.000Z",
+            payload: {
+              jcNo: "JC-WIP-CHAIN",
+              partCode: "M10",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "A510",
+              stage: "operator_started",
+              completedAt: "2026-07-01T08:00:00.000Z",
+            },
+          },
+        ],
+      });
+
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-WIP-CHAIN");
+      const remainingSetupOne = rows.find((row) => row.setupNo === "1" && row.machine === "A511");
+      const setupTwo = rows.find((row) => row.setupNo === "2");
+
+      expect(remainingSetupOne).toMatchObject({
+        machine: "A511",
+        orderPcs: 8,
+        totalOrderPcs: 10,
+        machineUnavailableSplitRole: "remaining_moved_to_alternate_machine",
+      });
+      expect(setupTwo).toMatchObject({
+        machine: "TR503",
+        orderPcs: 10,
+        totalOrderPcs: 10,
+      });
+      expect(dashboardDateKey(setupTwo?.plannedProductionStartDate)).toBeGreaterThan(dashboardDateKey("6-July-26"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("adds a practical handoff buffer before a downstream setup can finish", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
