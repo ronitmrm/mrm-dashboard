@@ -3986,7 +3986,7 @@ function planOverrideForSetup(planOverrides: ActionRow[], workOrder: Record<stri
   const jcKey = canonicalKey(rowText(workOrder, "jcNo", "JC NO.", "JC NO"));
   const partKey = canonicalKey(rowText(workOrder, "partCode", "PART CODE", "PART NO"));
   const setupKey = canonicalKey(setupNo);
-  return planOverrides.find((row) => {
+  const matches = planOverrides.filter((row) => {
     if (!isActivePlannerDecision(rowText(row, "status", "STATUS"))) return false;
     const targetKey = canonicalKey(rowText(row, "target", "jcNo", "JC NO.", "JC NO", "partCode", "PART CODE", "PART NO"));
     const rowJcKey = canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO"));
@@ -3997,8 +3997,14 @@ function planOverrideForSetup(planOverrides: ActionRow[], workOrder: Record<stri
     const setupMatches = !rowSetupKey || rowSetupKey === setupKey;
     return (targetMatches || rowMatches) && setupMatches;
   });
+  return matches.sort((left, right) => rowCreatedAtMs(right) - rowCreatedAtMs(left))[0];
 }
 
+function rowCreatedAtMs(row: Record<string, unknown>) {
+  const value = rowText(row, "createdAt", "CREATED AT", "timestamp", "updatedAt");
+  const time = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(time) ? time : 0;
+}
 function planOverrideInterruptionForSetup(
   override: ActionRow,
   target: { jcNo: string; setupNo: string; lockedMachines: Set<string> },

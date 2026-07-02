@@ -873,6 +873,99 @@ describe("buildLegacyDashboardSnapshot", () => {
     }
   });
 
+  it("uses the newest part-specific switch to move a delayed setup off the source machine", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-02T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        machineConstraints: [
+          {
+            machineNo: "ADB503",
+            unavailableFrom: "2026-07-01",
+            unavailableTo: "2026-07-10",
+            reason: "Breakdown",
+            rescheduleAction: "delay",
+            interruptedSetups: [
+              { jcNo: "JC-M24-DELAY", setupNo: "1", machine: "ADB503", finishedQty: 2 },
+            ],
+            status: "Active",
+            createdAt: "2026-07-01T10:00:00.000Z",
+          },
+        ],
+        planOverrides: [
+          {
+            target: "JC-M24-DELAY",
+            setupNo: "1",
+            fromMachine: "ADB503",
+            toMachine: "ADB503",
+            reason: "Older switch decision",
+            status: "Active",
+            createdAt: "2026-07-01T09:00:00.000Z",
+          },
+          {
+            target: "JC-M24-DELAY",
+            setupNo: "1",
+            fromMachine: "ADB503",
+            toMachine: "ADB504",
+            queuePlacements: [
+              {
+                targetJcNo: "JC-M24-DELAY",
+                targetPartCode: "M24",
+                targetSetupNo: "1",
+                targetSourceMachine: "ADB503",
+                targetMachine: "ADB504",
+                queueBeforeSetups: [],
+              },
+            ],
+            reason: "Planner approved move after delay",
+            status: "Active",
+            createdAt: "2026-07-02T10:30:00.000Z",
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { jcNo: "JC-M24-DELAY", partCode: "M24", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+          },
+          {
+            entryType: "route",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+          },
+          ...[
+            ["ADB503", "AUTOMATIC"],
+            ["ADB504", "AUTOMATIC"],
+          ].map(([machineNo, machineType]) => ({
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo, machineType, status: "Active" },
+          })),
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-07-01T08:00:00.000Z",
+            payload: { jcNo: "JC-M24-DELAY", partCode: "M24", optionNumber: "1", setupNo: "1", machine: "ADB503", stage: "operator_started", completedAt: "2026-07-01T08:00:00.000Z" },
+          },
+        ],
+      });
+
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-M24-DELAY");
+      expect(rows.some((row) => row.machine === "ADB503" && row.runningStatus === "Plan delayed")).toBe(false);
+      expect(rows.some((row) => row.machine === "ADB504")).toBe(true);
+      expect(rows.find((row) => row.machine === "ADB504")).toMatchObject({ planOverrideReason: "Planner approved move after delay" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("lets a part-specific machine switch stop a target running setup before placing the switched tile", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-02T12:00:00.000Z"));
