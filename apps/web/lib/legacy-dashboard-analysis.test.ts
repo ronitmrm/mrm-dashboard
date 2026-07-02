@@ -4872,6 +4872,65 @@ describe("buildLegacyDashboardSnapshot", () => {
   });
 
 
+
+  it("exposes digital production cards and cycle times for running card target calculation", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-07-02T08:00:00.000Z",
+          payload: { jcNo: "JC-PCARD", partCode: "M-PCARD", optionNumber: "1", orderPcs: 100, rmInwardDate: "2026-07-02" },
+        },
+        {
+          entryType: "route",
+          createdAt: "2026-07-02T08:00:00.000Z",
+          payload: { partNo: "M-PCARD", optionNumber: "1", setupNo: "1", machineUsed: "C9", machineType: "CONV" },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-07-02T08:00:00.000Z",
+          payload: { partNo: "M-PCARD", optionNumber: "1", setupNo: "1", cycleTime: 30, loadingUnloading: 10 },
+        },
+        {
+          entryType: "tooling",
+          createdAt: "2026-07-02T08:00:00.000Z",
+          payload: { partNo: "M-PCARD", optionNumber: "1", setupNo: "1", machineUsed: "C9", tooling: "Fixture" },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-07-02T08:00:00.000Z",
+          payload: { machineNo: "C901", machineType: "CONV", status: "Active" },
+        },
+        {
+          entryType: "production_card",
+          key: "pcard-old",
+          createdAt: "2026-07-02T09:00:00.000Z",
+          payload: { cardId: "pcard", jobCard: "JC-PCARD", partCode: "M-PCARD", setupNo: "1", machine: "C901", targetQty: 100, outputQty: 80 },
+        },
+        {
+          entryType: "production_card",
+          key: "pcard-new",
+          createdAt: "2026-07-02T10:00:00.000Z",
+          payload: { cardId: "pcard", jobCard: "JC-PCARD", partCode: "M-PCARD", setupNo: "1", machine: "C901", targetQty: 120, outputQty: 96 },
+        },
+      ],
+    });
+
+    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
+      productionCardRows: Array<Record<string, unknown>>;
+      machinePlanDetailRows: Array<Record<string, unknown>>;
+    };
+
+    expect(productionControl.productionCardRows).toHaveLength(1);
+    expect(productionControl.productionCardRows[0]).toMatchObject({ targetQty: 120, outputQty: 96 });
+    expect(productionControl.machinePlanDetailRows[0]).toMatchObject({
+      jcNo: "JC-PCARD",
+      cycleTime: 30,
+      loadingUnloading: 10,
+    });
+  });
   it("exposes setup checklist master rows and the latest setup checklist session", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",

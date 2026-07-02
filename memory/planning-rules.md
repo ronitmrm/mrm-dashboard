@@ -310,3 +310,15 @@ Relevant code:
 - `apps/web/components/mrmpl-dashboard.tsx` - `ShopFloorRowAction` and `SetupChecklistForm` manage checklist start/completion around pre setting and setting.
 - `apps/web/lib/legacy-dashboard-analysis.ts` - setup checklist master/session rows are exposed in `productionControl`.
 - `apps/web/convex/dashboard.ts` - setup checklist master/session entry types are included in the snapshot.
+
+## Digital production card
+
+Date: 2026-07-02
+
+The hard-copy conventional production card is being digitized from `MRM-QA-008-01-REV-01.xlsx`. The first digital workflow is attached to the running machine row in Shop Floor Status. Saving the card writes the full hard-copy replacement as `production_card` data-entry and also writes a `software_raw` production row so planning, actual production, target, and efficiency continue to use the canonical production pipeline. The target pieces are calculated from machine start/end time minus break and downtime minutes using `(cycleTime + loadingUnloading)` from the cycle master exposed on `machinePlanDetailRows`. Efficiency is actual produced quantity divided by calculated target.
+
+Relevant code:
+
+- `apps/web/components/mrmpl-dashboard.tsx` - `ProductionCardForm` on running shop-floor rows saves production card and production output.
+- `apps/web/lib/legacy-dashboard-analysis.ts` - exposes `cycleTime`, `loadingUnloading`, and latest `productionCardRows` in `productionControl`.
+- `apps/web/convex/dashboard.ts` - includes `production_card` data entries in the snapshot.

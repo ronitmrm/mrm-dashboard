@@ -268,6 +268,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const setupChecklistRows = entryRows(byType, "setup_checklist");
   const setupChecklistMasterRows = entryRows(byType, "setup_checklist_master");
   const setupChecklistSessionRows = latestEntryRowsByKey(entryRows(byType, "setup_checklist_session"), setupChecklistSessionEntryKey);
+  const productionCardRows = latestEntryRowsByKey(entryRows(byType, "production_card"), productionCardEntryKey);
   const shopFloorStatusRows = singleActiveShopFloorStatusRows(
     latestEntryRowsByKey(entryRows(byType, "shop_floor_status"), shopFloorStatusEntryKey),
   );
@@ -291,6 +292,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     setupChecklistRows,
     setupChecklistMasterRows,
     setupChecklistSessionRows,
+    productionCardRows,
     shopFloorStatusRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
@@ -325,6 +327,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     setupChecklistRows.length ||
     setupChecklistMasterRows.length ||
     setupChecklistSessionRows.length ||
+    productionCardRows.length ||
     employeeRows.length ||
     entryRows(byType, "machine_master").length
   ) return snapshot;
@@ -343,6 +346,7 @@ function buildProductionAnalysis({
   setupChecklistRows,
   setupChecklistMasterRows,
   setupChecklistSessionRows,
+  productionCardRows,
   shopFloorStatusRows,
   firstPieceInspectionMasterRows,
   firstPieceInspectionReportRows,
@@ -376,6 +380,7 @@ function buildProductionAnalysis({
   setupChecklistRows: Record<string, unknown>[];
   setupChecklistMasterRows: Record<string, unknown>[];
   setupChecklistSessionRows: Record<string, unknown>[];
+  productionCardRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
   firstPieceInspectionMasterRows: Record<string, unknown>[];
   firstPieceInspectionReportRows: Record<string, unknown>[];
@@ -688,6 +693,7 @@ function buildProductionAnalysis({
     setupChecklistRows,
     setupChecklistMasterRows,
     setupChecklistSessionRows,
+    productionCardRows,
     shopFloorStatusRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
@@ -862,6 +868,7 @@ function buildProductionControl({
   setupChecklistRows,
   setupChecklistMasterRows,
   setupChecklistSessionRows,
+  productionCardRows,
   shopFloorStatusRows,
   firstPieceInspectionMasterRows,
   firstPieceInspectionReportRows,
@@ -886,6 +893,7 @@ function buildProductionControl({
   setupChecklistRows: Record<string, unknown>[];
   setupChecklistMasterRows: Record<string, unknown>[];
   setupChecklistSessionRows: Record<string, unknown>[];
+  productionCardRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
   firstPieceInspectionMasterRows: Record<string, unknown>[];
   firstPieceInspectionReportRows: Record<string, unknown>[];
@@ -1189,6 +1197,7 @@ function buildProductionControl({
     setupChecklistMismatchRows,
     setupChecklistMasterRows,
     setupChecklistSessionRows,
+    productionCardRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
   };
@@ -1458,6 +1467,18 @@ function firstPieceReportEntryKey(row: Record<string, unknown>) {
     setupNo: rowText(row, "setupNo", "SETUP NO.", "SETUP NO", "SET UP"),
     machine: rowText(row, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO."),
   });
+}
+
+function productionCardEntryKey(row: Record<string, unknown>) {
+  return rowText(row, "cardId") || [
+    rowText(row, "prodDate", "PROD DATE", "PRODUCTION DATE"),
+    rowText(row, "jobCard", "jcNo", "JC NO.", "JC NO"),
+    rowText(row, "partCode", "partNo", "PART CODE", "PART NO"),
+    rowText(row, "setupNo", "SETUP NO.", "SETUP NO", "SET UP"),
+    rowText(row, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO."),
+    rowText(row, "startTime"),
+    rowText(row, "endTime"),
+  ].map(canonicalKey).join("|");
 }
 
 function setupChecklistSessionEntryKey(row: Record<string, unknown>) {
@@ -2537,6 +2558,8 @@ function machinePlanDetails(
         optionNumber,
         orderPcs: machineOrderPcs,
         totalOrderPcs: setupOrderPcs,
+        cycleTime: safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")),
+        loadingUnloading: safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING")),
         rmStatus: rowText(row, "rmStatus"),
         routeStatus: rowText(row, "routeStatus"),
         cycleStatus: rowText(row, "cycleStatus"),

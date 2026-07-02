@@ -911,6 +911,7 @@ const legacyEntryTypes = [
   "first_piece_inspection_report",
   "setup_checklist_master",
   "setup_checklist_session",
+  "production_card",
 ];
 
 const snapshotEntryTypes = [...legacyEntryTypes, "shop_floor_status"];
