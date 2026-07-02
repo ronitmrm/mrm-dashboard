@@ -381,6 +381,80 @@ describe("buildLegacyDashboardSnapshot", () => {
       vi.useRealTimers();
     }
   });
+  it("keeps interrupted delay-plan remaining work on the stopped machine", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        machineConstraints: [
+          {
+            machineNo: "ADB503",
+            unavailableFrom: "2026-07-01",
+            unavailableTo: "2026-08-01",
+            reason: "Breakdown",
+            rescheduleAction: "delay",
+            planningMode: "system_recalculate",
+            interruptedSetups: [
+              { jcNo: "JC-DELAY-RUN", setupNo: "1", machine: "ADB503", finishedQty: 0 },
+            ],
+            status: "Active",
+            createdAt: "2026-07-02T07:20:29.285Z",
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { jcNo: "JC-DELAY-RUN", partCode: "M24", optionNumber: "1", orderPcs: 26000, rmInwardDate: "2026-07-01" },
+          },
+          {
+            entryType: "route",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", cycleTime: 12, loadingUnloading: 0 },
+          },
+          ...["ADB503", "ADB504"].map((machineNo) => ({
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo, machineType: "AUTOMATIC", status: "Active" },
+          })),
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-07-01T08:00:00.000Z",
+            payload: {
+              jcNo: "JC-DELAY-RUN",
+              partCode: "M24",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "ADB503",
+              stage: "operator_started",
+              completedAt: "2026-07-01T08:00:00.000Z",
+            },
+          },
+        ],
+      });
+
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-DELAY-RUN");
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        machine: "ADB503",
+        runningStatus: "Plan delayed",
+        rawActualQty: 0,
+        shopFloorStage: "",
+        machineUnavailableSplitRole: "remaining_delayed_on_same_machine",
+      });
+      expect(dashboardDateKey(rows[0]?.plannedProductionStartDate)).toBeGreaterThanOrEqual(dashboardDateKey("2-Aug-26"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("moves remaining running breakdown quantity to an alternate machine using system planning rules", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));

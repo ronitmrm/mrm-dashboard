@@ -2337,7 +2337,7 @@ function machinePlanDetails(
         previousMachines: previousMachines?.size ? previousMachines : undefined,
         planningCalendar,
       });
-      if (breakdownInterruption && setupOrderPcs > breakdownInterruption.finishedQty) {
+      if (breakdownInterruption && machineUnavailableWindowWantsAlternate(breakdownInterruption.window) && setupOrderPcs > breakdownInterruption.finishedQty) {
         const remainingQty = Math.max(setupOrderPcs - Math.max(breakdownInterruption.finishedQty, 0), 0);
         const remainingMachines = assignedPhysicalMachines({
           routeMachine,
