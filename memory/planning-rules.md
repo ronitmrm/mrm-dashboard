@@ -322,3 +322,13 @@ Relevant code:
 - `apps/web/components/mrmpl-dashboard.tsx` - `ProductionCardForm` on running shop-floor rows saves production card and production output.
 - `apps/web/lib/legacy-dashboard-analysis.ts` - exposes `cycleTime`, `loadingUnloading`, and latest `productionCardRows` in `productionControl`.
 - `apps/web/convex/dashboard.ts` - includes `production_card` data entries in the snapshot.
+
+## Optimistic setup checklist sessions
+
+Date: 2026-07-02
+
+Presetting and setting checklist saves are workflow-only and do not trigger planning recalculation. Because shop-floor status is applied optimistically in the current browser, the UI must also apply saved `setup_checklist_session` rows optimistically. Otherwise a newly saved pre-setting checklist can exist in Convex while the next setting task still reads an older snapshot and shows "Pre setting checklist session is missing." The dashboard now merges just-saved setup checklist sessions into `productionControl.setupChecklistSessionRows` until the next snapshot refresh.
+
+Relevant code:
+
+- `apps/web/components/mrmpl-dashboard.tsx` - optimistic setup checklist session state, upsert, and payload merge.

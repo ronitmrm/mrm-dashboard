@@ -355,6 +355,7 @@ function DashboardShell() {
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
   const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
   const [optimisticShopFloorStatuses, setOptimisticShopFloorStatuses] = useState<ShopFloorStatusPatch[]>([]);
+  const [optimisticSetupChecklistSessions, setOptimisticSetupChecklistSessions] = useState<DashboardPayload[]>([]);
   const [planningRefreshLock, setPlanningRefreshLock] = useState<PlanningRefreshLock | null>(null);
   const lastStalePlanningRefreshKeyRef = useRef<string | undefined>(undefined);
   const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
@@ -405,7 +406,10 @@ function DashboardShell() {
           ? "Planning is already up to date."
           : "Planning recalculated from latest data.",
       });
-      if (!result.skipped) setOptimisticShopFloorStatuses([]);
+      if (!result.skipped) {
+        setOptimisticShopFloorStatuses([]);
+        setOptimisticSetupChecklistSessions([]);
+      }
       if (result.skipped) setPlanningRefreshLock(null);
     } catch (err) {
       setPlanningRefreshLock(null);
@@ -443,6 +447,10 @@ function DashboardShell() {
       const shopFloorPatch = shopFloorStatusPatchFromAction(path, body);
       if (shopFloorPatch) {
         setOptimisticShopFloorStatuses((current) => upsertShopFloorStatusPatch(current, shopFloorPatch));
+      }
+      const setupChecklistSessionPatch = setupChecklistSessionPatchFromAction(path, body);
+      if (setupChecklistSessionPatch) {
+        setOptimisticSetupChecklistSessions((current) => upsertSetupChecklistSessionPatch(current, setupChecklistSessionPatch));
       }
       setActionStatus({
         tone: "default",
@@ -497,11 +505,12 @@ function DashboardShell() {
     if (!snapshotUpdatedAt || lastSnapshotUpdatedAtRef.current === snapshotUpdatedAt) return;
     lastSnapshotUpdatedAtRef.current = snapshotUpdatedAt;
     setOptimisticShopFloorStatuses((current) => current.length ? [] : current);
+    setOptimisticSetupChecklistSessions((current) => current.length ? [] : current);
   }, [snapshotUpdatedAt]);
 
   const payload = useMemo(
-    () => applyShopFloorStatusPatches(basePayload, optimisticShopFloorStatuses),
-    [basePayload, optimisticShopFloorStatuses],
+    () => applySetupChecklistSessionPatches(applyShopFloorStatusPatches(basePayload, optimisticShopFloorStatuses), optimisticSetupChecklistSessions),
+    [basePayload, optimisticShopFloorStatuses, optimisticSetupChecklistSessions],
   );
   const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
   const isRefreshStatusLoading = dashboardRefreshStatus === undefined;
@@ -643,6 +652,56 @@ function AuthLoadingScreen() {
   );
 }
 
+function setupChecklistSessionPatchFromAction(path: string, body: Record<string, unknown>) {
+  if (path !== "data-entry") return undefined;
+  if (str(body.entryType) !== "setup_checklist_session") return undefined;
+  const payload = asRecord(body.payload);
+  return setupChecklistSessionPatchKey(payload) ? payload : undefined;
+}
+
+function upsertSetupChecklistSessionPatch(current: DashboardPayload[], patch: DashboardPayload) {
+  const patchKey = setupChecklistSessionPatchKey(patch);
+  return [
+    ...current.filter((item) => setupChecklistSessionPatchKey(item) !== patchKey),
+    patch,
+  ];
+}
+
+function applySetupChecklistSessionPatches(payload: DashboardPayload, patches: DashboardPayload[]) {
+  if (!patches.length) return payload;
+  const productionControl = asRecord(payload.productionControl);
+  if (!Object.keys(productionControl).length) return payload;
+  const rows = asArray(productionControl.setupChecklistSessionRows);
+  const rowsByKey = new Map(rows.map((row) => [setupChecklistSessionPatchKey(row), row]));
+  let changed = false;
+  for (const patch of patches) {
+    const patchKey = setupChecklistSessionPatchKey(patch);
+    if (!patchKey) continue;
+    rowsByKey.set(patchKey, patch);
+    changed = true;
+  }
+  if (!changed) return payload;
+  return {
+    ...payload,
+    productionControl: {
+      ...productionControl,
+      setupChecklistSessionRows: [...rowsByKey.values()],
+    },
+  };
+}
+
+function setupChecklistSessionPatchKey(row: DashboardPayload) {
+  const sessionId = str(row.sessionId);
+  if (sessionId) return sessionId.toLowerCase();
+  const parts = [
+    row.jcNo || row.jobCard,
+    row.partCode || row.partNo,
+    row.optionNumber,
+    row.setupNo,
+    row.machine || row.machineNo,
+  ].map((value) => displayValue(value).toLowerCase()).filter((value) => value && value !== "-");
+  return parts.length >= 5 ? parts.join("|") : "";
+}
 function AuthScreen() {
   const { signIn } = useAuthActions();
   const { resolvedTheme, setTheme } = useTheme();
