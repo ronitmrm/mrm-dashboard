@@ -540,17 +540,29 @@ describe("buildLegacyDashboardSnapshot", () => {
       });
 
       const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-RUNNING-A5-SOLO");
-      expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({
+      expect(rows).toHaveLength(2);
+      const stopped = rows.find((row) => row.runningStatus === "Breakdown stopped");
+      const delayed = rows.find((row) => row.runningStatus === "Plan delayed");
+
+      expect(stopped).toMatchObject({
         machine: "A510",
-        orderPcs: 10,
+        orderPcs: 3,
         totalOrderPcs: 10,
         rawActualQty: 3,
-        runningStatus: "Breakdown stopped",
+        shopFloorStage: "operator_started",
         machineUnavailableProducedQty: 3,
         machineUnavailableRemainingQty: 7,
       });
-      expect(dashboardDateKey(rows[0]?.plannedProductionEndDate)).toBeGreaterThanOrEqual(dashboardDateKey("7-July-26"));
+      expect(delayed).toMatchObject({
+        machine: "A510",
+        orderPcs: 7,
+        totalOrderPcs: 10,
+        rawActualQty: 0,
+        shopFloorStage: "",
+        setupCompletionDate: "",
+        machineUnavailableSplitRole: "remaining_delayed_on_same_machine",
+      });
+      expect(dashboardDateKey(delayed?.plannedProductionStartDate)).toBeGreaterThanOrEqual(dashboardDateKey("7-July-26"));
     } finally {
       vi.useRealTimers();
     }

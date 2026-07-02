@@ -5681,7 +5681,10 @@ function machineMatchesItemCode(machine: string, itemCodeFilter: string, planned
 
 function machineIsRunning(machine: string, plannedByMachine: Map<string, DashboardPayload[]>) {
   const rows = plannedByMachine.get(machineKey(machine)) ?? [];
-  return rows.some((row) => str(row.runningStatus).toLowerCase() === "running" || Number(row.rawRows) > 0 || Number(row.rawOutputQty) > 0 || Number(row.rawActualQty) > 0);
+  return rows.some((row) => {
+    if (planningRowIsBreakdownStopped(row) || planningRowIsShiftedAfterBreakdown(row)) return false;
+    return str(row.runningStatus).toLowerCase() === "running" || Number(row.rawRows) > 0 || Number(row.rawOutputQty) > 0 || Number(row.rawActualQty) > 0;
+  });
 }
 
 function currentShopFloorItem(rows: DashboardPayload[]) {
@@ -5751,6 +5754,7 @@ function pendingTaskLabel(row: DashboardPayload) {
 }
 
 function shopFloorItemIsCurrent(row: DashboardPayload) {
+  if (planningRowIsBreakdownStopped(row) || planningRowIsShiftedAfterBreakdown(row)) return false;
   return ["operator_started", "worker_start"].includes(str(row.shopFloorStage))
     || str(row.runningStatus).toLowerCase() === "running"
     || Number(row.rawRows) > 0
@@ -5786,6 +5790,7 @@ function shopFloorPlanKey(row: DashboardPayload) {
 
 function machinePlanningStatus(rows: DashboardPayload[]) {
   if (!rows.length) return "No plan";
+  if (rows.some(planningRowIsBreakdownStopped)) return "Breakdown";
   if (rows.some((row) => str(row.runningStatus).toLowerCase() === "setup complete")) return "Setup complete";
   return "Planned";
 }
@@ -5812,9 +5817,19 @@ function completedSetupDate(row: DashboardPayload | undefined) {
 }
 
 function machinePlanningTone(status: string): "success" | "planning" | "warning" | "danger" | "neutral" {
+  if (status === "Breakdown") return "danger";
   if (status === "Setup complete") return "success";
   if (status === "Planned") return "planning";
   return "neutral";
+}
+
+function planningRowIsBreakdownStopped(row: DashboardPayload) {
+  return str(row.runningStatus).toLowerCase() === "breakdown stopped";
+}
+
+function planningRowIsShiftedAfterBreakdown(row: DashboardPayload) {
+  const status = str(row.runningStatus).toLowerCase();
+  return status === "plan shifted" || status === "plan delayed";
 }
 
 function machineKey(value: unknown) {

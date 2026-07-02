@@ -233,3 +233,15 @@ Relevant code:
 
 - `apps/web/lib/legacy-dashboard-analysis.ts` - `plannedWipBufferReadyDate`, `downstreamWipFeasibleStartDate`, and `downstreamWipRunIsFeasible` calculate cumulative WIP availability through the downstream run.
 - `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `waits for the later setup 1 stream when stopped-machine WIP cannot feed 15 days`.
+
+## Breakdown stopped machine tile and same-machine remaining setup
+
+Date: 2026-07-02
+
+When a machine breakdown stops a running setup, the produced quantity row is breakdown history/WIP and must not make the machine tile look actively running. Machine tiles should show the machine plan as `Breakdown` and the run state as not running for `Breakdown stopped` rows. If the remaining quantity cannot or should not be shifted to an alternate machine, planning must create a separate same-machine remaining row with `Plan delayed`; that row must not inherit the old shop-floor workflow stage or production actuals, so RM-at-machine, presetting, setting, quality, and machine-start workflow can be completed again when the machine is available.
+
+Relevant code:
+
+- `apps/web/lib/legacy-dashboard-analysis.ts` - breakdown split assignments can create both a stopped produced row and a same-machine delayed remaining row.
+- `apps/web/components/mrmpl-dashboard.tsx` - machine tile current/running helpers ignore stopped/shifted/delayed breakdown rows and show machine plan `Breakdown`.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - no-alternate breakdown regression expects separate `Breakdown stopped` and `Plan delayed` rows.
