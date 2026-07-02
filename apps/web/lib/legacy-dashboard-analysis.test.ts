@@ -778,6 +778,101 @@ describe("buildLegacyDashboardSnapshot", () => {
       vi.useRealTimers();
     }
   });
+  it("splits a running part-specific machine switch and honors target queue placement", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-02T12:00:00.000Z"));
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [],
+        planOverrides: [
+          {
+            target: "JC-SWITCH",
+            setupNo: "1",
+            fromMachine: "A510",
+            toMachine: "A511",
+            interruptedSetups: [
+              { jcNo: "JC-SWITCH", setupNo: "1", machine: "A510", finishedQty: 2 },
+            ],
+            queuePlacements: [
+              {
+                targetJcNo: "JC-SWITCH",
+                targetPartCode: "M10",
+                targetSetupNo: "1",
+                targetSourceMachine: "A510",
+                targetMachine: "A511",
+                queueBeforeSetups: [
+                  { jcNo: "JC-A511-BLOCK", setupNo: "1", machine: "A511" },
+                ],
+              },
+            ],
+            reason: "Planner approved target queue placement",
+            status: "Active",
+            createdAt: "2026-07-02T10:30:00.000Z",
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { jcNo: "JC-SWITCH", partCode: "M10", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-07-01T00:01:00.000Z",
+            payload: { jcNo: "JC-A511-BLOCK", partCode: "M99", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-07-01" },
+          },
+          ...[
+            ["M10", "1", "A5", "AUTOMATIC"],
+            ["M99", "1", "A5", "AUTOMATIC"],
+          ].flatMap(([partNo, setupNo, machineUsed, machineType]) => [
+            {
+              entryType: "route",
+              createdAt: "2026-07-01T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo, machineUsed, machineType },
+            },
+            {
+              entryType: "cycle",
+              createdAt: "2026-07-01T00:00:00.000Z",
+              payload: { partNo, optionNumber: "1", setupNo, cycleTime: 28800, loadingUnloading: 0 },
+            },
+          ]),
+          ...[
+            ["A510", "AUTOMATIC"],
+            ["A511", "AUTOMATIC"],
+          ].map(([machineNo, machineType]) => ({
+            entryType: "machine_master",
+            createdAt: "2026-07-01T00:00:00.000Z",
+            payload: { machineNo, machineType, status: "Active" },
+          })),
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-07-02T08:30:00.000Z",
+            payload: { jcNo: "JC-A511-BLOCK", partCode: "M99", optionNumber: "1", setupNo: "1", machine: "A511", stage: "raw_material_at_machine", completedAt: "2026-07-02T08:30:00.000Z" },
+          },
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-07-02T09:00:00.000Z",
+            payload: { jcNo: "JC-SWITCH", partCode: "M10", optionNumber: "1", setupNo: "1", machine: "A510", stage: "operator_started", completedAt: "2026-07-02T09:00:00.000Z" },
+          },
+        ],
+      });
+
+      const rows = snapshot.productionControl.machinePlanDetailRows;
+      const stopped = rows.find((row) => row.jcNo === "JC-SWITCH" && row.machine === "A510");
+      const shifted = rows.find((row) => row.jcNo === "JC-SWITCH" && row.machine === "A511");
+      const blocker = rows.find((row) => row.jcNo === "JC-A511-BLOCK" && row.machine === "A511");
+
+      expect(stopped).toMatchObject({ orderPcs: 2, rawActualQty: 2, runningStatus: "Breakdown stopped" });
+      expect(shifted).toMatchObject({ orderPcs: 8, runningStatus: "Plan shifted", machineUnavailableQueuePlacementTarget: true });
+      expect(blocker).toBeTruthy();
+      expect(new Date(String(blocker?.plannedProductionStartDate)).getTime()).toBeLessThanOrEqual(new Date(String(shifted?.plannedProductionStartDate)).getTime());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("allows an active planner machine switch to move an RM-locked route-family setup", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-30T12:00:00.000Z"));

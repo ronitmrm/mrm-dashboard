@@ -257,3 +257,16 @@ Relevant code:
 - `apps/web/lib/legacy-dashboard-analysis.ts` - `machineUnavailableWindowWantsAlternate` must compare against normalized `delay`, and `assignedPhysicalMachines` preserves previous delay-window machines.
 - `apps/web/components/mrmpl-dashboard.tsx` - machine card plan/current helpers treat unavailable breakdown rows as breakdown/not running/no focused setup.
 - `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `keeps delay-plan work on the unavailable machine and pushes its dates`.
+
+## Part-specific machine switch queue placement and running split
+
+Date: 2026-07-02
+
+A part-specific machine switch must behave like a reviewed planner move, not just a target-machine override. The planner selects item, job card, setup, source machine, and a compatible target machine, then places the selected setup tile in the target machine queue before saving. If the selected setup is already running or has production/shop-floor start evidence, the planner must enter produced quantity; planning keeps that produced quantity on the source machine as stopped WIP and replans only the remaining quantity on the target machine. Normal downstream WIP and target-machine queue recalculation then apply.
+
+Relevant code:
+
+- `apps/web/components/mrmpl-dashboard.tsx` - `PartMachineSwitchPlannerForm` collects produced quantity and queue tile placement.
+- `apps/web/convex/dashboard.ts` and `apps/web/convex/schema.ts` - plan overrides persist `interruptedSetups` and `queuePlacements`.
+- `apps/web/lib/legacy-dashboard-analysis.ts` - plan overrides reuse interruption split and queue placement ordering.
+- `apps/web/lib/legacy-dashboard-analysis.test.ts` - regression `splits a running part-specific machine switch and honors target queue placement`.

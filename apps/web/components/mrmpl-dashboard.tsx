@@ -1162,6 +1162,8 @@ function PartMachineSwitchPlannerForm({
   const [reason, setReason] = useState("");
   const [reviewReady, setReviewReady] = useState(false);
   const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false);
+  const [producedQtyByRow, setProducedQtyByRow] = useState<Record<string, string>>({});
+  const [queueAfterByRow, setQueueAfterByRow] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const jobCardOptions = useMemo(() => uniqueValues(plannedRows
     .filter((row) => machineKey(itemCode(row)) === machineKey(selectedItem))
@@ -1187,6 +1189,13 @@ function PartMachineSwitchPlannerForm({
     plannedRows,
     sourceMachine: fromMachine,
   }), [fromMachine, machineRows, plannedRows, selectedRows]);
+  const runningRows = selectedRows.filter(machineIssueRowNeedsProducedQty);
+  const missingProducedQty = runningRows.some((row) => {
+    const rawValue = producedQtyByRow[machineIssueRowKey(row)]?.trim() ?? "";
+    const value = Number(rawValue);
+    const orderQty = Number(row.totalOrderPcs || row.orderPcs);
+    return rawValue === "" || !Number.isFinite(value) || value < 0 || (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty);
+  });
   const queueReviewGroups = useMemo(() => machineConstraintQueueReview({
     plannedRows,
     machineRows,
@@ -1199,12 +1208,18 @@ function PartMachineSwitchPlannerForm({
   }), [fromMachine, machineRows, plannedRows, selectedRows, toMachine]);
   const canReview = Boolean(selectedItem.trim() && target.trim() && setupNo.trim() && fromMachine.trim() && toMachine.trim())
     && machineKey(fromMachine) !== machineKey(toMachine);
-  const canSave = canReview && Boolean(reason.trim()) && reviewReady && selectedRows.length > 0 && queueReviewConfirmed;
+  const canSave = canReview && Boolean(reason.trim()) && reviewReady && selectedRows.length > 0 && !missingProducedQty && queueReviewConfirmed;
 
   function updateField(setter: Dispatch<SetStateAction<string>>, value: string) {
     setter(value);
     setReviewReady(false);
     setQueueReviewConfirmed(false);
+    setQueueAfterByRow({});
+  }
+
+  function updateProducedQty(row: DashboardPayload, value: string) {
+    const key = machineIssueRowKey(row);
+    setProducedQtyByRow((current) => ({ ...current, [key]: value }));
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -1216,11 +1231,20 @@ function PartMachineSwitchPlannerForm({
     if (!canSave || isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const interruptedSetups = runningRows.map((row) => ({
+        jcNo: jobCardNumber(row),
+        setupNo: displayValue(row.setupNo),
+        machine: machineValue(row, "machine"),
+        finishedQty: Number(producedQtyByRow[machineIssueRowKey(row)] ?? 0),
+      }));
+      const queuePlacements = machineConstraintQueuePlacements(queueReviewGroups, selectedRows, queueAfterByRow);
       await submitAction("plan-override", {
         target,
         setupNo,
         fromMachine,
         toMachine,
+        interruptedSetups,
+        queuePlacements,
         reason,
       });
       setSelectedItem("");
@@ -1229,6 +1253,8 @@ function PartMachineSwitchPlannerForm({
       setFromMachine("");
       setToMachine("");
       setReason("");
+      setProducedQtyByRow({});
+      setQueueAfterByRow({});
       setReviewReady(false);
       setQueueReviewConfirmed(false);
     } finally {
@@ -1335,25 +1361,55 @@ function PartMachineSwitchPlannerForm({
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{formatNumber(selectedRows.length)} selected setup rows</span>
             <span>{displayValue(fromMachine)} to {displayValue(toMachine)}</span>
+            <span>{formatNumber(runningRows.length)} running quantity inputs</span>
           </div>
           {selectedRows.length ? (
             <div className="grid max-h-56 gap-2 overflow-y-auto pr-1">
-              {selectedRows.map((row, index) => (
-                <div key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${machineValue(row, "machine")}-${index}`} className="grid gap-1 rounded-md border bg-background p-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-                    <StatusBadge value="Selected setup" />
+              {selectedRows.map((row, index) => {
+                const needsProducedQty = machineIssueRowNeedsProducedQty(row);
+                const producedKey = machineIssueRowKey(row);
+                const orderQty = Number(row.totalOrderPcs || row.orderPcs);
+                return (
+                  <div key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${machineValue(row, "machine")}-${index}`} className="grid gap-2 rounded-md border bg-background p-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
+                      <StatusBadge value={needsProducedQty ? "Produced qty required" : "Selected setup"} />
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+                    </div>
+                    {needsProducedQty ? (
+                      <Field label="Produced qty">
+                        <Input
+                          type="number"
+                          min="0"
+                          max={Number.isFinite(orderQty) && orderQty > 0 ? orderQty : undefined}
+                          step="1"
+                          value={producedQtyByRow[producedKey] ?? ""}
+                          placeholder="0"
+                          required
+                          onChange={(event) => updateProducedQty(row, event.target.value)}
+                        />
+                      </Field>
+                    ) : null}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup row matches this job card/part, setup number, and source machine.</div>
           )}
-          <MachineConstraintQueueReviewPanel groups={queueReviewGroups} />
+          <MachineConstraintQueueReviewPanel
+            groups={queueReviewGroups}
+            movableRows={selectedRows}
+            queueAfterByRow={queueAfterByRow}
+            onQueueAfterChange={(rowKey, value) => setQueueAfterByRow((current) => {
+              const next = { ...current };
+              if (value) next[rowKey] = value;
+              else delete next[rowKey];
+              return next;
+            })}
+          />
           <label className="flex items-start gap-2 rounded-md border bg-background p-2 text-sm">
             <input
               className="mt-1"
@@ -4922,6 +4978,15 @@ type DashboardActionMutations = {
     toMachine: string;
     setupNo?: string;
     fromMachine?: string;
+    interruptedSetups?: Array<{ jcNo: string; setupNo: string; machine: string; finishedQty?: number }>;
+    queuePlacements?: Array<{
+      targetJcNo: string;
+      targetPartCode?: string;
+      targetSetupNo: string;
+      targetSourceMachine?: string;
+      targetMachine: string;
+      queueBeforeSetups?: Array<{ jcNo: string; setupNo: string; machine: string }>;
+    }>;
     reason?: string;
   }) => Promise<unknown>;
   saveRouteChange: (args: {
@@ -5022,6 +5087,8 @@ async function runDashboardAction(
       toMachine: text(body.toMachine),
       setupNo: optionalText(body.setupNo),
       fromMachine: optionalText(body.fromMachine),
+      interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
+      queuePlacements: machineConstraintQueuePlacementsInput(body.queuePlacements),
       reason: optionalText(body.reason),
     });
     return "Plan override saved.";

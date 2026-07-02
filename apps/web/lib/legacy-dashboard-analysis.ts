@@ -2310,13 +2310,25 @@ function machinePlanDetails(
         setupNo: displaySetupNo,
         lockedMachines: interruptedLockedMachines,
       });
+      const planOverrideInterruption = override ? planOverrideInterruptionForSetup(override, {
+        jcNo: rowText(row, "jcNo"),
+        setupNo: displaySetupNo,
+        lockedMachines: interruptedLockedMachines,
+      }) : undefined;
+      const setupInterruption = planOverrideInterruption ?? breakdownInterruption;
       const machineUnavailablePlacement = machineUnavailableQueuePlacementForSetup(machineUnavailableWindows, {
         jcNo: rowText(row, "jcNo"),
         partCode,
         setupNo: displaySetupNo,
       });
-      const machineUnavailableOverride = machineUnavailablePlacement?.targetMachine
-        ? { toMachine: machineUnavailablePlacement.targetMachine } as ActionRow
+      const planOverridePlacement = override ? planOverrideQueuePlacementForSetup(override, {
+        jcNo: rowText(row, "jcNo"),
+        partCode,
+        setupNo: displaySetupNo,
+      }) : undefined;
+      const queuePlacement = planOverridePlacement ?? machineUnavailablePlacement;
+      const queuePlacementOverride = queuePlacement?.targetMachine
+        ? { toMachine: queuePlacement.targetMachine } as ActionRow
         : undefined;
       let assignedMachines = assignedPhysicalMachines({
         routeMachine,
@@ -2331,14 +2343,14 @@ function machinePlanDetails(
         machinePlannedQty,
         readyDate: readyDateForAssignment,
         deadlineDate: dispatchDeadlineDate,
-        override: interruptedLockedMachines.size ? override : machineUnavailableOverride ?? override,
+        override: interruptedLockedMachines.size ? override : queuePlacementOverride ?? override,
         productionActualMachines: productionActualMachines.size ? productionActualMachines : undefined,
         lockedMachines: lockedShopFloorMachines.size ? lockedShopFloorMachines : undefined,
         previousMachines: previousMachines?.size ? previousMachines : undefined,
         planningCalendar,
       });
-      if (breakdownInterruption && machineUnavailableWindowWantsAlternate(breakdownInterruption.window) && setupOrderPcs > breakdownInterruption.finishedQty) {
-        const remainingQty = Math.max(setupOrderPcs - Math.max(breakdownInterruption.finishedQty, 0), 0);
+      if (setupInterruption && machineUnavailableWindowWantsAlternate(setupInterruption.window) && setupOrderPcs > setupInterruption.finishedQty) {
+        const remainingQty = Math.max(setupOrderPcs - Math.max(setupInterruption.finishedQty, 0), 0);
         const remainingMachines = assignedPhysicalMachines({
           routeMachine,
           machineType,
@@ -2350,13 +2362,13 @@ function machinePlanDetails(
           machineNextSetupDate,
           machinePlannedDays,
           machinePlannedQty,
-          readyDate: maxDateValue(readyDateForAssignment, breakdownInterruption.window.fromDate),
+          readyDate: maxDateValue(readyDateForAssignment, setupInterruption.window.fromDate),
           deadlineDate: dispatchDeadlineDate,
-          override: machineUnavailableOverride ?? override,
+          override: queuePlacementOverride ?? override,
           previousMachines: previousMachines?.size ? previousMachines : undefined,
           planningCalendar,
-        }).filter((machine) => canonicalKey(machine) !== canonicalKey(breakdownInterruption.machine));
-        if (remainingMachines.length) assignedMachines = [breakdownInterruption.machine, ...remainingMachines];
+        }).filter((machine) => canonicalKey(machine) !== canonicalKey(setupInterruption.machine));
+        if (remainingMachines.length) assignedMachines = [setupInterruption.machine, ...remainingMachines];
       }
       if (!assignedMachines.length) {
         routePlanningBlocked = true;
@@ -2367,7 +2379,7 @@ function machinePlanDetails(
       const unavailableSplitPlan = machineUnavailableSplitPlan({
         setupOrderPcs,
         assignedMachines,
-        interruption: breakdownInterruption,
+        interruption: setupInterruption,
         planningCalendar,
       });
       const fallbackMachineOrderPcs = assignedMachineOrderPcs(setupOrderPcs, assignedMachines.length);
@@ -2415,9 +2427,9 @@ function machinePlanDetails(
         const shopFloorDoneBy = shopFloorStatus ? rowText(shopFloorStatus, "doneBy") : "";
         const staticBaseReadyDate = routeIndex === 0 ? addDays(parseDate(rmInwardDate) || rmInwardDate, 0, planningCalendar) : plannedSetupDate(rmInwardDate, routeIndex, planningCalendar);
         const baseSetupDate = splitRole === "remaining_moved_to_alternate_machine"
-          ? maxDateValue(operationReadyDate || staticBaseReadyDate, breakdownInterruption?.window.fromDate ?? "")
+          ? maxDateValue(operationReadyDate || staticBaseReadyDate, setupInterruption?.window.fromDate ?? "")
           : splitRole === "remaining_delayed_on_same_machine"
-            ? maxDateValue(operationReadyDate || staticBaseReadyDate, breakdownInterruption ? machineUnavailableResumeDate(breakdownInterruption.window, planningCalendar) : "")
+            ? maxDateValue(operationReadyDate || staticBaseReadyDate, setupInterruption ? machineUnavailableResumeDate(setupInterruption.window, planningCalendar) : "")
             : operationReadyDate || staticBaseReadyDate;
         const plannedStartDate = maxDateValue(baseSetupDate, machineNextSetupDate.get(machineKeyValue) ?? "");
         const plannedCompletionDate = plannedStartDate;
@@ -2443,7 +2455,7 @@ function machinePlanDetails(
         }
         if (machineKeyValue && plannedProductionEndDate) machineNextSetupDate.set(machineKeyValue, nextMachineAvailableDate(plannedProductionEndDate, planningCalendar));
         const taskReadiness = shopFloorTaskReadiness(operationReadyCanPullForward, plannedStartDate);
-        const machineUnavailableQueueBeforeSetups = machineUnavailableQueueBeforeSetupsForMachine(machineUnavailablePlacement, machine);
+        const machineUnavailableQueueBeforeSetups = machineUnavailableQueueBeforeSetupsForMachine(queuePlacement, machine);
         const runningStatus = splitRole === "produced_on_unavailable_machine"
           ? "Breakdown stopped"
           : splitRole === "remaining_moved_to_alternate_machine"
@@ -2521,7 +2533,7 @@ function machinePlanDetails(
         machineUnavailableProducedQty: splitRole ? unavailableSplitPlan?.producedQty ?? 0 : 0,
         machineUnavailableRemainingQty: splitRole ? unavailableSplitPlan?.remainingQty ?? 0 : 0,
         machineUnavailableQueueBeforeSetups,
-        machineUnavailableQueuePlacementTarget: Boolean(machineUnavailablePlacement && machineUnavailablePlacement.targetMachine === canonicalKey(machine)),
+        machineUnavailableQueuePlacementTarget: Boolean(queuePlacement && queuePlacement.targetMachine === canonicalKey(machine)),
         machineAssignment: splitRole === "produced_on_unavailable_machine" ? "Breakdown produced quantity locked on stopped machine" : splitRole === "remaining_moved_to_alternate_machine" ? "Breakdown remaining quantity replanned by system rules" : splitRole === "remaining_delayed_on_same_machine" ? "Breakdown remaining quantity delayed on same machine" : machine === routeMachine ? "Route family fallback" : assignedMachines.length > 1 ? "Parallel 25-day plan" : "Assigned physical machine",
         parallelMachineCount: assignedMachines.length,
         planningAssumption: `${planningHoursPerDay} hrs/day; Friday is plant shutdown; manual planning holidays are skipped; parallel setup WIP is pooled after each machine stream produces it; next setup waits for cumulative downstream WIP availability through the full run plus ${wipAvailabilityBufferDays} buffer day; stopped-machine WIP starts downstream only when it can feed ${minimumParallelMachineWorkDays} days or complete the order; downstream setup end includes ${interSetupTransferBufferDays} handoff buffer day after previous setup end; RM-at-machine, started shop-floor, or production-actual machines stay locked during recalculation; the same setup keeps its previously planned physical machine unless a material load/date gain justifies moving it; downstream setups are assigned independently; parallel machines require at least ${minimumParallelMachineWorkDays} production days each`,
@@ -3920,6 +3932,54 @@ function planOverrideForSetup(planOverrides: ActionRow[], workOrder: Record<stri
     const setupMatches = !rowSetupKey || rowSetupKey === setupKey;
     return (targetMatches || rowMatches) && setupMatches;
   });
+}
+
+function planOverrideInterruptionForSetup(
+  override: ActionRow,
+  target: { jcNo: string; setupNo: string; lockedMachines: Set<string> },
+): MachineUnavailableSetupInterruption | undefined {
+  if (!isActivePlannerDecision(rowText(override, "status", "STATUS"))) return undefined;
+  const jcKey = canonicalKey(target.jcNo);
+  const setupKey = canonicalKey(target.setupNo);
+  const lockedMachineList = [...target.lockedMachines].filter(Boolean);
+  const lockedMachineKeys = new Set(lockedMachineList.map(canonicalKey));
+  if (!jcKey || !setupKey || !lockedMachineKeys.size) return undefined;
+  const interruptions = machineUnavailableInterruptedSetups(override);
+  const match = interruptions.find((interruption) => interruption.jcNo === jcKey && interruption.setupNo === setupKey && lockedMachineKeys.has(interruption.machine));
+  if (!match) return undefined;
+  const lockedMachine = lockedMachineList.find((machine) => canonicalKey(machine) === match.machine) ?? match.machine;
+  const fromDate = parseDate(rowText(override, "createdAt")) || localIsoDate(new Date());
+  return {
+    ...match,
+    machine: lockedMachine,
+    finishedQty: Math.max(0, match.finishedQty),
+    window: {
+      machine: canonicalKey(lockedMachine),
+      fromDate,
+      toDate: fromDate,
+      action: "shift_required",
+      reason: rowText(override, "reason", "REASON") || "Planner machine switch",
+      interruptedSetups: interruptions,
+      queuePlacements: machineUnavailableQueuePlacements(override),
+    },
+  };
+}
+
+function planOverrideQueuePlacementForSetup(
+  override: ActionRow,
+  target: { jcNo: string; partCode: string; setupNo: string },
+): MachineUnavailableQueuePlacement | undefined {
+  if (!isActivePlannerDecision(rowText(override, "status", "STATUS"))) return undefined;
+  const today = localIsoDate(new Date());
+  return machineUnavailableQueuePlacementForSetup([{
+    machine: canonicalKey(rowText(override, "fromMachine", "machine", "machineNo")),
+    fromDate: today,
+    toDate: today,
+    action: "shift_required",
+    reason: rowText(override, "reason", "REASON"),
+    interruptedSetups: machineUnavailableInterruptedSetups(override),
+    queuePlacements: machineUnavailableQueuePlacements(override),
+  }], target);
 }
 
 function assignedPhysicalMachines({

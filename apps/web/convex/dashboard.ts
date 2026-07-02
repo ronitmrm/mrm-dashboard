@@ -181,6 +181,24 @@ const planOverrideValidator = {
   toMachine: v.string(),
   setupNo: optionalString,
   fromMachine: optionalString,
+  interruptedSetups: v.optional(v.array(v.object({
+    jcNo: v.string(),
+    setupNo: v.string(),
+    machine: v.string(),
+    finishedQty: optionalNumber,
+  }))),
+  queuePlacements: v.optional(v.array(v.object({
+    targetJcNo: v.string(),
+    targetPartCode: optionalString,
+    targetSetupNo: v.string(),
+    targetSourceMachine: optionalString,
+    targetMachine: v.string(),
+    queueBeforeSetups: v.optional(v.array(v.object({
+      jcNo: v.string(),
+      setupNo: v.string(),
+      machine: v.string(),
+    }))),
+  }))),
   reason: optionalString,
   createdAt: optionalString,
 };
@@ -1285,6 +1303,24 @@ export const savePlanOverride = mutation({
     toMachine: v.string(),
     setupNo: optionalString,
     fromMachine: optionalString,
+      interruptedSetups: v.optional(v.array(v.object({
+        jcNo: v.string(),
+        setupNo: v.string(),
+        machine: v.string(),
+        finishedQty: optionalNumber,
+      }))),
+      queuePlacements: v.optional(v.array(v.object({
+        targetJcNo: v.string(),
+        targetPartCode: optionalString,
+        targetSetupNo: v.string(),
+        targetSourceMachine: optionalString,
+        targetMachine: v.string(),
+        queueBeforeSetups: v.optional(v.array(v.object({
+          jcNo: v.string(),
+          setupNo: v.string(),
+          machine: v.string(),
+        }))),
+      }))),
     reason: optionalString,
   },
   handler: async (ctx, args) => {
