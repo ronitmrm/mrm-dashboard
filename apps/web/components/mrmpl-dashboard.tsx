@@ -1168,6 +1168,7 @@ function PartMachineSwitchPlannerForm({
   const [selectedTargetInterruptions, setSelectedTargetInterruptions] = useState<Record<string, boolean>>({});
   const [targetFinishedQtyByRow, setTargetFinishedQtyByRow] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resolvedConflictIds, setResolvedConflictIds] = useState<Set<string>>(() => new Set());
   const jobCardOptions = useMemo(() => uniqueValues(plannedRows
     .filter((row) => machineKey(itemCode(row)) === machineKey(selectedItem))
     .map((row) => jobCardNumber(row))
@@ -1209,6 +1210,15 @@ function PartMachineSwitchPlannerForm({
     includeSameMachineLater: false,
     includeDownstream: false,
   }), [fromMachine, machineRows, plannedRows, selectedRows, toMachine]);
+  const proposedQueuePlacements = useMemo(() => machineConstraintQueuePlacements(queueReviewGroups, selectedRows, queueAfterByRow), [queueAfterByRow, queueReviewGroups, selectedRows]);
+  const switchConflicts = useMemo(() => partMachineSwitchPreSaveConflicts(asArray(productionControl.planOverrideRows), {
+    target,
+    setupNo,
+    selectedItem,
+    toMachine,
+    queuePlacements: proposedQueuePlacements,
+    resolvedIds: resolvedConflictIds,
+  }), [productionControl.planOverrideRows, proposedQueuePlacements, resolvedConflictIds, selectedItem, setupNo, target, toMachine]);
   const targetInterruptionRows = useMemo(() => partMachineSwitchTargetInterruptionRows(queueReviewGroups, selectedRows), [queueReviewGroups, selectedRows]);
   const missingTargetFinishedQty = targetInterruptionRows.some((row) => {
     const rowKey = machineIssueRowKey(row);
@@ -1220,7 +1230,7 @@ function PartMachineSwitchPlannerForm({
   });
   const canReview = Boolean(selectedItem.trim() && target.trim() && setupNo.trim() && fromMachine.trim() && toMachine.trim())
     && machineKey(fromMachine) !== machineKey(toMachine);
-  const canSave = canReview && Boolean(reason.trim()) && reviewReady && selectedRows.length > 0 && !missingProducedQty && !missingTargetFinishedQty && queueReviewConfirmed;
+  const canSave = canReview && Boolean(reason.trim()) && reviewReady && selectedRows.length > 0 && !missingProducedQty && !missingTargetFinishedQty && !switchConflicts.length && queueReviewConfirmed;
 
   function updateField(setter: Dispatch<SetStateAction<string>>, value: string) {
     setter(value);
@@ -1229,6 +1239,7 @@ function PartMachineSwitchPlannerForm({
     setQueueAfterByRow({});
     setSelectedTargetInterruptions({});
     setTargetFinishedQtyByRow({});
+    setResolvedConflictIds(new Set());
   }
 
   function updateProducedQty(row: DashboardPayload, value: string) {
@@ -1241,6 +1252,24 @@ function PartMachineSwitchPlannerForm({
     setTargetFinishedQtyByRow((current) => ({ ...current, [key]: value }));
   }
 
+  async function reverseSwitchConflict(conflict: DashboardPayload) {
+    const targetId = displayValue(conflict.targetId);
+    if (!targetId || targetId === "-" || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await submitAction("reverse-entry", {
+        targetTable: "planOverrides",
+        targetId,
+        targetKey: displayValue(conflict.targetKey) !== "-" ? displayValue(conflict.targetKey) : "",
+        targetLabel: displayValue(conflict.targetLabel) !== "-" ? displayValue(conflict.targetLabel) : "",
+        reason: `Planner replacing conflicting machine switch with ${target} setup ${setupNo} to ${toMachine}`,
+        correctedBy: "Planner",
+      });
+      setResolvedConflictIds((current) => new Set([...current, targetId]));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!reviewReady) {
@@ -1265,7 +1294,7 @@ function PartMachineSwitchPlannerForm({
           finishedQty: Number(targetFinishedQtyByRow[machineIssueRowKey(row)] ?? 0),
         }));
       const interruptedSetups = [...sourceInterruptions, ...targetInterruptions];
-      const queuePlacements = machineConstraintQueuePlacements(queueReviewGroups, selectedRows, queueAfterByRow);
+      const queuePlacements = proposedQueuePlacements;
       await submitAction("plan-override", {
         target,
         setupNo,
@@ -1285,6 +1314,7 @@ function PartMachineSwitchPlannerForm({
       setQueueAfterByRow({});
       setSelectedTargetInterruptions({});
       setTargetFinishedQtyByRow({});
+    setResolvedConflictIds(new Set());
       setReviewReady(false);
       setQueueReviewConfirmed(false);
     } finally {
@@ -1487,6 +1517,31 @@ function PartMachineSwitchPlannerForm({
           />
           {missingTargetFinishedQty ? (
             <div className="text-xs text-destructive">Enter produced quantity for every target running setup selected to stop.</div>
+          ) : null}
+          {switchConflicts.length ? (
+            <div className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+              <div>
+                <div className="text-sm font-medium text-destructive">Conflicting planner action found</div>
+                <div className="text-xs text-muted-foreground">This switch cannot be saved while another active switch exists for the same setup with a different target or queue position.</div>
+              </div>
+              {switchConflicts.map((conflict, index) => (
+                <div key={`${displayValue(conflict.targetId)}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-2">
+                  <div>
+                    <div className="text-sm font-medium">{displayValue(conflict.targetLabel)}</div>
+                    <div className="text-xs text-muted-foreground">{displayValue(conflict.targetKey)} | {displayValue(conflict.createdAt)}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
+                      Keep existing
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" disabled={isSubmitting} onClick={() => void reverseSwitchConflict(conflict)}>
+                      <Undo2 className="size-4" />
+                      Reverse existing
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : null}
           <label className="flex items-start gap-2 rounded-md border bg-background p-2 text-sm">
             <input
@@ -5597,6 +5652,59 @@ function machineConstraintQueuePlacements(
   return placements;
 }
 
+function partMachineSwitchPreSaveConflicts(
+  rows: DashboardPayload[],
+  proposed: {
+    target: string;
+    selectedItem: string;
+    setupNo: string;
+    toMachine: string;
+    queuePlacements: MachineConstraintQueuePlacementPayload[];
+    resolvedIds: Set<string>;
+  },
+) {
+  const targetKey = machineKey(proposed.target);
+  const itemKey = machineKey(proposed.selectedItem);
+  const setupKey = machineKey(proposed.setupNo);
+  const proposedSignature = partMachineSwitchDecisionSignature(proposed.toMachine, proposed.queuePlacements);
+  if (!targetKey || !setupKey || !proposedSignature) return [];
+  return rows
+    .filter((row) => {
+      const targetId = displayValue(row._id || row.targetId);
+      if (proposed.resolvedIds.has(targetId)) return false;
+      const rowTargetKey = machineKey(displayValue(row.target));
+      if (rowTargetKey !== targetKey && (!itemKey || rowTargetKey !== itemKey)) return false;
+      const rowSetupKey = machineKey(displayValue(row.setupNo));
+      if (rowSetupKey && rowSetupKey !== setupKey) return false;
+      const existingSignature = partMachineSwitchDecisionSignature(displayValue(row.toMachine), asArray(row.queuePlacements) as MachineConstraintQueuePlacementPayload[]);
+      return Boolean(existingSignature && existingSignature !== proposedSignature);
+    })
+    .map((row) => ({
+      ...row,
+      targetTable: "planOverrides",
+      targetId: displayValue(row._id || row.targetId),
+      targetKey: [displayValue(row.target), displayValue(row.setupNo), displayValue(row.fromMachine), displayValue(row.toMachine)].filter((value) => value !== "-").join(" / "),
+      targetLabel: `Existing switch to ${displayValue(row.toMachine)}`,
+      createdAt: displayValue(row.createdAt),
+    }));
+}
+
+function partMachineSwitchDecisionSignature(toMachine: string, queuePlacements: MachineConstraintQueuePlacementPayload[]) {
+  const targetMachine = machineKey(toMachine);
+  if (!targetMachine) return "";
+  const placementSignature = queuePlacements
+    .map((placement) => ({
+      targetMachine: machineKey(placement.targetMachine || toMachine),
+      before: asArray(placement.queueBeforeSetups)
+        .map((row) => [displayValue(row.jcNo), displayValue(row.setupNo), displayValue(row.machine)].map(machineKey).join("/"))
+        .sort()
+        .join(","),
+    }))
+    .sort((left, right) => `${left.targetMachine}|${left.before}`.localeCompare(`${right.targetMachine}|${right.before}`))
+    .map((placement) => `${placement.targetMachine}:${placement.before}`)
+    .join("|");
+  return `${targetMachine}|${placementSignature}`;
+}
 function machineConstraintPlacementValue(machine: string, afterKey: string) {
   return `${machineKey(machine)}${machineConstraintPlacementSeparator}${afterKey}`;
 }
