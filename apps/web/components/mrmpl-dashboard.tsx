@@ -3296,6 +3296,14 @@ function RoleTaskPanel({
         key: dataEntryKey("software_raw", payload),
         payload,
       });
+      if (productionCycleMasterChanged(row, card)) {
+        const cyclePayload = productionCycleMasterPayload(row, card);
+        await submitAction("data-entry", {
+          entryType: "cycle",
+          key: dataEntryKey("cycle", cyclePayload),
+          payload: cyclePayload,
+        });
+      }
     }
   }
 
@@ -3798,6 +3806,9 @@ function ShopFloorRowAction({
   );
 }
 
+const DEFAULT_CRATE_WEIGHT_KG = 1.1;
+const CRATE_WEIGHT_OPTIONS_KG = [1.1, 1.25, 1.5, 2];
+
 function ProductionCardRoleEntryForm({
   role,
   rows,
@@ -3817,8 +3828,11 @@ function ProductionCardRoleEntryForm({
 
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [cycleSecondsByKey, setCycleSecondsByKey] = useState<Record<string, string>>({});
+  const [pieceWeightByKey, setPieceWeightByKey] = useState<Record<string, string>>({});
   const [producedGrossKg, setProducedGrossKg] = useState("");
   const [cratesUsed, setCratesUsed] = useState("");
+  const [crateWeightKg, setCrateWeightKg] = useState("1.1");
   const [downtimeCode, setDowntimeCode] = useState("");
   const [bulkDowntimeCode, setBulkDowntimeCode] = useState("");
   const [bulkDowntimeStart, setBulkDowntimeStart] = useState("");
@@ -3839,11 +3853,15 @@ function ProductionCardRoleEntryForm({
   })), [role, rows]);
   const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey) ?? rows[0];
   const selectedOptionKey = selectedRow ? shopFloorPlanKey(selectedRow) : "";
-  const cycleSeconds = selectedRow ? productionCycleSeconds(selectedRow) : 0;
-  const pieceWeightGram = selectedRow ? productionPieceWeightGrams(selectedRow) : 0;
+  const defaultCycleSeconds = selectedRow ? productionCycleSeconds(selectedRow) : 0;
+  const defaultPieceWeightGram = selectedRow ? productionPieceWeightGrams(selectedRow) : 0;
+  const cycleSecondsInput = cycleSecondsByKey[selectedOptionKey] ?? (defaultCycleSeconds ? String(defaultCycleSeconds) : "");
+  const pieceWeightInput = pieceWeightByKey[selectedOptionKey] ?? (defaultPieceWeightGram ? String(defaultPieceWeightGram) : "");
+  const cycleSeconds = numeric(cycleSecondsInput) || defaultCycleSeconds;
+  const pieceWeightGram = numeric(pieceWeightInput) || defaultPieceWeightGram;
   const grossKg = numeric(producedGrossKg);
   const crateCount = numeric(cratesUsed);
-  const crateTareKg = 1;
+  const crateTareKg = numeric(crateWeightKg) || DEFAULT_CRATE_WEIGHT_KG;
   const netProducedKg = Math.max(grossKg - (crateCount * crateTareKg), 0);
   const producedPcs = pieceWeightGram > 0 ? Math.floor((netProducedKg * 1000) / pieceWeightGram) : 0;
   const shopFloorRuntimeMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
@@ -3857,6 +3875,7 @@ function ProductionCardRoleEntryForm({
     && (role === "shopFloor" ? hasShopFloorProduction : hasDowntimeDetails);
   const canSaveBulkDowntime = role === "shopFloor" && bulkRows.length > 0 && Boolean(bulkDowntimeCode && bulkDowntimeStart && bulkDowntimeEnd && bulkDowntimeMinutes > 0);
 
+
   async function submitProductionCard() {
     if (!selectedRow || !canSave || isSaving) return;
     setIsSaving(true);
@@ -3869,6 +3888,8 @@ function ProductionCardRoleEntryForm({
         operatorId: role === "shopFloor" ? operatorNumber : "",
         operatorName: "",
         qcName: "",
+        cycleTime: role === "shopFloor" ? cycleSeconds : 0,
+        loadingUnloading: 0,
         startTime,
         endTime,
         runtimeMinutes: role === "shopFloor" ? shopFloorRuntimeMinutes : downtimeDurationMinutes,
@@ -3878,7 +3899,7 @@ function ProductionCardRoleEntryForm({
         downtimeCode: role === "shopFloor" ? "" : downtimeCode,
         outputQty: role === "shopFloor" ? producedPcs : 0,
         actualQty: role === "shopFloor" ? producedPcs : 0,
-        targetQty: 0,
+        targetQty: role === "shopFloor" && cycleSeconds > 0 && shopFloorRuntimeMinutes > 0 ? Math.floor((shopFloorRuntimeMinutes * 60) / cycleSeconds) : 0,
         rejectQty: 0,
         rejectionType: "",
         rejectionReason: "",
@@ -3887,6 +3908,7 @@ function ProductionCardRoleEntryForm({
         netWeight: role === "shopFloor" ? netProducedKg : 0,
         pieceWeight: role === "shopFloor" ? pieceWeightGram : 0,
         cratesUsed: role === "shopFloor" ? crateCount : 0,
+        crateWeightKg: role === "shopFloor" ? crateTareKg : 0,
         producedPcs: role === "shopFloor" ? producedPcs : 0,
         settingQty: 0,
         toolingCheck: {},
@@ -3993,16 +4015,23 @@ function ProductionCardRoleEntryForm({
       {role === "shopFloor" ? (
         <>
           <div className="grid gap-2 md:grid-cols-3">
-            <Field label="Item code"><Input className="h-8" value={selectedRow ? itemCode(selectedRow) : ""} readOnly /></Field>
-            <Field label="Job card"><Input className="h-8" value={selectedRow ? jobCardNumber(selectedRow) : ""} readOnly /></Field>
-            <Field label="Setup no."><Input className="h-8" value={displayValue(selectedRow?.setupNo)} readOnly /></Field>
-            <Field label="Cycle time sec"><Input className="h-8" value={formatNumber(cycleSeconds)} readOnly /></Field>
-            <Field label="1 piece weight gm"><Input className="h-8" value={formatNumber(pieceWeightGram)} readOnly /></Field>
+            {selectedRow ? (
+              <div className="rounded-md border bg-background p-3 md:col-span-3">
+                <ShopFloorItemSummary row={selectedRow} tone="current" />
+              </div>
+            ) : null}
+            <Field label="Cycle time sec"><Input className="h-8" type="number" step="0.01" value={cycleSecondsInput} onChange={(event) => setCycleSecondsByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
+            <Field label="1 piece weight gm"><Input className="h-8" type="number" step="0.01" value={pieceWeightInput} onChange={(event) => setPieceWeightByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
             <Field label="Operator number"><Input className="h-8" value={operatorNumber} onChange={(event) => setOperatorNumber(event.target.value)} /></Field>
             <Field label="Machine start"><Input className="h-8" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></Field>
             <Field label="Machine end"><Input className="h-8" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></Field>
             <Field label="Produced kg gross"><Input className="h-8" type="number" step="0.001" value={producedGrossKg} onChange={(event) => setProducedGrossKg(event.target.value)} /></Field>
             <Field label="Crates used"><Input className="h-8" type="number" step="1" value={cratesUsed} onChange={(event) => setCratesUsed(event.target.value)} /></Field>
+            <Field label="Crate weight kg">
+              <select className="h-8 rounded-md border bg-background px-2 text-sm" value={crateWeightKg} onChange={(event) => setCrateWeightKg(event.target.value)}>
+                {CRATE_WEIGHT_OPTIONS_KG.map((weight) => <option key={weight} value={String(weight)}>{formatNumber(weight)} kg</option>)}
+              </select>
+            </Field>
             <Field label="Net produced kg"><Input className="h-8" value={formatNumber(netProducedKg)} readOnly /></Field>
             <Field label="Produced pcs"><Input className="h-8" value={formatNumber(producedPcs)} readOnly /></Field>
           </div>
@@ -7090,6 +7119,27 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   return "";
 }
 
+function productionCycleMasterChanged(row: DashboardPayload, card: DashboardPayload) {
+  const nextCycle = optionalNumber(card.cycleTime) ?? productionCycleSeconds(row);
+  const nextPieceWeight = optionalNumber(card.pieceWeight) ?? productionPieceWeightGrams(row);
+  return Math.abs(nextCycle - productionCycleSeconds(row)) > 0.0001
+    || Math.abs(nextPieceWeight - productionPieceWeightGrams(row)) > 0.0001;
+}
+
+function productionCycleMasterPayload(row: DashboardPayload, card: DashboardPayload) {
+  return {
+    partNo: itemCode(row),
+    optionNumber: displayValue(row.optionNumber),
+    setupNo: displayValue(row.setupNo),
+    setupName: displayValue(row.setupName),
+    machineUsed: displayValue(row.machineType),
+    operationWeight: optionalNumber(card.pieceWeight) ?? productionPieceWeightGrams(row),
+    cycleTime: optionalNumber(card.cycleTime) ?? productionCycleSeconds(row),
+    loadingUnloading: optionalNumber(card.loadingUnloading) ?? 0,
+    updatedFrom: "shop_floor_tasks",
+    updatedAt: new Date().toISOString(),
+  };
+}
 function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
   const payload = {
     cardId: productionCardId(row, card),
@@ -7108,8 +7158,8 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
     optionNumber: displayValue(row.optionNumber),
     setupNo: displayValue(row.setupNo),
     setupName: displayValue(row.setupName),
-    cycleTime: optionalNumber(row.cycleTime) ?? 0,
-    loadingUnloading: optionalNumber(row.loadingUnloading) ?? 0,
+    cycleTime: optionalNumber(card.cycleTime) ?? optionalNumber(row.cycleTime) ?? 0,
+    loadingUnloading: optionalNumber(card.loadingUnloading) ?? optionalNumber(row.loadingUnloading) ?? 0,
     startTime: optionalText(card.startTime),
     endTime: optionalText(card.endTime),
     runtimeMinutes: optionalNumber(card.runtimeMinutes) ?? 0,
@@ -7128,6 +7178,7 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
     netWeight: optionalNumber(card.netWeight) ?? 0,
     pieceWeight: optionalNumber(card.pieceWeight) ?? 0,
     cratesUsed: optionalNumber(card.cratesUsed) ?? 0,
+    crateWeightKg: optionalNumber(card.crateWeightKg) ?? 0,
     producedPcs: optionalNumber(card.producedPcs) ?? optionalNumber(card.actualQty) ?? optionalNumber(card.outputQty) ?? 0,
     settingQty: optionalNumber(card.settingQty) ?? 0,
     toolingCheck: asRecord(card.toolingCheck),
@@ -7434,3 +7485,6 @@ function formatCell(value: unknown): string {
   }
   return JSON.stringify(value);
 }
+
+
+

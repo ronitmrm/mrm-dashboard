@@ -319,7 +319,7 @@ The hard-copy conventional production card from `MRM-QA-008-01-REV-01.xlsx` is d
 
 The role tabs each show a generic entry form where the user selects the machine/item/job/setup first:
 
-- Shop Floor Tasks records production by machine number for running machines. Item code, job card, setup number, cycle time, and one-piece weight are prefilled from the current machine plan. Operators enter operator number, machine start/end time, gross produced kg, and crates used; net kg and produced pcs are calculated. This save writes `production_card` and the calculated produced pcs to `software_raw`.
+- Shop Floor Tasks records production by machine number for running machines. Item/job/setup details are shown as a summary tile. Cycle time and one-piece weight are prefilled from the current plan but editable; changed values are saved back to the `cycle` master row for the same part/option/setup. Operators enter operator number, machine start/end time, gross produced kg, crates used, and crate tare weight from a dropdown defaulting to 1.1 kg. Net kg deducts `cratesUsed * crateWeightKg`, and produced pcs are calculated from net kg and one-piece weight. This save writes `production_card`, the calculated produced pcs to `software_raw`, and changed cycle/piece-weight values to `cycle`.
 - Shop Floor Tasks also has a bulk downtime entry for all currently running machines. Bulk downtime writes downtime-only `production_card` rows and must not write `software_raw`.
 - Quality Control Tasks records downtime only: machine number, item/setup summary tile, downtime code, 24-hour downtime start/end (`HH:mm`), and calculated downtime minutes.
 - Machinist Tasks records downtime only: machine number, item/setup summary tile, downtime code, 24-hour downtime start/end (`HH:mm`), and calculated downtime minutes.
@@ -339,3 +339,4 @@ Presetting and setting checklist saves are workflow-only and do not trigger plan
 Relevant code:
 
 - `apps/web/components/mrmpl-dashboard.tsx` - optimistic setup checklist session state, upsert, and payload merge.
+
