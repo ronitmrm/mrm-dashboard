@@ -321,10 +321,10 @@ The role tabs each show a generic entry form where the user selects the machine/
 
 - Shop Floor Tasks records production by machine number for running machines. Item code, job card, setup number, cycle time, and one-piece weight are prefilled from the current machine plan. Operators enter operator number, machine start/end time, gross produced kg, and crates used; net kg and produced pcs are calculated. This save writes `production_card` and the calculated produced pcs to `software_raw`.
 - Shop Floor Tasks also has a bulk downtime entry for all currently running machines. Bulk downtime writes downtime-only `production_card` rows and must not write `software_raw`.
-- Quality Control Tasks records QC approval, rejection, and hold details.
+- Quality Control Tasks records downtime only: machine number, prefilled item/setup details, downtime code, downtime start, downtime end, and calculated downtime minutes.
 - Machinist Tasks records downtime only: machine number, prefilled item/setup details, downtime code, downtime start, downtime end, and calculated downtime minutes.
 
-All three roles write `production_card` data-entry rows with `cardRole` included in the payload and card identifier so shop-floor, quality, and machinist entries do not overwrite each other. The machinist downtime entry must not write `software_raw`; production output from role tabs comes only from the Shop Floor Tasks production entry.
+All three roles write `production_card` data-entry rows with `cardRole` included in the payload and card identifier so shop-floor, quality, and machinist entries do not overwrite each other. Quality Control and Machinist downtime entries must not write `software_raw`; production output from role tabs comes only from the Shop Floor Tasks production entry.
 
 Relevant code:
 

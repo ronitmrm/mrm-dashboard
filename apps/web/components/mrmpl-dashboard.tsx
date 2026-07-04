@@ -3224,7 +3224,7 @@ function RoleTaskPanel({
   const runningRows = useMemo(() => currentShopFloorRows(productionControl), [productionControl]);
   const productionCardRows = useMemo(() => {
     const taskRows = roleRows.map((row) => row.next).filter((row): row is DashboardPayload => Boolean(row));
-    if (role === "shopFloor" || role === "machinist") return runningRows;
+    if (role === "shopFloor" || role === "quality" || role === "machinist") return runningRows;
     return taskRows;
   }, [role, roleRows, runningRows]);
   const filteredRows = useMemo(() => roleRows.filter((row) =>
@@ -3814,7 +3814,7 @@ function ProductionCardRoleEntryForm({
   const [prodDate, setProdDate] = useState(today);
   const [shift, setShift] = useState("Day");
   const [operatorNumber, setOperatorNumber] = useState("");
-  const [qcName, setQcName] = useState("");
+
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [producedGrossKg, setProducedGrossKg] = useState("");
@@ -3823,18 +3823,17 @@ function ProductionCardRoleEntryForm({
   const [bulkDowntimeCode, setBulkDowntimeCode] = useState("");
   const [bulkDowntimeStart, setBulkDowntimeStart] = useState("");
   const [bulkDowntimeEnd, setBulkDowntimeEnd] = useState("");
-  const [rejectQty, setRejectQty] = useState("0");
-  const [rejectionType, setRejectionType] = useState("");
-  const [rejectionReason, setRejectionReason] = useState("");
-  const [rejectionRemark, setRejectionRemark] = useState("");
 
-  const [qcApproval, setQcApproval] = useState("Approved");
+
+
+
+
   const [remarks, setRemarks] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isBulkSaving, setIsBulkSaving] = useState(false);
   const rowOptions = useMemo(() => rows.map((row) => ({
     key: shopFloorPlanKey(row),
-    label: role === "shopFloor" || role === "machinist"
+    label: role === "shopFloor" || role === "quality" || role === "machinist"
       ? displayValue(row.machine)
       : `${machineValue(row, "machine")} / ${itemCode(row)} / ${jobCardNumber(row)} / setup ${displayValue(row.setupNo)}`,
   })), [role, rows]);
@@ -3850,12 +3849,12 @@ function ProductionCardRoleEntryForm({
   const shopFloorRuntimeMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
   const downtimeDurationMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
   const bulkDowntimeMinutes = productionCardRuntimeMinutes(today, bulkDowntimeStart, bulkDowntimeEnd);
-  const roleLabel = role === "shopFloor" ? "Shop floor production entry" : role === "quality" ? "Quality production card" : "Machinist downtime entry";
+  const roleLabel = role === "shopFloor" ? "Shop floor production entry" : role === "quality" ? "Quality downtime entry" : "Machinist downtime entry";
   const hasShopFloorProduction = Boolean(operatorNumber && startTime && endTime && grossKg > 0 && pieceWeightGram > 0 && producedPcs > 0);
-  const hasQualityDetails = Boolean(qcName && qcApproval);
-  const hasMachinistDowntime = Boolean(downtimeCode && startTime && endTime && downtimeDurationMinutes > 0);
+  const hasDowntimeDetails = Boolean(downtimeCode && startTime && endTime && downtimeDurationMinutes > 0);
+
   const canSave = Boolean(selectedRow)
-    && (role === "shopFloor" ? hasShopFloorProduction : role === "quality" ? hasQualityDetails : hasMachinistDowntime);
+    && (role === "shopFloor" ? hasShopFloorProduction : hasDowntimeDetails);
   const canSaveBulkDowntime = role === "shopFloor" && bulkRows.length > 0 && Boolean(bulkDowntimeCode && bulkDowntimeStart && bulkDowntimeEnd && bulkDowntimeMinutes > 0);
 
   async function submitProductionCard() {
@@ -3869,21 +3868,21 @@ function ProductionCardRoleEntryForm({
         shift,
         operatorId: role === "shopFloor" ? operatorNumber : "",
         operatorName: "",
-        qcName,
+        qcName: "",
         startTime,
         endTime,
-        runtimeMinutes: role === "shopFloor" ? shopFloorRuntimeMinutes : role === "machinist" ? downtimeDurationMinutes : 0,
+        runtimeMinutes: role === "shopFloor" ? shopFloorRuntimeMinutes : downtimeDurationMinutes,
         breakMinutes: 0,
-        downtimeMinutes: role === "machinist" ? downtimeDurationMinutes : 0,
-        downtimeReason: role === "machinist" ? downtimeCode : "",
-        downtimeCode: role === "machinist" ? downtimeCode : "",
+        downtimeMinutes: role === "shopFloor" ? 0 : downtimeDurationMinutes,
+        downtimeReason: role === "shopFloor" ? "" : downtimeCode,
+        downtimeCode: role === "shopFloor" ? "" : downtimeCode,
         outputQty: role === "shopFloor" ? producedPcs : 0,
         actualQty: role === "shopFloor" ? producedPcs : 0,
         targetQty: 0,
-        rejectQty: numeric(rejectQty),
-        rejectionType,
-        rejectionReason,
-        rejectionRemark,
+        rejectQty: 0,
+        rejectionType: "",
+        rejectionReason: "",
+        rejectionRemark: "",
         grossWeight: role === "shopFloor" ? grossKg : 0,
         netWeight: role === "shopFloor" ? netProducedKg : 0,
         pieceWeight: role === "shopFloor" ? pieceWeightGram : 0,
@@ -3892,7 +3891,7 @@ function ProductionCardRoleEntryForm({
         settingQty: 0,
         toolingCheck: {},
         shopFloorChecks: {},
-        qcApproval,
+        qcApproval: "",
         remarks,
         efficiency: 0,
       });
@@ -3903,7 +3902,7 @@ function ProductionCardRoleEntryForm({
         setProducedGrossKg("");
         setCratesUsed("");
       }
-      if (role === "machinist") {
+      if (role === "quality" || role === "machinist") {
         setDowntimeCode("");
         setStartTime("");
         setEndTime("");
@@ -3970,10 +3969,10 @@ function ProductionCardRoleEntryForm({
           <div className="text-xs text-muted-foreground">Select the machine first; item and setup details are filled from the current plan.</div>
         </div>
         {role === "shopFloor" ? <StatusBadge value={producedPcs > 0 ? `${formatNumber(producedPcs)} pcs` : "Production pending"} /> : null}
-        {role === "machinist" ? <StatusBadge value={downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Downtime pending"} /> : null}
+        {role === "quality" || role === "machinist" ? <StatusBadge value={downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Downtime pending"} /> : null}
       </div>
       <div className="grid gap-2 md:grid-cols-3">
-        <Field label={role === "shopFloor" || role === "machinist" ? "Machine no." : "Machine / item"}>
+        <Field label={role === "shopFloor" || role === "quality" || role === "machinist" ? "Machine no." : "Machine / item"}>
           <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
             {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
           </select>
@@ -4033,23 +4032,8 @@ function ProductionCardRoleEntryForm({
           </div>
         </>
       ) : null}
-      {role === "quality" ? (
-        <div className="grid gap-2 md:grid-cols-3">
-          <Field label="QC name"><Input className="h-8" value={qcName} onChange={(event) => setQcName(event.target.value)} /></Field>
-          <Field label="QC approval">
-            <select className="h-8 rounded-md border bg-background px-2 text-sm" value={qcApproval} onChange={(event) => setQcApproval(event.target.value)}>
-              <option value="Approved">Approved</option>
-              <option value="Hold">Hold</option>
-              <option value="Rejected">Rejected</option>
-            </select>
-          </Field>
-          <Field label="Total rejection pcs"><Input className="h-8" type="number" value={rejectQty} onChange={(event) => setRejectQty(event.target.value)} /></Field>
-          <Field label="Type of rejection"><Input className="h-8" value={rejectionType} onChange={(event) => setRejectionType(event.target.value)} /></Field>
-          <Field label="Reason"><Input className="h-8" value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} /></Field>
-          <Field label="Rejection remark"><Input className="h-8" value={rejectionRemark} onChange={(event) => setRejectionRemark(event.target.value)} /></Field>
-        </div>
-      ) : null}
-      {role === "machinist" ? (
+
+      {role === "quality" || role === "machinist" ? (
         <>
           <div className="grid gap-2 md:grid-cols-3">
             <Field label="Item code"><Input className="h-8" value={selectedRow ? itemCode(selectedRow) : ""} readOnly /></Field>
@@ -4074,7 +4058,7 @@ function ProductionCardRoleEntryForm({
       ) : null}
       <Button type="button" size="sm" className="w-fit" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
         <CheckCircle2 className="size-4" />
-        {role === "shopFloor" ? "Save production" : role === "machinist" ? "Save downtime" : "Save production card"}
+        {role === "shopFloor" ? "Save production" : "Save downtime"}
       </Button>
     </div>
   );
