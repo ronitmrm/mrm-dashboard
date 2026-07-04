@@ -4252,8 +4252,8 @@ function ProductionCardRoleEntryForm({
             <Field label="Cycle time sec"><Input className="h-8" type="number" step="0.01" value={cycleSecondsInput} onChange={(event) => setCycleSecondsByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
             <Field label="1 piece weight gm"><Input className="h-8" type="number" step="0.01" value={pieceWeightInput} onChange={(event) => setPieceWeightByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
             <Field label="Operator number"><Input className="h-8" value={operatorNumber} onChange={(event) => setOperatorNumber(event.target.value)} /></Field>
-            <Field label="Machine start"><Input className="h-8" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></Field>
-            <Field label="Machine end"><Input className="h-8" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></Field>
+            <Field label="Machine start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} /></Field>
+            <Field label="Machine end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} /></Field>
             <Field label="Produced kg gross"><Input className="h-8" type="number" step="0.001" value={producedGrossKg} onChange={(event) => setProducedGrossKg(event.target.value)} /></Field>
             <Field label="Crates used"><Input className="h-8" type="number" step="1" value={cratesUsed} onChange={(event) => setCratesUsed(event.target.value)} /></Field>
             <Field label="Crate weight kg">
