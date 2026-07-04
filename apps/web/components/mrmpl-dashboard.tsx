@@ -4001,6 +4001,7 @@ function ProductionCardRoleEntryForm({
   const [bulkDowntimeCode, setBulkDowntimeCode] = useState("");
   const [bulkDowntimeStart, setBulkDowntimeStart] = useState("");
   const [bulkDowntimeEnd, setBulkDowntimeEnd] = useState("");
+  const [qualityEntryKind, setQualityEntryKind] = useState<"" | "downtime" | "rejection">("");
   const [rejectionTypeCode, setRejectionTypeCode] = useState("");
   const [rejectionReasonCode, setRejectionReasonCode] = useState("");
   const [rejectionRemarkCode, setRejectionRemarkCode] = useState("");
@@ -4055,11 +4056,15 @@ function ProductionCardRoleEntryForm({
   const selectedRejectionReason = codedMasterLabel(rejectionReasonOptions, rejectionReasonCode);
   const selectedRejectionRemark = codedMasterLabel(rejectionRemarkOptions, rejectionRemarkCode);
   const rejectQty = numeric(rejectedPieces);
+  const isQualityDowntimeEntry = role === "quality" && qualityEntryKind === "downtime";
+  const isQualityRejectionEntry = role === "quality" && qualityEntryKind === "rejection";
+  const isDowntimeEntry = role === "machinist" || isQualityDowntimeEntry;
+  const isRejectionEntry = isQualityRejectionEntry;
   const hasDowntimeDetails = Boolean(downtimeCode && startTime && endTime && downtimeDurationMinutes > 0);
   const hasQualityRejectionDetails = role === "quality" && Boolean(rejectionTypeCode && rejectionReasonCode && rejectionRemarkCode && rejectQty > 0);
 
   const canSave = Boolean(selectedRow)
-    && (role === "shopFloor" ? hasShopFloorProduction : role === "quality" ? (hasDowntimeDetails || hasQualityRejectionDetails) : hasDowntimeDetails);
+    && (role === "shopFloor" ? hasShopFloorProduction : role === "quality" ? (isQualityDowntimeEntry ? hasDowntimeDetails : isQualityRejectionEntry ? hasQualityRejectionDetails : false) : hasDowntimeDetails);
   const canSaveBulkDowntime = role === "shopFloor" && bulkRows.length > 0 && Boolean(bulkDowntimeCode && bulkDowntimeStart && bulkDowntimeEnd && bulkDowntimeMinutes > 0);
 
 
@@ -4079,21 +4084,21 @@ function ProductionCardRoleEntryForm({
         loadingUnloading: 0,
         startTime,
         endTime,
-        runtimeMinutes: role === "shopFloor" ? shopFloorRuntimeMinutes : hasDowntimeDetails ? downtimeDurationMinutes : 0,
+        runtimeMinutes: role === "shopFloor" ? shopFloorRuntimeMinutes : isDowntimeEntry && hasDowntimeDetails ? downtimeDurationMinutes : 0,
         breakMinutes: 0,
-        downtimeMinutes: role === "shopFloor" ? 0 : hasDowntimeDetails ? downtimeDurationMinutes : 0,
-        downtimeReason: role === "shopFloor" || !hasDowntimeDetails ? "" : selectedDowntimeReason,
-        downtimeCode: role === "shopFloor" || !hasDowntimeDetails ? "" : downtimeCode,
+        downtimeMinutes: isDowntimeEntry && hasDowntimeDetails ? downtimeDurationMinutes : 0,
+        downtimeReason: isDowntimeEntry && hasDowntimeDetails ? selectedDowntimeReason : "",
+        downtimeCode: isDowntimeEntry && hasDowntimeDetails ? downtimeCode : "",
         outputQty: role === "shopFloor" ? producedPcs : 0,
         actualQty: role === "shopFloor" ? producedPcs : 0,
         targetQty: role === "shopFloor" && cycleSeconds > 0 && shopFloorRuntimeMinutes > 0 ? Math.floor((shopFloorRuntimeMinutes * 60) / cycleSeconds) : 0,
-        rejectQty: role === "quality" ? rejectQty : 0,
-        rejectionType: role === "quality" ? selectedRejectionType : "",
-        rejectionTypeCode: role === "quality" ? rejectionTypeCode : "",
-        rejectionReason: role === "quality" ? selectedRejectionReason : "",
-        rejectionReasonCode: role === "quality" ? rejectionReasonCode : "",
-        rejectionRemark: role === "quality" ? selectedRejectionRemark : "",
-        rejectionRemarkCode: role === "quality" ? rejectionRemarkCode : "",
+        rejectQty: isRejectionEntry ? rejectQty : 0,
+        rejectionType: isRejectionEntry ? selectedRejectionType : "",
+        rejectionTypeCode: isRejectionEntry ? rejectionTypeCode : "",
+        rejectionReason: isRejectionEntry ? selectedRejectionReason : "",
+        rejectionReasonCode: isRejectionEntry ? rejectionReasonCode : "",
+        rejectionRemark: isRejectionEntry ? selectedRejectionRemark : "",
+        rejectionRemarkCode: isRejectionEntry ? rejectionRemarkCode : "",
         grossWeight: role === "shopFloor" ? grossKg : 0,
         netWeight: role === "shopFloor" ? netProducedKg : 0,
         pieceWeight: role === "shopFloor" ? pieceWeightGram : 0,
@@ -4185,7 +4190,7 @@ function ProductionCardRoleEntryForm({
           <div className="text-xs text-muted-foreground">Select the machine first; item and setup details are filled from the current plan.</div>
         </div>
         {role === "shopFloor" ? <StatusBadge value={producedPcs > 0 ? `${formatNumber(producedPcs)} pcs` : "Production pending"} /> : null}
-        {role === "quality" ? <StatusBadge value={rejectQty > 0 ? `${formatNumber(rejectQty)} rejected pcs` : downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Quality pending"} /> : null}
+        {role === "quality" ? <StatusBadge value={isQualityRejectionEntry && rejectQty > 0 ? `${formatNumber(rejectQty)} rejected pcs` : isQualityDowntimeEntry && downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : qualityEntryKind ? "Quality pending" : "Select entry"} /> : null}
         {role === "machinist" ? <StatusBadge value={downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Downtime pending"} /> : null}
       </div>
       <div className="grid gap-2 md:grid-cols-3">
@@ -4269,18 +4274,40 @@ function ProductionCardRoleEntryForm({
               <ShopFloorItemSummary row={selectedRow} tone="current" compact />
             </div>
           ) : null}
-          <div className="grid gap-2 md:grid-cols-4">
-            <Field label="Downtime code">
-              <select className="h-8 rounded-md border bg-background px-2 text-sm" value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
-                <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add downtime reason master"}</option>
-                {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-              </select>
-            </Field>
-            <Field label="Downtime start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} /></Field>
-            <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} /></Field>
-            <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(downtimeDurationMinutes)} readOnly /></Field>
-          </div>
           {role === "quality" ? (
+            <div className="grid gap-2 rounded-md border bg-background p-2.5 sm:grid-cols-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={qualityEntryKind === "downtime" ? "default" : "outline"}
+                onClick={() => setQualityEntryKind("downtime")}
+              >
+                Downtime entry
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={qualityEntryKind === "rejection" ? "default" : "outline"}
+                onClick={() => setQualityEntryKind("rejection")}
+              >
+                Rejection entry
+              </Button>
+            </div>
+          ) : null}
+          {isDowntimeEntry ? (
+            <div className="grid gap-2 md:grid-cols-4">
+              <Field label="Downtime code">
+                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
+                  <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add downtime reason master"}</option>
+                  {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Downtime start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} /></Field>
+              <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} /></Field>
+              <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(downtimeDurationMinutes)} readOnly /></Field>
+            </div>
+          ) : null}
+          {isRejectionEntry ? (
             <div className="grid gap-2 rounded-md border bg-background p-2.5 md:grid-cols-4">
               <Field label="Rejection type">
                 <select className="h-8 rounded-md border bg-background px-2 text-sm" value={rejectionTypeCode} onChange={(event) => setRejectionTypeCode(event.target.value)}>
@@ -4303,13 +4330,14 @@ function ProductionCardRoleEntryForm({
               <Field label="Rejected pcs"><Input className="h-8" type="number" step="1" min="0" value={rejectedPieces} onChange={(event) => setRejectedPieces(event.target.value)} /></Field>
             </div>
           ) : null}
-
         </>
       ) : null}
-      <Button type="button" size="sm" className="w-fit" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
-        <CheckCircle2 className="size-4" />
-        {role === "shopFloor" ? "Save production" : role === "quality" ? "Save quality entry" : "Save downtime"}
-      </Button>
+      {role !== "quality" || qualityEntryKind ? (
+        <Button type="button" size="sm" className="w-fit" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
+          <CheckCircle2 className="size-4" />
+          {role === "shopFloor" ? "Save production" : isQualityRejectionEntry ? "Save rejection" : "Save downtime"}
+        </Button>
+      ) : null}
     </div>
   );
 }
