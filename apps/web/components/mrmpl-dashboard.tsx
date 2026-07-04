@@ -4021,8 +4021,8 @@ function ProductionCardRoleEntryForm({
             </div>
             <div className="grid gap-2 md:grid-cols-4">
               <Field label="Downtime code"><Input className="h-8" value={bulkDowntimeCode} onChange={(event) => setBulkDowntimeCode(event.target.value)} /></Field>
-              <Field label="Downtime start"><Input className="h-8" type="time" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(event.target.value)} /></Field>
-              <Field label="Downtime end"><Input className="h-8" type="time" value={bulkDowntimeEnd} onChange={(event) => setBulkDowntimeEnd(event.target.value)} /></Field>
+              <Field label="Downtime start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(time24Input(event.target.value))} /></Field>
+              <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeEnd} onChange={(event) => setBulkDowntimeEnd(time24Input(event.target.value))} /></Field>
               <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(bulkDowntimeMinutes)} readOnly /></Field>
             </div>
             <Button type="button" size="sm" variant="outline" className="w-fit" disabled={!canSaveBulkDowntime || isBulkSaving} onClick={() => void submitBulkDowntime()}>
@@ -4035,15 +4035,15 @@ function ProductionCardRoleEntryForm({
 
       {role === "quality" || role === "machinist" ? (
         <>
+          {selectedRow ? (
+            <div className="rounded-md border bg-background p-3">
+              <ShopFloorItemSummary row={selectedRow} tone="current" />
+            </div>
+          ) : null}
           <div className="grid gap-2 md:grid-cols-3">
-            <Field label="Item code"><Input className="h-8" value={selectedRow ? itemCode(selectedRow) : ""} readOnly /></Field>
-            <Field label="Job card"><Input className="h-8" value={selectedRow ? jobCardNumber(selectedRow) : ""} readOnly /></Field>
-            <Field label="Setup no."><Input className="h-8" value={displayValue(selectedRow?.setupNo)} readOnly /></Field>
-            <Field label="Option no."><Input className="h-8" value={displayValue(selectedRow?.optionNumber)} readOnly /></Field>
-            <Field label="Setup name"><Input className="h-8" value={displayValue(selectedRow?.setupName)} readOnly /></Field>
             <Field label="Downtime code"><Input className="h-8" value={downtimeCode} onChange={(event) => setDowntimeCode(event.target.value)} /></Field>
-            <Field label="Downtime start"><Input className="h-8" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></Field>
-            <Field label="Downtime end"><Input className="h-8" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></Field>
+            <Field label="Downtime start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} /></Field>
+            <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} /></Field>
             <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(downtimeDurationMinutes)} readOnly /></Field>
           </div>
           <TrackingSummary
@@ -7152,6 +7152,10 @@ function productionCycleSeconds(row: DashboardPayload) {
 
 function productionPieceWeightGrams(row: DashboardPayload) {
   return optionalNumber(row.operationWeight) ?? optionalNumber(row.stageWeight) ?? 0;
+}
+
+function time24Input(value: string) {
+  return value.replace(/[^0-9:]/g, "").slice(0, 5);
 }
 
 function productionCardRuntimeMinutes(prodDate: string, startTime: string, endTime: string) {
