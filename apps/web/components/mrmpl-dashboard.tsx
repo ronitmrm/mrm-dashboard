@@ -303,6 +303,17 @@ const dataEntrySpecs: DataEntrySpec[] = [
     ],
   },
   {
+    entryType: "downtime_reason_master",
+    title: "Downtime reason master",
+    description: "Downtime reason codes used by shop floor, quality, and machinist downtime entries.",
+    fields: [
+      { name: "code", label: "Downtime code", required: true },
+      { name: "reason", label: "Reason", required: true },
+      { name: "category", label: "Category" },
+      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      { name: "remark", label: "Remark" },
+    ],
+  },  {
     entryType: "software_raw",
     title: "Software production output",
     description: "Daily production rows from the shop-floor software.",
@@ -3328,6 +3339,7 @@ function RoleTaskPanel({
             role={role}
             rows={productionCardRows}
             onSaveProductionCard={saveProductionCard}
+            downtimeReasonRows={asArray(productionControl.downtimeReasonMasterRows)}
             bulkRows={role === "shopFloor" ? runningRows : []}
           />
           <TrackingSummary
@@ -3813,11 +3825,13 @@ function ProductionCardRoleEntryForm({
   role,
   rows,
   bulkRows = [],
+  downtimeReasonRows = [],
   onSaveProductionCard,
 }: {
   role: RoleTaskKind;
   rows: DashboardPayload[];
   bulkRows?: DashboardPayload[];
+  downtimeReasonRows?: DashboardPayload[];
   onSaveProductionCard: (row: DashboardPayload, card: DashboardPayload) => Promise<void>;
 }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -3851,6 +3865,15 @@ function ProductionCardRoleEntryForm({
       ? displayValue(row.machine)
       : `${machineValue(row, "machine")} / ${itemCode(row)} / ${jobCardNumber(row)} / setup ${displayValue(row.setupNo)}`,
   })), [role, rows]);
+  const downtimeReasonOptions = useMemo(() => downtimeReasonRows
+    .filter((row) => displayValue(row.status).toLowerCase() !== "inactive")
+    .map((row) => {
+      const code = displayValue(row.code || row.downtimeCode);
+      const reason = displayValue(row.reason || row.downtimeReason || row.description);
+      return { code, reason, label: reason !== "-" ? `${code} - ${reason}` : code };
+    })
+    .filter((row) => row.code && row.code !== "-"), [downtimeReasonRows]);
+  const downtimeReasonByCode = useMemo(() => new Map(downtimeReasonOptions.map((row) => [row.code, row.reason])), [downtimeReasonOptions]);
   const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey) ?? rows[0];
   const selectedOptionKey = selectedRow ? shopFloorPlanKey(selectedRow) : "";
   const defaultCycleSeconds = selectedRow ? productionCycleSeconds(selectedRow) : 0;
@@ -3869,6 +3892,8 @@ function ProductionCardRoleEntryForm({
   const bulkDowntimeMinutes = productionCardRuntimeMinutes(today, bulkDowntimeStart, bulkDowntimeEnd);
   const roleLabel = role === "shopFloor" ? "Shop floor production entry" : role === "quality" ? "Quality downtime entry" : "Machinist downtime entry";
   const hasShopFloorProduction = Boolean(operatorNumber && startTime && endTime && grossKg > 0 && pieceWeightGram > 0 && producedPcs > 0);
+  const selectedDowntimeReason = downtimeReasonByCode.get(downtimeCode) ?? downtimeCode;
+  const selectedBulkDowntimeReason = downtimeReasonByCode.get(bulkDowntimeCode) ?? bulkDowntimeCode;
   const hasDowntimeDetails = Boolean(downtimeCode && startTime && endTime && downtimeDurationMinutes > 0);
 
   const canSave = Boolean(selectedRow)
@@ -3895,7 +3920,7 @@ function ProductionCardRoleEntryForm({
         runtimeMinutes: role === "shopFloor" ? shopFloorRuntimeMinutes : downtimeDurationMinutes,
         breakMinutes: 0,
         downtimeMinutes: role === "shopFloor" ? 0 : downtimeDurationMinutes,
-        downtimeReason: role === "shopFloor" ? "" : downtimeCode,
+        downtimeReason: role === "shopFloor" ? "" : selectedDowntimeReason,
         downtimeCode: role === "shopFloor" ? "" : downtimeCode,
         outputQty: role === "shopFloor" ? producedPcs : 0,
         actualQty: role === "shopFloor" ? producedPcs : 0,
@@ -3953,7 +3978,7 @@ function ProductionCardRoleEntryForm({
           runtimeMinutes: bulkDowntimeMinutes,
           breakMinutes: 0,
           downtimeMinutes: bulkDowntimeMinutes,
-          downtimeReason: bulkDowntimeCode,
+          downtimeReason: selectedBulkDowntimeReason,
           downtimeCode: bulkDowntimeCode,
           outputQty: 0,
           actualQty: 0,
@@ -4049,7 +4074,12 @@ function ProductionCardRoleEntryForm({
               <StatusBadge value={`${formatNumber(bulkRows.length)} machines`} />
             </div>
             <div className="grid gap-2 md:grid-cols-4">
-              <Field label="Downtime code"><Input className="h-8" value={bulkDowntimeCode} onChange={(event) => setBulkDowntimeCode(event.target.value)} /></Field>
+              <Field label="Downtime code">
+                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={bulkDowntimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setBulkDowntimeCode(event.target.value)}>
+                  <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add downtime reason master"}</option>
+                  {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+                </select>
+              </Field>
               <Field label="Downtime start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(time24Input(event.target.value))} /></Field>
               <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeEnd} onChange={(event) => setBulkDowntimeEnd(time24Input(event.target.value))} /></Field>
               <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(bulkDowntimeMinutes)} readOnly /></Field>
@@ -4070,7 +4100,12 @@ function ProductionCardRoleEntryForm({
             </div>
           ) : null}
           <div className="grid gap-2 md:grid-cols-3">
-            <Field label="Downtime code"><Input className="h-8" value={downtimeCode} onChange={(event) => setDowntimeCode(event.target.value)} /></Field>
+            <Field label="Downtime code">
+              <select className="h-8 rounded-md border bg-background px-2 text-sm" value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
+                <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add downtime reason master"}</option>
+                {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+              </select>
+            </Field>
             <Field label="Downtime start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} /></Field>
             <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} /></Field>
             <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(downtimeDurationMinutes)} readOnly /></Field>
@@ -7102,6 +7137,7 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       payload.machine,
     ].map((value) => str(value).toLowerCase()).join("|");
   }
+  if (entryType === "downtime_reason_master") return str(payload.code).toLowerCase();
   if (entryType === "planning_holiday") {
     return [
       payload.date,
@@ -7485,6 +7521,13 @@ function formatCell(value: unknown): string {
   }
   return JSON.stringify(value);
 }
+
+
+
+
+
+
+
 
 
 

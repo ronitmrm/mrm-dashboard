@@ -267,6 +267,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const planningHolidayRows = latestEntryRowsByKey(entryRows(byType, "planning_holiday"), planningHolidayEntryKey);
   const setupChecklistRows = entryRows(byType, "setup_checklist");
   const setupChecklistMasterRows = entryRows(byType, "setup_checklist_master");
+  const downtimeReasonMasterRows = latestEntryRowsByKey(entryRows(byType, "downtime_reason_master"), downtimeReasonMasterEntryKey);
   const setupChecklistSessionRows = latestEntryRowsByKey(entryRows(byType, "setup_checklist_session"), setupChecklistSessionEntryKey);
   const productionCardRows = latestEntryRowsByKey(entryRows(byType, "production_card"), productionCardEntryKey);
   const shopFloorStatusRows = singleActiveShopFloorStatusRows(
@@ -291,6 +292,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     meetingRows,
     setupChecklistRows,
     setupChecklistMasterRows,
+    downtimeReasonMasterRows,
     setupChecklistSessionRows,
     productionCardRows,
     shopFloorStatusRows,
@@ -345,6 +347,7 @@ function buildProductionAnalysis({
   meetingRows,
   setupChecklistRows,
   setupChecklistMasterRows,
+  downtimeReasonMasterRows,
   setupChecklistSessionRows,
   productionCardRows,
   shopFloorStatusRows,
@@ -379,6 +382,7 @@ function buildProductionAnalysis({
   meetingRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
   setupChecklistMasterRows: Record<string, unknown>[];
+  downtimeReasonMasterRows: Record<string, unknown>[];
   setupChecklistSessionRows: Record<string, unknown>[];
   productionCardRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
@@ -692,6 +696,7 @@ function buildProductionAnalysis({
     dispatchRows,
     setupChecklistRows,
     setupChecklistMasterRows,
+    downtimeReasonMasterRows,
     setupChecklistSessionRows,
     productionCardRows,
     shopFloorStatusRows,
@@ -867,6 +872,7 @@ function buildProductionControl({
   dispatchRows,
   setupChecklistRows,
   setupChecklistMasterRows,
+  downtimeReasonMasterRows,
   setupChecklistSessionRows,
   productionCardRows,
   shopFloorStatusRows,
@@ -892,6 +898,7 @@ function buildProductionControl({
   dispatchRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
   setupChecklistMasterRows: Record<string, unknown>[];
+  downtimeReasonMasterRows: Record<string, unknown>[];
   setupChecklistSessionRows: Record<string, unknown>[];
   productionCardRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
@@ -1196,6 +1203,7 @@ function buildProductionControl({
     setupChecklistHistoryRows,
     setupChecklistMismatchRows,
     setupChecklistMasterRows,
+    downtimeReasonMasterRows,
     setupChecklistSessionRows,
     productionCardRows,
     firstPieceInspectionMasterRows,
@@ -1467,6 +1475,10 @@ function firstPieceReportEntryKey(row: Record<string, unknown>) {
     setupNo: rowText(row, "setupNo", "SETUP NO.", "SETUP NO", "SET UP"),
     machine: rowText(row, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO."),
   });
+}
+
+function downtimeReasonMasterEntryKey(row: Record<string, unknown>) {
+  return rowText(row, "code", "downtimeCode", "DOWNTIME CODE").toLowerCase();
 }
 
 function productionCardEntryKey(row: Record<string, unknown>) {
@@ -5244,3 +5256,6 @@ function themeRows(counts: Map<string, number>) {
     .sort((a, b) => b[1] - a[1])
     .map(([theme, count]) => ({ theme, count }));
 }
+
+
+
