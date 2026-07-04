@@ -2560,6 +2560,8 @@ function machinePlanDetails(
         totalOrderPcs: setupOrderPcs,
         cycleTime: safeNumber(rowValue(cycle ?? {}, "cycleTime", "CYCLE TIME")),
         loadingUnloading: safeNumber(rowValue(cycle ?? {}, "loadingUnloading", "LOADING AND UNLOADING")),
+        operationWeight: safeNumber(rowValue(cycle ?? {}, "operationWeight", "OPERATION WT.", "OPERATION WEIGHT")),
+        stageWeight: safeNumber(rowValue(route ?? {}, "stageWeight", "STAGE WT.", "STAGE WEIGHT")),
         rmStatus: rowText(row, "rmStatus"),
         routeStatus: rowText(row, "routeStatus"),
         cycleStatus: rowText(row, "cycleStatus"),

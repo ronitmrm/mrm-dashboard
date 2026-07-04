@@ -3221,13 +3221,12 @@ function RoleTaskPanel({
     : roleTaskCopy[role];
   const queueRows = useMemo(() => shopFloorQueueRows(productionControl), [productionControl]);
   const roleRows = useMemo(() => queueRows.filter((row) => roleTaskMatches(row, role)), [queueRows, role]);
+  const runningRows = useMemo(() => currentShopFloorRows(productionControl), [productionControl]);
   const productionCardRows = useMemo(() => {
     const taskRows = roleRows.map((row) => row.next).filter((row): row is DashboardPayload => Boolean(row));
-    const runningRows = role === "machinist" ? currentShopFloorRows(productionControl) : [];
-    const uniqueRows = new Map<string, DashboardPayload>();
-    [...runningRows, ...taskRows].forEach((row) => uniqueRows.set(shopFloorPlanKey(row), row));
-    return Array.from(uniqueRows.values());
-  }, [productionControl, role, roleRows]);
+    if (role === "shopFloor" || role === "machinist") return runningRows;
+    return taskRows;
+  }, [role, roleRows, runningRows]);
   const filteredRows = useMemo(() => roleRows.filter((row) =>
     typedFilterMatches(row.machine, machineFilter) &&
     typedFilterMatches(row.location, locationFilter) &&
@@ -3321,6 +3320,7 @@ function RoleTaskPanel({
             role={role}
             rows={productionCardRows}
             onSaveProductionCard={saveProductionCard}
+            bulkRows={role === "shopFloor" ? runningRows : []}
           />
           <TrackingSummary
             items={[
@@ -3801,50 +3801,62 @@ function ShopFloorRowAction({
 function ProductionCardRoleEntryForm({
   role,
   rows,
+  bulkRows = [],
   onSaveProductionCard,
 }: {
   role: RoleTaskKind;
   rows: DashboardPayload[];
+  bulkRows?: DashboardPayload[];
   onSaveProductionCard: (row: DashboardPayload, card: DashboardPayload) => Promise<void>;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [selectedKey, setSelectedKey] = useState("");
   const [prodDate, setProdDate] = useState(today);
   const [shift, setShift] = useState("Day");
+  const [operatorNumber, setOperatorNumber] = useState("");
   const [qcName, setQcName] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-  const [downtimeReason, setDowntimeReason] = useState("");
+  const [producedGrossKg, setProducedGrossKg] = useState("");
+  const [cratesUsed, setCratesUsed] = useState("");
   const [downtimeCode, setDowntimeCode] = useState("");
+  const [bulkDowntimeCode, setBulkDowntimeCode] = useState("");
+  const [bulkDowntimeStart, setBulkDowntimeStart] = useState("");
+  const [bulkDowntimeEnd, setBulkDowntimeEnd] = useState("");
   const [rejectQty, setRejectQty] = useState("0");
   const [rejectionType, setRejectionType] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [rejectionRemark, setRejectionRemark] = useState("");
-  const [shopFloorChecks, setShopFloorChecks] = useState<Record<string, boolean>>({});
+
   const [qcApproval, setQcApproval] = useState("Approved");
   const [remarks, setRemarks] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
   const rowOptions = useMemo(() => rows.map((row) => ({
     key: shopFloorPlanKey(row),
-    label: role === "machinist"
+    label: role === "shopFloor" || role === "machinist"
       ? displayValue(row.machine)
       : `${machineValue(row, "machine")} / ${itemCode(row)} / ${jobCardNumber(row)} / setup ${displayValue(row.setupNo)}`,
   })), [role, rows]);
   const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey) ?? rows[0];
   const selectedOptionKey = selectedRow ? shopFloorPlanKey(selectedRow) : "";
+  const cycleSeconds = selectedRow ? productionCycleSeconds(selectedRow) : 0;
+  const pieceWeightGram = selectedRow ? productionPieceWeightGrams(selectedRow) : 0;
+  const grossKg = numeric(producedGrossKg);
+  const crateCount = numeric(cratesUsed);
+  const crateTareKg = 1;
+  const netProducedKg = Math.max(grossKg - (crateCount * crateTareKg), 0);
+  const producedPcs = pieceWeightGram > 0 ? Math.floor((netProducedKg * 1000) / pieceWeightGram) : 0;
+  const shopFloorRuntimeMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
   const downtimeDurationMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
-  const roleLabel = role === "shopFloor" ? "Shop floor production card" : role === "quality" ? "Quality production card" : "Machinist downtime entry";
-  const hasShopFloorDetails = Object.values(shopFloorChecks).some(Boolean) || Boolean(downtimeReason || remarks);
+  const bulkDowntimeMinutes = productionCardRuntimeMinutes(today, bulkDowntimeStart, bulkDowntimeEnd);
+  const roleLabel = role === "shopFloor" ? "Shop floor production entry" : role === "quality" ? "Quality production card" : "Machinist downtime entry";
+  const hasShopFloorProduction = Boolean(operatorNumber && startTime && endTime && grossKg > 0 && pieceWeightGram > 0 && producedPcs > 0);
   const hasQualityDetails = Boolean(qcName && qcApproval);
   const hasMachinistDowntime = Boolean(downtimeCode && startTime && endTime && downtimeDurationMinutes > 0);
   const canSave = Boolean(selectedRow)
-    && (role === "shopFloor" ? hasShopFloorDetails : role === "quality" ? hasQualityDetails : hasMachinistDowntime);
-
-
-
-  function updateShopFloorCheck(key: string, checked: boolean) {
-    setShopFloorChecks((current) => ({ ...current, [key]: checked }));
-  }
+    && (role === "shopFloor" ? hasShopFloorProduction : role === "quality" ? hasQualityDetails : hasMachinistDowntime);
+  const canSaveBulkDowntime = role === "shopFloor" && bulkRows.length > 0 && Boolean(bulkDowntimeCode && bulkDowntimeStart && bulkDowntimeEnd && bulkDowntimeMinutes > 0);
 
   async function submitProductionCard() {
     if (!selectedRow || !canSave || isSaving) return;
@@ -3852,37 +3864,45 @@ function ProductionCardRoleEntryForm({
     try {
       await onSaveProductionCard(selectedRow, {
         cardRole: role,
-        writeProductionOutput: false,
+        writeProductionOutput: role === "shopFloor",
         prodDate,
         shift,
-        operatorId: "",
+        operatorId: role === "shopFloor" ? operatorNumber : "",
         operatorName: "",
         qcName,
         startTime,
         endTime,
-        runtimeMinutes: role === "machinist" ? downtimeDurationMinutes : 0,
+        runtimeMinutes: role === "shopFloor" ? shopFloorRuntimeMinutes : role === "machinist" ? downtimeDurationMinutes : 0,
         breakMinutes: 0,
         downtimeMinutes: role === "machinist" ? downtimeDurationMinutes : 0,
-        downtimeReason,
-        downtimeCode,
-        outputQty: 0,
-        actualQty: 0,
+        downtimeReason: role === "machinist" ? downtimeCode : "",
+        downtimeCode: role === "machinist" ? downtimeCode : "",
+        outputQty: role === "shopFloor" ? producedPcs : 0,
+        actualQty: role === "shopFloor" ? producedPcs : 0,
         targetQty: 0,
         rejectQty: numeric(rejectQty),
         rejectionType,
         rejectionReason,
         rejectionRemark,
-        grossWeight: 0,
-        netWeight: 0,
-        pieceWeight: 0,
+        grossWeight: role === "shopFloor" ? grossKg : 0,
+        netWeight: role === "shopFloor" ? netProducedKg : 0,
+        pieceWeight: role === "shopFloor" ? pieceWeightGram : 0,
+        cratesUsed: role === "shopFloor" ? crateCount : 0,
+        producedPcs: role === "shopFloor" ? producedPcs : 0,
         settingQty: 0,
         toolingCheck: {},
-        shopFloorChecks,
+        shopFloorChecks: {},
         qcApproval,
         remarks,
         efficiency: 0,
       });
       setRemarks("");
+      if (role === "shopFloor") {
+        setStartTime("");
+        setEndTime("");
+        setProducedGrossKg("");
+        setCratesUsed("");
+      }
       if (role === "machinist") {
         setDowntimeCode("");
         setStartTime("");
@@ -3893,6 +3913,55 @@ function ProductionCardRoleEntryForm({
     }
   }
 
+  async function submitBulkDowntime() {
+    if (!canSaveBulkDowntime || isBulkSaving) return;
+    setIsBulkSaving(true);
+    try {
+      for (const row of bulkRows) {
+        await onSaveProductionCard(row, {
+          cardRole: "shopFloor",
+          bulkDowntime: true,
+          writeProductionOutput: false,
+          prodDate: today,
+          shift: "Bulk",
+          operatorId: "",
+          operatorName: "",
+          qcName: "",
+          startTime: bulkDowntimeStart,
+          endTime: bulkDowntimeEnd,
+          runtimeMinutes: bulkDowntimeMinutes,
+          breakMinutes: 0,
+          downtimeMinutes: bulkDowntimeMinutes,
+          downtimeReason: bulkDowntimeCode,
+          downtimeCode: bulkDowntimeCode,
+          outputQty: 0,
+          actualQty: 0,
+          targetQty: 0,
+          rejectQty: 0,
+          rejectionType: "",
+          rejectionReason: "",
+          rejectionRemark: "",
+          grossWeight: 0,
+          netWeight: 0,
+          pieceWeight: productionPieceWeightGrams(row),
+          cratesUsed: 0,
+          producedPcs: 0,
+          settingQty: 0,
+          toolingCheck: {},
+          shopFloorChecks: {},
+          qcApproval: "",
+          remarks: "Bulk downtime",
+          efficiency: 0,
+        });
+      }
+      setBulkDowntimeCode("");
+      setBulkDowntimeStart("");
+      setBulkDowntimeEnd("");
+    } finally {
+      setIsBulkSaving(false);
+    }
+  }
+
   return (
     <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -3900,15 +3969,16 @@ function ProductionCardRoleEntryForm({
           <div className="text-sm font-medium">{roleLabel}</div>
           <div className="text-xs text-muted-foreground">Select the machine first; item and setup details are filled from the current plan.</div>
         </div>
+        {role === "shopFloor" ? <StatusBadge value={producedPcs > 0 ? `${formatNumber(producedPcs)} pcs` : "Production pending"} /> : null}
         {role === "machinist" ? <StatusBadge value={downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Downtime pending"} /> : null}
       </div>
       <div className="grid gap-2 md:grid-cols-3">
-        <Field label={role === "machinist" ? "Machine no." : "Machine / item"}>
+        <Field label={role === "shopFloor" || role === "machinist" ? "Machine no." : "Machine / item"}>
           <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
             {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
           </select>
         </Field>
-        {role !== "machinist" ? (
+        {role === "quality" ? (
           <>
             <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
             <Field label="Shift">
@@ -3922,16 +3992,46 @@ function ProductionCardRoleEntryForm({
         ) : null}
       </div>
       {role === "shopFloor" ? (
-        <div className="grid gap-2 md:grid-cols-3">
-          {["No RM", "No operator", "No electricity", "Maintenance", "Other"].map((key) => (
-            <label key={key} className="flex h-8 items-center gap-2 rounded-md border bg-background px-2 text-sm">
-              <input type="checkbox" checked={Boolean(shopFloorChecks[key])} onChange={(event) => updateShopFloorCheck(key, event.target.checked)} />
-              {key}
-            </label>
-          ))}
-          <Field label="Downtime reason"><Input className="h-8" value={downtimeReason} onChange={(event) => setDowntimeReason(event.target.value)} /></Field>
-          <Field label="Remarks"><Input className="h-8" value={remarks} onChange={(event) => setRemarks(event.target.value)} /></Field>
-        </div>
+        <>
+          <div className="grid gap-2 md:grid-cols-3">
+            <Field label="Item code"><Input className="h-8" value={selectedRow ? itemCode(selectedRow) : ""} readOnly /></Field>
+            <Field label="Job card"><Input className="h-8" value={selectedRow ? jobCardNumber(selectedRow) : ""} readOnly /></Field>
+            <Field label="Setup no."><Input className="h-8" value={displayValue(selectedRow?.setupNo)} readOnly /></Field>
+            <Field label="Cycle time sec"><Input className="h-8" value={formatNumber(cycleSeconds)} readOnly /></Field>
+            <Field label="1 piece weight gm"><Input className="h-8" value={formatNumber(pieceWeightGram)} readOnly /></Field>
+            <Field label="Operator number"><Input className="h-8" value={operatorNumber} onChange={(event) => setOperatorNumber(event.target.value)} /></Field>
+            <Field label="Machine start"><Input className="h-8" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></Field>
+            <Field label="Machine end"><Input className="h-8" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></Field>
+            <Field label="Produced kg gross"><Input className="h-8" type="number" step="0.001" value={producedGrossKg} onChange={(event) => setProducedGrossKg(event.target.value)} /></Field>
+            <Field label="Crates used"><Input className="h-8" type="number" step="1" value={cratesUsed} onChange={(event) => setCratesUsed(event.target.value)} /></Field>
+            <Field label="Net produced kg"><Input className="h-8" value={formatNumber(netProducedKg)} readOnly /></Field>
+            <Field label="Produced pcs"><Input className="h-8" value={formatNumber(producedPcs)} readOnly /></Field>
+          </div>
+          <TrackingSummary
+            items={[
+              ["Runtime", `${formatNumber(shopFloorRuntimeMinutes)} min`],
+              ["Gross kg", formatNumber(grossKg)],
+              ["Net kg", formatNumber(netProducedKg)],
+              ["Produced pcs", formatNumber(producedPcs)],
+            ]}
+          />
+          <div className="grid gap-3 rounded-md border bg-background p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm font-medium">Bulk downtime for running machines</div>
+              <StatusBadge value={`${formatNumber(bulkRows.length)} machines`} />
+            </div>
+            <div className="grid gap-2 md:grid-cols-4">
+              <Field label="Downtime code"><Input className="h-8" value={bulkDowntimeCode} onChange={(event) => setBulkDowntimeCode(event.target.value)} /></Field>
+              <Field label="Downtime start"><Input className="h-8" type="time" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(event.target.value)} /></Field>
+              <Field label="Downtime end"><Input className="h-8" type="time" value={bulkDowntimeEnd} onChange={(event) => setBulkDowntimeEnd(event.target.value)} /></Field>
+              <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(bulkDowntimeMinutes)} readOnly /></Field>
+            </div>
+            <Button type="button" size="sm" variant="outline" className="w-fit" disabled={!canSaveBulkDowntime || isBulkSaving} onClick={() => void submitBulkDowntime()}>
+              <CheckCircle2 className="size-4" />
+              Save downtime for running machines
+            </Button>
+          </div>
+        </>
       ) : null}
       {role === "quality" ? (
         <div className="grid gap-2 md:grid-cols-3">
@@ -3974,11 +4074,12 @@ function ProductionCardRoleEntryForm({
       ) : null}
       <Button type="button" size="sm" className="w-fit" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
         <CheckCircle2 className="size-4" />
-        {role === "machinist" ? "Save downtime" : "Save production card"}
+        {role === "shopFloor" ? "Save production" : role === "machinist" ? "Save downtime" : "Save production card"}
       </Button>
     </div>
   );
 }
+
 function SetupChecklistForm({
   row,
   phase,
@@ -7042,6 +7143,8 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
     grossWeight: optionalNumber(card.grossWeight) ?? 0,
     netWeight: optionalNumber(card.netWeight) ?? 0,
     pieceWeight: optionalNumber(card.pieceWeight) ?? 0,
+    cratesUsed: optionalNumber(card.cratesUsed) ?? 0,
+    producedPcs: optionalNumber(card.producedPcs) ?? optionalNumber(card.actualQty) ?? optionalNumber(card.outputQty) ?? 0,
     settingQty: optionalNumber(card.settingQty) ?? 0,
     toolingCheck: asRecord(card.toolingCheck),
     shopFloorChecks: asRecord(card.shopFloorChecks),
@@ -7057,6 +7160,14 @@ function productionCardId(row: DashboardPayload, card: DashboardPayload) {
   return [card.cardRole, card.prodDate, jobCardNumber(row), itemCode(row), row.setupNo, row.machine, card.downtimeCode, card.startTime, card.endTime]
     .map((value) => str(value).toLowerCase())
     .join("|");
+}
+
+function productionCycleSeconds(row: DashboardPayload) {
+  return (optionalNumber(row.cycleTime) ?? 0) + (optionalNumber(row.loadingUnloading) ?? 0);
+}
+
+function productionPieceWeightGrams(row: DashboardPayload) {
+  return optionalNumber(row.operationWeight) ?? optionalNumber(row.stageWeight) ?? 0;
 }
 
 function productionCardRuntimeMinutes(prodDate: string, startTime: string, endTime: string) {
