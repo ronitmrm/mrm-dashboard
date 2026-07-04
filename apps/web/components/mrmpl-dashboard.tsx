@@ -313,6 +313,39 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
+  },
+  {
+    entryType: "rejection_type_master",
+    title: "Rejection type master",
+    description: "Quality rejection type codes used in QC rejection entry.",
+    fields: [
+      { name: "code", label: "Code", required: true },
+      { name: "typeOfRejection", label: "Type of rejection", required: true },
+      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      { name: "remark", label: "Remark" },
+    ],
+  },
+  {
+    entryType: "rejection_remark_master",
+    title: "Rejection remark master",
+    description: "Quality rejection remark codes used in QC rejection entry.",
+    fields: [
+      { name: "code", label: "Code", required: true },
+      { name: "rejectionRemark", label: "Rejection remark", required: true },
+      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      { name: "remark", label: "Remark" },
+    ],
+  },
+  {
+    entryType: "rejection_reason_master",
+    title: "Rejection reason master",
+    description: "Defect/rejection reason codes used in QC rejection entry.",
+    fields: [
+      { name: "code", label: "Code", required: true },
+      { name: "rejectionReason", label: "Rejection reason", required: true },
+      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      { name: "remark", label: "Remark" },
+    ],
   },  {
     entryType: "software_raw",
     title: "Software production output",
@@ -3340,6 +3373,9 @@ function RoleTaskPanel({
             rows={productionCardRows}
             onSaveProductionCard={saveProductionCard}
             downtimeReasonRows={asArray(productionControl.downtimeReasonMasterRows)}
+            rejectionTypeRows={asArray(productionControl.rejectionTypeMasterRows)}
+            rejectionReasonRows={asArray(productionControl.rejectionReasonMasterRows)}
+            rejectionRemarkRows={asArray(productionControl.rejectionRemarkMasterRows)}
             bulkRows={role === "shopFloor" ? runningRows : []}
           />
           <TrackingSummary
@@ -3835,17 +3871,117 @@ function ShopFloorRowAction({
 const DEFAULT_CRATE_WEIGHT_KG = 1.1;
 const CRATE_WEIGHT_OPTIONS_KG = [1.1, 1.25, 1.5, 2];
 
+const DEFAULT_REJECTION_TYPE_OPTIONS = [
+  { code: "T1", label: "Quality Process Rejection" },
+  { code: "T2", label: "Quality Control Rejection" },
+  { code: "T3", label: "Setup Rejection" },
+  { code: "T4", label: "In Process Setup Rejection" },
+];
+
+const DEFAULT_REJECTION_REMARK_OPTIONS = [
+  { code: "R1", label: "Machine Malfunction" },
+  { code: "R2", label: "Machine Setting Issue" },
+  { code: "R3", label: "Operator Error" },
+  { code: "R4", label: "Drawing Error" },
+  { code: "R5", label: "Parameter Missed" },
+  { code: "R6", label: "Measuring Instrument Issue" },
+  { code: "R7", label: "QC Inspection Error" },
+];
+
+const DEFAULT_REJECTION_REASON_OPTIONS = [
+  { code: "D1", label: "Length Short" },
+  { code: "D2", label: "Raw Material Defect" },
+  { code: "D3", label: "Thread Missing" },
+  { code: "D4", label: "Operation Incomplete" },
+  { code: "D5", label: "Tap Marks" },
+  { code: "D6", label: "Flat Barb" },
+  { code: "D7", label: "Hex Bent" },
+  { code: "D8", label: "Step in Hole" },
+  { code: "D9", label: "Incomplete Hole" },
+  { code: "D10", label: "Dent on Thread" },
+  { code: "D11", label: "Forging Defect" },
+  { code: "D12", label: "Thread Gauge Fail" },
+  { code: "D13", label: "Hole Missing" },
+  { code: "D14", label: "Dent on Degree" },
+  { code: "D15", label: "Plating Defect" },
+  { code: "D16", label: "Knurling Defect" },
+  { code: "D17", label: "Broken Part" },
+  { code: "D18", label: "Dent on Face" },
+  { code: "D19", label: "Coating Defect" },
+  { code: "D20", label: "Hole Shifted" },
+  { code: "D21", label: "Thread Not Straight" },
+  { code: "D22", label: "Vibration on Thread" },
+  { code: "D23", label: "Incomplete Thread" },
+  { code: "D24", label: "Flat Thread" },
+  { code: "D25", label: "Face Uneven" },
+  { code: "D26", label: "Turning Bent" },
+  { code: "D27", label: "Vibration on Face" },
+  { code: "D28", label: "Dent on Hex" },
+  { code: "D29", label: "Burr on Hex" },
+  { code: "D30", label: "Vibration on Barb" },
+  { code: "D31", label: "Dent on Barb" },
+  { code: "D32", label: "Barb Deformed" },
+  { code: "D33", label: "Burr on Barb" },
+  { code: "D34", label: "Dent on Turning" },
+  { code: "D35", label: "Vibration on Turning" },
+  { code: "D36", label: "Burr in Hole" },
+  { code: "D37", label: "Vibration in Hole" },
+  { code: "D38", label: "Die Marks" },
+  { code: "D39", label: "Vibration on Degree" },
+  { code: "D40", label: "Degree Bent" },
+  { code: "D41", label: "Outer Diameter Plus" },
+  { code: "D42", label: "Outer Diameter Minus" },
+  { code: "D43", label: "Cross Cutting" },
+  { code: "D44", label: "Degree Plus" },
+  { code: "D45", label: "Degree Minus" },
+  { code: "D46", label: "Burr On Thread" },
+  { code: "D47", label: "Burr On Degree" },
+  { code: "D48", label: "Width Plus" },
+  { code: "D49", label: "Lining Mark In Hole" },
+  { code: "D50", label: "Step Length Short" },
+  { code: "D51", label: "Width Minus" },
+  { code: "D52", label: "Length Plus" },
+  { code: "D53", label: "Barb Diameter Plus" },
+  { code: "D54", label: "Barb Diameter Minus" },
+  { code: "D55", label: "Barb Length Plus" },
+  { code: "D56", label: "Barb Length Minus" },
+  { code: "D57", label: "Inner Diameter Plus" },
+  { code: "D58", label: "Inner Diameter Minus" },
+];
+
+function codedMasterOptions(rows: DashboardPayload[], defaults: Array<{ code: string; label: string }>, labelFields: string[]) {
+  const options = new Map(defaults.map((option) => [option.code, option]));
+  for (const row of rows) {
+    if (displayValue(row.status).toLowerCase() === "inactive") continue;
+    const code = displayValue(row.code);
+    if (!code || code === "-") continue;
+    const label = labelFields.map((field) => displayValue(row[field])).find((value) => value && value !== "-") ?? code;
+    options.set(code, { code, label });
+  }
+  return [...options.values()];
+}
+
+function codedMasterLabel(options: Array<{ code: string; label: string }>, code: string) {
+  return options.find((option) => option.code === code)?.label ?? code;
+}
+
 function ProductionCardRoleEntryForm({
   role,
   rows,
   bulkRows = [],
   downtimeReasonRows = [],
+  rejectionTypeRows = [],
+  rejectionReasonRows = [],
+  rejectionRemarkRows = [],
   onSaveProductionCard,
 }: {
   role: RoleTaskKind;
   rows: DashboardPayload[];
   bulkRows?: DashboardPayload[];
   downtimeReasonRows?: DashboardPayload[];
+  rejectionTypeRows?: DashboardPayload[];
+  rejectionReasonRows?: DashboardPayload[];
+  rejectionRemarkRows?: DashboardPayload[];
   onSaveProductionCard: (row: DashboardPayload, card: DashboardPayload) => Promise<void>;
 }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -3865,6 +4001,10 @@ function ProductionCardRoleEntryForm({
   const [bulkDowntimeCode, setBulkDowntimeCode] = useState("");
   const [bulkDowntimeStart, setBulkDowntimeStart] = useState("");
   const [bulkDowntimeEnd, setBulkDowntimeEnd] = useState("");
+  const [rejectionTypeCode, setRejectionTypeCode] = useState("");
+  const [rejectionReasonCode, setRejectionReasonCode] = useState("");
+  const [rejectionRemarkCode, setRejectionRemarkCode] = useState("");
+  const [rejectedPieces, setRejectedPieces] = useState("");
 
 
 
@@ -3888,6 +4028,9 @@ function ProductionCardRoleEntryForm({
     })
     .filter((row) => row.code && row.code !== "-"), [downtimeReasonRows]);
   const downtimeReasonByCode = useMemo(() => new Map(downtimeReasonOptions.map((row) => [row.code, row.reason])), [downtimeReasonOptions]);
+  const rejectionTypeOptions = useMemo(() => codedMasterOptions(rejectionTypeRows, DEFAULT_REJECTION_TYPE_OPTIONS, ["typeOfRejection", "rejectionType", "name"]), [rejectionTypeRows]);
+  const rejectionReasonOptions = useMemo(() => codedMasterOptions(rejectionReasonRows, DEFAULT_REJECTION_REASON_OPTIONS, ["rejectionReason", "reason", "name"]), [rejectionReasonRows]);
+  const rejectionRemarkOptions = useMemo(() => codedMasterOptions(rejectionRemarkRows, DEFAULT_REJECTION_REMARK_OPTIONS, ["rejectionRemark", "remark", "name"]), [rejectionRemarkRows]);
   const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey) ?? rows[0];
   const selectedOptionKey = selectedRow ? shopFloorPlanKey(selectedRow) : "";
   const defaultCycleSeconds = selectedRow ? productionCycleSeconds(selectedRow) : 0;
@@ -3904,14 +4047,19 @@ function ProductionCardRoleEntryForm({
   const shopFloorRuntimeMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
   const downtimeDurationMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
   const bulkDowntimeMinutes = productionCardRuntimeMinutes(today, bulkDowntimeStart, bulkDowntimeEnd);
-  const roleLabel = role === "shopFloor" ? "Shop floor production entry" : role === "quality" ? "Quality downtime entry" : "Machinist downtime entry";
+  const roleLabel = role === "shopFloor" ? "Shop floor production entry" : role === "quality" ? "Quality control entry" : "Machinist downtime entry";
   const hasShopFloorProduction = Boolean(operatorNumber && startTime && endTime && grossKg > 0 && pieceWeightGram > 0 && producedPcs > 0);
   const selectedDowntimeReason = downtimeReasonByCode.get(downtimeCode) ?? downtimeCode;
   const selectedBulkDowntimeReason = downtimeReasonByCode.get(bulkDowntimeCode) ?? bulkDowntimeCode;
+  const selectedRejectionType = codedMasterLabel(rejectionTypeOptions, rejectionTypeCode);
+  const selectedRejectionReason = codedMasterLabel(rejectionReasonOptions, rejectionReasonCode);
+  const selectedRejectionRemark = codedMasterLabel(rejectionRemarkOptions, rejectionRemarkCode);
+  const rejectQty = numeric(rejectedPieces);
   const hasDowntimeDetails = Boolean(downtimeCode && startTime && endTime && downtimeDurationMinutes > 0);
+  const hasQualityRejectionDetails = role === "quality" && Boolean(rejectionTypeCode && rejectionReasonCode && rejectionRemarkCode && rejectQty > 0);
 
   const canSave = Boolean(selectedRow)
-    && (role === "shopFloor" ? hasShopFloorProduction : hasDowntimeDetails);
+    && (role === "shopFloor" ? hasShopFloorProduction : role === "quality" ? (hasDowntimeDetails || hasQualityRejectionDetails) : hasDowntimeDetails);
   const canSaveBulkDowntime = role === "shopFloor" && bulkRows.length > 0 && Boolean(bulkDowntimeCode && bulkDowntimeStart && bulkDowntimeEnd && bulkDowntimeMinutes > 0);
 
 
@@ -3931,18 +4079,21 @@ function ProductionCardRoleEntryForm({
         loadingUnloading: 0,
         startTime,
         endTime,
-        runtimeMinutes: role === "shopFloor" ? shopFloorRuntimeMinutes : downtimeDurationMinutes,
+        runtimeMinutes: role === "shopFloor" ? shopFloorRuntimeMinutes : hasDowntimeDetails ? downtimeDurationMinutes : 0,
         breakMinutes: 0,
-        downtimeMinutes: role === "shopFloor" ? 0 : downtimeDurationMinutes,
-        downtimeReason: role === "shopFloor" ? "" : selectedDowntimeReason,
-        downtimeCode: role === "shopFloor" ? "" : downtimeCode,
+        downtimeMinutes: role === "shopFloor" ? 0 : hasDowntimeDetails ? downtimeDurationMinutes : 0,
+        downtimeReason: role === "shopFloor" || !hasDowntimeDetails ? "" : selectedDowntimeReason,
+        downtimeCode: role === "shopFloor" || !hasDowntimeDetails ? "" : downtimeCode,
         outputQty: role === "shopFloor" ? producedPcs : 0,
         actualQty: role === "shopFloor" ? producedPcs : 0,
         targetQty: role === "shopFloor" && cycleSeconds > 0 && shopFloorRuntimeMinutes > 0 ? Math.floor((shopFloorRuntimeMinutes * 60) / cycleSeconds) : 0,
-        rejectQty: 0,
-        rejectionType: "",
-        rejectionReason: "",
-        rejectionRemark: "",
+        rejectQty: role === "quality" ? rejectQty : 0,
+        rejectionType: role === "quality" ? selectedRejectionType : "",
+        rejectionTypeCode: role === "quality" ? rejectionTypeCode : "",
+        rejectionReason: role === "quality" ? selectedRejectionReason : "",
+        rejectionReasonCode: role === "quality" ? rejectionReasonCode : "",
+        rejectionRemark: role === "quality" ? selectedRejectionRemark : "",
+        rejectionRemarkCode: role === "quality" ? rejectionRemarkCode : "",
         grossWeight: role === "shopFloor" ? grossKg : 0,
         netWeight: role === "shopFloor" ? netProducedKg : 0,
         pieceWeight: role === "shopFloor" ? pieceWeightGram : 0,
@@ -3967,6 +4118,10 @@ function ProductionCardRoleEntryForm({
         setDowntimeCode("");
         setStartTime("");
         setEndTime("");
+        setRejectionTypeCode("");
+        setRejectionReasonCode("");
+        setRejectionRemarkCode("");
+        setRejectedPieces("");
       }
     } finally {
       setIsSaving(false);
@@ -4030,7 +4185,8 @@ function ProductionCardRoleEntryForm({
           <div className="text-xs text-muted-foreground">Select the machine first; item and setup details are filled from the current plan.</div>
         </div>
         {role === "shopFloor" ? <StatusBadge value={producedPcs > 0 ? `${formatNumber(producedPcs)} pcs` : "Production pending"} /> : null}
-        {role === "quality" || role === "machinist" ? <StatusBadge value={downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Downtime pending"} /> : null}
+        {role === "quality" ? <StatusBadge value={rejectQty > 0 ? `${formatNumber(rejectQty)} rejected pcs` : downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Quality pending"} /> : null}
+        {role === "machinist" ? <StatusBadge value={downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Downtime pending"} /> : null}
       </div>
       <div className="grid gap-2 md:grid-cols-3">
         <Field label={role === "shopFloor" || role === "quality" || role === "machinist" ? "Machine no." : "Machine / item"}>
@@ -4124,12 +4280,35 @@ function ProductionCardRoleEntryForm({
             <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} /></Field>
             <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(downtimeDurationMinutes)} readOnly /></Field>
           </div>
+          {role === "quality" ? (
+            <div className="grid gap-2 rounded-md border bg-background p-2.5 md:grid-cols-4">
+              <Field label="Rejection type">
+                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={rejectionTypeCode} onChange={(event) => setRejectionTypeCode(event.target.value)}>
+                  <option value="">Select type</option>
+                  {rejectionTypeOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Rejection reason">
+                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}>
+                  <option value="">Select reason</option>
+                  {rejectionReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Rejection remark">
+                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={rejectionRemarkCode} onChange={(event) => setRejectionRemarkCode(event.target.value)}>
+                  <option value="">Select remark</option>
+                  {rejectionRemarkOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Rejected pcs"><Input className="h-8" type="number" step="1" min="0" value={rejectedPieces} onChange={(event) => setRejectedPieces(event.target.value)} /></Field>
+            </div>
+          ) : null}
 
         </>
       ) : null}
       <Button type="button" size="sm" className="w-fit" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
         <CheckCircle2 className="size-4" />
-        {role === "shopFloor" ? "Save production" : "Save downtime"}
+        {role === "shopFloor" ? "Save production" : role === "quality" ? "Save quality entry" : "Save downtime"}
       </Button>
     </div>
   );
@@ -7144,7 +7323,7 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       payload.machine,
     ].map((value) => str(value).toLowerCase()).join("|");
   }
-  if (entryType === "downtime_reason_master") return str(payload.code).toLowerCase();
+  if (entryType === "downtime_reason_master" || entryType === "rejection_type_master" || entryType === "rejection_reason_master" || entryType === "rejection_remark_master") return str(payload.code).toLowerCase();
   if (entryType === "planning_holiday") {
     return [
       payload.date,
@@ -7528,6 +7707,20 @@ function formatCell(value: unknown): string {
   }
   return JSON.stringify(value);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

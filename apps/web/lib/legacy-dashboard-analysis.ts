@@ -268,6 +268,9 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const setupChecklistRows = entryRows(byType, "setup_checklist");
   const setupChecklistMasterRows = entryRows(byType, "setup_checklist_master");
   const downtimeReasonMasterRows = latestEntryRowsByKey(entryRows(byType, "downtime_reason_master"), downtimeReasonMasterEntryKey);
+  const rejectionTypeMasterRows = latestEntryRowsByKey(entryRows(byType, "rejection_type_master"), rejectionMasterEntryKey);
+  const rejectionReasonMasterRows = latestEntryRowsByKey(entryRows(byType, "rejection_reason_master"), rejectionMasterEntryKey);
+  const rejectionRemarkMasterRows = latestEntryRowsByKey(entryRows(byType, "rejection_remark_master"), rejectionMasterEntryKey);
   const setupChecklistSessionRows = latestEntryRowsByKey(entryRows(byType, "setup_checklist_session"), setupChecklistSessionEntryKey);
   const productionCardRows = latestEntryRowsByKey(entryRows(byType, "production_card"), productionCardEntryKey);
   const shopFloorStatusRows = singleActiveShopFloorStatusRows(
@@ -293,6 +296,9 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     setupChecklistRows,
     setupChecklistMasterRows,
     downtimeReasonMasterRows,
+    rejectionTypeMasterRows,
+    rejectionReasonMasterRows,
+    rejectionRemarkMasterRows,
     setupChecklistSessionRows,
     productionCardRows,
     shopFloorStatusRows,
@@ -348,6 +354,9 @@ function buildProductionAnalysis({
   setupChecklistRows,
   setupChecklistMasterRows,
   downtimeReasonMasterRows,
+  rejectionTypeMasterRows,
+  rejectionReasonMasterRows,
+  rejectionRemarkMasterRows,
   setupChecklistSessionRows,
   productionCardRows,
   shopFloorStatusRows,
@@ -383,6 +392,9 @@ function buildProductionAnalysis({
   setupChecklistRows: Record<string, unknown>[];
   setupChecklistMasterRows: Record<string, unknown>[];
   downtimeReasonMasterRows: Record<string, unknown>[];
+  rejectionTypeMasterRows: Record<string, unknown>[];
+  rejectionReasonMasterRows: Record<string, unknown>[];
+  rejectionRemarkMasterRows: Record<string, unknown>[];
   setupChecklistSessionRows: Record<string, unknown>[];
   productionCardRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
@@ -697,6 +709,9 @@ function buildProductionAnalysis({
     setupChecklistRows,
     setupChecklistMasterRows,
     downtimeReasonMasterRows,
+    rejectionTypeMasterRows,
+    rejectionReasonMasterRows,
+    rejectionRemarkMasterRows,
     setupChecklistSessionRows,
     productionCardRows,
     shopFloorStatusRows,
@@ -873,6 +888,9 @@ function buildProductionControl({
   setupChecklistRows,
   setupChecklistMasterRows,
   downtimeReasonMasterRows,
+  rejectionTypeMasterRows,
+  rejectionReasonMasterRows,
+  rejectionRemarkMasterRows,
   setupChecklistSessionRows,
   productionCardRows,
   shopFloorStatusRows,
@@ -899,6 +917,9 @@ function buildProductionControl({
   setupChecklistRows: Record<string, unknown>[];
   setupChecklistMasterRows: Record<string, unknown>[];
   downtimeReasonMasterRows: Record<string, unknown>[];
+  rejectionTypeMasterRows: Record<string, unknown>[];
+  rejectionReasonMasterRows: Record<string, unknown>[];
+  rejectionRemarkMasterRows: Record<string, unknown>[];
   setupChecklistSessionRows: Record<string, unknown>[];
   productionCardRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
@@ -1204,6 +1225,9 @@ function buildProductionControl({
     setupChecklistMismatchRows,
     setupChecklistMasterRows,
     downtimeReasonMasterRows,
+    rejectionTypeMasterRows,
+    rejectionReasonMasterRows,
+    rejectionRemarkMasterRows,
     setupChecklistSessionRows,
     productionCardRows,
     firstPieceInspectionMasterRows,
@@ -1479,6 +1503,10 @@ function firstPieceReportEntryKey(row: Record<string, unknown>) {
 
 function downtimeReasonMasterEntryKey(row: Record<string, unknown>) {
   return rowText(row, "code", "downtimeCode", "DOWNTIME CODE").toLowerCase();
+}
+
+function rejectionMasterEntryKey(row: Record<string, unknown>) {
+  return rowText(row, "code", "CODE").toLowerCase();
 }
 
 function productionCardEntryKey(row: Record<string, unknown>) {
@@ -5256,6 +5284,10 @@ function themeRows(counts: Map<string, number>) {
     .sort((a, b) => b[1] - a[1])
     .map(([theme, count]) => ({ theme, count }));
 }
+
+
+
+
 
 
 
