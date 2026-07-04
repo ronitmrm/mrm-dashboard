@@ -4247,10 +4247,10 @@ function ProductionCardRoleEntryForm({
                   </select>
                 </Field>
                 {selectedRow ? (
-              <div className="rounded-md border bg-background p-3 md:col-span-3">
-                <ShopFloorItemSummary row={selectedRow} tone="current" />
-              </div>
-            ) : null}
+                  <div className="self-end md:col-span-2">
+                    <ShopFloorItemSummary row={selectedRow} tone="current" compact />
+                  </div>
+                ) : null}
             <Field label="Cycle time sec"><Input className="h-8" type="number" step="0.01" value={cycleSecondsInput} onChange={(event) => setCycleSecondsByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
             <Field label="1 piece weight gm"><Input className="h-8" type="number" step="0.01" value={pieceWeightInput} onChange={(event) => setPieceWeightByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
             <Field label="Operator number"><Input className="h-8" value={operatorNumber} onChange={(event) => setOperatorNumber(event.target.value)} /></Field>
@@ -4266,14 +4266,6 @@ function ProductionCardRoleEntryForm({
             <Field label="Net produced kg"><Input className="h-8" value={formatNumber(netProducedKg)} readOnly /></Field>
             <Field label="Produced pcs"><Input className="h-8" value={formatNumber(producedPcs)} readOnly /></Field>
               </div>
-              <TrackingSummary
-                items={[
-                  ["Runtime", `${formatNumber(shopFloorRuntimeMinutes)} min`],
-                  ["Gross kg", formatNumber(grossKg)],
-                  ["Net kg", formatNumber(netProducedKg)],
-                  ["Produced pcs", formatNumber(producedPcs)],
-                ]}
-              />
             </>
           ) : null}
           {isShopFloorBulkDowntimeEntry ? (
