@@ -4001,6 +4001,7 @@ function ProductionCardRoleEntryForm({
   const [bulkDowntimeCode, setBulkDowntimeCode] = useState("");
   const [bulkDowntimeStart, setBulkDowntimeStart] = useState("");
   const [bulkDowntimeEnd, setBulkDowntimeEnd] = useState("");
+  const [shopFloorEntryKind, setShopFloorEntryKind] = useState<"" | "production" | "bulkDowntime">("");
   const [qualityEntryKind, setQualityEntryKind] = useState<"" | "downtime" | "rejection">("");
   const [rejectionTypeCode, setRejectionTypeCode] = useState("");
   const [rejectionReasonCode, setRejectionReasonCode] = useState("");
@@ -4056,6 +4057,8 @@ function ProductionCardRoleEntryForm({
   const selectedRejectionReason = codedMasterLabel(rejectionReasonOptions, rejectionReasonCode);
   const selectedRejectionRemark = codedMasterLabel(rejectionRemarkOptions, rejectionRemarkCode);
   const rejectQty = numeric(rejectedPieces);
+  const isShopFloorProductionEntry = role === "shopFloor" && shopFloorEntryKind === "production";
+  const isShopFloorBulkDowntimeEntry = role === "shopFloor" && shopFloorEntryKind === "bulkDowntime";
   const isQualityDowntimeEntry = role === "quality" && qualityEntryKind === "downtime";
   const isQualityRejectionEntry = role === "quality" && qualityEntryKind === "rejection";
   const isDowntimeEntry = role === "machinist" || isQualityDowntimeEntry;
@@ -4064,8 +4067,9 @@ function ProductionCardRoleEntryForm({
   const hasQualityRejectionDetails = role === "quality" && Boolean(rejectionTypeCode && rejectionReasonCode && rejectionRemarkCode && rejectQty > 0);
 
   const canSave = Boolean(selectedRow)
-    && (role === "shopFloor" ? hasShopFloorProduction : role === "quality" ? (isQualityDowntimeEntry ? hasDowntimeDetails : isQualityRejectionEntry ? hasQualityRejectionDetails : false) : hasDowntimeDetails);
-  const canSaveBulkDowntime = role === "shopFloor" && bulkRows.length > 0 && Boolean(bulkDowntimeCode && bulkDowntimeStart && bulkDowntimeEnd && bulkDowntimeMinutes > 0);
+    && (role === "shopFloor" ? isShopFloorProductionEntry && hasShopFloorProduction : role === "quality" ? (isQualityDowntimeEntry ? hasDowntimeDetails : isQualityRejectionEntry ? hasQualityRejectionDetails : false) : hasDowntimeDetails);
+  const canSaveBulkDowntime = isShopFloorBulkDowntimeEntry && bulkRows.length > 0 && Boolean(bulkDowntimeCode && bulkDowntimeStart && bulkDowntimeEnd && bulkDowntimeMinutes > 0);
+  const showSaveButton = role === "shopFloor" ? isShopFloorProductionEntry : role === "quality" ? Boolean(qualityEntryKind) : true;
 
 
   async function submitProductionCard() {
@@ -4189,33 +4193,60 @@ function ProductionCardRoleEntryForm({
           <div className="text-sm font-medium">{roleLabel}</div>
           <div className="text-xs text-muted-foreground">Select the machine first; item and setup details are filled from the current plan.</div>
         </div>
-        {role === "shopFloor" ? <StatusBadge value={producedPcs > 0 ? `${formatNumber(producedPcs)} pcs` : "Production pending"} /> : null}
+        {role === "shopFloor" ? <StatusBadge value={isShopFloorProductionEntry && producedPcs > 0 ? `${formatNumber(producedPcs)} pcs` : isShopFloorBulkDowntimeEntry ? `${formatNumber(bulkRows.length)} machines` : "Select entry"} /> : null}
         {role === "quality" ? <StatusBadge value={isQualityRejectionEntry && rejectQty > 0 ? `${formatNumber(rejectQty)} rejected pcs` : isQualityDowntimeEntry && downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : qualityEntryKind ? "Quality pending" : "Select entry"} /> : null}
         {role === "machinist" ? <StatusBadge value={downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Downtime pending"} /> : null}
       </div>
-      <div className="grid gap-2 md:grid-cols-3">
-        <Field label={role === "shopFloor" || role === "quality" || role === "machinist" ? "Machine no." : "Machine / item"}>
-          <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
-            {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-          </select>
-        </Field>
-        {role === "quality" ? (
-          <>
-            <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
-            <Field label="Shift">
-              <select className="h-8 rounded-md border bg-background px-2 text-sm" value={shift} onChange={(event) => setShift(event.target.value)}>
-                <option value="Day">Day</option>
-                <option value="Night">Night</option>
-                <option value="General">General</option>
-              </select>
-            </Field>
-          </>
-        ) : null}
-      </div>
+      {role !== "shopFloor" ? (
+        <div className="grid gap-2 md:grid-cols-3">
+          <Field label={role === "quality" || role === "machinist" ? "Machine no." : "Machine / item"}>
+            <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+              {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+            </select>
+          </Field>
+          {role === "quality" ? (
+            <>
+              <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
+              <Field label="Shift">
+                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={shift} onChange={(event) => setShift(event.target.value)}>
+                  <option value="Day">Day</option>
+                  <option value="Night">Night</option>
+                  <option value="General">General</option>
+                </select>
+              </Field>
+            </>
+          ) : null}
+        </div>
+      ) : null}
       {role === "shopFloor" ? (
         <>
-          <div className="grid gap-2 md:grid-cols-3">
-            {selectedRow ? (
+          <div className="grid gap-2 rounded-md border bg-background p-2.5 sm:grid-cols-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={shopFloorEntryKind === "production" ? "default" : "outline"}
+              onClick={() => setShopFloorEntryKind("production")}
+            >
+              Production entry
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={shopFloorEntryKind === "bulkDowntime" ? "default" : "outline"}
+              onClick={() => setShopFloorEntryKind("bulkDowntime")}
+            >
+              Bulk downtime entry
+            </Button>
+          </div>
+          {isShopFloorProductionEntry ? (
+            <>
+              <div className="grid gap-2 md:grid-cols-3">
+                <Field label="Machine no.">
+                  <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+                    {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+                  </select>
+                </Field>
+                {selectedRow ? (
               <div className="rounded-md border bg-background p-3 md:col-span-3">
                 <ShopFloorItemSummary row={selectedRow} tone="current" />
               </div>
@@ -4234,16 +4265,19 @@ function ProductionCardRoleEntryForm({
             </Field>
             <Field label="Net produced kg"><Input className="h-8" value={formatNumber(netProducedKg)} readOnly /></Field>
             <Field label="Produced pcs"><Input className="h-8" value={formatNumber(producedPcs)} readOnly /></Field>
-          </div>
-          <TrackingSummary
-            items={[
-              ["Runtime", `${formatNumber(shopFloorRuntimeMinutes)} min`],
-              ["Gross kg", formatNumber(grossKg)],
-              ["Net kg", formatNumber(netProducedKg)],
-              ["Produced pcs", formatNumber(producedPcs)],
-            ]}
-          />
-          <div className="grid gap-3 rounded-md border bg-background p-3">
+              </div>
+              <TrackingSummary
+                items={[
+                  ["Runtime", `${formatNumber(shopFloorRuntimeMinutes)} min`],
+                  ["Gross kg", formatNumber(grossKg)],
+                  ["Net kg", formatNumber(netProducedKg)],
+                  ["Produced pcs", formatNumber(producedPcs)],
+                ]}
+              />
+            </>
+          ) : null}
+          {isShopFloorBulkDowntimeEntry ? (
+            <div className="grid gap-3 rounded-md border bg-background p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm font-medium">Bulk downtime for running machines</div>
               <StatusBadge value={`${formatNumber(bulkRows.length)} machines`} />
@@ -4263,7 +4297,8 @@ function ProductionCardRoleEntryForm({
               <CheckCircle2 className="size-4" />
               Save downtime for running machines
             </Button>
-          </div>
+            </div>
+          ) : null}
         </>
       ) : null}
 
@@ -4332,7 +4367,7 @@ function ProductionCardRoleEntryForm({
           ) : null}
         </>
       ) : null}
-      {role !== "quality" || qualityEntryKind ? (
+      {showSaveButton ? (
         <Button type="button" size="sm" className="w-fit" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
           <CheckCircle2 className="size-4" />
           {role === "shopFloor" ? "Save production" : isQualityRejectionEntry ? "Save rejection" : "Save downtime"}
