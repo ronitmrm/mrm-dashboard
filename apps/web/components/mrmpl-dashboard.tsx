@@ -4795,6 +4795,7 @@ function DataEntryPanel({
 }) {
   const dataEntry = asRecord(payload.dataEntry);
   const [bulkEntryType, setBulkEntryType] = useState(preferredEntryType || dataEntrySpecs[0]?.entryType || "route");
+  const selectedSpec = dataEntrySpecs.find((spec) => spec.entryType === bulkEntryType) ?? dataEntrySpecs[0];
 
   async function importEntryTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -4815,7 +4816,7 @@ function DataEntryPanel({
         </CardHeader>
         <CardContent className="grid gap-4">
           <form className="grid gap-3 @3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]" onSubmit={importEntryTemplate}>
-            <Field label="Entry type">
+            <Field label="Select entry form">
               <select
                 className="h-9 rounded-md border bg-background px-3 text-sm"
                 value={bulkEntryType}
@@ -4852,11 +4853,14 @@ function DataEntryPanel({
           </div>
         </CardContent>
       </Card>
-      <section className="grid gap-4 @5xl/main:grid-cols-2">
-        {dataEntrySpecs.map((spec) => (
-          <DataEntryForm key={spec.entryType} spec={spec} submitAction={submitAction} defaults={spec.entryType === bulkEntryType ? preferredDefaults : {}} />
-        ))}
-      </section>
+      {selectedSpec ? (
+        <DataEntryForm
+          key={selectedSpec.entryType}
+          spec={selectedSpec}
+          submitAction={submitAction}
+          defaults={selectedSpec.entryType === preferredEntryType ? preferredDefaults : {}}
+        />
+      ) : null}
       <DataRowsCard title="Data entry templates" rows={asArray(dataEntry.templates)} empty="No templates returned" />
       <DataRowsCard title="Data entry key summary" rows={asArray(dataEntry.keySummary)} empty="No entry summary returned" />
     </section>
@@ -4900,7 +4904,8 @@ function DataEntryForm({
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   defaults: Record<string, unknown>;
 }) {
-  const defaultsKey = JSON.stringify(defaults);  return (
+  const defaultsKey = JSON.stringify(defaults);
+  return (
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
@@ -7707,28 +7712,3 @@ function formatCell(value: unknown): string {
   }
   return JSON.stringify(value);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
