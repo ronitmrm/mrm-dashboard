@@ -3585,11 +3585,25 @@ function FirstPieceInspectionPanel({
 function ShopFloorItemSummary({
   row,
   tone,
+  compact = false,
 }: {
   row: DashboardPayload;
   tone: "current" | "next";
+  compact?: boolean;
 }) {
   const statusLabel = tone === "current" ? "Running" : (str(row.shopFloorStageLabel) || "Planned");
+  if (compact) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <span className="text-sm font-medium text-foreground">{itemCode(row)}</span>
+        <StatusBadge value={statusLabel} />
+        <span>{jobCardNumber(row)}</span>
+        <span>Setup {displayValue(row.setupNo)}</span>
+        <span>Option {displayValue(row.optionNumber)}</span>
+        <span>RM: {displayValue(row.rmStatus)}</span>
+      </div>
+    );
+  }
   return (
     <div className="grid gap-1.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -4095,11 +4109,11 @@ function ProductionCardRoleEntryForm({
       {role === "quality" || role === "machinist" ? (
         <>
           {selectedRow ? (
-            <div className="rounded-md border bg-background p-3">
-              <ShopFloorItemSummary row={selectedRow} tone="current" />
+            <div className="rounded-md border bg-background px-2.5 py-2">
+              <ShopFloorItemSummary row={selectedRow} tone="current" compact />
             </div>
           ) : null}
-          <div className="grid gap-2 md:grid-cols-3">
+          <div className="grid gap-2 md:grid-cols-4">
             <Field label="Downtime code">
               <select className="h-8 rounded-md border bg-background px-2 text-sm" value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
                 <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add downtime reason master"}</option>
@@ -4110,14 +4124,7 @@ function ProductionCardRoleEntryForm({
             <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} /></Field>
             <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(downtimeDurationMinutes)} readOnly /></Field>
           </div>
-          <TrackingSummary
-            items={[
-              ["Machine", selectedRow ? displayValue(selectedRow.machine) : "-"],
-              ["Item", selectedRow ? itemCode(selectedRow) : "-"],
-              ["Setup", selectedRow ? displayValue(selectedRow.setupNo) : "-"],
-              ["Downtime", `${formatNumber(downtimeDurationMinutes)} min`],
-            ]}
-          />
+
         </>
       ) : null}
       <Button type="button" size="sm" className="w-fit" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
@@ -7521,6 +7528,7 @@ function formatCell(value: unknown): string {
   }
   return JSON.stringify(value);
 }
+
 
 
 
