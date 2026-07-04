@@ -321,9 +321,9 @@ The role tabs each show a generic entry form where the user selects the machine/
 
 - Shop Floor Tasks records stoppage/task details.
 - Quality Control Tasks records QC approval, rejection, and hold details.
-- Machinist Tasks records production start/end, output, cycle target, efficiency, weights, and tooling checks.
+- Machinist Tasks records downtime only: machine number, prefilled item/setup details, downtime code, downtime start, downtime end, and calculated downtime minutes.
 
-All three roles write `production_card` data-entry rows with `cardRole` included in the payload and card identifier so shop-floor, quality, and machinist entries do not overwrite each other. Only the machinist production-card save also writes `software_raw`; that keeps planning, actual production, target, and efficiency on the canonical production pipeline without letting shop-floor or QC notes create production output.
+All three roles write `production_card` data-entry rows with `cardRole` included in the payload and card identifier so shop-floor, quality, and machinist entries do not overwrite each other. The machinist downtime entry must not write `software_raw`; production output must come from a separate production workflow, not this downtime form.
 
 Relevant code:
 

@@ -3811,50 +3811,36 @@ function ProductionCardRoleEntryForm({
   const [selectedKey, setSelectedKey] = useState("");
   const [prodDate, setProdDate] = useState(today);
   const [shift, setShift] = useState("Day");
-  const [operatorId, setOperatorId] = useState("");
-  const [operatorName, setOperatorName] = useState("");
   const [qcName, setQcName] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-  const [breakMinutes, setBreakMinutes] = useState("0");
-  const [downtimeMinutes, setDowntimeMinutes] = useState("0");
   const [downtimeReason, setDowntimeReason] = useState("");
-  const [outputQty, setOutputQty] = useState("");
-  const [actualQty, setActualQty] = useState("");
+  const [downtimeCode, setDowntimeCode] = useState("");
   const [rejectQty, setRejectQty] = useState("0");
   const [rejectionType, setRejectionType] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [rejectionRemark, setRejectionRemark] = useState("");
-  const [grossWeight, setGrossWeight] = useState("");
-  const [netWeight, setNetWeight] = useState("");
-  const [pieceWeight, setPieceWeight] = useState("");
-  const [settingQty, setSettingQty] = useState("");
-  const [toolingCheck, setToolingCheck] = useState<Record<string, string>>({});
   const [shopFloorChecks, setShopFloorChecks] = useState<Record<string, boolean>>({});
   const [qcApproval, setQcApproval] = useState("Approved");
   const [remarks, setRemarks] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const rowOptions = useMemo(() => rows.map((row) => ({
     key: shopFloorPlanKey(row),
-    label: `${machineValue(row, "machine")} / ${itemCode(row)} / ${jobCardNumber(row)} / setup ${displayValue(row.setupNo)}`,
-  })), [rows]);
+    label: role === "machinist"
+      ? displayValue(row.machine)
+      : `${machineValue(row, "machine")} / ${itemCode(row)} / ${jobCardNumber(row)} / setup ${displayValue(row.setupNo)}`,
+  })), [role, rows]);
   const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey) ?? rows[0];
   const selectedOptionKey = selectedRow ? shopFloorPlanKey(selectedRow) : "";
-  const runtime = productionCardRuntimeMinutes(prodDate, startTime, endTime);
-  const effectiveMinutes = Math.max(runtime - numeric(breakMinutes) - numeric(downtimeMinutes), 0);
-  const targetQty = selectedRow ? productionCardTargetQty(selectedRow, effectiveMinutes) : 0;
-  const actualProducedQty = numeric(actualQty || outputQty);
-  const efficiency = targetQty > 0 ? actualProducedQty / targetQty : 0;
-  const roleLabel = role === "shopFloor" ? "Shop floor production card" : role === "quality" ? "Quality production card" : "Machinist production card";
+  const downtimeDurationMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
+  const roleLabel = role === "shopFloor" ? "Shop floor production card" : role === "quality" ? "Quality production card" : "Machinist downtime entry";
   const hasShopFloorDetails = Object.values(shopFloorChecks).some(Boolean) || Boolean(downtimeReason || remarks);
   const hasQualityDetails = Boolean(qcName && qcApproval);
+  const hasMachinistDowntime = Boolean(downtimeCode && startTime && endTime && downtimeDurationMinutes > 0);
   const canSave = Boolean(selectedRow)
-    && (role === "shopFloor" ? hasShopFloorDetails : role === "quality" ? hasQualityDetails : Boolean(startTime && endTime && operatorId && outputQty && targetQty > 0));
+    && (role === "shopFloor" ? hasShopFloorDetails : role === "quality" ? hasQualityDetails : hasMachinistDowntime);
 
 
-  function updateToolingCheck(key: string, value: string) {
-    setToolingCheck((current) => ({ ...current, [key]: value }));
-  }
 
   function updateShopFloorCheck(key: string, checked: boolean) {
     setShopFloorChecks((current) => ({ ...current, [key]: checked }));
@@ -3866,40 +3852,41 @@ function ProductionCardRoleEntryForm({
     try {
       await onSaveProductionCard(selectedRow, {
         cardRole: role,
-        writeProductionOutput: role === "machinist",
+        writeProductionOutput: false,
         prodDate,
         shift,
-        operatorId,
-        operatorName,
+        operatorId: "",
+        operatorName: "",
         qcName,
         startTime,
         endTime,
-        runtimeMinutes: runtime,
-        breakMinutes: numeric(breakMinutes),
-        downtimeMinutes: numeric(downtimeMinutes),
+        runtimeMinutes: role === "machinist" ? downtimeDurationMinutes : 0,
+        breakMinutes: 0,
+        downtimeMinutes: role === "machinist" ? downtimeDurationMinutes : 0,
         downtimeReason,
-        outputQty: numeric(outputQty),
-        actualQty: actualQty ? numeric(actualQty) : Math.max(numeric(outputQty) - numeric(rejectQty), 0),
-        targetQty,
+        downtimeCode,
+        outputQty: 0,
+        actualQty: 0,
+        targetQty: 0,
         rejectQty: numeric(rejectQty),
         rejectionType,
         rejectionReason,
         rejectionRemark,
-        grossWeight: numeric(grossWeight),
-        netWeight: numeric(netWeight),
-        pieceWeight: numeric(pieceWeight),
-        settingQty: numeric(settingQty),
-        toolingCheck,
+        grossWeight: 0,
+        netWeight: 0,
+        pieceWeight: 0,
+        settingQty: 0,
+        toolingCheck: {},
         shopFloorChecks,
         qcApproval,
         remarks,
-        efficiency,
+        efficiency: 0,
       });
       setRemarks("");
       if (role === "machinist") {
-        setOutputQty("");
-        setActualQty("");
-        setRejectQty("0");
+        setDowntimeCode("");
+        setStartTime("");
+        setEndTime("");
       }
     } finally {
       setIsSaving(false);
@@ -3911,24 +3898,28 @@ function ProductionCardRoleEntryForm({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-sm font-medium">{roleLabel}</div>
-          <div className="text-xs text-muted-foreground">Select the machine/item, then save the role-specific production card entry.</div>
+          <div className="text-xs text-muted-foreground">Select the machine first; item and setup details are filled from the current plan.</div>
         </div>
-        {role === "machinist" ? <StatusBadge value={targetQty > 0 ? `Target ${formatNumber(targetQty)} pcs` : "Cycle missing"} /> : null}
+        {role === "machinist" ? <StatusBadge value={downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Downtime pending"} /> : null}
       </div>
       <div className="grid gap-2 md:grid-cols-3">
-        <Field label="Machine / item">
+        <Field label={role === "machinist" ? "Machine no." : "Machine / item"}>
           <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
             {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
           </select>
         </Field>
-        <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
-        <Field label="Shift">
-          <select className="h-8 rounded-md border bg-background px-2 text-sm" value={shift} onChange={(event) => setShift(event.target.value)}>
-            <option value="Day">Day</option>
-            <option value="Night">Night</option>
-            <option value="General">General</option>
-          </select>
-        </Field>
+        {role !== "machinist" ? (
+          <>
+            <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
+            <Field label="Shift">
+              <select className="h-8 rounded-md border bg-background px-2 text-sm" value={shift} onChange={(event) => setShift(event.target.value)}>
+                <option value="Day">Day</option>
+                <option value="Night">Night</option>
+                <option value="General">General</option>
+              </select>
+            </Field>
+          </>
+        ) : null}
       </div>
       {role === "shopFloor" ? (
         <div className="grid gap-2 md:grid-cols-3">
@@ -3961,45 +3952,29 @@ function ProductionCardRoleEntryForm({
       {role === "machinist" ? (
         <>
           <div className="grid gap-2 md:grid-cols-3">
-            <Field label="Cycle sec"><Input className="h-8" value={displayValue(selectedRow ? productionCardCycleSeconds(selectedRow) : "")} readOnly /></Field>
-            <Field label="Operator code"><Input className="h-8" value={operatorId} onChange={(event) => setOperatorId(event.target.value)} /></Field>
-            <Field label="Operator name"><Input className="h-8" value={operatorName} onChange={(event) => setOperatorName(event.target.value)} /></Field>
-            <Field label="M/C start time"><Input className="h-8" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></Field>
-            <Field label="M/C end time"><Input className="h-8" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></Field>
-            <Field label="Break minutes"><Input className="h-8" type="number" value={breakMinutes} onChange={(event) => setBreakMinutes(event.target.value)} /></Field>
-            <Field label="Downtime minutes"><Input className="h-8" type="number" value={downtimeMinutes} onChange={(event) => setDowntimeMinutes(event.target.value)} /></Field>
-            <Field label="Downtime reason"><Input className="h-8" value={downtimeReason} onChange={(event) => setDowntimeReason(event.target.value)} /></Field>
-            <Field label="Output qty pcs"><Input className="h-8" type="number" value={outputQty} onChange={(event) => setOutputQty(event.target.value)} /></Field>
-            <Field label="Actual qty pcs"><Input className="h-8" type="number" value={actualQty} placeholder="Auto from output - rejection" onChange={(event) => setActualQty(event.target.value)} /></Field>
-            <Field label="Reject qty pcs"><Input className="h-8" type="number" value={rejectQty} onChange={(event) => setRejectQty(event.target.value)} /></Field>
-            <Field label="Gross weight"><Input className="h-8" type="number" step="0.001" value={grossWeight} onChange={(event) => setGrossWeight(event.target.value)} /></Field>
-            <Field label="Net weight"><Input className="h-8" type="number" step="0.001" value={netWeight} onChange={(event) => setNetWeight(event.target.value)} /></Field>
-            <Field label="1 pcs weight"><Input className="h-8" type="number" step="0.001" value={pieceWeight} onChange={(event) => setPieceWeight(event.target.value)} /></Field>
-            <Field label="Setting qty pcs"><Input className="h-8" type="number" value={settingQty} onChange={(event) => setSettingQty(event.target.value)} /></Field>
-            {["1R", "2R", "3R", "4R", "5R"].map((key) => (
-              <Field key={key} label={`Tooling ${key}`}>
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={toolingCheck[key] ?? ""} onChange={(event) => updateToolingCheck(key, event.target.value)}>
-                  <option value="">Select</option>
-                  <option value="OK">OK</option>
-                  <option value="Not OK">Not OK</option>
-                </select>
-              </Field>
-            ))}
-            <Field label="Remarks"><Input className="h-8" value={remarks} onChange={(event) => setRemarks(event.target.value)} /></Field>
+            <Field label="Item code"><Input className="h-8" value={selectedRow ? itemCode(selectedRow) : ""} readOnly /></Field>
+            <Field label="Job card"><Input className="h-8" value={selectedRow ? jobCardNumber(selectedRow) : ""} readOnly /></Field>
+            <Field label="Setup no."><Input className="h-8" value={displayValue(selectedRow?.setupNo)} readOnly /></Field>
+            <Field label="Option no."><Input className="h-8" value={displayValue(selectedRow?.optionNumber)} readOnly /></Field>
+            <Field label="Setup name"><Input className="h-8" value={displayValue(selectedRow?.setupName)} readOnly /></Field>
+            <Field label="Downtime code"><Input className="h-8" value={downtimeCode} onChange={(event) => setDowntimeCode(event.target.value)} /></Field>
+            <Field label="Downtime start"><Input className="h-8" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></Field>
+            <Field label="Downtime end"><Input className="h-8" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></Field>
+            <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(downtimeDurationMinutes)} readOnly /></Field>
           </div>
           <TrackingSummary
             items={[
-              ["Runtime", `${formatNumber(runtime)} min`],
-              ["Effective", `${formatNumber(effectiveMinutes)} min`],
-              ["Target", formatNumber(targetQty)],
-              ["Efficiency", targetQty > 0 ? percentText(efficiency) : "-"],
+              ["Machine", selectedRow ? displayValue(selectedRow.machine) : "-"],
+              ["Item", selectedRow ? itemCode(selectedRow) : "-"],
+              ["Setup", selectedRow ? displayValue(selectedRow.setupNo) : "-"],
+              ["Downtime", `${formatNumber(downtimeDurationMinutes)} min`],
             ]}
           />
         </>
       ) : null}
       <Button type="button" size="sm" className="w-fit" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
         <CheckCircle2 className="size-4" />
-        Save production card
+        {role === "machinist" ? "Save downtime" : "Save production card"}
       </Button>
     </div>
   );
@@ -7056,6 +7031,7 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
     breakMinutes: optionalNumber(card.breakMinutes) ?? 0,
     downtimeMinutes: optionalNumber(card.downtimeMinutes) ?? 0,
     downtimeReason: optionalText(card.downtimeReason),
+    downtimeCode: optionalText(card.downtimeCode),
     outputQty: optionalNumber(card.outputQty) ?? 0,
     actualQty: optionalNumber(card.actualQty) ?? optionalNumber(card.outputQty) ?? 0,
     targetQty: optionalNumber(card.targetQty) ?? 0,
@@ -7078,19 +7054,9 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
 }
 
 function productionCardId(row: DashboardPayload, card: DashboardPayload) {
-  return [card.cardRole, card.prodDate, jobCardNumber(row), itemCode(row), row.setupNo, row.machine, card.startTime, card.endTime]
+  return [card.cardRole, card.prodDate, jobCardNumber(row), itemCode(row), row.setupNo, row.machine, card.downtimeCode, card.startTime, card.endTime]
     .map((value) => str(value).toLowerCase())
     .join("|");
-}
-
-function productionCardCycleSeconds(row: DashboardPayload) {
-  return (optionalNumber(row.cycleTime) ?? 0) + (optionalNumber(row.loadingUnloading) ?? 0);
-}
-
-function productionCardTargetQty(row: DashboardPayload, effectiveMinutes: number) {
-  const cycleSeconds = productionCardCycleSeconds(row);
-  if (cycleSeconds <= 0 || effectiveMinutes <= 0) return 0;
-  return Math.floor((effectiveMinutes * 60) / cycleSeconds);
 }
 
 function productionCardRuntimeMinutes(prodDate: string, startTime: string, endTime: string) {
@@ -7102,10 +7068,6 @@ function productionCardRuntimeMinutes(prodDate: string, startTime: string, endTi
   return Math.max(Math.round((end.getTime() - start.getTime()) / 60000), 0);
 }
 
-function percentText(value: number) {
-  if (!Number.isFinite(value)) return "-";
-  return `${Math.round(value * 100)}%`;
-}
 function setupChecklistSessionId(row: DashboardPayload) {
   return [
     jobCardNumber(row),
