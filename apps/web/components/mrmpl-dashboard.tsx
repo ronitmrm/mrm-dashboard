@@ -4050,7 +4050,11 @@ function ProductionCardRoleEntryForm({
   const downtimeDurationMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
   const bulkDowntimeMinutes = productionCardRuntimeMinutes(today, bulkDowntimeStart, bulkDowntimeEnd);
   const roleLabel = role === "shopFloor" ? "Shop floor production entry" : role === "quality" ? "Quality control entry" : "Machinist downtime entry";
-  const hasShopFloorProduction = Boolean(operatorNumber && startTime && endTime && grossKg > 0 && pieceWeightGram > 0 && producedPcs > 0);
+  const hasEditedCycleSeconds = cycleSecondsByKey[selectedOptionKey] !== undefined && cycleSecondsInput !== "";
+  const hasEditedPieceWeight = pieceWeightByKey[selectedOptionKey] !== undefined && pieceWeightInput !== "";
+  const hasChangedCrateWeight = crateWeightKg !== String(DEFAULT_CRATE_WEIGHT_KG);
+  const hasShopFloorProductionEntry = Boolean(operatorNumber.trim() || startTime || endTime || producedGrossKg || cratesUsed || hasEditedCycleSeconds || hasEditedPieceWeight || hasChangedCrateWeight);
+  const hasShopFloorProductionOutput = grossKg > 0 && pieceWeightGram > 0 && producedPcs > 0;
   const selectedDowntimeReason = downtimeReasonByCode.get(downtimeCode) ?? downtimeCode;
   const selectedBulkDowntimeReason = downtimeReasonByCode.get(bulkDowntimeCode) ?? bulkDowntimeCode;
   const selectedRejectionType = codedMasterLabel(rejectionTypeOptions, rejectionTypeCode);
@@ -4067,7 +4071,7 @@ function ProductionCardRoleEntryForm({
   const hasQualityRejectionDetails = role === "quality" && Boolean(rejectionTypeCode && rejectionReasonCode && rejectionRemarkCode && rejectQty > 0);
 
   const canSave = Boolean(selectedRow)
-    && (role === "shopFloor" ? isShopFloorProductionEntry && hasShopFloorProduction : role === "quality" ? (isQualityDowntimeEntry ? hasDowntimeDetails : isQualityRejectionEntry ? hasQualityRejectionDetails : false) : hasDowntimeDetails);
+    && (role === "shopFloor" ? isShopFloorProductionEntry && hasShopFloorProductionEntry : role === "quality" ? (isQualityDowntimeEntry ? hasDowntimeDetails : isQualityRejectionEntry ? hasQualityRejectionDetails : false) : hasDowntimeDetails);
   const canSaveBulkDowntime = isShopFloorBulkDowntimeEntry && bulkRows.length > 0 && Boolean(bulkDowntimeCode && bulkDowntimeStart && bulkDowntimeEnd && bulkDowntimeMinutes > 0);
   const showSaveButton = role === "shopFloor" ? isShopFloorProductionEntry : role === "quality" ? Boolean(qualityEntryKind) : true;
 
@@ -4078,7 +4082,7 @@ function ProductionCardRoleEntryForm({
     try {
       await onSaveProductionCard(selectedRow, {
         cardRole: role,
-        writeProductionOutput: role === "shopFloor",
+        writeProductionOutput: role === "shopFloor" && hasShopFloorProductionOutput,
         prodDate,
         shift,
         operatorId: role === "shopFloor" ? operatorNumber : "",
@@ -4117,12 +4121,6 @@ function ProductionCardRoleEntryForm({
         efficiency: 0,
       });
       setRemarks("");
-      if (role === "shopFloor") {
-        setStartTime("");
-        setEndTime("");
-        setProducedGrossKg("");
-        setCratesUsed("");
-      }
       if (role === "quality" || role === "machinist") {
         setDowntimeCode("");
         setStartTime("");
@@ -7474,7 +7472,12 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
 }
 
 function productionCardId(row: DashboardPayload, card: DashboardPayload) {
-  return [card.cardRole, card.prodDate, jobCardNumber(row), itemCode(row), row.setupNo, row.machine, card.downtimeCode, card.startTime, card.endTime]
+  const role = optionalText(card.cardRole);
+  const isShopFloorProduction = role === "shopFloor" && !card.bulkDowntime && !optionalText(card.downtimeCode);
+  const idParts = isShopFloorProduction
+    ? [role, card.prodDate, card.shift, jobCardNumber(row), itemCode(row), row.setupNo, row.machine]
+    : [role, card.prodDate, jobCardNumber(row), itemCode(row), row.setupNo, row.machine, card.downtimeCode, card.startTime, card.endTime];
+  return idParts
     .map((value) => str(value).toLowerCase())
     .join("|");
 }

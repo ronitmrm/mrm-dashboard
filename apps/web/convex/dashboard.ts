@@ -932,6 +932,28 @@ function payloadRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function mergeDataEntryPayload(entryType: string, existingPayload: unknown, nextPayload: unknown) {
+  if (entryType !== "production_card") return nextPayload;
+  const existing = payloadRecord(existingPayload);
+  const next = payloadRecord(nextPayload);
+  const merged: Record<string, unknown> = { ...existing, ...next };
+  for (const [key, value] of Object.entries(next)) {
+    if (key === "savedAt") continue;
+    const existingValue = existing[key];
+    if (isBlankProductionCardValue(value) && !isBlankProductionCardValue(existingValue)) {
+      merged[key] = existingValue;
+    }
+  }
+  return merged;
+}
+
+function isBlankProductionCardValue(value: unknown) {
+  if (value === undefined || value === null || value === "") return true;
+  if (typeof value === "number") return value === 0;
+  if (typeof value === "object" && !Array.isArray(value)) return Object.keys(payloadRecord(value)).length === 0;
+  return false;
+}
+
 function countRowsByEntryType(rows: Array<{ entryType: string }>) {
   const counts: Record<string, number> = {};
   for (const row of rows) {
@@ -1390,14 +1412,15 @@ export const saveDataEntry = mutation({
       if (!existing) {
         throw new Error("Setup checklist entry was not found or cannot be edited.");
       }
+      const mergedPayload = mergeDataEntryPayload(args.entryType, existing.payload, args.payload);
       await ctx.db.patch(args.id, {
         entryType: args.entryType,
         key: args.key,
-        payload: args.payload,
+        payload: mergedPayload,
         ...ownerFields,
         createdAt: now(),
       });
-      if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType, payload: args.payload })) {
+      if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType, payload: mergedPayload })) {
         await queueDashboardRefresh(ctx);
       }
       return { ok: true, id: args.id };
@@ -1414,14 +1437,15 @@ export const saveDataEntry = mutation({
       const correctionTargets = await activeCorrectionTargetsForRows(ctx, "dataEntries", existingRows);
       const existing = latestUncorrectedRow(existingRows, "dataEntries", correctionTargets);
       if (existing) {
+        const mergedPayload = mergeDataEntryPayload(args.entryType, existing.payload, args.payload);
         await ctx.db.patch(existing._id, {
           entryType: args.entryType,
           key: args.key,
-          payload: args.payload,
+          payload: mergedPayload,
           ...ownerFields,
           createdAt: now(),
         });
-        if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType, payload: args.payload })) {
+        if (shouldQueuePlanningRefresh("data-entry", { entryType: args.entryType, payload: mergedPayload })) {
           await queueDashboardRefresh(ctx);
         }
         return { ok: true, id: existing._id };
