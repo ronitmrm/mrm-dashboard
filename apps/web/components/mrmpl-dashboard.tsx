@@ -621,6 +621,169 @@ function HourlyQualityCheckShell() {
   );
 }
 
+
+export function SetupChecklistPage() {
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const [authCheckTimedOut, setAuthCheckTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setAuthCheckTimedOut(isLoading),
+      isLoading ? 4000 : 0,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [isLoading]);
+
+  if (isLoading && !authCheckTimedOut) return <AuthLoadingScreen />;
+  if (!isAuthenticated) return <AuthScreen />;
+
+  return <SetupChecklistShell />;
+}
+
+function setupChecklistQueryFromLocation() {
+  if (typeof window === "undefined") return { sessionId: "", phase: "" };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    sessionId: params.get("sessionId") ?? "",
+    phase: params.get("phase") ?? "",
+  };
+}
+
+function SetupChecklistShell() {
+  const dashboardPayload = useQuery(api.dashboard.snapshot, {});
+  const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
+  const [{ sessionId, phase }] = useState(setupChecklistQueryFromLocation);
+  const [doneBy, setDoneBy] = useState("");
+  const [remark, setRemark] = useState("");
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [status, setStatus] = useState<ActionStatus>(null);
+
+  const snapshot = asRecord(dashboardPayload);
+  const productionControl = asRecord(snapshot.productionControl);
+  const setupChecklistSessions = useMemo(() => asArray(productionControl.setupChecklistSessionRows), [productionControl]);
+  const activeChecklistMasters = useMemo(() => activeSetupChecklistMasterRows(asArray(productionControl.setupChecklistMasterRows)), [productionControl]);
+  const setupRows = useMemo(() => setupChecklistCandidateRows(productionControl), [productionControl]);
+  const row = useMemo(() => setupRows.find((candidate) => setupChecklistSessionId(candidate) === sessionId), [sessionId, setupRows]);
+  const currentChecklistSession = useMemo(() => row ? setupChecklistSessionForRow(setupChecklistSessions, row) : undefined, [row, setupChecklistSessions]);
+  const checklistItems = useMemo(() => {
+    if (phase === "end" && Array.isArray(currentChecklistSession?.items)) return currentChecklistSession.items as DashboardPayload[];
+    return setupChecklistItemsFromMaster(activeChecklistMasters);
+  }, [activeChecklistMasters, currentChecklistSession, phase]);
+  const canSave = Boolean(row && (phase === "start" || phase === "end") && checklistItems.length)
+    && (phase === "start" || Boolean(currentChecklistSession));
+  const isComplete = canSave && setupChecklistValuesComplete(checklistItems, values, phase);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (!currentChecklistSession) {
+        setValues({});
+        setDoneBy("");
+        setRemark("");
+        return;
+      }
+      const nextValues: Record<string, string> = {};
+      for (const item of asArray(currentChecklistSession.items)) {
+        nextValues[setupChecklistItemKey(item)] = setupChecklistExistingValue(item, phase);
+      }
+      setValues(nextValues);
+      setDoneBy(str(phase === "start" ? currentChecklistSession.startedBy : currentChecklistSession.endedBy));
+      setRemark(str(phase === "start" ? currentChecklistSession.startRemark : currentChecklistSession.endRemark));
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [currentChecklistSession, phase]);
+
+  function updateValue(item: DashboardPayload, value: string) {
+    const itemKey = setupChecklistItemKey(item);
+    setValues((currentValues) => ({ ...currentValues, [itemKey]: value }));
+  }
+
+  async function saveProgress() {
+    if (!row || !canSave || isSaving) return;
+    const session = setupChecklistSessionForStage({
+      row,
+      phase,
+      values,
+      items: checklistItems,
+      masterRows: activeChecklistMasters,
+      existingSession: currentChecklistSession,
+      doneBy,
+      remark,
+      completedAt: new Date().toISOString(),
+    });
+    const payload = setupChecklistSessionPayload(row, session);
+    setIsSaving(true);
+    setStatus(null);
+    try {
+      await saveDataEntry({
+        entryType: "setup_checklist_session",
+        key: dataEntryKey("setup_checklist_session", payload),
+        payload,
+      });
+      setStatus({ tone: "default", message: "Checklist progress saved." });
+    } catch (err) {
+      setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Checklist save failed." });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-background p-4 text-foreground md:p-6">
+      <div className="mx-auto grid max-w-6xl gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold">Setup checklist</h1>
+            <p className="text-sm text-muted-foreground">Save pre setting and setting checklist progress outside the machinist task list.</p>
+          </div>
+          <Button type="button" variant="outline" onClick={() => { window.location.href = "/"; }}>
+            <LayoutDashboard className="size-4" />
+            Dashboard
+          </Button>
+        </div>
+        {dashboardPayload === undefined ? (
+          <Skeleton className="h-56 w-full" />
+        ) : row ? (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">{phase === "end" ? "Setting completion" : "Pre setting start"}</CardTitle>
+                <CardDescription>{itemCode(row)} / JC {jobCardNumber(row)} / Option {displayValue(row.optionNumber)} / Setup {displayValue(row.setupNo)} / Machine {displayValue(row.machine)}</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-2">
+                <LabeledInput label={phase === "end" ? "Completed by" : "Started by"} value={doneBy} onChange={setDoneBy} />
+                <LabeledInput label="Remark" value={remark} onChange={setRemark} />
+              </CardContent>
+            </Card>
+            <SetupChecklistForm
+              row={row}
+              phase={phase}
+              items={checklistItems}
+              session={currentChecklistSession}
+              values={values}
+              onValueChange={updateValue}
+            />
+            {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <StatusBadge value={isComplete ? "Checklist complete" : "Progress can be saved"} />
+              <Button type="button" disabled={!canSave || isSaving} onClick={() => void saveProgress()}>
+                <CheckCircle2 className="size-4" />
+                {isSaving ? "Saving" : "Save checklist progress"}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <Card>
+            <CardContent className="pt-6">
+              <EmptyRowsMessage>Checklist setup was not found. Open this page from a machinist task row.</EmptyRowsMessage>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </main>
+  );
+}
+
 function DashboardShell() {
   const [activeTab, setActiveTab] = useState<DashboardTabId>("productionControlTab");
   const [preferredDataEntryType, setPreferredDataEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
@@ -3964,9 +4127,6 @@ function ShopFloorRowAction({
   const [worker, setWorker] = useState("");
   const [remark, setRemark] = useState("");
   const [inspectionReadings, setInspectionReadings] = useState<Record<string, string[]>>({});
-  const [setupChecklistValues, setSetupChecklistValues] = useState<Record<string, string>>({});
-  const [isChecklistOpen, setIsChecklistOpen] = useState(false);
-  const [isChecklistSaving, setIsChecklistSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const row = next ?? current;
   const stage = str(row?.shopFloorStage) as ShopFloorStageId;
@@ -3975,20 +4135,14 @@ function ShopFloorRowAction({
   const currentChecklistSession = useMemo(() => next ? setupChecklistSessionForRow(setupChecklistSessions, next) : undefined, [next, setupChecklistSessions]);
   const activeChecklistMasters = useMemo(() => activeSetupChecklistMasterRows(setupChecklistMasters), [setupChecklistMasters]);
   const checklistPhase = nextStage?.id === "presetting" ? "start" : nextStage?.id === "setting" ? "end" : "";
-  const setupChecklistItems = useMemo(() => {
-    if (checklistPhase === "end" && Array.isArray(currentChecklistSession?.items)) return currentChecklistSession.items as DashboardPayload[];
-    return setupChecklistItemsFromMaster(activeChecklistMasters);
-  }, [activeChecklistMasters, checklistPhase, currentChecklistSession]);
   const needsSetupChecklist = Boolean(checklistPhase && onSaveSetupChecklistSession);
   const setupChecklistReady = !needsSetupChecklist
-    || (checklistPhase === "start" && activeChecklistMasters.length > 0 && setupChecklistValuesComplete(setupChecklistItems, setupChecklistValues, checklistPhase))
-    || (checklistPhase === "end" && Boolean(currentChecklistSession) && setupChecklistValuesComplete(setupChecklistItems, setupChecklistValues, checklistPhase));
-  const canSaveSetupChecklistProgress = Boolean(needsSetupChecklist && onSaveSetupChecklistSession && setupChecklistItems.length > 0)
-    && (checklistPhase === "start" || Boolean(currentChecklistSession));
+    || (Boolean(currentChecklistSession) && setupChecklistValuesComplete(asArray(currentChecklistSession?.items), {}, checklistPhase));
+  const checklistPageHref = next && checklistPhase ? setupChecklistPageHref(next, checklistPhase) : "";
   const setupChecklistStatus = !needsSetupChecklist
     ? "Not required"
     : setupChecklistReady
-      ? checklistPhase === "end" ? "Completion ready" : "Start ready"
+      ? checklistPhase === "end" ? "Completion saved" : "Start saved"
       : currentChecklistSession
         ? "Saved progress"
         : "Checklist pending";
@@ -4008,31 +4162,6 @@ function ShopFloorRowAction({
     });
   }
 
-  function updateSetupChecklistValue(item: DashboardPayload, value: string) {
-    const itemKey = setupChecklistItemKey(item);
-    setSetupChecklistValues((currentValues) => ({ ...currentValues, [itemKey]: value }));
-  }
-
-  async function submitSetupChecklistProgress() {
-    if (!next || !needsSetupChecklist || !onSaveSetupChecklistSession || !canSaveSetupChecklistProgress || isChecklistSaving) return;
-    setIsChecklistSaving(true);
-    try {
-      const setupChecklist = setupChecklistSessionForStage({
-        row: next,
-        phase: checklistPhase,
-        values: setupChecklistValues,
-        items: setupChecklistItems,
-        masterRows: activeChecklistMasters,
-        existingSession: currentChecklistSession,
-        doneBy,
-        remark,
-        completedAt: new Date().toISOString(),
-      });
-      await onSaveSetupChecklistSession(next, setupChecklist);
-    } finally {
-      setIsChecklistSaving(false);
-    }
-  }
   async function submitNextStage() {
     if (!next || !nextStage || isSubmitting) return;
     if (nextStage.id === "quality_approval" && !canSubmitInspection) return;
@@ -4064,21 +4193,7 @@ function ShopFloorRowAction({
           remark,
         });
       }
-      let setupChecklist: DashboardPayload | undefined;
-      if (needsSetupChecklist && onSaveSetupChecklistSession) {
-        setupChecklist = setupChecklistSessionForStage({
-          row: next,
-          phase: checklistPhase,
-          values: setupChecklistValues,
-          items: setupChecklistItems,
-          masterRows: activeChecklistMasters,
-          existingSession: currentChecklistSession,
-          doneBy,
-          remark,
-          completedAt: taskCompletedAt,
-        });
-        await onSaveSetupChecklistSession(next, setupChecklist);
-      }
+      const setupChecklist = needsSetupChecklist ? currentChecklistSession : undefined;
       await onSaveStage(next, nextStage.id, {
         doneBy,
         worker: nextStage.id === "operator_started" ? worker : "",
@@ -4090,7 +4205,6 @@ function ShopFloorRowAction({
       setWorker("");
       setRemark("");
       setInspectionReadings({});
-      setSetupChecklistValues({});
     } finally {
       setIsSubmitting(false);
     }
@@ -4160,27 +4274,15 @@ function ShopFloorRowAction({
                 <StatusBadge value={setupChecklistStatus} />
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => setIsChecklistOpen((open) => !open)}>
-                  {isChecklistOpen ? "Hide checklist" : "Open checklist"}
+                <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => { window.location.href = checklistPageHref; }}>
+                  Open checklist
                 </Button>
-                {isChecklistOpen ? (
-                  <Button type="button" size="sm" variant="outline" className="w-fit" disabled={!canSaveSetupChecklistProgress || isChecklistSaving} onClick={() => void submitSetupChecklistProgress()}>
-                    <CheckCircle2 className="size-4" />
-                    Save checklist progress
+                {checklistPhase === "start" && !activeChecklistMasters.length && openDataEntry ? (
+                  <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("setup_checklist_master", setupChecklistMasterDefaults())}>
+                    Add checklist master
                   </Button>
                 ) : null}
               </div>
-              {isChecklistOpen ? (
-                <SetupChecklistForm
-                  row={next}
-                  phase={checklistPhase}
-                  items={setupChecklistItems}
-                  session={currentChecklistSession}
-                  values={setupChecklistValues}
-                  onValueChange={updateSetupChecklistValue}
-                  onAddMaster={openDataEntry}
-                />
-              ) : null}
             </div>
           ) : null}
           {needsFirstPieceInspection ? (
@@ -8132,6 +8234,22 @@ function productionCardRuntimeMinutes(prodDate: string, startTime: string, endTi
   return Math.max(Math.round((end.getTime() - start.getTime()) / 60000), 0);
 }
 
+function setupChecklistPageHref(row: DashboardPayload, phase: string) {
+  return `/dashboard/setup-checklist?sessionId=${encodeURIComponent(setupChecklistSessionId(row))}&phase=${encodeURIComponent(phase)}`;
+}
+
+function setupChecklistCandidateRows(productionControl: DashboardPayload) {
+  const rows = [
+    ...shopFloorQueueRows(productionControl).map((row) => row.next),
+    ...currentShopFloorRows(productionControl),
+  ].filter((row): row is DashboardPayload => Boolean(row));
+  const bySessionId = new Map<string, DashboardPayload>();
+  for (const row of rows) {
+    const sessionId = setupChecklistSessionId(row);
+    if (sessionId && !bySessionId.has(sessionId)) bySessionId.set(sessionId, row);
+  }
+  return [...bySessionId.values()];
+}
 function setupChecklistSessionId(row: DashboardPayload) {
   return [
     jobCardNumber(row),

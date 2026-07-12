@@ -7,3 +7,5 @@
 - The role form hydrates existing saved `production_card` rows for the selected date/machine/item/setup before editing.
 - 2026-07-12: Hourly quality checks live on `/dashboard/hourly-quality-check`, opened from Quality Control Tasks rather than inside the downtime/rejection card. They select date, shift, machine, and 24-hour slot; machine selection fills item/job/option/setup from the current running plan.
 - Hourly quality parameters are stored as `quality_parameter_master` rows keyed by item/option/setup/parameter code. Saved checks are `hourly_quality_check` rows keyed by date/shift/hour/machine/item/option/setup so back-dated edits replace the intended hourly card.
+
+- 2026-07-12: Machinist setup checklist editing lives on `/dashboard/setup-checklist`, opened from the Machinist Tasks row with `sessionId` and `phase` query params. The task list should show only checklist status plus an open button; in-progress checklist values still save to `setup_checklist_session`.
