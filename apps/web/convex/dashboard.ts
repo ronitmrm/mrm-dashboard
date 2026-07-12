@@ -912,6 +912,8 @@ const legacyEntryTypes = [
   "setup_checklist_master",
   "setup_checklist_session",
   "production_card",
+  "quality_parameter_master",
+  "hourly_quality_check",
 ];
 
 const snapshotEntryTypes = [...legacyEntryTypes, "shop_floor_status"];

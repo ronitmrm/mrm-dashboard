@@ -273,6 +273,8 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const rejectionRemarkMasterRows = latestEntryRowsByKey(entryRows(byType, "rejection_remark_master"), rejectionMasterEntryKey);
   const setupChecklistSessionRows = latestEntryRowsByKey(entryRows(byType, "setup_checklist_session"), setupChecklistSessionEntryKey);
   const productionCardRows = latestEntryRowsByKey(entryRows(byType, "production_card"), productionCardEntryKey);
+  const qualityParameterMasterRows = latestEntryRowsByKey(entryRows(byType, "quality_parameter_master"), qualityParameterMasterEntryKey);
+  const hourlyQualityCheckRows = latestEntryRowsByKey(entryRows(byType, "hourly_quality_check"), hourlyQualityCheckEntryKey);
   const shopFloorStatusRows = singleActiveShopFloorStatusRows(
     latestEntryRowsByKey(entryRows(byType, "shop_floor_status"), shopFloorStatusEntryKey),
   );
@@ -301,6 +303,8 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     rejectionRemarkMasterRows,
     setupChecklistSessionRows,
     productionCardRows,
+    qualityParameterMasterRows,
+    hourlyQualityCheckRows,
     shopFloorStatusRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
@@ -359,6 +363,8 @@ function buildProductionAnalysis({
   rejectionRemarkMasterRows,
   setupChecklistSessionRows,
   productionCardRows,
+  qualityParameterMasterRows,
+  hourlyQualityCheckRows,
   shopFloorStatusRows,
   firstPieceInspectionMasterRows,
   firstPieceInspectionReportRows,
@@ -397,6 +403,8 @@ function buildProductionAnalysis({
   rejectionRemarkMasterRows: Record<string, unknown>[];
   setupChecklistSessionRows: Record<string, unknown>[];
   productionCardRows: Record<string, unknown>[];
+  qualityParameterMasterRows: Record<string, unknown>[];
+  hourlyQualityCheckRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
   firstPieceInspectionMasterRows: Record<string, unknown>[];
   firstPieceInspectionReportRows: Record<string, unknown>[];
@@ -714,6 +722,8 @@ function buildProductionAnalysis({
     rejectionRemarkMasterRows,
     setupChecklistSessionRows,
     productionCardRows,
+    qualityParameterMasterRows,
+    hourlyQualityCheckRows,
     shopFloorStatusRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
@@ -893,6 +903,8 @@ function buildProductionControl({
   rejectionRemarkMasterRows,
   setupChecklistSessionRows,
   productionCardRows,
+  qualityParameterMasterRows,
+  hourlyQualityCheckRows,
   shopFloorStatusRows,
   firstPieceInspectionMasterRows,
   firstPieceInspectionReportRows,
@@ -922,6 +934,8 @@ function buildProductionControl({
   rejectionRemarkMasterRows: Record<string, unknown>[];
   setupChecklistSessionRows: Record<string, unknown>[];
   productionCardRows: Record<string, unknown>[];
+  qualityParameterMasterRows: Record<string, unknown>[];
+  hourlyQualityCheckRows: Record<string, unknown>[];
   shopFloorStatusRows: Record<string, unknown>[];
   firstPieceInspectionMasterRows: Record<string, unknown>[];
   firstPieceInspectionReportRows: Record<string, unknown>[];
@@ -1230,6 +1244,8 @@ function buildProductionControl({
     rejectionRemarkMasterRows,
     setupChecklistSessionRows,
     productionCardRows,
+    qualityParameterMasterRows,
+    hourlyQualityCheckRows,
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
   };
@@ -1518,6 +1534,27 @@ function productionCardEntryKey(row: Record<string, unknown>) {
     rowText(row, "machine", "machineNo", "M/C NO", "MACHINE NO", "MACHINE NO."),
     rowText(row, "startTime"),
     rowText(row, "endTime"),
+  ].map(canonicalKey).join("|");
+}
+
+function qualityParameterMasterEntryKey(row: Record<string, unknown>) {
+  return [
+    rowText(row, "partNo", "partCode", "PART NO", "PART CODE"),
+    rowText(row, "optionNumber", "OPTION NUMBER", "OPTION NO"),
+    rowText(row, "setupNo", "SETUP NO.", "SETUP NO", "SET UP"),
+    rowText(row, "code", "parameterCode", "CODE"),
+  ].map(canonicalKey).join("|");
+}
+
+function hourlyQualityCheckEntryKey(row: Record<string, unknown>) {
+  return rowText(row, "checkId") || [
+    rowText(row, "prodDate", "date"),
+    rowText(row, "shift"),
+    rowText(row, "hourSlot"),
+    rowText(row, "machine", "machineNo"),
+    rowText(row, "partCode", "partNo"),
+    rowText(row, "optionNumber"),
+    rowText(row, "setupNo"),
   ].map(canonicalKey).join("|");
 }
 

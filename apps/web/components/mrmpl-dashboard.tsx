@@ -346,7 +346,28 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
-  },  {
+  },
+  {
+    entryType: "quality_parameter_master",
+    title: "Quality parameter master",
+    description: "Hourly quality check parameters by item, option, and setup.",
+    fields: [
+      { name: "partNo", label: "Part no.", required: true },
+      { name: "optionNumber", label: "Option no.", required: true },
+      { name: "setupNo", label: "Setup no.", required: true },
+      { name: "code", label: "Parameter code", required: true },
+      { name: "parameterName", label: "Parameter name", required: true },
+      { name: "specification", label: "Specification", required: true },
+      { name: "instrumentUsed", label: "Instrument used" },
+      { name: "tolerancePlus", label: "Tolerance +", type: "number", step: "0.001" },
+      { name: "toleranceMinus", label: "Tolerance -", type: "number", step: "0.001" },
+      { name: "inputType", label: "Input type", options: ["number", "text", "pass_fail"], defaultValue: "number" },
+      { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
+      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      { name: "remark", label: "Remark" },
+    ],
+  },
+  {
     entryType: "software_raw",
     title: "Software production output",
     description: "Daily production rows from the shop-floor software.",
@@ -391,6 +412,213 @@ export function MrmplDashboard() {
   if (!isAuthenticated) return <AuthScreen />;
 
   return <DashboardShell />;
+}
+
+
+export function HourlyQualityCheckPage() {
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const [authCheckTimedOut, setAuthCheckTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setAuthCheckTimedOut(isLoading),
+      isLoading ? 4000 : 0,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [isLoading]);
+
+  if (isLoading && !authCheckTimedOut) return <AuthLoadingScreen />;
+  if (!isAuthenticated) return <AuthScreen />;
+
+  return <HourlyQualityCheckShell />;
+}
+
+function HourlyQualityCheckShell() {
+  const dashboardPayload = useQuery(api.dashboard.snapshot, {});
+  const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
+  const [prodDate, setProdDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [shift, setShift] = useState("Day");
+  const [hourSlot, setHourSlot] = useState(() => currentHourSlot());
+  const [selectedKey, setSelectedKey] = useState("");
+  const [checkedBy, setCheckedBy] = useState("");
+  const [readings, setReadings] = useState<Record<string, string>>({});
+  const [remarks, setRemarks] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [status, setStatus] = useState<ActionStatus>(null);
+
+  const snapshot = asRecord(dashboardPayload);
+  const productionControl = asRecord(snapshot.productionControl);
+  const runningRows = useMemo(() => currentShopFloorRows(productionControl), [productionControl]);
+  const selectedRow = useMemo(() => runningRows.find((row) => shopFloorPlanKey(row) === selectedKey), [runningRows, selectedKey]);
+  const qualityParameterRows = useMemo(() => asArray(productionControl.qualityParameterMasterRows), [productionControl]);
+  const hourlyRows = useMemo(() => asArray(productionControl.hourlyQualityCheckRows), [productionControl]);
+  const parameters = useMemo(
+    () => selectedRow ? qualityParameterRows.filter((row) => qualityParameterMatchesSetup(row, selectedRow)) : [],
+    [qualityParameterRows, selectedRow],
+  );
+  const existingCheck = useMemo(
+    () => selectedRow ? hourlyRows.find((row) => hourlyQualityCheckMatchesSelection(row, selectedRow, prodDate, shift, hourSlot)) : undefined,
+    [hourSlot, hourlyRows, prodDate, selectedRow, shift],
+  );
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (!existingCheck) {
+        setReadings({});
+        setRemarks({});
+        setCheckedBy("");
+        return;
+      }
+      const nextReadings: Record<string, string> = {};
+      const nextRemarks: Record<string, string> = {};
+      for (const reading of asArray(existingCheck.readings)) {
+        const code = qualityParameterCode(reading);
+        if (!code) continue;
+        nextReadings[code] = str(reading.actualReading || reading.value);
+        nextRemarks[code] = str(reading.remark);
+      }
+      setReadings(nextReadings);
+      setRemarks(nextRemarks);
+      setCheckedBy(str(existingCheck.checkedBy));
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [existingCheck]);
+
+  async function saveHourlyCheck() {
+    if (!selectedRow || !checkedBy.trim() || !parameters.length) return;
+    const payload = hourlyQualityCheckPayload(selectedRow, parameters, readings, remarks, {
+      prodDate,
+      shift,
+      hourSlot,
+      checkedBy,
+    });
+    setIsSaving(true);
+    setStatus(null);
+    try {
+      await saveDataEntry({
+        entryType: "hourly_quality_check",
+        key: dataEntryKey("hourly_quality_check", payload),
+        payload,
+      });
+      setStatus({ tone: "default", message: "Hourly quality check saved." });
+    } catch (err) {
+      setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Hourly quality check save failed." });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const canSave = Boolean(selectedRow && checkedBy.trim() && parameters.length && parameters.every((parameter) => {
+    if (str(parameter.required).toLowerCase() === "no") return true;
+    return str(readings[qualityParameterCode(parameter)]);
+  }));
+
+  return (
+    <main className="min-h-screen bg-background p-4 text-foreground md:p-6">
+      <div className="mx-auto grid max-w-7xl gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold">Hourly quality check</h1>
+            <p className="text-sm text-muted-foreground">Select the running machine, then record the hourly inspection against the active item, option, and setup.</p>
+          </div>
+          <Button type="button" variant="outline" onClick={() => { window.location.href = "/"; }}>
+            <LayoutDashboard className="size-4" />
+            Dashboard
+          </Button>
+        </div>
+        <Card>
+          <CardContent className="grid gap-3 pt-4 md:grid-cols-5">
+            <LabeledInput label="Date" value={prodDate} onChange={setProdDate} type="date" />
+            <LabeledSelect label="Shift" value={shift} onChange={setShift} options={["Day", "Night"]} />
+            <LabeledSelect label="Machine no." value={selectedKey} onChange={setSelectedKey} options={runningRows.map((row) => ({ value: shopFloorPlanKey(row), label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}` }))} placeholder="Select machine" />
+            <LabeledSelect label="Hour slot" value={hourSlot} onChange={setHourSlot} options={hourSlotOptions()} />
+            <LabeledInput label="Checked by" value={checkedBy} onChange={setCheckedBy} />
+          </CardContent>
+        </Card>
+        {selectedRow ? (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">{displayValue(selectedRow.machine)} running details</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-2 text-sm md:grid-cols-5">
+              <TileField label="Item code" value={itemCode(selectedRow)} />
+              <TileField label="JC no." value={jobCardNumber(selectedRow)} />
+              <TileField label="Option" value={selectedRow.optionNumber} />
+              <TileField label="Setup no." value={selectedRow.setupNo} />
+              <TileField label="Setup name" value={selectedRow.setupName} />
+            </CardContent>
+          </Card>
+        ) : null}
+        <Card>
+          <CardHeader>
+            <CardTitle>Inspection readings</CardTitle>
+            <CardDescription>{existingCheck ? "Existing hourly card loaded for editing." : "Readings are saved against the selected date, shift, hour, machine, item, and setup."}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {dashboardPayload === undefined ? (
+              <Skeleton className="h-36 w-full" />
+            ) : selectedRow && parameters.length ? (
+              <div className="overflow-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-24">Code</TableHead>
+                      <TableHead className="min-w-56">Parameter</TableHead>
+                      <TableHead className="min-w-36">Specification</TableHead>
+                      <TableHead className="min-w-32">Tolerance</TableHead>
+                      <TableHead className="min-w-40">Instrument</TableHead>
+                      <TableHead className="min-w-44">Actual reading</TableHead>
+                      <TableHead className="min-w-24">Result</TableHead>
+                      <TableHead className="min-w-56">Remark</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {parameters.map((parameter) => {
+                      const code = qualityParameterCode(parameter);
+                      const result = qualityReadingResult(parameter, readings[code]);
+                      return (
+                        <TableRow key={code || qualityParameterName(parameter)}>
+                          <TableCell className="font-medium">{code}</TableCell>
+                          <TableCell>{qualityParameterName(parameter)}</TableCell>
+                          <TableCell>{displayValue(parameter.specification)}</TableCell>
+                          <TableCell>{qualityParameterTolerance(parameter)}</TableCell>
+                          <TableCell>{displayValue(parameter.instrumentUsed)}</TableCell>
+                          <TableCell>
+                            {qualityParameterInputType(parameter) === "pass_fail" ? (
+                              <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))}>
+                                <option value="">Select</option>
+                                <option value="OK">OK</option>
+                                <option value="NG">NG</option>
+                              </select>
+                            ) : (
+                              <Input value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))} type={qualityParameterInputType(parameter) === "number" ? "number" : "text"} step="0.001" />
+                            )}
+                          </TableCell>
+                          <TableCell><StatusBadge value={result || "Pending"} /></TableCell>
+                          <TableCell><Input value={remarks[code] ?? ""} onChange={(event) => setRemarks((current) => ({ ...current, [code]: event.target.value }))} /></TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : selectedRow ? (
+              <EmptyRowsMessage>No active quality parameter master rows match this item, option, and setup.</EmptyRowsMessage>
+            ) : (
+              <EmptyRowsMessage>Select a machine to start the hourly check.</EmptyRowsMessage>
+            )}
+            {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
+            <div className="flex justify-end">
+              <Button type="button" disabled={!canSave || isSaving} onClick={saveHourlyCheck}>
+                <CheckCircle2 className="size-4" />
+                {isSaving ? "Saving" : "Save hourly check"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </main>
+  );
 }
 
 function DashboardShell() {
@@ -3417,6 +3645,14 @@ function RoleTaskPanel({
           <CardDescription>{copy.description}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
+          {role === "quality" ? (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => { window.location.href = "/dashboard/hourly-quality-check"; }}>
+                <Gauge className="size-4" />
+                Hourly quality check
+              </Button>
+            </div>
+          ) : null}
           <ProductionCardRoleEntryForm
             role={role}
             rows={productionCardRows}
@@ -7447,6 +7683,178 @@ function machineTileFocusSetup(rows: DashboardPayload[]) {
   )[0];
 }
 
+function LabeledInput({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+  return (
+    <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+      {label}
+      <Input value={value} type={type} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function LabeledSelect({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<string | { value: string; label: string }>;
+  placeholder?: string;
+}) {
+  return (
+    <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+      {label}
+      <select className="h-9 rounded-md border bg-background px-3 text-sm text-foreground" value={value} onChange={(event) => onChange(event.target.value)}>
+        {placeholder ? <option value="">{placeholder}</option> : null}
+        {options.map((option) => {
+          const optionValue = typeof option === "string" ? option : option.value;
+          const optionLabel = typeof option === "string" ? option : option.label;
+          return <option key={optionValue} value={optionValue}>{optionLabel}</option>;
+        })}
+      </select>
+    </label>
+  );
+}
+
+function AlertMessage({ tone, children }: { tone: NonNullable<ActionStatus>["tone"]; children: ReactNode }) {
+  return (
+    <Badge variant={tone === "destructive" ? "destructive" : "outline"} className="w-fit">
+      {children}
+    </Badge>
+  );
+}
+
+function hourSlotOptions() {
+  return Array.from({ length: 24 }, (_, hour) => {
+    const start = `${String(hour).padStart(2, "0")}:00`;
+    const end = `${String((hour + 1) % 24).padStart(2, "0")}:00`;
+    return `${start}-${end}`;
+  });
+}
+
+function currentHourSlot() {
+  const hour = new Date().getHours();
+  return `${String(hour).padStart(2, "0")}:00-${String((hour + 1) % 24).padStart(2, "0")}:00`;
+}
+
+function qualityParameterCode(row: DashboardPayload) {
+  return str(row.code || row.parameterCode || row["CODE"]);
+}
+
+function qualityParameterName(row: DashboardPayload) {
+  return str(row.parameterName || row.description || row["PARAMETER"] || row["DESCRIPTION"] || row.specification || qualityParameterCode(row));
+}
+
+function qualityParameterInputType(row: DashboardPayload) {
+  const inputType = str(row.inputType).toLowerCase();
+  if (inputType === "pass_fail" || inputType === "pass/fail") return "pass_fail";
+  if (inputType === "text") return "text";
+  return "number";
+}
+
+function qualityParameterTolerance(row: DashboardPayload) {
+  const plus = str(row.tolerancePlus || row["TOLERANCE +"] || row["TOL +"]);
+  const minus = str(row.toleranceMinus || row["TOLERANCE -"] || row["TOL -"]);
+  if (!plus && !minus) return "-";
+  return `+${plus || "0"} / -${minus || "0"}`;
+}
+
+function qualityParameterMatchesSetup(parameter: DashboardPayload, row: DashboardPayload) {
+  if (str(parameter.status).toLowerCase() === "inactive") return false;
+  const parameterPart = machineKey(parameter.partNo || parameter.partCode || parameter["PART NO"] || parameter["PART CODE"]);
+  const parameterOption = machineKey(parameter.optionNumber || parameter["OPTION NUMBER"] || parameter["OPTION NO"]);
+  const parameterSetup = machineKey(parameter.setupNo || parameter["SETUP NO."] || parameter["SETUP NO"] || parameter["SET UP"]);
+  return parameterPart === machineKey(itemCode(row))
+    && parameterOption === machineKey(displayValue(row.optionNumber))
+    && parameterSetup === machineKey(displayValue(row.setupNo));
+}
+
+function qualityReadingResult(parameter: DashboardPayload, value: unknown) {
+  const reading = str(value);
+  if (!reading) return "";
+  if (qualityParameterInputType(parameter) === "pass_fail") return reading.toUpperCase() === "OK" ? "OK" : "NG";
+  if (qualityParameterInputType(parameter) !== "number") return "Recorded";
+  const numericReading = Number(reading);
+  const specification = Number(str(parameter.specification));
+  if (!Number.isFinite(numericReading) || !Number.isFinite(specification)) return "Recorded";
+  const plus = Number(str(parameter.tolerancePlus || 0));
+  const minus = Number(str(parameter.toleranceMinus || 0));
+  const lower = specification - (Number.isFinite(minus) ? minus : 0);
+  const upper = specification + (Number.isFinite(plus) ? plus : 0);
+  return numericReading >= lower && numericReading <= upper ? "OK" : "NG";
+}
+
+function hourlyQualityCheckId(row: DashboardPayload, prodDate: string, shift: string, hourSlot: string) {
+  return [
+    "hourly-quality",
+    prodDate,
+    shift,
+    hourSlot,
+    displayValue(row.machine),
+    itemCode(row),
+    displayValue(row.optionNumber),
+    displayValue(row.setupNo),
+  ].map(machineKey).join("|");
+}
+
+function hourlyQualityCheckMatchesSelection(check: DashboardPayload, row: DashboardPayload, prodDate: string, shift: string, hourSlot: string) {
+  return str(check.checkId) === hourlyQualityCheckId(row, prodDate, shift, hourSlot)
+    || (machineKey(check.prodDate || check.date) === machineKey(prodDate)
+      && machineKey(check.shift) === machineKey(shift)
+      && machineKey(check.hourSlot) === machineKey(hourSlot)
+      && machineKey(check.machine || check.machineNo) === machineKey(displayValue(row.machine))
+      && machineKey(check.partCode || check.partNo) === machineKey(itemCode(row))
+      && machineKey(check.optionNumber) === machineKey(displayValue(row.optionNumber))
+      && machineKey(check.setupNo) === machineKey(displayValue(row.setupNo)));
+}
+
+function hourlyQualityCheckPayload(
+  row: DashboardPayload,
+  parameters: DashboardPayload[],
+  readings: Record<string, string>,
+  remarks: Record<string, string>,
+  meta: { prodDate: string; shift: string; hourSlot: string; checkedBy: string },
+) {
+  const readingRows = parameters.map((parameter) => {
+    const code = qualityParameterCode(parameter);
+    const actualReading = str(readings[code]);
+    const result = qualityReadingResult(parameter, actualReading);
+    return {
+      code,
+      parameterName: qualityParameterName(parameter),
+      specification: str(parameter.specification),
+      tolerancePlus: str(parameter.tolerancePlus),
+      toleranceMinus: str(parameter.toleranceMinus),
+      instrumentUsed: str(parameter.instrumentUsed),
+      actualReading,
+      result,
+      remark: str(remarks[code]),
+    };
+  });
+  return {
+    checkId: hourlyQualityCheckId(row, meta.prodDate, meta.shift, meta.hourSlot),
+    prodDate: meta.prodDate,
+    shift: meta.shift,
+    hourSlot: meta.hourSlot,
+    machine: displayValue(row.machine),
+    machineType: displayValue(row.machineType),
+    partCode: itemCode(row),
+    jobCard: jobCardNumber(row),
+    jcNo: jobCardNumber(row),
+    optionNumber: displayValue(row.optionNumber),
+    setupNo: displayValue(row.setupNo),
+    setupName: displayValue(row.setupName),
+    checkedBy: meta.checkedBy.trim(),
+    okCount: readingRows.filter((reading) => reading.result === "OK").length,
+    ngCount: readingRows.filter((reading) => reading.result === "NG").length,
+    readings: readingRows,
+    savedAt: new Date().toISOString(),
+  };
+}
 function plannedSetupDate(row: DashboardPayload | undefined) {
   return row?.plannedProductionStartDate || row?.setupPlannedDate || row?.plannedDate;
 }
@@ -7499,6 +7907,25 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       payload.setupNo,
       payload.machine,
       "fpi",
+    ].map((value) => str(value).toLowerCase()).join("|");
+  }
+  if (entryType === "quality_parameter_master") {
+    return [
+      payload.partNo || payload.partCode,
+      payload.optionNumber,
+      payload.setupNo,
+      payload.code || payload.parameterCode,
+    ].map((value) => str(value).toLowerCase()).join("|");
+  }
+  if (entryType === "hourly_quality_check") {
+    return str(payload.checkId) || [
+      payload.prodDate || payload.date,
+      payload.shift,
+      payload.hourSlot,
+      payload.machine || payload.machineNo,
+      payload.partCode || payload.partNo,
+      payload.optionNumber,
+      payload.setupNo,
     ].map((value) => str(value).toLowerCase()).join("|");
   }
   if (entryType === "production_card" || entryType === "software_raw") {

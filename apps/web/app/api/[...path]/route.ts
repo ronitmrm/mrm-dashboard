@@ -446,6 +446,25 @@ function normalizeImportedValue(value: unknown) {
 }
 
 function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
+  if (entryType === "quality_parameter_master") {
+    return [
+      payload.partNo || payload.partCode,
+      payload.optionNumber,
+      payload.setupNo,
+      payload.code || payload.parameterCode,
+    ].map(text).join("|");
+  }
+  if (entryType === "hourly_quality_check") {
+    return text(payload.checkId) || [
+      payload.prodDate || payload.date,
+      payload.shift,
+      payload.hourSlot,
+      payload.machine || payload.machineNo,
+      payload.partCode || payload.partNo,
+      payload.optionNumber,
+      payload.setupNo,
+    ].map(text).join("|");
+  }
   if (["route", "cycle", "tooling"].includes(entryType)) {
     return [payload.partNo, payload.optionNumber, payload.setupNo].map(text).join("|");
   }
