@@ -9,3 +9,5 @@
 - Hourly quality parameters are stored as `quality_parameter_master` rows keyed by item/option/setup/parameter code. Saved checks are `hourly_quality_check` rows keyed by date/shift/hour/machine/item/option/setup so back-dated edits replace the intended hourly card.
 
 - 2026-07-12: Machinist setup checklist editing lives on `/dashboard/setup-checklist`, opened from the Machinist Tasks row with `sessionId` and `phase` query params. The task list should show only checklist status plus an open button; in-progress checklist values still save to `setup_checklist_session`.
+
+- 2026-07-12: Setup checklist page shows running setup metadata as top tiles. Because `dashboard.snapshot` is cached, the page stores the latest saved `setup_checklist_session` in browser local storage by session id and prefers it over stale snapshot data for immediate reopen hydration.

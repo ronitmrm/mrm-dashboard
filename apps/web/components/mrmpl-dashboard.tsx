@@ -652,7 +652,9 @@ function setupChecklistQueryFromLocation() {
 function SetupChecklistShell() {
   const dashboardPayload = useQuery(api.dashboard.snapshot, {});
   const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
-  const [{ sessionId, phase }] = useState(setupChecklistQueryFromLocation);
+  const isClientHydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
+  const { sessionId, phase } = isClientHydrated ? setupChecklistQueryFromLocation() : { sessionId: "", phase: "" };
+  const [localChecklistSession, setLocalChecklistSession] = useState<DashboardPayload | undefined>(undefined);
   const [doneBy, setDoneBy] = useState("");
   const [remark, setRemark] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
@@ -665,14 +667,24 @@ function SetupChecklistShell() {
   const activeChecklistMasters = useMemo(() => activeSetupChecklistMasterRows(asArray(productionControl.setupChecklistMasterRows)), [productionControl]);
   const setupRows = useMemo(() => setupChecklistCandidateRows(productionControl), [productionControl]);
   const row = useMemo(() => setupRows.find((candidate) => setupChecklistSessionId(candidate) === sessionId), [sessionId, setupRows]);
-  const currentChecklistSession = useMemo(() => row ? setupChecklistSessionForRow(setupChecklistSessions, row) : undefined, [row, setupChecklistSessions]);
+  const snapshotChecklistSession = useMemo(() => row ? setupChecklistSessionForRow(setupChecklistSessions, row) : undefined, [row, setupChecklistSessions]);
+  const currentChecklistSession = localChecklistSession ?? snapshotChecklistSession;
   const checklistItems = useMemo(() => {
     if (phase === "end" && Array.isArray(currentChecklistSession?.items)) return currentChecklistSession.items as DashboardPayload[];
+    if (phase === "start" && Array.isArray(currentChecklistSession?.items)) return currentChecklistSession.items as DashboardPayload[];
     return setupChecklistItemsFromMaster(activeChecklistMasters);
   }, [activeChecklistMasters, currentChecklistSession, phase]);
   const canSave = Boolean(row && (phase === "start" || phase === "end") && checklistItems.length)
     && (phase === "start" || Boolean(currentChecklistSession));
   const isComplete = canSave && setupChecklistValuesComplete(checklistItems, values, phase);
+
+  useEffect(() => {
+    if (!isClientHydrated || !sessionId) return;
+    const timeout = window.setTimeout(() => {
+      setLocalChecklistSession(readStoredSetupChecklistSession(sessionId));
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [isClientHydrated, sessionId]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -720,6 +732,8 @@ function SetupChecklistShell() {
         key: dataEntryKey("setup_checklist_session", payload),
         payload,
       });
+      setLocalChecklistSession(payload);
+      writeStoredSetupChecklistSession(payload);
       setStatus({ tone: "default", message: "Checklist progress saved." });
     } catch (err) {
       setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Checklist save failed." });
@@ -748,11 +762,21 @@ function SetupChecklistShell() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">{phase === "end" ? "Setting completion" : "Pre setting start"}</CardTitle>
-                <CardDescription>{itemCode(row)} / JC {jobCardNumber(row)} / Option {displayValue(row.optionNumber)} / Setup {displayValue(row.setupNo)} / Machine {displayValue(row.machine)}</CardDescription>
+                <CardDescription>Running setup details</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2">
-                <LabeledInput label={phase === "end" ? "Completed by" : "Started by"} value={doneBy} onChange={setDoneBy} />
-                <LabeledInput label="Remark" value={remark} onChange={setRemark} />
+              <CardContent className="grid gap-3">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+                  <TileField label="Item code" value={itemCode(row)} />
+                  <TileField label="JC no." value={jobCardNumber(row)} />
+                  <TileField label="Option" value={row.optionNumber} />
+                  <TileField label="Setup no." value={row.setupNo} />
+                  <TileField label="Machine" value={row.machine} />
+                  <TileField label="Phase" value={phase === "end" ? "Completion" : "Start"} />
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <LabeledInput label={phase === "end" ? "Completed by" : "Started by"} value={doneBy} onChange={setDoneBy} />
+                  <LabeledInput label="Remark" value={remark} onChange={setRemark} />
+                </div>
               </CardContent>
             </Card>
             <SetupChecklistForm
@@ -8234,6 +8258,25 @@ function productionCardRuntimeMinutes(prodDate: string, startTime: string, endTi
   return Math.max(Math.round((end.getTime() - start.getTime()) / 60000), 0);
 }
 
+function storedSetupChecklistSessionKey(sessionId: string) {
+  return `mrmpl:setup-checklist:${sessionId}`;
+}
+
+function readStoredSetupChecklistSession(sessionId: string) {
+  if (typeof window === "undefined" || !sessionId) return undefined;
+  try {
+    const stored = asRecord(JSON.parse(window.localStorage.getItem(storedSetupChecklistSessionKey(sessionId)) || "null"));
+    return str(stored.sessionId) ? stored : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeStoredSetupChecklistSession(session: DashboardPayload) {
+  const sessionId = str(session.sessionId);
+  if (typeof window === "undefined" || !sessionId) return;
+  window.localStorage.setItem(storedSetupChecklistSessionKey(sessionId), JSON.stringify(session));
+}
 function setupChecklistPageHref(row: DashboardPayload, phase: string) {
   return `/dashboard/setup-checklist?sessionId=${encodeURIComponent(setupChecklistSessionId(row))}&phase=${encodeURIComponent(phase)}`;
 }
