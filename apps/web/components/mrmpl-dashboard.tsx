@@ -3729,6 +3729,8 @@ function ShopFloorRowAction({
   const [remark, setRemark] = useState("");
   const [inspectionReadings, setInspectionReadings] = useState<Record<string, string[]>>({});
   const [setupChecklistValues, setSetupChecklistValues] = useState<Record<string, string>>({});
+  const [isChecklistOpen, setIsChecklistOpen] = useState(false);
+  const [isChecklistSaving, setIsChecklistSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const row = next ?? current;
   const stage = str(row?.shopFloorStage) as ShopFloorStageId;
@@ -3745,6 +3747,15 @@ function ShopFloorRowAction({
   const setupChecklistReady = !needsSetupChecklist
     || (checklistPhase === "start" && activeChecklistMasters.length > 0 && setupChecklistValuesComplete(setupChecklistItems, setupChecklistValues, checklistPhase))
     || (checklistPhase === "end" && Boolean(currentChecklistSession) && setupChecklistValuesComplete(setupChecklistItems, setupChecklistValues, checklistPhase));
+  const canSaveSetupChecklistProgress = Boolean(needsSetupChecklist && onSaveSetupChecklistSession && setupChecklistItems.length > 0)
+    && (checklistPhase === "start" || Boolean(currentChecklistSession));
+  const setupChecklistStatus = !needsSetupChecklist
+    ? "Not required"
+    : setupChecklistReady
+      ? checklistPhase === "end" ? "Completion ready" : "Start ready"
+      : currentChecklistSession
+        ? "Saved progress"
+        : "Checklist pending";
   const firstPieceMasters = useMemo(() => next && nextStage?.id === "quality_approval"
     ? matchingFirstPieceInspectionMasters(inspectionMasters, next)
     : [], [inspectionMasters, next, nextStage?.id]);
@@ -3766,6 +3777,26 @@ function ShopFloorRowAction({
     setSetupChecklistValues((currentValues) => ({ ...currentValues, [itemKey]: value }));
   }
 
+  async function submitSetupChecklistProgress() {
+    if (!next || !needsSetupChecklist || !onSaveSetupChecklistSession || !canSaveSetupChecklistProgress || isChecklistSaving) return;
+    setIsChecklistSaving(true);
+    try {
+      const setupChecklist = setupChecklistSessionForStage({
+        row: next,
+        phase: checklistPhase,
+        values: setupChecklistValues,
+        items: setupChecklistItems,
+        masterRows: activeChecklistMasters,
+        existingSession: currentChecklistSession,
+        doneBy,
+        remark,
+        completedAt: new Date().toISOString(),
+      });
+      await onSaveSetupChecklistSession(next, setupChecklist);
+    } finally {
+      setIsChecklistSaving(false);
+    }
+  }
   async function submitNextStage() {
     if (!next || !nextStage || isSubmitting) return;
     if (nextStage.id === "quality_approval" && !canSubmitInspection) return;
@@ -3887,15 +3918,34 @@ function ShopFloorRowAction({
             <Input className="h-8" value={remark} placeholder="Remark" onChange={(event) => setRemark(event.target.value)} />
           ) : null}
           {needsSetupChecklist ? (
-            <SetupChecklistForm
-              row={next}
-              phase={checklistPhase}
-              items={setupChecklistItems}
-              session={currentChecklistSession}
-              values={setupChecklistValues}
-              onValueChange={updateSetupChecklistValue}
-              onAddMaster={openDataEntry}
-            />
+            <div className="grid gap-2 rounded-md border bg-background p-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-medium">Setup checklist</div>
+                <StatusBadge value={setupChecklistStatus} />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => setIsChecklistOpen((open) => !open)}>
+                  {isChecklistOpen ? "Hide checklist" : "Open checklist"}
+                </Button>
+                {isChecklistOpen ? (
+                  <Button type="button" size="sm" variant="outline" className="w-fit" disabled={!canSaveSetupChecklistProgress || isChecklistSaving} onClick={() => void submitSetupChecklistProgress()}>
+                    <CheckCircle2 className="size-4" />
+                    Save checklist progress
+                  </Button>
+                ) : null}
+              </div>
+              {isChecklistOpen ? (
+                <SetupChecklistForm
+                  row={next}
+                  phase={checklistPhase}
+                  items={setupChecklistItems}
+                  session={currentChecklistSession}
+                  values={setupChecklistValues}
+                  onValueChange={updateSetupChecklistValue}
+                  onAddMaster={openDataEntry}
+                />
+              ) : null}
+            </div>
           ) : null}
           {needsFirstPieceInspection ? (
             <FirstPieceInspectionForm
