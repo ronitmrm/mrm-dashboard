@@ -400,6 +400,7 @@ function DashboardShell() {
   const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
   const [optimisticShopFloorStatuses, setOptimisticShopFloorStatuses] = useState<ShopFloorStatusPatch[]>([]);
   const [optimisticSetupChecklistSessions, setOptimisticSetupChecklistSessions] = useState<DashboardPayload[]>([]);
+  const [optimisticProductionCards, setOptimisticProductionCards] = useState<DashboardPayload[]>([]);
   const [planningRefreshLock, setPlanningRefreshLock] = useState<PlanningRefreshLock | null>(null);
   const lastStalePlanningRefreshKeyRef = useRef<string | undefined>(undefined);
   const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
@@ -453,6 +454,7 @@ function DashboardShell() {
       if (!result.skipped) {
         setOptimisticShopFloorStatuses([]);
         setOptimisticSetupChecklistSessions([]);
+        setOptimisticProductionCards([]);
       }
       if (result.skipped) setPlanningRefreshLock(null);
     } catch (err) {
@@ -495,6 +497,10 @@ function DashboardShell() {
       const setupChecklistSessionPatch = setupChecklistSessionPatchFromAction(path, body);
       if (setupChecklistSessionPatch) {
         setOptimisticSetupChecklistSessions((current) => upsertSetupChecklistSessionPatch(current, setupChecklistSessionPatch));
+      }
+      const productionCardPatch = productionCardPatchFromAction(path, body);
+      if (productionCardPatch) {
+        setOptimisticProductionCards((current) => upsertProductionCardPatch(current, productionCardPatch));
       }
       setActionStatus({
         tone: "default",
@@ -550,11 +556,12 @@ function DashboardShell() {
     lastSnapshotUpdatedAtRef.current = snapshotUpdatedAt;
     setOptimisticShopFloorStatuses((current) => current.length ? [] : current);
     setOptimisticSetupChecklistSessions((current) => current.length ? [] : current);
+    setOptimisticProductionCards((current) => current.length ? [] : current);
   }, [snapshotUpdatedAt]);
 
   const payload = useMemo(
-    () => applySetupChecklistSessionPatches(applyShopFloorStatusPatches(basePayload, optimisticShopFloorStatuses), optimisticSetupChecklistSessions),
-    [basePayload, optimisticShopFloorStatuses, optimisticSetupChecklistSessions],
+    () => applyProductionCardPatches(applySetupChecklistSessionPatches(applyShopFloorStatusPatches(basePayload, optimisticShopFloorStatuses), optimisticSetupChecklistSessions), optimisticProductionCards),
+    [basePayload, optimisticShopFloorStatuses, optimisticSetupChecklistSessions, optimisticProductionCards],
   );
   const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
   const isRefreshStatusLoading = dashboardRefreshStatus === undefined;
@@ -734,6 +741,47 @@ function applySetupChecklistSessionPatches(payload: DashboardPayload, patches: D
   };
 }
 
+function productionCardPatchFromAction(path: string, body: Record<string, unknown>) {
+  if (path !== "data-entry") return undefined;
+  if (str(body.entryType) !== "production_card") return undefined;
+  const payload = asRecord(body.payload);
+  return productionCardPatchKey(payload) ? payload : undefined;
+}
+
+function productionCardPatchKey(row: DashboardPayload) {
+  return optionalText(row.cardId) || dataEntryKey("production_card", row);
+}
+
+function upsertProductionCardPatch(current: DashboardPayload[], patch: DashboardPayload) {
+  const patchKey = productionCardPatchKey(patch);
+  return [
+    ...current.filter((item) => productionCardPatchKey(item) !== patchKey),
+    patch,
+  ];
+}
+
+function applyProductionCardPatches(payload: DashboardPayload, patches: DashboardPayload[]) {
+  if (!patches.length) return payload;
+  const productionControl = asRecord(payload.productionControl);
+  if (!Object.keys(productionControl).length) return payload;
+  const rows = asArray(productionControl.productionCardRows);
+  const rowsByKey = new Map(rows.map((row) => [productionCardPatchKey(row), row]));
+  let changed = false;
+  for (const patch of patches) {
+    const patchKey = productionCardPatchKey(patch);
+    if (!patchKey) continue;
+    rowsByKey.set(patchKey, { ...(rowsByKey.get(patchKey) ?? {}), ...patch });
+    changed = true;
+  }
+  if (!changed) return payload;
+  return {
+    ...payload,
+    productionControl: {
+      ...productionControl,
+      productionCardRows: [...rowsByKey.values()],
+    },
+  };
+}
 function setupChecklistSessionPatchKey(row: DashboardPayload) {
   const sessionId = str(row.sessionId);
   if (sessionId) return sessionId.toLowerCase();
@@ -3266,6 +3314,7 @@ function RoleTaskPanel({
   const queueRows = useMemo(() => shopFloorQueueRows(productionControl), [productionControl]);
   const roleRows = useMemo(() => queueRows.filter((row) => roleTaskMatches(row, role)), [queueRows, role]);
   const runningRows = useMemo(() => currentShopFloorRows(productionControl), [productionControl]);
+  const existingProductionCardRows = useMemo(() => asArray(productionControl.productionCardRows), [productionControl]);
   const productionCardRows = useMemo(() => {
     const taskRows = roleRows.map((row) => row.next).filter((row): row is DashboardPayload => Boolean(row));
     if (role === "shopFloor" || role === "quality" || role === "machinist") return runningRows;
@@ -3371,6 +3420,7 @@ function RoleTaskPanel({
           <ProductionCardRoleEntryForm
             role={role}
             rows={productionCardRows}
+            existingCardRows={existingProductionCardRows}
             onSaveProductionCard={saveProductionCard}
             downtimeReasonRows={asArray(productionControl.downtimeReasonMasterRows)}
             rejectionTypeRows={asArray(productionControl.rejectionTypeMasterRows)}
@@ -3968,6 +4018,7 @@ function codedMasterLabel(options: Array<{ code: string; label: string }>, code:
 function ProductionCardRoleEntryForm({
   role,
   rows,
+  existingCardRows = [],
   bulkRows = [],
   downtimeReasonRows = [],
   rejectionTypeRows = [],
@@ -3977,6 +4028,7 @@ function ProductionCardRoleEntryForm({
 }: {
   role: RoleTaskKind;
   rows: DashboardPayload[];
+  existingCardRows?: DashboardPayload[];
   bulkRows?: DashboardPayload[];
   downtimeReasonRows?: DashboardPayload[];
   rejectionTypeRows?: DashboardPayload[];
@@ -4015,12 +4067,11 @@ function ProductionCardRoleEntryForm({
   const [remarks, setRemarks] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const hydratedProductionCardKeyRef = useRef("");
   const rowOptions = useMemo(() => rows.map((row) => ({
     key: shopFloorPlanKey(row),
-    label: role === "shopFloor" || role === "quality" || role === "machinist"
-      ? displayValue(row.machine)
-      : `${machineValue(row, "machine")} / ${itemCode(row)} / ${jobCardNumber(row)} / setup ${displayValue(row.setupNo)}`,
-  })), [role, rows]);
+    label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}`,
+  })), [rows]);
   const downtimeReasonOptions = useMemo(() => downtimeReasonRows
     .filter((row) => displayValue(row.status).toLowerCase() !== "inactive")
     .map((row) => {
@@ -4035,6 +4086,15 @@ function ProductionCardRoleEntryForm({
   const rejectionRemarkOptions = useMemo(() => codedMasterOptions(rejectionRemarkRows, DEFAULT_REJECTION_REMARK_OPTIONS, ["rejectionRemark", "remark", "name"]), [rejectionRemarkRows]);
   const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey) ?? rows[0];
   const selectedOptionKey = selectedRow ? shopFloorPlanKey(selectedRow) : "";
+  const selectedCardKind = role === "shopFloor"
+    ? shopFloorEntryKind === "production" ? "production" : shopFloorEntryKind === "bulkDowntime" ? "bulk_downtime" : ""
+    : role === "quality" ? qualityEntryKind : "downtime";
+  const existingProductionCard = useMemo(() => {
+    if (!selectedCardKind || selectedCardKind === "bulk_downtime" || !selectedRow) return undefined;
+    return existingCardRows
+      .filter((card) => productionCardMatchesSelection(card, selectedRow, role, selectedCardKind, prodDate, shift))
+      .sort((left, right) => str(right.savedAt).localeCompare(str(left.savedAt)))[0];
+  }, [existingCardRows, prodDate, role, selectedCardKind, selectedRow, shift]);
   const defaultCycleSeconds = selectedRow ? productionCycleSeconds(selectedRow) : 0;
   const defaultPieceWeightGram = selectedRow ? productionPieceWeightGrams(selectedRow) : 0;
   const cycleSecondsInput = cycleSecondsByKey[selectedOptionKey] ?? (defaultCycleSeconds ? String(defaultCycleSeconds) : "");
@@ -4048,7 +4108,7 @@ function ProductionCardRoleEntryForm({
   const producedPcs = pieceWeightGram > 0 ? Math.floor((netProducedKg * 1000) / pieceWeightGram) : 0;
   const shopFloorRuntimeMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
   const downtimeDurationMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
-  const bulkDowntimeMinutes = productionCardRuntimeMinutes(today, bulkDowntimeStart, bulkDowntimeEnd);
+  const bulkDowntimeMinutes = productionCardRuntimeMinutes(prodDate, bulkDowntimeStart, bulkDowntimeEnd);
   const roleLabel = role === "shopFloor" ? "Shop floor production entry" : role === "quality" ? "Quality control entry" : "Machinist downtime entry";
   const hasEditedCycleSeconds = cycleSecondsByKey[selectedOptionKey] !== undefined && cycleSecondsInput !== "";
   const hasEditedPieceWeight = pieceWeightByKey[selectedOptionKey] !== undefined && pieceWeightInput !== "";
@@ -4074,6 +4134,54 @@ function ProductionCardRoleEntryForm({
     && (role === "shopFloor" ? isShopFloorProductionEntry && hasShopFloorProductionEntry : role === "quality" ? (isQualityDowntimeEntry ? hasDowntimeDetails : isQualityRejectionEntry ? hasQualityRejectionDetails : false) : hasDowntimeDetails);
   const canSaveBulkDowntime = isShopFloorBulkDowntimeEntry && bulkRows.length > 0 && Boolean(bulkDowntimeCode && bulkDowntimeStart && bulkDowntimeEnd && bulkDowntimeMinutes > 0);
   const showSaveButton = role === "shopFloor" ? isShopFloorProductionEntry : role === "quality" ? Boolean(qualityEntryKind) : true;
+
+useEffect(() => {
+    if (!selectedCardKind || selectedCardKind === "bulk_downtime" || !selectedOptionKey) return;
+    const hydrationKey = existingProductionCard
+      ? `${productionCardPatchKey(existingProductionCard)}|${optionalText(existingProductionCard.savedAt)}`
+      : `${role}|${selectedCardKind}|${prodDate}|${shift}|${selectedOptionKey}|empty`;
+    if (hydratedProductionCardKeyRef.current === hydrationKey) return;
+    hydratedProductionCardKeyRef.current = hydrationKey;
+    const savedOperator = optionalText(existingProductionCard?.operatorId) ?? "";
+    const savedStartTime = optionalText(existingProductionCard?.startTime) ?? "";
+    const savedEndTime = optionalText(existingProductionCard?.endTime) ?? "";
+    const savedGrossWeight = optionalNumber(existingProductionCard?.grossWeight) ?? 0;
+    const savedCratesUsed = optionalNumber(existingProductionCard?.cratesUsed) ?? 0;
+    const savedCrateWeight = optionalNumber(existingProductionCard?.crateWeightKg) ?? DEFAULT_CRATE_WEIGHT_KG;
+    const savedCycleTime = optionalNumber(existingProductionCard?.cycleTime) ?? 0;
+    const savedPieceWeight = optionalNumber(existingProductionCard?.pieceWeight) ?? 0;
+    const savedDowntimeCode = optionalText(existingProductionCard?.downtimeCode) ?? "";
+    const savedRejectionTypeCode = optionalText(existingProductionCard?.rejectionTypeCode) ?? "";
+    const savedRejectionReasonCode = optionalText(existingProductionCard?.rejectionReasonCode) ?? "";
+    const savedRejectionRemarkCode = optionalText(existingProductionCard?.rejectionRemarkCode) ?? "";
+    const savedRejectQty = optionalNumber(existingProductionCard?.rejectQty) ?? 0;
+    const savedRemarks = optionalText(existingProductionCard?.remarks) ?? "";
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setOperatorNumber(savedOperator === "Unassigned" ? "" : savedOperator);
+      setStartTime(savedStartTime);
+      setEndTime(savedEndTime);
+      setProducedGrossKg(savedGrossWeight > 0 ? String(savedGrossWeight) : "");
+      setCratesUsed(savedCratesUsed > 0 ? String(savedCratesUsed) : "");
+      setCrateWeightKg(String(savedCrateWeight));
+      setCycleSecondsByKey((current) => savedCycleTime > 0
+        ? { ...current, [selectedOptionKey]: String(savedCycleTime) }
+        : omitRecordKey(current, selectedOptionKey));
+      setPieceWeightByKey((current) => savedPieceWeight > 0
+        ? { ...current, [selectedOptionKey]: String(savedPieceWeight) }
+        : omitRecordKey(current, selectedOptionKey));
+      setDowntimeCode(savedDowntimeCode);
+      setRejectionTypeCode(savedRejectionTypeCode);
+      setRejectionReasonCode(savedRejectionReasonCode);
+      setRejectionRemarkCode(savedRejectionRemarkCode);
+      setRejectedPieces(savedRejectQty > 0 ? String(savedRejectQty) : "");
+      setRemarks(savedRemarks === "Bulk downtime" ? "" : savedRemarks);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [existingProductionCard, prodDate, role, selectedCardKind, selectedOptionKey, shift]);
 
 
   async function submitProductionCard() {
@@ -4202,19 +4310,14 @@ function ProductionCardRoleEntryForm({
               {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
             </select>
           </Field>
-          {role === "quality" ? (
-            <>
-              <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
-              <Field label="Shift">
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={shift} onChange={(event) => setShift(event.target.value)}>
-                  <option value="Day">Day</option>
-                  <option value="Night">Night</option>
-                  <option value="General">General</option>
-                </select>
-              </Field>
-            </>
-          ) : null}
-        </div>
+<Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
+          <Field label="Shift">
+            <select className="h-8 rounded-md border bg-background px-2 text-sm" value={shift} onChange={(event) => setShift(event.target.value)}>
+              <option value="Day">Day</option>
+              <option value="Night">Night</option>
+              <option value="General">General</option>
+            </select>
+          </Field>        </div>
       ) : null}
       {role === "shopFloor" ? (
         <>
@@ -4244,12 +4347,19 @@ function ProductionCardRoleEntryForm({
                     {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
                   </select>
                 </Field>
+<Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
+                <Field label="Shift">
+                  <select className="h-8 rounded-md border bg-background px-2 text-sm" value={shift} onChange={(event) => setShift(event.target.value)}>
+                    <option value="Day">Day</option>
+                    <option value="Night">Night</option>
+                    <option value="General">General</option>
+                  </select>
+                </Field>
                 {selectedRow ? (
-                  <div className="self-end md:col-span-2">
+                  <div className="self-end md:col-span-3">
                     <ShopFloorItemSummary row={selectedRow} tone="current" compact />
                   </div>
-                ) : null}
-            <Field label="Cycle time sec"><Input className="h-8" type="number" step="0.01" value={cycleSecondsInput} onChange={(event) => setCycleSecondsByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
+                ) : null}            <Field label="Cycle time sec"><Input className="h-8" type="number" step="0.01" value={cycleSecondsInput} onChange={(event) => setCycleSecondsByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
             <Field label="1 piece weight gm"><Input className="h-8" type="number" step="0.01" value={pieceWeightInput} onChange={(event) => setPieceWeightByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
             <Field label="Operator number"><Input className="h-8" value={operatorNumber} onChange={(event) => setOperatorNumber(event.target.value)} /></Field>
             <Field label="Machine start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} /></Field>
@@ -4273,6 +4383,7 @@ function ProductionCardRoleEntryForm({
               <StatusBadge value={`${formatNumber(bulkRows.length)} machines`} />
             </div>
             <div className="grid gap-2 md:grid-cols-4">
+              <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
               <Field label="Downtime code">
                 <select className="h-8 rounded-md border bg-background px-2 text-sm" value={bulkDowntimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setBulkDowntimeCode(event.target.value)}>
                   <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add downtime reason master"}</option>
@@ -4321,6 +4432,7 @@ function ProductionCardRoleEntryForm({
           ) : null}
           {isDowntimeEntry ? (
             <div className="grid gap-2 md:grid-cols-4">
+              <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
               <Field label="Downtime code">
                 <select className="h-8 rounded-md border bg-background px-2 text-sm" value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
                   <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add downtime reason master"}</option>
@@ -5526,7 +5638,7 @@ function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: Das
             {setupRows.map((setup, index) => (
               <div key={`${displayValue(setup.setupNo)}-${displayValue(setup.machine)}-${index}`} className="rounded-md border bg-muted/10 p-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-medium">Setup {displayValue(setup.setupNo)} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {displayValue(setup.machine)}</div>
+                  <div className="text-sm font-medium">Setup {displayValue(setup.setupNo)} Ãƒâ€šÃ‚Â· {displayValue(setup.machine)}</div>
                   <StatusBadge value={setup.runningStatus} />
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -6473,7 +6585,7 @@ function routeOptionText(option: DashboardPayload, fallback: string) {
     str(option.setupCount || option.numberOfSetups) ? `${str(option.setupCount || option.numberOfSetups)} setups` : "",
   ]
     .filter(Boolean)
-    .join(" ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ");
+    .join(" Ãƒâ€šÃ‚Â· ");
 }
 
 function readFileAsDataUrl(file: File) {
@@ -7420,10 +7532,39 @@ function productionCycleMasterPayload(row: DashboardPayload, card: DashboardPayl
     updatedAt: new Date().toISOString(),
   };
 }
+function omitRecordKey<T>(record: Record<string, T>, key: string) {
+  if (!(key in record)) return record;
+  const next = { ...record };
+  delete next[key];
+  return next;
+}
+
+function productionCardMatchesSelection(card: DashboardPayload, row: DashboardPayload, role: RoleTaskKind, cardEntryKind: string, prodDate: string, shift: string) {
+  if (!sameProductionCardText(card.cardRole, role)) return false;
+  if (!sameProductionCardText(card.cardEntryKind || inferredProductionCardEntryKind(card), cardEntryKind)) return false;
+  if (!sameProductionCardText(card.prodDate, prodDate)) return false;
+  if (!sameProductionCardText(card.shift, shift)) return false;
+  if (!sameProductionCardText(card.machine, displayValue(row.machine))) return false;
+  if (!sameProductionCardText(card.partCode || card.partNo, itemCode(row))) return false;
+  if (!sameProductionCardText(card.jobCard || card.jcNo, jobCardNumber(row))) return false;
+  return sameProductionCardText(card.setupNo, displayValue(row.setupNo));
+}
+
+function inferredProductionCardEntryKind(card: DashboardPayload) {
+  if (optionalText(card.rejectionReasonCode) || optionalNumber(card.rejectQty)) return "rejection";
+  if (optionalText(card.downtimeCode) || optionalNumber(card.downtimeMinutes)) return "downtime";
+  if (optionalText(card.bulkDowntime)) return "bulk_downtime";
+  return "production";
+}
+
+function sameProductionCardText(left: unknown, right: unknown) {
+  return str(left).toLowerCase() === str(right).toLowerCase();
+}
 function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
   const payload = {
     cardId: productionCardId(row, card),
     cardRole: optionalText(card.cardRole),
+    cardEntryKind: optionalText(card.cardEntryKind) || inferredProductionCardEntryKind(card),
     prodDate: text(card.prodDate) || new Date().toISOString().slice(0, 10),
     shift: optionalText(card.shift),
     location: optionalText(row.location),
@@ -7452,8 +7593,11 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
     targetQty: optionalNumber(card.targetQty) ?? 0,
     rejectQty: optionalNumber(card.rejectQty) ?? 0,
     rejectionType: optionalText(card.rejectionType),
+    rejectionTypeCode: optionalText(card.rejectionTypeCode),
     rejectionReason: optionalText(card.rejectionReason),
+    rejectionReasonCode: optionalText(card.rejectionReasonCode),
     rejectionRemark: optionalText(card.rejectionRemark),
+    rejectionRemarkCode: optionalText(card.rejectionRemarkCode),
     grossWeight: optionalNumber(card.grossWeight) ?? 0,
     netWeight: optionalNumber(card.netWeight) ?? 0,
     pieceWeight: optionalNumber(card.pieceWeight) ?? 0,
@@ -7473,11 +7617,17 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
 
 function productionCardId(row: DashboardPayload, card: DashboardPayload) {
   const role = optionalText(card.cardRole);
-  const isShopFloorProduction = role === "shopFloor" && !card.bulkDowntime && !optionalText(card.downtimeCode);
-  const idParts = isShopFloorProduction
-    ? [role, card.prodDate, card.shift, jobCardNumber(row), itemCode(row), row.setupNo, row.machine]
-    : [role, card.prodDate, jobCardNumber(row), itemCode(row), row.setupNo, row.machine, card.downtimeCode, card.startTime, card.endTime];
-  return idParts
+  const entryKind = optionalText(card.cardEntryKind) || inferredProductionCardEntryKind(card);
+  return [
+    role,
+    entryKind,
+    card.prodDate,
+    card.shift,
+    jobCardNumber(row),
+    itemCode(row),
+    row.setupNo,
+    row.machine,
+  ]
     .map((value) => str(value).toLowerCase())
     .join("|");
 }
