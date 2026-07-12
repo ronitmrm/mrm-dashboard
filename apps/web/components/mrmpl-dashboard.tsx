@@ -4134,7 +4134,7 @@ function ProductionCardRoleEntryForm({
   const rejectionTypeOptions = useMemo(() => codedMasterOptions(rejectionTypeRows, DEFAULT_REJECTION_TYPE_OPTIONS, ["typeOfRejection", "rejectionType", "name"]), [rejectionTypeRows]);
   const rejectionReasonOptions = useMemo(() => codedMasterOptions(rejectionReasonRows, DEFAULT_REJECTION_REASON_OPTIONS, ["rejectionReason", "reason", "name"]), [rejectionReasonRows]);
   const rejectionRemarkOptions = useMemo(() => codedMasterOptions(rejectionRemarkRows, DEFAULT_REJECTION_REMARK_OPTIONS, ["rejectionRemark", "remark", "name"]), [rejectionRemarkRows]);
-  const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey) ?? rows[0];
+  const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey);
   const selectedOptionKey = selectedRow ? shopFloorPlanKey(selectedRow) : "";
   const selectedCardKind = role === "shopFloor"
     ? shopFloorEntryKind === "production" ? "production" : shopFloorEntryKind === "bulkDowntime" ? "bulk_downtime" : ""
@@ -4357,6 +4357,7 @@ useEffect(() => {
         <div className="grid gap-2 md:grid-cols-3">
           <Field label={role === "quality" || role === "machinist" ? "Machine no." : "Machine / item"}>
             <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+              <option value="">Select machine</option>
               {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
             </select>
           </Field>
@@ -4394,6 +4395,7 @@ useEffect(() => {
               <div className="grid gap-2 md:grid-cols-3">
                 <Field label="Machine no.">
                   <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+                    <option value="">Select machine</option>
                     {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
                   </select>
                 </Field>
