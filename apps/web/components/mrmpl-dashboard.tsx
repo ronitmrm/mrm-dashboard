@@ -641,19 +641,30 @@ export function SetupChecklistPage() {
 }
 
 function setupChecklistQueryFromLocation() {
-  if (typeof window === "undefined") return { sessionId: "", phase: "" };
+  if (typeof window === "undefined") return { sessionId: "", phase: "", row: {} as DashboardPayload };
   const params = new URLSearchParams(window.location.search);
   return {
     sessionId: params.get("sessionId") ?? "",
     phase: params.get("phase") ?? "",
+    row: {
+      jcNo: params.get("jcNo") ?? "",
+      jobCard: params.get("jcNo") ?? "",
+      partCode: params.get("partCode") ?? "",
+      itemCode: params.get("partCode") ?? "",
+      optionNumber: params.get("optionNumber") ?? "",
+      setupNo: params.get("setupNo") ?? "",
+      setupName: params.get("setupName") ?? "",
+      machine: params.get("machine") ?? "",
+      machineType: params.get("machineType") ?? "",
+    } as DashboardPayload,
   };
 }
 
 function SetupChecklistShell() {
-  const dashboardPayload = useQuery(api.dashboard.snapshot, {});
   const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
   const isClientHydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
-  const { sessionId, phase } = isClientHydrated ? setupChecklistQueryFromLocation() : { sessionId: "", phase: "" };
+  const { sessionId, phase, row } = isClientHydrated ? setupChecklistQueryFromLocation() : { sessionId: "", phase: "", row: {} as DashboardPayload };
+  const checklistPageData = useQuery(api.dashboard.setupChecklistPage, sessionId ? { sessionId } : "skip");
   const [localChecklistSession, setLocalChecklistSession] = useState<DashboardPayload | undefined>(undefined);
   const [doneBy, setDoneBy] = useState("");
   const [remark, setRemark] = useState("");
@@ -661,19 +672,14 @@ function SetupChecklistShell() {
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState<ActionStatus>(null);
 
-  const snapshot = asRecord(dashboardPayload);
-  const productionControl = asRecord(snapshot.productionControl);
-  const setupChecklistSessions = useMemo(() => asArray(productionControl.setupChecklistSessionRows), [productionControl]);
-  const activeChecklistMasters = useMemo(() => activeSetupChecklistMasterRows(asArray(productionControl.setupChecklistMasterRows)), [productionControl]);
-  const setupRows = useMemo(() => setupChecklistCandidateRows(productionControl), [productionControl]);
-  const row = useMemo(() => setupRows.find((candidate) => setupChecklistSessionId(candidate) === sessionId), [sessionId, setupRows]);
-  const snapshotChecklistSession = useMemo(() => row ? setupChecklistSessionForRow(setupChecklistSessions, row) : undefined, [row, setupChecklistSessions]);
+  const pageRecord = asRecord(checklistPageData);
+  const activeChecklistMasters = useMemo(() => activeSetupChecklistMasterRows(asArray(pageRecord.setupChecklistMasterRows)), [pageRecord.setupChecklistMasterRows]);
+  const snapshotChecklistSessionRecord = asRecord(pageRecord.setupChecklistSession);
+  const snapshotChecklistSession = Object.keys(snapshotChecklistSessionRecord).length ? snapshotChecklistSessionRecord : undefined;
   const currentChecklistSession = localChecklistSession ?? snapshotChecklistSession;
-  const checklistItems = useMemo(() => {
-    if (phase === "end" && Array.isArray(currentChecklistSession?.items)) return currentChecklistSession.items as DashboardPayload[];
-    if (phase === "start" && Array.isArray(currentChecklistSession?.items)) return currentChecklistSession.items as DashboardPayload[];
-    return setupChecklistItemsFromMaster(activeChecklistMasters);
-  }, [activeChecklistMasters, currentChecklistSession, phase]);
+  const checklistItems = Array.isArray(currentChecklistSession?.items)
+    ? currentChecklistSession.items as DashboardPayload[]
+    : setupChecklistItemsFromMaster(activeChecklistMasters);
   const canSave = Boolean(row && (phase === "start" || phase === "end") && checklistItems.length)
     && (phase === "start" || Boolean(currentChecklistSession));
   const isComplete = canSave && setupChecklistValuesComplete(checklistItems, values, phase);
@@ -755,7 +761,7 @@ function SetupChecklistShell() {
             Dashboard
           </Button>
         </div>
-        {dashboardPayload === undefined ? (
+        {checklistPageData === undefined ? (
           <Skeleton className="h-56 w-full" />
         ) : row ? (
           <>
@@ -8278,21 +8284,20 @@ function writeStoredSetupChecklistSession(session: DashboardPayload) {
   window.localStorage.setItem(storedSetupChecklistSessionKey(sessionId), JSON.stringify(session));
 }
 function setupChecklistPageHref(row: DashboardPayload, phase: string) {
-  return `/dashboard/setup-checklist?sessionId=${encodeURIComponent(setupChecklistSessionId(row))}&phase=${encodeURIComponent(phase)}`;
+  const params = new URLSearchParams({
+    sessionId: setupChecklistSessionId(row),
+    phase,
+    jcNo: jobCardNumber(row),
+    partCode: itemCode(row),
+    optionNumber: displayValue(row.optionNumber),
+    setupNo: displayValue(row.setupNo),
+    setupName: displayValue(row.setupName),
+    machine: displayValue(row.machine),
+    machineType: displayValue(row.machineType),
+  });
+  return `/dashboard/setup-checklist?${params.toString()}`;
 }
 
-function setupChecklistCandidateRows(productionControl: DashboardPayload) {
-  const rows = [
-    ...shopFloorQueueRows(productionControl).map((row) => row.next),
-    ...currentShopFloorRows(productionControl),
-  ].filter((row): row is DashboardPayload => Boolean(row));
-  const bySessionId = new Map<string, DashboardPayload>();
-  for (const row of rows) {
-    const sessionId = setupChecklistSessionId(row);
-    if (sessionId && !bySessionId.has(sessionId)) bySessionId.set(sessionId, row);
-  }
-  return [...bySessionId.values()];
-}
 function setupChecklistSessionId(row: DashboardPayload) {
   return [
     jobCardNumber(row),

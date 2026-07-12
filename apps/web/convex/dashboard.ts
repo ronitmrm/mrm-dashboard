@@ -265,6 +265,37 @@ export const snapshot = query({
   },
 });
 
+export const setupChecklistPage = query({
+  args: {
+    sessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireDashboardAccess(ctx);
+    const ownerFields = await getGlobalOwnerFields(ctx);
+    const masterRows = await ctx.db
+      .query("dataEntries")
+      .withIndex("by_entry_type", (q) => q.eq("entryType", "setup_checklist_master"))
+      .collect();
+    const sessionRows = args.sessionId
+      ? await ctx.db
+        .query("dataEntries")
+        .withIndex("by_owner_entry_type_key", (q) => q
+          .eq("ownerId", ownerFields.ownerId)
+          .eq("entryType", "setup_checklist_session")
+          .eq("key", args.sessionId))
+        .order("desc")
+        .take(20)
+      : [];
+    const sessionCorrectionTargets = await activeCorrectionTargetsForRows(ctx, "dataEntries", sessionRows);
+    const session = latestUncorrectedRow(sessionRows, "dataEntries", sessionCorrectionTargets);
+    return {
+      setupChecklistMasterRows: masterRows
+        .filter((row) => row.ownerId === ownerFields.ownerId)
+        .map((row) => payloadRecord(row.payload)),
+      setupChecklistSession: session ? payloadRecord(session.payload) : undefined,
+    };
+  },
+});
 export const refreshSnapshot = action({
   args: {
     force: v.optional(v.boolean()),

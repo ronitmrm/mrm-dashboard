@@ -11,3 +11,5 @@
 - 2026-07-12: Machinist setup checklist editing lives on `/dashboard/setup-checklist`, opened from the Machinist Tasks row with `sessionId` and `phase` query params. The task list should show only checklist status plus an open button; in-progress checklist values still save to `setup_checklist_session`.
 
 - 2026-07-12: Setup checklist page shows running setup metadata as top tiles. Because `dashboard.snapshot` is cached, the page stores the latest saved `setup_checklist_session` in browser local storage by session id and prefers it over stale snapshot data for immediate reopen hydration.
+
+- 2026-07-12: Setup checklist page must not load `dashboard.snapshot`; use the lightweight `api.dashboard.setupChecklistPage` query plus row details in the URL so checklist opening is fast and does not pull the multi-MB dashboard payload.
