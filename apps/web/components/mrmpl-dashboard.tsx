@@ -381,8 +381,8 @@ const dataEntrySpecs: DataEntrySpec[] = [
   },
   {
     entryType: "downtime_reason_master",
-    title: "Downtime reason master",
-    description: "Downtime reason codes used by shop floor, quality, and machinist downtime entries.",
+    title: "Legacy downtime reason master",
+    description: "Legacy downtime-only reason codes. New downtime codes should be maintained in Defect / downtime reason master.",
     fields: [
       { name: "code", label: "Downtime code", required: true },
       { name: "reason", label: "Reason", required: true },
@@ -415,11 +415,11 @@ const dataEntrySpecs: DataEntrySpec[] = [
   },
   {
     entryType: "rejection_reason_master",
-    title: "Rejection reason master",
-    description: "Defect/rejection reason codes used in QC rejection entry.",
+    title: "Defect / downtime reason master",
+    description: "Shared defect and downtime reason codes used by QC rejection and downtime entries.",
     fields: [
       { name: "code", label: "Code", required: true },
-      { name: "rejectionReason", label: "Rejection reason", required: true },
+      { name: "rejectionReason", label: "Defect / downtime reason", required: true },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
@@ -4494,6 +4494,9 @@ const DEFAULT_REJECTION_REASON_OPTIONS = [
   { code: "D56", label: "Barb Length Minus" },
   { code: "D57", label: "Inner Diameter Plus" },
   { code: "D58", label: "Inner Diameter Minus" },
+  { code: "D59", label: "Electricity failure" },
+  { code: "D60", label: "No raw material" },
+  { code: "D61", label: "No operator" },
 ];
 
 function codedMasterOptions(rows: DashboardPayload[], defaults: Array<{ code: string; label: string }>, labelFields: string[]) {
@@ -4508,6 +4511,17 @@ function codedMasterOptions(rows: DashboardPayload[], defaults: Array<{ code: st
   return [...options.values()];
 }
 
+function combinedDowntimeReasonOptions(sharedReasonOptions: Array<{ code: string; label: string }>, legacyDowntimeRows: DashboardPayload[]) {
+  const options = new Map(sharedReasonOptions.map((option) => [option.code, { code: option.code, reason: option.label, label: `${option.code} - ${option.label}` }]));
+  for (const row of legacyDowntimeRows) {
+    if (displayValue(row.status).toLowerCase() === "inactive") continue;
+    const code = displayValue(row.code || row.downtimeCode);
+    if (!code || code === "-") continue;
+    const reason = displayValue(row.reason || row.downtimeReason || row.rejectionReason || row.description);
+    options.set(code, { code, reason: reason !== "-" ? reason : code, label: reason !== "-" ? `${code} - ${reason}` : code });
+  }
+  return [...options.values()].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+}
 function codedMasterLabel(options: Array<{ code: string; label: string }>, code: string) {
   return options.find((option) => option.code === code)?.label ?? code;
 }
@@ -4569,17 +4583,10 @@ function ProductionCardRoleEntryForm({
     key: shopFloorPlanKey(row),
     label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}`,
   })), [rows]);
-  const downtimeReasonOptions = useMemo(() => downtimeReasonRows
-    .filter((row) => displayValue(row.status).toLowerCase() !== "inactive")
-    .map((row) => {
-      const code = displayValue(row.code || row.downtimeCode);
-      const reason = displayValue(row.reason || row.downtimeReason || row.description);
-      return { code, reason, label: reason !== "-" ? `${code} - ${reason}` : code };
-    })
-    .filter((row) => row.code && row.code !== "-"), [downtimeReasonRows]);
-  const downtimeReasonByCode = useMemo(() => new Map(downtimeReasonOptions.map((row) => [row.code, row.reason])), [downtimeReasonOptions]);
   const rejectionTypeOptions = useMemo(() => codedMasterOptions(rejectionTypeRows, DEFAULT_REJECTION_TYPE_OPTIONS, ["typeOfRejection", "rejectionType", "name"]), [rejectionTypeRows]);
-  const rejectionReasonOptions = useMemo(() => codedMasterOptions(rejectionReasonRows, DEFAULT_REJECTION_REASON_OPTIONS, ["rejectionReason", "reason", "name"]), [rejectionReasonRows]);
+  const rejectionReasonOptions = useMemo(() => codedMasterOptions(rejectionReasonRows, DEFAULT_REJECTION_REASON_OPTIONS, ["rejectionReason", "reason", "name", "downtimeReason", "description"]), [rejectionReasonRows]);
+  const downtimeReasonOptions = useMemo(() => combinedDowntimeReasonOptions(rejectionReasonOptions, downtimeReasonRows), [downtimeReasonRows, rejectionReasonOptions]);
+  const downtimeReasonByCode = useMemo(() => new Map(downtimeReasonOptions.map((row) => [row.code, row.reason])), [downtimeReasonOptions]);
   const rejectionRemarkOptions = useMemo(() => codedMasterOptions(rejectionRemarkRows, DEFAULT_REJECTION_REMARK_OPTIONS, ["rejectionRemark", "remark", "name"]), [rejectionRemarkRows]);
   const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey);
   const selectedOptionKey = selectedRow ? shopFloorPlanKey(selectedRow) : "";
@@ -4885,7 +4892,7 @@ useEffect(() => {
               <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
               <Field label="Downtime code">
                 <select className="h-8 rounded-md border bg-background px-2 text-sm" value={bulkDowntimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setBulkDowntimeCode(event.target.value)}>
-                  <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add downtime reason master"}</option>
+                  <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add defect / downtime reason master"}</option>
                   {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
                 </select>
               </Field>
@@ -4934,7 +4941,7 @@ useEffect(() => {
               <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
               <Field label="Downtime code">
                 <select className="h-8 rounded-md border bg-background px-2 text-sm" value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
-                  <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add downtime reason master"}</option>
+                  <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add defect / downtime reason master"}</option>
                   {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
                 </select>
               </Field>

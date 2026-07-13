@@ -51,3 +51,7 @@ _Avoid_: Single probable date.
 **Quality Inspection Parameter Set**:
 The ordered parameters, specifications, instruments, and tolerances assigned to one item, option, and setup and reused by both first-piece inspection and hourly quality checks.
 _Avoid_: Separate FPIR master, hourly QC parameter master.
+
+**Defect / Downtime Reason**:
+A coded reason describing a quality defect or a downtime cause that can stop or affect machine production.
+_Avoid_: Separate defect code, separate downtime code.
