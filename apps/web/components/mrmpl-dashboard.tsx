@@ -283,11 +283,11 @@ const dataEntrySpecs: DataEntrySpec[] = [
   },
   {
     entryType: "maintenance_master",
-    title: "Maintenance master",
-    description: "Maintenance codes, titles, default frequency, and optional checklist used when assigning machine schedules.",
+    title: "Maintenance schedule master",
+    description: "Reusable weekly, monthly, or custom maintenance schedules. Machine numbers are assigned later from Machine Master.",
     fields: [
       { name: "maintenanceCode", label: "Maintenance code", required: true },
-      { name: "maintenanceTitle", label: "Maintenance title", required: true },
+      { name: "maintenanceTitle", label: "Maintenance schedule title", required: true },
       { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
       { name: "checklistCode", label: "Checklist code" },
       { name: "estimatedMinutes", label: "Estimated minutes", type: "number", min: "0" },
@@ -307,22 +307,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "stepDescription", label: "Step description", required: true },
       { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
       { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
-      { name: "remark", label: "Remark" },
-    ],
-  },
-  {
-    entryType: "maintenance_schedule",
-    title: "Maintenance schedule",
-    description: "Planned preventive maintenance frequency for each machine.",
-    fields: [
-      { name: "machineNo", label: "Machine no.", required: true },
-      { name: "maintenanceCode", label: "Maintenance code", required: true },
-      { name: "maintenanceTitle", label: "Maintenance title", required: true },
-      { name: "checklistCode", label: "Checklist code" },
-      { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
-      { name: "firstDueDate", label: "First due date", type: "date", required: true },
-      { name: "estimatedMinutes", label: "Estimated minutes", type: "number", min: "0" },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
@@ -5660,7 +5644,7 @@ function MachineMasterPanel({
   if (!selectedMachineNo) {
     return (
       <section className="grid gap-4">
-        <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Filtered", formatNumber(filteredMachineRows.length)], ["Maintenance master", formatNumber(maintenanceMasterRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)]]} />
+        <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Filtered", formatNumber(filteredMachineRows.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)]]} />
         <Card>
           <CardHeader>
             <CardTitle>Machines</CardTitle>
@@ -5712,7 +5696,7 @@ function MachineMasterPanel({
         </div>
         <Button type="button" variant="outline" onClick={closeMachine}>Back to machines</Button>
       </div>
-      <TrackingSummary items={[["Schedules", formatNumber(machineSchedules.length)], ["Records", formatNumber(machineHistory.length)], ["Filtered", formatNumber(filteredHistory.length)], ["Master titles", formatNumber(maintenanceMasterRows.length)]]} />
+      <TrackingSummary items={[["Schedules", formatNumber(machineSchedules.length)], ["Records", formatNumber(machineHistory.length)], ["Filtered", formatNumber(filteredHistory.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)]]} />
       <Card>
         <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine maintenance schedules and records.</CardDescription></CardHeader>
         <CardContent><div className="grid gap-3 md:grid-cols-4"><TileField label="Machine type" value={selectedMachine.machineType} important /><TileField label="Machine name" value={selectedMachine.machineName} /><TileField label="Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
@@ -5720,30 +5704,30 @@ function MachineMasterPanel({
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div>
-            <CardTitle>Machine schedules</CardTitle>
+            <CardTitle>Assigned maintenance schedules</CardTitle>
             <CardDescription>{machineSchedules.length ? `${formatNumber(filteredMachineSchedules.length)} of ${formatNumber(machineSchedules.length)} schedules shown` : "No schedules assigned yet"}</CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {hasScheduleFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setScheduleCodeFilter(""); setScheduleTitleFilter(""); setScheduleChecklistFilter(""); setScheduleFrequencyFilter(""); setScheduleFirstDueFilter(""); setScheduleStatusFilter(""); }}>Clear filters</Button> : null}
-            <Button type="button" size="sm" variant={isScheduleFormOpen ? "secondary" : "default"} onClick={() => setIsScheduleFormOpen((open) => !open)}><CalendarDays className="size-4" />{isScheduleFormOpen ? "Close entry" : "Add schedule"}</Button>
+            <Button type="button" size="sm" variant={isScheduleFormOpen ? "secondary" : "default"} onClick={() => setIsScheduleFormOpen((open) => !open)}><CalendarDays className="size-4" />{isScheduleFormOpen ? "Close entry" : "Assign schedule"}</Button>
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
           {isScheduleFormOpen ? (
             <div className="grid gap-4 rounded-lg border p-3">
-              {!maintenanceMasterRows.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No maintenance master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_master", {})}>Add maintenance in Data Entry</Button></div> : null}
+              {!maintenanceMasterRows.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No maintenance schedule master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_master", {})}>Add schedule in Data Entry</Button></div> : null}
               {!checklistOptions.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No checklist master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_checklist_master", maintenanceChecklistMasterDefaults("machineMasterTab"))}>Add checklist in Data Entry</Button></div> : null}
               {selectedChecklistRows.length ? <MaintenanceChecklistPreview rows={selectedChecklistRows} /> : null}
               <form className="grid gap-3" onSubmit={saveSchedule}>
                 <input type="hidden" name="machineNo" value={displayValue(selectedMachine.machineNo)} />
                 <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-                  <Field label="Maintenance title">
+                  <Field label="Maintenance schedule">
                     <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedMaintenanceCode} onChange={(event) => { const code = event.target.value; setSelectedMaintenanceCode(code); const master = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(code)); setSelectedChecklistCode(displayValue(master?.checklistCode) !== "-" ? displayValue(master?.checklistCode) : ""); }} required>
-                      <option value="">Select maintenance</option>
+                      <option value="">Select schedule</option>
                       {maintenanceMasterRows.map((row) => <option key={displayValue(row.maintenanceCode)} value={displayValue(row.maintenanceCode)}>{displayValue(row.maintenanceTitle)}</option>)}
                     </select>
                   </Field>
-                  <Field label="Maintenance code"><Input value={displayValue(selectedMaintenance?.maintenanceCode)} readOnly /></Field>
+                  <Field label="Schedule code"><Input value={displayValue(selectedMaintenance?.maintenanceCode)} readOnly /></Field>
                   <Field label="Frequency days"><Input value={displayValue(selectedMaintenance?.frequencyDays)} readOnly /></Field>
                   <Field label="Checklist code"><Input value={displayValue(selectedMaintenance?.checklistCode)} readOnly /></Field>
                   <Field label="First due date"><Input name="firstDueDate" type="date" defaultValue={todayIsoDate()} required /></Field>
@@ -8577,9 +8561,8 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
 
 function maintenanceScheduleFields(): LegacyField[] {
   return [
-    { name: "machineNo", label: "Machine no.", required: true },
     { name: "maintenanceCode", label: "Maintenance code", required: true },
-    { name: "maintenanceTitle", label: "Maintenance title", required: true },
+    { name: "maintenanceTitle", label: "Maintenance schedule title", required: true },
     { name: "checklistCode", label: "Checklist code" },
     { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
     { name: "firstDueDate", label: "First due date", type: "date", required: true },
