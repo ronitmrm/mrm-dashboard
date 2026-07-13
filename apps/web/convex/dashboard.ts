@@ -35,6 +35,19 @@ async function requireDashboardAccess(ctx: QueryCtx | MutationCtx | ActionCtx) {
   await requireDashboardUserId(ctx);
 }
 
+export const currentDashboardUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireDashboardUserId(ctx);
+    const user = await ctx.db.get(userId);
+    return {
+      userId,
+      email: user?.email ?? "",
+      name: user?.name ?? "",
+      displayId: user?.email || user?.name || userId,
+    };
+  },
+});
 async function getGlobalOwnerFields(ctx: QueryCtx | MutationCtx) {
   await requireDashboardAccess(ctx);
   return { ownerId: undefined };

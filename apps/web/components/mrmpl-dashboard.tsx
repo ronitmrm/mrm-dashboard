@@ -516,18 +516,21 @@ export function HourlyQualityCheckPage() {
 
 function HourlyQualityCheckShell() {
   const hourlyQualityPageData = useQuery(api.dashboard.hourlyQualityPage, {});
+  const currentDashboardUser = useQuery(api.dashboard.currentDashboardUser, {});
   const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
   const [prodDate, setProdDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [shift, setShift] = useState("Day");
   const [hourSlot, setHourSlot] = useState(() => currentHourSlot());
   const [selectedKey, setSelectedKey] = useState("");
-  const [checkedBy, setCheckedBy] = useState("");
   const [readings, setReadings] = useState<Record<string, string>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState<ActionStatus>(null);
 
   const hourlyQualityPageRecord = asRecord(hourlyQualityPageData);
+  const currentDashboardUserRecord = asRecord(currentDashboardUser);
+  const performerId = str(currentDashboardUserRecord.userId);
+  const performerDisplay = str(currentDashboardUserRecord.displayId || currentDashboardUserRecord.email || currentDashboardUserRecord.name || performerId);
   const runningRows = useMemo(() => asArray(hourlyQualityPageRecord.runningRows), [hourlyQualityPageRecord.runningRows]);
   const selectedRow = useMemo(() => runningRows.find((row) => shopFloorPlanKey(row) === selectedKey), [runningRows, selectedKey]);
   const qualityParameterRows = useMemo(() => asArray(hourlyQualityPageRecord.qualityParameterMasterRows), [hourlyQualityPageRecord.qualityParameterMasterRows]);
@@ -544,7 +547,6 @@ function HourlyQualityCheckShell() {
       if (!existingCheck) {
         setReadings({});
         setRemarks({});
-        setCheckedBy("");
         return;
       }
       const nextReadings: Record<string, string> = {};
@@ -557,18 +559,17 @@ function HourlyQualityCheckShell() {
       }
       setReadings(nextReadings);
       setRemarks(nextRemarks);
-      setCheckedBy(str(existingCheck.checkedBy));
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [existingCheck]);
 
   async function saveHourlyCheck() {
-    if (!selectedRow || !checkedBy.trim() || !parameters.length) return;
+    if (!selectedRow || !performerId || !parameters.length) return;
     const payload = hourlyQualityCheckPayload(selectedRow, parameters, readings, remarks, {
       prodDate,
       shift,
       hourSlot,
-      checkedBy,
+      checkedBy: performerId,
     });
     setIsSaving(true);
     setStatus(null);
@@ -587,7 +588,7 @@ function HourlyQualityCheckShell() {
     }
   }
 
-  const canSave = Boolean(selectedRow && checkedBy.trim() && parameters.length && parameters.every((parameter) => {
+  const canSave = Boolean(selectedRow && performerId && parameters.length && parameters.every((parameter) => {
     if (str(parameter.required).toLowerCase() === "no") return true;
     return str(readings[qualityParameterCode(parameter)]);
   }));
@@ -611,7 +612,7 @@ function HourlyQualityCheckShell() {
             <LabeledSelect label="Shift" value={shift} onChange={setShift} options={["Day", "Night"]} />
             <LabeledSelect label="Machine no." value={selectedKey} onChange={setSelectedKey} options={runningRows.map((row) => ({ value: shopFloorPlanKey(row), label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}` }))} placeholder="Select machine" />
             <LabeledSelect label="Hour slot" value={hourSlot} onChange={setHourSlot} options={hourSlotOptions()} />
-            <LabeledInput label="Checked by" value={checkedBy} onChange={setCheckedBy} />
+            <label className="grid gap-1 text-xs font-medium text-muted-foreground">Checked by<Input value={performerDisplay || "Loading user..."} readOnly /></label>
           </CardContent>
         </Card>
         {selectedRow ? (
