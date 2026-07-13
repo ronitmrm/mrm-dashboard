@@ -5553,13 +5553,14 @@ function MachineMasterPanel({
   const checklistRows = asArray(productionControl.maintenanceChecklistMasterRows);
   const activeChecklistRows = useMemo(() => activeMaintenanceChecklistRows(checklistRows), [checklistRows]);
   const checklistOptions = useMemo(() => maintenanceChecklistOptions(activeChecklistRows), [activeChecklistRows]);
-  const [selectedMachineNo, setSelectedMachineNo] = useState("");
+  const [selectedMachineNo] = useState(() => typeof window === "undefined" ? "" : str(new URLSearchParams(window.location.search).get("machine")));
   const [selectedChecklistCode, setSelectedChecklistCode] = useState("");
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyTypeFilter, setHistoryTypeFilter] = useState("");
   const [historyCodeFilter, setHistoryCodeFilter] = useState("");
   const [historyResultFilter, setHistoryResultFilter] = useState("");
   const [selectedReportKey, setSelectedReportKey] = useState("");
+
   const selectedMachine = machineRows.find((row) => machineKey(row.machineNo) === machineKey(selectedMachineNo));
   const machineSchedules = selectedMachineNo ? maintenanceSchedulesForMachine(scheduleRows, selectedMachineNo) : [];
   const machineHistory = selectedMachineNo ? maintenanceHistoryRowsForMachine(completionRows, selectedMachineNo) : [];
@@ -5569,6 +5570,14 @@ function MachineMasterPanel({
   const typeOptions = uniqueValues(machineHistory.map((row) => displayValue(row.maintenanceType || "Planned")));
   const codeOptions = uniqueValues(machineHistory.map((row) => displayValue(row.maintenanceCode)).filter((value) => value !== "-"));
   const resultOptions = uniqueValues(machineHistory.map((row) => displayValue(row.result)).filter((value) => value !== "-"));
+
+  function openMachine(machineNo: string) {
+    window.location.assign(`${dashboardTabHref("machineMasterTab")}&machine=${encodeURIComponent(machineNo)}`);
+  }
+
+  function closeMachine() {
+    window.location.assign(dashboardTabHref("machineMasterTab"));
+  }
 
   async function saveSchedule(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -5589,73 +5598,101 @@ function MachineMasterPanel({
     setSelectedChecklistCode("");
   }
 
-  return (
-    <section className="grid gap-4">
-      <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)], ["Checklists", formatNumber(checklistOptions.length)]]} />
-      <div className="grid gap-4 @5xl/main:grid-cols-[340px_minmax(0,1fr)]">
+  if (!selectedMachineNo) {
+    return (
+      <section className="grid gap-4">
+        <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)], ["Checklists", formatNumber(checklistOptions.length)]]} />
         <Card>
-          <CardHeader><CardTitle>Machines</CardTitle><CardDescription>Select a machine to manage schedule and history.</CardDescription></CardHeader>
+          <CardHeader>
+            <CardTitle>Machines</CardTitle>
+            <CardDescription>Select a machine to open its maintenance page.</CardDescription>
+          </CardHeader>
           <CardContent className="grid gap-3">
             {!machineRows.length ? <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("machine_master", { status: "Active", __returnTab: "machineMasterTab" })}>Add machine</Button> : null}
-            <div className="max-h-[68vh] overflow-auto rounded-lg border">
-              <Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Machine</TableHead><TableHead>Type</TableHead><TableHead></TableHead></TableRow></TableHeader>
+            <div className="max-h-[72vh] overflow-auto rounded-lg border">
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Machine</TableHead><TableHead>Type</TableHead><TableHead>Location</TableHead><TableHead></TableHead></TableRow></TableHeader>
                 <TableBody>{machineRows.map((row) => {
                   const machineNo = displayValue(row.machineNo);
-                  const selected = machineKey(machineNo) === machineKey(selectedMachineNo);
-                  return <TableRow key={machineNo} className={selected ? "bg-muted/50" : ""}><TableCell><div className="font-medium">{machineNo}</div><div className="text-xs text-muted-foreground">{displayValue(row.location)}</div></TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell className="text-right"><Button type="button" size="sm" variant={selected ? "default" : "outline"} onClick={() => { setSelectedMachineNo(machineNo); setSelectedReportKey(""); }}>Open</Button></TableCell></TableRow>;
-                })}</TableBody></Table>
+                  return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></TableCell></TableRow>;
+                })}</TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
-        {selectedMachine ? (
-          <div className="grid gap-4">
-            <Card>
-              <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine maintenance schedules and records.</CardDescription></CardHeader>
-              <CardContent><div className="grid gap-3 md:grid-cols-4"><TileField label="Machine type" value={selectedMachine.machineType} important /><TileField label="Machine name" value={selectedMachine.machineName} /><TileField label="Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Assign maintenance schedule</CardTitle><CardDescription>Checklist master remains in Data Entry; schedules are assigned here.</CardDescription></CardHeader>
-              <CardContent className="grid gap-4">
-                {!checklistOptions.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No checklist master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_checklist_master", maintenanceChecklistMasterDefaults("machineMasterTab"))}>Add checklist in Data Entry</Button></div> : null}
-                {selectedChecklistRows.length ? <MaintenanceChecklistPreview rows={selectedChecklistRows} /> : null}
-                <form className="grid gap-3" onSubmit={saveSchedule}>
-                  <input type="hidden" name="machineNo" value={displayValue(selectedMachine.machineNo)} />
-                  <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-                    <Field label="Maintenance code"><Input name="maintenanceCode" placeholder="PM01" required /></Field>
-                    <Field label="Maintenance title"><Input name="maintenanceTitle" placeholder="Monthly preventive check" required /></Field>
-                    <Field label="Checklist code"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={selectedChecklistCode} onChange={(event) => setSelectedChecklistCode(event.target.value)}><option value="">No checklist</option>{checklistOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.title}</option>)}</select></Field>
-                    <Field label="Frequency days"><Input name="frequencyDays" type="number" min="1" required /></Field>
-                    <Field label="First due date"><Input name="firstDueDate" type="date" defaultValue={todayIsoDate()} required /></Field>
-                    <Field label="Estimated minutes"><Input name="estimatedMinutes" type="number" min="0" /></Field>
-                    <Field label="Assigned to"><Input name="assignedTo" /></Field>
-                    <Field label="Priority"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="priority" defaultValue="Normal"><option value="Normal">Normal</option><option value="High">High</option><option value="Critical">Critical</option></select></Field>
-                    <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue="Active"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
-                    <Field label="Remark"><Input name="remark" /></Field>
-                  </div>
-                  <Button type="submit" className="w-fit"><CalendarDays className="size-4" />Save schedule</Button>
-                </form>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Machine schedules</CardTitle><CardDescription>{machineSchedules.length ? `${formatNumber(machineSchedules.length)} schedules assigned` : "No schedules assigned yet"}</CardDescription></CardHeader>
-              <CardContent>{machineSchedules.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Code</TableHead><TableHead>Title</TableHead><TableHead>Checklist</TableHead><TableHead>Frequency</TableHead><TableHead>First due</TableHead><TableHead>Status</TableHead><TableHead>Assigned</TableHead></TableRow></TableHeader><TableBody>{machineSchedules.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell>{displayValue(row.maintenanceCode)}</TableCell><TableCell>{displayValue(row.maintenanceTitle)}</TableCell><TableCell>{displayValue(row.checklistCode)}</TableCell><TableCell>{displayValue(row.frequencyDays)} days</TableCell><TableCell>{displayValue(row.firstDueDate)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell>{displayValue(row.assignedTo)}</TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved for this machine.</EmptyRowsMessage>}</CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Maintenance history</CardTitle><CardDescription>Planned and breakdown maintenance saved against this machine.</CardDescription></CardHeader>
-              <CardContent className="grid gap-4">
-                <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_repeat(3,180px)]"><Label className="grid gap-1 text-xs font-medium text-muted-foreground"><span>Search</span><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={historyQuery} placeholder="Search maintenance report" onChange={(event) => setHistoryQuery(event.target.value)} /></div></Label><FilterSelect label="Type" value={historyTypeFilter} onChange={setHistoryTypeFilter} options={[["", "All types"], ...typeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Code" value={historyCodeFilter} onChange={setHistoryCodeFilter} options={[["", "All codes"], ...codeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Result" value={historyResultFilter} onChange={setHistoryResultFilter} options={[["", "All results"], ...resultOptions.map((value) => [value, value] as [string, string])]} /></div>
-                {filteredHistory.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Maintenance</TableHead><TableHead>Changed parts</TableHead><TableHead>Done by</TableHead><TableHead>Result</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{filteredHistory.map((row) => { const key = maintenanceRecordKey(row); return <TableRow key={key} className={key === selectedReportKey ? "bg-muted/50" : ""}><TableCell>{displayValue(row.completedDate)}</TableCell><TableCell><StatusBadge value={row.maintenanceType || "Planned"} /></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)}</div><div className="text-xs text-muted-foreground">{displayValue(row.maintenanceTitle)}</div></TableCell><TableCell className="max-w-64 truncate">{displayValue(row.partsChanged)}</TableCell><TableCell>{displayValue(row.completedBy)}</TableCell><TableCell><StatusBadge value={row.result} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => setSelectedReportKey(key)}>Report</Button></TableCell></TableRow>; })}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance records match this machine and filter.</EmptyRowsMessage>}
-                {selectedReport ? <MaintenanceReportDetail row={selectedReport} /> : null}
-              </CardContent>
-            </Card>
-          </div>
-        ) : <Card><CardHeader><CardTitle>Select a machine</CardTitle><CardDescription>Open a machine to assign schedules and review maintenance history.</CardDescription></CardHeader></Card>}
+      </section>
+    );
+  }
+
+  if (!selectedMachine) {
+    return (
+      <section className="grid gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Machine not found</CardTitle>
+            <CardDescription>The selected machine is not available in machine master.</CardDescription>
+          </CardHeader>
+          <CardContent><Button type="button" variant="outline" onClick={closeMachine}>Back to machines</Button></CardContent>
+        </Card>
+      </section>
+    );
+  }
+
+  return (
+    <section className="grid gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Machine {displayValue(selectedMachine.machineNo)}</h2>
+          <p className="text-sm text-muted-foreground">Maintenance schedule, history, and reports for this machine.</p>
+        </div>
+        <Button type="button" variant="outline" onClick={closeMachine}>Back to machines</Button>
       </div>
+      <TrackingSummary items={[["Schedules", formatNumber(machineSchedules.length)], ["Records", formatNumber(machineHistory.length)], ["Filtered", formatNumber(filteredHistory.length)], ["Checklists", formatNumber(checklistOptions.length)]]} />
+      <Card>
+        <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine maintenance schedules and records.</CardDescription></CardHeader>
+        <CardContent><div className="grid gap-3 md:grid-cols-4"><TileField label="Machine type" value={selectedMachine.machineType} important /><TileField label="Machine name" value={selectedMachine.machineName} /><TileField label="Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Assign maintenance schedule</CardTitle><CardDescription>Checklist master remains in Data Entry; schedules are assigned here.</CardDescription></CardHeader>
+        <CardContent className="grid gap-4">
+          {!checklistOptions.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No checklist master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_checklist_master", maintenanceChecklistMasterDefaults("machineMasterTab"))}>Add checklist in Data Entry</Button></div> : null}
+          {selectedChecklistRows.length ? <MaintenanceChecklistPreview rows={selectedChecklistRows} /> : null}
+          <form className="grid gap-3" onSubmit={saveSchedule}>
+            <input type="hidden" name="machineNo" value={displayValue(selectedMachine.machineNo)} />
+            <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+              <Field label="Maintenance code"><Input name="maintenanceCode" placeholder="PM01" required /></Field>
+              <Field label="Maintenance title"><Input name="maintenanceTitle" placeholder="Monthly preventive check" required /></Field>
+              <Field label="Checklist code"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={selectedChecklistCode} onChange={(event) => setSelectedChecklistCode(event.target.value)}><option value="">No checklist</option>{checklistOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.title}</option>)}</select></Field>
+              <Field label="Frequency days"><Input name="frequencyDays" type="number" min="1" required /></Field>
+              <Field label="First due date"><Input name="firstDueDate" type="date" defaultValue={todayIsoDate()} required /></Field>
+              <Field label="Estimated minutes"><Input name="estimatedMinutes" type="number" min="0" /></Field>
+              <Field label="Assigned to"><Input name="assignedTo" /></Field>
+              <Field label="Priority"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="priority" defaultValue="Normal"><option value="Normal">Normal</option><option value="High">High</option><option value="Critical">Critical</option></select></Field>
+              <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue="Active"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
+              <Field label="Remark"><Input name="remark" /></Field>
+            </div>
+            <Button type="submit" className="w-fit"><CalendarDays className="size-4" />Save schedule</Button>
+          </form>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Machine schedules</CardTitle><CardDescription>{machineSchedules.length ? `${formatNumber(machineSchedules.length)} schedules assigned` : "No schedules assigned yet"}</CardDescription></CardHeader>
+        <CardContent>{machineSchedules.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Code</TableHead><TableHead>Title</TableHead><TableHead>Checklist</TableHead><TableHead>Frequency</TableHead><TableHead>First due</TableHead><TableHead>Status</TableHead><TableHead>Assigned</TableHead></TableRow></TableHeader><TableBody>{machineSchedules.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell>{displayValue(row.maintenanceCode)}</TableCell><TableCell>{displayValue(row.maintenanceTitle)}</TableCell><TableCell>{displayValue(row.checklistCode)}</TableCell><TableCell>{displayValue(row.frequencyDays)} days</TableCell><TableCell>{displayValue(row.firstDueDate)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell>{displayValue(row.assignedTo)}</TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved for this machine.</EmptyRowsMessage>}</CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Maintenance history</CardTitle><CardDescription>Planned and breakdown maintenance saved against this machine.</CardDescription></CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_repeat(3,180px)]"><Label className="grid gap-1 text-xs font-medium text-muted-foreground"><span>Search</span><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={historyQuery} placeholder="Search maintenance report" onChange={(event) => setHistoryQuery(event.target.value)} /></div></Label><FilterSelect label="Type" value={historyTypeFilter} onChange={setHistoryTypeFilter} options={[["", "All types"], ...typeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Code" value={historyCodeFilter} onChange={setHistoryCodeFilter} options={[["", "All codes"], ...codeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Result" value={historyResultFilter} onChange={setHistoryResultFilter} options={[["", "All results"], ...resultOptions.map((value) => [value, value] as [string, string])]} /></div>
+          {filteredHistory.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Maintenance</TableHead><TableHead>Changed parts</TableHead><TableHead>Done by</TableHead><TableHead>Result</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{filteredHistory.map((row) => { const key = maintenanceRecordKey(row); return <TableRow key={key} className={key === selectedReportKey ? "bg-muted/50" : ""}><TableCell>{displayValue(row.completedDate)}</TableCell><TableCell><StatusBadge value={row.maintenanceType || "Planned"} /></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)}</div><div className="text-xs text-muted-foreground">{displayValue(row.maintenanceTitle)}</div></TableCell><TableCell className="max-w-64 truncate">{displayValue(row.partsChanged)}</TableCell><TableCell>{displayValue(row.completedBy)}</TableCell><TableCell><StatusBadge value={row.result} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => setSelectedReportKey(key)}>Report</Button></TableCell></TableRow>; })}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance records match this machine and filter.</EmptyRowsMessage>}
+          {selectedReport ? <MaintenanceReportDetail row={selectedReport} /> : null}
+        </CardContent>
+      </Card>
     </section>
   );
 }
 
-function MaintenancePanel({ productionControl, submitAction }: { productionControl: DashboardPayload; submitAction: (path: string, body: Record<string, unknown>) => Promise<void> }) {
+function MaintenancePanel
+({ productionControl, submitAction }: { productionControl: DashboardPayload; submitAction: (path: string, body: Record<string, unknown>) => Promise<void> }) {
   const machineRows = useMemo(() => maintenanceMachineRows(asArray(productionControl.machinePlanningRows)), [productionControl.machinePlanningRows]);
   const scheduleRows = asArray(productionControl.maintenanceScheduleRows);
   const completionRows = asArray(productionControl.maintenanceTaskRows);
@@ -6340,7 +6377,7 @@ function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: Das
             {setupRows.map((setup, index) => (
               <div key={`${displayValue(setup.setupNo)}-${displayValue(setup.machine)}-${index}`} className="rounded-md border bg-muted/10 p-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-medium">Setup {displayValue(setup.setupNo)} Ãƒâ€šÃ‚Â· {displayValue(setup.machine)}</div>
+                  <div className="text-sm font-medium">Setup {displayValue(setup.setupNo)} / {displayValue(setup.machine)}</div>
                   <StatusBadge value={setup.runningStatus} />
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -7289,7 +7326,7 @@ function routeOptionText(option: DashboardPayload, fallback: string) {
     str(option.setupCount || option.numberOfSetups) ? `${str(option.setupCount || option.numberOfSetups)} setups` : "",
   ]
     .filter(Boolean)
-    .join(" Ãƒâ€šÃ‚Â· ");
+    .join(" / ");
 }
 
 function readFileAsDataUrl(file: File) {
