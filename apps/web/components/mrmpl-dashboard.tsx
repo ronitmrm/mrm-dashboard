@@ -532,7 +532,7 @@ function HourlyQualityCheckShell() {
       for (const reading of asArray(existingCheck.readings)) {
         const code = qualityParameterCode(reading);
         if (!code) continue;
-        nextReadings[code] = str(reading.actualReading || reading.value);
+        nextReadings[code] = normalizeQualityReadingInput(reading.actualReading || reading.value);
         nextRemarks[code] = str(reading.remark);
       }
       setReadings(nextReadings);
@@ -635,8 +635,10 @@ function HourlyQualityCheckShell() {
                     {parameters.map((parameter) => {
                       const code = qualityParameterCode(parameter);
                       const result = qualityReadingResult(parameter, readings[code]);
+                      const resultTone = qualityResultTone(result);
+                      const readingClass = qualityReadingInputClass(result);
                       return (
-                        <TableRow key={code || qualityParameterName(parameter)}>
+                        <TableRow key={code || qualityParameterName(parameter)} className={resultTone === "bad" ? "bg-red-50/70 dark:bg-red-950/20" : ""}>
                           <TableCell className="font-medium">{code}</TableCell>
                           <TableCell>{qualityParameterName(parameter)}</TableCell>
                           <TableCell>{displayValue(parameter.specification)}</TableCell>
@@ -644,13 +646,13 @@ function HourlyQualityCheckShell() {
                           <TableCell>{displayValue(parameter.instrumentUsed)}</TableCell>
                           <TableCell>
                             {qualityParameterInputType(parameter) === "pass_fail" ? (
-                              <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))}>
+                              <select className={`h-9 w-full rounded-md border bg-background px-3 text-sm ${readingClass}`} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))}>
                                 <option value="">Select</option>
                                 <option value="OK">OK</option>
-                                <option value="NG">NG</option>
+                                <option value="Not OK">Not OK</option>
                               </select>
                             ) : (
-                              <Input value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))} type={qualityParameterInputType(parameter) === "number" ? "number" : "text"} step="0.001" />
+                              <Input className={readingClass} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))} type={qualityParameterInputType(parameter) === "number" ? "number" : "text"} step="0.001" />
                             )}
                           </TableCell>
                           <TableCell><StatusBadge value={result || "Pending"} /></TableCell>
@@ -5124,18 +5126,25 @@ function FirstPieceInspectionForm({
                 <TableCell>{displayValue(master.specification)}</TableCell>
                 <TableCell>{displayValue(master.tolerancePlus)}</TableCell>
                 <TableCell>{displayValue(master.toleranceMinus)}</TableCell>
-                {[0, 1, 2, 3, 4].map((pieceIndex) => (
-                  <TableCell key={pieceIndex}>
-                    <Input
-                      className="h-8 min-w-20"
-                      type="number"
-                      step="0.001"
-                      value={firstPieceReadingsFor(readings, master)[pieceIndex] ?? ""}
-                      onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)}
-                      required
-                    />
-                  </TableCell>
-                ))}
+                {[0, 1, 2, 3, 4].map((pieceIndex) => {
+                  const value = firstPieceReadingsFor(readings, master)[pieceIndex] ?? "";
+                  const result = qualityReadingResult(master, value);
+                  return (
+                    <TableCell key={pieceIndex} className={qualityResultTone(result) === "bad" ? "bg-red-50/70 dark:bg-red-950/20" : ""}>
+                      <div className="grid gap-1">
+                        <Input
+                          className={`h-8 min-w-20 ${qualityReadingInputClass(result)}`}
+                          type="number"
+                          step="0.001"
+                          value={value}
+                          onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)}
+                          required
+                        />
+                        <StatusBadge value={result || "Pending"} />
+                      </div>
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))}
           </TableBody>
@@ -6822,8 +6831,10 @@ function StatusBadge({ value }: { value: unknown }) {
 function statusBadgeToneClass(normalized: string) {
   if (normalized === "-") return "border-slate-300 bg-slate-50 text-slate-700";
   if (normalized.includes("in production") || normalized.includes("running")) return "border-sky-300 bg-sky-50 text-sky-800";
+  if (normalized === "ok") return "border-emerald-300 bg-emerald-50 text-emerald-800";
   if (normalized.includes("ready") || normalized.includes("received") || normalized.includes("dispatch") || normalized.includes("setup complete") || normalized.includes("on time")) return "border-emerald-300 bg-emerald-50 text-emerald-800";
   if (normalized.includes("early")) return "border-sky-300 bg-sky-50 text-sky-800";
+  if (normalized === "not ok" || normalized === "ng") return "border-red-300 bg-red-50 text-red-800";
   if (normalized.includes("waiting") || normalized.includes("pending") || normalized.includes("shifted")) return "border-amber-300 bg-amber-50 text-amber-800";
   if (
     normalized.includes("delayed") ||
@@ -8210,7 +8221,7 @@ function qualityParameterMatchesSetup(parameter: DashboardPayload, row: Dashboar
 function qualityReadingResult(parameter: DashboardPayload, value: unknown) {
   const reading = str(value);
   if (!reading) return "";
-  if (qualityParameterInputType(parameter) === "pass_fail") return reading.toUpperCase() === "OK" ? "OK" : "NG";
+  if (qualityParameterInputType(parameter) === "pass_fail") return qualityPassFailResult(reading);
   if (qualityParameterInputType(parameter) !== "number") return "Recorded";
   const numericReading = Number(reading);
   const specification = Number(str(parameter.specification));
@@ -8219,7 +8230,32 @@ function qualityReadingResult(parameter: DashboardPayload, value: unknown) {
   const minus = Number(str(parameter.toleranceMinus || 0));
   const lower = specification - (Number.isFinite(minus) ? minus : 0);
   const upper = specification + (Number.isFinite(plus) ? plus : 0);
-  return numericReading >= lower && numericReading <= upper ? "OK" : "NG";
+  return numericReading >= lower && numericReading <= upper ? "OK" : "Not OK";
+}
+
+function normalizeQualityReadingInput(value: unknown) {
+  const reading = str(value);
+  return reading.toLowerCase() === "ng" ? "Not OK" : reading;
+}
+
+function qualityPassFailResult(value: unknown) {
+  const reading = str(value).toLowerCase();
+  if (!reading) return "";
+  return reading === "ok" || reading === "pass" ? "OK" : "Not OK";
+}
+
+function qualityResultTone(result: unknown) {
+  const normalized = str(result).toLowerCase();
+  if (normalized === "not ok" || normalized === "ng") return "bad";
+  if (normalized === "ok") return "good";
+  return "neutral";
+}
+
+function qualityReadingInputClass(result: unknown) {
+  const tone = qualityResultTone(result);
+  if (tone === "bad") return "border-red-400 bg-red-50 text-red-900 focus-visible:border-red-500 focus-visible:ring-red-200 dark:bg-red-950/30 dark:text-red-100";
+  if (tone === "good") return "border-emerald-300 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-100";
+  return "";
 }
 
 function hourlyQualityCheckId(row: DashboardPayload, prodDate: string, shift: string, hourSlot: string) {
@@ -8274,7 +8310,7 @@ function hourlyQualityCheckPayload(
     setupName: displayValue(row.setupName),
     checkedBy: meta.checkedBy.trim(),
     okCount: readingRows.filter((reading) => reading.result === "OK").length,
-    ngCount: readingRows.filter((reading) => reading.result === "NG").length,
+    ngCount: readingRows.filter((reading) => qualityResultTone(reading.result) === "bad").length,
     readings: readingRows,
     savedAt: new Date().toISOString(),
   };

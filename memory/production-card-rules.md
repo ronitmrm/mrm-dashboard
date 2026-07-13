@@ -15,3 +15,4 @@
 - 2026-07-12: Setup checklist page must not load `dashboard.snapshot`; use the lightweight `api.dashboard.setupChecklistPage` query plus row details in the URL so checklist opening is fast and does not pull the multi-MB dashboard payload.
 
 - 2026-07-13: Hourly QC page must not load `dashboard.snapshot` in the browser. Use `api.dashboard.hourlyQualityPage` for only running rows and quality parameter masters; load an existing hourly QC card separately by key only after machine/date/hour selection.
+- 2026-07-13: Out-of-tolerance hourly QC and first-piece quality readings display as Not OK, with red row/input/badge styling. Existing older NG values are normalized to Not OK in the hourly QC UI.
