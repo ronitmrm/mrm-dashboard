@@ -11,3 +11,4 @@
 - 2026-07-13: Maintenance checklist master remains in Data Entry. Maintenance completions store changed parts/work done/breakdown reason on maintenance_task records against the machine number.
 - 2026-07-13: Opening a machine from Machine Master navigates to a machine-specific page state instead of showing details beside the machine list.
 - 2026-07-13: Maintenance schedule assignment uses maintenance_master. Users select the maintenance title; maintenance code, frequency days, optional checklist, and estimated minutes are copied from the master. Assigned-to and priority are not schedule fields because maintenance is owned by the maintenance department.
+- 2026-07-13: Machine Master machine list has column-level dropdown filters for machine number, name, type, location, and status before opening a machine detail page.

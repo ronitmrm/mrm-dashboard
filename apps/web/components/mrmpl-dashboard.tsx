@@ -5574,6 +5574,22 @@ function MachineMasterPanel({
   const [historyCodeFilter, setHistoryCodeFilter] = useState("");
   const [historyResultFilter, setHistoryResultFilter] = useState("");
   const [selectedReportKey, setSelectedReportKey] = useState("");
+  const [machineNoFilter, setMachineNoFilter] = useState("");
+  const [machineNameFilter, setMachineNameFilter] = useState("");
+  const [machineTypeFilter, setMachineTypeFilter] = useState("");
+  const [machineLocationFilter, setMachineLocationFilter] = useState("");
+  const [machineStatusFilter, setMachineStatusFilter] = useState("");
+
+  const machineNoOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineNo)).filter((value) => value !== "-")), [machineRows]);
+  const machineNameOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineName)).filter((value) => value !== "-")), [machineRows]);
+  const machineTypeOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineType)).filter((value) => value !== "-")), [machineRows]);
+  const machineLocationOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.location)).filter((value) => value !== "-")), [machineRows]);
+  const machineStatusOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.status || "Active")).filter((value) => value !== "-")), [machineRows]);
+  const hasMachineFilters = Boolean(machineNoFilter || machineNameFilter || machineTypeFilter || machineLocationFilter || machineStatusFilter);
+  const filteredMachineRows = useMemo(
+    () => machineRows.filter((row) => machineMasterMatches(row, machineNoFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter)),
+    [machineRows, machineNoFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter],
+  );
 
   const selectedMaintenance = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(selectedMaintenanceCode));
   const selectedMachine = machineRows.find((row) => machineKey(row.machineNo) === machineKey(selectedMachineNo));
@@ -5623,21 +5639,27 @@ function MachineMasterPanel({
   if (!selectedMachineNo) {
     return (
       <section className="grid gap-4">
-        <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Maintenance master", formatNumber(maintenanceMasterRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)]]} />
+        <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Filtered", formatNumber(filteredMachineRows.length)], ["Maintenance master", formatNumber(maintenanceMasterRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)]]} />
         <Card>
           <CardHeader>
             <CardTitle>Machines</CardTitle>
             <CardDescription>Select a machine to open its maintenance page.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {!machineRows.length ? <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("machine_master", { status: "Active", __returnTab: "machineMasterTab" })}>Add machine</Button> : null}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {!machineRows.length ? <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("machine_master", { status: "Active", __returnTab: "machineMasterTab" })}>Add machine</Button> : <div className="text-xs text-muted-foreground">Showing {formatNumber(filteredMachineRows.length)} of {formatNumber(machineRows.length)} machines</div>}
+              {hasMachineFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setMachineNoFilter(""); setMachineNameFilter(""); setMachineTypeFilter(""); setMachineLocationFilter(""); setMachineStatusFilter(""); }}>Clear filters</Button> : null}
+            </div>
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Machine</TableHead><TableHead>Type</TableHead><TableHead>Location</TableHead><TableHead></TableHead></TableRow></TableHeader>
-                <TableBody>{machineRows.map((row) => {
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow><TableHead>Machine</TableHead><TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Location</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow>
+                  <TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Machine" value={machineNoFilter} onChange={setMachineNoFilter} options={machineNoOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Name" value={machineNameFilter} onChange={setMachineNameFilter} options={machineNameOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Type" value={machineTypeFilter} onChange={setMachineTypeFilter} options={machineTypeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Location" value={machineLocationFilter} onChange={setMachineLocationFilter} options={machineLocationOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={machineStatusFilter} onChange={setMachineStatusFilter} options={machineStatusOptions} /></TableHead><TableHead></TableHead></TableRow>
+                </TableHeader>
+                <TableBody>{filteredMachineRows.length ? filteredMachineRows.map((row) => {
                   const machineNo = displayValue(row.machineNo);
-                  return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></TableCell></TableRow>;
-                })}</TableBody>
+                  return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></TableCell></TableRow>;
+                }) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">No machines match the selected filters.</TableCell></TableRow>}</TableBody>
               </Table>
             </div>
           </CardContent>
@@ -6792,6 +6814,32 @@ function FilterSelect({
           ))}
         </select>
       </Label>
+  );
+}
+
+function MachineMasterColumnFilter({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <select
+      aria-label={`Filter ${label}`}
+      className="h-8 w-full min-w-32 rounded-md border bg-background px-2 text-xs font-normal outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value="">All</option>
+      {options.map((option) => (
+        <option key={option} value={option}>{option}</option>
+      ))}
+    </select>
   );
 }
 
@@ -8606,6 +8654,14 @@ function maintenanceMachineRows(rows: DashboardPayload[]) {
     });
   }
   return [...byMachine.values()].sort((a, b) => displayValue(a.machineNo).localeCompare(displayValue(b.machineNo), undefined, { numeric: true }));
+}
+
+function machineMasterMatches(row: DashboardPayload, machineNoFilter: string, machineNameFilter: string, machineTypeFilter: string, machineLocationFilter: string, machineStatusFilter: string) {
+  return typedFilterMatches(displayValue(row.machineNo), machineNoFilter) &&
+    typedFilterMatches(displayValue(row.machineName), machineNameFilter) &&
+    typedFilterMatches(displayValue(row.machineType), machineTypeFilter) &&
+    typedFilterMatches(displayValue(row.location), machineLocationFilter) &&
+    typedFilterMatches(displayValue(row.status || "Active"), machineStatusFilter);
 }
 
 function maintenanceScheduleKey(row: DashboardPayload) {
