@@ -14,3 +14,4 @@
 - 2026-07-13: Machine Master machine list has column-level dropdown filters for machine number, name, type, location, and status before opening a machine detail page.
 - 2026-07-13: On a machine detail page, Assign maintenance schedule is collapsed behind Add schedule. Machine schedules remain visible as a table with column dropdown filters for code, title, checklist, frequency, first due date, and status.
 - 2026-07-13: Reusable maintenance schedules are defined in `maintenance_master` without machine numbers, for example weekly/monthly/custom schedules. `maintenance_schedule` is only the machine-specific assignment record created from Machine Master, keyed by machine plus schedule code for due-task calculation.
+- 2026-07-13: Maintenance checklist master auto-generates checklist codes as MC###. Multiple step rows share the same checklistCode/checklistTitle, and schedules assign the full checklist by referencing that checklistCode.

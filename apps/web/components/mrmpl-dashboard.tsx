@@ -5527,6 +5527,7 @@ function DataEntryPanel({
           spec={selectedSpec}
           submitAction={submitAction}
           defaults={selectedSpec.entryType === preferredEntryType ? preferredDefaults : {}}
+          dataEntry={dataEntry}
         />
       ) : null}
       <DataRowsCard title="Data entry templates" rows={asArray(dataEntry.templates)} empty="No templates returned" />
@@ -5866,12 +5867,17 @@ function DataEntryForm({
   spec,
   submitAction,
   defaults,
+  dataEntry,
 }: {
   spec: DataEntrySpec;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   defaults: Record<string, unknown>;
+  dataEntry?: DashboardPayload;
 }) {
   const defaultsKey = JSON.stringify(defaults);
+  if (spec.entryType === "maintenance_checklist_master") {
+    return <MaintenanceChecklistMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} />;
+  }
   return (
     <Card>
       <CardHeader>
@@ -5899,6 +5905,86 @@ function DataEntryForm({
   );
 }
 
+function MaintenanceChecklistMasterForm({
+  spec,
+  submitAction,
+  defaults,
+  dataEntry,
+}: {
+  spec: DataEntrySpec;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  defaults: Record<string, unknown>;
+  dataEntry?: DashboardPayload;
+}) {
+  const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
+  const persistedRows = useMemo(() => maintenanceChecklistMasterRowsFromDataEntry(dataEntry), [dataEntry]);
+  const savedRows = useMemo(() => {
+    const persistedKeys = new Set(persistedRows.map(maintenanceChecklistStepKey));
+    return [...persistedRows, ...localRows.filter((row) => !persistedKeys.has(maintenanceChecklistStepKey(row)))];
+  }, [persistedRows, localRows]);
+  const checklistOptions = useMemo(() => maintenanceChecklistOptions(savedRows), [savedRows]);
+  const defaultCode = displayValue(defaults.checklistCode) !== "-" ? displayValue(defaults.checklistCode) : nextMaintenanceChecklistCode(savedRows);
+  const [selectedCode, setSelectedCode] = useState(defaultCode);
+  const selectedRows = selectedCode ? maintenanceChecklistRowsForCode(savedRows, selectedCode) : [];
+  const selectedChecklist = checklistOptions.find((row) => machineKey(row.code) === machineKey(selectedCode));
+  const isExistingChecklist = Boolean(selectedChecklist);
+  const nextSequence = nextMaintenanceChecklistSequence(selectedRows);
+  const defaultTitle = selectedChecklist?.title || (displayValue(defaults.checklistTitle) !== "-" ? displayValue(defaults.checklistTitle) : "");
+  const defaultStepCode = displayValue(defaults.stepCode) !== "-" ? displayValue(defaults.stepCode) : `S${nextSequence}`;
+
+  function submit(body: Record<string, unknown>) {
+    const payload = {
+      ...body,
+      checklistCode: selectedCode || nextMaintenanceChecklistCode(savedRows),
+      checklistTitle: str(body.checklistTitle) || defaultTitle,
+      sequence: optionalNumber(body.sequence) ?? nextSequence,
+      status: str(body.status) || "Active",
+    };
+    void submitAction("data-entry", {
+      entryType: spec.entryType,
+      id: defaults.__entryId,
+      key: defaults.__entryKey,
+      returnTab: defaults.__returnTab,
+      payload,
+    });
+    const savedCode = str(payload.checklistCode);
+    setLocalRows((current) => [
+      ...current.filter((row) => maintenanceChecklistStepKey(row) !== maintenanceChecklistStepKey(payload)),
+      payload,
+    ]);
+    setSelectedCode(savedCode || nextMaintenanceChecklistCode(savedRows));
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{spec.title}</CardTitle>
+        <CardDescription>Create a checklist once, then add multiple steps under the same auto-generated checklist code.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+          <Field label="Checklist">
+            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}>
+              <option value={nextMaintenanceChecklistCode(savedRows)}>New checklist ({nextMaintenanceChecklistCode(savedRows)})</option>
+              {checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}
+            </select>
+          </Field>
+          <TileField label="Next step" value={nextSequence} numeric />
+        </div>
+        {selectedRows.length ? <MaintenanceChecklistPreview rows={selectedRows} /> : null}
+        <LegacyActionForm
+          key={`${spec.entryType}-${selectedCode}-${nextSequence}`}
+          title={isExistingChecklist ? "Add checklist step" : "Create checklist step"}
+          description={isExistingChecklist ? "This step will be saved under the selected checklist code." : "The checklist code is generated automatically and reused for each step you add."}
+          fields={maintenanceChecklistStepFields(isExistingChecklist)}
+          defaults={{ ...defaults, checklistCode: selectedCode, checklistTitle: defaultTitle, sequence: String(nextSequence), stepCode: defaultStepCode, inputType: "checkbox", required: "Yes", status: "Active" }}
+          buttonLabel={isExistingChecklist ? "Save step" : "Create checklist"}
+          onSubmit={submit}
+        />
+      </CardContent>
+    </Card>
+  );
+}
 function PlanningControlPanel({
   payload,
   productionControl,
@@ -6144,6 +6230,7 @@ type LegacyField = {
   required?: boolean;
   min?: string;
   step?: string;
+  readOnly?: boolean;
 };
 
 function LegacyActionForm({
@@ -6198,6 +6285,7 @@ function LegacyActionForm({
                 required={field.required}
                 min={field.min}
                 step={field.step}
+                readOnly={field.readOnly}
                 defaultValue={str(defaults[field.name])}
               />
             )}
@@ -8578,9 +8666,45 @@ function activeMaintenanceMasterRows(rows: DashboardPayload[]) {
     .sort((a, b) => displayValue(a.maintenanceTitle).localeCompare(displayValue(b.maintenanceTitle), undefined, { numeric: true })
       || displayValue(a.maintenanceCode).localeCompare(displayValue(b.maintenanceCode), undefined, { numeric: true }));
 }
+function maintenanceChecklistStepFields(existingChecklist: boolean): LegacyField[] {
+  return [
+    { name: "checklistCode", label: "Checklist code", required: true, readOnly: true },
+    { name: "checklistTitle", label: "Checklist title", required: true, readOnly: existingChecklist },
+    { name: "sequence", label: "Step no.", type: "number", min: "1", required: true, readOnly: true },
+    { name: "stepCode", label: "Step code", required: true },
+    { name: "stepDescription", label: "Step description", required: true },
+    { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
+    { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
+    { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+    { name: "remark", label: "Remark" },
+  ];
+}
+
+function maintenanceChecklistMasterRowsFromDataEntry(dataEntry: DashboardPayload | undefined) {
+  const rows = [
+    ...asArray(asRecord(dataEntry).maintenanceChecklistMasterRows),
+    ...asArray(asRecord(dataEntry).rows),
+    ...asArray(asRecord(dataEntry).templates),
+  ];
+  return rows.filter((row) => str(row.entryType) === "maintenance_checklist_master" || displayValue(row.checklistCode) !== "-");
+}
+
+function nextMaintenanceChecklistCode(rows: DashboardPayload[]) {
+  const max = rows.reduce((highest, row) => {
+    const code = displayValue(row.checklistCode);
+    const match = /^MC(\d+)$/i.exec(code);
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return `MC${String(max + 1).padStart(3, "0")}`;
+}
+
+function nextMaintenanceChecklistSequence(rows: DashboardPayload[]) {
+  const max = rows.reduce((highest, row) => Math.max(highest, optionalNumber(row.sequence) ?? 0), 0);
+  return max + 1;
+}
 function maintenanceChecklistMasterDefaults(returnTab = "maintenanceTab") {
   return {
-    checklistCode: "PM01",
+    checklistCode: "",
     checklistTitle: "Preventive maintenance",
     sequence: "1",
     stepCode: "S1",

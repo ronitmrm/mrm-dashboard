@@ -377,7 +377,7 @@ function buildProductionAnalysis({
   qualityParameterMasterRows,
   hourlyQualityCheckRows,
   maintenanceMasterRows,
-    maintenanceChecklistMasterRows,
+  maintenanceChecklistMasterRows,
   maintenanceScheduleRows,
   maintenanceTaskRows,
   shopFloorStatusRows,
@@ -761,7 +761,7 @@ function buildProductionAnalysis({
   });
   const routingStatus = buildRoutingStatus(routeRows, productionRows);
   const toolFixtureNumbers = buildToolFixtureNumbers(toolingRows);
-  const dataEntry = buildDataEntryContext({ routeRows, cycleRows, toolingRows, workOrderRows, setupChecklistRows, planningHolidayRows, employeeRows, machineRows });
+  const dataEntry = buildDataEntryContext({ routeRows, cycleRows, toolingRows, workOrderRows, setupChecklistRows, maintenanceChecklistMasterRows, planningHolidayRows, employeeRows, machineRows });
 
   return {
     updatedAt,
@@ -929,7 +929,7 @@ function buildProductionControl({
   qualityParameterMasterRows,
   hourlyQualityCheckRows,
   maintenanceMasterRows,
-    maintenanceChecklistMasterRows,
+  maintenanceChecklistMasterRows,
   maintenanceScheduleRows,
   maintenanceTaskRows,
   shopFloorStatusRows,
@@ -2065,6 +2065,7 @@ function buildDataEntryContext({
   toolingRows,
   workOrderRows,
   setupChecklistRows,
+  maintenanceChecklistMasterRows,
   planningHolidayRows,
   employeeRows,
   machineRows,
@@ -2074,6 +2075,7 @@ function buildDataEntryContext({
   toolingRows: Record<string, unknown>[];
   workOrderRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
+  maintenanceChecklistMasterRows: Record<string, unknown>[];
   planningHolidayRows: Record<string, unknown>[];
   employeeRows: Record<string, unknown>[];
   machineRows: Record<string, unknown>[];
@@ -2118,6 +2120,7 @@ function buildDataEntryContext({
     machineNumbers: [...machineNumbers].sort(),
     machineTypes: [...machineTypes].sort(),
     employeeIds: [...employeeIds].sort(),
+    maintenanceChecklistMasterRows,
     planningHolidayCount: planningHolidayRows.length,
   };
 }
