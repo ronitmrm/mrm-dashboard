@@ -1275,6 +1275,7 @@ function buildProductionControl({
     rejectionRemarkMasterRows,
     setupChecklistSessionRows,
     productionCardRows,
+    productionRunRows: productionRows.map((row) => ({ machine: row.machine, prodDate: row.prodDate })).filter((row) => row.machine && row.prodDate),
     qualityParameterMasterRows,
     hourlyQualityCheckRows,
     maintenanceMasterRows,

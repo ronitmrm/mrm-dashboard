@@ -289,6 +289,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "maintenanceCode", label: "Maintenance code", required: true },
       { name: "maintenanceTitle", label: "Maintenance schedule title", required: true },
       { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
+      { name: "frequencyBasis", label: "Frequency basis", options: ["Calendar days", "Running days"], defaultValue: "Calendar days" },
       { name: "checklistCode", label: "Checklist code" },
       { name: "estimatedMinutes", label: "Estimated minutes", type: "number", min: "0" },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
@@ -5629,6 +5630,7 @@ function MachineMasterPanel({
       checklistCode,
       checklistTitle: maintenanceChecklistTitle(activeChecklistRows, checklistCode),
       frequencyDays: optionalNumber(selectedMaintenance.frequencyDays) ?? displayValue(selectedMaintenance.frequencyDays),
+      frequencyBasis: displayValue(selectedMaintenance.frequencyBasis) !== "-" ? displayValue(selectedMaintenance.frequencyBasis) : "Calendar days",
       estimatedMinutes: optionalNumber(selectedMaintenance.estimatedMinutes) ?? displayValue(selectedMaintenance.estimatedMinutes),
       machineType: displayValue(selectedMachine.machineType) !== "-" ? displayValue(selectedMachine.machineType) : "",
       machineName: displayValue(selectedMachine.machineName) !== "-" ? displayValue(selectedMachine.machineName) : "",
@@ -5740,7 +5742,7 @@ function MachineMasterPanel({
               </form>
             </div>
           ) : null}
-          {machineSchedules.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Code</TableHead><TableHead>Title</TableHead><TableHead>Checklist</TableHead><TableHead>Frequency</TableHead><TableHead>First due</TableHead><TableHead>Status</TableHead></TableRow><TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Code" value={scheduleCodeFilter} onChange={setScheduleCodeFilter} options={scheduleCodeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Title" value={scheduleTitleFilter} onChange={setScheduleTitleFilter} options={scheduleTitleOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Checklist" value={scheduleChecklistFilter} onChange={setScheduleChecklistFilter} options={scheduleChecklistOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Frequency" value={scheduleFrequencyFilter} onChange={setScheduleFrequencyFilter} options={scheduleFrequencyOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="First due" value={scheduleFirstDueFilter} onChange={setScheduleFirstDueFilter} options={scheduleFirstDueOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={scheduleStatusFilter} onChange={setScheduleStatusFilter} options={scheduleStatusOptions} /></TableHead></TableRow></TableHeader><TableBody>{filteredMachineSchedules.length ? filteredMachineSchedules.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell>{displayValue(row.maintenanceCode)}</TableCell><TableCell>{displayValue(row.maintenanceTitle)}</TableCell><TableCell>{displayValue(row.checklistCode)}</TableCell><TableCell>{displayValue(row.frequencyDays)} days</TableCell><TableCell>{displayValue(row.firstDueDate)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">No machine schedules match the selected filters.</TableCell></TableRow>}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved for this machine.</EmptyRowsMessage>}
+          {machineSchedules.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Code</TableHead><TableHead>Title</TableHead><TableHead>Checklist</TableHead><TableHead>Frequency</TableHead><TableHead>First due</TableHead><TableHead>Status</TableHead></TableRow><TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Code" value={scheduleCodeFilter} onChange={setScheduleCodeFilter} options={scheduleCodeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Title" value={scheduleTitleFilter} onChange={setScheduleTitleFilter} options={scheduleTitleOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Checklist" value={scheduleChecklistFilter} onChange={setScheduleChecklistFilter} options={scheduleChecklistOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Frequency" value={scheduleFrequencyFilter} onChange={setScheduleFrequencyFilter} options={scheduleFrequencyOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="First due" value={scheduleFirstDueFilter} onChange={setScheduleFirstDueFilter} options={scheduleFirstDueOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={scheduleStatusFilter} onChange={setScheduleStatusFilter} options={scheduleStatusOptions} /></TableHead></TableRow></TableHeader><TableBody>{filteredMachineSchedules.length ? filteredMachineSchedules.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell>{displayValue(row.maintenanceCode)}</TableCell><TableCell>{displayValue(row.maintenanceTitle)}</TableCell><TableCell>{displayValue(row.checklistCode)}</TableCell><TableCell>{maintenanceFrequencyLabel(row)}</TableCell><TableCell>{displayValue(row.firstDueDate)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">No machine schedules match the selected filters.</TableCell></TableRow>}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved for this machine.</EmptyRowsMessage>}
         </CardContent>
       </Card>
       <Card>
@@ -5762,7 +5764,8 @@ function MaintenancePanel
   const completionRows = asArray(productionControl.maintenanceTaskRows);
   const checklistRows = asArray(productionControl.maintenanceChecklistMasterRows);
   const activeChecklistRows = useMemo(() => activeMaintenanceChecklistRows(checklistRows), [checklistRows]);
-  const dueRows = useMemo(() => maintenanceDueRows(scheduleRows, completionRows, machineRows, activeChecklistRows), [scheduleRows, completionRows, machineRows, activeChecklistRows]);
+  const productionRunRows = useMemo(() => asArray(productionControl.productionRunRows), [productionControl.productionRunRows]);
+  const dueRows = useMemo(() => maintenanceDueRows(scheduleRows, completionRows, machineRows, activeChecklistRows, productionRunRows), [scheduleRows, completionRows, machineRows, activeChecklistRows, productionRunRows]);
   const dueNowRows = dueRows.filter((row) => row.status !== "Upcoming");
   const breakdownRows = completionRows.filter((row) => str(row.maintenanceType).toLowerCase() === "breakdown");
 
@@ -5774,7 +5777,7 @@ function MaintenancePanel
     const workDone = window.prompt("Work done / remarks", "")?.trim() ?? "";
     const completedDate = todayIsoDate();
     const frequencyDays = optionalNumber(row.frequencyDays) ?? 0;
-    const payload = { taskId: maintenanceTaskId(row, completedDate), maintenanceType: "Planned", scheduleKey: maintenanceScheduleKey(row), machineNo: displayValue(row.machineNo), machineType: displayValue(row.machineType) !== "-" ? displayValue(row.machineType) : "", maintenanceCode: displayValue(row.maintenanceCode), maintenanceTitle: displayValue(row.maintenanceTitle), checklistCode: displayValue(row.checklistCode) !== "-" ? displayValue(row.checklistCode) : "", checklistTitle: displayValue(row.checklistTitle) !== "-" ? displayValue(row.checklistTitle) : "", checklistSteps: maintenanceChecklistCompletionSteps(row, activeChecklistRows), completedDate, completedAt: new Date().toISOString(), completedBy, actualMinutes: optionalNumber(actualMinutesText) ?? actualMinutesText, result: "Completed", partsChanged, workDone, nextDueDate: frequencyDays > 0 ? addIsoDays(completedDate, frequencyDays) : "", remark: workDone || "Completed from maintenance task list." };
+    const payload = { taskId: maintenanceTaskId(row, completedDate), maintenanceType: "Planned", scheduleKey: maintenanceScheduleKey(row), machineNo: displayValue(row.machineNo), machineType: displayValue(row.machineType) !== "-" ? displayValue(row.machineType) : "", maintenanceCode: displayValue(row.maintenanceCode), maintenanceTitle: displayValue(row.maintenanceTitle), frequencyBasis: maintenanceFrequencyBasis(row), checklistCode: displayValue(row.checklistCode) !== "-" ? displayValue(row.checklistCode) : "", checklistTitle: displayValue(row.checklistTitle) !== "-" ? displayValue(row.checklistTitle) : "", checklistSteps: maintenanceChecklistCompletionSteps(row, activeChecklistRows), completedDate, completedAt: new Date().toISOString(), completedBy, actualMinutes: optionalNumber(actualMinutesText) ?? actualMinutesText, result: "Completed", partsChanged, workDone, nextDueDate: maintenanceFrequencyBasis(row) === "running" ? "" : (frequencyDays > 0 ? addIsoDays(completedDate, frequencyDays) : ""), remark: workDone || "Completed from maintenance task list." };
     await submitAction("data-entry", { entryType: "maintenance_task", key: dataEntryKey("maintenance_task", payload), payload });
   }
 
@@ -5795,7 +5798,7 @@ function MaintenancePanel
       <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Saved schedules", formatNumber(scheduleRows.length)], ["Due now", formatNumber(dueNowRows.length)], ["Breakdowns", formatNumber(breakdownRows.length)]]} />
       <Card className={dueNowRows.length ? "border-amber-300/80" : ""}>
         <CardHeader><CardTitle>Maintenance pending tasks</CardTitle><CardDescription>Due and overdue planned maintenance appears here from Machine Master schedules.</CardDescription></CardHeader>
-        <CardContent>{dueRows.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Machine</TableHead><TableHead>Maintenance</TableHead><TableHead>Checklist</TableHead><TableHead>Due date</TableHead><TableHead>Status</TableHead><TableHead>Last done</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{dueRows.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell><div className="font-medium">{displayValue(row.machineNo)}</div><div className="text-xs text-muted-foreground">{displayValue(row.machineType)}</div></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</div><div className="text-xs text-muted-foreground">Every {formatNumber(optionalNumber(row.frequencyDays) ?? 0)} days</div></TableCell><TableCell><div>{displayValue(row.checklistCode)}</div><div className="text-xs text-muted-foreground">{formatNumber(asArray(row.checklistSteps).length)} steps</div></TableCell><TableCell>{displayValue(row.nextDueDate)}</TableCell><TableCell><StatusBadge value={row.status} /></TableCell><TableCell>{displayValue(row.lastCompletedDate)}</TableCell><TableCell><Button type="button" size="sm" variant={row.status === "Upcoming" ? "outline" : "default"} onClick={() => void markMaintenanceDone(row)}><CheckCircle2 className="size-4" />Mark done</Button></TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved yet. Add schedules from Machine Master.</EmptyRowsMessage>}</CardContent>
+        <CardContent>{dueRows.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Machine</TableHead><TableHead>Maintenance</TableHead><TableHead>Checklist</TableHead><TableHead>Due date</TableHead><TableHead>Status</TableHead><TableHead>Last done</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{dueRows.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell><div className="font-medium">{displayValue(row.machineNo)}</div><div className="text-xs text-muted-foreground">{displayValue(row.machineType)}</div></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</div><div className="text-xs text-muted-foreground">Every {maintenanceFrequencyLabel(row)}</div></TableCell><TableCell><div>{displayValue(row.checklistCode)}</div><div className="text-xs text-muted-foreground">{formatNumber(asArray(row.checklistSteps).length)} steps</div></TableCell><TableCell><div>{displayValue(row.nextDueDate)}</div>{displayValue(row.dueProgress) !== "-" ? <div className="text-xs text-muted-foreground">{displayValue(row.dueProgress)}</div> : null}</TableCell><TableCell><StatusBadge value={row.status} /></TableCell><TableCell>{displayValue(row.lastCompletedDate)}</TableCell><TableCell><Button type="button" size="sm" variant={row.status === "Upcoming" ? "outline" : "default"} onClick={() => void markMaintenanceDone(row)}><CheckCircle2 className="size-4" />Mark done</Button></TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved yet. Add schedules from Machine Master.</EmptyRowsMessage>}</CardContent>
       </Card>
       <Card>
         <CardHeader><CardTitle>Breakdown maintenance entry</CardTitle><CardDescription>Use this for maintenance not against a planned schedule.</CardDescription></CardHeader>
@@ -5946,6 +5949,7 @@ function MaintenanceMasterForm({
       maintenanceCode: selectedCode || nextMaintenanceMasterCode(savedRows),
       maintenanceTitle: str(formData.get("maintenanceTitle")),
       frequencyDays: optionalNumber(formData.get("frequencyDays")) ?? str(formData.get("frequencyDays")),
+      frequencyBasis: str(formData.get("frequencyBasis")) || "Calendar days",
       checklistCode,
       checklistTitle: maintenanceChecklistTitle(checklistRows, checklistCode),
       estimatedMinutes: optionalNumber(formData.get("estimatedMinutes")) ?? str(formData.get("estimatedMinutes")),
@@ -5968,6 +5972,7 @@ function MaintenanceMasterForm({
 
   const selectedTitle = displayValue(selectedMaster?.maintenanceTitle ?? defaults.maintenanceTitle);
   const selectedFrequency = displayValue(selectedMaster?.frequencyDays ?? defaults.frequencyDays);
+  const selectedFrequencyBasis = displayValue(selectedMaster?.frequencyBasis ?? defaults.frequencyBasis);
   const selectedEstimatedMinutes = displayValue(selectedMaster?.estimatedMinutes ?? defaults.estimatedMinutes);
   const selectedStatus = displayValue(selectedMaster?.status ?? defaults.status);
   const selectedRemark = displayValue(selectedMaster?.remark ?? defaults.remark);
@@ -5997,7 +6002,8 @@ function MaintenanceMasterForm({
           <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
             <Field label="Maintenance code"><Input name="maintenanceCode" value={selectedCode} readOnly /></Field>
             <Field label="Maintenance schedule title"><Input name="maintenanceTitle" defaultValue={selectedTitle !== "-" ? selectedTitle : ""} required /></Field>
-            <Field label="Frequency days"><Input name="frequencyDays" type="number" min="1" defaultValue={selectedFrequency !== "-" ? selectedFrequency : ""} required /></Field>
+            <Field label="Frequency"><Input name="frequencyDays" type="number" min="1" defaultValue={selectedFrequency !== "-" ? selectedFrequency : ""} required /></Field>
+            <Field label="Frequency basis"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="frequencyBasis" defaultValue={selectedFrequencyBasis !== "-" ? selectedFrequencyBasis : "Calendar days"}><option value="Calendar days">Calendar days</option><option value="Running days">Running days</option></select></Field>
             <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={previewChecklistCode} onChange={(event) => setChecklistCodeOverride(event.target.value)}><option value="">No checklist</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
             <Field label="Estimated minutes"><Input name="estimatedMinutes" type="number" min="0" defaultValue={selectedEstimatedMinutes !== "-" ? selectedEstimatedMinutes : ""} /></Field>
             <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue={selectedStatus !== "-" ? selectedStatus : "Active"}><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
@@ -8970,7 +8976,7 @@ function maintenanceHistoryMatches(row: DashboardPayload, query: string, typeFil
   return queryMatch && typedFilterMatches(type, typeFilter) && typedFilterMatches(code, codeFilter) && typedFilterMatches(result, resultFilter);
 }
 
-function maintenanceDueRows(scheduleRows: DashboardPayload[], completionRows: DashboardPayload[], machineRows: DashboardPayload[], checklistRows: DashboardPayload[]): DashboardPayload[] {
+function maintenanceDueRows(scheduleRows: DashboardPayload[], completionRows: DashboardPayload[], machineRows: DashboardPayload[], checklistRows: DashboardPayload[], productionRunRows: DashboardPayload[]): DashboardPayload[] {
   const machinesByKey = new Map(machineRows.map((row) => [machineKey(row.machineNo), row]));
   const today = todayIsoDate();
   return scheduleRows
@@ -8982,14 +8988,10 @@ function maintenanceDueRows(scheduleRows: DashboardPayload[], completionRows: Da
       const lastCompletedDate = isoDateValue(latestCompletion?.completedDate || latestCompletion?.completedAt || row.lastCompletedDate);
       const firstDueDate = isoDateValue(row.firstDueDate || row.nextDueDate || today);
       const frequencyDays = optionalNumber(row.frequencyDays) ?? 0;
-      const nextDueDate = isoDateValue(latestCompletion?.nextDueDate) || (lastCompletedDate && frequencyDays > 0 ? addIsoDays(lastCompletedDate, frequencyDays) : firstDueDate);
-      const status = !nextDueDate
-        ? "Unscheduled"
-        : nextDueDate < today
-          ? "Overdue"
-          : nextDueDate === today
-            ? "Due today"
-            : "Upcoming";
+      const frequencyBasis = maintenanceFrequencyBasis(row);
+      const dueInfo = frequencyBasis === "running"
+        ? runningMaintenanceDueInfo(row, productionRunRows, lastCompletedDate || firstDueDate, frequencyDays, today)
+        : calendarMaintenanceDueInfo(latestCompletion, lastCompletedDate, firstDueDate, frequencyDays, today);
       return {
         ...row,
         machineType: displayValue(row.machineType || machine?.machineType),
@@ -8998,9 +9000,13 @@ function maintenanceDueRows(scheduleRows: DashboardPayload[], completionRows: Da
         checklistTitle: displayValue(row.checklistTitle) !== "-" ? displayValue(row.checklistTitle) : maintenanceChecklistTitle(checklistRows, row.checklistCode),
         checklistSteps: scheduleChecklistRows,
         frequencyDays,
-        nextDueDate,
+        frequencyBasis,
+        nextDueDate: dueInfo.nextDueDate,
+        dueProgress: dueInfo.dueProgress,
+        runningDaysSinceMaintenance: dueInfo.runningDaysSinceMaintenance,
+        runningDaysRemaining: dueInfo.runningDaysRemaining,
         lastCompletedDate,
-        status,
+        status: dueInfo.status,
       } as DashboardPayload;
     })
     .sort((a, b) => maintenanceStatusRank(a.status) - maintenanceStatusRank(b.status)
@@ -9009,6 +9015,57 @@ function maintenanceDueRows(scheduleRows: DashboardPayload[], completionRows: Da
       || displayValue(a.maintenanceCode).localeCompare(displayValue(b.maintenanceCode), undefined, { numeric: true }));
 }
 
+function calendarMaintenanceDueInfo(latestCompletion: DashboardPayload | undefined, lastCompletedDate: string, firstDueDate: string, frequencyDays: number, today: string) {
+  const nextDueDate = isoDateValue(latestCompletion?.nextDueDate) || (lastCompletedDate && frequencyDays > 0 ? addIsoDays(lastCompletedDate, frequencyDays) : firstDueDate);
+  const status = !nextDueDate
+    ? "Unscheduled"
+    : nextDueDate < today
+      ? "Overdue"
+      : nextDueDate === today
+        ? "Due today"
+        : "Upcoming";
+  return { nextDueDate, status, dueProgress: "", runningDaysSinceMaintenance: 0, runningDaysRemaining: 0 };
+}
+
+function runningMaintenanceDueInfo(schedule: DashboardPayload, productionRunRows: DashboardPayload[], startDate: string, frequencyDays: number, today: string) {
+  if (!frequencyDays) return { nextDueDate: "", status: "Unscheduled", dueProgress: "", runningDaysSinceMaintenance: 0, runningDaysRemaining: 0 };
+  const runningDates = runningDatesForMachine(productionRunRows, schedule.machineNo, startDate, today);
+  const runningDaysSinceMaintenance = runningDates.length;
+  const runningDaysRemaining = Math.max(frequencyDays - runningDaysSinceMaintenance, 0);
+  const dueDate = runningDates[frequencyDays - 1] || "";
+  const status = runningDaysSinceMaintenance >= frequencyDays
+    ? (dueDate && dueDate < today ? "Overdue" : "Due today")
+    : "Upcoming";
+  return {
+    nextDueDate: dueDate || `After ${runningDaysRemaining} running days`,
+    status,
+    dueProgress: `${runningDaysSinceMaintenance}/${frequencyDays} running days`,
+    runningDaysSinceMaintenance,
+    runningDaysRemaining,
+  };
+}
+
+function runningDatesForMachine(rows: DashboardPayload[], machineNo: unknown, startDate: string, today: string) {
+  const machine = machineKey(machineNo);
+  const dates = new Set<string>();
+  for (const row of rows) {
+    if (machineKey(row.machine || row.machineNo) !== machine) continue;
+    const date = isoDateValue(row.prodDate || row.productionDate || row.date);
+    if (!date || date <= startDate || date > today) continue;
+    dates.add(date);
+  }
+  return [...dates].sort();
+}
+
+function maintenanceFrequencyBasis(row: DashboardPayload | undefined) {
+  const value = str(row?.frequencyBasis || row?.frequencyType || row?.frequencyMode).toLowerCase();
+  return value.includes("running") ? "running" : "calendar";
+}
+
+function maintenanceFrequencyLabel(row: DashboardPayload | undefined) {
+  const days = formatNumber(optionalNumber(row?.frequencyDays) ?? 0);
+  return maintenanceFrequencyBasis(row) === "running" ? `${days} running days` : `${days} calendar days`;
+}
 function latestMaintenanceCompletion(schedule: DashboardPayload, completionRows: DashboardPayload[]) {
   return completionRows
     .filter((row) => maintenanceScheduleKey(row) === maintenanceScheduleKey(schedule))
