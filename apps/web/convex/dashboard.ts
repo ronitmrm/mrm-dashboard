@@ -991,6 +991,7 @@ const legacyEntryTypes = [
   "production_card",
   "quality_parameter_master",
   "hourly_quality_check",
+  "maintenance_master",
   "maintenance_checklist_master",
   "maintenance_schedule",
   "maintenance_task",

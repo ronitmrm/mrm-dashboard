@@ -275,6 +275,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
   const productionCardRows = latestEntryRowsByKey(entryRows(byType, "production_card"), productionCardEntryKey);
   const qualityParameterMasterRows = latestEntryRowsByKey(entryRows(byType, "quality_parameter_master"), qualityParameterMasterEntryKey);
   const hourlyQualityCheckRows = latestEntryRowsByKey(entryRows(byType, "hourly_quality_check"), hourlyQualityCheckEntryKey);
+  const maintenanceMasterRows = latestEntryRowsByKey(entryRows(byType, "maintenance_master"), maintenanceMasterEntryKey);
   const maintenanceChecklistMasterRows = latestEntryRowsByKey(entryRows(byType, "maintenance_checklist_master"), maintenanceChecklistMasterEntryKey);
   const maintenanceScheduleRows = latestEntryRowsByKey(entryRows(byType, "maintenance_schedule"), maintenanceScheduleEntryKey);
   const maintenanceTaskRows = latestEntryRowsByKey(entryRows(byType, "maintenance_task"), maintenanceTaskEntryKey);
@@ -308,6 +309,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     productionCardRows,
     qualityParameterMasterRows,
     hourlyQualityCheckRows,
+    maintenanceMasterRows,
     maintenanceChecklistMasterRows,
     maintenanceScheduleRows,
     maintenanceTaskRows,
@@ -374,7 +376,8 @@ function buildProductionAnalysis({
   productionCardRows,
   qualityParameterMasterRows,
   hourlyQualityCheckRows,
-  maintenanceChecklistMasterRows,
+  maintenanceMasterRows,
+    maintenanceChecklistMasterRows,
   maintenanceScheduleRows,
   maintenanceTaskRows,
   shopFloorStatusRows,
@@ -417,6 +420,7 @@ function buildProductionAnalysis({
   productionCardRows: Record<string, unknown>[];
   qualityParameterMasterRows: Record<string, unknown>[];
   hourlyQualityCheckRows: Record<string, unknown>[];
+  maintenanceMasterRows: Record<string, unknown>[];
   maintenanceChecklistMasterRows: Record<string, unknown>[];
   maintenanceScheduleRows: Record<string, unknown>[];
   maintenanceTaskRows: Record<string, unknown>[];
@@ -739,6 +743,7 @@ function buildProductionAnalysis({
     productionCardRows,
     qualityParameterMasterRows,
     hourlyQualityCheckRows,
+    maintenanceMasterRows,
     maintenanceChecklistMasterRows,
     maintenanceScheduleRows,
     maintenanceTaskRows,
@@ -923,7 +928,8 @@ function buildProductionControl({
   productionCardRows,
   qualityParameterMasterRows,
   hourlyQualityCheckRows,
-  maintenanceChecklistMasterRows,
+  maintenanceMasterRows,
+    maintenanceChecklistMasterRows,
   maintenanceScheduleRows,
   maintenanceTaskRows,
   shopFloorStatusRows,
@@ -957,6 +963,7 @@ function buildProductionControl({
   productionCardRows: Record<string, unknown>[];
   qualityParameterMasterRows: Record<string, unknown>[];
   hourlyQualityCheckRows: Record<string, unknown>[];
+  maintenanceMasterRows: Record<string, unknown>[];
   maintenanceChecklistMasterRows: Record<string, unknown>[];
   maintenanceScheduleRows: Record<string, unknown>[];
   maintenanceTaskRows: Record<string, unknown>[];
@@ -1270,6 +1277,7 @@ function buildProductionControl({
     productionCardRows,
     qualityParameterMasterRows,
     hourlyQualityCheckRows,
+    maintenanceMasterRows,
     maintenanceChecklistMasterRows,
     maintenanceScheduleRows,
     maintenanceTaskRows,
@@ -1585,6 +1593,9 @@ function hourlyQualityCheckEntryKey(row: Record<string, unknown>) {
   ].map(canonicalKey).join("|");
 }
 
+function maintenanceMasterEntryKey(row: Record<string, unknown>) {
+  return rowText(row, "maintenanceCode", "code", "CODE") || rowText(row, "maintenanceTitle", "title", "TITLE");
+}
 function maintenanceChecklistMasterEntryKey(row: Record<string, unknown>) {
   return [
     rowText(row, "checklistCode", "CHECKLIST CODE"),

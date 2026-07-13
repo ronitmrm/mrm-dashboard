@@ -10,3 +10,4 @@
 - 2026-07-13: The Maintenance tab is only for pending planned maintenance task completion plus separate breakdown maintenance entry. It should not show checklist master, saved schedule lists, or completion history.
 - 2026-07-13: Maintenance checklist master remains in Data Entry. Maintenance completions store changed parts/work done/breakdown reason on maintenance_task records against the machine number.
 - 2026-07-13: Opening a machine from Machine Master navigates to a machine-specific page state instead of showing details beside the machine list.
+- 2026-07-13: Maintenance schedule assignment uses maintenance_master. Users select the maintenance title; maintenance code, frequency days, optional checklist, and estimated minutes are copied from the master. Assigned-to and priority are not schedule fields because maintenance is owned by the maintenance department.
