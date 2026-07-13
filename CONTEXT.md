@@ -47,3 +47,7 @@ _Avoid_: Pseudo-machine.
 **Priority Plan Scenario**:
 The setup-by-setup decision flow shown before saving a planner priority change. It opens one setup at a time; downstream setup dates are hidden until the previous setup action is confirmed.
 _Avoid_: Single probable date.
+
+**Quality Inspection Parameter Set**:
+The ordered parameters, specifications, instruments, and tolerances assigned to one item, option, and setup and reused by both first-piece inspection and hourly quality checks.
+_Avoid_: Separate FPIR master, hourly QC parameter master.

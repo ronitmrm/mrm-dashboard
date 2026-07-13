@@ -7,3 +7,4 @@ Persistent notes for local coding agents. Treat these as context, not authority;
 - `planning-rules.md` - production planning date-cascade rules and no-production actual caveats.
 - `production-card-rules.md` - role production-card date/edit/keying rules.
 - `maintenance-rules.md` - planned machine maintenance schedule and task-entry rules.
+- `quality-rules.md` - shared first-piece and hourly quality parameter master rules.
