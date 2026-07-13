@@ -489,6 +489,7 @@ function HourlyQualityCheckShell() {
         payload,
       });
       setStatus({ tone: "default", message: "Hourly quality check saved." });
+      window.location.assign("/");
     } catch (err) {
       setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Hourly quality check save failed." });
     } finally {
@@ -509,7 +510,7 @@ function HourlyQualityCheckShell() {
             <h1 className="text-2xl font-semibold">Hourly quality check</h1>
             <p className="text-sm text-muted-foreground">Select the running machine, then record the hourly inspection against the active item, option, and setup.</p>
           </div>
-          <Button type="button" variant="outline" onClick={() => { window.location.href = "/"; }}>
+          <Button type="button" variant="outline" onClick={() => { window.location.assign("/"); }}>
             <LayoutDashboard className="size-4" />
             Dashboard
           </Button>
@@ -719,6 +720,7 @@ function SetupChecklistShell() {
       setLocalChecklistSession(payload);
       writeStoredSetupChecklistSession(payload);
       setStatus({ tone: "default", message: "Checklist progress saved." });
+      window.location.assign("/");
     } catch (err) {
       setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Checklist save failed." });
     } finally {
@@ -734,7 +736,7 @@ function SetupChecklistShell() {
             <h1 className="text-2xl font-semibold">Setup checklist</h1>
             <p className="text-sm text-muted-foreground">Save pre setting and setting checklist progress outside the machinist task list.</p>
           </div>
-          <Button type="button" variant="outline" onClick={() => { window.location.href = "/"; }}>
+          <Button type="button" variant="outline" onClick={() => { window.location.assign("/"); }}>
             <LayoutDashboard className="size-4" />
             Dashboard
           </Button>
