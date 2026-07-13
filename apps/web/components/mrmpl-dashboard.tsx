@@ -80,6 +80,7 @@ import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSe
 import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
   applyShopFloorStatusPatches,
+  retainUnconfirmedShopFloorStatusPatches,
   shopFloorStatusPatchFromAction,
   upsertShopFloorStatusPatch,
   type ShopFloorStatusPatch,
@@ -852,7 +853,7 @@ function DashboardShell() {
           : "Planning recalculated from latest data.",
       });
       if (!result.skipped) {
-        setOptimisticShopFloorStatuses([]);
+        setOptimisticShopFloorStatuses((current) => retainUnconfirmedShopFloorStatusPatches(basePayload, current));
         setOptimisticSetupChecklistSessions([]);
         setOptimisticProductionCards([]);
       }
@@ -954,10 +955,10 @@ function DashboardShell() {
   useEffect(() => {
     if (!snapshotUpdatedAt || lastSnapshotUpdatedAtRef.current === snapshotUpdatedAt) return;
     lastSnapshotUpdatedAtRef.current = snapshotUpdatedAt;
-    setOptimisticShopFloorStatuses((current) => current.length ? [] : current);
+    setOptimisticShopFloorStatuses((current) => retainUnconfirmedShopFloorStatusPatches(basePayload, current));
     setOptimisticSetupChecklistSessions((current) => current.length ? [] : current);
     setOptimisticProductionCards((current) => current.length ? [] : current);
-  }, [snapshotUpdatedAt]);
+  }, [basePayload, snapshotUpdatedAt]);
 
   const payload = useMemo(
     () => applyProductionCardPatches(applySetupChecklistSessionPatches(applyShopFloorStatusPatches(basePayload, optimisticShopFloorStatuses), optimisticSetupChecklistSessions), optimisticProductionCards),

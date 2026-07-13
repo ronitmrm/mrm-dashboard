@@ -339,6 +339,14 @@ Presetting and setting checklist saves are workflow-only and do not trigger plan
 Relevant code:
 
 - `apps/web/components/mrmpl-dashboard.tsx` - optimistic setup checklist session state, upsert, and payload merge.
+## Optimistic workflow patches survive stale snapshots
 
+Date: 2026-07-13
 
+Workflow-only shop-floor stages such as `raw_material_at_machine`, `presetting`, `setting`, and `quality_approval` can be saved without forcing a planning recalculation. The dashboard must not clear optimistic `shop_floor_status` patches just because `dashboard.snapshot.updatedAt` changes; a new snapshot can still be stale for workflow-only data. Keep each optimistic patch until the snapshot contains the same setup at that stage or a later lifecycle stage. This prevents completed RM-at-machine tasks, such as JC-009 / M15 / setup 2 / A511, from reappearing in Shop Floor Tasks after another local change.
 
+Relevant code:
+
+- `apps/web/lib/shop-floor-optimistic.ts` - `retainUnconfirmedShopFloorStatusPatches` prunes only snapshot-confirmed patches.
+- `apps/web/components/mrmpl-dashboard.tsx` - snapshot refresh/update paths retain unconfirmed shop-floor patches.
+- `apps/web/lib/shop-floor-optimistic.test.ts` - regression `keeps workflow patches until a refreshed snapshot confirms the saved stage`.

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyShopFloorStatusPatches,
+  retainUnconfirmedShopFloorStatusPatches,
   shopFloorStatusPatchFromAction,
   upsertShopFloorStatusPatch,
 } from "./shop-floor-optimistic";
@@ -109,5 +110,68 @@ describe("shop-floor optimistic status patches", () => {
     expect(machineRow.runningStatus).toBe("Running");
     expect(jobCard.runningStatus).toBe("Running");
     expect(jobCard.shopFloorStage).toBe("operator_started");
+  });
+  it("keeps workflow patches until a refreshed snapshot confirms the saved stage", () => {
+    const stalePayload = {
+      productionControl: {
+        machinePlanDetailRows: [
+          {
+            jcNo: "JC-009",
+            partCode: "M15",
+            optionNumber: "1",
+            setupNo: "2",
+            machine: "A511",
+            shopFloorStage: "",
+          },
+        ],
+      },
+    };
+    const confirmedPayload = {
+      productionControl: {
+        machinePlanDetailRows: [
+          {
+            jcNo: "JC-009",
+            partCode: "M15",
+            optionNumber: "1",
+            setupNo: "2",
+            machine: "A511",
+            shopFloorStage: "raw_material_at_machine",
+          },
+        ],
+      },
+    };
+    const laterPayload = {
+      productionControl: {
+        machinePlanDetailRows: [
+          {
+            jcNo: "JC-009",
+            partCode: "M15",
+            optionNumber: "1",
+            setupNo: "2",
+            machine: "A511",
+            shopFloorStage: "presetting",
+          },
+        ],
+      },
+    };
+    const patch = shopFloorStatusPatchFromAction("data-entry", {
+      entryType: "shop_floor_status",
+      payload: {
+        jcNo: "JC-009",
+        partCode: "M15",
+        optionNumber: "1",
+        setupNo: "2",
+        machine: "A511",
+        stage: "raw_material_at_machine",
+        stageLabel: "Raw material at the machine",
+        completedAt: "2026-07-13T10:00:00.000Z",
+      },
+    });
+
+    const patches = upsertShopFloorStatusPatch([], patch!);
+
+    expect(retainUnconfirmedShopFloorStatusPatches(stalePayload, patches)).toHaveLength(1);
+    expect(retainUnconfirmedShopFloorStatusPatches(confirmedPayload, patches)).toHaveLength(0);
+    expect(retainUnconfirmedShopFloorStatusPatches(laterPayload, patches)).toHaveLength(0);
   });
 });

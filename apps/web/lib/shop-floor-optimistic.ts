@@ -23,6 +23,16 @@ const stageLabels: Record<string, string> = {
   item_complete: "Item complete",
 };
 
+const stageRanks = new Map([
+  ["raw_material_at_machine", 0],
+  ["presetting", 1],
+  ["setting", 2],
+  ["quality_approval", 3],
+  ["worker_start", 4],
+  ["operator_started", 4],
+  ["item_complete", 5],
+]);
+
 export function shopFloorStatusPatchFromAction(path: string, body: Record<string, unknown>): ShopFloorStatusPatch | undefined {
   if (path !== "data-entry") return undefined;
   return shopFloorStatusPatchFromDataEntry(body.entryType, body.payload);
@@ -53,6 +63,26 @@ export function upsertShopFloorStatusPatch(current: ShopFloorStatusPatch[], patc
     ...current.filter((item) => shopFloorStatusKey(item) !== patchKey),
     patch,
   ];
+}
+
+export function retainUnconfirmedShopFloorStatusPatches(payload: DashboardPayload, patches: ShopFloorStatusPatch[]) {
+  if (!patches.length) return patches;
+  const productionControl = record(payload.productionControl);
+  const rowsByKey = new Map(array(productionControl.machinePlanDetailRows).map((row) => {
+    const rowRecord = record(row);
+    return [shopFloorStatusKey({
+      jcNo: text(rowRecord.jcNo),
+      partCode: text(rowRecord.partCode),
+      optionNumber: displayText(rowRecord.optionNumber),
+      setupNo: displayText(rowRecord.setupNo),
+      machine: displayText(rowRecord.machine),
+    }), rowRecord];
+  }));
+  return patches.filter((patch) => {
+    const row = rowsByKey.get(shopFloorStatusKey(patch));
+    if (!row) return true;
+    return stageRank(row.shopFloorStage) < stageRank(patch.stage);
+  });
 }
 
 export function applyShopFloorStatusPatches(payload: DashboardPayload, patches: ShopFloorStatusPatch[]) {
@@ -125,6 +155,10 @@ function optimisticRunningStatus(stage: string, current: unknown) {
   if (stage === "operator_started") return "Running";
   if (stage === "setting" || stage === "quality_approval") return "Setup complete";
   return current;
+}
+
+function stageRank(stage: unknown) {
+  return stageRanks.get(text(stage)) ?? -1;
 }
 
 function shopFloorStatusKey(value: Pick<ShopFloorStatusPatch, "jcNo" | "partCode" | "optionNumber" | "setupNo" | "machine">) {
