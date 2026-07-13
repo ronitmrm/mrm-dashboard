@@ -355,3 +355,9 @@ Relevant code:
 Date: 2026-07-13
 
 The dashboard should not show the blocking "Checking planning recalculation" overlay just because `api.dashboard.refreshStatus` is loading, and auto stale-planning checks must not key off the general snapshot `updatedAt`. Ordinary workflow/data updates can change `updatedAt` without changing the planning cache. Use `stalePlanningRefreshKey` from `apps/web/lib/planning-refresh-policy.ts`, keyed by cache status and `snapshotCacheUpdatedAt` day, so a stale planning snapshot is checked once per stale planning cache date instead of after every unrelated dashboard update.
+
+## Shop Floor Status action labels
+
+Date: 2026-07-13
+
+Shop Floor Status must not show a generic "Ready to start machine" fallback when a planned row has no next workflow stage. Rows at `operator_started` are already machine-started and should not imply a missing Machinist task. Use explicit no-pending labels such as "Machine already started" so the status tab and Machinist task tab do not appear inconsistent.

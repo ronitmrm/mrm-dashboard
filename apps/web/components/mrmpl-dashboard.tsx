@@ -78,6 +78,7 @@ import {
 } from "@/lib/dashboard-view-model";
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
+import { shopFloorNoPendingActionLabel } from "@/lib/shop-floor-workflow";
 import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
 import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
@@ -4409,7 +4410,7 @@ function ShopFloorRowAction({
           </Button>
         </>
       ) : (
-        <div className="text-sm text-muted-foreground">Ready to start machine.</div>
+        <div className="text-sm text-muted-foreground">{shopFloorNoPendingActionLabel(next.shopFloorStage)}</div>
       )}
     </div>
   );
