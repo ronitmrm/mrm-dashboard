@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot } from "./planning-refresh-policy";
+import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "./planning-refresh-policy";
 
 describe("planning refresh policy", () => {
   it("queues recalculation for operational planning changes", () => {
@@ -52,5 +52,25 @@ describe("planning refresh policy", () => {
       new Date("2026-06-30T09:00:00"),
     )).toBe(false);
     expect(shouldRefreshStalePlanningSnapshot({ cacheStatus: "missing" })).toBe(true);
+  });
+  it("uses a stable stale-planning key that ignores ordinary snapshot updates", () => {
+    const now = new Date("2026-06-30T09:00:00");
+
+    expect(stalePlanningRefreshKey({
+      cacheStatus: "ready",
+      snapshotCacheUpdatedAt: "2026-06-29T18:30:00",
+      updatedAt: "2026-06-30T08:00:00",
+    }, now)).toBe("ready:2026-06-29");
+    expect(stalePlanningRefreshKey({
+      cacheStatus: "ready",
+      snapshotCacheUpdatedAt: "2026-06-29T18:30:00",
+      updatedAt: "2026-06-30T08:30:00",
+    }, now)).toBe("ready:2026-06-29");
+    expect(stalePlanningRefreshKey({
+      cacheStatus: "ready",
+      snapshotCacheUpdatedAt: "2026-06-30T01:00:00",
+      updatedAt: "2026-06-30T08:30:00",
+    }, now)).toBe("");
+    expect(stalePlanningRefreshKey({ cacheStatus: "missing" }, now)).toBe("missing");
   });
 });

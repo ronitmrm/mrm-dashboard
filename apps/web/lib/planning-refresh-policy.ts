@@ -46,14 +46,19 @@ export function planningRefreshStatusMessage(autoRefresh: boolean, path = "", bo
 }
 
 export function shouldRefreshStalePlanningSnapshot(payload: unknown, now = new Date()) {
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return false;
+  return Boolean(stalePlanningRefreshKey(payload, now));
+}
+
+export function stalePlanningRefreshKey(payload: unknown, now = new Date()) {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return "";
   const record = payload as Record<string, unknown>;
-  if (text(record.cacheStatus) === "missing") return true;
-  if (text(record.cacheStatus) !== "ready") return false;
+  const cacheStatus = text(record.cacheStatus);
+  if (cacheStatus === "missing") return "missing";
+  if (cacheStatus !== "ready") return "";
 
   const snapshotCacheDate = localDateKey(record.snapshotCacheUpdatedAt);
   const today = localDateKey(now);
-  return Boolean(snapshotCacheDate && today && snapshotCacheDate < today);
+  return snapshotCacheDate && today && snapshotCacheDate < today ? `ready:${snapshotCacheDate}` : "";
 }
 
 function shouldQueueDataEntryPlanningRefresh(body: Record<string, unknown>) {

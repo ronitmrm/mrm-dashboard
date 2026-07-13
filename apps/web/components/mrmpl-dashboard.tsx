@@ -75,7 +75,7 @@ import {
   toDashboardViewModel,
 } from "@/lib/dashboard-view-model";
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
-import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot } from "@/lib/planning-refresh-policy";
+import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
 import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
@@ -832,7 +832,7 @@ function DashboardShell() {
     const dashboardRecord = asRecord(dashboardPayload);
     if (!shouldRefreshStalePlanningSnapshot(dashboardRecord)) return;
     if (isPlanningRefreshLockActive || dashboardRefreshStatus?.isRefreshing) return;
-    const staleRefreshKey = str(dashboardRecord.snapshotCacheUpdatedAt) || str(dashboardRecord.updatedAt) || str(dashboardRecord.cacheStatus) || "missing";
+    const staleRefreshKey = stalePlanningRefreshKey(dashboardRecord);
     if (lastStalePlanningRefreshKeyRef.current === staleRefreshKey) return;
     lastStalePlanningRefreshKeyRef.current = staleRefreshKey;
     void refreshSnapshot({});
@@ -965,8 +965,7 @@ function DashboardShell() {
     [basePayload, optimisticShopFloorStatuses, optimisticSetupChecklistSessions, optimisticProductionCards],
   );
   const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
-  const isRefreshStatusLoading = dashboardRefreshStatus === undefined;
-  const isSnapshotRefreshActive = isRefreshingSnapshot || isRefreshStatusLoading || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
+  const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
 
   const view = useMemo(
     () => toDashboardViewModel(payload),

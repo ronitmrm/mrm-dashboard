@@ -350,3 +350,8 @@ Relevant code:
 - `apps/web/lib/shop-floor-optimistic.ts` - `retainUnconfirmedShopFloorStatusPatches` prunes only snapshot-confirmed patches.
 - `apps/web/components/mrmpl-dashboard.tsx` - snapshot refresh/update paths retain unconfirmed shop-floor patches.
 - `apps/web/lib/shop-floor-optimistic.test.ts` - regression `keeps workflow patches until a refreshed snapshot confirms the saved stage`.
+## Planning refresh checks are keyed by planning cache date
+
+Date: 2026-07-13
+
+The dashboard should not show the blocking "Checking planning recalculation" overlay just because `api.dashboard.refreshStatus` is loading, and auto stale-planning checks must not key off the general snapshot `updatedAt`. Ordinary workflow/data updates can change `updatedAt` without changing the planning cache. Use `stalePlanningRefreshKey` from `apps/web/lib/planning-refresh-policy.ts`, keyed by cache status and `snapshotCacheUpdatedAt` day, so a stale planning snapshot is checked once per stale planning cache date instead of after every unrelated dashboard update.
