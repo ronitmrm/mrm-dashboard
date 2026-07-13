@@ -265,6 +265,52 @@ export const snapshot = query({
   },
 });
 
+export const hourlyQualityPage = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireDashboardAccess(ctx);
+    const ownerFields = await getGlobalOwnerFields(ctx);
+    const cached = await readDashboardSnapshotPayload(ctx, null);
+    const productionControl = payloadRecord(payloadRecord(cached).productionControl);
+    const runningRows = currentShopFloorRowsForPage(
+      arrayRecords(productionControl.machinePlanningRows),
+      arrayRecords(productionControl.machinePlanDetailRows),
+    );
+    const parameterRows = await ctx.db
+      .query("dataEntries")
+      .withIndex("by_entry_type", (q) => q.eq("entryType", "quality_parameter_master"))
+      .collect();
+    return {
+      runningRows,
+      qualityParameterMasterRows: latestPayloadRowsByKey(
+        parameterRows.filter((row) => row.ownerId === ownerFields.ownerId).map((row) => payloadRecord(row.payload)),
+        qualityParameterMasterPayloadKey,
+      ),
+    };
+  },
+});
+
+export const hourlyQualityCheckByKey = query({
+  args: {
+    key: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireDashboardAccess(ctx);
+    const ownerFields = await getGlobalOwnerFields(ctx);
+    const rows = await ctx.db
+      .query("dataEntries")
+      .withIndex("by_owner_entry_type_key", (q) => q
+        .eq("ownerId", ownerFields.ownerId)
+        .eq("entryType", "hourly_quality_check")
+        .eq("key", args.key))
+      .order("desc")
+      .take(20);
+    const correctionTargets = await activeCorrectionTargetsForRows(ctx, "dataEntries", rows);
+    const row = latestUncorrectedRow(rows, "dataEntries", correctionTargets);
+    return row ? payloadRecord(row.payload) : null;
+  },
+});
+
 export const setupChecklistPage = query({
   args: {
     sessionId: v.string(),
@@ -963,6 +1009,122 @@ type CorrectionCandidateTable = typeof correctionCandidateTables[number];
 
 function payloadRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function arrayRecords(value: unknown) {
+  return Array.isArray(value)
+    ? value.map(payloadRecord).filter((row) => Object.keys(row).length)
+    : [];
+}
+
+function textValue(value: unknown) {
+  if (typeof value === "string") return value.trim();
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function pageDisplayValue(value: unknown) {
+  const text = textValue(value);
+  return text || "-";
+}
+
+function pageMachineKey(value: unknown) {
+  return textValue(value).toLowerCase();
+}
+
+function pageMachineValue(row: Record<string, unknown>, type: "machine" | "machineType") {
+  if (type === "machine") return pageDisplayValue(row.machine || row.machineNo || row["MACHINE NO"] || row["M/C NO"] || row["MACHINE NO."]);
+  return pageDisplayValue(row.machineType || row["MACHINE TYPE"] || row.type || row.TYPE);
+}
+
+
+function pageItemCode(row: Record<string, unknown>) {
+  return pageDisplayValue(row.partCode || row["PART CODE"] || row.itemCode);
+}
+
+function pagePlannedSetupDate(row: Record<string, unknown>) {
+  return row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate;
+}
+
+function pageDateSortValue(value: unknown) {
+  const text = textValue(value);
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+}
+
+function pagePlanningRowIsBreakdownStopped(row: Record<string, unknown>) {
+  return textValue(row.runningStatus).toLowerCase() === "breakdown stopped";
+}
+
+function pagePlanningRowIsShiftedAfterBreakdown(row: Record<string, unknown>) {
+  const status = textValue(row.runningStatus).toLowerCase();
+  return status === "plan shifted" || status === "plan delayed";
+}
+
+function pageShopFloorItemIsCurrent(row: Record<string, unknown>) {
+  if (pagePlanningRowIsBreakdownStopped(row) || pagePlanningRowIsShiftedAfterBreakdown(row)) return false;
+  return ["operator_started", "worker_start"].includes(textValue(row.shopFloorStage))
+    || textValue(row.runningStatus).toLowerCase() === "running"
+    || Number(row.rawRows) > 0
+    || Number(row.rawOutputQty) > 0
+    || Number(row.rawActualQty) > 0;
+}
+
+function pageShopFloorPlanSort(a: Record<string, unknown>, b: Record<string, unknown>) {
+  return pageDateSortValue(pagePlannedSetupDate(a)) - pageDateSortValue(pagePlannedSetupDate(b))
+    || pageDisplayValue(a.setupNo).localeCompare(pageDisplayValue(b.setupNo), undefined, { numeric: true })
+    || pageItemCode(a).localeCompare(pageItemCode(b), undefined, { numeric: true });
+}
+
+function currentShopFloorRowsForPage(machineRows: Record<string, unknown>[], plannedRows: Record<string, unknown>[]) {
+  const rowsByMachine = new Map<string, Record<string, unknown>>();
+  for (const row of machineRows) {
+    const key = pageMachineKey(pageMachineValue(row, "machine"));
+    if (key) rowsByMachine.set(key, row);
+  }
+  for (const row of plannedRows) {
+    const machine = pageMachineValue(row, "machine");
+    const key = pageMachineKey(machine);
+    if (!key || rowsByMachine.has(key)) continue;
+    rowsByMachine.set(key, { machine, machineNo: machine, machineType: pageMachineValue(row, "machineType") });
+  }
+  const plannedByMachine = new Map<string, Record<string, unknown>[]>();
+  for (const row of plannedRows) {
+    const key = pageMachineKey(pageMachineValue(row, "machine"));
+    if (!key) continue;
+    const rows = plannedByMachine.get(key) ?? [];
+    rows.push(row);
+    plannedByMachine.set(key, rows);
+  }
+  return [...rowsByMachine.values()]
+    .sort((a, b) => pageMachineValue(a, "machine").localeCompare(pageMachineValue(b, "machine"), undefined, { numeric: true }))
+    .map((machineRow) => {
+      const rows = plannedByMachine.get(pageMachineKey(pageMachineValue(machineRow, "machine"))) ?? [];
+      return rows
+        .filter((row) => textValue(row.shopFloorStage) !== "item_complete")
+        .filter(pageShopFloorItemIsCurrent)
+        .sort(pageShopFloorPlanSort)[0];
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+}
+
+function latestPayloadRowsByKey(rows: Record<string, unknown>[], keyFn: (row: Record<string, unknown>) => string) {
+  const rowsByKey = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const key = keyFn(row);
+    if (!key) continue;
+    rowsByKey.set(key, row);
+  }
+  return [...rowsByKey.values()];
+}
+
+function qualityParameterMasterPayloadKey(row: Record<string, unknown>) {
+  return [
+    row.partNo || row.partCode || row["PART NO"] || row["PART CODE"],
+    row.optionNumber || row["OPTION NUMBER"] || row["OPTION NO"],
+    row.setupNo || row["SETUP NO."] || row["SETUP NO"] || row["SET UP"],
+    row.code || row.parameterCode || row.CODE,
+  ].map(pageMachineKey).join("|");
 }
 
 function mergeDataEntryPayload(entryType: string, existingPayload: unknown, nextPayload: unknown) {

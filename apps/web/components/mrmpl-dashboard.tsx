@@ -417,24 +417,14 @@ export function MrmplDashboard() {
 
 export function HourlyQualityCheckPage() {
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const [authCheckTimedOut, setAuthCheckTimedOut] = useState(false);
 
-  useEffect(() => {
-    const timeout = window.setTimeout(
-      () => setAuthCheckTimedOut(isLoading),
-      isLoading ? 4000 : 0,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [isLoading]);
-
-  if (isLoading && !authCheckTimedOut) return <AuthLoadingScreen />;
-  if (!isAuthenticated) return <AuthScreen />;
+  if (!isLoading && !isAuthenticated) return <AuthScreen />;
 
   return <HourlyQualityCheckShell />;
 }
 
 function HourlyQualityCheckShell() {
-  const dashboardPayload = useQuery(api.dashboard.snapshot, {});
+  const hourlyQualityPageData = useQuery(api.dashboard.hourlyQualityPage, {});
   const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
   const [prodDate, setProdDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [shift, setShift] = useState("Day");
@@ -446,20 +436,17 @@ function HourlyQualityCheckShell() {
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState<ActionStatus>(null);
 
-  const snapshot = asRecord(dashboardPayload);
-  const productionControl = asRecord(snapshot.productionControl);
-  const runningRows = useMemo(() => currentShopFloorRows(productionControl), [productionControl]);
+  const hourlyQualityPageRecord = asRecord(hourlyQualityPageData);
+  const runningRows = useMemo(() => asArray(hourlyQualityPageRecord.runningRows), [hourlyQualityPageRecord.runningRows]);
   const selectedRow = useMemo(() => runningRows.find((row) => shopFloorPlanKey(row) === selectedKey), [runningRows, selectedKey]);
-  const qualityParameterRows = useMemo(() => asArray(productionControl.qualityParameterMasterRows), [productionControl]);
-  const hourlyRows = useMemo(() => asArray(productionControl.hourlyQualityCheckRows), [productionControl]);
+  const qualityParameterRows = useMemo(() => asArray(hourlyQualityPageRecord.qualityParameterMasterRows), [hourlyQualityPageRecord.qualityParameterMasterRows]);
+
   const parameters = useMemo(
     () => selectedRow ? qualityParameterRows.filter((row) => qualityParameterMatchesSetup(row, selectedRow)) : [],
     [qualityParameterRows, selectedRow],
   );
-  const existingCheck = useMemo(
-    () => selectedRow ? hourlyRows.find((row) => hourlyQualityCheckMatchesSelection(row, selectedRow, prodDate, shift, hourSlot)) : undefined,
-    [hourSlot, hourlyRows, prodDate, selectedRow, shift],
-  );
+  const selectedCheckKey = selectedRow ? hourlyQualityCheckId(selectedRow, prodDate, shift, hourSlot) : "";
+  const existingCheck = useQuery(api.dashboard.hourlyQualityCheckByKey, selectedCheckKey ? { key: selectedCheckKey } : "skip");
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -555,8 +542,8 @@ function HourlyQualityCheckShell() {
             <CardDescription>{existingCheck ? "Existing hourly card loaded for editing." : "Readings are saved against the selected date, shift, hour, machine, item, and setup."}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            {dashboardPayload === undefined ? (
-              <Skeleton className="h-36 w-full" />
+            {selectedRow && existingCheck === undefined && selectedCheckKey ? (
+              <Skeleton className="h-24 w-full" />
             ) : selectedRow && parameters.length ? (
               <div className="overflow-auto rounded-lg border">
                 <Table>
@@ -624,18 +611,8 @@ function HourlyQualityCheckShell() {
 
 export function SetupChecklistPage() {
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const [authCheckTimedOut, setAuthCheckTimedOut] = useState(false);
 
-  useEffect(() => {
-    const timeout = window.setTimeout(
-      () => setAuthCheckTimedOut(isLoading),
-      isLoading ? 4000 : 0,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [isLoading]);
-
-  if (isLoading && !authCheckTimedOut) return <AuthLoadingScreen />;
-  if (!isAuthenticated) return <AuthScreen />;
+  if (!isLoading && !isAuthenticated) return <AuthScreen />;
 
   return <SetupChecklistShell />;
 }
@@ -680,7 +657,7 @@ function SetupChecklistShell() {
   const checklistItems = Array.isArray(currentChecklistSession?.items)
     ? currentChecklistSession.items as DashboardPayload[]
     : setupChecklistItemsFromMaster(activeChecklistMasters);
-  const canSave = Boolean(row && (phase === "start" || phase === "end") && checklistItems.length)
+  const canSave = Boolean(sessionId && (phase === "start" || phase === "end") && checklistItems.length)
     && (phase === "start" || Boolean(currentChecklistSession));
   const isComplete = canSave && setupChecklistValuesComplete(checklistItems, values, phase);
 
@@ -761,9 +738,7 @@ function SetupChecklistShell() {
             Dashboard
           </Button>
         </div>
-        {checklistPageData === undefined ? (
-          <Skeleton className="h-56 w-full" />
-        ) : row ? (
+        {sessionId ? (
           <>
             <Card>
               <CardHeader>
@@ -785,14 +760,18 @@ function SetupChecklistShell() {
                 </div>
               </CardContent>
             </Card>
-            <SetupChecklistForm
-              row={row}
-              phase={phase}
-              items={checklistItems}
-              session={currentChecklistSession}
-              values={values}
-              onValueChange={updateValue}
-            />
+            {checklistPageData === undefined && !checklistItems.length ? (
+              <Skeleton className="h-56 w-full" />
+            ) : (
+              <SetupChecklistForm
+                row={row}
+                phase={phase}
+                items={checklistItems}
+                session={currentChecklistSession}
+                values={values}
+                onValueChange={updateValue}
+              />
+            )}
             {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <StatusBadge value={isComplete ? "Checklist complete" : "Progress can be saved"} />
@@ -7933,16 +7912,6 @@ function hourlyQualityCheckId(row: DashboardPayload, prodDate: string, shift: st
   ].map(machineKey).join("|");
 }
 
-function hourlyQualityCheckMatchesSelection(check: DashboardPayload, row: DashboardPayload, prodDate: string, shift: string, hourSlot: string) {
-  return str(check.checkId) === hourlyQualityCheckId(row, prodDate, shift, hourSlot)
-    || (machineKey(check.prodDate || check.date) === machineKey(prodDate)
-      && machineKey(check.shift) === machineKey(shift)
-      && machineKey(check.hourSlot) === machineKey(hourSlot)
-      && machineKey(check.machine || check.machineNo) === machineKey(displayValue(row.machine))
-      && machineKey(check.partCode || check.partNo) === machineKey(itemCode(row))
-      && machineKey(check.optionNumber) === machineKey(displayValue(row.optionNumber))
-      && machineKey(check.setupNo) === machineKey(displayValue(row.setupNo)));
-}
 
 function hourlyQualityCheckPayload(
   row: DashboardPayload,

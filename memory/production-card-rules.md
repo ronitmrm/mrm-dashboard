@@ -13,3 +13,5 @@
 - 2026-07-12: Setup checklist page shows running setup metadata as top tiles. Because `dashboard.snapshot` is cached, the page stores the latest saved `setup_checklist_session` in browser local storage by session id and prefers it over stale snapshot data for immediate reopen hydration.
 
 - 2026-07-12: Setup checklist page must not load `dashboard.snapshot`; use the lightweight `api.dashboard.setupChecklistPage` query plus row details in the URL so checklist opening is fast and does not pull the multi-MB dashboard payload.
+
+- 2026-07-13: Hourly QC page must not load `dashboard.snapshot` in the browser. Use `api.dashboard.hourlyQualityPage` for only running rows and quality parameter masters; load an existing hourly QC card separately by key only after machine/date/hour selection.
