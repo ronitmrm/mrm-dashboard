@@ -143,6 +143,25 @@ const navItems: Array<{ id: DashboardTabId; title: string; subtitle: string; ico
   { id: "correctionsTab", title: "Corrections", subtitle: "reverse wrong entries", icon: Undo2 },
 ];
 
+function dashboardTabHref(tab: DashboardTabId) {
+  return `/?tab=${encodeURIComponent(tab)}`;
+}
+
+function initialDashboardTabFromLocation(): DashboardTabId {
+  if (typeof window === "undefined") return "productionControlTab";
+  const tab = new URLSearchParams(window.location.search).get("tab") as DashboardTabId | null;
+  return validDashboardTab(tab) ?? "productionControlTab";
+}
+
+function dashboardReturnHref(defaultTab: DashboardTabId) {
+  if (typeof window === "undefined") return dashboardTabHref(defaultTab);
+  const returnTab = new URLSearchParams(window.location.search).get("returnTab") as DashboardTabId | null;
+  return dashboardTabHref(validDashboardTab(returnTab) ?? defaultTab);
+}
+
+function validDashboardTab(tab: DashboardTabId | null) {
+  return tab && navItems.some((item) => item.id === tab) ? tab : undefined;
+}
 const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "route",
@@ -489,7 +508,7 @@ function HourlyQualityCheckShell() {
         payload,
       });
       setStatus({ tone: "default", message: "Hourly quality check saved." });
-      window.location.assign("/");
+      window.location.assign(dashboardReturnHref("qualityControlTasksTab"));
     } catch (err) {
       setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Hourly quality check save failed." });
     } finally {
@@ -510,9 +529,9 @@ function HourlyQualityCheckShell() {
             <h1 className="text-2xl font-semibold">Hourly quality check</h1>
             <p className="text-sm text-muted-foreground">Select the running machine, then record the hourly inspection against the active item, option, and setup.</p>
           </div>
-          <Button type="button" variant="outline" onClick={() => { window.location.assign("/"); }}>
+          <Button type="button" variant="outline" onClick={() => { window.location.assign(dashboardReturnHref("qualityControlTasksTab")); }}>
             <LayoutDashboard className="size-4" />
-            Dashboard
+            Quality Control
           </Button>
         </div>
         <Card>
@@ -720,7 +739,7 @@ function SetupChecklistShell() {
       setLocalChecklistSession(payload);
       writeStoredSetupChecklistSession(payload);
       setStatus({ tone: "default", message: "Checklist progress saved." });
-      window.location.assign("/");
+      window.location.assign(dashboardReturnHref("machinistTasksTab"));
     } catch (err) {
       setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Checklist save failed." });
     } finally {
@@ -736,9 +755,9 @@ function SetupChecklistShell() {
             <h1 className="text-2xl font-semibold">Setup checklist</h1>
             <p className="text-sm text-muted-foreground">Save pre setting and setting checklist progress outside the machinist task list.</p>
           </div>
-          <Button type="button" variant="outline" onClick={() => { window.location.assign("/"); }}>
+          <Button type="button" variant="outline" onClick={() => { window.location.assign(dashboardReturnHref("machinistTasksTab")); }}>
             <LayoutDashboard className="size-4" />
-            Dashboard
+            Machinist
           </Button>
         </div>
         {sessionId ? (
@@ -797,7 +816,7 @@ function SetupChecklistShell() {
 }
 
 function DashboardShell() {
-  const [activeTab, setActiveTab] = useState<DashboardTabId>("productionControlTab");
+  const [activeTab, setActiveTab] = useState<DashboardTabId>(() => initialDashboardTabFromLocation());
   const [preferredDataEntryType, setPreferredDataEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
   const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
@@ -3821,7 +3840,7 @@ function RoleTaskPanel({
         <CardContent className="grid gap-4">
           {role === "quality" ? (
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => { window.location.href = "/dashboard/hourly-quality-check"; }}>
+              <Button type="button" variant="outline" size="sm" onClick={() => { window.location.assign("/dashboard/hourly-quality-check?returnTab=qualityControlTasksTab"); }}>
                 <Gauge className="size-4" />
                 Hourly quality check
               </Button>
@@ -8265,6 +8284,7 @@ function setupChecklistPageHref(row: DashboardPayload, phase: string) {
     setupName: displayValue(row.setupName),
     machine: displayValue(row.machine),
     machineType: displayValue(row.machineType),
+    returnTab: "machinistTasksTab",
   });
   return `/dashboard/setup-checklist?${params.toString()}`;
 }
