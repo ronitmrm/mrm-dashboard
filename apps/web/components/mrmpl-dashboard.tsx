@@ -119,6 +119,7 @@ type DashboardTabId =
   | "masterGapsTab"
   | "dataEntryTab"
   | "planningHolidayTab"
+  | "maintenanceTab"
   | "planningControlTab"
   | "shopFloorStatusTab"
   | "shopFloorTasksTab"
@@ -134,6 +135,7 @@ const navItems: Array<{ id: DashboardTabId; title: string; subtitle: string; ico
   { id: "masterGapsTab", title: "Master Readiness", subtitle: "missing planning data", icon: Database },
   { id: "dataEntryTab", title: "Data Entry", subtitle: "imports and manual entry", icon: ListChecks },
   { id: "planningHolidayTab", title: "Planning Holidays", subtitle: "Friday shutdown, holidays", icon: CalendarDays },
+  { id: "maintenanceTab", title: "Maintenance", subtitle: "machine PM schedule", icon: Settings2 },
   { id: "planningControlTab", title: "Planning Control", subtitle: "route and plan checks", icon: Route },
   { id: "shopFloorStatusTab", title: "Shop Floor Status", subtitle: "machine queue", icon: Factory },
   { id: "shopFloorTasksTab", title: "Shop Floor Tasks", subtitle: "raw material at machine", icon: PackageCheck },
@@ -275,6 +277,38 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "capacity", label: "Capacity", type: "number", step: "0.01" },
       { name: "status", label: "Status", options: ["Active", "Inactive", "Maintenance"], defaultValue: "Active" },
       { name: "remarks", label: "Remarks" },
+    ],
+  },
+  {
+    entryType: "maintenance_schedule",
+    title: "Maintenance schedule",
+    description: "Planned preventive maintenance frequency for each machine.",
+    fields: [
+      { name: "machineNo", label: "Machine no.", required: true },
+      { name: "maintenanceCode", label: "Maintenance code", required: true },
+      { name: "maintenanceTitle", label: "Maintenance title", required: true },
+      { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
+      { name: "firstDueDate", label: "First due date", type: "date", required: true },
+      { name: "estimatedMinutes", label: "Estimated minutes", type: "number", min: "0" },
+      { name: "assignedTo", label: "Assigned to" },
+      { name: "priority", label: "Priority", options: ["Normal", "High", "Critical"], defaultValue: "Normal" },
+      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      { name: "remark", label: "Remark" },
+    ],
+  },
+  {
+    entryType: "maintenance_task",
+    title: "Maintenance completion",
+    description: "Completed preventive maintenance records against scheduled machines.",
+    fields: [
+      { name: "machineNo", label: "Machine no.", required: true },
+      { name: "maintenanceCode", label: "Maintenance code", required: true },
+      { name: "completedDate", label: "Completed date", type: "date", required: true },
+      { name: "completedBy", label: "Completed by", required: true },
+      { name: "actualMinutes", label: "Actual minutes", type: "number", min: "0" },
+      { name: "result", label: "Result", options: ["Completed", "Needs follow up", "Skipped"], defaultValue: "Completed" },
+      { name: "nextDueDate", label: "Next due date", type: "date" },
+      { name: "remark", label: "Remark" },
     ],
   },
   {
@@ -1405,6 +1439,10 @@ function DashboardContent({
 
   if (activeTab === "planningHolidayTab") {
     return <PlanningHolidayPanel productionControl={productionControl} submitAction={submitAction} />;
+  }
+
+  if (activeTab === "maintenanceTab") {
+    return <MaintenancePanel productionControl={productionControl} submitAction={submitAction} openDataEntry={openDataEntry} />;
   }
 
   if (activeTab === "planningControlTab") {
@@ -5462,6 +5500,193 @@ function DataEntryPanel({
   );
 }
 
+function MaintenancePanel({
+  productionControl,
+  submitAction,
+  openDataEntry,
+}: {
+  productionControl: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+}) {
+  const machineRows = useMemo(() => maintenanceMachineRows(asArray(productionControl.machinePlanningRows)), [productionControl.machinePlanningRows]);
+  const scheduleRows = asArray(productionControl.maintenanceScheduleRows);
+  const completionRows = asArray(productionControl.maintenanceTaskRows);
+  const dueRows = useMemo(() => maintenanceDueRows(scheduleRows, completionRows, machineRows), [scheduleRows, completionRows, machineRows]);
+  const dueNowRows = dueRows.filter((row) => row.status !== "Upcoming");
+  const activeSchedules = scheduleRows.filter((row) => str(row.status || "Active").toLowerCase() !== "inactive");
+  const [selectedMachineNo, setSelectedMachineNo] = useState("");
+  const selectedMachine = machineRows.find((row) => machineKey(row.machineNo) === machineKey(selectedMachineNo));
+
+  async function saveSchedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const body = formPayload(new FormData(form), maintenanceScheduleFields());
+    const machine = machineRows.find((row) => machineKey(row.machineNo) === machineKey(body.machineNo));
+    const payload = {
+      ...body,
+      machineType: displayValue(machine?.machineType) !== "-" ? displayValue(machine?.machineType) : "",
+      machineName: displayValue(machine?.machineName) !== "-" ? displayValue(machine?.machineName) : "",
+      location: displayValue(machine?.location) !== "-" ? displayValue(machine?.location) : "",
+      updatedAt: new Date().toISOString(),
+    };
+    await submitAction("data-entry", {
+      entryType: "maintenance_schedule",
+      key: dataEntryKey("maintenance_schedule", payload),
+      payload,
+    });
+    form.reset();
+    setSelectedMachineNo("");
+  }
+
+  async function markMaintenanceDone(row: DashboardPayload) {
+    const completedBy = window.prompt("Completed by")?.trim();
+    if (!completedBy) return;
+    const actualMinutesText = window.prompt("Actual minutes", displayValue(row.estimatedMinutes) !== "-" ? displayValue(row.estimatedMinutes) : "")?.trim() ?? "";
+    const completedDate = todayIsoDate();
+    const frequencyDays = optionalNumber(row.frequencyDays) ?? 0;
+    const payload = {
+      taskId: maintenanceTaskId(row, completedDate),
+      scheduleKey: maintenanceScheduleKey(row),
+      machineNo: displayValue(row.machineNo),
+      machineType: displayValue(row.machineType) !== "-" ? displayValue(row.machineType) : "",
+      maintenanceCode: displayValue(row.maintenanceCode),
+      maintenanceTitle: displayValue(row.maintenanceTitle),
+      completedDate,
+      completedAt: new Date().toISOString(),
+      completedBy,
+      actualMinutes: optionalNumber(actualMinutesText) ?? actualMinutesText,
+      result: "Completed",
+      nextDueDate: frequencyDays > 0 ? addIsoDays(completedDate, frequencyDays) : "",
+      remark: "Completed from maintenance task list.",
+    };
+    await submitAction("data-entry", {
+      entryType: "maintenance_task",
+      key: dataEntryKey("maintenance_task", payload),
+      payload,
+    });
+  }
+
+  return (
+    <section className="grid gap-4">
+      <TrackingSummary
+        items={[
+          ["Machines", formatNumber(machineRows.length)],
+          ["Active schedules", formatNumber(activeSchedules.length)],
+          ["Due now", formatNumber(dueNowRows.length)],
+          ["Completed records", formatNumber(completionRows.length)],
+        ]}
+      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Maintenance schedule</CardTitle>
+          <CardDescription>Select a machine from machine master and define its planned preventive maintenance cycle.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {!machineRows.length ? (
+            <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+              <div>Machine master has no active machines yet.</div>
+              <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("machine_master", { status: "Active", __returnTab: "maintenanceTab" })}>
+                Add machine master
+              </Button>
+            </div>
+          ) : null}
+          <form className="grid gap-3" onSubmit={saveSchedule}>
+            <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+              <Field label="Machine no.">
+                <select className="h-9 rounded-md border bg-background px-3 text-sm" name="machineNo" value={selectedMachineNo} onChange={(event) => setSelectedMachineNo(event.target.value)} required>
+                  <option value="">Select machine</option>
+                  {machineRows.map((row) => <option key={displayValue(row.machineNo)} value={displayValue(row.machineNo)}>{displayValue(row.machineNo)}</option>)}
+                </select>
+              </Field>
+              <Field label="Machine detail"><Input value={[selectedMachine?.machineType, selectedMachine?.machineName, selectedMachine?.location].map((value) => displayValue(value)).filter((value) => value !== "-").join(" / ")} readOnly /></Field>
+              <Field label="Maintenance code"><Input name="maintenanceCode" placeholder="PM01" required /></Field>
+              <Field label="Maintenance title"><Input name="maintenanceTitle" placeholder="Monthly preventive check" required /></Field>
+              <Field label="Frequency days"><Input name="frequencyDays" type="number" min="1" required /></Field>
+              <Field label="First due date"><Input name="firstDueDate" type="date" defaultValue={todayIsoDate()} required /></Field>
+              <Field label="Estimated minutes"><Input name="estimatedMinutes" type="number" min="0" /></Field>
+              <Field label="Assigned to"><Input name="assignedTo" /></Field>
+              <Field label="Priority">
+                <select className="h-9 rounded-md border bg-background px-3 text-sm" name="priority" defaultValue="Normal">
+                  <option value="Normal">Normal</option>
+                  <option value="High">High</option>
+                  <option value="Critical">Critical</option>
+                </select>
+              </Field>
+              <Field label="Status">
+                <select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue="Active">
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </Field>
+              <Field label="Remark"><Input name="remark" /></Field>
+            </div>
+            <Button type="submit" className="w-fit" disabled={!machineRows.length}>
+              <CalendarDays className="size-4" />
+              Save schedule
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card className={dueNowRows.length ? "border-amber-300/80" : ""}>
+        <CardHeader>
+          <CardTitle>Maintenance tasks</CardTitle>
+          <CardDescription>Due and overdue machine maintenance appears here from the saved schedule.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {dueRows.length ? (
+            <div className="overflow-auto rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Machine</TableHead>
+                    <TableHead>Maintenance</TableHead>
+                    <TableHead>Due date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Last done</TableHead>
+                    <TableHead>Assigned</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dueRows.map((row) => (
+                    <TableRow key={maintenanceScheduleKey(row)}>
+                      <TableCell>
+                        <div className="font-medium">{displayValue(row.machineNo)}</div>
+                        <div className="text-xs text-muted-foreground">{displayValue(row.machineType)}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</div>
+                        <div className="text-xs text-muted-foreground">Every {formatNumber(optionalNumber(row.frequencyDays) ?? 0)} days</div>
+                      </TableCell>
+                      <TableCell>{displayValue(row.nextDueDate)}</TableCell>
+                      <TableCell><StatusBadge value={row.status} /></TableCell>
+                      <TableCell>{displayValue(row.lastCompletedDate)}</TableCell>
+                      <TableCell>{displayValue(row.assignedTo)}</TableCell>
+                      <TableCell>
+                        <Button type="button" size="sm" variant={row.status === "Upcoming" ? "outline" : "default"} onClick={() => void markMaintenanceDone(row)}>
+                          <CheckCircle2 className="size-4" />
+                          Mark done
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <EmptyRowsMessage>No maintenance schedules saved yet.</EmptyRowsMessage>
+          )}
+        </CardContent>
+      </Card>
+
+      <DataRowsCard title="Saved maintenance schedules" rows={maintenanceScheduleViewRows(scheduleRows, completionRows)} empty="No maintenance schedules saved yet" />
+      <DataRowsCard title="Maintenance completion history" rows={completionRows} empty="No maintenance completion records saved yet" />
+    </section>
+  );
+}
 function PlanningHolidayPanel({
   productionControl,
   submitAction,
@@ -8104,6 +8329,12 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       payload.machine,
     ].map((value) => str(value).toLowerCase()).join("|");
   }
+  if (entryType === "maintenance_schedule") {
+    return [payload.machineNo || payload.machine, payload.maintenanceCode].map((value) => str(value).toLowerCase()).join("|");
+  }
+  if (entryType === "maintenance_task") {
+    return str(payload.taskId) || [payload.machineNo || payload.machine, payload.maintenanceCode, payload.completedDate].map((value) => str(value).toLowerCase()).join("|");
+  }
   if (entryType === "downtime_reason_master" || entryType === "rejection_type_master" || entryType === "rejection_reason_master" || entryType === "rejection_remark_master") return str(payload.code).toLowerCase();
   if (entryType === "planning_holiday") {
     return [
@@ -8122,6 +8353,136 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   return "";
 }
 
+function maintenanceScheduleFields(): LegacyField[] {
+  return [
+    { name: "machineNo", label: "Machine no.", required: true },
+    { name: "maintenanceCode", label: "Maintenance code", required: true },
+    { name: "maintenanceTitle", label: "Maintenance title", required: true },
+    { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
+    { name: "firstDueDate", label: "First due date", type: "date", required: true },
+    { name: "estimatedMinutes", label: "Estimated minutes", type: "number", min: "0" },
+    { name: "assignedTo", label: "Assigned to" },
+    { name: "priority", label: "Priority" },
+    { name: "status", label: "Status" },
+    { name: "remark", label: "Remark" },
+  ];
+}
+
+function maintenanceMachineRows(rows: DashboardPayload[]) {
+  const byMachine = new Map<string, DashboardPayload>();
+  for (const row of rows) {
+    const machineNo = displayValue(row.machineNo || row.machine || row["MACHINE NO"] || row["M/C NO"] || row["MACHINE NO."]);
+    if (machineNo === "-") continue;
+    if (str(row.status || "Active").toLowerCase() === "inactive") continue;
+    const key = machineKey(machineNo);
+    if (byMachine.has(key)) continue;
+    byMachine.set(key, {
+      ...row,
+      machineNo,
+      machineType: displayValue(row.machineType || row["MACHINE TYPE"]),
+      machineName: displayValue(row.machineName || row["MACHINE NAME"]),
+      location: displayValue(row.location || row["LOCATION"]),
+    });
+  }
+  return [...byMachine.values()].sort((a, b) => displayValue(a.machineNo).localeCompare(displayValue(b.machineNo), undefined, { numeric: true }));
+}
+
+function maintenanceScheduleKey(row: DashboardPayload) {
+  return [row.machineNo || row.machine, row.maintenanceCode].map((value) => str(value).toLowerCase()).join("|");
+}
+
+function maintenanceTaskId(row: DashboardPayload, completedDate: string) {
+  return [row.machineNo || row.machine, row.maintenanceCode, completedDate].map((value) => str(value).toLowerCase()).join("|");
+}
+
+function maintenanceDueRows(scheduleRows: DashboardPayload[], completionRows: DashboardPayload[], machineRows: DashboardPayload[]): DashboardPayload[] {
+  const machinesByKey = new Map(machineRows.map((row) => [machineKey(row.machineNo), row]));
+  const today = todayIsoDate();
+  return scheduleRows
+    .filter((row) => str(row.status || "Active").toLowerCase() !== "inactive")
+    .map((row) => {
+      const machine = machinesByKey.get(machineKey(row.machineNo));
+      const latestCompletion = latestMaintenanceCompletion(row, completionRows);
+      const lastCompletedDate = isoDateValue(latestCompletion?.completedDate || latestCompletion?.completedAt || row.lastCompletedDate);
+      const firstDueDate = isoDateValue(row.firstDueDate || row.nextDueDate || today);
+      const frequencyDays = optionalNumber(row.frequencyDays) ?? 0;
+      const nextDueDate = isoDateValue(latestCompletion?.nextDueDate) || (lastCompletedDate && frequencyDays > 0 ? addIsoDays(lastCompletedDate, frequencyDays) : firstDueDate);
+      const status = !nextDueDate
+        ? "Unscheduled"
+        : nextDueDate < today
+          ? "Overdue"
+          : nextDueDate === today
+            ? "Due today"
+            : "Upcoming";
+      return {
+        ...row,
+        machineType: displayValue(row.machineType || machine?.machineType),
+        machineName: displayValue(row.machineName || machine?.machineName),
+        location: displayValue(row.location || machine?.location),
+        frequencyDays,
+        nextDueDate,
+        lastCompletedDate,
+        status,
+      } as DashboardPayload;
+    })
+    .sort((a, b) => maintenanceStatusRank(a.status) - maintenanceStatusRank(b.status)
+      || dateSortValue(a.nextDueDate) - dateSortValue(b.nextDueDate)
+      || displayValue(a.machineNo).localeCompare(displayValue(b.machineNo), undefined, { numeric: true })
+      || displayValue(a.maintenanceCode).localeCompare(displayValue(b.maintenanceCode), undefined, { numeric: true }));
+}
+
+function latestMaintenanceCompletion(schedule: DashboardPayload, completionRows: DashboardPayload[]) {
+  return completionRows
+    .filter((row) => maintenanceScheduleKey(row) === maintenanceScheduleKey(schedule))
+    .sort((a, b) => dateSortValue(isoDateValue(b.completedDate || b.completedAt)) - dateSortValue(isoDateValue(a.completedDate || a.completedAt)))[0];
+}
+
+function maintenanceScheduleViewRows(scheduleRows: DashboardPayload[], completionRows: DashboardPayload[]) {
+  return scheduleRows.map((row) => {
+    const latestCompletion = latestMaintenanceCompletion(row, completionRows);
+    return {
+      machineNo: displayValue(row.machineNo),
+      maintenanceCode: displayValue(row.maintenanceCode),
+      maintenanceTitle: displayValue(row.maintenanceTitle),
+      frequencyDays: displayValue(row.frequencyDays),
+      firstDueDate: displayValue(row.firstDueDate),
+      status: displayValue(row.status || "Active"),
+      assignedTo: displayValue(row.assignedTo),
+      lastCompletedDate: displayValue(latestCompletion?.completedDate),
+      nextDueDate: displayValue(latestCompletion?.nextDueDate),
+    };
+  });
+}
+
+function maintenanceStatusRank(status: unknown) {
+  const value = str(status).toLowerCase();
+  if (value.includes("overdue")) return 0;
+  if (value.includes("due")) return 1;
+  if (value.includes("unscheduled")) return 2;
+  return 3;
+}
+
+function todayIsoDate() {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60000;
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
+function addIsoDays(date: string, days: number) {
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  parsed.setDate(parsed.getDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function isoDateValue(value: unknown) {
+  const text = str(value);
+  if (!text || text === "-") return "";
+  const isoMatch = text.match(/^\d{4}-\d{2}-\d{2}/);
+  if (isoMatch) return isoMatch[0];
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+}
 function productionCycleMasterChanged(row: DashboardPayload, card: DashboardPayload) {
   const nextCycle = optionalNumber(card.cycleTime) ?? productionCycleSeconds(row);
   const nextPieceWeight = optionalNumber(card.pieceWeight) ?? productionPieceWeightGrams(row);

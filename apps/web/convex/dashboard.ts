@@ -991,6 +991,8 @@ const legacyEntryTypes = [
   "production_card",
   "quality_parameter_master",
   "hourly_quality_check",
+  "maintenance_schedule",
+  "maintenance_task",
 ];
 
 const snapshotEntryTypes = [...legacyEntryTypes, "shop_floor_status"];
