@@ -5875,6 +5875,9 @@ function DataEntryForm({
   dataEntry?: DashboardPayload;
 }) {
   const defaultsKey = JSON.stringify(defaults);
+  if (spec.entryType === "maintenance_master") {
+    return <MaintenanceMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} />;
+  }
   if (spec.entryType === "maintenance_checklist_master") {
     return <MaintenanceChecklistMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} />;
   }
@@ -5905,6 +5908,107 @@ function DataEntryForm({
   );
 }
 
+function MaintenanceMasterForm({
+  spec,
+  submitAction,
+  defaults,
+  dataEntry,
+}: {
+  spec: DataEntrySpec;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  defaults: Record<string, unknown>;
+  dataEntry?: DashboardPayload;
+}) {
+  const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
+  const persistedRows = useMemo(() => maintenanceMasterRowsFromDataEntry(dataEntry), [dataEntry]);
+  const savedRows = useMemo(() => {
+    const persistedKeys = new Set(persistedRows.map(maintenanceMasterKey));
+    return [...persistedRows, ...localRows.filter((row) => !persistedKeys.has(maintenanceMasterKey(row)))];
+  }, [persistedRows, localRows]);
+  const scheduleOptions = useMemo(() => activeMaintenanceMasterRows(savedRows), [savedRows]);
+  const checklistRows = useMemo(() => activeMaintenanceChecklistRows(maintenanceChecklistMasterRowsFromDataEntry(dataEntry)), [dataEntry]);
+  const checklistOptions = useMemo(() => maintenanceChecklistOptions(checklistRows), [checklistRows]);
+  const defaultCode = displayValue(defaults.maintenanceCode) !== "-" ? displayValue(defaults.maintenanceCode) : nextMaintenanceMasterCode(savedRows);
+  const [selectedCode, setSelectedCode] = useState(defaultCode);
+  const selectedMaster = savedRows.find((row) => maintenanceMasterKey(row) === machineKey(selectedCode));
+  const isExistingSchedule = Boolean(selectedMaster);
+  const selectedChecklistCode = displayValue(selectedMaster?.checklistCode ?? defaults.checklistCode);
+  const [checklistCodeOverride, setChecklistCodeOverride] = useState("");
+  const previewChecklistCode = checklistCodeOverride || (selectedChecklistCode !== "-" ? selectedChecklistCode : "");
+  const previewChecklistRows = previewChecklistCode ? maintenanceChecklistRowsForCode(checklistRows, previewChecklistCode) : [];
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const checklistCode = str(formData.get("checklistCode"));
+    const payload = {
+      maintenanceCode: selectedCode || nextMaintenanceMasterCode(savedRows),
+      maintenanceTitle: str(formData.get("maintenanceTitle")),
+      frequencyDays: optionalNumber(formData.get("frequencyDays")) ?? str(formData.get("frequencyDays")),
+      checklistCode,
+      checklistTitle: maintenanceChecklistTitle(checklistRows, checklistCode),
+      estimatedMinutes: optionalNumber(formData.get("estimatedMinutes")) ?? str(formData.get("estimatedMinutes")),
+      status: str(formData.get("status")) || "Active",
+      remark: str(formData.get("remark")),
+    };
+    void submitAction("data-entry", {
+      entryType: spec.entryType,
+      id: defaults.__entryId,
+      key: dataEntryKey(spec.entryType, payload),
+      returnTab: defaults.__returnTab,
+      payload,
+    });
+    setLocalRows((current) => [
+      ...current.filter((row) => maintenanceMasterKey(row) !== maintenanceMasterKey(payload)),
+      payload,
+    ]);
+    setSelectedCode(str(payload.maintenanceCode) || nextMaintenanceMasterCode(savedRows));
+  }
+
+  const selectedTitle = displayValue(selectedMaster?.maintenanceTitle ?? defaults.maintenanceTitle);
+  const selectedFrequency = displayValue(selectedMaster?.frequencyDays ?? defaults.frequencyDays);
+  const selectedEstimatedMinutes = displayValue(selectedMaster?.estimatedMinutes ?? defaults.estimatedMinutes);
+  const selectedStatus = displayValue(selectedMaster?.status ?? defaults.status);
+  const selectedRemark = displayValue(selectedMaster?.remark ?? defaults.remark);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{spec.title}</CardTitle>
+        <CardDescription>Create reusable maintenance schedules here, then assign them to machines from Machine Master.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+          <Field label="Maintenance schedule">
+            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => { setSelectedCode(event.target.value); setChecklistCodeOverride(""); }}>
+              <option value={nextMaintenanceMasterCode(savedRows)}>New schedule ({nextMaintenanceMasterCode(savedRows)})</option>
+              {scheduleOptions.map((row) => <option key={displayValue(row.maintenanceCode)} value={displayValue(row.maintenanceCode)}>{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</option>)}
+            </select>
+          </Field>
+          <TileField label="Saved schedules" value={scheduleOptions.length} numeric />
+        </div>
+        {previewChecklistRows.length ? <MaintenanceChecklistPreview rows={previewChecklistRows} /> : null}
+        <form key={`${spec.entryType}-${selectedCode}`} className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+          <div>
+            <div className="text-sm font-medium">{isExistingSchedule ? "Update maintenance schedule" : "Create maintenance schedule"}</div>
+            <div className="text-xs text-muted-foreground">The generated code identifies this reusable schedule; the title is what users select when assigning it to machines.</div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+            <Field label="Maintenance code"><Input name="maintenanceCode" value={selectedCode} readOnly /></Field>
+            <Field label="Maintenance schedule title"><Input name="maintenanceTitle" defaultValue={selectedTitle !== "-" ? selectedTitle : ""} required /></Field>
+            <Field label="Frequency days"><Input name="frequencyDays" type="number" min="1" defaultValue={selectedFrequency !== "-" ? selectedFrequency : ""} required /></Field>
+            <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={previewChecklistCode} onChange={(event) => setChecklistCodeOverride(event.target.value)}><option value="">No checklist</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
+            <Field label="Estimated minutes"><Input name="estimatedMinutes" type="number" min="0" defaultValue={selectedEstimatedMinutes !== "-" ? selectedEstimatedMinutes : ""} /></Field>
+            <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue={selectedStatus !== "-" ? selectedStatus : "Active"}><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
+            <Field label="Remark"><Input name="remark" defaultValue={selectedRemark !== "-" ? selectedRemark : ""} /></Field>
+          </div>
+          <Button className="w-fit" type="submit"><Wrench className="size-4" />{isExistingSchedule ? "Update schedule" : "Create schedule"}</Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
 function MaintenanceChecklistMasterForm({
   spec,
   submitAction,
@@ -8647,6 +8751,23 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   return "";
 }
 
+function maintenanceMasterRowsFromDataEntry(dataEntry: DashboardPayload | undefined) {
+  return asArray(asRecord(dataEntry).maintenanceMasterRows)
+    .filter((row) => displayValue(row.maintenanceCode || row.code) !== "-");
+}
+
+function maintenanceMasterKey(row: DashboardPayload) {
+  return machineKey(row.maintenanceCode || row.code);
+}
+
+function nextMaintenanceMasterCode(rows: DashboardPayload[]) {
+  const max = rows.reduce((highest, row) => {
+    const code = displayValue(row.maintenanceCode || row.code);
+    const match = /^MM(\d+)$/i.exec(code);
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return `MM${String(max + 1).padStart(3, "0")}`;
+}
 function maintenanceScheduleFields(): LegacyField[] {
   return [
     { name: "maintenanceCode", label: "Maintenance code", required: true },

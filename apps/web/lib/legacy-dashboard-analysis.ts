@@ -761,7 +761,7 @@ function buildProductionAnalysis({
   });
   const routingStatus = buildRoutingStatus(routeRows, productionRows);
   const toolFixtureNumbers = buildToolFixtureNumbers(toolingRows);
-  const dataEntry = buildDataEntryContext({ routeRows, cycleRows, toolingRows, workOrderRows, setupChecklistRows, maintenanceChecklistMasterRows, planningHolidayRows, employeeRows, machineRows });
+  const dataEntry = buildDataEntryContext({ routeRows, cycleRows, toolingRows, workOrderRows, setupChecklistRows, maintenanceMasterRows, maintenanceChecklistMasterRows, planningHolidayRows, employeeRows, machineRows });
 
   return {
     updatedAt,
@@ -2065,6 +2065,7 @@ function buildDataEntryContext({
   toolingRows,
   workOrderRows,
   setupChecklistRows,
+  maintenanceMasterRows,
   maintenanceChecklistMasterRows,
   planningHolidayRows,
   employeeRows,
@@ -2075,6 +2076,7 @@ function buildDataEntryContext({
   toolingRows: Record<string, unknown>[];
   workOrderRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
+  maintenanceMasterRows: Record<string, unknown>[];
   maintenanceChecklistMasterRows: Record<string, unknown>[];
   planningHolidayRows: Record<string, unknown>[];
   employeeRows: Record<string, unknown>[];
@@ -2120,6 +2122,7 @@ function buildDataEntryContext({
     machineNumbers: [...machineNumbers].sort(),
     machineTypes: [...machineTypes].sort(),
     employeeIds: [...employeeIds].sort(),
+    maintenanceMasterRows,
     maintenanceChecklistMasterRows,
     planningHolidayCount: planningHolidayRows.length,
   };
