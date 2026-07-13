@@ -4162,7 +4162,17 @@ function ShopFloorRowAction({
   const stage = str(row?.shopFloorStage) as ShopFloorStageId;
   const stageIndex = shopFloorStageIndex(stage);
   const nextStage = next ? shopFloorStages.find((_, index) => index === stageIndex + 1) : undefined;
-  const currentChecklistSession = useMemo(() => next ? setupChecklistSessionForRow(setupChecklistSessions, next) : undefined, [next, setupChecklistSessions]);
+  const checklistSessionId = next ? setupChecklistSessionId(next) : "";
+  const snapshotChecklistSession = useMemo(() => next ? setupChecklistSessionForRow(setupChecklistSessions, next) : undefined, [next, setupChecklistSessions]);
+  const [localChecklistSession, setLocalChecklistSession] = useState<DashboardPayload | undefined>(undefined);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setLocalChecklistSession(checklistSessionId ? readStoredSetupChecklistSession(checklistSessionId) : undefined);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [checklistSessionId]);
+  const matchingLocalChecklistSession = str(localChecklistSession?.sessionId) === checklistSessionId ? localChecklistSession : undefined;
+  const currentChecklistSession = mostCompleteSetupChecklistSession(snapshotChecklistSession, matchingLocalChecklistSession, nextStage?.id);
   const activeChecklistMasters = useMemo(() => activeSetupChecklistMasterRows(setupChecklistMasters), [setupChecklistMasters]);
   const checklistPhase = nextStage?.id === "presetting" ? "start" : nextStage?.id === "setting" ? "end" : "";
   const needsSetupChecklist = Boolean(checklistPhase && onSaveSetupChecklistSession);
@@ -8319,6 +8329,12 @@ function setupChecklistSessionForRow(sessions: DashboardPayload[], row: Dashboar
     ?? sessions.find((session) => setupChecklistSessionId(session) === sessionId);
 }
 
+function mostCompleteSetupChecklistSession(snapshotSession: DashboardPayload | undefined, localSession: DashboardPayload | undefined, stageId: string | undefined) {
+  const phase = stageId === "presetting" ? "start" : stageId === "setting" ? "end" : "";
+  if (!phase) return snapshotSession ?? localSession;
+  if (localSession && setupChecklistValuesComplete(asArray(localSession.items), {}, phase)) return localSession;
+  return snapshotSession ?? localSession;
+}
 function activeSetupChecklistMasterRows(rows: DashboardPayload[]) {
   const activeRows = rows.filter((row) => str(row.status || "Active").toLowerCase() !== "inactive");
   const latestVersion = activeRows
