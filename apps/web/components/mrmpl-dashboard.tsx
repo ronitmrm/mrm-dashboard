@@ -3609,6 +3609,7 @@ function ShopFloorStatusPanel({
   const [statusFilter, setStatusFilter] = useState("");
   const plannedRows = asArray(productionControl.machinePlanDetailRows);
   const boardRows = useMemo(() => machineBoardRows(asArray(productionControl.machinePlanningRows), plannedRows), [plannedRows, productionControl.machinePlanningRows]);
+  const productionCardRows = useMemo(() => asArray(productionControl.productionCardRows), [productionControl.productionCardRows]);
   const plannedByMachine = useMemo(() => groupPlannedRowsByMachine(plannedRows), [plannedRows]);
   const machineOptions = useMemo(() => plannedMachineOptions(plannedRows, boardRows), [boardRows, plannedRows]);
   const locationOptions = useMemo(() => uniqueValues(boardRows.map(machineMasterLocationValue).filter((value) => value !== "-")), [boardRows]);
@@ -3616,11 +3617,11 @@ function ShopFloorStatusPanel({
     .map((machineRow) => {
       const machine = machineValue(machineRow, "machine");
       const plans = plannedByMachine.get(machineKey(machine)) ?? [];
-      const current = currentShopFloorStatusItem(plans);
-      const next = nextShopFloorStatusItem(plans, current);
-      const actionCurrent = current && shopFloorItemIsProductionCurrent(current) ? current : undefined;
+      const current = currentShopFloorStatusItem(plans, productionCardRows);
+      const next = nextShopFloorStatusItem(plans, current, productionCardRows);
+      const actionCurrent = current && (shopFloorItemIsProductionCurrent(current) || shopFloorItemHasActiveProductionCard(current, productionCardRows)) ? current : undefined;
       const actionNext = actionCurrent ? next : (current ?? next);
-      const status = shopFloorRowStatus(current, next);
+      const status = shopFloorRowStatus(current, next, productionCardRows);
       return { machineRow, machine, location: machineMasterLocationValue(machineRow), current, next, actionCurrent, actionNext, status };
     })
     .filter((row) =>
@@ -3629,7 +3630,7 @@ function ShopFloorStatusPanel({
       shopFloorItemMatchesFilter(row.current, currentFilter) &&
       shopFloorItemMatchesFilter(row.next, nextFilter) &&
       typedFilterMatches(row.status, statusFilter),
-    ), [boardRows, currentFilter, locationFilter, machineFilter, nextFilter, plannedByMachine, statusFilter]);
+    ), [boardRows, currentFilter, locationFilter, machineFilter, nextFilter, plannedByMachine, productionCardRows, statusFilter]);
   const currentOptions = useMemo(() => uniqueValues(floorRows.map((row) => row.current ? shopFloorItemLabel(row.current) : "Empty")), [floorRows]);
   const nextOptions = useMemo(() => uniqueValues(floorRows.map((row) => row.next ? shopFloorItemLabel(row.next) : "No plan")), [floorRows]);
   const statusOptions = useMemo(() => uniqueValues(floorRows.map((row) => row.status)), [floorRows]);
@@ -3755,7 +3756,7 @@ function ShopFloorStatusPanel({
                     <TableCell className="align-middle text-sm">{row.location}</TableCell>
                     <TableCell className="align-middle">
                       {row.current ? (
-                        <ShopFloorItemSummary row={row.current} tone="current" />
+                        <ShopFloorItemSummary row={row.current} tone="current" productionCardRows={productionCardRows} />
                       ) : (
                         <EmptyShopFloorSlot label={row.next ? "Setup required" : "No running item"} compact />
                       )}
@@ -4184,12 +4185,14 @@ function ShopFloorItemSummary({
   row,
   tone,
   compact = false,
+  productionCardRows = [],
 }: {
   row: DashboardPayload;
   tone: "current" | "next";
   compact?: boolean;
+  productionCardRows?: DashboardPayload[];
 }) {
-  const statusLabel = tone === "current" ? shopFloorCurrentStatusLabel(row) : (str(row.shopFloorStageLabel) || "Planned");
+  const statusLabel = tone === "current" ? shopFloorCurrentStatusLabel(row, productionCardRows) : (str(row.shopFloorStageLabel) || "Planned");
   if (compact) {
     return (
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -8766,14 +8769,14 @@ function correctionRowMatchesQuery(row: DashboardPayload, query: string) {
   ].map((value) => formatCell(value)).join(" ").toLowerCase().includes(normalizedQuery);
 }
 
-function shopFloorRowStatus(current: DashboardPayload | undefined, next: DashboardPayload | undefined) {
-  if (current) return shopFloorCurrentStatusLabel(current);
+function shopFloorRowStatus(current: DashboardPayload | undefined, next: DashboardPayload | undefined, productionCardRows: DashboardPayload[] = []) {
+  if (current) return shopFloorCurrentStatusLabel(current, productionCardRows);
   if (!next) return "No plan";
   return str(next.shopFloorStageLabel) || "Setup required";
 }
 
-function shopFloorCurrentStatusLabel(row: DashboardPayload) {
-  if (shopFloorItemIsProductionCurrent(row)) return "Running";
+function shopFloorCurrentStatusLabel(row: DashboardPayload, productionCardRows: DashboardPayload[] = []) {
+  if (shopFloorItemIsProductionCurrent(row) || shopFloorItemHasActiveProductionCard(row, productionCardRows)) return "Running";
   return str(row.shopFloorStageLabel) || str(row.runningStatus) || "Setup complete";
 }
 
@@ -8830,19 +8833,19 @@ function nextShopFloorItem(rows: DashboardPayload[], current: DashboardPayload |
     .sort(shopFloorPlanSort)[0];
 }
 
-function currentShopFloorStatusItem(rows: DashboardPayload[]) {
+function currentShopFloorStatusItem(rows: DashboardPayload[], productionCardRows: DashboardPayload[] = []) {
   return rows
     .filter((row) => str(row.shopFloorStage) !== "item_complete")
-    .filter((row) => shopFloorItemIsStatusCurrent(row))
+    .filter((row) => shopFloorItemIsStatusCurrent(row) || shopFloorItemHasActiveProductionCard(row, productionCardRows))
     .sort(shopFloorPlanSort)[0];
 }
 
-function nextShopFloorStatusItem(rows: DashboardPayload[], current: DashboardPayload | undefined) {
+function nextShopFloorStatusItem(rows: DashboardPayload[], current: DashboardPayload | undefined, productionCardRows: DashboardPayload[] = []) {
   const currentKey = current ? shopFloorPlanKey(current) : "";
   return rows
     .filter((row) => shopFloorPlanKey(row) !== currentKey)
     .filter((row) => str(row.shopFloorStage) !== "item_complete")
-    .filter((row) => !shopFloorItemIsStatusCurrent(row))
+    .filter((row) => !shopFloorItemIsStatusCurrent(row) && !shopFloorItemHasActiveProductionCard(row, productionCardRows))
     .sort(shopFloorPlanSort)[0];
 }
 
@@ -8909,6 +8912,20 @@ function pendingTaskLabel(row: DashboardPayload) {
   return nextShopFloorStage(row)?.label ?? "No pending task";
 }
 
+function shopFloorItemHasActiveProductionCard(row: DashboardPayload, productionCardRows: DashboardPayload[] = []) {
+  return productionCardRows.some((card) => {
+    const role = optionalText(card.cardRole) ?? "";
+    const entryKind = optionalText(card.cardEntryKind) || inferredProductionCardEntryKind(card);
+    if (role && !sameProductionCardText(role, "shopFloor")) return false;
+    if (entryKind !== "production") return false;
+    if (!optionalText(card.startTime)) return false;
+    if (optionalText(card.endTime)) return false;
+    if (!sameProductionCardText(card.machine, displayValue(row.machine))) return false;
+    if (!sameProductionCardText(card.partCode || card.partNo, itemCode(row))) return false;
+    if (!sameProductionCardText(card.jobCard || card.jcNo, jobCardNumber(row))) return false;
+    return sameProductionCardText(card.setupNo, displayValue(row.setupNo));
+  });
+}
 function shopFloorItemIsCurrent(row: DashboardPayload) {
   return shopFloorItemIsProductionCurrent(row);
 }

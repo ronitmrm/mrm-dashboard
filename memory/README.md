@@ -9,3 +9,4 @@ Persistent notes for local coding agents. Treat these as context, not authority;
 - `maintenance-rules.md` - planned machine maintenance schedule and task-entry rules.
 - `quality-rules.md` - shared first-piece and hourly quality parameter master rules.
 - `master-data-rules.md` - master data browsing and data-entry separation rules.
+- Agent workflow: if the command approval layer times out, retry the command once before treating it as blocked or asking the user.

@@ -17,3 +17,5 @@
 - 2026-07-13: Hourly QC page must not load `dashboard.snapshot` in the browser. Use `api.dashboard.hourlyQualityPage` for only running rows and quality parameter masters; load an existing hourly QC card separately by key only after machine/date/hour selection.
 - 2026-07-13: Out-of-tolerance hourly QC and first-piece quality readings display as Not OK, with red row/input/badge styling. Existing older NG values are normalized to Not OK in the hourly QC UI.
 - 2026-07-13: Hourly QC `checkedBy` is not manually entered. It is saved from the signed-in dashboard user id via `dashboard.currentDashboardUser`, with the email/name shown read-only on the form.
+
+- 2026-07-14: In Shop Floor Status, an active shop-floor production card (cardRole=shopFloor, cardEntryKind=production, has startTime, no endTime) counts as the current running item. The board should show Running and expose Item finished instead of the next pending task for that machine/item/setup.
