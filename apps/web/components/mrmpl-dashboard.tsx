@@ -130,6 +130,17 @@ type QualityParameterDraft = {
   remark: string;
 };
 
+type MaintenanceChecklistStepDraft = {
+  draftId: string;
+  persisted?: boolean;
+  sequence: string;
+  stepDescription: string;
+  inputType: string;
+  required: string;
+  status: string;
+  remark: string;
+};
+
 type DashboardTabId =
   | "productionControlTab"
   | "jobCardStatusTab"
@@ -322,7 +333,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "checklistCode", label: "Checklist code", required: true },
       { name: "checklistTitle", label: "Checklist title", required: true },
       { name: "sequence", label: "Step no.", type: "number", min: "1", required: true },
-      { name: "stepCode", label: "Step code", required: true },
       { name: "stepDescription", label: "Step description", required: true },
       { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
       { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
@@ -5812,7 +5822,7 @@ function MaintenanceReportDetail({ row }: { row: DashboardPayload }) {
       <div className="flex flex-wrap items-center justify-between gap-2"><div><div className="text-sm font-semibold">Maintenance report</div><div className="text-xs text-muted-foreground">{displayValue(row.machineNo)} / {displayValue(row.completedDate)} / {displayValue(row.maintenanceCode)}</div></div><StatusBadge value={row.maintenanceType || "Planned"} /></div>
       <div className="grid gap-3 md:grid-cols-4"><TileField label="Maintenance" value={`${displayValue(row.maintenanceCode)} - ${displayValue(row.maintenanceTitle)}`} important /><TileField label="Completed by" value={row.completedBy} /><TileField label="Actual minutes" value={row.actualMinutes} numeric /><TileField label="Result" value={row.result} /><TileField label="Parts changed" value={row.partsChanged} /><TileField label="Breakdown reason" value={row.breakdownReason} /><TileField label="Work done" value={row.workDone} /><TileField label="Next due" value={row.nextDueDate} /></div>
       {displayValue(row.remark) !== "-" ? <div className="text-sm text-muted-foreground">{displayValue(row.remark)}</div> : null}
-      {checklistSteps.length ? <div className="overflow-auto rounded-md border bg-background"><Table><TableHeader><TableRow><TableHead>Step</TableHead><TableHead>Description</TableHead><TableHead>Value</TableHead><TableHead>Result</TableHead></TableRow></TableHeader><TableBody>{checklistSteps.map((step, index) => <TableRow key={`${displayValue(step.stepCode)}-${index}`}><TableCell>{displayValue(step.stepCode || step.sequence)}</TableCell><TableCell>{displayValue(step.stepDescription)}</TableCell><TableCell>{displayValue(step.value)}</TableCell><TableCell><StatusBadge value={step.result || "Recorded"} /></TableCell></TableRow>)}</TableBody></Table></div> : null}
+      {checklistSteps.length ? <div className="overflow-auto rounded-md border bg-background"><Table><TableHeader><TableRow><TableHead>Step</TableHead><TableHead>Description</TableHead><TableHead>Value</TableHead><TableHead>Result</TableHead></TableRow></TableHeader><TableBody>{checklistSteps.map((step, index) => <TableRow key={`${displayValue(step.sequence)}-${index}`}><TableCell>{displayValue(step.sequence)}</TableCell><TableCell>{displayValue(step.stepDescription)}</TableCell><TableCell>{displayValue(step.value)}</TableCell><TableCell><StatusBadge value={step.result || "Recorded"} /></TableCell></TableRow>)}</TableBody></Table></div> : null}
     </div>
   );
 }
@@ -5827,7 +5837,7 @@ function MaintenanceChecklistPreview({ rows }: { rows: DashboardPayload[] }) {
         {rows.slice(0, 6).map((row) => (
           <div key={maintenanceChecklistStepKey(row)} className="flex gap-2 text-muted-foreground">
             <span className="min-w-10 font-medium text-foreground">{displayValue(row.sequence)}</span>
-            <span>{displayValue(row.stepCode)} - {displayValue(row.stepDescription)}</span>
+            <span>{displayValue(row.stepDescription)}</span>
           </div>
         ))}
         {rows.length > 6 ? <div className="text-xs text-muted-foreground">{formatNumber(rows.length - 6)} more steps</div> : null}
@@ -6211,70 +6221,153 @@ function MaintenanceChecklistMasterForm({
   dataEntry?: DashboardPayload;
 }) {
   const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
+  const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([]);
+  const [status, setStatus] = useState<ActionStatus>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const persistedRows = useMemo(() => maintenanceChecklistMasterRowsFromDataEntry(dataEntry), [dataEntry]);
-  const savedRows = useMemo(() => {
-    const persistedKeys = new Set(persistedRows.map(maintenanceChecklistStepKey));
-    return [...persistedRows, ...localRows.filter((row) => !persistedKeys.has(maintenanceChecklistStepKey(row)))];
-  }, [persistedRows, localRows]);
+  const savedRows = useMemo(() => mergeMaintenanceChecklistRows([...persistedRows, ...localRows]), [persistedRows, localRows]);
   const checklistOptions = useMemo(() => maintenanceChecklistOptions(savedRows), [savedRows]);
   const defaultCode = displayValue(defaults.checklistCode) !== "-" ? displayValue(defaults.checklistCode) : nextMaintenanceChecklistCode(savedRows);
   const [selectedCode, setSelectedCode] = useState(defaultCode);
-  const selectedRows = selectedCode ? maintenanceChecklistRowsForCode(savedRows, selectedCode) : [];
+  const selectedRows = useMemo(() => selectedCode ? maintenanceChecklistRowsForCode(savedRows, selectedCode) : [], [savedRows, selectedCode]);
   const selectedChecklist = checklistOptions.find((row) => machineKey(row.code) === machineKey(selectedCode));
-  const isExistingChecklist = Boolean(selectedChecklist);
-  const nextSequence = nextMaintenanceChecklistSequence(selectedRows);
   const defaultTitle = selectedChecklist?.title || (displayValue(defaults.checklistTitle) !== "-" ? displayValue(defaults.checklistTitle) : "");
-  const defaultStepCode = displayValue(defaults.stepCode) !== "-" ? displayValue(defaults.stepCode) : `S${nextSequence}`;
+  const [checklistTitle, setChecklistTitle] = useState(defaultTitle);
+  const [drafts, setDrafts] = useState<MaintenanceChecklistStepDraft[]>(() => selectedRows.length ? selectedRows.map(maintenanceChecklistDraftFromRow) : [newMaintenanceChecklistDraft(1)]);
 
-  function submit(body: Record<string, unknown>) {
-    const payload = {
-      ...body,
-      checklistCode: selectedCode || nextMaintenanceChecklistCode(savedRows),
-      checklistTitle: str(body.checklistTitle) || defaultTitle,
-      sequence: optionalNumber(body.sequence) ?? nextSequence,
-      status: str(body.status) || "Active",
-    };
-    void submitAction("data-entry", {
-      entryType: spec.entryType,
-      id: defaults.__entryId,
-      key: defaults.__entryKey,
-      returnTab: defaults.__returnTab,
-      payload,
-    });
-    const savedCode = str(payload.checklistCode);
-    setLocalRows((current) => [
-      ...current.filter((row) => maintenanceChecklistStepKey(row) !== maintenanceChecklistStepKey(payload)),
-      payload,
-    ]);
-    setSelectedCode(savedCode || nextMaintenanceChecklistCode(savedRows));
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const rows = selectedCode ? maintenanceChecklistRowsForCode(savedRows, selectedCode) : [];
+      const option = checklistOptions.find((item) => machineKey(item.code) === machineKey(selectedCode));
+      setChecklistTitle(option?.title || (displayValue(defaults.checklistTitle) !== "-" ? displayValue(defaults.checklistTitle) : ""));
+      setDrafts(rows.length ? rows.map(maintenanceChecklistDraftFromRow) : [newMaintenanceChecklistDraft(1)]);
+      setRemovedRows([]);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [checklistOptions, defaults.checklistTitle, savedRows, selectedCode]);
+
+  function startNewChecklist() {
+    const nextCode = nextMaintenanceChecklistCode(savedRows);
+    setSelectedCode(nextCode);
+    setChecklistTitle("");
+    setDrafts([newMaintenanceChecklistDraft(1)]);
+    setRemovedRows([]);
+    setStatus(null);
+  }
+
+  function updateDraft(draftId: string, field: keyof MaintenanceChecklistStepDraft, value: string) {
+    setDrafts((current) => current.map((draft) => draft.draftId === draftId ? { ...draft, [field]: value } : draft));
+  }
+
+  function addDraft() {
+    setDrafts((current) => [...current, newMaintenanceChecklistDraft(current.length + 1)]);
+  }
+
+  function removeDraft(draft: MaintenanceChecklistStepDraft) {
+    if (draft.persisted) setRemovedRows((current) => [...current, maintenanceChecklistPayload(draft, selectedCode, checklistTitle, "Inactive")]);
+    setDrafts((current) => current.filter((item) => item.draftId !== draft.draftId));
+  }
+
+  async function saveChecklist() {
+    const code = selectedCode || nextMaintenanceChecklistCode(savedRows);
+    const title = checklistTitle.trim();
+    const activeDrafts = drafts.filter((draft) => draft.stepDescription.trim());
+    const duplicateSequences = activeDrafts
+      .map((draft, index) => str(optionalNumber(draft.sequence) ?? index + 1))
+      .filter((sequence, index, sequences) => sequence && sequences.indexOf(sequence) !== index);
+    if (!title) {
+      setStatus({ tone: "destructive", message: "Checklist title is required." });
+      return;
+    }
+    if (!activeDrafts.length) {
+      setStatus({ tone: "destructive", message: "Add at least one checklist step." });
+      return;
+    }
+    if (duplicateSequences.length) {
+      setStatus({ tone: "destructive", message: "Step numbers must be unique in one checklist." });
+      return;
+    }
+    setIsSaving(true);
+    setStatus(null);
+    try {
+      const activePayloads = activeDrafts.map((draft, index) => maintenanceChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, draft.status || "Active"));
+      const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
+      for (const payload of [...activePayloads, ...inactivePayloads]) {
+        await submitAction("data-entry", {
+          entryType: spec.entryType,
+          id: defaults.__entryId,
+          key: dataEntryKey(spec.entryType, payload),
+          returnTab: defaults.__returnTab,
+          payload,
+        });
+      }
+      setLocalRows((current) => mergeMaintenanceChecklistRows([...current, ...activePayloads, ...inactivePayloads]));
+      setRemovedRows([]);
+      setSelectedCode(code);
+      setStatus({ tone: "default", message: "Maintenance checklist saved." });
+    } catch (err) {
+      setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Maintenance checklist save failed." });
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>Create a checklist once, then add multiple steps under the same auto-generated checklist code.</CardDescription>
+        <CardDescription>Create the checklist once, then add all steps in the table. Step codes are not required.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px]">
           <Field label="Checklist">
             <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}>
               <option value={nextMaintenanceChecklistCode(savedRows)}>New checklist ({nextMaintenanceChecklistCode(savedRows)})</option>
               {checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}
             </select>
           </Field>
-          <TileField label="Next step" value={nextSequence} numeric />
+          <Button type="button" variant="outline" className="self-end" onClick={startNewChecklist}><Plus className="size-4" />New checklist</Button>
+          <TileField label="Steps" value={drafts.filter((draft) => draft.stepDescription.trim()).length} numeric />
         </div>
-        {selectedRows.length ? <MaintenanceChecklistPreview rows={selectedRows} /> : null}
-        <LegacyActionForm
-          key={`${spec.entryType}-${selectedCode}-${nextSequence}`}
-          title={isExistingChecklist ? "Add checklist step" : "Create checklist step"}
-          description={isExistingChecklist ? "This step will be saved under the selected checklist code." : "The checklist code is generated automatically and reused for each step you add."}
-          fields={maintenanceChecklistStepFields(isExistingChecklist)}
-          defaults={{ ...defaults, checklistCode: selectedCode, checklistTitle: defaultTitle, sequence: String(nextSequence), stepCode: defaultStepCode, inputType: "checkbox", required: "Yes", status: "Active" }}
-          buttonLabel={isExistingChecklist ? "Save step" : "Create checklist"}
-          onSubmit={submit}
-        />
+        <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
+          <Field label="Checklist code"><Input value={selectedCode} readOnly /></Field>
+          <Field label="Checklist title"><Input value={checklistTitle} onChange={(event) => setChecklistTitle(event.target.value)} required /></Field>
+        </div>
+        <div className="overflow-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-20">Step no.</TableHead>
+                <TableHead className="min-w-80">Step description</TableHead>
+                <TableHead className="min-w-32">Input</TableHead>
+                <TableHead className="min-w-28">Required</TableHead>
+                <TableHead className="min-w-28">Status</TableHead>
+                <TableHead className="min-w-44">Remark</TableHead>
+                <TableHead className="w-12"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {drafts.map((draft, index) => (
+                <TableRow key={draft.draftId}>
+                  <TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell>
+                  <TableCell><Input className="h-8 min-w-72" value={draft.stepDescription} onChange={(event) => updateDraft(draft.draftId, "stepDescription", event.target.value)} /></TableCell>
+                  <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></select></TableCell>
+                  <TableCell><select className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.required} onChange={(event) => updateDraft(draft.draftId, "required", event.target.value)}><option value="Yes">Yes</option><option value="No">No</option></select></TableCell>
+                  <TableCell><select className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.status} onChange={(event) => updateDraft(draft.draftId, "status", event.target.value)}><option value="Active">Active</option><option value="Inactive">Inactive</option></select></TableCell>
+                  <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
+                  <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove checklist step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button type="button" variant="outline" onClick={addDraft}><Plus className="size-4" />Add step</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
+            <Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save checklist"}</Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -8915,7 +9008,7 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
     return str(payload.maintenanceCode || payload.code).toLowerCase();
   }
   if (entryType === "maintenance_checklist_master") {
-    return [payload.checklistCode, payload.sequence, payload.stepCode].map((value) => str(value).toLowerCase()).join("|");
+    return [payload.checklistCode, payload.sequence].map((value) => str(value).toLowerCase()).join("|");
   }
   if (entryType === "maintenance_schedule") {
     return [payload.machineNo || payload.machine, payload.maintenanceCode].map((value) => str(value).toLowerCase()).join("|");
@@ -9093,20 +9186,6 @@ function activeMaintenanceMasterRows(rows: DashboardPayload[]) {
     .sort((a, b) => displayValue(a.maintenanceTitle).localeCompare(displayValue(b.maintenanceTitle), undefined, { numeric: true })
       || displayValue(a.maintenanceCode).localeCompare(displayValue(b.maintenanceCode), undefined, { numeric: true }));
 }
-function maintenanceChecklistStepFields(existingChecklist: boolean): LegacyField[] {
-  return [
-    { name: "checklistCode", label: "Checklist code", required: true, readOnly: true },
-    { name: "checklistTitle", label: "Checklist title", required: true, readOnly: existingChecklist },
-    { name: "sequence", label: "Step no.", type: "number", min: "1", required: true, readOnly: true },
-    { name: "stepCode", label: "Step code", required: true },
-    { name: "stepDescription", label: "Step description", required: true },
-    { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
-    { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
-    { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
-    { name: "remark", label: "Remark" },
-  ];
-}
-
 function maintenanceChecklistMasterRowsFromDataEntry(dataEntry: DashboardPayload | undefined) {
   const rows = [
     ...asArray(asRecord(dataEntry).maintenanceChecklistMasterRows),
@@ -9125,16 +9204,59 @@ function nextMaintenanceChecklistCode(rows: DashboardPayload[]) {
   return `MC${String(max + 1).padStart(3, "0")}`;
 }
 
-function nextMaintenanceChecklistSequence(rows: DashboardPayload[]) {
-  const max = rows.reduce((highest, row) => Math.max(highest, optionalNumber(row.sequence) ?? 0), 0);
-  return max + 1;
+
+function newMaintenanceChecklistDraft(sequence: number): MaintenanceChecklistStepDraft {
+  return {
+    draftId: `maintenance-checklist-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    sequence: String(sequence),
+    stepDescription: "",
+    inputType: "checkbox",
+    required: "Yes",
+    status: "Active",
+    remark: "",
+  };
+}
+
+function maintenanceChecklistDraftFromRow(row: DashboardPayload): MaintenanceChecklistStepDraft {
+  return {
+    draftId: maintenanceChecklistStepKey(row) || `maintenance-checklist-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    persisted: true,
+    sequence: displayValue(row.sequence) !== "-" ? displayValue(row.sequence) : "",
+    stepDescription: str(row.stepDescription),
+    inputType: str(row.inputType || "checkbox"),
+    required: str(row.required || "Yes"),
+    status: str(row.status || "Active"),
+    remark: str(row.remark),
+  };
+}
+
+function maintenanceChecklistPayload(draft: MaintenanceChecklistStepDraft | DashboardPayload, checklistCode: string, checklistTitle: string, status: string): DashboardPayload {
+  return {
+    checklistCode,
+    checklistTitle,
+    sequence: optionalNumber(draft.sequence) ?? str(draft.sequence),
+    stepDescription: str(draft.stepDescription),
+    inputType: str(draft.inputType || "checkbox"),
+    required: str(draft.required || "Yes"),
+    status,
+    remark: str(draft.remark),
+  };
+}
+
+function mergeMaintenanceChecklistRows(rows: DashboardPayload[]) {
+  const byKey = new Map<string, DashboardPayload>();
+  for (const row of rows) {
+    const key = maintenanceChecklistStepKey(row);
+    if (!key.replaceAll("|", "")) continue;
+    byKey.set(key, row);
+  }
+  return activeMaintenanceChecklistRows([...byKey.values()]);
 }
 function maintenanceChecklistMasterDefaults(returnTab = "maintenanceTab") {
   return {
     checklistCode: "",
     checklistTitle: "Preventive maintenance",
     sequence: "1",
-    stepCode: "S1",
     stepDescription: "",
     inputType: "checkbox",
     required: "Yes",
@@ -9148,7 +9270,7 @@ function activeMaintenanceChecklistRows(rows: DashboardPayload[]) {
     .filter((row) => str(row.status || "Active").toLowerCase() !== "inactive")
     .sort((a, b) => displayValue(a.checklistCode).localeCompare(displayValue(b.checklistCode), undefined, { numeric: true })
       || (optionalNumber(a.sequence) ?? 0) - (optionalNumber(b.sequence) ?? 0)
-      || displayValue(a.stepCode).localeCompare(displayValue(b.stepCode), undefined, { numeric: true }));
+      || displayValue(a.stepDescription).localeCompare(displayValue(b.stepDescription), undefined, { numeric: true }));
 }
 
 function maintenanceChecklistOptions(rows: DashboardPayload[]) {
@@ -9178,21 +9300,20 @@ function maintenanceChecklistTitle(rows: DashboardPayload[], checklistCode: unkn
 }
 
 function maintenanceChecklistStepKey(row: DashboardPayload) {
-  return [row.checklistCode, row.sequence, row.stepCode].map((value) => str(value).toLowerCase()).join("|");
+  return [row.checklistCode, row.sequence].map((value) => str(value).toLowerCase()).join("|");
 }
 
 function maintenanceChecklistCompletionSteps(schedule: DashboardPayload, checklistRows: DashboardPayload[]) {
   const rows = maintenanceChecklistRowsForCode(checklistRows, schedule.checklistCode);
   return rows.map((row) => {
     const inputType = str(row.inputType || "checkbox").toLowerCase();
-    const promptLabel = `${displayValue(row.stepCode)} - ${displayValue(row.stepDescription)}`;
+    const promptLabel = displayValue(row.stepDescription);
     const defaultValue = inputType === "checkbox" ? "OK" : "";
     const value = window.prompt(promptLabel, defaultValue)?.trim() ?? "";
     return {
       checklistCode: displayValue(row.checklistCode),
       checklistTitle: displayValue(row.checklistTitle),
       sequence: displayValue(row.sequence),
-      stepCode: displayValue(row.stepCode),
       stepDescription: displayValue(row.stepDescription),
       inputType: displayValue(row.inputType || "checkbox"),
       required: displayValue(row.required || "Yes"),

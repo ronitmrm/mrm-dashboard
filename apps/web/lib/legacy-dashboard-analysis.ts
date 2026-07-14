@@ -1601,7 +1601,6 @@ function maintenanceChecklistMasterEntryKey(row: Record<string, unknown>) {
   return [
     rowText(row, "checklistCode", "CHECKLIST CODE"),
     rowText(row, "sequence", "SEQUENCE", "STEP NO"),
-    rowText(row, "stepCode", "STEP CODE", "code", "CODE"),
   ].map(canonicalKey).join("|");
 }
 
@@ -5388,10 +5387,4 @@ function themeRows(counts: Map<string, number>) {
     .sort((a, b) => b[1] - a[1])
     .map(([theme, count]) => ({ theme, count }));
 }
-
-
-
-
-
-
 
