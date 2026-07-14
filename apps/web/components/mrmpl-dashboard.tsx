@@ -370,18 +370,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
     ],
   },
   {
-    entryType: "downtime_reason_master",
-    title: "Legacy downtime reason master",
-    description: "Legacy downtime-only reason codes. New downtime codes should be maintained in Defect / downtime reason master.",
-    fields: [
-      { name: "code", label: "Downtime code", required: true },
-      { name: "reason", label: "Reason", required: true },
-      { name: "category", label: "Category" },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
-      { name: "remark", label: "Remark" },
-    ],
-  },
-  {
     entryType: "rejection_type_master",
     title: "Rejection type master",
     description: "Quality rejection type codes used in QC rejection entry.",
@@ -3912,7 +3900,6 @@ function RoleTaskPanel({
             rows={productionCardRows}
             existingCardRows={existingProductionCardRows}
             onSaveProductionCard={saveProductionCard}
-            downtimeReasonRows={asArray(productionControl.downtimeReasonMasterRows)}
             rejectionTypeRows={asArray(productionControl.rejectionTypeMasterRows)}
             rejectionReasonRows={asArray(productionControl.rejectionReasonMasterRows)}
             rejectionRemarkRows={asArray(productionControl.rejectionRemarkMasterRows)}
@@ -4503,17 +4490,6 @@ function codedMasterOptions(rows: DashboardPayload[], defaults: Array<{ code: st
   return [...options.values()];
 }
 
-function combinedDowntimeReasonOptions(sharedReasonOptions: Array<{ code: string; label: string }>, legacyDowntimeRows: DashboardPayload[]) {
-  const options = new Map(sharedReasonOptions.map((option) => [option.code, { code: option.code, reason: option.label, label: `${option.code} - ${option.label}` }]));
-  for (const row of legacyDowntimeRows) {
-    if (displayValue(row.status).toLowerCase() === "inactive") continue;
-    const code = displayValue(row.code || row.downtimeCode);
-    if (!code || code === "-") continue;
-    const reason = displayValue(row.reason || row.downtimeReason || row.rejectionReason || row.description);
-    options.set(code, { code, reason: reason !== "-" ? reason : code, label: reason !== "-" ? `${code} - ${reason}` : code });
-  }
-  return [...options.values()].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
-}
 function codedMasterLabel(options: Array<{ code: string; label: string }>, code: string) {
   return options.find((option) => option.code === code)?.label ?? code;
 }
@@ -4523,7 +4499,6 @@ function ProductionCardRoleEntryForm({
   rows,
   existingCardRows = [],
   bulkRows = [],
-  downtimeReasonRows = [],
   rejectionTypeRows = [],
   rejectionReasonRows = [],
   rejectionRemarkRows = [],
@@ -4533,7 +4508,6 @@ function ProductionCardRoleEntryForm({
   rows: DashboardPayload[];
   existingCardRows?: DashboardPayload[];
   bulkRows?: DashboardPayload[];
-  downtimeReasonRows?: DashboardPayload[];
   rejectionTypeRows?: DashboardPayload[];
   rejectionReasonRows?: DashboardPayload[];
   rejectionRemarkRows?: DashboardPayload[];
@@ -4577,7 +4551,7 @@ function ProductionCardRoleEntryForm({
   })), [rows]);
   const rejectionTypeOptions = useMemo(() => codedMasterOptions(rejectionTypeRows, DEFAULT_REJECTION_TYPE_OPTIONS, ["typeOfRejection", "rejectionType", "name"]), [rejectionTypeRows]);
   const rejectionReasonOptions = useMemo(() => codedMasterOptions(rejectionReasonRows, DEFAULT_REJECTION_REASON_OPTIONS, ["rejectionReason", "reason", "name", "downtimeReason", "description"]), [rejectionReasonRows]);
-  const downtimeReasonOptions = useMemo(() => combinedDowntimeReasonOptions(rejectionReasonOptions, downtimeReasonRows), [downtimeReasonRows, rejectionReasonOptions]);
+  const downtimeReasonOptions = useMemo(() => rejectionReasonOptions.map((option) => ({ code: option.code, reason: option.label, label: `${option.code} - ${option.label}` })).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })), [rejectionReasonOptions]);
   const downtimeReasonByCode = useMemo(() => new Map(downtimeReasonOptions.map((row) => [row.code, row.reason])), [downtimeReasonOptions]);
   const rejectionRemarkOptions = useMemo(() => codedMasterOptions(rejectionRemarkRows, DEFAULT_REJECTION_REMARK_OPTIONS, ["rejectionRemark", "remark", "name"]), [rejectionRemarkRows]);
   const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey);
