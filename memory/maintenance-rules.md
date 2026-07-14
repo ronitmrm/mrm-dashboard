@@ -21,3 +21,5 @@
 - 2026-07-14: Maintenance checklist master is edited as one checklist header with multiple step rows. Step codes are not required; rows are keyed by checklist code plus step number.
 
 - 2026-07-14: Maintenance checklist master step entry does not ask for Required or Status. Steps use checklist code/title, step number, description, input type, and remark only.
+
+- 2026-07-14: The custom multi-step Maintenance checklist master editor must also hide Required and Status; active step payloads should not store those fields, except status: Inactive used internally when deleting an existing step.

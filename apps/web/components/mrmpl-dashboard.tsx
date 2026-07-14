@@ -133,8 +133,6 @@ type MaintenanceChecklistStepDraft = {
   sequence: string;
   stepDescription: string;
   inputType: string;
-  required: string;
-  status: string;
   remark: string;
 };
 
@@ -6331,8 +6329,6 @@ function QualityParameterMasterForm({
                 <TableHead className="min-w-28">Tol +</TableHead>
                 <TableHead className="min-w-28">Tol -</TableHead>
                 <TableHead className="min-w-32">Input</TableHead>
-                <TableHead className="min-w-28">Required</TableHead>
-                <TableHead className="min-w-28">Status</TableHead>
                 <TableHead className="min-w-44">Remark</TableHead>
                 <TableHead className="w-12"></TableHead>
               </TableRow>
@@ -6550,7 +6546,7 @@ function MaintenanceChecklistMasterForm({
     setIsSaving(true);
     setStatus(null);
     try {
-      const activePayloads = activeDrafts.map((draft, index) => maintenanceChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, draft.status || "Active"));
+      const activePayloads = activeDrafts.map((draft, index) => maintenanceChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, "Active"));
       const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
       for (const payload of [...activePayloads, ...inactivePayloads]) {
         await submitAction("data-entry", {
@@ -6600,8 +6596,6 @@ function MaintenanceChecklistMasterForm({
                 <TableHead className="min-w-20">Step no.</TableHead>
                 <TableHead className="min-w-80">Step description</TableHead>
                 <TableHead className="min-w-32">Input</TableHead>
-                <TableHead className="min-w-28">Required</TableHead>
-                <TableHead className="min-w-28">Status</TableHead>
                 <TableHead className="min-w-44">Remark</TableHead>
                 <TableHead className="w-12"></TableHead>
               </TableRow>
@@ -6612,8 +6606,6 @@ function MaintenanceChecklistMasterForm({
                   <TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-72" value={draft.stepDescription} onChange={(event) => updateDraft(draft.draftId, "stepDescription", event.target.value)} /></TableCell>
                   <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></select></TableCell>
-                  <TableCell><select className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.required} onChange={(event) => updateDraft(draft.draftId, "required", event.target.value)}><option value="Yes">Yes</option><option value="No">No</option></select></TableCell>
-                  <TableCell><select className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.status} onChange={(event) => updateDraft(draft.draftId, "status", event.target.value)}><option value="Active">Active</option><option value="Inactive">Inactive</option></select></TableCell>
                   <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
                   <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove checklist step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
                 </TableRow>
@@ -9518,8 +9510,6 @@ function newMaintenanceChecklistDraft(sequence: number): MaintenanceChecklistSte
     sequence: String(sequence),
     stepDescription: "",
     inputType: "checkbox",
-    required: "Yes",
-    status: "Active",
     remark: "",
   };
 }
@@ -9531,23 +9521,21 @@ function maintenanceChecklistDraftFromRow(row: DashboardPayload): MaintenanceChe
     sequence: displayValue(row.sequence) !== "-" ? displayValue(row.sequence) : "",
     stepDescription: str(row.stepDescription),
     inputType: str(row.inputType || "checkbox"),
-    required: str(row.required || "Yes"),
-    status: str(row.status || "Active"),
     remark: str(row.remark),
   };
 }
 
 function maintenanceChecklistPayload(draft: MaintenanceChecklistStepDraft | DashboardPayload, checklistCode: string, checklistTitle: string, status: string): DashboardPayload {
-  return {
+  const payload: DashboardPayload = {
     checklistCode,
     checklistTitle,
     sequence: optionalNumber(draft.sequence) ?? str(draft.sequence),
     stepDescription: str(draft.stepDescription),
     inputType: str(draft.inputType || "checkbox"),
-    required: str(draft.required || "Yes"),
-    status,
     remark: str(draft.remark),
   };
+  if (status.toLowerCase() === "inactive") payload.status = status;
+  return payload;
 }
 
 function mergeMaintenanceChecklistRows(rows: DashboardPayload[]) {
@@ -9566,8 +9554,6 @@ function maintenanceChecklistMasterDefaults(returnTab = "maintenanceTab") {
     sequence: "1",
     stepDescription: "",
     inputType: "checkbox",
-    required: "Yes",
-    status: "Active",
     __returnTab: returnTab,
   };
 }
