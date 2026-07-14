@@ -3593,10 +3593,12 @@ function ShopFloorStatusPanel({
     .map((machineRow) => {
       const machine = machineValue(machineRow, "machine");
       const plans = plannedByMachine.get(machineKey(machine)) ?? [];
-      const current = currentShopFloorItem(plans);
-      const next = nextShopFloorItem(plans, current);
+      const current = currentShopFloorStatusItem(plans);
+      const next = nextShopFloorStatusItem(plans, current);
+      const actionCurrent = current && shopFloorItemIsProductionCurrent(current) ? current : undefined;
+      const actionNext = actionCurrent ? next : (current ?? next);
       const status = shopFloorRowStatus(current, next);
-      return { machineRow, machine, location: machineMasterLocationValue(machineRow), current, next, status };
+      return { machineRow, machine, location: machineMasterLocationValue(machineRow), current, next, actionCurrent, actionNext, status };
     })
     .filter((row) =>
       typedFilterMatches(row.machine, machineFilter) &&
@@ -3744,8 +3746,8 @@ function ShopFloorStatusPanel({
                     </TableCell>
                     <TableCell className="align-middle">
                       <ShopFloorRowAction
-                        current={row.current}
-                        next={row.next}
+                        current={row.actionCurrent}
+                        next={row.actionNext}
                         onSaveStage={saveStage}
                         onSaveSetupChecklistSession={saveSetupChecklistSession}
                         setupChecklistMasters={asArray(productionControl.setupChecklistMasterRows)}
@@ -4165,7 +4167,7 @@ function ShopFloorItemSummary({
   tone: "current" | "next";
   compact?: boolean;
 }) {
-  const statusLabel = tone === "current" ? "Running" : (str(row.shopFloorStageLabel) || "Planned");
+  const statusLabel = tone === "current" ? shopFloorCurrentStatusLabel(row) : (str(row.shopFloorStageLabel) || "Planned");
   if (compact) {
     return (
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -8524,9 +8526,14 @@ function correctionRowMatchesQuery(row: DashboardPayload, query: string) {
 }
 
 function shopFloorRowStatus(current: DashboardPayload | undefined, next: DashboardPayload | undefined) {
-  if (current) return "Running";
+  if (current) return shopFloorCurrentStatusLabel(current);
   if (!next) return "No plan";
   return str(next.shopFloorStageLabel) || "Setup required";
+}
+
+function shopFloorCurrentStatusLabel(row: DashboardPayload) {
+  if (shopFloorItemIsProductionCurrent(row)) return "Running";
+  return str(row.shopFloorStageLabel) || str(row.runningStatus) || "Setup complete";
 }
 
 function jobCardMatchesMachine(
@@ -8569,7 +8576,7 @@ function machineIsRunning(machine: string, plannedByMachine: Map<string, Dashboa
 function currentShopFloorItem(rows: DashboardPayload[]) {
   return rows
     .filter((row) => str(row.shopFloorStage) !== "item_complete")
-    .filter((row) => shopFloorItemIsCurrent(row))
+    .filter((row) => shopFloorItemIsProductionCurrent(row))
     .sort(shopFloorPlanSort)[0];
 }
 
@@ -8578,7 +8585,23 @@ function nextShopFloorItem(rows: DashboardPayload[], current: DashboardPayload |
   return rows
     .filter((row) => shopFloorPlanKey(row) !== currentKey)
     .filter((row) => str(row.shopFloorStage) !== "item_complete")
-    .filter((row) => !shopFloorItemIsCurrent(row))
+    .filter((row) => !shopFloorItemIsProductionCurrent(row))
+    .sort(shopFloorPlanSort)[0];
+}
+
+function currentShopFloorStatusItem(rows: DashboardPayload[]) {
+  return rows
+    .filter((row) => str(row.shopFloorStage) !== "item_complete")
+    .filter((row) => shopFloorItemIsStatusCurrent(row))
+    .sort(shopFloorPlanSort)[0];
+}
+
+function nextShopFloorStatusItem(rows: DashboardPayload[], current: DashboardPayload | undefined) {
+  const currentKey = current ? shopFloorPlanKey(current) : "";
+  return rows
+    .filter((row) => shopFloorPlanKey(row) !== currentKey)
+    .filter((row) => str(row.shopFloorStage) !== "item_complete")
+    .filter((row) => !shopFloorItemIsStatusCurrent(row))
     .sort(shopFloorPlanSort)[0];
 }
 
@@ -8646,12 +8669,23 @@ function pendingTaskLabel(row: DashboardPayload) {
 }
 
 function shopFloorItemIsCurrent(row: DashboardPayload) {
+  return shopFloorItemIsProductionCurrent(row);
+}
+
+function shopFloorItemIsProductionCurrent(row: DashboardPayload) {
   if (planningRowIsBreakdownStopped(row) || planningRowIsShiftedAfterBreakdown(row)) return false;
   return ["operator_started", "worker_start"].includes(str(row.shopFloorStage))
     || str(row.runningStatus).toLowerCase() === "running"
     || Number(row.rawRows) > 0
     || Number(row.rawOutputQty) > 0
     || Number(row.rawActualQty) > 0;
+}
+
+function shopFloorItemIsStatusCurrent(row: DashboardPayload) {
+  if (shopFloorItemIsProductionCurrent(row)) return true;
+  const stageIndex = shopFloorStageIndex(str(row.shopFloorStage));
+  const qualityApprovedIndex = shopFloorStageIndex("quality_approval");
+  return stageIndex >= qualityApprovedIndex;
 }
 
 function shopFloorStageIndex(stage: string) {

@@ -361,3 +361,4 @@ The dashboard should not show the blocking "Checking planning recalculation" ove
 Date: 2026-07-13
 
 Shop Floor Status must not show a generic "Ready to start machine" fallback when a planned row has no next workflow stage. Rows at `operator_started` are already machine-started and should not imply a missing Machinist task. Use explicit no-pending labels such as "Machine already started" so the status tab and Machinist task tab do not appear inconsistent.
+- 2026-07-14: Shop Floor Status display promotes a setup from Next item planned to Current item once the workflow reaches `quality_approval`. This is display/action routing only; role production-entry lists still use the stricter operator-start/production-current rule.
