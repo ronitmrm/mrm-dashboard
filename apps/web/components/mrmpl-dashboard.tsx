@@ -6199,10 +6199,19 @@ function QualityParameterMasterForm({
   const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([]);
   const [status, setStatus] = useState<ActionStatus>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const persistedRows = useMemo(() => mergeQualityParameterRows([
-    ...qualityParameterRowsFromDataEntry(dataEntry),
-    ...asArray(hourlyQualityPageRecord.qualityParameterMasterRows),
-  ]), [dataEntry, hourlyQualityPageRecord.qualityParameterMasterRows]);
+  const { results: liveQualityRows, status: liveQualityRowsStatus, loadMore: loadMoreQualityRows } = usePaginatedQuery(
+    api.dashboard.masterTableRows,
+    { entryType: "quality_parameter_master" },
+    { initialNumItems: 500 },
+  );
+  const persistedRows = useMemo(() => {
+    const fallbackRows = mergeQualityParameterRows([
+      ...qualityParameterRowsFromDataEntry(dataEntry),
+      ...asArray(hourlyQualityPageRecord.qualityParameterMasterRows),
+    ]);
+    if (liveQualityRowsStatus === "LoadingFirstPage") return fallbackRows;
+    return mergeQualityParameterRows(asArray(liveQualityRows));
+  }, [dataEntry, hourlyQualityPageRecord.qualityParameterMasterRows, liveQualityRows, liveQualityRowsStatus]);
   const savedRows = useMemo(() => mergeQualityParameterRows([...persistedRows, ...localRows]), [persistedRows, localRows]);
   const setupOptions = useMemo(() => qualityParameterSetupOptions(savedRows), [savedRows]);
   const defaultSetupKey = qualityParameterSetupKey(defaults);
@@ -6305,10 +6314,15 @@ function QualityParameterMasterForm({
               {setupOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
             </select>
           </Field>
-          <Button type="button" variant="outline" className="self-end" onClick={() => { setSelectedSetupKey(""); setSetupFields({ partNo: "", optionNumber: "", setupNo: "" }); setDrafts([newQualityParameterDraft(1)]); setRemovedRows([]); }}>
-            <Plus className="size-4" />
-            New set
-          </Button>
+          <div className="flex items-end gap-2">
+            <Button type="button" variant="outline" onClick={() => { setSelectedSetupKey(""); setSetupFields({ partNo: "", optionNumber: "", setupNo: "" }); setDrafts([newQualityParameterDraft(1)]); setRemovedRows([]); }}>
+              <Plus className="size-4" />
+              New set
+            </Button>
+            {liveQualityRowsStatus === "CanLoadMore" || liveQualityRowsStatus === "LoadingMore" ? (
+              <Button type="button" variant="outline" disabled={liveQualityRowsStatus === "LoadingMore"} onClick={() => loadMoreQualityRows(500)}>{liveQualityRowsStatus === "LoadingMore" ? "Loading" : "Load more"}</Button>
+            ) : null}
+          </div>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
           <Field label="Item code"><Input list="quality-part-options" value={setupFields.partNo} onChange={(event) => setSetupFields((current) => ({ ...current, partNo: event.target.value }))} required /></Field>
