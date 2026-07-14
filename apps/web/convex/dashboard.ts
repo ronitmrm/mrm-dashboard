@@ -278,6 +278,41 @@ export const snapshot = query({
   },
 });
 
+
+export const masterTableRows = query({
+  args: {
+    entryType: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireDashboardAccess(ctx);
+    if (!legacyEntryTypes.includes(args.entryType)) return { rows: [], totalRows: 0 };
+    const ownerFields = await getGlobalOwnerFields(ctx);
+    const rows = await ctx.db
+      .query("dataEntries")
+      .withIndex("by_entry_type", (q) => q.eq("entryType", args.entryType))
+      .collect();
+    const ownerRows = rows.filter((row) => row.ownerId === ownerFields.ownerId);
+    const corrections = await ctx.db
+      .query("corrections")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerFields.ownerId))
+      .collect() as CorrectionTargetRow[];
+    const correctionTargets = dataEntryCorrectionTargetsWithWorkflowCascade(
+      ownerRows as DataEntryCorrectionRow[],
+      activeCorrectionTargetKeys(corrections),
+      corrections,
+    );
+    const activeRows = withoutCorrectedRows(ownerRows, "dataEntries", correctionTargets);
+    return {
+      rows: activeRows.map((row) => ({
+        ...payloadRecord(row.payload),
+        entryType: row.entryType,
+        key: row.key,
+        createdAt: row.createdAt,
+      })),
+      totalRows: activeRows.length,
+    };
+  },
+});
 export const hourlyQualityPage = query({
   args: {},
   handler: async (ctx) => {

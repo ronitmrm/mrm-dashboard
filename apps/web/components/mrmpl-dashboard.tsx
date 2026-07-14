@@ -5570,8 +5570,10 @@ function MasterTablesPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
+  const liveMasterRows = useQuery(api.dashboard.masterTableRows, selectedSpec ? { entryType: selectedSpec.entryType } : "skip");
+  const directMasterRows = liveMasterRows ? asArray(liveMasterRows.rows) : undefined;
   const dataEntry = asRecord(payload.dataEntry);
-  const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [], [payload, productionControl, selectedSpec]);
+  const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl, directMasterRows) : [], [directMasterRows, payload, productionControl, selectedSpec]);
   const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec, rows) : [], [selectedSpec, rows]);
   const filteredRows = useMemo(
     () => rows.filter((row) => masterTableRowMatches(row, columns, searchQuery, columnFilters)),
@@ -5732,15 +5734,19 @@ function masterTableKeySummaryRows(spec: DataEntrySpec, dataEntry: DashboardPayl
     uniqueKeys: uniqueValues(rows.map((row, index) => dataEntryKey(spec.entryType, row) || masterTableRowKey(spec.entryType, row, index))).length,
   }];
 }
-function masterTableRows(entryType: string, payload: DashboardPayload, productionControl: DashboardPayload) {
+function masterTableRows(entryType: string, payload: DashboardPayload, productionControl: DashboardPayload, directRows?: DashboardPayload[]) {
   const dataEntry = asRecord(payload.dataEntry);
   const rows: DashboardPayload[] = [];
-  for (const source of masterTableRowSources[entryType] ?? []) {
-    rows.push(...asArray(productionControl[source]));
-    rows.push(...asArray(dataEntry[source]));
+  if (directRows) {
+    rows.push(...directRows);
+  } else {
+    for (const source of masterTableRowSources[entryType] ?? []) {
+      rows.push(...asArray(productionControl[source]));
+      rows.push(...asArray(dataEntry[source]));
+    }
+    rows.push(...asArray(dataEntry.rows).filter((row) => str(row.entryType) === entryType));
+    rows.push(...asArray(dataEntry.templates).filter((row) => str(row.entryType) === entryType));
   }
-  rows.push(...asArray(dataEntry.rows).filter((row) => str(row.entryType) === entryType));
-  rows.push(...asArray(dataEntry.templates).filter((row) => str(row.entryType) === entryType));
 
   if (entryType === "quality_parameter_master") return mergeQualityParameterRows(rows);
   if (entryType === "maintenance_master") return activeMaintenanceMasterRows(rows);
