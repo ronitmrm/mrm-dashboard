@@ -460,10 +460,10 @@ const masterTableEntryTypes = [
 ] as const;
 
 const masterTableRowSources: Record<string, string[]> = {
-  route: ["routeRows"],
-  cycle: ["cycleRows"],
-  tooling: ["toolingRows"],
-  employee: ["employeeRows"],
+  route: ["routeMasterRows", "routeRows"],
+  cycle: ["cycleMasterRows", "cycleRows"],
+  tooling: ["toolingMasterRows", "toolingRows"],
+  employee: ["employeeMasterRows", "employeeRows"],
   machine_master: ["machinePlanningRows", "machineRows"],
   maintenance_master: ["maintenanceMasterRows"],
   maintenance_checklist_master: ["maintenanceChecklistMasterRows"],

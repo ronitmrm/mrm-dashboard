@@ -732,6 +732,7 @@ function buildProductionAnalysis({
     rmInwardRows,
     planningHolidayRows,
     machineRows,
+    employeeRows,
     dispatchRows,
     setupChecklistRows,
     setupChecklistMasterRows,
@@ -917,6 +918,7 @@ function buildProductionControl({
   rmInwardRows,
   planningHolidayRows,
   machineRows,
+  employeeRows,
   dispatchRows,
   setupChecklistRows,
   setupChecklistMasterRows,
@@ -952,6 +954,7 @@ function buildProductionControl({
   rmInwardRows: Record<string, unknown>[];
   planningHolidayRows: Record<string, unknown>[];
   machineRows: Record<string, unknown>[];
+  employeeRows: Record<string, unknown>[];
   dispatchRows: Record<string, unknown>[];
   setupChecklistRows: Record<string, unknown>[];
   setupChecklistMasterRows: Record<string, unknown>[];
@@ -1250,15 +1253,10 @@ function buildProductionControl({
     routeChanges,
     routeChangeRows: routeChanges,
     routeChangeImpacts: [],
-    routeMasterRows: dedupedRouteRows.map((row) => ({
-      partNo: rowText(row, "PART NO", "PART CODE", "partNo"),
-      optionNumber: rowText(row, "OPTION NUMBER", "optionNumber"),
-      setupNo: rowText(row, "SETUP NO.", "SETUP CODE", "setupNo"),
-      displaySetupNo: setupStepKey(rowText(row, "SETUP NO.", "SETUP CODE", "setupNo"), rowText(row, "OPTION NUMBER", "optionNumber")),
-      setupName: rowText(row, "SETUP NAME", "setupName"),
-      machineUsed: rowText(row, "MACHINE USED", "machineUsed", "machine"),
-      machineType: rowText(row, "MACHINE TYPE", "machineType"),
-    })),
+    routeMasterRows: dedupedRouteRows.map(routeMasterTableRow),
+    cycleMasterRows: [...latestMasterRows(cycleRows).values()].map(cycleMasterTableRow),
+    toolingMasterRows: [...latestMasterRows(toolingRows).values()].map(toolingMasterTableRow),
+    employeeMasterRows: employeeRows.map(employeeMasterTableRow),
     routeOptions: routeSelections,
     plannerActionLog,
     plannerActionConflicts,
@@ -4909,6 +4907,66 @@ function masterKey(row: Record<string, unknown>) {
   ].join("|");
 }
 
+function routeMasterTableRow(row: Record<string, unknown>) {
+  const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
+  const setupNo = rowText(row, "SETUP NO.", "SETUP NO", "SETUP CODE", "setupNo");
+  return {
+    partNo: rowText(row, "PART NO", "PART CODE", "partNo", "partCode"),
+    optionNumber,
+    setupNo,
+    displaySetupNo: setupStepKey(setupNo, optionNumber),
+    numberOfSetups: rowValue(row, "NO. OF SETUP", "NO OF SETUP", "numberOfSetups"),
+    setupName: rowText(row, "SETUP NAME", "setupName"),
+    machineUsed: rowText(row, "MACHINE USED", "machineUsed", "machine"),
+    machineType: rowText(row, "MACHINE TYPE", "machineType"),
+    stageWeight: rowValue(row, "STAGE WEIGHT", "STAGE WEIGHT GRAM", "stageWeight"),
+    rodSize: rowText(row, "ROD SIZE", "rodSize"),
+    cuttingLength: rowValue(row, "CUTTING LENGTH", "cuttingLength"),
+    finishedGoodsLength: rowValue(row, "FG LENGTH", "FINISHED GOODS LENGTH", "finishedGoodsLength"),
+  };
+}
+
+function cycleMasterTableRow(row: Record<string, unknown>) {
+  return {
+    partNo: rowText(row, "PART NO", "PART CODE", "partNo", "partCode"),
+    optionNumber: rowText(row, "OPTION NUMBER", "optionNumber"),
+    setupNo: rowText(row, "SETUP NO.", "SETUP NO", "SETUP CODE", "setupNo"),
+    setupName: rowText(row, "SETUP NAME", "setupName"),
+    machineUsed: rowText(row, "MACHINE USED", "machineUsed", "machine"),
+    operationWeight: rowValue(row, "OPERATION WEIGHT", "OPERATION WEIGHT GRAM", "operationWeight"),
+    cycleTime: rowValue(row, "CYCLE TIME", "CYCLE TIME SEC", "cycleTime"),
+    loadingUnloading: rowValue(row, "LOADING/UNLOADING", "LOADING UNLOADING", "LOADING/UNLOADING SEC", "loadingUnloading"),
+  };
+}
+
+function toolingMasterTableRow(row: Record<string, unknown>) {
+  return {
+    partNo: rowText(row, "PART NO", "PART CODE", "partNo", "partCode"),
+    optionNumber: rowText(row, "OPTION NUMBER", "optionNumber"),
+    setupNo: rowText(row, "SETUP NO.", "SETUP NO", "SETUP CODE", "setupNo"),
+    setupName: rowText(row, "SETUP NAME", "setupName"),
+    machineUsed: rowText(row, "MACHINE USED", "machineUsed", "machine"),
+    fixture: rowText(row, "FIXTURE", "fixture"),
+    fixtureQty: rowValue(row, "FIXTURE QTY", "fixtureQty"),
+    tooling: rowText(row, "TOOLING", "tooling"),
+    toolingQty: rowValue(row, "TOOLING QTY", "toolingQty"),
+    foamTool: rowText(row, "FOAM TOOL", "foamTool"),
+    foamToolQty: rowValue(row, "FOAM QTY", "FOAM TOOL QTY", "foamToolQty"),
+    remarks: rowText(row, "REMARKS", "remarks"),
+  };
+}
+
+function employeeMasterTableRow(row: Record<string, unknown>) {
+  return {
+    empId: rowText(row, "Emp ID", "EMP ID", "empId"),
+    employeeType: rowText(row, "Employee Type", "EMPLOYEE TYPE", "employeeType"),
+    employeeName: rowText(row, "Employee Name", "EMPLOYEE NAME", "employeeName"),
+    location: rowText(row, "Location", "LOCATION", "location"),
+    doj: rowValue(row, "DOJ", "doj"),
+    terminatedDate: rowValue(row, "Terminated Date", "TERMINATED DATE", "terminatedDate"),
+    status: rowText(row, "Status", "STATUS", "status") || "Active",
+  };
+}
 function latestMasterRows(rows: Record<string, unknown>[]) {
   const latest = new Map<string, Record<string, unknown>>();
   for (const row of rows) {
