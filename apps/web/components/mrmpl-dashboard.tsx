@@ -118,15 +118,12 @@ type QualityParameterDraft = {
   draftId: string;
   persisted?: boolean;
   sequence: string;
-  code: string;
   parameterName: string;
   specification: string;
   instrumentUsed: string;
   tolerancePlus: string;
   toleranceMinus: string;
   inputType: string;
-  required: string;
-  status: string;
   remark: string;
 };
 
@@ -410,7 +407,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "partNo", label: "Part no.", required: true },
       { name: "optionNumber", label: "Option no.", required: true },
       { name: "setupNo", label: "Setup no.", required: true },
-      { name: "code", label: "Parameter code", required: true },
       { name: "sequence", label: "Sequence", type: "number", min: "1" },
       { name: "parameterName", label: "Parameter name", required: true },
       { name: "specification", label: "Specification", required: true },
@@ -418,8 +414,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "tolerancePlus", label: "Tolerance +", type: "number", step: "0.001" },
       { name: "toleranceMinus", label: "Tolerance -", type: "number", step: "0.001" },
       { name: "inputType", label: "Input type", options: ["number", "text", "pass_fail"], defaultValue: "number" },
-      { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
@@ -5972,8 +5966,8 @@ function QualityParameterMasterForm({
   }
 
   async function saveParameterSet() {
-    const activeDrafts = drafts.filter((draft) => draft.code.trim() && draft.parameterName.trim());
-    const duplicateCodes = activeDrafts.map((draft) => machineKey(draft.code)).filter((code, index, codes) => code && codes.indexOf(code) !== index);
+    const activeDrafts = drafts.filter((draft) => draft.parameterName.trim());
+    const duplicateSequences = activeDrafts.map((draft, index) => str(optionalNumber(draft.sequence) ?? index + 1)).filter((sequence, index, sequences) => sequence && sequences.indexOf(sequence) !== index);
     if (!setupFields.partNo.trim() || !setupFields.optionNumber.trim() || !setupFields.setupNo.trim()) {
       setStatus({ tone: "destructive", message: "Item, option, and setup are required." });
       return;
@@ -5982,14 +5976,14 @@ function QualityParameterMasterForm({
       setStatus({ tone: "destructive", message: "Add at least one parameter row." });
       return;
     }
-    if (duplicateCodes.length) {
-      setStatus({ tone: "destructive", message: "Parameter codes must be unique for this item, option, and setup." });
+    if (duplicateSequences.length) {
+      setStatus({ tone: "destructive", message: "Step numbers must be unique for this item, option, and setup." });
       return;
     }
     setIsSaving(true);
     setStatus(null);
     try {
-      const activePayloads = activeDrafts.map((draft, index) => qualityParameterPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, setupFields, draft.status || "Active"));
+      const activePayloads = activeDrafts.map((draft, index) => qualityParameterPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, setupFields, "Active"));
       const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
       for (const payload of [...activePayloads, ...inactivePayloads]) {
         await saveDataEntry({ entryType: spec.entryType, key: dataEntryKey(spec.entryType, payload), payload });
@@ -6037,7 +6031,6 @@ function QualityParameterMasterForm({
             <TableHeader>
               <TableRow>
                 <TableHead className="min-w-20">Seq</TableHead>
-                <TableHead className="min-w-28">Code</TableHead>
                 <TableHead className="min-w-52">Parameter</TableHead>
                 <TableHead className="min-w-32">Spec</TableHead>
                 <TableHead className="min-w-40">Instrument</TableHead>
@@ -6054,15 +6047,12 @@ function QualityParameterMasterForm({
               {drafts.map((draft, index) => (
                 <TableRow key={draft.draftId}>
                   <TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell>
-                  <TableCell><Input className="h-8 min-w-24" value={draft.code} onChange={(event) => updateDraft(draft.draftId, "code", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-48" value={draft.parameterName} onChange={(event) => updateDraft(draft.draftId, "parameterName", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-28" value={draft.specification} onChange={(event) => updateDraft(draft.draftId, "specification", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-36" value={draft.instrumentUsed} onChange={(event) => updateDraft(draft.draftId, "instrumentUsed", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.tolerancePlus} onChange={(event) => updateDraft(draft.draftId, "tolerancePlus", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.toleranceMinus} onChange={(event) => updateDraft(draft.draftId, "toleranceMinus", event.target.value)} /></TableCell>
                   <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="number">Number</option><option value="text">Text</option><option value="pass_fail">OK / Not OK</option></select></TableCell>
-                  <TableCell><select className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.required} onChange={(event) => updateDraft(draft.draftId, "required", event.target.value)}><option value="Yes">Yes</option><option value="No">No</option></select></TableCell>
-                  <TableCell><select className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.status} onChange={(event) => updateDraft(draft.draftId, "status", event.target.value)}><option value="Active">Active</option><option value="Inactive">Inactive</option></select></TableCell>
                   <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
                   <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove parameter" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
                 </TableRow>
@@ -9101,15 +9091,12 @@ function newQualityParameterDraft(sequence: number): QualityParameterDraft {
   return {
     draftId: `quality-param-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     sequence: String(sequence),
-    code: "",
     parameterName: "",
     specification: "",
     instrumentUsed: "",
     tolerancePlus: "",
     toleranceMinus: "",
     inputType: "number",
-    required: "Yes",
-    status: "Active",
     remark: "",
   };
 }
@@ -9119,17 +9106,21 @@ function qualityParameterDraftFromRow(row: DashboardPayload): QualityParameterDr
     draftId: qualityParameterMasterKey(row) || `quality-param-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     persisted: true,
     sequence: displayValue(row.sequence) !== "-" ? displayValue(row.sequence) : "",
-    code: qualityParameterCode(row),
     parameterName: qualityParameterName(row),
     specification: str(row.specification),
     instrumentUsed: str(row.instrumentUsed),
     tolerancePlus: str(row.tolerancePlus),
     toleranceMinus: str(row.toleranceMinus),
     inputType: qualityParameterInputType(row),
-    required: str(row.required || "Yes"),
-    status: str(row.status || "Active"),
     remark: str(row.remark),
   };
+}
+
+function qualityParameterAutoCode(draft: QualityParameterDraft | DashboardPayload) {
+  const existingCode = str((draft as DashboardPayload).code || (draft as DashboardPayload).parameterCode);
+  if (existingCode) return existingCode;
+  const sequence = optionalNumber(draft.sequence) ?? 1;
+  return `P${sequence}`;
 }
 
 function qualityParameterPayload(draft: QualityParameterDraft | DashboardPayload, setupFields: DashboardPayload, status: string): DashboardPayload {
@@ -9138,7 +9129,7 @@ function qualityParameterPayload(draft: QualityParameterDraft | DashboardPayload
     partNo: str(setupFields.partNo || setupFields.partCode),
     optionNumber: str(setupFields.optionNumber),
     setupNo: str(setupFields.setupNo),
-    code: str(draftRecord.code || draftRecord.parameterCode),
+    code: qualityParameterAutoCode(draft),
     sequence: optionalNumber(draft.sequence) ?? str(draft.sequence),
     parameterName: str(draftRecord.parameterName || draftRecord.description),
     specification: str(draft.specification),
@@ -9146,7 +9137,7 @@ function qualityParameterPayload(draft: QualityParameterDraft | DashboardPayload
     tolerancePlus: str(draft.tolerancePlus),
     toleranceMinus: str(draft.toleranceMinus),
     inputType: qualityParameterInputType(draft),
-    required: str(draft.required || "Yes"),
+    required: "Yes",
     status,
     remark: str(draft.remark),
   };
@@ -9849,15 +9840,12 @@ function firstPieceMasterDefaults(row: DashboardPayload) {
     partNo: itemCode(row) !== "-" ? itemCode(row) : "",
     optionNumber: displayValue(row.optionNumber) !== "-" ? displayValue(row.optionNumber) : "",
     setupNo: displayValue(row.setupNo) !== "-" ? displayValue(row.setupNo) : "",
-    code: "",
     parameterName: "",
     instrumentUsed: "",
     specification: "",
     tolerancePlus: "",
     toleranceMinus: "",
     inputType: "number",
-    required: "Yes",
-    status: "Active",
     __returnTab: "firstPieceInspectionTab",
   };
 }
