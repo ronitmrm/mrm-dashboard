@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type DragEvent, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import Image from "next/image";
 import {
   ArrowDown,
@@ -5570,8 +5570,9 @@ function MasterTablesPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
-  const liveMasterRows = useQuery(api.dashboard.masterTableRows, selectedSpec ? { entryType: selectedSpec.entryType } : "skip");
-  const directMasterRows = liveMasterRows ? asArray(liveMasterRows.rows) : undefined;
+  const { results: liveMasterRows, status: liveMasterRowsStatus, loadMore: loadMoreMasterRows } = usePaginatedQuery(api.dashboard.masterTableRows, selectedSpec ? { entryType: selectedSpec.entryType } : "skip", { initialNumItems: 200 });
+  const isLoadingMasterRows = liveMasterRowsStatus === "LoadingFirstPage";
+  const directMasterRows = isLoadingMasterRows ? undefined : asArray(liveMasterRows);
   const dataEntry = asRecord(payload.dataEntry);
   const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl, directMasterRows) : [], [directMasterRows, payload, productionControl, selectedSpec]);
   const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec, rows) : [], [selectedSpec, rows]);
@@ -5641,7 +5642,9 @@ function MasterTablesPanel({
           </div>
         </CardHeader>
         <CardContent>
-          {!rows.length ? (
+          {isLoadingMasterRows ? (
+            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">Loading saved rows...</div>
+          ) : !rows.length ? (
             <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No saved rows found for this master.</div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
@@ -5679,6 +5682,13 @@ function MasterTablesPanel({
               </Table>
             </div>
           )}
+          {liveMasterRowsStatus === "CanLoadMore" || liveMasterRowsStatus === "LoadingMore" ? (
+            <div className="mt-3 flex justify-center">
+              <Button type="button" variant="outline" disabled={liveMasterRowsStatus === "LoadingMore"} onClick={() => loadMoreMasterRows(500)}>
+                {liveMasterRowsStatus === "LoadingMore" ? "Loading..." : "Load more rows"}
+              </Button>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
       {summaryRows.length ? (

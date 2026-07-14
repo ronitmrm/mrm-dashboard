@@ -10,3 +10,5 @@ Last updated: 2026-07-14
 - Data Entry should not show the template preview table or global key summary table; downloaded templates stay behind the Download template button, and selected-master key summaries belong in Master Tables.
 
 - 2026-07-14: Master Tables must fetch the selected master's saved dataEntries directly with dashboard.masterTableRows(entryType). Key summaries only carry counts, so snapshot-normalized rows alone can make masters like cycle appear empty even when thousands of saved rows exist.
+
+- 2026-07-14: Large master tables must use Convex pagination (dashboard.masterTableRows) rather than .collect(); masters like cycle can have 4000+ rows and returning all rows at once can trigger server/runtime errors.
