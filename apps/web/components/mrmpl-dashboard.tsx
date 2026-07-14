@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Database,
+  Download,
   Factory,
   Gauge,
   GripVertical,
@@ -5524,18 +5525,6 @@ function DataEntryPanel({
             <Button type="button" variant="outline" onClick={() => downloadApi("data-template", bulkEntryType)}>
               Download template
             </Button>
-            <Button type="button" variant="outline" onClick={() => downloadApi("data-export", bulkEntryType)}>
-              Export current data
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                window.location.href = `/api/export-workbook?scope=${encodeURIComponent(bulkEntryType)}&t=${Date.now()}`;
-              }}
-            >
-              Export selected data
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -5619,6 +5608,10 @@ function MasterTablesPanel({
           </Field>
           <div className="flex items-end gap-2">
             <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); setColumnFilters({}); }}>Clear filters</Button>
+            <Button type="button" variant="outline" disabled={!filteredRows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, filteredRows, columns)}>
+              <Download className="size-4" />
+              Export visible rows
+            </Button>
             <Button type="button" onClick={() => openDataEntry(selectedSpec.entryType, { __returnTab: "masterTablesTab" })}>
               <Plus className="size-4" />
               Add row
@@ -5793,6 +5786,31 @@ function masterTableCellText(row: DashboardPayload, key: string) {
   return displayValue(row[key]);
 }
 
+
+function downloadMasterTableCsv(spec: DataEntrySpec, rows: DashboardPayload[], columns: MasterTableColumn[]) {
+  const header = columns.map((column) => csvCell(column.label)).join(",");
+  const body = rows.map((row) => columns.map((column) => csvCell(masterTableCellText(row, column.key))).join(","));
+  const blob = new Blob(["\ufeff", [header, ...body].join("\r\n"), "\r\n"], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${safeExportFileName(spec.title)}-${new Date().toISOString().slice(0, 10)}-visible-rows.csv`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value: unknown) {
+  const textValue = str(value);
+  const doubleQuote = String.fromCharCode(34);
+  const escaped = textValue.replaceAll(doubleQuote, `${doubleQuote}${doubleQuote}`);
+  return /[",\r\n]/.test(textValue) ? `${doubleQuote}${escaped}${doubleQuote}` : textValue;
+}
+
+function safeExportFileName(value: unknown) {
+  return str(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "master-table";
+}
 function masterTableColumnOptions(rows: DashboardPayload[], key: string) {
   return uniqueValues(rows.map((row) => masterTableCellText(row, key)).filter((value) => value !== "-"));
 }
@@ -8018,7 +8036,7 @@ async function runDashboardAction(
   throw new Error(`Unsupported dashboard action: ${path}`);
 }
 
-function downloadApi(kind: "data-template" | "data-export", entryType: string) {
+function downloadApi(kind: "data-template", entryType: string) {
   window.location.href = `/api/${kind}?entryType=${encodeURIComponent(entryType)}&t=${Date.now()}`;
 }
 

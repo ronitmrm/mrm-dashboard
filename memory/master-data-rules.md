@@ -12,3 +12,5 @@ Last updated: 2026-07-14
 - 2026-07-14: Master Tables must fetch the selected master's saved dataEntries directly with dashboard.masterTableRows(entryType). Key summaries only carry counts, so snapshot-normalized rows alone can make masters like cycle appear empty even when thousands of saved rows exist.
 
 - 2026-07-14: Large master tables must use Convex pagination (dashboard.masterTableRows) rather than .collect(); masters like cycle can have 4000+ rows and returning all rows at once can trigger server/runtime errors.
+
+- 2026-07-14: Master Tables exports must use the same currently visible filtered rows and columns rendered on screen. Keep broader workbook/data exports disabled unless they are wired to the same live source, otherwise operators can see one dataset and download another.
