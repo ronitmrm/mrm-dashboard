@@ -144,6 +144,7 @@ type DashboardTabId =
   | "machineDetailTab"
   | "machineMasterTab"
   | "masterGapsTab"
+  | "masterTablesTab"
   | "dataEntryTab"
   | "planningHolidayTab"
   | "maintenanceTab"
@@ -161,6 +162,7 @@ const navItems: Array<{ id: DashboardTabId; title: string; subtitle: string; ico
   { id: "machineDetailTab", title: "Machine Detail", subtitle: "setup planning", icon: Factory },
   { id: "machineMasterTab", title: "Machine Master", subtitle: "schedules and history", icon: Factory },
   { id: "masterGapsTab", title: "Master Readiness", subtitle: "missing planning data", icon: Database },
+  { id: "masterTablesTab", title: "Master Tables", subtitle: "search saved masters", icon: Database },
   { id: "dataEntryTab", title: "Data Entry", subtitle: "imports and manual entry", icon: ListChecks },
   { id: "planningHolidayTab", title: "Planning Holidays", subtitle: "Friday shutdown, holidays", icon: CalendarDays },
   { id: "maintenanceTab", title: "Maintenance", subtitle: "machine PM schedule", icon: Settings2 },
@@ -441,7 +443,42 @@ const dataEntrySpecs: DataEntrySpec[] = [
     ],
   },
 ];
+const masterTableEntryTypes = [
+  "route",
+  "cycle",
+  "tooling",
+  "employee",
+  "machine_master",
+  "maintenance_master",
+  "maintenance_checklist_master",
+  "planning_holiday",
+  "setup_checklist_master",
+  "rejection_type_master",
+  "rejection_remark_master",
+  "rejection_reason_master",
+  "quality_parameter_master",
+] as const;
 
+const masterTableRowSources: Record<string, string[]> = {
+  route: ["routeRows"],
+  cycle: ["cycleRows"],
+  tooling: ["toolingRows"],
+  employee: ["employeeRows"],
+  machine_master: ["machinePlanningRows", "machineRows"],
+  maintenance_master: ["maintenanceMasterRows"],
+  maintenance_checklist_master: ["maintenanceChecklistMasterRows"],
+  planning_holiday: ["planningHolidayRows"],
+  setup_checklist_master: ["setupChecklistMasterRows"],
+  rejection_type_master: ["rejectionTypeMasterRows"],
+  rejection_remark_master: ["rejectionRemarkMasterRows"],
+  rejection_reason_master: ["rejectionReasonMasterRows"],
+  quality_parameter_master: ["qualityParameterMasterRows"],
+};
+
+function masterTableSpecs() {
+  const allowed = new Set<string>(masterTableEntryTypes);
+  return dataEntrySpecs.filter((spec) => allowed.has(spec.entryType));
+}
 const subscribeToHydration = () => () => {};
 const clientHydrationSnapshot = () => true;
 const serverHydrationSnapshot = () => false;
@@ -1438,6 +1475,10 @@ function DashboardContent({
 
   if (activeTab === "dataEntryTab") {
     return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} />;
+  }
+
+  if (activeTab === "masterTablesTab") {
+    return <MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} />;
   }
 
   if (activeTab === "planningHolidayTab") {
@@ -5514,6 +5555,195 @@ function DataEntryPanel({
   );
 }
 
+function MasterTablesPanel({
+  payload,
+  productionControl,
+  openDataEntry,
+}: {
+  payload: DashboardPayload;
+  productionControl: DashboardPayload;
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+}) {
+  const specs = useMemo(() => masterTableSpecs(), []);
+  const [entryType, setEntryType] = useState(() => specs[0]?.entryType ?? "");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
+  const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [], [payload, productionControl, selectedSpec]);
+  const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec, rows) : [], [selectedSpec, rows]);
+  const filteredRows = useMemo(
+    () => rows.filter((row) => masterTableRowMatches(row, columns, searchQuery, columnFilters)),
+    [rows, columns, searchQuery, columnFilters],
+  );
+
+  if (!selectedSpec) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Master tables</CardTitle>
+          <CardDescription>No master definitions are configured.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <section className="grid gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Master tables</CardTitle>
+          <CardDescription>Search saved master data in tabular format. Use Data Entry only when you need to add or edit rows.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(260px,1fr)_auto]">
+          <Field label="Master">
+            <select
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={selectedSpec.entryType}
+              onChange={(event) => { setEntryType(event.target.value); setSearchQuery(""); setColumnFilters({}); }}
+            >
+              {specs.map((spec) => (
+                <option key={spec.entryType} value={spec.entryType}>{spec.title}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Search all visible columns">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input className="pl-9" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search saved rows" />
+            </div>
+          </Field>
+          <div className="flex items-end gap-2">
+            <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); setColumnFilters({}); }}>Clear filters</Button>
+            <Button type="button" onClick={() => openDataEntry(selectedSpec.entryType, { __returnTab: "masterTablesTab" })}>
+              <Plus className="size-4" />
+              Add row
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>{selectedSpec.title}</CardTitle>
+              <CardDescription>{selectedSpec.description}</CardDescription>
+            </div>
+            <Badge variant="outline">{formatNumber(filteredRows.length)} / {formatNumber(rows.length)} rows</Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!rows.length ? (
+            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No saved rows found for this master.</div>
+          ) : (
+            <div className="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {columns.map((column) => (
+                      <TableHead key={column.key} className="min-w-36 whitespace-nowrap">{column.label}</TableHead>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    {columns.map((column) => (
+                      <TableHead key={`${column.key}-filter`} className="min-w-36 whitespace-nowrap">
+                        <MachineMasterColumnFilter
+                          label={column.label}
+                          value={columnFilters[column.key] ?? ""}
+                          options={masterTableColumnOptions(rows, column.key)}
+                          onChange={(value) => setColumnFilters((current) => ({ ...current, [column.key]: value }))}
+                        />
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredRows.map((row, index) => (
+                    <TableRow key={masterTableRowKey(selectedSpec.entryType, row, index)}>
+                      {columns.map((column) => (
+                        <TableCell key={column.key} className="align-top text-xs">
+                          {masterTableCellText(row, column.key)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+type MasterTableColumn = {
+  key: string;
+  label: string;
+};
+
+function masterTableRows(entryType: string, payload: DashboardPayload, productionControl: DashboardPayload) {
+  const dataEntry = asRecord(payload.dataEntry);
+  const rows: DashboardPayload[] = [];
+  for (const source of masterTableRowSources[entryType] ?? []) {
+    rows.push(...asArray(productionControl[source]));
+    rows.push(...asArray(dataEntry[source]));
+  }
+  rows.push(...asArray(dataEntry.rows).filter((row) => str(row.entryType) === entryType));
+  rows.push(...asArray(dataEntry.templates).filter((row) => str(row.entryType) === entryType));
+
+  if (entryType === "quality_parameter_master") return mergeQualityParameterRows(rows);
+  if (entryType === "maintenance_master") return activeMaintenanceMasterRows(rows);
+  if (entryType === "maintenance_checklist_master") return activeMaintenanceChecklistRows(rows);
+  return dedupeMasterTableRows(entryType, rows);
+}
+
+function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
+  const byKey = new Map<string, DashboardPayload>();
+  rows.forEach((row, index) => {
+    const key = dataEntryKey(entryType, row) || JSON.stringify(row) || String(index);
+    byKey.set(key, row);
+  });
+  return [...byKey.values()].sort((a, b) => masterTableRowKey(entryType, a, 0).localeCompare(masterTableRowKey(entryType, b, 0), undefined, { numeric: true }));
+}
+
+function masterTableColumns(spec: DataEntrySpec, rows: DashboardPayload[]): MasterTableColumn[] {
+  const ignored = new Set(["_id", "_creationTime", "entryType", "payload", "key", "dataEntryKey"]);
+  const columns = new Map<string, MasterTableColumn>();
+  for (const field of spec.fields) columns.set(field.name, { key: field.name, label: field.label });
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      if (ignored.has(key) || columns.has(key)) continue;
+      columns.set(key, { key, label: humanizeMasterTableColumn(key) });
+    }
+  }
+  return [...columns.values()];
+}
+
+function humanizeMasterTableColumn(key: string) {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function masterTableCellText(row: DashboardPayload, key: string) {
+  return displayValue(row[key]);
+}
+
+function masterTableColumnOptions(rows: DashboardPayload[], key: string) {
+  return uniqueValues(rows.map((row) => masterTableCellText(row, key)).filter((value) => value !== "-"));
+}
+
+function masterTableRowMatches(row: DashboardPayload, columns: MasterTableColumn[], searchQuery: string, columnFilters: Record<string, string>) {
+  const query = searchQuery.trim().toLowerCase();
+  if (query && !columns.some((column) => masterTableCellText(row, column.key).toLowerCase().includes(query))) return false;
+  return columns.every((column) => typedFilterMatches(masterTableCellText(row, column.key), columnFilters[column.key] ?? ""));
+}
+
+function masterTableRowKey(entryType: string, row: DashboardPayload, index: number) {
+  return `${entryType}|${dataEntryKey(entryType, row) || JSON.stringify(row) || index}`;
+}
 function MachineMasterPanel({
   productionControl,
   submitAction,

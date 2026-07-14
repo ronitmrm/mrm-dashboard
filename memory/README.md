@@ -8,3 +8,4 @@ Persistent notes for local coding agents. Treat these as context, not authority;
 - `production-card-rules.md` - role production-card date/edit/keying rules.
 - `maintenance-rules.md` - planned machine maintenance schedule and task-entry rules.
 - `quality-rules.md` - shared first-piece and hourly quality parameter master rules.
+- `master-data-rules.md` - master data browsing and data-entry separation rules.
