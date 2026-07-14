@@ -6480,7 +6480,16 @@ function MaintenanceChecklistMasterForm({
   const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([]);
   const [status, setStatus] = useState<ActionStatus>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const persistedRows = useMemo(() => maintenanceChecklistMasterRowsFromDataEntry(dataEntry), [dataEntry]);
+  const { results: liveChecklistRows, status: liveChecklistRowsStatus, loadMore: loadMoreChecklistRows } = usePaginatedQuery(
+    api.dashboard.masterTableRows,
+    { entryType: "maintenance_checklist_master" },
+    { initialNumItems: 500 },
+  );
+  const persistedRows = useMemo(() => {
+    const fallbackRows = maintenanceChecklistMasterRowsFromDataEntry(dataEntry);
+    if (liveChecklistRowsStatus === "LoadingFirstPage") return fallbackRows;
+    return asArray(liveChecklistRows);
+  }, [dataEntry, liveChecklistRows, liveChecklistRowsStatus]);
   const savedRows = useMemo(() => mergeMaintenanceChecklistRows([...persistedRows, ...localRows]), [persistedRows, localRows]);
   const checklistOptions = useMemo(() => maintenanceChecklistOptions(savedRows), [savedRows]);
   const defaultCode = displayValue(defaults.checklistCode) !== "-" ? displayValue(defaults.checklistCode) : nextMaintenanceChecklistCode(savedRows);
@@ -6582,7 +6591,12 @@ function MaintenanceChecklistMasterForm({
               {checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}
             </select>
           </Field>
-          <Button type="button" variant="outline" className="self-end" onClick={startNewChecklist}><Plus className="size-4" />New checklist</Button>
+          <div className="flex items-end gap-2">
+            <Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New checklist</Button>
+            {liveChecklistRowsStatus === "CanLoadMore" || liveChecklistRowsStatus === "LoadingMore" ? (
+              <Button type="button" variant="outline" disabled={liveChecklistRowsStatus === "LoadingMore"} onClick={() => loadMoreChecklistRows(500)}>{liveChecklistRowsStatus === "LoadingMore" ? "Loading" : "Load more"}</Button>
+            ) : null}
+          </div>
           <TileField label="Steps" value={drafts.filter((draft) => draft.stepDescription.trim()).length} numeric />
         </div>
         <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">

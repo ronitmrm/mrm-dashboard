@@ -23,3 +23,5 @@
 - 2026-07-14: Maintenance checklist master step entry does not ask for Required or Status. Steps use checklist code/title, step number, description, input type, and remark only.
 
 - 2026-07-14: The custom multi-step Maintenance checklist master editor must also hide Required and Status; active step payloads should not store those fields, except status: Inactive used internally when deleting an existing step.
+
+- 2026-07-14: Reopening Maintenance checklist master in Data Entry must hydrate saved checklist steps from dashboard.masterTableRows(entryType: maintenance_checklist_master), not only from the dashboard snapshot, so recently saved checklists can be edited without recalculating the snapshot.
