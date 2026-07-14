@@ -7,3 +7,4 @@ Last updated: 2026-07-14
 - Master table browsing should show one master at a time because the schemas differ. Each table should provide global search plus per-column dropdown filters similar to Excel.
 - The browser should reuse the existing dashboard snapshot/master row sources where possible, with `productionControl` rows preferred over raw data-entry fallback rows.
 - Master Tables depends on normalized rows exposed from `productionControl` (`routeMasterRows`, `cycleMasterRows`, `toolingMasterRows`, etc.); if a master table is empty, verify the snapshot exposes that source before changing the UI.
+- Data Entry should not show the template preview table or global key summary table; downloaded templates stay behind the Download template button, and selected-master key summaries belong in Master Tables.

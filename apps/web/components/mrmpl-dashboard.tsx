@@ -5549,8 +5549,6 @@ function DataEntryPanel({
           dataEntry={dataEntry}
         />
       ) : null}
-      <DataRowsCard title="Data entry templates" rows={asArray(dataEntry.templates)} empty="No templates returned" />
-      <DataRowsCard title="Data entry key summary" rows={asArray(dataEntry.keySummary)} empty="No entry summary returned" />
     </section>
   );
 }
@@ -5569,11 +5567,16 @@ function MasterTablesPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
+  const dataEntry = asRecord(payload.dataEntry);
   const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [], [payload, productionControl, selectedSpec]);
   const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec, rows) : [], [selectedSpec, rows]);
   const filteredRows = useMemo(
     () => rows.filter((row) => masterTableRowMatches(row, columns, searchQuery, columnFilters)),
     [rows, columns, searchQuery, columnFilters],
+  );
+  const summaryRows = useMemo(
+    () => selectedSpec ? masterTableKeySummaryRows(selectedSpec, dataEntry, rows, filteredRows) : [],
+    [selectedSpec, dataEntry, rows, filteredRows],
   );
 
   if (!selectedSpec) {
@@ -5673,6 +5676,36 @@ function MasterTablesPanel({
           )}
         </CardContent>
       </Card>
+      {summaryRows.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{selectedSpec.title} summary</CardTitle>
+            <CardDescription>Key summary for the selected master only.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {tableColumns(summaryRows).map((column) => (
+                      <TableHead key={column}>{humanizeMasterTableColumn(column)}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {summaryRows.map((row, index) => (
+                    <TableRow key={`${selectedSpec.entryType}-summary-${index}`}>
+                      {tableColumns(summaryRows).map((column) => (
+                        <TableCell key={column} className="text-xs">{formatCell(row[column])}</TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
     </section>
   );
 }
@@ -5682,6 +5715,20 @@ type MasterTableColumn = {
   label: string;
 };
 
+function masterTableKeySummaryRows(spec: DataEntrySpec, dataEntry: DashboardPayload, rows: DashboardPayload[], filteredRows: DashboardPayload[]) {
+  const existingRows = asArray(dataEntry.keySummary).filter((row) => {
+    const rowType = str(row.entryType || row.type || row.master || row.table || row.name);
+    return rowType.toLowerCase() === spec.entryType.toLowerCase() || rowType.toLowerCase() === spec.title.toLowerCase();
+  });
+  if (existingRows.length) return existingRows;
+  return [{
+    master: spec.title,
+    entryType: spec.entryType,
+    totalRows: rows.length,
+    filteredRows: filteredRows.length,
+    uniqueKeys: uniqueValues(rows.map((row, index) => dataEntryKey(spec.entryType, row) || masterTableRowKey(spec.entryType, row, index))).length,
+  }];
+}
 function masterTableRows(entryType: string, payload: DashboardPayload, productionControl: DashboardPayload) {
   const dataEntry = asRecord(payload.dataEntry);
   const rows: DashboardPayload[] = [];
