@@ -19,3 +19,5 @@
 - 2026-07-13: Maintenance master frequency has a basis: Calendar days or Running days. Running-day schedules become due only after the assigned machine has production entries on the required number of distinct running dates after the first due date or last completion.
 - 2026-07-14: `maintenance_task` is an execution/completion record, not a Data Entry master form. Keep it hidden from the Data Entry selector; Maintenance tab and Machine Master history can still write/read completion records.
 - 2026-07-14: Maintenance checklist master is edited as one checklist header with multiple step rows. Step codes are not required; rows are keyed by checklist code plus step number.
+
+- 2026-07-14: Maintenance checklist master step entry does not ask for Required or Status. Steps use checklist code/title, step number, description, input type, and remark only.

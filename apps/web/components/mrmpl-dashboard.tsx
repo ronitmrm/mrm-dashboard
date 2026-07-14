@@ -334,8 +334,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "sequence", label: "Step no.", type: "number", min: "1", required: true },
       { name: "stepDescription", label: "Step description", required: true },
       { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
-      { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
