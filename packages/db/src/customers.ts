@@ -1,8 +1,9 @@
-import { asc, eq } from "drizzle-orm"
+import { asc, eq, getTableColumns, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
 
 import { customers } from "./schema/customers"
+import { organizations } from "./schema/organizations"
 
 type CustomerSource = {
   id: string
@@ -82,6 +83,20 @@ export function createCustomerRepository({
         .select()
         .from(customers)
         .where(eq(customers.organizationId, organizationId))
+        .orderBy(asc(customers.customerUid))
+    },
+
+    async listForOrganization(organizationCode: string) {
+      return database
+        .select(getTableColumns(customers))
+        .from(customers)
+        .innerJoin(
+          organizations,
+          eq(customers.organizationId, organizations.id)
+        )
+        .where(
+          sql`lower(${organizations.code}) = lower(${organizationCode.trim()})`
+        )
         .orderBy(asc(customers.customerUid))
     },
   }

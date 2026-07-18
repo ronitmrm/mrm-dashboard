@@ -54,3 +54,32 @@ Source availability finding:
 - Recover the complete `pricing-data/` directory and the dashboard's Convex
   export/local deployment data from the original development machine before
   migration implementation.
+
+Implementation checkpoint (branch `feat/postgresql-unified-migration`):
+
+- Numbered, checksummed, advisory-locked migrations now create the PostgreSQL
+  schemas, fresh Better Auth/MRMPL identity model, capability seed, migration
+  conflict/provenance tables, durable derived/outbox tables, organizations,
+  and the first Pricing table (`sales.customers`).
+- `packages/migration` inventories Convex ZIP exports and Pricing SQLite
+  backups without opening a production source. The SQLite inspector is
+  read-only, excludes legacy identity tables, and requires the repository's
+  pinned Node 22 runtime because `better-sqlite3` does not support Node 25.
+- Better Auth 1.6.23 uses the Drizzle PostgreSQL adapter, UUIDs, disabled
+  public sign-up, disabled cookie session caching, and the Admin plugin.
+  `pnpm -C apps/web auth:provision-admin` creates the only initial user, then
+  transactionally assigns both Better Auth `admin` and MRMPL `administrator`.
+- Server-facing capability checks read PostgreSQL on every protected
+  Commercial boundary. Active per-user deny overrides win over allows, which
+  win over role grants.
+- The Pricing costing engine now lives at `apps/web/lib/pricing/costing.ts`
+  with regression coverage for the audited workbook calculation chain.
+- `/commercial`, `/commercial/customers`, and `/commercial/costing` are the
+  first in-shell Pricing routes. They use the dashboard's shared shadcn design
+  system; SQLite and the legacy Pricing shell are not runtime dependencies.
+- Production build verification needs valid Convex URL environment values
+  for the still-live dashboard routes even though Commercial routes use
+  PostgreSQL. Non-secret localhost placeholders are sufficient for an offline
+  compile check.
+- Avoid `rtk pnpm --filter ... typecheck`; RTK can rewrite that form as a root
+  TypeScript invocation. Use `rtk pnpm -C <package> typecheck` instead.

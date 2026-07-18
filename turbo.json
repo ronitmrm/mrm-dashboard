@@ -2,10 +2,17 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
   "globalEnv": [
+    "ADMIN_EMAIL",
+    "ADMIN_NAME",
+    "ADMIN_PASSWORD",
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL",
     "CONVEX_DEPLOYMENT",
     "CONVEX_SELF_HOSTED_ADMIN_KEY",
     "CONVEX_SELF_HOSTED_URL",
     "CONVEX_SITE_URL",
+    "DATABASE_URL",
+    "NEXT_PUBLIC_APP_URL",
     "NEXT_PUBLIC_CONVEX_SITE_URL",
     "NEXT_PUBLIC_CONVEX_URL"
   ],

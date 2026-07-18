@@ -1,2 +1,6 @@
+export { createAuthorizationRepository } from "./authorization"
 export { createCustomerRepository } from "./customers"
+export { createDatabase } from "./database"
+export { createInitialAdministratorProvisioner } from "./initial-administrator"
 export { migrateDatabase } from "./migrate"
+export { identitySchema } from "./schema"

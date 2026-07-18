@@ -177,6 +177,9 @@ test("Pricing customers are created and listed through the PostgreSQL repository
     await expect(repository.list(organization.rows[0]!.id)).resolves.toEqual([
       created,
     ])
+    await expect(repository.listForOrganization("mrmpl")).resolves.toEqual([
+      created,
+    ])
   } finally {
     await repository.close()
   }
