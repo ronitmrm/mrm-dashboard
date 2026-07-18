@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Calculator,
   Database,
+  ListTree,
   PackageSearch,
   UsersRound,
 } from "lucide-react"
@@ -25,6 +26,14 @@ const modules = [
     href: "/commercial/customers",
     icon: UsersRound,
     label: "Customers",
+    status: "Live slice",
+  },
+  {
+    description:
+      "Case-insensitive grade, rod-type, and machine-type masters with provenance.",
+    href: "/commercial/masters",
+    icon: ListTree,
+    label: "Pricing masters",
     status: "Live slice",
   },
   {

@@ -8,6 +8,7 @@ import {
   Calculator,
   Factory,
   LayoutDashboard,
+  ListTree,
   PackageSearch,
   Settings2,
   UsersRound,
@@ -42,6 +43,11 @@ const navigation = [
     href: "/commercial/customers",
     icon: UsersRound,
     label: "Customers",
+  },
+  {
+    href: "/commercial/masters",
+    icon: ListTree,
+    label: "Pricing masters",
   },
   {
     href: "/commercial/products",

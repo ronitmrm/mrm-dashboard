@@ -1,4 +1,5 @@
 export { createAuthorizationRepository } from "./authorization"
+export { createCatalogMasterRepository } from "./catalog-masters"
 export { createCustomerRepository } from "./customers"
 export { createDatabase } from "./database"
 export { createInitialAdministratorProvisioner } from "./initial-administrator"

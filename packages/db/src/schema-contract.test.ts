@@ -1,6 +1,7 @@
 import { Pool } from "pg"
 import { afterAll, beforeAll, expect, test } from "vitest"
 
+import { createCatalogMasterRepository } from "./catalog-masters"
 import { createCustomerRepository } from "./customers"
 import { migrateDatabase } from "./migrate"
 import { createProductRepository } from "./products"
@@ -226,6 +227,50 @@ test("Pricing products preserve creation-time costing rules in PostgreSQL", asyn
       created,
     ])
     await expect(repository.listForOrganization("MRMPL")).resolves.toEqual([
+      created,
+    ])
+  } finally {
+    await repository.close()
+  }
+})
+
+test("Pricing catalog masters are case-insensitive and source-traceable", async () => {
+  await migrateDatabase({ connectionString })
+  const organization = await pool.query<{ id: string }>(
+    `SELECT id FROM core.organizations WHERE lower(code) = 'mrmpl'`
+  )
+  const repository = createCatalogMasterRepository({
+    connectionString,
+    kind: "materialGrade",
+  })
+
+  try {
+    const created = await repository.create({
+      name: " CW617N ",
+      organizationId: organization.rows[0]!.id,
+      source: {
+        id: "1",
+        system: "pricing_sqlite",
+        table: "product_grades",
+      },
+    })
+    const duplicate = await repository.create({
+      name: "cw617n",
+      organizationId: organization.rows[0]!.id,
+      source: {
+        id: "2",
+        system: "pricing_sqlite",
+        table: "product_grades",
+      },
+    })
+
+    expect(created).toMatchObject({
+      name: "CW617N",
+      sourceId: "1",
+      sourceTable: "product_grades",
+    })
+    expect(duplicate.id).toBe(created.id)
+    await expect(repository.list(organization.rows[0]!.id)).resolves.toEqual([
       created,
     ])
   } finally {

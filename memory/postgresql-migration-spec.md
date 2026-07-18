@@ -82,6 +82,10 @@ Implementation checkpoint (branch `feat/postgresql-unified-migration`):
   costing inputs, source aliases, material/rod/machine master references, and
   BOM relationships. Product creation preserves legacy Barstock and Package
   cost-routing behavior. `/commercial/products` exposes the read slice.
+- `createCatalogMasterRepository` ports the legacy insert-or-ignore behavior
+  for material grades, rod types, and machine types while enforcing
+  case-insensitive canonical identity and retaining the first source
+  provenance. `/commercial/masters` exposes these read models.
 - Production build verification needs valid Convex URL environment values
   for the still-live dashboard routes even though Commercial routes use
   PostgreSQL. Non-secret localhost placeholders are sufficient for an offline
