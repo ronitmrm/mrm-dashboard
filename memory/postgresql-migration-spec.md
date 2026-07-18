@@ -77,6 +77,11 @@ Implementation checkpoint (branch `feat/postgresql-unified-migration`):
 - `/commercial`, `/commercial/customers`, and `/commercial/costing` are the
   first in-shell Pricing routes. They use the dashboard's shared shadcn design
   system; SQLite and the legacy Pricing shell are not runtime dependencies.
+- Migration `0006_catalog_pricing_products.sql` and
+  `createProductRepository` establish canonical products, exact numeric
+  costing inputs, source aliases, material/rod/machine master references, and
+  BOM relationships. Product creation preserves legacy Barstock and Package
+  cost-routing behavior. `/commercial/products` exposes the read slice.
 - Production build verification needs valid Convex URL environment values
   for the still-live dashboard routes even though Commercial routes use
   PostgreSQL. Non-secret localhost placeholders are sufficient for an offline

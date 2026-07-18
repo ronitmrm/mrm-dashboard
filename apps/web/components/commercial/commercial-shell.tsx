@@ -8,6 +8,7 @@ import {
   Calculator,
   Factory,
   LayoutDashboard,
+  PackageSearch,
   Settings2,
   UsersRound,
 } from "lucide-react"
@@ -41,6 +42,11 @@ const navigation = [
     href: "/commercial/customers",
     icon: UsersRound,
     label: "Customers",
+  },
+  {
+    href: "/commercial/products",
+    icon: PackageSearch,
+    label: "Products",
   },
   {
     href: "/commercial/costing",

@@ -7,3 +7,4 @@ export {
   verification,
 } from "./identity"
 export { organizations } from "./organizations"
+export { items, type Item } from "./products"

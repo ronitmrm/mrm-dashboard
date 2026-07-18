@@ -1,5 +1,11 @@
 import Link from "next/link"
-import { ArrowRight, Calculator, Database, UsersRound } from "lucide-react"
+import {
+  ArrowRight,
+  Calculator,
+  Database,
+  PackageSearch,
+  UsersRound,
+} from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -19,6 +25,14 @@ const modules = [
     href: "/commercial/customers",
     icon: UsersRound,
     label: "Customers",
+    status: "Live slice",
+  },
+  {
+    description:
+      "Canonical product identity, costing inputs, and BOM-ready relationships.",
+    href: "/commercial/products",
+    icon: PackageSearch,
+    label: "Products",
     status: "Live slice",
   },
   {

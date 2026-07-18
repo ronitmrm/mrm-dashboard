@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, test } from "vitest"
 
 import { createCustomerRepository } from "./customers"
 import { migrateDatabase } from "./migrate"
+import { createProductRepository } from "./products"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -178,6 +179,53 @@ test("Pricing customers are created and listed through the PostgreSQL repository
       created,
     ])
     await expect(repository.listForOrganization("mrmpl")).resolves.toEqual([
+      created,
+    ])
+  } finally {
+    await repository.close()
+  }
+})
+
+test("Pricing products preserve creation-time costing rules in PostgreSQL", async () => {
+  await migrateDatabase({ connectionString })
+  const organization = await pool.query<{ id: string }>(
+    `SELECT id FROM core.organizations WHERE lower(code) = 'mrmpl'`
+  )
+  const repository = createProductRepository({ connectionString })
+
+  try {
+    const created = await repository.create({
+      assemblyOperationCost: 5,
+      casting: 2,
+      description: "Fixture barstock package",
+      forgingCost: 12,
+      itemType: "Package",
+      machiningCost: 10,
+      organizationId: organization.rows[0]!.id,
+      overheadCost: 9,
+      productionType: "Barstock",
+      source: {
+        id: "101",
+        system: "pricing_sqlite",
+        table: "products",
+      },
+      uid: " MRM-100 ",
+      weight100Pcs: 500,
+    })
+
+    expect(created).toMatchObject({
+      assemblyOperationCost: "5.00000000",
+      description: "Fixture barstock package",
+      forgingCost: "0.00000000",
+      machiningPricePerPiece: "5.00000000",
+      overheadCost: "0.00000000",
+      piecesPerKg: "2.00000000",
+      uid: "MRM-100",
+    })
+    await expect(repository.list(organization.rows[0]!.id)).resolves.toEqual([
+      created,
+    ])
+    await expect(repository.listForOrganization("MRMPL")).resolves.toEqual([
       created,
     ])
   } finally {
