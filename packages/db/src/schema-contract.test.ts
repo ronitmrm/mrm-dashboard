@@ -1,6 +1,7 @@
 import { Pool } from "pg"
 import { afterAll, beforeAll, expect, test } from "vitest"
 
+import { createCustomerRepository } from "./customers"
 import { migrateDatabase } from "./migrate"
 
 const connectionString =
@@ -107,4 +108,76 @@ test("authorization seeds every unified application module", async () => {
     "pricing",
     "quality",
   ])
+})
+
+test("foundation includes provenance, conflict review, and durable work tables", async () => {
+  await migrateDatabase({ connectionString })
+
+  const result = await pool.query<{
+    table_name: string
+    table_schema: string
+  }>(`
+    SELECT table_schema, table_name
+    FROM information_schema.tables
+    WHERE table_schema IN ('derived', 'migration')
+    ORDER BY table_schema, table_name
+  `)
+
+  expect(
+    result.rows.map((row) => `${row.table_schema}.${row.table_name}`)
+  ).toEqual([
+    "derived.dashboard_read_models",
+    "derived.outbox_events",
+    "derived.refresh_jobs",
+    "derived.refresh_watermarks",
+    "migration.artifacts",
+    "migration.convex_documents",
+    "migration.file_conflicts",
+    "migration.identity_conflicts",
+    "migration.orphan_corrections",
+    "migration.relationship_conflicts",
+    "migration.runs",
+    "migration.schema_migrations",
+    "migration.source_hashes",
+    "migration.source_id_map",
+    "migration.type_conflicts",
+    "migration.unknown_entry_types",
+    "migration.validation_results",
+  ])
+})
+
+test("Pricing customers are created and listed through the PostgreSQL repository", async () => {
+  await migrateDatabase({ connectionString })
+  const organization = await pool.query<{ id: string }>(`
+    INSERT INTO core.organizations (code, name)
+    VALUES ('MRMPL', 'Mayank Raw Mint Private Limited')
+    ON CONFLICT (lower(code)) DO UPDATE SET name = EXCLUDED.name
+    RETURNING id
+  `)
+  const repository = createCustomerRepository({ connectionString })
+
+  try {
+    const created = await repository.create({
+      companyName: "Fixture Brass Customer",
+      country: "India",
+      customerUid: " 001 ",
+      organizationId: organization.rows[0]!.id,
+      source: {
+        id: "1",
+        system: "pricing_sqlite",
+        table: "customers",
+      },
+    })
+
+    expect(created).toMatchObject({
+      companyName: "Fixture Brass Customer",
+      country: "India",
+      customerUid: "001",
+    })
+    await expect(repository.list(organization.rows[0]!.id)).resolves.toEqual([
+      created,
+    ])
+  } finally {
+    await repository.close()
+  }
 })
