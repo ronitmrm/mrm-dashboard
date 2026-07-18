@@ -12,12 +12,13 @@ Durable decisions:
 - Use PostgreSQL schemas to separate identity, catalog, sales, manufacturing,
   workforce, quality, maintenance, audit, derived state, and migration
   staging.
-- Pricing has 42 final SQLite tables. Its startup `migrate()` function also
+- The recovered Pricing snapshot has 44 final SQLite tables. Its startup `migrate()` function also
   performs repairs/backfills, so final extraction must use the pinned source
   version and a consistent SQLite backup.
-- Convex has 12 canonical application sources plus auth and two disposable
-  derived snapshot tables. Decompose `dataEntries` by logical type; never port
-  it wholesale as a primary JSONB entity store.
+- The recovered Convex export has 13,752 canonical staging rows, 652 excluded
+  identity rows, and 39 archive-only system/derived rows. Decompose
+  `dataEntries` by logical type; never port it wholesale as a primary JSONB
+  entity store.
 - Use immutable source artifacts, checksums, staging, source ID maps,
   idempotent loaders, and explicit conflict queues.
 - Use a rehearsed maintenance-window cutover with a write freeze. Do not build
@@ -44,16 +45,27 @@ Durable decisions:
   initially, and limits Redis to disposable acceleration driven by a
   transactional PostgreSQL outbox.
 
-Source availability finding:
+Source recovery checkpoint:
 
-- This workspace does not contain `pricing/pricing-data/pricing_app.db`,
-  a Pricing data directory, an `mrm-dashboard` Convex local directory, a
-  matching Convex Docker volume, or a Convex export.
-- Do not start the Pricing application before recovery because `getDb()` would
-  create a new empty database at the missing path.
-- Recover the complete `pricing-data/` directory and the dashboard's Convex
-  export/local deployment data from the original development machine before
-  migration implementation.
+- Immutable source exports were supplied at the workspace root:
+  `pricing-sqlite-export-20260718-203337.zip` and
+  `mrm-dashboard-convex-brilliant-spider-229-2026-07-18.zip`. Raw exports stay
+  outside the repository.
+- The Pricing ZIP SHA-256 is
+  `40e6d256dc1279b343951c3024efb0470663e0cf4d546537318c888b25bd190b`;
+  its embedded SQLite SHA-256 is
+  `cda45d16fcd50908b94b84e2958c30cd32c33e28c5f0b0ea80d78f414fc43cb3`.
+- The Convex ZIP SHA-256 is
+  `e31158f68b082af720c9d36816ce967de181c1132f1f8867f5e642dc068409d3`.
+- The durable count, schema, key/type, conflict, and first staging-rehearsal
+  evidence is in
+  `docs/postgresql-migration-source-inventory-2026-07-18.md`.
+- Pricing contains 630 rows. Its three legacy identity tables are excluded from
+  working staging and contain two rows in total; three import-review
+  foreign-key violations require relationship-conflict evidence.
+- Convex contains 13,524 `dataEntries` rows across 19 observed types.
+  `_summary` is a derived import-count record and is archive-only. No
+  unclassified entry type remains.
 
 Implementation checkpoint (branch `feat/postgresql-unified-migration`):
 
@@ -62,9 +74,26 @@ Implementation checkpoint (branch `feat/postgresql-unified-migration`):
   conflict/provenance tables, durable derived/outbox tables, organizations,
   and the first Pricing table (`sales.customers`).
 - `packages/migration` inventories Convex ZIP exports and Pricing SQLite
-  backups without opening a production source. The SQLite inspector is
-  read-only, excludes legacy identity tables, and requires the repository's
-  pinned Node 22 runtime because `better-sqlite3` does not support Node 25.
+  backups without opening a production source. The ZIP-aware SQLite inspector
+  validates its manifest, schema objects, file references, row counts, and
+  checksums. The Convex inspector is ZIP64-safe, profiles logical-key
+  duplication and payload types, and requires `fflate` 0.8.3. SQLite
+  inspection requires the repository's pinned Node 22 runtime because
+  `better-sqlite3` does not support Node 25.
+- The first real Convex rehearsal staged 13,752 canonical rows with 13,752
+  distinct source keys, no auth/system/derived leakage, no orphan corrections,
+  and no unknown entry types. The batch loader is idempotent for a run and
+  records artifact metadata plus data-entry profiles in PostgreSQL.
+- Migration `0007_pricing_sqlite_staging.sql` provides typed staging for all 17
+  populated canonical Pricing tables in the recovered snapshot. The combined
+  rehearsal staged all 628 canonical Pricing rows and all 13,752 canonical
+  Convex rows under one run. Re-running both loaders preserved artifact IDs and
+  counts. The three Pricing FK violations are recorded in
+  `migration.relationship_conflicts`.
+- The clean foundation rehearsal also transformed 27 customers, 37 material
+  grades, 3 machine types, and 8 rod types and created 75 source-ID mappings.
+  Re-running the transformation preserved target counts and customer
+  `row_version = 1`.
 - Better Auth 1.6.23 uses the Drizzle PostgreSQL adapter, UUIDs, disabled
   public sign-up, disabled cookie session caching, and the Admin plugin.
   `pnpm -C apps/web auth:provision-admin` creates the only initial user, then

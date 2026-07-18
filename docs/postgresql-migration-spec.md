@@ -2,8 +2,9 @@
 
 Date: 2026-07-18
 
-Status: Approved for phased implementation; artifact-dependent rehearsal and
-cutover gates remain blocked
+Status: Approved for phased implementation; Pricing/Convex artifacts are
+recovered, while remaining transformations, HR discovery, acceptance, and
+cutover gates stay open
 
 Sources:
 
