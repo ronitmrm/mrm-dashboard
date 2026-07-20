@@ -50,6 +50,10 @@ skills-lock.json
 .firecrawl/
 *.Zone.Identifier
 
+# immutable migration source exports (keep outside the repository)
+pricing-sqlite-export-*.zip
+mrm-dashboard-convex-*.zip
+
 # vercel
 .vercel
 
