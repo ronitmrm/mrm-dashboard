@@ -66,4 +66,3 @@ FROM identity.roles AS roles
 CROSS JOIN identity.permissions AS permissions
 WHERE roles.key = 'administrator'
 ON CONFLICT (role_id, permission_id) DO NOTHING;
-

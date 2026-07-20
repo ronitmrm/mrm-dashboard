@@ -114,4 +114,3 @@ CREATE TABLE identity.user_permission_overrides (
 
 CREATE INDEX user_permission_overrides_permission_id_idx
   ON identity.user_permission_overrides (permission_id);
-

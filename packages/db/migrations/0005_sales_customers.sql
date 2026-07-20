@@ -27,4 +27,3 @@ CREATE INDEX customers_organization_status_idx
   ON sales.customers (organization_id, status);
 CREATE INDEX customers_company_name_idx
   ON sales.customers (organization_id, company_name);
-

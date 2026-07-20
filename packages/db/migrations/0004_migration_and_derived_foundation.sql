@@ -307,4 +307,3 @@ CREATE TABLE derived.outbox_events (
 CREATE INDEX outbox_events_claim_idx
   ON derived.outbox_events (available_at, occurred_at)
   WHERE published_at IS NULL;
-
