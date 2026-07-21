@@ -145,6 +145,36 @@ describe.runIf(Boolean(connectionString))("Convex PostgreSQL staging", () => {
       [migrationRunId]
     )
     expect(artifacts.rows[0]?.count).toBe("1")
+
+    const convexInventory = await pool!.query<{
+      table_inventory: Array<{
+        disposition: string
+        name: string
+        rowCount: number
+      }>
+    }>(
+      `
+        SELECT table_inventory
+        FROM migration.artifacts
+        WHERE migration_run_id = $1
+          AND source_kind = 'convex'
+      `,
+      [migrationRunId]
+    )
+    expect(convexInventory.rows[0]?.table_inventory).toEqual(
+      expect.arrayContaining([
+        {
+          disposition: "excluded_identity",
+          name: "authSessions",
+          rowCount: 1,
+        },
+        {
+          disposition: "archive_only",
+          name: "dashboardSnapshotChunks",
+          rowCount: 1,
+        },
+      ])
+    )
   })
 
   test("stages populated Pricing tables and records source FK conflicts", async () => {
@@ -270,6 +300,27 @@ describe.runIf(Boolean(connectionString))("Convex PostgreSQL staging", () => {
       product_grades: 1,
     })
     expect(first.relationshipConflicts).toBe(1)
+
+    const pricingInventory = await pool!.query<{
+      table_inventory: Array<{
+        disposition: string
+        name: string
+        rowCount: number
+      }>
+    }>(
+      `
+        SELECT table_inventory
+        FROM migration.artifacts
+        WHERE migration_run_id = $1
+          AND source_kind = 'sqlite'
+      `,
+      [migrationRunId]
+    )
+    expect(pricingInventory.rows[0]?.table_inventory).toContainEqual({
+      disposition: "excluded_identity",
+      name: "app_users",
+      rowCount: 1,
+    })
 
     const customers = await pool!.query<{ company_name: string }>(
       `

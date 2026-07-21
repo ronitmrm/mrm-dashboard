@@ -1,4 +1,9 @@
-# Local Self-Hosted Convex
+# Local Self-Hosted Convex (historical, retired)
+
+> This document is retained as read-only migration evidence. The application no
+> longer has a Convex runtime, CLI task, provider, generated binding, or Docker
+> service. Use `README.md` and `docs/postgresql-migration-spec.md` for the active
+> PostgreSQL + Redis + Better Auth runtime. Do not run the commands below.
 
 Use this workflow while developing locally to avoid spending database I/O on the shared cloud Convex deployment.
 

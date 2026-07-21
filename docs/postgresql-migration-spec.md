@@ -6,6 +6,12 @@ Status: Approved for phased implementation; Pricing/Convex artifacts are
 recovered, while remaining transformations, HR discovery, acceptance, and
 cutover gates stay open
 
+Local delivery addendum: Approved on 2026-07-21. The current delivery target is
+a local unified application using Dockerized PostgreSQL and Redis. Production
+provider, region, maintenance-window, and managed object-storage selections do
+not block local delivery and remain deployment decisions for a later production
+release.
+
 Sources:
 
 - `mrm-dashboard`: Convex database and Convex Auth
@@ -52,6 +58,27 @@ below.
 | Dashboard subscriptions | Replace Convex live subscriptions with a durable PostgreSQL read-model job and client invalidation/polling                                                                               |
 | Redis                   | Optional disposable acceleration for rate limits, caches, permission caching, and invalidation; never a source of business correctness                                                   |
 | Rollback                | Legacy sources stay read-only and intact through the acceptance window; writes are enabled in PostgreSQL only after read-only smoke acceptance                                           |
+
+### 2.1 Local delivery profile
+
+- Docker Compose owns the local PostgreSQL 16-or-newer and Redis services.
+- PostgreSQL volumes are persistent for normal local development. Test and
+  rehearsal databases are isolated and may use disposable volumes.
+- PostgreSQL remains authoritative for Better Auth sessions, permissions,
+  canonical business data, the transactional outbox, durable jobs, and derived
+  read-model versions.
+- Redis is required as a local runtime service for rate limiting, cache and
+  invalidation verification, but losing Redis must not lose a canonical write,
+  authorization assignment, durable refresh request, or read-model version.
+- Uploaded documents remain on an explicit persistent local filesystem volume
+  for this delivery. Object-storage migration stays behind the production
+  deployment gate.
+- HR recruitment data remains a separately gated source. The unified shell may
+  retain the existing HR boundary, but the external HR service is not silently
+  decommissioned or represented as migrated.
+- `migration.json` is the local ticket ledger and append-only implementation
+  change log for this delivery. Plane or another external issue tracker is not
+  used.
 
 ## 3. Scope
 
@@ -125,9 +152,10 @@ business tables.
 
 ### 4.2 SQLite source
 
-`pricing/src/lib/db.ts` creates 42 final tables. A forty-third name,
-`bulk_price_revisions_new`, is a transitional table used while repairing an
-older SQLite schema and is not part of the final model.
+The immutable Pricing export contains 44 final tables: 41 business tables and
+three identity tables that are inventoried but excluded. The earlier count of
+42 predated the two quality tables. `bulk_price_revisions_new` remains a
+transitional repair name and is not part of the final model.
 
 The database:
 
@@ -417,6 +445,8 @@ must enter `migration.identity_conflicts`.
 - `sales.commercial_terms`
 - `sales.purchase_orders`
 - `sales.purchase_order_lines`
+- `sales.proforma_invoices`
+- `sales.proforma_invoice_lines`
 - `sales.bulk_price_revisions`
 - `sales.bulk_price_revision_changes`
 - `sales.engineering_change_notes`
@@ -451,9 +481,13 @@ production backup proves it contains required rows.
 - `manufacturing.shop_floor_setup_state`
 - `manufacturing.shop_floor_stage_events`
 - `manufacturing.planner_priority_events`
+- `manufacturing.planner_priority_event_details`
 - `manufacturing.machine_constraint_events`
+- `manufacturing.machine_constraint_event_details`
 - `manufacturing.plan_override_events`
+- `manufacturing.plan_override_event_details`
 - `manufacturing.route_change_events`
+- `manufacturing.route_change_event_setups`
 - `manufacturing.dispatch_approval_events`
 - `manufacturing.setup_completion_events`
 - `manufacturing.planning_calendar_exceptions`
@@ -615,6 +649,16 @@ Unknown `entryType` values go to `migration.unmapped_convex_entries`. The
 migration fails its completeness gate while any non-approved unknown type
 remains.
 
+Implementation evidence (2026-07-21): the immutable Convex export
+`mrm-dashboard-convex-brilliant-spider-229-2026-07-18.zip` was transformed
+twice from scratch. Each run reconciled all 13,751 canonical rows (13,523
+logical `dataEntries` plus 228 populated physical-table rows), produced 13,751
+source-ID mappings and matching payload hashes, resolved all 205 corrections,
+retained 69 approved typed quarantines, and reported zero orphan corrections
+and zero unknown types. The sole `_summary` document remains archive evidence.
+The recovered source contains three physical `productionEntries` and no
+`software_raw` entries, so the overlap report is explicit and lossless.
+
 ### 8.3 SQLite tables
 
 | SQLite table                        | PostgreSQL target                                              |
@@ -654,6 +698,8 @@ remains.
 | `quote_packaging_options`           | `sales.packaging_options`                                      |
 | `quote_terms`                       | `sales.quote_terms`                                            |
 | `quote_commercial_terms`            | `sales.commercial_terms`                                       |
+| `quality_check_parameters`          | `quality.parameter_definitions`                                |
+| `quality_check_results`             | relational quality readings for the source check type          |
 | `purchase_orders`                   | `sales.purchase_orders`                                        |
 | `purchase_order_lines`              | `sales.purchase_order_lines`                                   |
 | `bulk_price_revisions`              | `sales.bulk_price_revisions`                                   |
@@ -661,6 +707,50 @@ remains.
 | `engineering_change_notes`          | `sales.engineering_change_notes`                               |
 | `engineering_change_note_decisions` | `sales.engineering_change_decisions`                           |
 | `correction_logs`                   | `audit.legacy_pricing_corrections` and audit events            |
+
+The recovered export has zero rows in both Pricing quality tables. They still
+receive explicit zero-row reconciliation and remain in the 41-table business
+contract. For populated master data, PostgreSQL preserves source-only fields
+needed by unchanged business behavior: category and combination codes,
+commercial-term type, packaging cost basis, website sort order, and the
+grade/rod-scoped alloy-premium and extrusion-cost pair.
+
+Implementation evidence (2026-07-21): migration
+`0011_commercial_workflow_fidelity.sql` and the commercial workflow repository
+run the recovered enquiry-to-design rules on PostgreSQL. One-client
+transactions cover monthly enquiry numbering, line allocation, commercial-term
+handover gates, the six-key technical checklist, Sales clarification reuse and
+resolution, portfolio-match and new-design branches, design-to-costing handoff,
+and idempotent import application. Every public mutation repeats a Better Auth
+capability check and records the authenticated actor in `audit.events`.
+Attachment binaries stay in ignored local storage while PostgreSQL owns their
+sanitized relative key, size, MIME type, and SHA-256 metadata.
+
+The real-database and browser acceptance passed against the migrated source
+data. A fresh local Better Auth administrator created `ENQ-2607-001`, added its
+line, handed it to Technical Review, opened and resolved a Sales clarification,
+and completed all six checklist gates as `Feasible`. The shared dashboard shell
+and shadcn primitives rendered without browser errors or horizontal overflow at
+desktop and 390-pixel widths.
+
+Implementation evidence (2026-07-21): migration
+`0012_commercial_costing_fidelity.sql`, the shared pure calculation module, and
+`createCommercialCostingRepository` now run the recovered Pricing product and
+customer costing workflow on PostgreSQL. The calculation order, Barstock
+zero-forging rule, material-rate defaults, direct-purchase conversion,
+package-only assembly processing, and immediate-child recursive quote snapshots
+are unchanged. Draft saves replace the current draft; sent quote trees are
+immutable; a partial unique index constrains one active price per lineage; and a
+new sent revision supersedes the prior active revision without deleting history.
+
+The capability-protected product-costing, quote-register, and quote-detail
+screens use the dashboard's shared shadcn primitives. A real Better Auth browser
+session completed product parameters for `M1`, saved
+`ENQ-2607-001-M1` at USD `1.235625`, and marked revision 1 Sent and active.
+PostgreSQL retained actor-linked `quote.saved` and `quote.sent` audit events.
+The 16-test database suite, focused browser calculation tests, package
+typechecks/lint, and production build pass; desktop and 390-pixel browser checks
+have no console errors or horizontal overflow.
 
 ## 9. Fresh Better Auth initialization
 
@@ -1315,3 +1405,325 @@ The migration is complete when:
 - rollback conditions are closed or explicitly accepted
 - the old Convex deployment and SQLite database remain read-only until the
   agreed retention window expires
+
+### 20.1 Delivered commercial order slice
+
+The local implementation now includes the recovered purchase-order and
+proforma-invoice workflow:
+
+- Excel and manual PO lines commit through PostgreSQL transactions.
+- Matching is customer scoped and uses active sent quote lineages. A customer
+  part code spanning more than one active lineage is `Ambiguous` and never
+  auto-matches.
+- Both the source PO price and the selected historical quote values are
+  retained. Keeping the quoted price is explicit; accepting the PO price opens
+  a durable costing-revision request.
+- Unmatched lines create or reuse one PO-source enquiry and enquiry item.
+- PI lines copy the exact quote item ID, quantity, price, and amount. Sent PI
+  headers and lines are protected from commercial-value edits by database
+  triggers.
+- PI approval activates and accepts the historical quote, records its order
+  timestamp, and converts quote-only products from `Q` identities to
+  organization-scoped `M…` / `P` identities atomically. Immediate quoted
+  package children follow the recovered conversion behavior.
+- Cancellation retains the PO, PI, quote, source values, reason, and
+  actor-linked audit events.
+
+Migrations `0013_commercial_orders_fidelity.sql` and
+`0014_commercial_order_cancellation.sql`,
+`createCommercialOrdersRepository`, and `/commercial/orders` own this slice.
+
+### 20.2 Delivered bulk revision, ECN, and correction slice
+
+The local implementation now preserves the recovered Pricing revision
+workflows on PostgreSQL:
+
+- Customer and product parameter revisions stage only active sent/accepted
+  prices, retain the selected source quote IDs and old values, and complete
+  once.
+- Percentage inputs retain the legacy whole-percent operator convention and
+  are normalized to stored decimal fractions at the Server Action boundary.
+- Completion creates new quote, product-snapshot, immediate-component, and
+  term rows. Source quotes are superseded only after replacements are fully
+  constructed; replacements then become sent and active atomically.
+- A changed child is recalculated before each recursively affected assembly or
+  package parent. Parent snapshots point to the new immediate child quote while
+  every earlier snapshot and component tree remains unchanged.
+- Engineering changes retain the source two-stage state machine: `Pending
+Design` updates the canonical product and captures before/after JSON;
+  `Pending Costing` requires one explicit keep-or-revise decision for each
+  recursively affected customer price.
+- ECN decisions are append-only. Both keep-price and revise-price decisions
+  create replacement quote revisions and retain old/new price and profit
+  evidence.
+- Requests to delete or rewrite historical prices are not executed. They are
+  inserted into `audit.pricing_correction_requests` as visibly `Quarantined`
+  records with authenticated actors and audit events.
+
+Migration `0015_commercial_revisions_fidelity.sql`,
+`createCommercialRevisionsRepository`, and `/commercial/revisions` own this
+slice. Its real-PostgreSQL contract covers direct prices, assemblies, nested
+packages, immutable snapshot digests, ECN decisions, and correction
+quarantine.
+
+### 20.3 Delivered dashboard master and planning-write slice
+
+The local implementation now gives the existing dashboard an authenticated
+PostgreSQL write boundary without changing its planning algorithms:
+
+- Machine, work-order, route/setup, cycle, tooling, and planning-calendar
+  writes resolve normalized business identities and retain the complete input
+  payload. Updating a current local master also advances its row version and
+  source evidence.
+- Route lookup accepts both canonical `OPTION-*` route codes and the recovered
+  legacy option number used by the current dashboard forms.
+- Route selection supersedes the previous current selection rather than
+  rewriting history. Priority, machine-constraint, plan-override, and
+  route-change decisions remain append-only events.
+- Interrupted setups, queue blockers, queue placements, and remaining route
+  setups are retained in the source event payload and normalized into child
+  rows whenever they carry joinable work-order/setup identities.
+- PostgreSQL advisory locks serialize master business keys. Work-order, route,
+  setup-state, and physical-machine rows are locked in the same transaction as
+  planner validation and event creation; an override cannot take a machine
+  owned by another active setup.
+- Every accepted master or planning write atomically creates or coalesces one
+  pending `dashboard` refresh job. Redis is not involved in canonical write
+  correctness.
+- `/api/route-selection`, `/api/planner-priority`,
+  `/api/machine-constraint`, `/api/plan-override`, and `/api/route-change`, plus
+  the six relevant `data-entry`/CSV import types, enforce Better Auth
+  capabilities and record the authenticated PostgreSQL actor.
+
+Migration `0016_dashboard_planning_writes.sql` and
+`createDashboardPlanningRepository` own this slice. The production-source
+browser check confirmed legacy option-number resolution, actor-linked master
+and priority writes, three normalized priority details, raw master-payload
+retention, and one coalesced durable refresh job.
+
+### 20.4 Delivered production and shop-floor slice
+
+The authenticated production boundary now writes PostgreSQL directly while
+retaining the recovered Convex behavior:
+
+- Raw-material receipts are identified case-insensitively by organization and
+  receipt number. Repeated receipts update the current quantity and source
+  payload; non-positive quantities are rejected.
+- Production cards preserve an existing populated value when a later patch
+  supplies a blank value. Every accepted patch also records an immutable card
+  event, so the current card and its change history remain independently
+  queryable.
+- Production entries are append-only. Corrections set reversal metadata and
+  create actor-linked audit evidence instead of deleting or rewriting the
+  original entry.
+- Shop-floor aliases normalize into the recovered six-stage lifecycle. Once
+  raw material reaches a physical machine, that setup retains the machine
+  unless the planner has recorded a matching active switch. A partial unique
+  index prevents two active setups from owning the same machine.
+- Setup completion appends a completion event, advances the setup to
+  `item_complete`, and releases the machine. Dispatch decisions remain
+  append-only events.
+- Canonical work orders, current route selections, imported legacy setup
+  codes, physical machines, and employees are resolved relationally while the
+  complete submitted payload remains available as source evidence.
+- Raw-material receipt, production-card, shop-floor status, software
+  production, CSV import, dispatch, completion, and reversal HTTP paths all
+  enforce Better Auth capabilities and retain the authenticated actor.
+- Planning-impacting writes atomically create or coalesce durable dashboard
+  refresh work. Redis remains disposable acceleration and is not required for
+  canonical write correctness.
+
+Migration `0017_production_shop_floor_writes.sql` and
+`createProductionShopFloorRepository` own this slice. Browser acceptance
+verified the full authenticated API path, actor attribution, machine release,
+append-only evidence, and refresh coalescing against the local Docker
+PostgreSQL and Redis services.
+
+### 20.5 Delivered workforce, quality, and maintenance slice
+
+The local PostgreSQL boundary now owns the remaining operational write
+families and the two dedicated quality screens:
+
+- Employees and training records resolve organization-scoped employee
+  identities. Attendance retains one current projection per
+  employee/date/shift and appends every submitted state to an immutable event
+  table.
+- Quality parameter masters resolve canonical item, route, and operation-setup
+  identities. First-piece reports retain every archived inspection, normalized
+  parameter readings, and all five samples; hourly cards retain relational
+  readings under a stable check key.
+- The eleven recovered duplicate first-piece business keys remain queryable.
+  The newest source row owns the canonical key and older evidence receives a
+  deterministic `|legacy|<source_id>` suffix instead of being discarded.
+- Setup checklist templates and items have stable keys, active state, sequence,
+  response type, and required state. Sessions retain stable keys and separate
+  `start` and `end` result rows, allowing the UI to reconstruct both phases
+  without reading source JSON as canonical state.
+- Maintenance definitions, checklist items, physical-machine schedules, tasks,
+  task results, and breakdowns use normalized identities. Repeated task writes
+  are idempotent while completed task history remains queryable.
+- Archived source evidence was reconciled into 58 first-piece inspections,
+  61 of 61 dimensions, 305 of 305 samples, one hourly reading, and 27 of 27
+  setup results. One provenance-marked fallback parameter preserves an
+  archived report that predates its master definition.
+- `/api/attendance`, `/api/training`, operational `data-entry`/CSV imports,
+  `/api/hourly-quality`, and `/api/setup-checklist` enforce Better Auth
+  capabilities. Repository operations are awaited before their PostgreSQL
+  pools close, preventing a queued query from outliving its request scope.
+- The hourly-quality and setup-checklist pages retain their existing shared
+  shadcn composition. Their reads are bounded PostgreSQL projections, their
+  saves use the authenticated PostgreSQL entry API, and their page boundaries
+  use Better Auth instead of Convex Auth.
+
+Migrations `0018_workforce_quality_maintenance_writes.sql`,
+`0019_normalize_archived_operational_evidence.sql`, and
+`0020_backfill_orphan_quality_parameters.sql`, together with
+`createWorkforceRepository`, `createQualityRepository`, and
+`createMaintenanceRepository`, own this slice. Real HTTP and browser acceptance
+verified authenticated projections, an existing hourly reading, and both
+setup-checklist phases against the Docker PostgreSQL test database.
+
+### 20.6 Delivered durable refresh and Redis acceleration slice
+
+The local runtime now refreshes dashboard-derived state without making Redis
+part of the correctness boundary:
+
+- Planning and shop-floor writes append `dashboard.refresh.requested` outbox
+  evidence in the same PostgreSQL transaction as their coalesced refresh job.
+- Workers claim due jobs with `FOR UPDATE SKIP LOCKED`. Each attempt records its
+  worker, duration, result, error, and optional model version.
+- A successful attempt builds from a repeatable-read PostgreSQL snapshot, then
+  atomically inserts the next immutable read-model version, advances its
+  watermark, appends the update outbox event, and completes the job.
+- A failed attempt rolls back model work to its savepoint, preserves attempt
+  evidence, and reschedules the same job. It cannot consume or duplicate a
+  read-model version.
+- Outbox delivery has its own lock, attempt count, next-available time, and
+  error. Redis receives a monotonic organization-scoped dashboard version and
+  an invalidation publication only after PostgreSQL commits.
+- Better Auth client requests use the current atomic custom-rate-limit storage
+  hook. Keys are SHA-256 namespaced, counters live in Redis, and unavailable
+  Redis explicitly fails open so sign-in correctness stays PostgreSQL-backed.
+- `pnpm runtime:worker`, `pnpm runtime:worker:once`, and
+  `pnpm runtime:worker:status` provide bounded polling, rehearsal, and JSON
+  observability for pending/running/failed jobs, lag, retrying outbox rows,
+  last errors, and the newest model version.
+
+Migration `0021_durable_refresh_runtime.sql` and
+`createDurableRefreshWorker` own this slice. Concurrent worker, synthetic
+retry, Redis-unavailable, and populated-database rehearsals verified exactly
+one version per successful build and durable PostgreSQL state when Redis is
+absent.
+
+### 20.7 Delivered dashboard read-cutover slice
+
+The dashboard now renders and mutates operational state without a Convex
+runtime dependency:
+
+- The unchanged dashboard domain, planning rules, derived-analysis functions,
+  and correction rules live in `@workspace/db` and operate on normalized
+  PostgreSQL projections.
+- The durable worker builds immutable, versioned dashboard read models from a
+  repeatable-read PostgreSQL snapshot. The main dashboard polls the newest
+  committed version and never reconstructs chunked Convex snapshots.
+- The root page, specialized dashboard routes, dashboard APIs, corrections,
+  and every supported data-entry write use Better Auth capability checks and
+  authenticated PostgreSQL repositories.
+- Generic corrections append durable reversal evidence. Rejection type,
+  reason, and remark masters use normalized quality tables while retaining the
+  raw legacy payload and appear in the next derived model.
+- The root layout and request proxy do not load Convex auth providers, clients,
+  generated APIs, or Convex environment variables. Historical source payloads
+  remain available only as migration evidence.
+- Redis loss cannot hide or lose the current dashboard state. Authenticated
+  polling continued to return HTTP 200 and the same PostgreSQL model while the
+  Redis container was stopped, then resumed normally after Redis restarted.
+- The current shared-shadcn dashboard composition, labels, forms, and business
+  behavior were retained. Fresh Better Auth desktop and 390px browser checks
+  rendered read-model version 3 with 100 work orders and no page errors.
+
+`createDashboardReadModelRepository`, `buildDashboardReadModel`, the durable
+refresh worker, and `/api/dashboard` own this slice. Static cutover tests guard
+against reintroducing Convex into the client, API fallback, middleware, or root
+layout.
+
+### 20.8 Delivered legacy runtime-removal slice
+
+The active local application no longer installs, starts, imports, or configures
+the previous runtime databases:
+
+- `apps/web/convex`, generated bindings, React/server auth providers, Convex
+  environment helpers, CLI scripts, and the self-hosted Compose stack are
+  removed from the target application.
+- Workspace and web scripts start only the Next.js application, Docker
+  PostgreSQL/Redis services, and durable worker. Turborepo and the active
+  environment example contain no Convex variables or tasks.
+- The web, database, and runtime packages have no Convex or SQLite-driver
+  imports. `better-sqlite3` remains confined to `packages/migration`, where it
+  reads the immutable Pricing archive during deterministic rehearsals.
+- Historical source repositories, archive checksums, staging schemas,
+  transforms, reconciliation reports, and migration commands remain unchanged
+  evidence and are never part of a production request.
+- File metadata, checksums, entity links, and unresolved-reference review state
+  remain in PostgreSQL. Attachment bytes remain in ignored local storage.
+- Compatibility routes either execute their normalized PostgreSQL repository
+  behavior or return explicit `400`/`404` unsupported errors; no route reports
+  fake success or falls back to a legacy database.
+
+`legacy-runtime-removal.test.ts` guards the package, configuration, source
+imports, and obsolete-file boundary. The complete Next.js production build and
+all database, web, migration, and runtime suites pass without Convex runtime
+packages or environment values.
+
+### 20.9 Delivered rehearsal, restore, and local-acceptance slice
+
+The final local acceptance used the exact 2026-07-18 Pricing and Convex archives:
+
+- The first full run found and then regression-tested two cutover defects: the
+  archived quality transformer did not supply identities added by the final
+  schema, and reconciled runs were not marked complete.
+- Quality reports, hourly checks, and setup sessions now derive collision-safe
+  `check_key`/`session_key` values using the same newest-canonical plus
+  `|legacy|<source_id>` policy as the normalized schema. Successful full runs
+  set `status = 'complete'` and `completed_at` atomically.
+- Two consecutive post-fix runs each matched all 14,379 source/target hashes,
+  produced digest `6cd0fa2ae0280e768c97fbfb168279b5`, passed 72 validations,
+  retained the same three known Pricing relationship warnings, and failed none.
+- The main database contains all 13,751 canonical Convex mappings and all 628
+  Pricing mappings, with zero failed validations and zero open unknown types.
+- A custom-format backup of the main database restored into a separate local
+  database. `fingerprint:database` compared every row in all 143 tables; both
+  sides contained 149,093 rows and digest
+  `d1aae279ed2da03936f857e75497cf6b36f006a1c46ba469ed9dc33820d1de9f`.
+- Production-build browser acceptance covered Better Auth, dashboard model
+  version 3 and 100 work orders, migrated commercial order/price evidence,
+  quality/checklist screens, zero runtime errors, and no 390px page overflow.
+- The final gate passed 35 database, 12 migration, 4 runtime, and 129 web tests,
+  workspace typecheck and lint, and the complete Next.js production build.
+
+The dated report is
+`docs/rehearsals/2026-07-21-full-migration-acceptance.md`. Operational execution
+is fixed in `docs/postgresql-cutover-command-sheet.md` and
+`docs/postgresql-rollback-command-sheet.md`.
+
+### 20.10 Pricing business-logic migration pause checkpoint
+
+The data/runtime migration remains the verified baseline, while the Pricing
+business-logic migration now proceeds separately on `feat/logic-migration`
+under `docs/pricing-project-business-logic-migration-spec.md` and LM-00 through
+LM-09 in `migration.json`.
+
+- LM-00 is complete. Executable Pricing behavior governs active-price scope
+  and ranked PO matching, with archived contradictions retained as evidence.
+- LM-01 is in progress. Exact capabilities, active-price locking, explicit
+  import review, quote-send follow-ups, and safe correction reversals are
+  implemented with migrations `0022`-`0024` and focused tests.
+- Pricing snapshot transformation now preserves import-review actions/notes
+  and restores deferred relationships after all source-ID mappings exist.
+- The new schema contract, focused transform test, auth/capability tests, and
+  package typechecks pass. One combined commercial test invocation exposed a
+  shared-test-database deadlock and cascading fixture loss; it must be
+  reproduced in the workflow file alone before LM-01 is accepted.
+- Main `mrmpl` has not applied `0022`-`0024` or the final review-relationship
+  backfill. At this pause, the local PostgreSQL and Redis containers are
+  stopped with volumes retained and no mrm application/worker server running.

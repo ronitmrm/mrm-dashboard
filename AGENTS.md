@@ -9,10 +9,11 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
 ## Project Shape
 
 - Package manager: `pnpm`.
-- App: `apps/web` using Next.js, TypeScript, React, and Convex.
+- App: `apps/web` using Next.js, TypeScript, React, and Better Auth.
 - Shared UI package: `packages/ui`.
-- Convex backend: `apps/web/convex`.
-- Runtime data source: Convex. Excel workbooks are local import inputs only.
+- Database package: `packages/db` with PostgreSQL repositories and domain logic.
+- Worker package: `packages/runtime` with durable PostgreSQL jobs and Redis delivery.
+- Runtime data source: PostgreSQL. Redis is disposable acceleration only.
 
 ## Non-Negotiables
 
@@ -20,22 +21,21 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
 - Do not add a Python server or sidecar backend to serve dashboard data.
 - Do not commit `.env*`, workbook files, local exports, build output, or generated agent metadata.
 - Do not use fake/sample dashboard data unless it is isolated in a test.
-- Do not edit `apps/web/convex/_generated`; regenerate it with Convex tooling when needed.
+- Do not add a runtime Convex or SQLite dependency. Source loaders belong only in `packages/migration`.
 
-## Data And Convex
+## Data And Runtime
 
-- Dashboard reads should go through Convex queries/mutations in `apps/web/convex/dashboard.ts`.
-- The main UI should use Convex React hooks directly where practical, not local fake state.
-- Keep company workbook data shared unless a feature explicitly needs user-owned rows.
-- Treat Convex free-tier I/O as a hard product constraint for this repo. The deployed shared dev Convex instance can exhaust its 1 GB free-tier I/O budget quickly if agents add broad reactive reads, unbounded scans, large return payloads, or forced snapshot rebuilds.
-- Be careful with `dashboard:snapshot`: it has historically returned a multi-MB app-state payload. Prefer small, tab-specific queries, bounded result sets, coalesced background refreshes, and explicit user-triggered refreshes over making the main snapshot larger or more reactive.
-- Do not add forced `refreshSnapshot({ force: true })` calls after routine UI actions, imports, polling, navigation, or "make it always current" requests without challenging the cost. The user is often describing desired freshness in non-technical terms; explain the Convex I/O tradeoff and offer cheaper alternatives before implementing.
-- Vercel intentionally points at the shared seeded dev Convex deployment; do not introduce a production Convex deployment unless explicitly requested.
-- Vercel deploys the Next.js frontend only. If any file under `apps/web/convex` changes, run `npx convex dev --once` or `pnpm dev:convex` locally before treating the Vercel site as current, otherwise deployed mutations/queries may call stale Convex backend code.
-- Run workbook imports as dry runs first:
-  `pnpm import:workbook:dry-run -- --workbook /path/to/file.xlsx`
-- Confirm the target deployment before any write/import command.
-- Use convex skills whenever necessary
+- Dashboard writes go through normalized repositories and append durable refresh
+  work inside the same PostgreSQL transaction.
+- The main dashboard reads only committed, versioned PostgreSQL read models.
+- Use bounded normalized projections for specialized screens; do not introduce
+  N+1 request paths or rebuild full dashboard state inside a request.
+- Redis loss must not reject a canonical write, invalidate a Better Auth
+  session, or hide the newest PostgreSQL model.
+- Source archives and migration staging rows are immutable evidence. Only
+  `packages/migration` may import Convex exports or open the Pricing SQLite file.
+- Historical identifiers and raw payloads must remain attributable after
+  normalization. Corrections append reversal/quarantine evidence.
 
 ## Design System
 
@@ -51,7 +51,7 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
 ## Code Rules
 
 - Normalize dashboard payload changes in `apps/web/lib/dashboard-view-model.ts` before changing layout components.
-- Keep analysis/business logic in `apps/web/lib/legacy-dashboard-analysis.ts` and `apps/web/lib/dashboard-domain.ts`.
+- Keep analysis/business logic in the exported `@workspace/db` domain modules.
 - Keep API compatibility routes under `apps/web/app/api/[...path]/route.ts` honest: no fake success responses.
 - For Next.js behavior, check local Next docs or current package behavior before relying on old conventions.
 - Prefer existing package boundaries over adding new abstractions.
@@ -61,13 +61,12 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
 
 - Copy `apps/web/.env.example` to `apps/web/.env.local`.
 - Required env vars:
-  - `CONVEX_DEPLOYMENT`
-  - `NEXT_PUBLIC_CONVEX_URL`
-  - `CONVEX_SITE_URL`
-  - `NEXT_PUBLIC_CONVEX_SITE_URL`
-- For Vercel, use the same shared dev Convex deployment/env values and build with `pnpm build`; do not set `CONVEX_DEPLOY_KEY`.
-- Commit `apps/web/convex/_generated` so Vercel can build from a clean checkout without Convex CLI credentials.
-- If Convex generated files are stale or missing, run `pnpm --filter web codegen` or Convex dev tooling locally, then commit the generated files.
+  - `DATABASE_URL`
+  - `REDIS_URL`
+  - `BETTER_AUTH_SECRET`
+  - `BETTER_AUTH_URL`
+  - `NEXT_PUBLIC_APP_URL`
+- This project is local-first. Do not alter deployments unless explicitly requested.
 
 ## Agent Working Memory
 

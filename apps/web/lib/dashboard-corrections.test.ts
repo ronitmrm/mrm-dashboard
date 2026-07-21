@@ -4,7 +4,7 @@ import {
   activeCorrectionTargetKeys,
   dataEntryCorrectionTargetsWithWorkflowCascade,
   latestUncorrectedRow,
-} from "./dashboard-corrections";
+} from "@workspace/db/dashboard-corrections";
 
 describe("dashboard corrections", () => {
   it("marks only active correction actions as target blockers", () => {

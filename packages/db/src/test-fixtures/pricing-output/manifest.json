@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "source": "pricing@2026-07-21",
+  "outputs": [
+    {
+      "family": "master-workbook",
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "masters-template.xlsx or <master>-master-template.xlsx",
+      "sheets": "all source master sheets, or the selected source master sheet",
+      "sourceRoutes": ["/masters/template.xlsx"]
+    },
+    {
+      "family": "enquiry-import-template",
+      "contentType": "text/csv; charset=utf-8 or application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "enquiry-line-items-template.csv or enquiry-register-import-template.xlsx",
+      "sheets": "Enquiry Register; Instructions",
+      "sourceRoutes": [
+        "/enquiries/template.csv",
+        "/enquiries/register/template.xlsx"
+      ]
+    },
+    {
+      "family": "enquiry-register",
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "sales-work-register.xlsx",
+      "sheets": "Sales Work Register",
+      "sourceRoutes": ["/enquiries/register/export.xlsx"]
+    },
+    {
+      "family": "enquiry-lines",
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "<enquiry-number>-logged-lines.xlsx",
+      "sheets": "Logged Lines",
+      "sourceRoutes": ["/enquiries/[id]/lines/export.xlsx"]
+    },
+    {
+      "family": "sales-history",
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "sales-history.xlsx, sent-quote-history.xlsx, or followup-history.xlsx",
+      "sheets": "Sales History; Sent Quote History; Follow-up History",
+      "sourceRoutes": [
+        "/sales/history/export.xlsx",
+        "/sales/history/sent-quotes/export.xlsx",
+        "/sales/history/followups/export.xlsx"
+      ]
+    },
+    {
+      "family": "quote-pdf",
+      "contentType": "application/pdf",
+      "disposition": "inline",
+      "filenamePattern": "<enquiry-number>-Rev-<revision>-quote.pdf",
+      "sheets": "historical quote document",
+      "sourceRoutes": ["/quotes/enquiry/[id]/pdf"]
+    },
+    {
+      "family": "pricing-current",
+      "contentType": "text/csv; charset=utf-8 and application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "source Pricing spreadsheet export name",
+      "sheets": "current active pricing",
+      "sourceRoutes": [
+        "/pricing",
+        "pricing/src/components/PricingSpreadsheetTable.tsx"
+      ]
+    },
+    {
+      "family": "pricing-revisions",
+      "contentType": "text/csv; charset=utf-8 and application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "source Pricing revisions spreadsheet export name",
+      "sheets": "historical pricing revisions",
+      "sourceRoutes": [
+        "/pricing/revisions",
+        "pricing/src/components/PricingSpreadsheetTable.tsx"
+      ]
+    },
+    {
+      "family": "po-template",
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "po-line-import-template.xlsx",
+      "sheets": "PO Lines; Instructions",
+      "sourceRoutes": ["/po-pi/template.xlsx"]
+    },
+    {
+      "family": "po-detail",
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "<po-number>-po.xlsx",
+      "sheets": "Summary; PO Lines",
+      "sourceRoutes": ["/po-pi/[id]/export.xlsx"]
+    },
+    {
+      "family": "po-master",
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "po-master.xlsx",
+      "sheets": "PO Master",
+      "sourceRoutes": ["/po-pi/master/export.xlsx"]
+    },
+    {
+      "family": "pi-document",
+      "contentType": "application/pdf or application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "inline PDF or attachment workbook",
+      "filenamePattern": "<pi-number>.pdf or <pi-number>-pi.xlsx",
+      "sheets": "PI Summary; PI Lines",
+      "sourceRoutes": ["/po-pi/[id]/pi", "/po-pi/[id]/pi.xlsx"]
+    },
+    {
+      "family": "pi-master",
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "approved-pi-master.xlsx",
+      "sheets": "Approved PI Master",
+      "sourceRoutes": ["/po-pi/pi-master/export.xlsx"]
+    },
+    {
+      "family": "drawing-history",
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "drawing-history.xlsx",
+      "sheets": "Drawing History",
+      "sourceRoutes": ["/drawing-history/export.xlsx"]
+    },
+    {
+      "family": "website-products",
+      "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "disposition": "attachment",
+      "filenamePattern": "website-product-data.xlsx",
+      "sheets": "Website Product Data",
+      "sourceRoutes": ["/website-products/export.xlsx"]
+    }
+  ]
+}

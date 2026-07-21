@@ -1,87 +1,90 @@
 # MRMPL Dashboard
 
-Next.js + Convex dashboard for MRMPL production, attendance, training, planning, routing, and shop-floor metrics.
+Unified local MRMPL application for pricing, production, planning, quality,
+maintenance, attendance, and training workflows.
 
-The UI lives in `apps/web`, shared shadcn/ui components live in `packages/ui`, and Convex backend functions live in `apps/web/convex`.
+The application uses Next.js 16, PostgreSQL 16, Redis 7, and Better Auth.
+PostgreSQL is the sole writable business datastore. Redis is disposable
+acceleration for invalidation and rate limiting; losing Redis cannot lose a
+canonical write or dashboard read model.
 
-## Setup
+## Project layout
+
+- `apps/web` — Next.js application and Better Auth HTTP boundary
+- `packages/ui` — shared shadcn/ui design system (`radix-luma`)
+- `packages/db` — typed PostgreSQL schema, repositories, and unchanged domain logic
+- `packages/runtime` — durable read-model worker and Redis delivery
+- `packages/migration` — read-only loaders and deterministic migration rehearsals
+- `migration.json` — ticket and implementation ledger
+
+## Local setup
 
 ```bash
 pnpm install
 cp apps/web/.env.example apps/web/.env.local
+pnpm local:up
 ```
 
-Fill `apps/web/.env.local` with Convex values.
+Local service defaults are:
 
-For local self-hosted Convex development, see `docs/local-convex.md`.
+- application PostgreSQL: `postgres://mrmpl:mrmpl@localhost:5434/mrmpl`
+- test PostgreSQL: `postgres://mrmpl:mrmpl@localhost:5434/mrmpl_test`
+- Redis: `redis://localhost:6380`
+- web application: `http://localhost:3001`
 
-Required app variables:
+Set `BETTER_AUTH_SECRET` to a local value with at least 32 characters. Configure
+the one-time `ADMIN_*` values only while running
+`pnpm --filter web auth:provision-admin`, then remove them.
 
-- `NEXT_PUBLIC_CONVEX_URL`
-- `CONVEX_SITE_URL`
-- `NEXT_PUBLIC_CONVEX_SITE_URL`
-
-Convex CLI variables depend on the backend target:
-
-- Cloud: `CONVEX_DEPLOYMENT`
-- Local self-hosted: `CONVEX_SELF_HOSTED_URL` and `CONVEX_SELF_HOSTED_ADMIN_KEY`
-
-## Development
+Start the worker and web application in separate terminals:
 
 ```bash
+pnpm runtime:worker
 pnpm dev
 ```
 
-This runs the web app and Convex dev task together through Turborepo's TUI.
+Stop PostgreSQL and Redis without deleting their named volumes with
+`pnpm services:down`.
 
-Useful focused commands:
+## Runtime commands
 
 ```bash
-pnpm dev:web
-pnpm dev:convex
-pnpm convex:local:up
-pnpm convex:local:admin-key
-pnpm convex:local:push
+pnpm local:up
+pnpm runtime:worker
+pnpm runtime:worker:once
+pnpm runtime:worker:status
+pnpm --filter @workspace/migration fingerprint:database
 pnpm lint
 pnpm typecheck
-pnpm --filter web test
+pnpm test
 pnpm build
 ```
 
-## Data
+`runtime:worker:status` reports durable PostgreSQL queue, retry, lag, outbox,
+and read-model state. Redis publication happens only after PostgreSQL commits.
 
-The dashboard reads from Convex at runtime. Workbook files are treated as local import inputs and are intentionally ignored by git.
+## Data migration
 
-To inspect a workbook without writing to Convex:
+The earlier Convex export and Pricing SQLite archive are migration inputs, not
+runtime databases. Only `packages/migration` may open or interpret those source
+artifacts. The web, database, and worker packages do not import Convex or a
+SQLite driver.
 
-```bash
-pnpm import:workbook:dry-run -- --workbook /path/to/Advanced_Employee_Performance_System.xlsx
-```
-
-To import workbook data into the selected Convex deployment:
-
-```bash
-pnpm import:workbook -- --workbook /path/to/Advanced_Employee_Performance_System.xlsx
-```
-
-The importer uses `npx convex import --replace`, so verify the selected Convex deployment before running it. For routine local development, prefer the self-hosted backend documented in `docs/local-convex.md` to avoid spending database I/O on the shared cloud Convex deployment.
-
-## Vercel Dev-Backed Deployment
-
-Set Vercel's root directory to `apps/web` and use this build command:
+Rehearsal commands are intentionally explicit and read source artifacts without
+modifying them:
 
 ```bash
-pnpm build
+pnpm --filter @workspace/migration inspect:artifacts -- <artifact paths>
+pnpm --filter @workspace/migration rehearse:foundation -- <arguments>
+pnpm --filter @workspace/migration rehearse:pricing -- <arguments>
+pnpm --filter @workspace/migration rehearse:convex -- <arguments>
 ```
 
-The Convex generated bindings in `apps/web/convex/_generated` are committed so Vercel can build from a clean checkout without Convex CLI credentials. After changing `apps/web/convex`, run `pnpm --filter web codegen` locally and commit the generated changes.
+The complete mapping, reconciliation, cutover, and rollback contract is in
+`docs/postgresql-migration-spec.md`.
 
-Required Vercel environment variables:
+## Local file storage
 
-- `NEXT_PUBLIC_CONVEX_URL`: shared dev Convex cloud URL, for example `https://your-dev-deployment.convex.cloud`.
-- `NEXT_PUBLIC_CONVEX_SITE_URL`: shared dev Convex site URL, for example `https://your-dev-deployment.convex.site`.
-- `CONVEX_SITE_URL`: same shared dev Convex site URL, kept aligned with the Convex Auth issuer.
-
-Do not set `CONVEX_DEPLOY_KEY` in Vercel. Do not run `npx convex deploy` from Vercel for this app. The hosted site should read and write the already-seeded shared dev Convex deployment.
-
-Before deploying a code change that modifies `apps/web/convex`, run `pnpm dev:convex` or `npx convex dev --once` locally so the shared dev backend has the latest schema and functions.
+PostgreSQL stores canonical file metadata, checksums, ownership, and entity
+links. Local attachment bytes live below `LOCAL_FILE_STORAGE_PATH`, which must
+remain outside version control.

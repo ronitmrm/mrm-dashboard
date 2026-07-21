@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { buildLegacyDashboardSnapshot } from "./legacy-dashboard-analysis";
+import { buildLegacyDashboardSnapshot } from "@workspace/db/dashboard-analysis"
 
 afterEach(() => {
-  vi.useRealTimers();
-});
+  vi.useRealTimers()
+})
 
 const dashboardMonthNumbers: Record<string, string> = {
   january: "01",
@@ -19,19 +19,23 @@ const dashboardMonthNumbers: Record<string, string> = {
   october: "10",
   november: "11",
   december: "12",
-};
+}
 
 function dashboardDateKey(value: unknown) {
-  const raw = String(value ?? "");
-  const match = /^(\d{1,2})-([A-Za-z]+)-(\d{2})$/.exec(raw);
-  if (!match) return 0;
-  const [, day, month, year] = match;
-  return Number(`20${year}${dashboardMonthNumbers[month!.toLowerCase()] ?? "00"}${day!.padStart(2, "0")}`);
+  const raw = String(value ?? "")
+  const match = /^(\d{1,2})-([A-Za-z]+)-(\d{2})$/.exec(raw)
+  if (!match) return 0
+  const [, day, month, year] = match
+  return Number(
+    `20${year}${dashboardMonthNumbers[month!.toLowerCase()] ?? "00"}${day!.padStart(2, "0")}`
+  )
 }
 
 function todayDateKey() {
-  const date = new Date();
-  return Number(`${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`);
+  const date = new Date()
+  return Number(
+    `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`
+  )
 }
 
 describe("buildLegacyDashboardSnapshot", () => {
@@ -103,21 +107,28 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
-      masterGaps: Array<Record<string, unknown>>;
-    };
+    const productionControl =
+      snapshot.productionControl as typeof snapshot.productionControl & {
+        masterGaps: Array<Record<string, unknown>>
+      }
 
-    expect(productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-MISSING-D5")).toEqual([]);
-    expect(productionControl.masterGaps).toContainEqual(expect.objectContaining({
-      jcNo: "JC-MISSING-D5",
-      partCode: "M4",
-      machineMasterMissing: true,
-      missingAreas: "Machine master",
-      planningBlocker: "Add active machine for family D5",
-    }));
-  });
+    expect(
+      productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-MISSING-D5"
+      )
+    ).toEqual([])
+    expect(productionControl.masterGaps).toContainEqual(
+      expect.objectContaining({
+        jcNo: "JC-MISSING-D5",
+        partCode: "M4",
+        machineMasterMissing: true,
+        missingAreas: "Machine master",
+        planningBlocker: "Add active machine for family D5",
+      })
+    )
+  })
 
   it("recalculates family route machines while keeping started shop-floor machines locked", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -202,26 +213,30 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const future = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-FUTURE-D5");
-    const running = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-RUNNING-D5");
+    const future = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-FUTURE-D5"
+    )
+    const running = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-RUNNING-D5"
+    )
 
     expect(future).toMatchObject({
       routeMachine: "D5",
       machine: "D501",
       machineAssignment: "Assigned physical machine",
-    });
+    })
     expect(running).toMatchObject({
       routeMachine: "D5",
       machine: "D5",
       runningStatus: "Running",
-    });
-  });
+    })
+  })
 
   it("delays a locked running setup on an unavailable machine and cascades that machine queue", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -242,29 +257,57 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { jcNo: "JC-RUNNING-A5", partCode: "M22", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-RUNNING-A5",
+              partCode: "M22",
+              optionNumber: "1",
+              orderPcs: 2,
+              rmInwardDate: "2026-07-01",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:01:00.000Z",
-            payload: { jcNo: "JC-FOLLOW-A5", partCode: "M23", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-FOLLOW-A5",
+              partCode: "M23",
+              optionNumber: "1",
+              orderPcs: 1,
+              rmInwardDate: "2026-07-01",
+            },
           },
           ...["M22", "M23"].flatMap((partNo) => [
             {
               entryType: "route",
               createdAt: "2026-07-01T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "A5", machineType: "AUTOMATIC" },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                machineUsed: "A5",
+                machineType: "AUTOMATIC",
+              },
             },
             {
               entryType: "cycle",
               createdAt: "2026-07-01T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
             },
           ]),
           {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo: "A510", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "A510",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
           {
             entryType: "shop_floor_status",
@@ -280,30 +323,32 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
         ],
-      });
+      })
 
-      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "A510");
-      const running = rows.find((row) => row.jcNo === "JC-RUNNING-A5");
-      const follower = rows.find((row) => row.jcNo === "JC-FOLLOW-A5");
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.machine === "A510"
+      )
+      const running = rows.find((row) => row.jcNo === "JC-RUNNING-A5")
+      const follower = rows.find((row) => row.jcNo === "JC-FOLLOW-A5")
 
       expect(running).toMatchObject({
         machine: "A510",
         runningStatus: "Running",
         plannedProductionStartDate: "7-July-26",
         plannedProductionEndDate: "8-July-26",
-      });
+      })
       expect(follower).toMatchObject({
         machine: "A510",
         setupPlannedDate: "9-July-26",
         plannedProductionStartDate: "9-July-26",
-      });
+      })
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
   it("keeps delay-plan work on the unavailable machine and pushes its dates", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"))
 
     try {
       const first = buildLegacyDashboardSnapshot({
@@ -313,17 +358,35 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { jcNo: "JC-DELAY-ADB", partCode: "M-ADB", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-DELAY-ADB",
+              partCode: "M-ADB",
+              optionNumber: "1",
+              orderPcs: 2,
+              rmInwardDate: "2026-07-01",
+            },
           },
           {
             entryType: "route",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M-ADB", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M-ADB",
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "ADB5",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M-ADB", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            payload: {
+              partNo: "M-ADB",
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
           },
           ...["ADB503", "ADB504"].map((machineNo) => ({
             entryType: "machine_master",
@@ -331,8 +394,13 @@ describe("buildLegacyDashboardSnapshot", () => {
             payload: { machineNo, machineType: "AUTOMATIC", status: "Active" },
           })),
         ],
-      });
-      const previous = first.productionControl.machinePlanDetailRows.map((row) => ({ ...row, machine: row.machine === "ADB504" ? "ADB503" : row.machine }));
+      })
+      const previous = first.productionControl.machinePlanDetailRows.map(
+        (row) => ({
+          ...row,
+          machine: row.machine === "ADB504" ? "ADB503" : row.machine,
+        })
+      )
       const snapshot = buildLegacyDashboardSnapshot({
         workbookName: "Convex",
         productionEntries: [],
@@ -352,17 +420,35 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { jcNo: "JC-DELAY-ADB", partCode: "M-ADB", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-DELAY-ADB",
+              partCode: "M-ADB",
+              optionNumber: "1",
+              orderPcs: 2,
+              rmInwardDate: "2026-07-01",
+            },
           },
           {
             entryType: "route",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M-ADB", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M-ADB",
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "ADB5",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M-ADB", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            payload: {
+              partNo: "M-ADB",
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
           },
           ...["ADB503", "ADB504"].map((machineNo) => ({
             entryType: "machine_master",
@@ -370,20 +456,24 @@ describe("buildLegacyDashboardSnapshot", () => {
             payload: { machineNo, machineType: "AUTOMATIC", status: "Active" },
           })),
         ],
-      });
+      })
 
-      expect(snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-DELAY-ADB")).toMatchObject({
+      expect(
+        snapshot.productionControl.machinePlanDetailRows.find(
+          (row) => row.jcNo === "JC-DELAY-ADB"
+        )
+      ).toMatchObject({
         machine: "ADB503",
         plannedProductionStartDate: "7-July-26",
         machineUnavailableReason: expect.stringContaining("Breakdown"),
-      });
+      })
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
   it("keeps interrupted delay-plan remaining work on the stopped machine", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -398,7 +488,12 @@ describe("buildLegacyDashboardSnapshot", () => {
             rescheduleAction: "delay",
             planningMode: "system_recalculate",
             interruptedSetups: [
-              { jcNo: "JC-DELAY-RUN", setupNo: "1", machine: "ADB503", finishedQty: 0 },
+              {
+                jcNo: "JC-DELAY-RUN",
+                setupNo: "1",
+                machine: "ADB503",
+                finishedQty: 0,
+              },
             ],
             status: "Active",
             createdAt: "2026-07-02T07:20:29.285Z",
@@ -408,17 +503,35 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { jcNo: "JC-DELAY-RUN", partCode: "M24", optionNumber: "1", orderPcs: 26000, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-DELAY-RUN",
+              partCode: "M24",
+              optionNumber: "1",
+              orderPcs: 26000,
+              rmInwardDate: "2026-07-01",
+            },
           },
           {
             entryType: "route",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M24",
+              optionNumber: "1",
+              setupNo: "1.1",
+              machineUsed: "ADB5",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M24", optionNumber: "1", setupNo: "1", cycleTime: 12, loadingUnloading: 0 },
+            payload: {
+              partNo: "M24",
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 12,
+              loadingUnloading: 0,
+            },
           },
           ...["ADB503", "ADB504"].map((machineNo) => ({
             entryType: "machine_master",
@@ -439,25 +552,29 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
         ],
-      });
+      })
 
-      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-DELAY-RUN");
-      expect(rows).toHaveLength(1);
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-DELAY-RUN"
+      )
+      expect(rows).toHaveLength(1)
       expect(rows[0]).toMatchObject({
         machine: "ADB503",
         runningStatus: "Plan delayed",
         rawActualQty: 0,
         shopFloorStage: "",
         machineUnavailableSplitRole: "remaining_delayed_on_same_machine",
-      });
-      expect(dashboardDateKey(rows[0]?.plannedProductionStartDate)).toBeGreaterThanOrEqual(dashboardDateKey("2-Aug-26"));
+      })
+      expect(
+        dashboardDateKey(rows[0]?.plannedProductionStartDate)
+      ).toBeGreaterThanOrEqual(dashboardDateKey("2-Aug-26"))
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
   it("moves remaining running breakdown quantity to an alternate machine using system planning rules", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -472,7 +589,12 @@ describe("buildLegacyDashboardSnapshot", () => {
             rescheduleAction: "shift_required",
             planningMode: "system_recalculate",
             interruptedSetups: [
-              { jcNo: "JC-RUNNING-A5", setupNo: "1", machine: "A510", finishedQty: 3 },
+              {
+                jcNo: "JC-RUNNING-A5",
+                setupNo: "1",
+                machine: "A510",
+                finishedQty: 3,
+              },
             ],
             status: "Active",
             createdAt: "2026-07-01T10:16:31.528Z",
@@ -482,27 +604,53 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { jcNo: "JC-RUNNING-A5", partCode: "M22", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-RUNNING-A5",
+              partCode: "M22",
+              optionNumber: "1",
+              orderPcs: 10,
+              rmInwardDate: "2026-07-01",
+            },
           },
           {
             entryType: "route",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M22", optionNumber: "1", setupNo: "1", machineUsed: "A5", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M22",
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "A5",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M22", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            payload: {
+              partNo: "M22",
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo: "A510", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "A510",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo: "A511", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "A511",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
           {
             entryType: "shop_floor_status",
@@ -518,11 +666,13 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
         ],
-      });
+      })
 
-      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-RUNNING-A5");
-      const produced = rows.find((row) => row.machine === "A510");
-      const remaining = rows.find((row) => row.machine === "A511");
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-RUNNING-A5"
+      )
+      const produced = rows.find((row) => row.machine === "A510")
+      const remaining = rows.find((row) => row.machine === "A511")
 
       expect(produced).toMatchObject({
         machine: "A510",
@@ -531,7 +681,7 @@ describe("buildLegacyDashboardSnapshot", () => {
         rawActualQty: 3,
         runningStatus: "Breakdown stopped",
         machineUnavailableSplitRole: "produced_on_unavailable_machine",
-      });
+      })
       expect(remaining).toMatchObject({
         machine: "A511",
         orderPcs: 7,
@@ -540,15 +690,17 @@ describe("buildLegacyDashboardSnapshot", () => {
         plannedProductionStartDate: "1-July-26",
         plannedProductionEndDate: "8-July-26",
         machineUnavailableSplitRole: "remaining_moved_to_alternate_machine",
-      });
-      expect(dashboardDateKey(remaining?.plannedProductionEndDate)).toBeLessThanOrEqual(dashboardDateKey("26-July-26"));
+      })
+      expect(
+        dashboardDateKey(remaining?.plannedProductionEndDate)
+      ).toBeLessThanOrEqual(dashboardDateKey("26-July-26"))
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
   it("honors reviewed destination queue placement for a machine-unavailable shift", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -582,60 +734,104 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { jcNo: "JC-MOVE-A5", partCode: "M22", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-MOVE-A5",
+              partCode: "M22",
+              optionNumber: "1",
+              orderPcs: 2,
+              rmInwardDate: "2026-07-01",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:01:00.000Z",
-            payload: { jcNo: "JC-BLOCK-A5", partCode: "M20", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-02" },
+            payload: {
+              jcNo: "JC-BLOCK-A5",
+              partCode: "M20",
+              optionNumber: "1",
+              orderPcs: 2,
+              rmInwardDate: "2026-07-02",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:02:00.000Z",
-            payload: { jcNo: "JC-FOLLOW-A5", partCode: "M23", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-FOLLOW-A5",
+              partCode: "M23",
+              optionNumber: "1",
+              orderPcs: 2,
+              rmInwardDate: "2026-07-01",
+            },
           },
           ...["M20", "M22", "M23"].flatMap((partNo) => [
             {
               entryType: "route",
               createdAt: "2026-07-01T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "A5", machineType: "AUTOMATIC" },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                machineUsed: "A5",
+                machineType: "AUTOMATIC",
+              },
             },
             {
               entryType: "cycle",
               createdAt: "2026-07-01T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
             },
           ]),
           {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo: "A510", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "A510",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo: "A511", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "A511",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
         ],
-      });
+      })
 
-      const blocker = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-BLOCK-A5");
-      const moved = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-MOVE-A5");
+      const blocker = snapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-BLOCK-A5"
+      )
+      const moved = snapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-MOVE-A5"
+      )
 
-      expect(blocker).toMatchObject({ machine: "A511", partCode: "M20" });
+      expect(blocker).toMatchObject({ machine: "A511", partCode: "M20" })
       expect(moved).toMatchObject({
         machine: "A511",
         partCode: "M22",
         machineUnavailableQueuePlacementTarget: true,
-      });
-      expect(dashboardDateKey(moved?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(blocker?.plannedProductionEndDate));
+      })
+      expect(dashboardDateKey(moved?.setupPlannedDate)).toBeGreaterThan(
+        dashboardDateKey(blocker?.plannedProductionEndDate)
+      )
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
   it("counts produced breakdown quantity before delaying remaining quantity when no alternate exists", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -650,7 +846,12 @@ describe("buildLegacyDashboardSnapshot", () => {
             rescheduleAction: "shift_required",
             planningMode: "system_recalculate",
             interruptedSetups: [
-              { jcNo: "JC-RUNNING-A5-SOLO", setupNo: "1", machine: "A510", finishedQty: 3 },
+              {
+                jcNo: "JC-RUNNING-A5-SOLO",
+                setupNo: "1",
+                machine: "A510",
+                finishedQty: 3,
+              },
             ],
             status: "Active",
             createdAt: "2026-07-01T10:16:31.528Z",
@@ -660,22 +861,44 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { jcNo: "JC-RUNNING-A5-SOLO", partCode: "M22", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-RUNNING-A5-SOLO",
+              partCode: "M22",
+              optionNumber: "1",
+              orderPcs: 10,
+              rmInwardDate: "2026-07-01",
+            },
           },
           {
             entryType: "route",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M22", optionNumber: "1", setupNo: "1", machineUsed: "A5", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M22",
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "A5",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M22", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            payload: {
+              partNo: "M22",
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { machineNo: "A510", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "A510",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
           {
             entryType: "shop_floor_status",
@@ -691,12 +914,16 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
         ],
-      });
+      })
 
-      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-RUNNING-A5-SOLO");
-      expect(rows).toHaveLength(2);
-      const stopped = rows.find((row) => row.runningStatus === "Breakdown stopped");
-      const delayed = rows.find((row) => row.runningStatus === "Plan delayed");
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-RUNNING-A5-SOLO"
+      )
+      expect(rows).toHaveLength(2)
+      const stopped = rows.find(
+        (row) => row.runningStatus === "Breakdown stopped"
+      )
+      const delayed = rows.find((row) => row.runningStatus === "Plan delayed")
 
       expect(stopped).toMatchObject({
         machine: "A510",
@@ -706,7 +933,7 @@ describe("buildLegacyDashboardSnapshot", () => {
         shopFloorStage: "operator_started",
         machineUnavailableProducedQty: 3,
         machineUnavailableRemainingQty: 7,
-      });
+      })
       expect(delayed).toMatchObject({
         machine: "A510",
         orderPcs: 7,
@@ -715,14 +942,17 @@ describe("buildLegacyDashboardSnapshot", () => {
         shopFloorStage: "",
         setupCompletionDate: "",
         machineUnavailableSplitRole: "remaining_delayed_on_same_machine",
-      });
-      expect(dashboardDateKey(delayed?.plannedProductionStartDate)).toBeGreaterThanOrEqual(dashboardDateKey("7-July-26"));
+      })
+      expect(
+        dashboardDateKey(delayed?.plannedProductionStartDate)
+      ).toBeGreaterThanOrEqual(dashboardDateKey("7-July-26"))
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });  it("locks route-family assignment once raw material is at the physical machine", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-30T12:00:00.000Z"));
+  })
+  it("locks route-family assignment once raw material is at the physical machine", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-30T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -732,55 +962,103 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { jcNo: "JC-001", partCode: "M23", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-24" },
+            payload: {
+              jcNo: "JC-001",
+              partCode: "M23",
+              optionNumber: "1",
+              orderPcs: 3,
+              rmInwardDate: "2026-06-24",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-06-25T00:00:00.000Z",
-            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-25" },
+            payload: {
+              jcNo: "JC-016",
+              partCode: "M24",
+              optionNumber: "1",
+              orderPcs: 3,
+              rmInwardDate: "2026-06-25",
+            },
           },
           ...["M23", "M24"].flatMap((partNo) => [
             {
               entryType: "route",
               createdAt: "2026-06-24T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                machineUsed: "ADB5",
+                machineType: "AUTOMATIC",
+              },
             },
             {
               entryType: "cycle",
               createdAt: "2026-06-24T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
             },
           ]),
           {
             entryType: "machine_master",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { machineNo: "ADB503", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "ADB503",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { machineNo: "ADB504", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "ADB504",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
           {
             entryType: "shop_floor_status",
             createdAt: "2026-06-30T10:25:58.273Z",
-            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", setupNo: "1", machine: "ADB503", stage: "raw_material_at_machine", completedAt: "2026-06-30T10:25:57.947Z" },
+            payload: {
+              jcNo: "JC-016",
+              partCode: "M24",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "ADB503",
+              stage: "raw_material_at_machine",
+              completedAt: "2026-06-30T10:25:57.947Z",
+            },
           },
         ],
-      });
+      })
 
-      const loader = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-001");
-      const locked = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-016");
+      const loader = snapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-001"
+      )
+      const locked = snapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-016"
+      )
 
-      expect(loader).toMatchObject({ partCode: "M23", machine: "ADB503" });
-      expect(locked).toMatchObject({ partCode: "M24", machine: "ADB503", shopFloorStage: "raw_material_at_machine" });
+      expect(loader).toMatchObject({ partCode: "M23", machine: "ADB503" })
+      expect(locked).toMatchObject({
+        partCode: "M24",
+        machine: "ADB503",
+        shopFloorStage: "raw_material_at_machine",
+      })
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
   it("splits a running part-specific machine switch and honors target queue placement", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-02T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-02T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -793,7 +1071,12 @@ describe("buildLegacyDashboardSnapshot", () => {
             fromMachine: "A510",
             toMachine: "A511",
             interruptedSetups: [
-              { jcNo: "JC-SWITCH", setupNo: "1", machine: "A510", finishedQty: 2 },
+              {
+                jcNo: "JC-SWITCH",
+                setupNo: "1",
+                machine: "A510",
+                finishedQty: 2,
+              },
             ],
             queuePlacements: [
               {
@@ -816,12 +1099,24 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { jcNo: "JC-SWITCH", partCode: "M10", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-SWITCH",
+              partCode: "M10",
+              optionNumber: "1",
+              orderPcs: 10,
+              rmInwardDate: "2026-07-01",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:01:00.000Z",
-            payload: { jcNo: "JC-A511-BLOCK", partCode: "M99", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-A511-BLOCK",
+              partCode: "M99",
+              optionNumber: "1",
+              orderPcs: 3,
+              rmInwardDate: "2026-07-01",
+            },
           },
           ...[
             ["M10", "1", "A5", "AUTOMATIC"],
@@ -830,12 +1125,24 @@ describe("buildLegacyDashboardSnapshot", () => {
             {
               entryType: "route",
               createdAt: "2026-07-01T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo, machineUsed, machineType },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo,
+                machineUsed,
+                machineType,
+              },
             },
             {
               entryType: "cycle",
               createdAt: "2026-07-01T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo, cycleTime: 28800, loadingUnloading: 0 },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo,
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
             },
           ]),
           ...[
@@ -849,29 +1156,63 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "shop_floor_status",
             createdAt: "2026-07-02T08:30:00.000Z",
-            payload: { jcNo: "JC-A511-BLOCK", partCode: "M99", optionNumber: "1", setupNo: "1", machine: "A511", stage: "raw_material_at_machine", completedAt: "2026-07-02T08:30:00.000Z" },
+            payload: {
+              jcNo: "JC-A511-BLOCK",
+              partCode: "M99",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "A511",
+              stage: "raw_material_at_machine",
+              completedAt: "2026-07-02T08:30:00.000Z",
+            },
           },
           {
             entryType: "shop_floor_status",
             createdAt: "2026-07-02T09:00:00.000Z",
-            payload: { jcNo: "JC-SWITCH", partCode: "M10", optionNumber: "1", setupNo: "1", machine: "A510", stage: "operator_started", completedAt: "2026-07-02T09:00:00.000Z" },
+            payload: {
+              jcNo: "JC-SWITCH",
+              partCode: "M10",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "A510",
+              stage: "operator_started",
+              completedAt: "2026-07-02T09:00:00.000Z",
+            },
           },
         ],
-      });
+      })
 
-      const rows = snapshot.productionControl.machinePlanDetailRows;
-      const stopped = rows.find((row) => row.jcNo === "JC-SWITCH" && row.machine === "A510");
-      const shifted = rows.find((row) => row.jcNo === "JC-SWITCH" && row.machine === "A511");
-      const blocker = rows.find((row) => row.jcNo === "JC-A511-BLOCK" && row.machine === "A511");
+      const rows = snapshot.productionControl.machinePlanDetailRows
+      const stopped = rows.find(
+        (row) => row.jcNo === "JC-SWITCH" && row.machine === "A510"
+      )
+      const shifted = rows.find(
+        (row) => row.jcNo === "JC-SWITCH" && row.machine === "A511"
+      )
+      const blocker = rows.find(
+        (row) => row.jcNo === "JC-A511-BLOCK" && row.machine === "A511"
+      )
 
-      expect(stopped).toMatchObject({ orderPcs: 2, rawActualQty: 2, runningStatus: "Breakdown stopped" });
-      expect(shifted).toMatchObject({ orderPcs: 8, runningStatus: "Plan shifted", machineUnavailableQueuePlacementTarget: true });
-      expect(blocker).toBeTruthy();
-      expect(new Date(String(blocker?.plannedProductionStartDate)).getTime()).toBeLessThanOrEqual(new Date(String(shifted?.plannedProductionStartDate)).getTime());
+      expect(stopped).toMatchObject({
+        orderPcs: 2,
+        rawActualQty: 2,
+        runningStatus: "Breakdown stopped",
+      })
+      expect(shifted).toMatchObject({
+        orderPcs: 8,
+        runningStatus: "Plan shifted",
+        machineUnavailableQueuePlacementTarget: true,
+      })
+      expect(blocker).toBeTruthy()
+      expect(
+        new Date(String(blocker?.plannedProductionStartDate)).getTime()
+      ).toBeLessThanOrEqual(
+        new Date(String(shifted?.plannedProductionStartDate)).getTime()
+      )
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
 
   it("flags conflicting active part-specific machine switches for planner choice", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -901,17 +1242,35 @@ describe("buildLegacyDashboardSnapshot", () => {
         {
           entryType: "work_order",
           createdAt: "2026-07-01T00:00:00.000Z",
-          payload: { jcNo: "JC-M24-CONFLICT", partCode: "M24", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+          payload: {
+            jcNo: "JC-M24-CONFLICT",
+            partCode: "M24",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-07-01",
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-07-01T00:00:00.000Z",
-          payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+          payload: {
+            partNo: "M24",
+            optionNumber: "1",
+            setupNo: "1.1",
+            machineUsed: "ADB5",
+            machineType: "AUTOMATIC",
+          },
         },
         {
           entryType: "cycle",
           createdAt: "2026-07-01T00:00:00.000Z",
-          payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", cycleTime: 28800, loadingUnloading: 0 },
+          payload: {
+            partNo: "M24",
+            optionNumber: "1",
+            setupNo: "1.1",
+            cycleTime: 28800,
+            loadingUnloading: 0,
+          },
         },
         ...[
           ["ADB503", "AUTOMATIC"],
@@ -922,20 +1281,24 @@ describe("buildLegacyDashboardSnapshot", () => {
           payload: { machineNo, machineType, status: "Active" },
         })),
       ],
-    });
+    })
 
-    const row = snapshot.productionControl.machinePlanDetailRows.find((planRow) => planRow.jcNo === "JC-M24-CONFLICT" && planRow.setupNo === "1");
+    const row = snapshot.productionControl.machinePlanDetailRows.find(
+      (planRow) => planRow.jcNo === "JC-M24-CONFLICT" && planRow.setupNo === "1"
+    )
     expect(row).toMatchObject({
       planOverrideReason: "",
       plannerActionConflict: expect.stringContaining("Planner action conflict"),
-    });
-    expect(row?.plannerActionRequired).toContain("Choose one action to keep");
-    expect(snapshot.productionControl.plannerActionConflicts).toHaveLength(1);
-    expect(snapshot.productionControl.plannerActionConflicts[0]?.choices).toHaveLength(2);
-  });
+    })
+    expect(row?.plannerActionRequired).toContain("Choose one action to keep")
+    expect(snapshot.productionControl.plannerActionConflicts).toHaveLength(1)
+    expect(
+      snapshot.productionControl.plannerActionConflicts[0]?.choices
+    ).toHaveLength(2)
+  })
   it("uses a part-specific switch to move a delayed setup off the source machine", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-02T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-02T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -949,14 +1312,18 @@ describe("buildLegacyDashboardSnapshot", () => {
             reason: "Breakdown",
             rescheduleAction: "delay",
             interruptedSetups: [
-              { jcNo: "JC-M24-DELAY", setupNo: "1", machine: "ADB503", finishedQty: 2 },
+              {
+                jcNo: "JC-M24-DELAY",
+                setupNo: "1",
+                machine: "ADB503",
+                finishedQty: 2,
+              },
             ],
             status: "Active",
             createdAt: "2026-07-01T10:00:00.000Z",
           },
         ],
         planOverrides: [
-
           {
             target: "JC-M24-DELAY",
             setupNo: "1",
@@ -981,17 +1348,35 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { jcNo: "JC-M24-DELAY", partCode: "M24", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-M24-DELAY",
+              partCode: "M24",
+              optionNumber: "1",
+              orderPcs: 10,
+              rmInwardDate: "2026-07-01",
+            },
           },
           {
             entryType: "route",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M24",
+              optionNumber: "1",
+              setupNo: "1.1",
+              machineUsed: "ADB5",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", cycleTime: 28800, loadingUnloading: 0 },
+            payload: {
+              partNo: "M24",
+              optionNumber: "1",
+              setupNo: "1.1",
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
           },
           ...[
             ["ADB503", "AUTOMATIC"],
@@ -1004,23 +1389,40 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "shop_floor_status",
             createdAt: "2026-07-01T08:00:00.000Z",
-            payload: { jcNo: "JC-M24-DELAY", partCode: "M24", optionNumber: "1", setupNo: "1", machine: "ADB503", stage: "operator_started", completedAt: "2026-07-01T08:00:00.000Z" },
+            payload: {
+              jcNo: "JC-M24-DELAY",
+              partCode: "M24",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "ADB503",
+              stage: "operator_started",
+              completedAt: "2026-07-01T08:00:00.000Z",
+            },
           },
         ],
-      });
+      })
 
-      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-M24-DELAY");
-      expect(rows.some((row) => row.machine === "ADB503" && row.runningStatus === "Plan delayed")).toBe(false);
-      expect(rows.some((row) => row.machine === "ADB504")).toBe(true);
-      expect(rows.find((row) => row.machine === "ADB504")).toMatchObject({ planOverrideReason: "Planner approved move after delay" });
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-M24-DELAY"
+      )
+      expect(
+        rows.some(
+          (row) =>
+            row.machine === "ADB503" && row.runningStatus === "Plan delayed"
+        )
+      ).toBe(false)
+      expect(rows.some((row) => row.machine === "ADB504")).toBe(true)
+      expect(rows.find((row) => row.machine === "ADB504")).toMatchObject({
+        planOverrideReason: "Planner approved move after delay",
+      })
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
 
   it("lets a part-specific machine switch stop a target running setup before placing the switched tile", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-02T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-02T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -1033,8 +1435,18 @@ describe("buildLegacyDashboardSnapshot", () => {
             fromMachine: "ADB503",
             toMachine: "ADB504",
             interruptedSetups: [
-              { jcNo: "JC-M24", setupNo: "1", machine: "ADB503", finishedQty: 2 },
-              { jcNo: "JC-M93", setupNo: "1", machine: "ADB504", finishedQty: 1 },
+              {
+                jcNo: "JC-M24",
+                setupNo: "1",
+                machine: "ADB503",
+                finishedQty: 2,
+              },
+              {
+                jcNo: "JC-M93",
+                setupNo: "1",
+                machine: "ADB504",
+                finishedQty: 1,
+              },
             ],
             queuePlacements: [
               {
@@ -1055,12 +1467,24 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { jcNo: "JC-M24", partCode: "M24", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-M24",
+              partCode: "M24",
+              optionNumber: "1",
+              orderPcs: 10,
+              rmInwardDate: "2026-07-01",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:01:00.000Z",
-            payload: { jcNo: "JC-M93", partCode: "M93", optionNumber: "1", orderPcs: 4, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-M93",
+              partCode: "M93",
+              optionNumber: "1",
+              orderPcs: 4,
+              rmInwardDate: "2026-07-01",
+            },
           },
           ...[
             ["M24", "1", "ADB5", "AUTOMATIC"],
@@ -1069,12 +1493,24 @@ describe("buildLegacyDashboardSnapshot", () => {
             {
               entryType: "route",
               createdAt: "2026-07-01T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo, machineUsed, machineType },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo,
+                machineUsed,
+                machineType,
+              },
             },
             {
               entryType: "cycle",
               createdAt: "2026-07-01T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo, cycleTime: 28800, loadingUnloading: 0 },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo,
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
             },
           ]),
           ...[
@@ -1088,33 +1524,67 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "shop_floor_status",
             createdAt: "2026-07-02T08:30:00.000Z",
-            payload: { jcNo: "JC-M93", partCode: "M93", optionNumber: "1", setupNo: "1", machine: "ADB504", stage: "operator_started", completedAt: "2026-07-02T08:30:00.000Z" },
+            payload: {
+              jcNo: "JC-M93",
+              partCode: "M93",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "ADB504",
+              stage: "operator_started",
+              completedAt: "2026-07-02T08:30:00.000Z",
+            },
           },
           {
             entryType: "shop_floor_status",
             createdAt: "2026-07-02T09:00:00.000Z",
-            payload: { jcNo: "JC-M24", partCode: "M24", optionNumber: "1", setupNo: "1", machine: "ADB503", stage: "operator_started", completedAt: "2026-07-02T09:00:00.000Z" },
+            payload: {
+              jcNo: "JC-M24",
+              partCode: "M24",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "ADB503",
+              stage: "operator_started",
+              completedAt: "2026-07-02T09:00:00.000Z",
+            },
           },
         ],
-      });
+      })
 
-      const rows = snapshot.productionControl.machinePlanDetailRows;
-      const stoppedSource = rows.find((row) => row.jcNo === "JC-M24" && row.machine === "ADB503");
-      const shifted = rows.find((row) => row.jcNo === "JC-M24" && row.machine === "ADB504");
-      const stoppedTarget = rows.find((row) => row.jcNo === "JC-M93" && row.machine === "ADB504");
+      const rows = snapshot.productionControl.machinePlanDetailRows
+      const stoppedSource = rows.find(
+        (row) => row.jcNo === "JC-M24" && row.machine === "ADB503"
+      )
+      const shifted = rows.find(
+        (row) => row.jcNo === "JC-M24" && row.machine === "ADB504"
+      )
+      const stoppedTarget = rows.find(
+        (row) => row.jcNo === "JC-M93" && row.machine === "ADB504"
+      )
 
-      expect(stoppedSource).toMatchObject({ orderPcs: 2, rawActualQty: 2, runningStatus: "Breakdown stopped" });
-      expect(shifted).toMatchObject({ orderPcs: 8, runningStatus: "Plan shifted", machineUnavailableQueuePlacementTarget: true });
-      expect(stoppedTarget).toMatchObject({ rawActualQty: 1 });
-      expect(dashboardDateKey(shifted?.plannedProductionStartDate)).toBeLessThanOrEqual(dashboardDateKey(stoppedTarget?.plannedProductionStartDate));
+      expect(stoppedSource).toMatchObject({
+        orderPcs: 2,
+        rawActualQty: 2,
+        runningStatus: "Breakdown stopped",
+      })
+      expect(shifted).toMatchObject({
+        orderPcs: 8,
+        runningStatus: "Plan shifted",
+        machineUnavailableQueuePlacementTarget: true,
+      })
+      expect(stoppedTarget).toMatchObject({ rawActualQty: 1 })
+      expect(
+        dashboardDateKey(shifted?.plannedProductionStartDate)
+      ).toBeLessThanOrEqual(
+        dashboardDateKey(stoppedTarget?.plannedProductionStartDate)
+      )
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
 
   it("allows an active planner machine switch to move an RM-locked route-family setup", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-30T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-30T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -1134,102 +1604,197 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-06-25T00:00:00.000Z",
-            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-25" },
+            payload: {
+              jcNo: "JC-016",
+              partCode: "M24",
+              optionNumber: "1",
+              orderPcs: 3,
+              rmInwardDate: "2026-06-25",
+            },
           },
           {
             entryType: "route",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M24",
+              optionNumber: "1",
+              setupNo: "1.1",
+              machineUsed: "ADB5",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { partNo: "M24", optionNumber: "1", setupNo: "1.1", cycleTime: 28800, loadingUnloading: 0 },
+            payload: {
+              partNo: "M24",
+              optionNumber: "1",
+              setupNo: "1.1",
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { machineNo: "ADB503", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "ADB503",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { machineNo: "ADB504", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "ADB504",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
           {
             entryType: "shop_floor_status",
             createdAt: "2026-06-30T10:25:58.273Z",
-            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", setupNo: "1", machine: "ADB503", stage: "raw_material_at_machine", completedAt: "2026-06-30T10:25:57.947Z" },
+            payload: {
+              jcNo: "JC-016",
+              partCode: "M24",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "ADB503",
+              stage: "raw_material_at_machine",
+              completedAt: "2026-06-30T10:25:57.947Z",
+            },
           },
         ],
-      });
+      })
 
-      const switched = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-016");
+      const switched = snapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-016"
+      )
 
-      expect(switched).toMatchObject({ partCode: "M24", machine: "ADB504", shopFloorStage: "" });
+      expect(switched).toMatchObject({
+        partCode: "M24",
+        machine: "ADB504",
+        shopFloorStage: "",
+      })
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
   it("preserves a previous machine for the same setup while downstream setup can move", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
       previousMachinePlanDetailRows: [
-        { jcNo: "JC-002", partCode: "M102", optionNumber: "1", setupNo: "1", routeMachine: "ADB5", machine: "ADB503" },
+        {
+          jcNo: "JC-002",
+          partCode: "M102",
+          optionNumber: "1",
+          setupNo: "1",
+          routeMachine: "ADB5",
+          machine: "ADB503",
+        },
       ],
       dataEntries: [
         {
           entryType: "work_order",
           createdAt: "2026-06-24T00:00:00.000Z",
-          payload: { jcNo: "JC-001", partCode: "M101", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-24" },
+          payload: {
+            jcNo: "JC-001",
+            partCode: "M101",
+            optionNumber: "1",
+            orderPcs: 1,
+            rmInwardDate: "2026-06-24",
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-06-24T00:00:00.000Z",
-          payload: { partNo: "M101", optionNumber: "1", setupNo: "1", machineUsed: "ADB5", machineType: "AUTOMATIC" },
+          payload: {
+            partNo: "M101",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "ADB5",
+            machineType: "AUTOMATIC",
+          },
         },
         {
           entryType: "cycle",
           createdAt: "2026-06-24T00:00:00.000Z",
-          payload: { partNo: "M101", optionNumber: "1", setupNo: "1", cycleTime: 3600, loadingUnloading: 0 },
+          payload: {
+            partNo: "M101",
+            optionNumber: "1",
+            setupNo: "1",
+            cycleTime: 3600,
+            loadingUnloading: 0,
+          },
         },
         {
           entryType: "work_order",
           createdAt: "2026-06-24T00:00:00.000Z",
-          payload: { jcNo: "JC-002", partCode: "M102", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-24" },
+          payload: {
+            jcNo: "JC-002",
+            partCode: "M102",
+            optionNumber: "1",
+            orderPcs: 1,
+            rmInwardDate: "2026-06-24",
+          },
         },
         ...["1", "2"].flatMap((setupNo) => [
           {
             entryType: "route",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { partNo: "M102", optionNumber: "1", setupNo, machineUsed: "ADB5", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M102",
+              optionNumber: "1",
+              setupNo,
+              machineUsed: "ADB5",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { partNo: "M102", optionNumber: "1", setupNo, cycleTime: 3600, loadingUnloading: 0 },
+            payload: {
+              partNo: "M102",
+              optionNumber: "1",
+              setupNo,
+              cycleTime: 3600,
+              loadingUnloading: 0,
+            },
           },
         ]),
         {
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
-          payload: { machineNo: "ADB503", machineType: "AUTOMATIC", status: "Active" },
+          payload: {
+            machineNo: "ADB503",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
         },
         {
           entryType: "machine_master",
           createdAt: "2026-06-24T00:00:00.000Z",
-          payload: { machineNo: "ADB504", machineType: "AUTOMATIC", status: "Active" },
+          payload: {
+            machineNo: "ADB504",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
         },
       ],
-    });
+    })
 
-    const setupOne = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-002" && row.setupNo === "1");
-    const setupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-002" && row.setupNo === "2");
+    const setupOne = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-002" && row.setupNo === "1"
+    )
+    const setupTwo = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-002" && row.setupNo === "2"
+    )
 
-    expect(setupOne).toMatchObject({ partCode: "M102", machine: "ADB503" });
-    expect(setupTwo).toMatchObject({ partCode: "M102", machine: "ADB504" });
-  });
+    expect(setupOne).toMatchObject({ partCode: "M102", machine: "ADB503" })
+    expect(setupTwo).toMatchObject({ partCode: "M102", machine: "ADB504" })
+  })
   it("uses the latest canonical route row when old imports use option-prefixed setup numbers", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -1311,31 +1876,36 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
-      routeMasterRows: Array<Record<string, unknown>>;
-      machinePlanDetailRows: Array<Record<string, unknown>>;
-    };
+    const productionControl =
+      snapshot.productionControl as typeof snapshot.productionControl & {
+        routeMasterRows: Array<Record<string, unknown>>
+        machinePlanDetailRows: Array<Record<string, unknown>>
+      }
 
-    expect(productionControl.routeMasterRows).toContainEqual(expect.objectContaining({
-      partNo: "M4",
-      displaySetupNo: "2",
-      machineUsed: "D3",
-    }));
-    expect(productionControl.routeMasterRows).not.toContainEqual(expect.objectContaining({
-      partNo: "M4",
-      displaySetupNo: "2",
-      machineUsed: "D5",
-    }));
+    expect(productionControl.routeMasterRows).toContainEqual(
+      expect.objectContaining({
+        partNo: "M4",
+        displaySetupNo: "2",
+        machineUsed: "D3",
+      })
+    )
+    expect(productionControl.routeMasterRows).not.toContainEqual(
+      expect.objectContaining({
+        partNo: "M4",
+        displaySetupNo: "2",
+        machineUsed: "D5",
+      })
+    )
     expect(productionControl.machinePlanDetailRows[0]).toMatchObject({
       jcNo: "JC-001",
       partCode: "M4",
       setupNo: "2",
       routeMachine: "D3",
       machine: "D301",
-    });
-  });
+    })
+  })
 
   it("counts WIP from the actual production machine before releasing the next setup", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -1429,10 +1999,14 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
       ],
-    });
+    })
 
-    const setupOne = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-001" && row.setupNo === "1");
-    const setupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-001" && row.setupNo === "2");
+    const setupOne = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-001" && row.setupNo === "1"
+    )
+    const setupTwo = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-001" && row.setupNo === "2"
+    )
 
     expect(setupOne).toMatchObject({
       machine: "C501",
@@ -1440,13 +2014,13 @@ describe("buildLegacyDashboardSnapshot", () => {
       runningStatus: "Running",
       actualCompletionDate: "",
       actualProductionEndDate: "",
-    });
+    })
     expect(setupTwo).toMatchObject({
       machine: "D301",
       shopFloorTaskReady: true,
       shopFloorTaskBlocker: "",
-    });
-  });
+    })
+  })
 
   it("keeps planning data visible before production rows are imported", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -1514,9 +2088,9 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    expect(snapshot.productionControl.workOrders).toHaveLength(1);
+    expect(snapshot.productionControl.workOrders).toHaveLength(1)
     expect(snapshot.productionControl.workOrders[0]).toMatchObject({
       jcNo: "JC-001",
       partCode: "M100",
@@ -1524,17 +2098,20 @@ describe("buildLegacyDashboardSnapshot", () => {
       rmInwardDate: "2026-06-23",
       routeStatus: "Ready",
       cycleStatus: "Ready",
-    });
-    expect(snapshot.productionControl.machineConstraintRows).toEqual([]);
-    expect(snapshot.productionControl.planOverrideRows).toEqual([]);
-    const jcMachinePlans = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-001");
-    expect(jcMachinePlans).toHaveLength(1);
+    })
+    expect(snapshot.productionControl.machineConstraintRows).toEqual([])
+    expect(snapshot.productionControl.planOverrideRows).toEqual([])
+    const jcMachinePlans =
+      snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-001"
+      )
+    expect(jcMachinePlans).toHaveLength(1)
     expect(jcMachinePlans[0]).toMatchObject({
       machine: "C501",
       routeMachine: "C5",
       machineAssignment: "Assigned physical machine",
-    });
-  });
+    })
+  })
 
   it("does not plan waiting RM work orders on machines", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -1593,15 +2170,19 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
     expect(snapshot.productionControl.workOrders[0]).toMatchObject({
       jcNo: "JC-023",
       partCode: "M32",
       rmStatus: "Waiting",
-    });
-    expect(snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-023")).toEqual([]);
-  });
+    })
+    expect(
+      snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-023"
+      )
+    ).toEqual([])
+  })
 
   it("does not plan RM received work orders when route, cycle, or tooling is missing", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -1670,19 +2251,26 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
-      masterGaps: Array<Record<string, unknown>>;
-    };
+    const productionControl =
+      snapshot.productionControl as typeof snapshot.productionControl & {
+        masterGaps: Array<Record<string, unknown>>
+      }
 
-    expect(productionControl.masterGaps).toContainEqual(expect.objectContaining({
-      jcNo: "JC-M28",
-      partCode: "M28",
-      toolingPlanMissing: true,
-    }));
-    expect(productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-M28")).toEqual([]);
-  });
+    expect(productionControl.masterGaps).toContainEqual(
+      expect.objectContaining({
+        jcNo: "JC-M28",
+        partCode: "M28",
+        toolingPlanMissing: true,
+      })
+    )
+    expect(
+      productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-M28"
+      )
+    ).toEqual([])
+  })
 
   it("uses day-first RM inward dates for setup planned dates", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -1741,23 +2329,23 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
     expect(snapshot.productionControl.workOrders[0]).toMatchObject({
       jcNo: "JC-002",
       rmStatus: "Received",
       rmInwardDate: "23/06/2026",
-    });
+    })
     expect(snapshot.productionControl.machinePlanDetailRows[0]).toMatchObject({
       jcNo: "JC-002",
       setupNo: "1",
       setupPlannedDate: "23-June-26",
-    });
-  });
+    })
+  })
 
   it("skips Friday shutdown and manual planning holidays in production dates", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"))
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -1815,26 +2403,27 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
-      planningCalendar: Record<string, unknown>;
-    };
+    const productionControl =
+      snapshot.productionControl as typeof snapshot.productionControl & {
+        planningCalendar: Record<string, unknown>
+      }
 
     expect(productionControl.planningCalendar).toMatchObject({
       weeklyHoliday: "Friday",
       holidayDates: ["2026-06-27"],
-    });
+    })
     expect(productionControl.machinePlanDetailRows[0]).toMatchObject({
       jcNo: "JC-HOLIDAY",
       setupPlannedDate: "25-June-26",
       plannedProductionEndDate: "28-June-26",
-    });
-  });
+    })
+  })
 
   it("keeps production dates dynamic until actual production starts", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
 
     const baseDataEntries = [
       {
@@ -1892,13 +2481,16 @@ describe("buildLegacyDashboardSnapshot", () => {
           status: "Active",
         },
       },
-    ];
+    ]
     const setupCompleteSnapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
       dataEntries: baseDataEntries,
-    });
-    const setupCompleteRow = setupCompleteSnapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-M42");
+    })
+    const setupCompleteRow =
+      setupCompleteSnapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-M42"
+      )
 
     expect(setupCompleteRow).toMatchObject({
       setupPlannedDate: "23-June-26",
@@ -1907,7 +2499,7 @@ describe("buildLegacyDashboardSnapshot", () => {
       plannedProductionStartDate: "29-June-26",
       plannedProductionEndDate: "30-June-26",
       actualProductionStartDate: "",
-    });
+    })
 
     const productionStartedSnapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -1927,16 +2519,19 @@ describe("buildLegacyDashboardSnapshot", () => {
         },
       ],
       dataEntries: baseDataEntries,
-    });
-    const productionStartedRow = productionStartedSnapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-M42");
+    })
+    const productionStartedRow =
+      productionStartedSnapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-M42"
+      )
 
     expect(productionStartedRow).toMatchObject({
       plannedProductionStartDate: "28-June-26",
       actualProductionStartDate: "28-June-26",
       plannedProductionEndDate: "1-July-26",
-    });
-    vi.useRealTimers();
-  });
+    })
+    vi.useRealTimers()
+  })
 
   it("splits a setup across compatible machines when the 25-day target is missed and each machine gets at least 15 days", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -1995,13 +2590,20 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const jcMachinePlans = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-002");
-    expect(jcMachinePlans.map((row) => row.machine)).toEqual(["C501", "C502"]);
-    expect(jcMachinePlans.every((row) => row.machineAssignment === "Parallel 25-day plan")).toBe(true);
-    expect(jcMachinePlans.every((row) => row.orderPcs === 120)).toBe(true);
-  });
+    const jcMachinePlans =
+      snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-002"
+      )
+    expect(jcMachinePlans.map((row) => row.machine)).toEqual(["C501", "C502"])
+    expect(
+      jcMachinePlans.every(
+        (row) => row.machineAssignment === "Parallel 25-day plan"
+      )
+    ).toBe(true)
+    expect(jcMachinePlans.every((row) => row.orderPcs === 120)).toBe(true)
+  })
 
   it("marks setup complete only from matching shop floor workflow status", () => {
     const baseDataEntries = [
@@ -2047,7 +2649,7 @@ describe("buildLegacyDashboardSnapshot", () => {
           status: "Active",
         },
       },
-    ];
+    ]
 
     const incompleteMatch = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -2066,10 +2668,12 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
-    expect(incompleteMatch.productionControl.machinePlanDetailRows[0]).toMatchObject({
+    })
+    expect(
+      incompleteMatch.productionControl.machinePlanDetailRows[0]
+    ).toMatchObject({
       runningStatus: "Planned",
-    });
+    })
 
     const strictMatch = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -2090,12 +2694,16 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
-    expect(strictMatch.productionControl.machinePlanDetailRows[0]).toMatchObject({
+    })
+    expect(
+      strictMatch.productionControl.machinePlanDetailRows[0]
+    ).toMatchObject({
       runningStatus: "Setup complete",
-    });
-    expect(strictMatch.productionControl.setupChecklistMismatchRows).toHaveLength(0);
-  });
+    })
+    expect(
+      strictMatch.productionControl.setupChecklistMismatchRows
+    ).toHaveLength(0)
+  })
 
   it("matches shop floor workflow step number against option-prefixed route setup numbers", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -2158,20 +2766,22 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
     expect(snapshot.productionControl.machinePlanDetailRows[0]).toMatchObject({
       optionNumber: "1",
       setupNo: "1",
       routeSetupNo: "1.1",
       runningStatus: "Setup complete",
-    });
-    expect(snapshot.productionControl.setupChecklistMismatchRows).toHaveLength(0);
-  });
+    })
+    expect(snapshot.productionControl.setupChecklistMismatchRows).toHaveLength(
+      0
+    )
+  })
 
   it("does not plan a later setup before the previous setup can produce material", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"))
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -2251,21 +2861,25 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const jcRows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-003");
-    expect(jcRows).toHaveLength(2);
+    const jcRows = snapshot.productionControl.machinePlanDetailRows.filter(
+      (row) => row.jcNo === "JC-003"
+    )
+    expect(jcRows).toHaveLength(2)
     expect(jcRows.find((row) => row.setupNo === "1")).toMatchObject({
       setupPlannedDate: "24-June-26",
       plannedProductionStartDate: "24-June-26",
       plannedProductionEndDate: "27-June-26",
-    });
+    })
     expect(jcRows.find((row) => row.setupNo === "2")).toMatchObject({
       setupPlannedDate: "28-June-26",
       shopFloorTaskReady: false,
-      shopFloorTaskBlocker: expect.stringContaining("Previous setup WIP buffer is not ready"),
-    });
-  });
+      shopFloorTaskBlocker: expect.stringContaining(
+        "Previous setup WIP buffer is not ready"
+      ),
+    })
+  })
 
   it("does not release a setup before its planned date is due", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -2315,20 +2929,25 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const setupOne = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "SAD509" && row.partCode === "M35" && row.setupNo === "1");
+    const setupOne = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) =>
+        row.jcNo === "SAD509" && row.partCode === "M35" && row.setupNo === "1"
+    )
 
     expect(setupOne).toMatchObject({
       setupPlannedDate: "1-July-99",
       shopFloorTaskReady: false,
-      shopFloorTaskBlocker: expect.stringContaining("Planned date not due until 1-July-99"),
-    });
-  });
+      shopFloorTaskBlocker: expect.stringContaining(
+        "Planned date not due until 1-July-99"
+      ),
+    })
+  })
 
   it("adds a buffer day before planning the next setup after WIP quantity is available", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -2385,18 +3004,22 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
       ],
-    });
+    })
 
-    const setupOne = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "SAD508" && row.setupNo === "1");
-    const setupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "SAD508" && row.setupNo === "2");
+    const setupOne = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "SAD508" && row.setupNo === "1"
+    )
+    const setupTwo = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "SAD508" && row.setupNo === "2"
+    )
 
     expect(setupOne).toMatchObject({
       setupPlannedDate: "29-June-26",
-    });
+    })
     expect(setupTwo).toMatchObject({
       setupPlannedDate: "30-June-26",
-    });
-  });
+    })
+  })
 
   it("does not occupy every eligible machine when a late setup still cannot meet the 25-day target", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -2467,16 +3090,18 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
       ],
-    });
+    })
 
-    const lateRows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-002");
+    const lateRows = snapshot.productionControl.machinePlanDetailRows.filter(
+      (row) => row.jcNo === "JC-002"
+    )
 
-    expect(lateRows).toHaveLength(1);
+    expect(lateRows).toHaveLength(1)
     expect(lateRows[0]).toMatchObject({
       partCode: "MLATE",
       parallelMachineCount: 1,
-    });
-  });
+    })
+  })
 
   it("keeps a setup on one machine when splitting would give each machine less than 15 production days", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -2526,16 +3151,18 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
       ],
-    });
+    })
 
-    const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-029D");
+    const rows = snapshot.productionControl.machinePlanDetailRows.filter(
+      (row) => row.jcNo === "JC-029D"
+    )
 
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
       orderPcs: 29,
       parallelMachineCount: 1,
-    });
-  });
+    })
+  })
 
   it("splits a 30-day setup into two machines with at least 15 production days per machine", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -2585,23 +3212,27 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
       ],
-    });
+    })
 
-    const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-030D");
+    const rows = snapshot.productionControl.machinePlanDetailRows.filter(
+      (row) => row.jcNo === "JC-030D"
+    )
 
-    expect(rows).toHaveLength(2);
-    expect(rows).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        orderPcs: 15,
-        totalOrderPcs: 30,
-        parallelMachineCount: 2,
-      }),
-    ]));
-  });
+    expect(rows).toHaveLength(2)
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          orderPcs: 15,
+          totalOrderPcs: 30,
+          parallelMachineCount: 2,
+        }),
+      ])
+    )
+  })
 
   it("waits for pooled WIP demand when the next setup is split across parallel machines", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -2657,22 +3288,27 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
       ],
-    });
+    })
 
-    const setupTwoRows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-WIP-SCALE" && row.setupNo === "2");
+    const setupTwoRows =
+      snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-WIP-SCALE" && row.setupNo === "2"
+      )
 
-    expect(setupTwoRows).toHaveLength(2);
-    expect(setupTwoRows).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        parallelMachineCount: 2,
-        setupPlannedDate: "18-July-26",
-      }),
-    ]));
-  });
+    expect(setupTwoRows).toHaveLength(2)
+    expect(setupTwoRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          parallelMachineCount: 2,
+          setupPlannedDate: "18-July-26",
+        }),
+      ])
+    )
+  })
 
   it("does not count a staggered upstream split machine after its own planned end date", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -2742,17 +3378,25 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
       ],
-    });
+    })
 
-    const setupOneRows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-002" && row.setupNo === "1");
-    const setupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-002" && row.setupNo === "2");
+    const setupOneRows =
+      snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-002" && row.setupNo === "1"
+      )
+    const setupTwo = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-002" && row.setupNo === "2"
+    )
 
-    expect(setupOneRows).toHaveLength(2);
-    expect(setupOneRows.map((row) => row.machine).sort()).toEqual(["C501", "C502"]);
+    expect(setupOneRows).toHaveLength(2)
+    expect(setupOneRows.map((row) => row.machine).sort()).toEqual([
+      "C501",
+      "C502",
+    ])
     expect(setupTwo).toMatchObject({
       setupPlannedDate: "22-July-26",
-    });
-  });
+    })
+  })
 
   it("prefers lower-utilized compatible machines before reusing a loaded family machine", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -2815,18 +3459,22 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
       ],
-    });
+    })
 
-    const first = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-LOAD-A");
-    const second = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-LOAD-B");
+    const first = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-LOAD-A"
+    )
+    const second = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-LOAD-B"
+    )
 
-    expect(first).toMatchObject({ machine: "C501" });
-    expect(second).toMatchObject({ machine: "C502" });
-  });
+    expect(first).toMatchObject({ machine: "C501" })
+    expect(second).toMatchObject({ machine: "C502" })
+  })
 
   it("uses planner priority to schedule a selected job card before normal priority work", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"))
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -2898,20 +3546,24 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const m42 = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-042");
-    const m43 = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-043");
+    const m42 = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-042"
+    )
+    const m43 = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-043"
+    )
 
     expect(m43).toMatchObject({
       plannerPriority: "High",
       setupPlannedDate: "23-June-26",
-    });
+    })
     expect(m42).toMatchObject({
       plannerPriority: "Normal",
       setupPlannedDate: "24-June-26",
-    });
-  });
+    })
+  })
 
   it("reserves the C501 queue for high-priority M116 before earlier-ready normal M32", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -2984,27 +3636,33 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
     const c501Rows = snapshot.productionControl.machinePlanDetailRows
       .filter((row) => row.machine === "C501")
-      .sort((a, b) => dashboardDateKey(a.setupPlannedDate) - dashboardDateKey(b.setupPlannedDate));
-    const m116 = c501Rows.find((row) => row.partCode === "M116");
-    const m32 = c501Rows.find((row) => row.partCode === "M32");
+      .sort(
+        (a, b) =>
+          dashboardDateKey(a.setupPlannedDate) -
+          dashboardDateKey(b.setupPlannedDate)
+      )
+    const m116 = c501Rows.find((row) => row.partCode === "M116")
+    const m32 = c501Rows.find((row) => row.partCode === "M32")
 
     expect(m116).toMatchObject({
       plannerPriority: "High",
       setupPlannedDate: "28-June-26",
-    });
+    })
     expect(m32).toMatchObject({
       plannerPriority: "Normal",
-    });
-    expect(dashboardDateKey(m32?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
-  });
+    })
+    expect(dashboardDateKey(m32?.setupPlannedDate)).toBeGreaterThan(
+      dashboardDateKey(m116?.plannedProductionEndDate)
+    )
+  })
 
   it("does not overlap C501 when a running M43 and priority M116 push normal M32", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-27T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-27T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -3027,22 +3685,471 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         ],
         dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              jcNo: "JC-023",
+              partCode: "M32",
+              optionNumber: "1",
+              orderPcs: 5,
+              rmInwardDate: "2026-06-25",
+            },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-23T00:01:00.000Z",
+            payload: {
+              jcNo: "JC-033",
+              partCode: "M43",
+              optionNumber: "1",
+              orderPcs: 1,
+              rmInwardDate: "2026-06-23",
+            },
+          },
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-23T00:02:00.000Z",
+            payload: {
+              jcNo: "JC-081",
+              partCode: "M116",
+              optionNumber: "1",
+              orderPcs: 8,
+              rmInwardDate: "2026-06-28",
+            },
+          },
+          ...["M32", "M43", "M116"].flatMap((partNo) => [
+            {
+              entryType: "route",
+              createdAt: "2026-06-23T00:00:00.000Z",
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                machineUsed: "C501",
+                machineType: "AUTOMATIC",
+              },
+            },
+            {
+              entryType: "cycle",
+              createdAt: "2026-06-23T00:00:00.000Z",
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
+            },
+          ]),
+          {
+            entryType: "shop_floor_status",
+            createdAt: "2026-06-27T00:00:00.000Z",
+            payload: {
+              jcNo: "JC-033",
+              partNo: "M43",
+              optionNumber: "1",
+              setupNo: "1",
+              machineNo: "C501",
+              stage: "operator_started",
+              completedAt: "2026-06-27T00:00:00.000Z",
+            },
+          },
+          {
+            entryType: "machine_master",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              machineNo: "C501",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
+          },
+        ],
+      })
+
+      const c501Rows = snapshot.productionControl.machinePlanDetailRows
+        .filter((row) => row.machine === "C501")
+        .sort(
+          (a, b) =>
+            dashboardDateKey(a.setupPlannedDate) -
+            dashboardDateKey(b.setupPlannedDate)
+        )
+      const m43 = c501Rows.find((row) => row.partCode === "M43")
+      const m116 = c501Rows.find((row) => row.partCode === "M116")
+      const m32 = c501Rows.find((row) => row.partCode === "M32")
+
+      expect(m43).toMatchObject({
+        runningStatus: "Running",
+        plannedProductionStartDate: "27-June-26",
+      })
+      expect(m116).toMatchObject({
+        plannerPriority: "High",
+        setupPlannedDate: "28-June-26",
+      })
+      expect(dashboardDateKey(m32?.setupPlannedDate)).toBeGreaterThan(
+        dashboardDateKey(m116?.plannedProductionEndDate)
+      )
+      for (let index = 1; index < c501Rows.length; index += 1) {
+        expect(
+          dashboardDateKey(c501Rows[index]!.setupPlannedDate)
+        ).toBeGreaterThan(
+          dashboardDateKey(c501Rows[index - 1]!.plannedProductionEndDate)
+        )
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("keeps priority behind a setup task that already started without planner approval", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
+
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      plannerPriorities: [
+        {
+          target: "JC-043",
+          jcNo: "JC-043",
+          partCode: "M43",
+          priority: "High",
+          createdAt: "2026-06-23T01:00:00.000Z",
+        },
+      ],
+      dataEntries: [
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            jcNo: "JC-023",
-            partCode: "M32",
+            jcNo: "JC-042",
+            partCode: "M42",
             optionNumber: "1",
-            orderPcs: 5,
-            rmInwardDate: "2026-06-25",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
           },
         },
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:01:00.000Z",
           payload: {
-            jcNo: "JC-033",
+            jcNo: "JC-043",
+            partCode: "M43",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
+          },
+        },
+        ...["M42", "M43"].flatMap((partNo) => [
+          {
+            entryType: "route",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "C501",
+              machineType: "AUTOMATIC",
+            },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 1,
+              loadingUnloading: 0,
+            },
+          },
+        ]),
+        {
+          entryType: "shop_floor_status",
+          createdAt: "2026-06-23T00:30:00.000Z",
+          payload: {
+            jcNo: "JC-042",
+            partNo: "M42",
+            optionNumber: "1",
+            setupNo: "1",
+            machineNo: "C501",
+            stage: "setting",
+            completedAt: "2026-06-23T00:30:00.000Z",
+          },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
+        },
+      ],
+    })
+
+    const started = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-042"
+    )
+    const priority = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-043"
+    )
+
+    expect(started).toMatchObject({
+      runningStatus: "Setup complete",
+      setupPlannedDate: "23-June-26",
+    })
+    expect(
+      dashboardDateKey(started?.plannedProductionEndDate)
+    ).toBeGreaterThanOrEqual(todayDateKey())
+    expect(priority).toMatchObject({ plannerPriority: "High" })
+    expect(dashboardDateKey(priority?.setupPlannedDate)).toBeGreaterThan(
+      dashboardDateKey(started?.plannedProductionEndDate)
+    )
+    vi.useRealTimers()
+  })
+
+  it("keeps a selected queued setup ahead of a priority setup when the planner chooses that queue position", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"))
+
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      plannerPriorities: [
+        {
+          target: "JC-046",
+          jcNo: "JC-046",
+          partCode: "M62",
+          priority: "High",
+          approvalMode: "idle_queue_only",
+          queueBeforeSetups: [
+            {
+              targetSetupNo: "1",
+              jcNo: "JC-077",
+              setupNo: "1",
+              machine: "SA705",
+            },
+          ],
+          createdAt: "2026-06-23T01:00:00.000Z",
+        },
+      ],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-077",
+            partCode: "M108",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
+          },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:01:00.000Z",
+          payload: {
+            jcNo: "JC-046",
+            partCode: "M62",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
+          },
+        },
+        ...["M108", "M62"].flatMap((partNo) => [
+          {
+            entryType: "route",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "SA705",
+              machineType: "AUTOMATIC",
+            },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 1,
+              loadingUnloading: 0,
+            },
+          },
+        ]),
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            machineNo: "SA705",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
+        },
+      ],
+    })
+
+    const m108 = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-077"
+    )
+    const m62 = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-046"
+    )
+
+    expect(m108).toMatchObject({
+      partCode: "M108",
+      setupPlannedDate: "23-June-26",
+    })
+    expect(m62).toMatchObject({ partCode: "M62", plannerPriority: "High" })
+    expect(dashboardDateKey(m62?.setupPlannedDate)).toBeGreaterThan(
+      dashboardDateKey(m108?.plannedProductionEndDate)
+    )
+  })
+
+  it("keeps priority behind a running machine unless the planner approves a stop", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      plannerPriorities: [
+        {
+          target: "JC-043",
+          jcNo: "JC-043",
+          partCode: "M43",
+          priority: "High",
+          createdAt: "2026-06-23T01:00:00.000Z",
+        },
+      ],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-042",
+            partCode: "M42",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
+          },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:01:00.000Z",
+          payload: {
+            jcNo: "JC-043",
+            partCode: "M43",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
+          },
+        },
+        ...["M42", "M43"].flatMap((partNo) => [
+          {
+            entryType: "route",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "C501",
+              machineType: "AUTOMATIC",
+            },
+          },
+          {
+            entryType: "cycle",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 1,
+              loadingUnloading: 0,
+            },
+          },
+        ]),
+        {
+          entryType: "shop_floor_status",
+          createdAt: "2026-06-23T00:30:00.000Z",
+          payload: {
+            jcNo: "JC-042",
+            partCode: "M42",
+            optionNumber: "1",
+            setupNo: "1",
+            machine: "C501",
+            stage: "operator_started",
+            completedAt: "2026-06-23T00:30:00.000Z",
+          },
+        },
+        {
+          entryType: "machine_master",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
+        },
+      ],
+    })
+
+    const running = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-042"
+    )
+    const priority = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-043"
+    )
+
+    expect(running).toMatchObject({
+      runningStatus: "Running",
+      setupPlannedDate: "23-June-26",
+    })
+    expect(priority).toMatchObject({ plannerPriority: "High" })
+    expect(
+      dashboardDateKey(running?.plannedProductionEndDate)
+    ).toBeGreaterThanOrEqual(todayDateKey())
+    expect(dashboardDateKey(priority?.setupPlannedDate)).toBeGreaterThan(
+      dashboardDateKey(running?.plannedProductionEndDate)
+    )
+  })
+
+  it("pushes the C501 queue after delayed running work and cascades M43 downstream setup dates", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
+
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "Convex",
+      productionEntries: [],
+      plannerPriorities: [
+        {
+          target: "JC-116",
+          jcNo: "JC-116",
+          partCode: "M116",
+          priority: "High",
+          approvalMode: "idle_queue_only",
+          createdAt: "2026-06-27T01:00:00.000Z",
+        },
+      ],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-042",
+            partCode: "M42",
+            optionNumber: "1",
+            orderPcs: 1,
+            rmInwardDate: "2026-06-23",
+          },
+        },
+        {
+          entryType: "work_order",
+          createdAt: "2026-06-23T00:01:00.000Z",
+          payload: {
+            jcNo: "JC-043",
             partCode: "M43",
             optionNumber: "1",
             orderPcs: 1,
@@ -3053,14 +4160,14 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "work_order",
           createdAt: "2026-06-23T00:02:00.000Z",
           payload: {
-            jcNo: "JC-081",
+            jcNo: "JC-116",
             partCode: "M116",
             optionNumber: "1",
-            orderPcs: 8,
-            rmInwardDate: "2026-06-28",
+            orderPcs: 1,
+            rmInwardDate: "2026-06-23",
           },
         },
-        ...["M32", "M43", "M116"].flatMap((partNo) => [
+        ...["M42", "M43", "M116"].flatMap((partNo) => [
           {
             entryType: "route",
             createdAt: "2026-06-23T00:00:00.000Z",
@@ -3085,16 +4192,38 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         ]),
         {
-          entryType: "shop_floor_status",
-          createdAt: "2026-06-27T00:00:00.000Z",
+          entryType: "route",
+          createdAt: "2026-06-23T00:00:00.000Z",
           payload: {
-            jcNo: "JC-033",
             partNo: "M43",
             optionNumber: "1",
+            setupNo: "2",
+            machineUsed: "TH501",
+            machineType: "AUTOMATIC",
+          },
+        },
+        {
+          entryType: "cycle",
+          createdAt: "2026-06-23T00:00:00.000Z",
+          payload: {
+            partNo: "M43",
+            optionNumber: "1",
+            setupNo: "2",
+            cycleTime: 28800,
+            loadingUnloading: 0,
+          },
+        },
+        {
+          entryType: "shop_floor_status",
+          createdAt: "2026-06-23T00:30:00.000Z",
+          payload: {
+            jcNo: "JC-042",
+            partCode: "M42",
+            optionNumber: "1",
             setupNo: "1",
-            machineNo: "C501",
+            machine: "C501",
             stage: "operator_started",
-            completedAt: "2026-06-27T00:00:00.000Z",
+            completedAt: "2026-06-23T00:30:00.000Z",
           },
         },
         {
@@ -3106,318 +4235,64 @@ describe("buildLegacyDashboardSnapshot", () => {
             status: "Active",
           },
         },
-        ],
-      });
-
-      const c501Rows = snapshot.productionControl.machinePlanDetailRows
-        .filter((row) => row.machine === "C501")
-        .sort((a, b) => dashboardDateKey(a.setupPlannedDate) - dashboardDateKey(b.setupPlannedDate));
-      const m43 = c501Rows.find((row) => row.partCode === "M43");
-      const m116 = c501Rows.find((row) => row.partCode === "M116");
-      const m32 = c501Rows.find((row) => row.partCode === "M32");
-
-      expect(m43).toMatchObject({
-        runningStatus: "Running",
-        plannedProductionStartDate: "27-June-26",
-      });
-      expect(m116).toMatchObject({
-        plannerPriority: "High",
-        setupPlannedDate: "28-June-26",
-      });
-      expect(dashboardDateKey(m32?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
-      for (let index = 1; index < c501Rows.length; index += 1) {
-        expect(dashboardDateKey(c501Rows[index]!.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(c501Rows[index - 1]!.plannedProductionEndDate));
-      }
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("keeps priority behind a setup task that already started without planner approval", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
-
-    const snapshot = buildLegacyDashboardSnapshot({
-      workbookName: "Convex",
-      productionEntries: [],
-      plannerPriorities: [
-        {
-          target: "JC-043",
-          jcNo: "JC-043",
-          partCode: "M43",
-          priority: "High",
-          createdAt: "2026-06-23T01:00:00.000Z",
-        },
-      ],
-      dataEntries: [
-        {
-          entryType: "work_order",
-          createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { jcNo: "JC-042", partCode: "M42", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-06-23" },
-        },
-        {
-          entryType: "work_order",
-          createdAt: "2026-06-23T00:01:00.000Z",
-          payload: { jcNo: "JC-043", partCode: "M43", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-06-23" },
-        },
-        ...["M42", "M43"].flatMap((partNo) => [
-          {
-            entryType: "route",
-            createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
-          },
-          {
-            entryType: "cycle",
-            createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 1, loadingUnloading: 0 },
-          },
-        ]),
-        {
-          entryType: "shop_floor_status",
-          createdAt: "2026-06-23T00:30:00.000Z",
-          payload: { jcNo: "JC-042", partNo: "M42", optionNumber: "1", setupNo: "1", machineNo: "C501", stage: "setting", completedAt: "2026-06-23T00:30:00.000Z" },
-        },
         {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
-        },
-      ],
-    });
-
-    const started = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-042");
-    const priority = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-043");
-
-    expect(started).toMatchObject({ runningStatus: "Setup complete", setupPlannedDate: "23-June-26" });
-    expect(dashboardDateKey(started?.plannedProductionEndDate)).toBeGreaterThanOrEqual(todayDateKey());
-    expect(priority).toMatchObject({ plannerPriority: "High" });
-    expect(dashboardDateKey(priority?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(started?.plannedProductionEndDate));
-    vi.useRealTimers();
-  });
-
-
-  it("keeps a selected queued setup ahead of a priority setup when the planner chooses that queue position", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"));
-
-    const snapshot = buildLegacyDashboardSnapshot({
-      workbookName: "Convex",
-      productionEntries: [],
-      plannerPriorities: [
-        {
-          target: "JC-046",
-          jcNo: "JC-046",
-          partCode: "M62",
-          priority: "High",
-          approvalMode: "idle_queue_only",
-          queueBeforeSetups: [
-            { targetSetupNo: "1", jcNo: "JC-077", setupNo: "1", machine: "SA705" },
-          ],
-          createdAt: "2026-06-23T01:00:00.000Z",
-        },
-      ],
-      dataEntries: [
-        {
-          entryType: "work_order",
-          createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { jcNo: "JC-077", partCode: "M108", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-06-23" },
-        },
-        {
-          entryType: "work_order",
-          createdAt: "2026-06-23T00:01:00.000Z",
-          payload: { jcNo: "JC-046", partCode: "M62", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-06-23" },
-        },
-        ...["M108", "M62"].flatMap((partNo) => [
-          {
-            entryType: "route",
-            createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "SA705", machineType: "AUTOMATIC" },
+          payload: {
+            machineNo: "TH501",
+            machineType: "AUTOMATIC",
+            status: "Active",
           },
-          {
-            entryType: "cycle",
-            createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 1, loadingUnloading: 0 },
-          },
-        ]),
-        {
-          entryType: "machine_master",
-          createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "SA705", machineType: "AUTOMATIC", status: "Active" },
         },
       ],
-    });
-
-    const m108 = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-077");
-    const m62 = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-046");
-
-    expect(m108).toMatchObject({ partCode: "M108", setupPlannedDate: "23-June-26" });
-    expect(m62).toMatchObject({ partCode: "M62", plannerPriority: "High" });
-    expect(dashboardDateKey(m62?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m108?.plannedProductionEndDate));
-  });
-
-  it("keeps priority behind a running machine unless the planner approves a stop", () => {
-    const snapshot = buildLegacyDashboardSnapshot({
-      workbookName: "Convex",
-      productionEntries: [],
-      plannerPriorities: [
-        {
-          target: "JC-043",
-          jcNo: "JC-043",
-          partCode: "M43",
-          priority: "High",
-          createdAt: "2026-06-23T01:00:00.000Z",
-        },
-      ],
-      dataEntries: [
-        {
-          entryType: "work_order",
-          createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { jcNo: "JC-042", partCode: "M42", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-06-23" },
-        },
-        {
-          entryType: "work_order",
-          createdAt: "2026-06-23T00:01:00.000Z",
-          payload: { jcNo: "JC-043", partCode: "M43", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-06-23" },
-        },
-        ...["M42", "M43"].flatMap((partNo) => [
-          {
-            entryType: "route",
-            createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
-          },
-          {
-            entryType: "cycle",
-            createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 1, loadingUnloading: 0 },
-          },
-        ]),
-        {
-          entryType: "shop_floor_status",
-          createdAt: "2026-06-23T00:30:00.000Z",
-          payload: { jcNo: "JC-042", partCode: "M42", optionNumber: "1", setupNo: "1", machine: "C501", stage: "operator_started", completedAt: "2026-06-23T00:30:00.000Z" },
-        },
-        {
-          entryType: "machine_master",
-          createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
-        },
-      ],
-    });
-
-    const running = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-042");
-    const priority = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-043");
-
-    expect(running).toMatchObject({ runningStatus: "Running", setupPlannedDate: "23-June-26" });
-    expect(priority).toMatchObject({ plannerPriority: "High" });
-    expect(dashboardDateKey(running?.plannedProductionEndDate)).toBeGreaterThanOrEqual(todayDateKey());
-    expect(dashboardDateKey(priority?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(running?.plannedProductionEndDate));
-  });
-
-  it("pushes the C501 queue after delayed running work and cascades M43 downstream setup dates", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
-
-    const snapshot = buildLegacyDashboardSnapshot({
-      workbookName: "Convex",
-      productionEntries: [],
-      plannerPriorities: [
-        {
-          target: "JC-116",
-          jcNo: "JC-116",
-          partCode: "M116",
-          priority: "High",
-          approvalMode: "idle_queue_only",
-          createdAt: "2026-06-27T01:00:00.000Z",
-        },
-      ],
-      dataEntries: [
-        {
-          entryType: "work_order",
-          createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { jcNo: "JC-042", partCode: "M42", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-23" },
-        },
-        {
-          entryType: "work_order",
-          createdAt: "2026-06-23T00:01:00.000Z",
-          payload: { jcNo: "JC-043", partCode: "M43", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-23" },
-        },
-        {
-          entryType: "work_order",
-          createdAt: "2026-06-23T00:02:00.000Z",
-          payload: { jcNo: "JC-116", partCode: "M116", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-23" },
-        },
-        ...["M42", "M43", "M116"].flatMap((partNo) => [
-          {
-            entryType: "route",
-            createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
-          },
-          {
-            entryType: "cycle",
-            createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
-          },
-        ]),
-        {
-          entryType: "route",
-          createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M43", optionNumber: "1", setupNo: "2", machineUsed: "TH501", machineType: "AUTOMATIC" },
-        },
-        {
-          entryType: "cycle",
-          createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M43", optionNumber: "1", setupNo: "2", cycleTime: 28800, loadingUnloading: 0 },
-        },
-        {
-          entryType: "shop_floor_status",
-          createdAt: "2026-06-23T00:30:00.000Z",
-          payload: { jcNo: "JC-042", partCode: "M42", optionNumber: "1", setupNo: "1", machine: "C501", stage: "operator_started", completedAt: "2026-06-23T00:30:00.000Z" },
-        },
-        {
-          entryType: "machine_master",
-          createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
-        },
-        {
-          entryType: "machine_master",
-          createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "TH501", machineType: "AUTOMATIC", status: "Active" },
-        },
-      ],
-    });
+    })
 
     const c501Rows = snapshot.productionControl.machinePlanDetailRows
       .filter((row) => row.machine === "C501")
-      .sort((a, b) => dashboardDateKey(a.setupPlannedDate) - dashboardDateKey(b.setupPlannedDate));
-    const running = c501Rows.find((row) => row.partCode === "M42");
-    const m116 = c501Rows.find((row) => row.partCode === "M116");
-    const m43SetupOne = c501Rows.find((row) => row.partCode === "M43");
-    const m43SetupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.partCode === "M43" && row.setupNo === "2");
+      .sort(
+        (a, b) =>
+          dashboardDateKey(a.setupPlannedDate) -
+          dashboardDateKey(b.setupPlannedDate)
+      )
+    const running = c501Rows.find((row) => row.partCode === "M42")
+    const m116 = c501Rows.find((row) => row.partCode === "M116")
+    const m43SetupOne = c501Rows.find((row) => row.partCode === "M43")
+    const m43SetupTwo = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.partCode === "M43" && row.setupNo === "2"
+    )
 
     expect(running).toMatchObject({
       runningStatus: "Running",
       plannedProductionStartDate: "29-June-26",
-    });
-    expect(dashboardDateKey(running?.plannedProductionEndDate)).toBeGreaterThanOrEqual(todayDateKey());
+    })
+    expect(
+      dashboardDateKey(running?.plannedProductionEndDate)
+    ).toBeGreaterThanOrEqual(todayDateKey())
     expect(m116).toMatchObject({
       plannerPriority: "High",
-    });
+    })
     expect(m43SetupOne).toMatchObject({
       plannerPriority: "Normal",
-    });
-    expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(running?.plannedProductionEndDate));
-    expect(dashboardDateKey(m43SetupOne?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
+    })
+    expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(
+      dashboardDateKey(running?.plannedProductionEndDate)
+    )
+    expect(dashboardDateKey(m43SetupOne?.setupPlannedDate)).toBeGreaterThan(
+      dashboardDateKey(m116?.plannedProductionEndDate)
+    )
     expect(m43SetupTwo).toMatchObject({
       machine: "TH501",
       setupNo: "2",
-    });
-    expect(dashboardDateKey(m43SetupTwo?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m43SetupOne?.plannedProductionEndDate));
-    vi.useRealTimers();
-  });
+    })
+    expect(dashboardDateKey(m43SetupTwo?.setupPlannedDate)).toBeGreaterThan(
+      dashboardDateKey(m43SetupOne?.plannedProductionEndDate)
+    )
+    vi.useRealTimers()
+  })
 
   it("moves a setup-complete production forecast with no production rows and cascades the next setup", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -3449,32 +4324,68 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "route",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M-NO-PROD",
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "C501",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "route",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "2", machineUsed: "D3", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M-NO-PROD",
+              optionNumber: "1",
+              setupNo: "2",
+              machineUsed: "D3",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "route",
             createdAt: "2026-07-02T00:00:00.000Z",
-            payload: { partNo: "M-D301-FOLLOWER", optionNumber: "1", setupNo: "1", machineUsed: "D3", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M-D301-FOLLOWER",
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "D3",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            payload: {
+              partNo: "M-NO-PROD",
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo: "M-NO-PROD", optionNumber: "1", setupNo: "2", cycleTime: 28800, loadingUnloading: 0 },
+            payload: {
+              partNo: "M-NO-PROD",
+              optionNumber: "1",
+              setupNo: "2",
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-07-02T00:00:00.000Z",
-            payload: { partNo: "M-D301-FOLLOWER", optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+            payload: {
+              partNo: "M-D301-FOLLOWER",
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
           },
           {
             entryType: "shop_floor_status",
@@ -3492,34 +4403,59 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "C501",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { machineNo: "D301", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "D301",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
         ],
-      });
+      })
 
-      const setupOne = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-NO-PROD" && row.setupNo === "1");
-      const setupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-NO-PROD" && row.setupNo === "2");
-      const follower = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-D301-FOLLOWER");
+      const setupOne = snapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-NO-PROD" && row.setupNo === "1"
+      )
+      const setupTwo = snapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-NO-PROD" && row.setupNo === "2"
+      )
+      const follower = snapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-D301-FOLLOWER"
+      )
 
-      expect(setupOne).toMatchObject({ runningStatus: "Setup complete" });
-      expect(dashboardDateKey(setupOne?.plannedProductionEndDate)).toBeGreaterThanOrEqual(20260701);
-      expect(dashboardDateKey(setupTwo?.setupPlannedDate)).toBeGreaterThanOrEqual(20260701);
-      expect(dashboardDateKey(setupTwo?.plannedProductionEndDate)).toBeGreaterThan(dashboardDateKey(setupOne?.plannedProductionEndDate));
-      expect(follower).toMatchObject({ machine: "D301", plannerPriority: "Normal" });
-      expect(dashboardDateKey(follower?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(setupTwo?.plannedProductionEndDate));
+      expect(setupOne).toMatchObject({ runningStatus: "Setup complete" })
+      expect(
+        dashboardDateKey(setupOne?.plannedProductionEndDate)
+      ).toBeGreaterThanOrEqual(20260701)
+      expect(
+        dashboardDateKey(setupTwo?.setupPlannedDate)
+      ).toBeGreaterThanOrEqual(20260701)
+      expect(
+        dashboardDateKey(setupTwo?.plannedProductionEndDate)
+      ).toBeGreaterThan(dashboardDateKey(setupOne?.plannedProductionEndDate))
+      expect(follower).toMatchObject({
+        machine: "D301",
+        plannerPriority: "Normal",
+      })
+      expect(dashboardDateKey(follower?.setupPlannedDate)).toBeGreaterThan(
+        dashboardDateKey(setupTwo?.plannedProductionEndDate)
+      )
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
 
   it("moves a stale planned production window with no production rows and cascades the next machine item", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -3529,48 +4465,86 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { jcNo: "JC-043", partCode: "M43", optionNumber: "1", orderPcs: 4, rmInwardDate: "2026-06-23" },
+            payload: {
+              jcNo: "JC-043",
+              partCode: "M43",
+              optionNumber: "1",
+              orderPcs: 4,
+              rmInwardDate: "2026-06-23",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-06-23T00:01:00.000Z",
-            payload: { jcNo: "JC-116", partCode: "M116", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-23" },
+            payload: {
+              jcNo: "JC-116",
+              partCode: "M116",
+              optionNumber: "1",
+              orderPcs: 1,
+              rmInwardDate: "2026-06-23",
+            },
           },
           ...["M43", "M116"].flatMap((partNo) => [
             {
               entryType: "route",
               createdAt: "2026-06-23T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                machineUsed: "C501",
+                machineType: "AUTOMATIC",
+              },
             },
             {
               entryType: "cycle",
               createdAt: "2026-06-23T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
             },
           ]),
           {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "C501",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
         ],
-      });
+      })
 
-      const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "C501");
-      const m43 = c501Rows.find((row) => row.partCode === "M43");
-      const m116 = c501Rows.find((row) => row.partCode === "M116");
+      const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.machine === "C501"
+      )
+      const m43 = c501Rows.find((row) => row.partCode === "M43")
+      const m116 = c501Rows.find((row) => row.partCode === "M116")
 
-      expect(m43).toMatchObject({ runningStatus: "Planned", setupPlannedDate: "23-June-26", plannedProductionStartDate: "29-June-26" });
-      expect(dashboardDateKey(m43?.plannedProductionEndDate)).toBeGreaterThan(20260627);
-      expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m43?.plannedProductionEndDate));
+      expect(m43).toMatchObject({
+        runningStatus: "Planned",
+        setupPlannedDate: "23-June-26",
+        plannedProductionStartDate: "29-June-26",
+      })
+      expect(dashboardDateKey(m43?.plannedProductionEndDate)).toBeGreaterThan(
+        20260627
+      )
+      expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(
+        dashboardDateKey(m43?.plannedProductionEndDate)
+      )
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
 
   it("moves an operator-started item with no production rows and leaves actual production start blank", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -3580,41 +4554,79 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-06-27T00:00:00.000Z",
-            payload: { jcNo: "JC-033", partCode: "M43", optionNumber: "1", orderPcs: 4, rmInwardDate: "2026-06-27" },
+            payload: {
+              jcNo: "JC-033",
+              partCode: "M43",
+              optionNumber: "1",
+              orderPcs: 4,
+              rmInwardDate: "2026-06-27",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-06-28T00:00:00.000Z",
-            payload: { jcNo: "JC-081", partCode: "M116", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-28" },
+            payload: {
+              jcNo: "JC-081",
+              partCode: "M116",
+              optionNumber: "1",
+              orderPcs: 1,
+              rmInwardDate: "2026-06-28",
+            },
           },
           ...["M43", "M116"].flatMap((partNo) => [
             {
               entryType: "route",
               createdAt: "2026-06-23T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                machineUsed: "C501",
+                machineType: "AUTOMATIC",
+              },
             },
             {
               entryType: "cycle",
               createdAt: "2026-06-23T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
             },
           ]),
           {
             entryType: "shop_floor_status",
             createdAt: "2026-06-27T08:00:00.000Z",
-            payload: { jcNo: "JC-033", partCode: "M43", optionNumber: "1", setupNo: "1", machine: "C501", stage: "operator_started", completedAt: "2026-06-27T08:00:00.000Z" },
+            payload: {
+              jcNo: "JC-033",
+              partCode: "M43",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "C501",
+              stage: "operator_started",
+              completedAt: "2026-06-27T08:00:00.000Z",
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "C501",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
         ],
-      });
+      })
 
-      const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "C501");
-      const m43 = c501Rows.find((row) => row.partCode === "M43");
-      const m116 = c501Rows.find((row) => row.partCode === "M116");
+      const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.machine === "C501"
+      )
+      const m43 = c501Rows.find((row) => row.partCode === "M43")
+      const m116 = c501Rows.find((row) => row.partCode === "M116")
 
       expect(m43).toMatchObject({
         runningStatus: "Running",
@@ -3622,17 +4634,21 @@ describe("buildLegacyDashboardSnapshot", () => {
         actualProductionStartDate: "",
         setupPlannedDate: "27-June-26",
         plannedProductionStartDate: "29-June-26",
-      });
-      expect(dashboardDateKey(m43?.plannedProductionEndDate)).toBeGreaterThan(20260627);
-      expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m43?.plannedProductionEndDate));
+      })
+      expect(dashboardDateKey(m43?.plannedProductionEndDate)).toBeGreaterThan(
+        20260627
+      )
+      expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(
+        dashboardDateKey(m43?.plannedProductionEndDate)
+      )
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
 
   it("does not treat a second shop-floor start on the same machine as running until the active setup completes", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -3642,59 +4658,118 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-06-25T00:00:00.000Z",
-            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-25" },
+            payload: {
+              jcNo: "JC-016",
+              partCode: "M24",
+              optionNumber: "1",
+              orderPcs: 3,
+              rmInwardDate: "2026-06-25",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-06-26T00:00:00.000Z",
-            payload: { jcNo: "JC-017", partCode: "M25", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-26" },
+            payload: {
+              jcNo: "JC-017",
+              partCode: "M25",
+              optionNumber: "1",
+              orderPcs: 3,
+              rmInwardDate: "2026-06-26",
+            },
           },
           ...["M24", "M25"].flatMap((partNo) => [
             {
               entryType: "route",
               createdAt: "2026-06-25T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "ADB502", machineType: "AUTOMATIC" },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                machineUsed: "ADB502",
+                machineType: "AUTOMATIC",
+              },
             },
             {
               entryType: "cycle",
               createdAt: "2026-06-25T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
             },
           ]),
           {
             entryType: "shop_floor_status",
             createdAt: "2026-06-25T08:00:00.000Z",
-            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", setupNo: "1", machine: "ADB502", stage: "operator_started", completedAt: "2026-06-25T08:00:00.000Z" },
+            payload: {
+              jcNo: "JC-016",
+              partCode: "M24",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "ADB502",
+              stage: "operator_started",
+              completedAt: "2026-06-25T08:00:00.000Z",
+            },
           },
           {
             entryType: "shop_floor_status",
             createdAt: "2026-06-27T08:00:00.000Z",
-            payload: { jcNo: "JC-017", partCode: "M25", optionNumber: "1", setupNo: "1", machine: "ADB502", stage: "operator_started", completedAt: "2026-06-27T08:00:00.000Z" },
+            payload: {
+              jcNo: "JC-017",
+              partCode: "M25",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "ADB502",
+              stage: "operator_started",
+              completedAt: "2026-06-27T08:00:00.000Z",
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-06-25T00:00:00.000Z",
-            payload: { machineNo: "ADB502", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "ADB502",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
         ],
-      });
+      })
 
-      const adbRows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "ADB502");
-      const first = adbRows.find((row) => row.jcNo === "JC-016");
-      const second = adbRows.find((row) => row.jcNo === "JC-017");
-      const activeRows = adbRows.filter((row) => row.runningStatus === "Running" || row.shopFloorStage === "operator_started");
+      const adbRows = snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.machine === "ADB502"
+      )
+      const first = adbRows.find((row) => row.jcNo === "JC-016")
+      const second = adbRows.find((row) => row.jcNo === "JC-017")
+      const activeRows = adbRows.filter(
+        (row) =>
+          row.runningStatus === "Running" ||
+          row.shopFloorStage === "operator_started"
+      )
 
-      expect(activeRows.map((row) => row.jcNo)).toEqual(["JC-016"]);
-      expect(first).toMatchObject({ runningStatus: "Running", shopFloorStage: "operator_started" });
-      expect(second).toMatchObject({ runningStatus: "Planned", shopFloorStage: "", shopFloorTaskReady: false });
-      expect(second?.shopFloorTaskBlocker).toContain("Machine has active setup M24 JC-016 setup 1");
+      expect(activeRows.map((row) => row.jcNo)).toEqual(["JC-016"])
+      expect(first).toMatchObject({
+        runningStatus: "Running",
+        shopFloorStage: "operator_started",
+      })
+      expect(second).toMatchObject({
+        runningStatus: "Planned",
+        shopFloorStage: "",
+        shopFloorTaskReady: false,
+      })
+      expect(second?.shopFloorTaskBlocker).toContain(
+        "Machine has active setup M24 JC-016 setup 1"
+      )
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
   it("prefers global shop-floor status over legacy owner-scoped active rows on the same machine", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-30T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-30T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -3705,59 +4780,114 @@ describe("buildLegacyDashboardSnapshot", () => {
             entryType: "work_order",
             createdAt: "2026-06-25T00:00:00.000Z",
             ownerId: "legacy-user",
-            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-25" },
+            payload: {
+              jcNo: "JC-016",
+              partCode: "M24",
+              optionNumber: "1",
+              orderPcs: 3,
+              rmInwardDate: "2026-06-25",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-06-30T00:00:00.000Z",
             ownerId: "legacy-user",
-            payload: { jcNo: "JC-067", partCode: "M93", optionNumber: "1", orderPcs: 3, rmInwardDate: "2026-06-30" },
+            payload: {
+              jcNo: "JC-067",
+              partCode: "M93",
+              optionNumber: "1",
+              orderPcs: 3,
+              rmInwardDate: "2026-06-30",
+            },
           },
           ...["M24", "M93"].flatMap((partNo) => [
             {
               entryType: "route",
               createdAt: "2026-06-25T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "ADB503", machineType: "AUTOMATIC" },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                machineUsed: "ADB503",
+                machineType: "AUTOMATIC",
+              },
             },
             {
               entryType: "cycle",
               createdAt: "2026-06-25T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
             },
           ]),
           {
             entryType: "shop_floor_status",
             createdAt: "2026-06-27T08:00:00.000Z",
             ownerId: "legacy-user",
-            payload: { jcNo: "JC-016", partCode: "M24", optionNumber: "1", setupNo: "1", machine: "ADB503", stage: "operator_started", completedAt: "2026-06-27T08:00:00.000Z" },
+            payload: {
+              jcNo: "JC-016",
+              partCode: "M24",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "ADB503",
+              stage: "operator_started",
+              completedAt: "2026-06-27T08:00:00.000Z",
+            },
           },
           {
             entryType: "shop_floor_status",
             createdAt: "2026-06-30T09:47:43.648Z",
-            payload: { jcNo: "JC-067", partCode: "M93", optionNumber: "1", setupNo: "1", machine: "ADB503", stage: "raw_material_at_machine", completedAt: "2026-06-30T09:47:43.359Z" },
+            payload: {
+              jcNo: "JC-067",
+              partCode: "M93",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "ADB503",
+              stage: "raw_material_at_machine",
+              completedAt: "2026-06-30T09:47:43.359Z",
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-06-25T00:00:00.000Z",
-            payload: { machineNo: "ADB503", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "ADB503",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
         ],
-      });
+      })
 
-      const adbRows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "ADB503");
-      const legacy = adbRows.find((row) => row.jcNo === "JC-016");
-      const current = adbRows.find((row) => row.jcNo === "JC-067");
+      const adbRows = snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.machine === "ADB503"
+      )
+      const legacy = adbRows.find((row) => row.jcNo === "JC-016")
+      const current = adbRows.find((row) => row.jcNo === "JC-067")
 
-      expect(current).toMatchObject({ partCode: "M93", shopFloorStage: "raw_material_at_machine" });
-      expect(legacy).toMatchObject({ partCode: "M24", shopFloorStage: "", shopFloorTaskReady: false });
-      expect(legacy?.shopFloorTaskBlocker).toContain("Machine has active setup M93 JC-067 setup 1");
+      expect(current).toMatchObject({
+        partCode: "M93",
+        shopFloorStage: "raw_material_at_machine",
+      })
+      expect(legacy).toMatchObject({
+        partCode: "M24",
+        shopFloorStage: "",
+        shopFloorTaskReady: false,
+      })
+      expect(legacy?.shopFloorTaskBlocker).toContain(
+        "Machine has active setup M93 JC-067 setup 1"
+      )
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
   it("keeps stale normal work behind a high-priority item after running work", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -3791,90 +4921,174 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-06-24T00:00:00.000Z",
-            payload: { jcNo: "JC-001", partCode: "M4", optionNumber: "1", orderPcs: 1000, rmInwardDate: "2026-06-24" },
+            payload: {
+              jcNo: "JC-001",
+              partCode: "M4",
+              optionNumber: "1",
+              orderPcs: 1000,
+              rmInwardDate: "2026-06-24",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-06-25T00:00:00.000Z",
-            payload: { jcNo: "JC-025", partCode: "M34", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-06-25" },
+            payload: {
+              jcNo: "JC-025",
+              partCode: "M34",
+              optionNumber: "1",
+              orderPcs: 2,
+              rmInwardDate: "2026-06-25",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-06-26T00:00:00.000Z",
-            payload: { jcNo: "JC-026", partCode: "M35", optionNumber: "1", orderPcs: 2, rmInwardDate: "2026-06-26" },
+            payload: {
+              jcNo: "JC-026",
+              partCode: "M35",
+              optionNumber: "1",
+              orderPcs: 2,
+              rmInwardDate: "2026-06-26",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-06-27T00:00:00.000Z",
-            payload: { jcNo: "JC-033", partCode: "M43", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-27" },
+            payload: {
+              jcNo: "JC-033",
+              partCode: "M43",
+              optionNumber: "1",
+              orderPcs: 1,
+              rmInwardDate: "2026-06-27",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-06-28T00:00:00.000Z",
-            payload: { jcNo: "JC-081", partCode: "M116", optionNumber: "1", orderPcs: 1, rmInwardDate: "2026-06-28" },
+            payload: {
+              jcNo: "JC-081",
+              partCode: "M116",
+              optionNumber: "1",
+              orderPcs: 1,
+              rmInwardDate: "2026-06-28",
+            },
           },
           ...["M4", "M34", "M35", "M43", "M116"].flatMap((partNo) => [
             {
               entryType: "route",
               createdAt: "2026-06-23T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                machineUsed: "C501",
+                machineType: "AUTOMATIC",
+              },
             },
             {
               entryType: "cycle",
               createdAt: "2026-06-23T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 28800, loadingUnloading: 0 },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo: "1",
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
             },
           ]),
           {
             entryType: "shop_floor_status",
             createdAt: "2026-06-25T08:50:33.782Z",
-            payload: { jcNo: "JC-001", partCode: "M4", optionNumber: "1", setupNo: "1", machine: "C501", stage: "item_complete", completedAt: "2026-06-25T08:50:33.782Z" },
+            payload: {
+              jcNo: "JC-001",
+              partCode: "M4",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "C501",
+              stage: "item_complete",
+              completedAt: "2026-06-25T08:50:33.782Z",
+            },
           },
           {
             entryType: "shop_floor_status",
             createdAt: "2026-06-27T08:00:00.000Z",
-            payload: { jcNo: "JC-033", partCode: "M43", optionNumber: "1", setupNo: "1", machine: "C501", stage: "operator_started", completedAt: "2026-06-27T08:00:00.000Z" },
+            payload: {
+              jcNo: "JC-033",
+              partCode: "M43",
+              optionNumber: "1",
+              setupNo: "1",
+              machine: "C501",
+              stage: "operator_started",
+              completedAt: "2026-06-27T08:00:00.000Z",
+            },
           },
           {
             entryType: "machine_master",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+            payload: {
+              machineNo: "C501",
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
           },
         ],
-      });
+      })
 
-      const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "C501");
-      const m43 = c501Rows.find((row) => row.partCode === "M43");
-      const m116 = c501Rows.find((row) => row.partCode === "M116");
-      const m34 = c501Rows.find((row) => row.partCode === "M34");
-      const m35 = c501Rows.find((row) => row.partCode === "M35");
+      const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.machine === "C501"
+      )
+      const m43 = c501Rows.find((row) => row.partCode === "M43")
+      const m116 = c501Rows.find((row) => row.partCode === "M116")
+      const m34 = c501Rows.find((row) => row.partCode === "M34")
+      const m35 = c501Rows.find((row) => row.partCode === "M35")
       const scheduledC501Rows = c501Rows
-        .filter((row) => !["Complete", "Completed"].includes(String(row.runningStatus)))
-        .sort((left, right) => dashboardDateKey(left.setupPlannedDate) - dashboardDateKey(right.setupPlannedDate));
+        .filter(
+          (row) =>
+            !["Complete", "Completed"].includes(String(row.runningStatus))
+        )
+        .sort(
+          (left, right) =>
+            dashboardDateKey(left.setupPlannedDate) -
+            dashboardDateKey(right.setupPlannedDate)
+        )
 
-      expect(m43).toMatchObject({ runningStatus: "Running", plannedProductionStartDate: "29-June-26" });
-      expect(m116).toMatchObject({ plannerPriority: "High" });
-      expect(m34).toMatchObject({ plannerPriority: "Normal" });
-      expect(m35).toMatchObject({ plannerPriority: "Normal" });
-      expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m43?.plannedProductionEndDate));
-      expect(dashboardDateKey(m34?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
-      expect(dashboardDateKey(m34?.plannedProductionStartDate)).toBeGreaterThan(dashboardDateKey(m116?.plannedProductionEndDate));
-      expect(dashboardDateKey(m35?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(m34?.plannedProductionEndDate));
+      expect(m43).toMatchObject({
+        runningStatus: "Running",
+        plannedProductionStartDate: "29-June-26",
+      })
+      expect(m116).toMatchObject({ plannerPriority: "High" })
+      expect(m34).toMatchObject({ plannerPriority: "Normal" })
+      expect(m35).toMatchObject({ plannerPriority: "Normal" })
+      expect(dashboardDateKey(m116?.setupPlannedDate)).toBeGreaterThan(
+        dashboardDateKey(m43?.plannedProductionEndDate)
+      )
+      expect(dashboardDateKey(m34?.setupPlannedDate)).toBeGreaterThan(
+        dashboardDateKey(m116?.plannedProductionEndDate)
+      )
+      expect(dashboardDateKey(m34?.plannedProductionStartDate)).toBeGreaterThan(
+        dashboardDateKey(m116?.plannedProductionEndDate)
+      )
+      expect(dashboardDateKey(m35?.setupPlannedDate)).toBeGreaterThan(
+        dashboardDateKey(m34?.plannedProductionEndDate)
+      )
 
       for (let index = 1; index < scheduledC501Rows.length; index += 1) {
-        const previous = scheduledC501Rows[index - 1];
-        const current = scheduledC501Rows[index];
+        const previous = scheduledC501Rows[index - 1]
+        const current = scheduledC501Rows[index]
 
-        expect(dashboardDateKey(current?.setupPlannedDate)).toBeGreaterThan(dashboardDateKey(previous?.plannedProductionEndDate));
+        expect(dashboardDateKey(current?.setupPlannedDate)).toBeGreaterThan(
+          dashboardDateKey(previous?.plannedProductionEndDate)
+        )
       }
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
 
   it("moves priority ahead of a started setup task when planner approves non-running queue change", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"))
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -3893,44 +5107,90 @@ describe("buildLegacyDashboardSnapshot", () => {
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { jcNo: "JC-042", partCode: "M42", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-06-23" },
+          payload: {
+            jcNo: "JC-042",
+            partCode: "M42",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
+          },
         },
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:01:00.000Z",
-          payload: { jcNo: "JC-043", partCode: "M43", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-06-23" },
+          payload: {
+            jcNo: "JC-043",
+            partCode: "M43",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
+          },
         },
         ...["M42", "M43"].flatMap((partNo) => [
           {
             entryType: "route",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              machineUsed: "C501",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo, optionNumber: "1", setupNo: "1", cycleTime: 1, loadingUnloading: 0 },
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo: "1",
+              cycleTime: 1,
+              loadingUnloading: 0,
+            },
           },
         ]),
         {
           entryType: "shop_floor_status",
           createdAt: "2026-06-23T00:30:00.000Z",
-          payload: { jcNo: "JC-042", partNo: "M42", optionNumber: "1", setupNo: "1", machineNo: "C501", stage: "setting", completedAt: "2026-06-23T00:30:00.000Z" },
+          payload: {
+            jcNo: "JC-042",
+            partNo: "M42",
+            optionNumber: "1",
+            setupNo: "1",
+            machineNo: "C501",
+            stage: "setting",
+            completedAt: "2026-06-23T00:30:00.000Z",
+          },
         },
         {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
         },
       ],
-    });
+    })
 
-    const started = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-042");
-    const priority = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-043");
+    const started = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-042"
+    )
+    const priority = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-043"
+    )
 
-    expect(priority).toMatchObject({ plannerPriority: "High", setupPlannedDate: "23-June-26" });
-    expect(started).toMatchObject({ runningStatus: "Setup complete", setupPlannedDate: "24-June-26" });
-  });
+    expect(priority).toMatchObject({
+      plannerPriority: "High",
+      setupPlannedDate: "23-June-26",
+    })
+    expect(started).toMatchObject({
+      runningStatus: "Setup complete",
+      setupPlannedDate: "24-June-26",
+    })
+  })
 
   it("stops only the approved setup when priority interrupts a running job card", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -3980,59 +5240,119 @@ describe("buildLegacyDashboardSnapshot", () => {
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { jcNo: "JC-042", partCode: "M42", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-06-23" },
+          payload: {
+            jcNo: "JC-042",
+            partCode: "M42",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
+          },
         },
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:01:00.000Z",
-          payload: { jcNo: "JC-043", partCode: "M43", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-06-23" },
+          payload: {
+            jcNo: "JC-043",
+            partCode: "M43",
+            optionNumber: "1",
+            orderPcs: 10,
+            rmInwardDate: "2026-06-23",
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M42", optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+          payload: {
+            partNo: "M42",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "C501",
+            machineType: "AUTOMATIC",
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M42", optionNumber: "1", setupNo: "2", machineUsed: "C502", machineType: "AUTOMATIC" },
+          payload: {
+            partNo: "M42",
+            optionNumber: "1",
+            setupNo: "2",
+            machineUsed: "C502",
+            machineType: "AUTOMATIC",
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M43", optionNumber: "1", setupNo: "1", machineUsed: "C501", machineType: "AUTOMATIC" },
+          payload: {
+            partNo: "M43",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "C501",
+            machineType: "AUTOMATIC",
+          },
         },
-        ...["M42", "M43"].flatMap((partNo) => ["1", "2"].map((setupNo) => ({
-          entryType: "cycle",
-          createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo, optionNumber: "1", setupNo, cycleTime: 1, loadingUnloading: 0 },
-        }))),
+        ...["M42", "M43"].flatMap((partNo) =>
+          ["1", "2"].map((setupNo) => ({
+            entryType: "cycle",
+            createdAt: "2026-06-23T00:00:00.000Z",
+            payload: {
+              partNo,
+              optionNumber: "1",
+              setupNo,
+              cycleTime: 1,
+              loadingUnloading: 0,
+            },
+          }))
+        ),
         {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
         },
         {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "C502", machineType: "AUTOMATIC", status: "Active" },
+          payload: {
+            machineNo: "C502",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
         },
       ],
-    });
+    })
 
-    const stoppedSetup = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-042" && row.setupNo === "1");
-    const untouchedSetup = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-042" && row.setupNo === "2");
-    const priority = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-043");
+    const stoppedSetup = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-042" && row.setupNo === "1"
+    )
+    const untouchedSetup =
+      snapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-042" && row.setupNo === "2"
+      )
+    const priority = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-043"
+    )
 
-    expect(priority).toMatchObject({ plannerPriority: "High", setupPlannedDate: "23-June-26" });
-    expect(stoppedSetup).toMatchObject({ priorityStoppedByJcNo: "JC-043", rawActualQty: 4, priorityRemainingQty: 6 });
-    expect(untouchedSetup).not.toHaveProperty("priorityStoppedByJcNo");
-    expect(untouchedSetup).toMatchObject({ rawActualQty: 1 });
-  });
+    expect(priority).toMatchObject({
+      plannerPriority: "High",
+      setupPlannedDate: "23-June-26",
+    })
+    expect(stoppedSetup).toMatchObject({
+      priorityStoppedByJcNo: "JC-043",
+      rawActualQty: 4,
+      priorityRemainingQty: 6,
+    })
+    expect(untouchedSetup).not.toHaveProperty("priorityStoppedByJcNo")
+    expect(untouchedSetup).toMatchObject({ rawActualQty: 1 })
+  })
 
   it("recomputes downstream setup readiness when an earlier setup is pulled into an idle machine gap", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"))
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -4041,73 +5361,149 @@ describe("buildLegacyDashboardSnapshot", () => {
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { jcNo: "JC-001", partCode: "M-BLOCK", optionNumber: "1", orderPcs: 1000, rmInwardDate: "2026-06-24" },
+          payload: {
+            jcNo: "JC-001",
+            partCode: "M-BLOCK",
+            optionNumber: "1",
+            orderPcs: 1000,
+            rmInwardDate: "2026-06-24",
+          },
         },
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:01:00.000Z",
-          payload: { jcNo: "JC-087", partCode: "M124", optionNumber: "1", orderPcs: 1000, rmInwardDate: "2026-06-24" },
+          payload: {
+            jcNo: "JC-087",
+            partCode: "M124",
+            optionNumber: "1",
+            orderPcs: 1000,
+            rmInwardDate: "2026-06-24",
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-BLOCK", optionNumber: "1", setupNo: "1.1", machineUsed: "A5", machineType: "AUTOMATIC" },
+          payload: {
+            partNo: "M-BLOCK",
+            optionNumber: "1",
+            setupNo: "1.1",
+            machineUsed: "A5",
+            machineType: "AUTOMATIC",
+          },
         },
         {
           entryType: "cycle",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-BLOCK", optionNumber: "1", setupNo: "1.1", cycleTime: 288, loadingUnloading: 0 },
+          payload: {
+            partNo: "M-BLOCK",
+            optionNumber: "1",
+            setupNo: "1.1",
+            cycleTime: 288,
+            loadingUnloading: 0,
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-BLOCK", optionNumber: "1", setupNo: "1.2", machineUsed: "C5", machineType: "AUTOMATIC" },
+          payload: {
+            partNo: "M-BLOCK",
+            optionNumber: "1",
+            setupNo: "1.2",
+            machineUsed: "C5",
+            machineType: "AUTOMATIC",
+          },
         },
         {
           entryType: "cycle",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-BLOCK", optionNumber: "1", setupNo: "1.2", cycleTime: 50, loadingUnloading: 0 },
+          payload: {
+            partNo: "M-BLOCK",
+            optionNumber: "1",
+            setupNo: "1.2",
+            cycleTime: 50,
+            loadingUnloading: 0,
+          },
         },
         ...["1.1", "1.2"].flatMap((setupNo) => [
           {
             entryType: "route",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo: "M124", optionNumber: "1", setupNo, machineUsed: "C5", machineType: "AUTOMATIC" },
+            payload: {
+              partNo: "M124",
+              optionNumber: "1",
+              setupNo,
+              machineUsed: "C5",
+              machineType: "AUTOMATIC",
+            },
           },
           {
             entryType: "cycle",
             createdAt: "2026-06-23T00:00:00.000Z",
-            payload: { partNo: "M124", optionNumber: "1", setupNo, cycleTime: 25, loadingUnloading: 0 },
+            payload: {
+              partNo: "M124",
+              optionNumber: "1",
+              setupNo,
+              cycleTime: 25,
+              loadingUnloading: 0,
+            },
           },
         ]),
         {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "A501", machineType: "AUTOMATIC", status: "Active" },
+          payload: {
+            machineNo: "A501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
         },
         {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
         },
       ],
-    });
+    })
 
     const targetRows = snapshot.productionControl.machinePlanDetailRows
       .filter((row) => row.jcNo === "JC-087")
-      .sort((a, b) => String(a.setupNo).localeCompare(String(b.setupNo), undefined, { numeric: true }));
-    const blockerSetupTwo = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-001" && row.setupNo === "2");
+      .sort((a, b) =>
+        String(a.setupNo).localeCompare(String(b.setupNo), undefined, {
+          numeric: true,
+        })
+      )
+    const blockerSetupTwo =
+      snapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-001" && row.setupNo === "2"
+      )
 
     expect(targetRows).toMatchObject([
-      { machine: "C501", setupNo: "1", setupPlannedDate: "24-June-26", plannedProductionEndDate: "24-June-26" },
-      { machine: "C501", setupNo: "2", setupPlannedDate: "25-June-26", plannedProductionEndDate: "25-June-26" },
-    ]);
-    expect(blockerSetupTwo).toMatchObject({ machine: "C501", setupPlannedDate: "6-July-26" });
-  });
+      {
+        machine: "C501",
+        setupNo: "1",
+        setupPlannedDate: "24-June-26",
+        plannedProductionEndDate: "24-June-26",
+      },
+      {
+        machine: "C501",
+        setupNo: "2",
+        setupPlannedDate: "25-June-26",
+        plannedProductionEndDate: "25-June-26",
+      },
+    ])
+    expect(blockerSetupTwo).toMatchObject({
+      machine: "C501",
+      setupPlannedDate: "6-July-26",
+    })
+  })
 
   it("moves planned work to an idle physical machine in the same family when it fits before the next queued job", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"))
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -4116,77 +5512,157 @@ describe("buildLegacyDashboardSnapshot", () => {
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { jcNo: "JC-001", partCode: "M-SLOW", optionNumber: "1", orderPcs: 1000, rmInwardDate: "2026-06-24" },
+          payload: {
+            jcNo: "JC-001",
+            partCode: "M-SLOW",
+            optionNumber: "1",
+            orderPcs: 1000,
+            rmInwardDate: "2026-06-24",
+          },
         },
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:01:00.000Z",
-          payload: { jcNo: "JC-002", partCode: "M-C502", optionNumber: "1", orderPcs: 1000, rmInwardDate: "2026-06-24" },
+          payload: {
+            jcNo: "JC-002",
+            partCode: "M-C502",
+            optionNumber: "1",
+            orderPcs: 1000,
+            rmInwardDate: "2026-06-24",
+          },
         },
         {
           entryType: "work_order",
           createdAt: "2026-06-23T00:02:00.000Z",
-          payload: { jcNo: "JC-003", partCode: "M-FIT", optionNumber: "1", orderPcs: 1000, rmInwardDate: "2026-06-24" },
+          payload: {
+            jcNo: "JC-003",
+            partCode: "M-FIT",
+            optionNumber: "1",
+            orderPcs: 1000,
+            rmInwardDate: "2026-06-24",
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-SLOW", optionNumber: "1", setupNo: "1.1", machineUsed: "A5", machineType: "AUTOMATIC" },
+          payload: {
+            partNo: "M-SLOW",
+            optionNumber: "1",
+            setupNo: "1.1",
+            machineUsed: "A5",
+            machineType: "AUTOMATIC",
+          },
         },
         {
           entryType: "cycle",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-SLOW", optionNumber: "1", setupNo: "1.1", cycleTime: 576, loadingUnloading: 0 },
+          payload: {
+            partNo: "M-SLOW",
+            optionNumber: "1",
+            setupNo: "1.1",
+            cycleTime: 576,
+            loadingUnloading: 0,
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-SLOW", optionNumber: "1", setupNo: "1.2", machineUsed: "C5", machineType: "AUTOMATIC" },
+          payload: {
+            partNo: "M-SLOW",
+            optionNumber: "1",
+            setupNo: "1.2",
+            machineUsed: "C5",
+            machineType: "AUTOMATIC",
+          },
         },
         {
           entryType: "cycle",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-SLOW", optionNumber: "1", setupNo: "1.2", cycleTime: 288, loadingUnloading: 0 },
+          payload: {
+            partNo: "M-SLOW",
+            optionNumber: "1",
+            setupNo: "1.2",
+            cycleTime: 288,
+            loadingUnloading: 0,
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-C502", optionNumber: "1", setupNo: "1.1", machineUsed: "C5", machineType: "AUTOMATIC" },
+          payload: {
+            partNo: "M-C502",
+            optionNumber: "1",
+            setupNo: "1.1",
+            machineUsed: "C5",
+            machineType: "AUTOMATIC",
+          },
         },
         {
           entryType: "cycle",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-C502", optionNumber: "1", setupNo: "1.1", cycleTime: 288, loadingUnloading: 0 },
+          payload: {
+            partNo: "M-C502",
+            optionNumber: "1",
+            setupNo: "1.1",
+            cycleTime: 288,
+            loadingUnloading: 0,
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-FIT", optionNumber: "1", setupNo: "1.1", machineUsed: "C5", machineType: "AUTOMATIC" },
+          payload: {
+            partNo: "M-FIT",
+            optionNumber: "1",
+            setupNo: "1.1",
+            machineUsed: "C5",
+            machineType: "AUTOMATIC",
+          },
         },
         {
           entryType: "cycle",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { partNo: "M-FIT", optionNumber: "1", setupNo: "1.1", cycleTime: 25, loadingUnloading: 0 },
+          payload: {
+            partNo: "M-FIT",
+            optionNumber: "1",
+            setupNo: "1.1",
+            cycleTime: 25,
+            loadingUnloading: 0,
+          },
         },
         {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "A501", machineType: "AUTOMATIC", status: "Active" },
+          payload: {
+            machineNo: "A501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
         },
         {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "C501", machineType: "AUTOMATIC", status: "Active" },
+          payload: {
+            machineNo: "C501",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
         },
         {
           entryType: "machine_master",
           createdAt: "2026-06-23T00:00:00.000Z",
-          payload: { machineNo: "C502", machineType: "AUTOMATIC", status: "Active" },
+          payload: {
+            machineNo: "C502",
+            machineType: "AUTOMATIC",
+            status: "Active",
+          },
         },
       ],
-    });
+    })
 
-    const fitRow = snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-003");
+    const fitRow = snapshot.productionControl.machinePlanDetailRows.find(
+      (row) => row.jcNo === "JC-003"
+    )
 
     expect(fitRow).toMatchObject({
       machine: "C501",
@@ -4194,8 +5670,8 @@ describe("buildLegacyDashboardSnapshot", () => {
       familyIdleGapFromMachine: "C502",
       setupPlannedDate: "24-June-26",
       plannedProductionEndDate: "24-June-26",
-    });
-  });
+    })
+  })
 
   it("moves a later setup when actual previous setup output is below cycle plan", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -4290,14 +5766,21 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    expect(snapshot.productionControl.machinePlanDetailRows.find((row) => row.jcNo === "JC-003" && row.setupNo === "2")).toMatchObject({
+    expect(
+      snapshot.productionControl.machinePlanDetailRows.find(
+        (row) => row.jcNo === "JC-003" && row.setupNo === "2"
+      )
+    ).toMatchObject({
       setupPlannedDate: "27-July-26",
-    });
-  });
+    })
+  })
 
   it("moves a ready setup ahead when an earlier machine slot is delayed by WIP shortage", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-25T12:00:00.000Z"))
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [
@@ -4423,20 +5906,24 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "C501");
+    const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter(
+      (row) => row.machine === "C501"
+    )
     expect(c501Rows.find((row) => row.jcNo === "JC-B")).toMatchObject({
       setupPlannedDate: "4-July-26",
-    });
-    expect(c501Rows.find((row) => row.jcNo === "JC-A" && row.setupNo === "2")).toMatchObject({
+    })
+    expect(
+      c501Rows.find((row) => row.jcNo === "JC-A" && row.setupNo === "2")
+    ).toMatchObject({
       setupPlannedDate: "11-July-26",
-    });
-  });
+    })
+  })
 
   it("does not move a later setup ahead when its WIP buffer is still short", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-25T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-25T12:00:00.000Z"))
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -4524,18 +6011,22 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
       ],
-    });
+    })
 
-    const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "C501");
+    const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter(
+      (row) => row.machine === "C501"
+    )
     expect(c501Rows.find((row) => row.jcNo === "JC-A")).toMatchObject({
       setupPlannedDate: "7-July-26",
-    });
+    })
     expect(c501Rows.find((row) => row.jcNo === "JC-B")).toMatchObject({
       setupPlannedDate: "11-July-26",
       shopFloorTaskReady: false,
-      shopFloorTaskBlocker: expect.stringContaining("Previous setup WIP buffer is not ready"),
-    });
-  });
+      shopFloorTaskBlocker: expect.stringContaining(
+        "Previous setup WIP buffer is not ready"
+      ),
+    })
+  })
 
   it("plans only planner-selected remaining setups after a mid-route change", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -4620,21 +6111,23 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
       ],
-    });
+    })
 
-    const jcRows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-004");
-    expect(jcRows.map((row) => row.setupNo)).toEqual(["2", "3", "4"]);
-    expect(jcRows.map((row) => row.orderPcs)).toEqual([2500, 5000, 5000]);
+    const jcRows = snapshot.productionControl.machinePlanDetailRows.filter(
+      (row) => row.jcNo === "JC-004"
+    )
+    expect(jcRows.map((row) => row.setupNo)).toEqual(["2", "3", "4"])
+    expect(jcRows.map((row) => row.orderPcs)).toEqual([2500, 5000, 5000])
     expect(snapshot.productionControl.workOrders[0]).toMatchObject({
       optionNumber: "2",
       optionSource: "Route change",
       routeStatus: "Route change plan",
-    });
-  });
+    })
+  })
 
   it("plans the next setup on a machine from the current job planned production end date", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"))
 
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -4716,19 +6209,21 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.machine === "C501");
-    expect(c501Rows).toHaveLength(2);
+    const c501Rows = snapshot.productionControl.machinePlanDetailRows.filter(
+      (row) => row.machine === "C501"
+    )
+    expect(c501Rows).toHaveLength(2)
     expect(c501Rows[0]).toMatchObject({
       jcNo: "JC-001",
       plannedProductionEndDate: "23-June-26",
-    });
+    })
     expect(c501Rows[1]).toMatchObject({
       jcNo: "JC-002",
       setupPlannedDate: "24-June-26",
-    });
-  });
+    })
+  })
 
   it("deduplicates repeated quality approval and first-piece report saves for the same setup", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -4852,26 +6347,25 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
-      firstPieceInspectionReportRows: Array<Record<string, unknown>>;
-      machinePlanDetailRows: Array<Record<string, unknown>>;
-    };
+    const productionControl =
+      snapshot.productionControl as typeof snapshot.productionControl & {
+        firstPieceInspectionReportRows: Array<Record<string, unknown>>
+        machinePlanDetailRows: Array<Record<string, unknown>>
+      }
 
-    expect(productionControl.firstPieceInspectionReportRows).toHaveLength(1);
+    expect(productionControl.firstPieceInspectionReportRows).toHaveLength(1)
     expect(productionControl.firstPieceInspectionReportRows[0]).toMatchObject({
       approvedBy: "Q2",
       reportId: "jc-fpi|m-fpi|1|1|c901|fpi",
-    });
+    })
     expect(productionControl.machinePlanDetailRows[0]).toMatchObject({
       jcNo: "JC-FPI",
       shopFloorStage: "quality_approval",
       shopFloorDoneBy: "Q2",
-    });
-  });
-
-
+    })
+  })
 
   it("exposes digital production cards and cycle times for running card target calculation", () => {
     const snapshot = buildLegacyDashboardSnapshot({
@@ -4881,22 +6375,46 @@ describe("buildLegacyDashboardSnapshot", () => {
         {
           entryType: "work_order",
           createdAt: "2026-07-02T08:00:00.000Z",
-          payload: { jcNo: "JC-PCARD", partCode: "M-PCARD", optionNumber: "1", orderPcs: 100, rmInwardDate: "2026-07-02" },
+          payload: {
+            jcNo: "JC-PCARD",
+            partCode: "M-PCARD",
+            optionNumber: "1",
+            orderPcs: 100,
+            rmInwardDate: "2026-07-02",
+          },
         },
         {
           entryType: "route",
           createdAt: "2026-07-02T08:00:00.000Z",
-          payload: { partNo: "M-PCARD", optionNumber: "1", setupNo: "1", machineUsed: "C9", machineType: "CONV" },
+          payload: {
+            partNo: "M-PCARD",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "C9",
+            machineType: "CONV",
+          },
         },
         {
           entryType: "cycle",
           createdAt: "2026-07-02T08:00:00.000Z",
-          payload: { partNo: "M-PCARD", optionNumber: "1", setupNo: "1", cycleTime: 30, loadingUnloading: 10 },
+          payload: {
+            partNo: "M-PCARD",
+            optionNumber: "1",
+            setupNo: "1",
+            cycleTime: 30,
+            loadingUnloading: 10,
+          },
         },
         {
           entryType: "tooling",
           createdAt: "2026-07-02T08:00:00.000Z",
-          payload: { partNo: "M-PCARD", optionNumber: "1", setupNo: "1", machineUsed: "C9", tooling: "Fixture" },
+          payload: {
+            partNo: "M-PCARD",
+            optionNumber: "1",
+            setupNo: "1",
+            machineUsed: "C9",
+            tooling: "Fixture",
+          },
         },
         {
           entryType: "machine_master",
@@ -4907,30 +6425,50 @@ describe("buildLegacyDashboardSnapshot", () => {
           entryType: "production_card",
           key: "pcard-old",
           createdAt: "2026-07-02T09:00:00.000Z",
-          payload: { cardId: "pcard", jobCard: "JC-PCARD", partCode: "M-PCARD", setupNo: "1", machine: "C901", targetQty: 100, outputQty: 80 },
+          payload: {
+            cardId: "pcard",
+            jobCard: "JC-PCARD",
+            partCode: "M-PCARD",
+            setupNo: "1",
+            machine: "C901",
+            targetQty: 100,
+            outputQty: 80,
+          },
         },
         {
           entryType: "production_card",
           key: "pcard-new",
           createdAt: "2026-07-02T10:00:00.000Z",
-          payload: { cardId: "pcard", jobCard: "JC-PCARD", partCode: "M-PCARD", setupNo: "1", machine: "C901", targetQty: 120, outputQty: 96 },
+          payload: {
+            cardId: "pcard",
+            jobCard: "JC-PCARD",
+            partCode: "M-PCARD",
+            setupNo: "1",
+            machine: "C901",
+            targetQty: 120,
+            outputQty: 96,
+          },
         },
       ],
-    });
+    })
 
-    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
-      productionCardRows: Array<Record<string, unknown>>;
-      machinePlanDetailRows: Array<Record<string, unknown>>;
-    };
+    const productionControl =
+      snapshot.productionControl as typeof snapshot.productionControl & {
+        productionCardRows: Array<Record<string, unknown>>
+        machinePlanDetailRows: Array<Record<string, unknown>>
+      }
 
-    expect(productionControl.productionCardRows).toHaveLength(1);
-    expect(productionControl.productionCardRows[0]).toMatchObject({ targetQty: 120, outputQty: 96 });
+    expect(productionControl.productionCardRows).toHaveLength(1)
+    expect(productionControl.productionCardRows[0]).toMatchObject({
+      targetQty: 120,
+      outputQty: 96,
+    })
     expect(productionControl.machinePlanDetailRows[0]).toMatchObject({
       jcNo: "JC-PCARD",
       cycleTime: 30,
       loadingUnloading: 10,
-    });
-  });
+    })
+  })
   it("exposes setup checklist master rows and the latest setup checklist session", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -4997,23 +6535,24 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         },
       ],
-    });
+    })
 
-    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
-      setupChecklistMasterRows: Array<Record<string, unknown>>;
-      setupChecklistSessionRows: Array<Record<string, unknown>>;
-    };
+    const productionControl =
+      snapshot.productionControl as typeof snapshot.productionControl & {
+        setupChecklistMasterRows: Array<Record<string, unknown>>
+        setupChecklistSessionRows: Array<Record<string, unknown>>
+      }
 
-    expect(productionControl.setupChecklistMasterRows).toHaveLength(2);
-    expect(productionControl.setupChecklistSessionRows).toHaveLength(1);
+    expect(productionControl.setupChecklistMasterRows).toHaveLength(2)
+    expect(productionControl.setupChecklistSessionRows).toHaveLength(1)
     expect(productionControl.setupChecklistSessionRows[0]).toMatchObject({
       status: "Completed",
       endedBy: "A2",
-    });
-  });
+    })
+  })
   it("waits for the later setup 1 stream when stopped-machine WIP cannot feed 15 days", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"))
 
     try {
       const snapshot = buildLegacyDashboardSnapshot({
@@ -5028,7 +6567,12 @@ describe("buildLegacyDashboardSnapshot", () => {
             rescheduleAction: "shift_required",
             planningMode: "review_then_plan",
             interruptedSetups: [
-              { jcNo: "JC-WIP-CHAIN", setupNo: "1", machine: "A510", finishedQty: 2 },
+              {
+                jcNo: "JC-WIP-CHAIN",
+                setupNo: "1",
+                machine: "A510",
+                finishedQty: 2,
+              },
             ],
             queuePlacements: [
               {
@@ -5050,12 +6594,24 @@ describe("buildLegacyDashboardSnapshot", () => {
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:00:00.000Z",
-            payload: { jcNo: "JC-WIP-CHAIN", partCode: "M10", optionNumber: "1", orderPcs: 10, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-WIP-CHAIN",
+              partCode: "M10",
+              optionNumber: "1",
+              orderPcs: 10,
+              rmInwardDate: "2026-07-01",
+            },
           },
           {
             entryType: "work_order",
             createdAt: "2026-07-01T00:01:00.000Z",
-            payload: { jcNo: "JC-A511-BLOCK", partCode: "M99", optionNumber: "1", orderPcs: 6, rmInwardDate: "2026-07-01" },
+            payload: {
+              jcNo: "JC-A511-BLOCK",
+              partCode: "M99",
+              optionNumber: "1",
+              orderPcs: 6,
+              rmInwardDate: "2026-07-01",
+            },
           },
           ...[
             ["M10", "1", "A5", "AUTOMATIC"],
@@ -5065,12 +6621,24 @@ describe("buildLegacyDashboardSnapshot", () => {
             {
               entryType: "route",
               createdAt: "2026-07-01T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo, machineUsed, machineType },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo,
+                machineUsed,
+                machineType,
+              },
             },
             {
               entryType: "cycle",
               createdAt: "2026-07-01T00:00:00.000Z",
-              payload: { partNo, optionNumber: "1", setupNo, cycleTime: 28800, loadingUnloading: 0 },
+              payload: {
+                partNo,
+                optionNumber: "1",
+                setupNo,
+                cycleTime: 28800,
+                loadingUnloading: 0,
+              },
             },
           ]),
           ...[
@@ -5096,28 +6664,36 @@ describe("buildLegacyDashboardSnapshot", () => {
             },
           },
         ],
-      });
+      })
 
-      const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-WIP-CHAIN");
-      const remainingSetupOne = rows.find((row) => row.setupNo === "1" && row.machine === "A511");
-      const setupTwo = rows.find((row) => row.setupNo === "2");
+      const rows = snapshot.productionControl.machinePlanDetailRows.filter(
+        (row) => row.jcNo === "JC-WIP-CHAIN"
+      )
+      const remainingSetupOne = rows.find(
+        (row) => row.setupNo === "1" && row.machine === "A511"
+      )
+      const setupTwo = rows.find((row) => row.setupNo === "2")
 
       expect(remainingSetupOne).toMatchObject({
         machine: "A511",
         orderPcs: 8,
         totalOrderPcs: 10,
         machineUnavailableSplitRole: "remaining_moved_to_alternate_machine",
-      });
+      })
       expect(setupTwo).toMatchObject({
         machine: "TR503",
         orderPcs: 10,
         totalOrderPcs: 10,
-      });
-      expect(dashboardDateKey(setupTwo?.plannedProductionStartDate)).toBeGreaterThanOrEqual(dashboardDateKey(remainingSetupOne?.plannedProductionStartDate));
+      })
+      expect(
+        dashboardDateKey(setupTwo?.plannedProductionStartDate)
+      ).toBeGreaterThanOrEqual(
+        dashboardDateKey(remainingSetupOne?.plannedProductionStartDate)
+      )
     } finally {
-      vi.useRealTimers();
+      vi.useRealTimers()
     }
-  });
+  })
   it("adds a practical handoff buffer before a downstream setup can finish", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -5188,23 +6764,27 @@ describe("buildLegacyDashboardSnapshot", () => {
           },
         })),
       ],
-    });
+    })
 
-    const rows = snapshot.productionControl.machinePlanDetailRows.filter((row) => row.jcNo === "JC-M12");
-    const setupThree = rows.find((row) => row.setupNo === "3");
-    const setupFour = rows.find((row) => row.setupNo === "4");
+    const rows = snapshot.productionControl.machinePlanDetailRows.filter(
+      (row) => row.jcNo === "JC-M12"
+    )
+    const setupThree = rows.find((row) => row.setupNo === "3")
+    const setupFour = rows.find((row) => row.setupNo === "4")
 
-    expect(setupThree).toBeDefined();
-    expect(setupFour).toBeDefined();
-    expect(dateLabelValue(setupFour!.plannedProductionEndDate)).toBeGreaterThan(dateLabelValue(setupThree!.plannedProductionEndDate));
-  });
-});
+    expect(setupThree).toBeDefined()
+    expect(setupFour).toBeDefined()
+    expect(dateLabelValue(setupFour!.plannedProductionEndDate)).toBeGreaterThan(
+      dateLabelValue(setupThree!.plannedProductionEndDate)
+    )
+  })
+})
 
 function dateLabelValue(value: unknown) {
-  const raw = String(value ?? "");
-  const match = raw.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/);
-  if (!match) return Date.parse(raw);
-  const [, day, monthName, yearText] = match;
+  const raw = String(value ?? "")
+  const match = raw.match(/^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/)
+  if (!match) return Date.parse(raw)
+  const [, day, monthName, yearText] = match
   const month = [
     "january",
     "february",
@@ -5218,7 +6798,7 @@ function dateLabelValue(value: unknown) {
     "october",
     "november",
     "december",
-  ].indexOf(monthName!.toLowerCase());
-  const year = Number(yearText);
-  return Date.UTC(year < 100 ? 2000 + year : year, month, Number(day));
+  ].indexOf(monthName!.toLowerCase())
+  const year = Number(yearText)
+  return Date.UTC(year < 100 ? 2000 + year : year, month, Number(day))
 }

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises"
 import { strFromU8, unzipSync } from "fflate"
 import { Pool, type PoolClient } from "pg"
 
+import { normalizeArchive } from "../archive-safety"
 import { convexTableDisposition, inspectConvexExport } from "../convex-export"
 import { convexDataEntryDisposition } from "../data-entry-classification"
 
@@ -140,7 +141,7 @@ export async function stageConvexExport(
     readFile(options.artifactPath),
     inspectConvexExport(options.artifactPath),
   ])
-  const archive = unzipSync(artifact)
+  const archive = normalizeArchive(unzipSync(artifact))
   const stagedRowsByTable: Record<string, number> = {}
   const unknownTypes = unknownEntryTypes(inventory.dataEntryTypes)
   const pool = new Pool({ connectionString: options.connectionString })

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises"
 
 import { strFromU8, unzipSync } from "fflate"
 
+import { normalizeArchive } from "./archive-safety"
 import { convexDataEntryDisposition } from "./data-entry-classification"
 
 const EXCLUDED_IDENTITY_TABLES = new Set([
@@ -203,11 +204,56 @@ function dataEntryProfile(contents: Uint8Array | undefined) {
   }
 }
 
+function validateDocuments(
+  table: string,
+  contents: Uint8Array,
+  requireSourceId: boolean
+) {
+  const lines = strFromU8(contents)
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+
+  for (const [index, line] of lines.entries()) {
+    let document: unknown
+    try {
+      document = JSON.parse(line)
+    } catch {
+      throw new Error(
+        `Invalid Convex document JSON in ${table} on line ${index + 1}`
+      )
+    }
+
+    if (
+      !isRecord(document) ||
+      (requireSourceId && (typeof document._id !== "string" || !document._id))
+    ) {
+      throw new Error(
+        `Invalid Convex document in ${table} on line ${index + 1}`
+      )
+    }
+  }
+}
+
 export async function inspectConvexExport(
   artifactPath: string
 ): Promise<ConvexExportInventory> {
   const artifact = await readFile(artifactPath)
-  const archive = unzipSync(artifact)
+  const archive = normalizeArchive(unzipSync(artifact))
+  if (!Object.hasOwn(archive, "dataEntries/documents.jsonl")) {
+    throw new Error("Convex export must contain dataEntries/documents.jsonl")
+  }
+
+  for (const [path, contents] of Object.entries(archive)) {
+    if (path.endsWith("/documents.jsonl")) {
+      const table = path.slice(0, -"/documents.jsonl".length)
+      validateDocuments(
+        table,
+        contents,
+        convexTableDisposition(table) === "canonical"
+      )
+    }
+  }
+
   const dataEntries = dataEntryProfile(archive["dataEntries/documents.jsonl"])
   const tables = Object.entries(archive)
     .filter(([path]) => path.endsWith("/documents.jsonl"))

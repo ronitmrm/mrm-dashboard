@@ -1,8 +1,6 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type DragEvent, type FormEvent, type ReactNode, type SetStateAction } from "react";
-import { useAuthActions } from "@convex-dev/auth/react";
-import { useAction, useConvexAuth, useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import Image from "next/image";
 import {
   ArrowDown,
@@ -90,8 +88,7 @@ import {
   type ShopFloorStatusPatch,
 } from "@/lib/shop-floor-optimistic";
 import { useTheme } from "@/components/theme-provider";
-import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
+import { authClient } from "@/lib/auth/auth-client";
 
 type DashboardPayload = Record<string, unknown>;
 
@@ -102,6 +99,8 @@ type ActionStatus = {
 
 type DashboardApiResult = {
   message: string;
+  queued?: boolean;
+  skipped?: boolean;
 };
 
 type PlanningRefreshLock = {
@@ -480,37 +479,76 @@ const subscribeToHydration = () => () => {};
 const clientHydrationSnapshot = () => true;
 const serverHydrationSnapshot = () => false;
 
-export function MrmplDashboard() {
-  const { isAuthenticated, isLoading } = useConvexAuth();
-  const [authCheckTimedOut, setAuthCheckTimedOut] = useState(false);
+function usePostgresDashboardPage(url: string | null, pollIntervalMs = 0) {
+  const [result, setResult] = useState<{
+    data?: DashboardPayload;
+    error?: string;
+    url: string;
+  }>({ url: "" });
 
   useEffect(() => {
-    const timeout = window.setTimeout(
-      () => setAuthCheckTimedOut(isLoading),
-      isLoading ? 4000 : 0,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [isLoading]);
+    if (!url) return;
+    const controller = new AbortController();
+    const load = () => {
+      void fetch(url, {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const body = asRecord(await response.json().catch(() => ({})));
+          if (!response.ok) {
+            throw new Error(str(body.error) || "Dashboard data could not be loaded.");
+          }
+          setResult({ data: body, url });
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) return;
+          setResult({
+            error: error instanceof Error ? error.message : "Dashboard data could not be loaded.",
+            url,
+          });
+        });
+    };
+    load();
+    const interval = pollIntervalMs > 0
+      ? window.setInterval(load, pollIntervalMs)
+      : undefined;
+    return () => {
+      controller.abort();
+      if (interval !== undefined) window.clearInterval(interval);
+    };
+  }, [pollIntervalMs, url]);
 
-  if (isLoading && !authCheckTimedOut) return <AuthLoadingScreen />;
-  if (!isAuthenticated) return <AuthScreen />;
+  return result.url === url ? result : { url: url ?? "" };
+}
 
+async function savePostgresDashboardEntry(entryType: string, payload: DashboardPayload) {
+  const response = await fetch("/api/data-entry", {
+    body: JSON.stringify({ entryType, payload }),
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  const body = asRecord(await response.json().catch(() => ({})));
+  if (!response.ok) {
+    throw new Error(str(body.error) || "Dashboard entry could not be saved.");
+  }
+  return body;
+}
+
+export function MrmplDashboard() {
   return <DashboardShell />;
 }
 
 
 export function HourlyQualityCheckPage() {
-  const { isAuthenticated, isLoading } = useConvexAuth();
-
-  if (!isLoading && !isAuthenticated) return <AuthScreen />;
-
   return <HourlyQualityCheckShell />;
 }
 
 function HourlyQualityCheckShell() {
-  const hourlyQualityPageData = useQuery(api.dashboard.hourlyQualityPage, {});
-  const currentDashboardUser = useQuery(api.dashboard.currentDashboardUser, {});
-  const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
+  const hourlyQualityPage = usePostgresDashboardPage("/api/hourly-quality");
+  const hourlyQualityPageData = hourlyQualityPage.data;
   const [prodDate, setProdDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [shift, setShift] = useState("Day");
   const [hourSlot, setHourSlot] = useState(() => currentHourSlot());
@@ -521,7 +559,7 @@ function HourlyQualityCheckShell() {
   const [status, setStatus] = useState<ActionStatus>(null);
 
   const hourlyQualityPageRecord = asRecord(hourlyQualityPageData);
-  const currentDashboardUserRecord = asRecord(currentDashboardUser);
+  const currentDashboardUserRecord = asRecord(hourlyQualityPageRecord.currentDashboardUser);
   const performerId = str(currentDashboardUserRecord.userId);
   const performerDisplay = str(currentDashboardUserRecord.displayId || currentDashboardUserRecord.email || currentDashboardUserRecord.name || performerId);
   const runningRows = useMemo(() => asArray(hourlyQualityPageRecord.runningRows), [hourlyQualityPageRecord.runningRows]);
@@ -533,7 +571,12 @@ function HourlyQualityCheckShell() {
     [qualityParameterRows, selectedRow],
   );
   const selectedCheckKey = selectedRow ? hourlyQualityCheckId(selectedRow, prodDate, shift, hourSlot) : "";
-  const existingCheck = useQuery(api.dashboard.hourlyQualityCheckByKey, selectedCheckKey ? { key: selectedCheckKey } : "skip");
+  const existingCheckPage = usePostgresDashboardPage(
+    selectedCheckKey ? `/api/hourly-quality?checkKey=${encodeURIComponent(selectedCheckKey)}` : null,
+  );
+  const existingCheck = selectedCheckKey
+    ? existingCheckPage.data?.existingCheck as DashboardPayload | null | undefined
+    : undefined;
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -567,11 +610,7 @@ function HourlyQualityCheckShell() {
     setIsSaving(true);
     setStatus(null);
     try {
-      await saveDataEntry({
-        entryType: "hourly_quality_check",
-        key: dataEntryKey("hourly_quality_check", payload),
-        payload,
-      });
+      await savePostgresDashboardEntry("hourly_quality_check", payload);
       setStatus({ tone: "default", message: "Hourly quality check saved." });
       window.location.assign(dashboardReturnHref("qualityControlTasksTab"));
     } catch (err) {
@@ -682,6 +721,9 @@ function HourlyQualityCheckShell() {
             ) : (
               <EmptyRowsMessage>Select a machine to start the hourly check.</EmptyRowsMessage>
             )}
+            {hourlyQualityPage.error || existingCheckPage.error ? (
+              <AlertMessage tone="destructive">{hourlyQualityPage.error || existingCheckPage.error}</AlertMessage>
+            ) : null}
             {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
             <div className="flex justify-end">
               <Button type="button" disabled={!canSave || isSaving} onClick={saveHourlyCheck}>
@@ -698,10 +740,6 @@ function HourlyQualityCheckShell() {
 
 
 export function SetupChecklistPage() {
-  const { isAuthenticated, isLoading } = useConvexAuth();
-
-  if (!isLoading && !isAuthenticated) return <AuthScreen />;
-
   return <SetupChecklistShell />;
 }
 
@@ -726,10 +764,12 @@ function setupChecklistQueryFromLocation() {
 }
 
 function SetupChecklistShell() {
-  const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
   const isClientHydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
   const { sessionId, phase, row } = isClientHydrated ? setupChecklistQueryFromLocation() : { sessionId: "", phase: "", row: {} as DashboardPayload };
-  const checklistPageData = useQuery(api.dashboard.setupChecklistPage, sessionId ? { sessionId } : "skip");
+  const checklistPage = usePostgresDashboardPage(
+    sessionId ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}` : null,
+  );
+  const checklistPageData = checklistPage.data;
   const [localChecklistSession, setLocalChecklistSession] = useState<DashboardPayload | undefined>(undefined);
   const [doneBy, setDoneBy] = useState("");
   const [remark, setRemark] = useState("");
@@ -798,11 +838,7 @@ function SetupChecklistShell() {
     setIsSaving(true);
     setStatus(null);
     try {
-      await saveDataEntry({
-        entryType: "setup_checklist_session",
-        key: dataEntryKey("setup_checklist_session", payload),
-        payload,
-      });
+      await savePostgresDashboardEntry("setup_checklist_session", payload);
       setLocalChecklistSession(payload);
       writeStoredSetupChecklistSession(payload);
       setStatus({ tone: "default", message: "Checklist progress saved." });
@@ -861,6 +897,7 @@ function SetupChecklistShell() {
                 onValueChange={updateValue}
               />
             )}
+            {checklistPage.error ? <AlertMessage tone="destructive">{checklistPage.error}</AlertMessage> : null}
             {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <StatusBadge value={isComplete ? "Checklist complete" : "Progress can be saved"} />
@@ -895,23 +932,15 @@ function DashboardShell() {
   const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
-  const dashboardPayload = useQuery(api.dashboard.snapshot, {});
-  const dashboardRefreshStatus = useQuery(api.dashboard.refreshStatus, {});
-  const refreshSnapshot = useAction(api.dashboard.refreshSnapshot);
-  const saveRouteSelection = useMutation(api.dashboard.saveRouteSelection);
-  const savePlannerPriority = useMutation(api.dashboard.savePlannerPriority);
-  const saveMachineConstraint = useMutation(api.dashboard.saveMachineConstraint);
-  const savePlanOverride = useMutation(api.dashboard.savePlanOverride);
-  const saveRouteChange = useMutation(api.dashboard.saveRouteChange);
-  const saveDispatchApproval = useMutation(api.dashboard.saveDispatchApproval);
-  const markComplete = useMutation(api.dashboard.markComplete);
-  const saveProductionEntry = useMutation(api.dashboard.saveProductionEntry);
-  const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
-  const reverseEntry = useMutation(api.dashboard.reverseEntry);
-  const correctionCandidates = useQuery(
-    api.dashboard.correctionCandidates,
-    activeTab === "correctionsTab" ? { limit: 200 } : "skip",
+  const dashboardPage = usePostgresDashboardPage("/api/dashboard", 5_000);
+  const dashboardStatusPage = usePostgresDashboardPage("/api/dashboard-refresh-status", 2_000);
+  const correctionCandidatesPage = usePostgresDashboardPage(
+    activeTab === "correctionsTab" ? "/api/correction-candidates?limit=200" : null,
+    5_000,
   );
+  const dashboardPayload = dashboardPage.data;
+  const dashboardRefreshStatus = dashboardStatusPage.data;
+  const correctionCandidates = asArray(correctionCandidatesPage.data?.rows);
   const isPlanningRefreshLockActive = planningRefreshLock
     ? !refreshLockHasSettled(planningRefreshLock, dashboardRefreshStatus)
     : false;
@@ -923,15 +952,15 @@ function DashboardShell() {
     const staleRefreshKey = stalePlanningRefreshKey(dashboardRecord);
     if (lastStalePlanningRefreshKeyRef.current === staleRefreshKey) return;
     lastStalePlanningRefreshKeyRef.current = staleRefreshKey;
-    void refreshSnapshot({});
-  }, [dashboardPayload, dashboardRefreshStatus?.isRefreshing, isPlanningRefreshLockActive, refreshSnapshot]);
+    void postDashboardApi("dashboard-refresh", {});
+  }, [dashboardPayload, dashboardRefreshStatus?.isRefreshing, isPlanningRefreshLockActive]);
 
   async function refreshDashboardSnapshot(force = true) {
     setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus));
     setIsRefreshingSnapshot(true);
     setActionStatus(null);
     try {
-      const result = await refreshSnapshot({ force });
+      const result = await postDashboardApi("dashboard-refresh", { force });
       setActionStatus({
         tone: "default",
         message: result.queued
@@ -964,21 +993,8 @@ function DashboardShell() {
       setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus));
     }
     try {
-      const apiResult = path === "data-import"
-        ? await postDashboardApi(path, body)
-        : undefined;
-      const message = apiResult?.message ?? (await runDashboardAction(path, body, {
-            saveRouteSelection,
-            savePlannerPriority,
-            saveMachineConstraint,
-            savePlanOverride,
-            saveRouteChange,
-            saveDispatchApproval,
-            markComplete,
-            saveProductionEntry,
-            saveDataEntry,
-            reverseEntry,
-          }));
+      const apiResult = await postDashboardApi(path, body);
+      const message = apiResult.message;
       const shopFloorPatch = shopFloorStatusPatchFromAction(path, body);
       if (shopFloorPatch) {
         setOptimisticShopFloorStatuses((current) => upsertShopFloorStatusPatch(current, shopFloorPatch));
@@ -1136,7 +1152,7 @@ function DashboardShell() {
               activeTab={activeTab}
               payload={payload}
               submitAction={submitAction}
-              correctionCandidates={asArray(correctionCandidates)}
+              correctionCandidates={correctionCandidates}
               openDataEntry={openDataEntry}
               openMasterReadiness={openMasterReadiness}
               openFirstPieceInspection={openFirstPieceInspection}
@@ -1171,23 +1187,6 @@ function PlanningRecalculationOverlay({ status }: { status: string }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function AuthLoadingScreen() {
-  return (
-    <main className="grid min-h-svh place-items-center bg-muted/20 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>MRMPL Dashboard</CardTitle>
-          <CardDescription>Checking your session</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-4/5" />
-        </CardContent>
-      </Card>
-    </main>
   );
 }
 
@@ -1282,99 +1281,6 @@ function setupChecklistSessionPatchKey(row: DashboardPayload) {
   ].map((value) => displayValue(value).toLowerCase()).filter((value) => value && value !== "-");
   return parts.length >= 5 ? parts.join("|") : "";
 }
-function AuthScreen() {
-  const { signIn } = useAuthActions();
-  const { resolvedTheme, setTheme } = useTheme();
-  const mounted = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
-  const isDark = mounted && resolvedTheme === "dark";
-  const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
-  const [status, setStatus] = useState<ActionStatus>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatus(null);
-    setIsSubmitting(true);
-
-    try {
-      const formData = new FormData(event.currentTarget);
-      formData.set("flow", flow);
-      await signIn("password", formData);
-    } catch (err) {
-      setStatus({
-        tone: "destructive",
-        message: err instanceof Error ? err.message : "Authentication failed.",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  return (
-    <main className="grid min-h-svh place-items-center bg-muted/20 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="gap-4">
-          <div className="flex items-start justify-between gap-3">
-            <Image
-              src="/mrm-green.svg"
-              alt="MRMPL"
-              width={792}
-              height={176}
-              priority
-              className="h-10 w-auto max-w-48 object-contain"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              onClick={() => setTheme(isDark ? "light" : "dark")}
-            >
-              {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            </Button>
-          </div>
-          <div>
-            <CardTitle>{flow === "signIn" ? "Sign in" : "Create account"}</CardTitle>
-            <CardDescription>Use your dashboard account to continue.</CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <div className="grid grid-cols-2 rounded-lg border bg-background p-1">
-            <Button type="button" variant={flow === "signIn" ? "secondary" : "ghost"} size="sm" onClick={() => setFlow("signIn")}>
-              Sign in
-            </Button>
-            <Button type="button" variant={flow === "signUp" ? "secondary" : "ghost"} size="sm" onClick={() => setFlow("signUp")}>
-              Sign up
-            </Button>
-          </div>
-          <form className="grid gap-3" onSubmit={submit}>
-            <Field label="Email">
-              <Input name="email" type="email" autoComplete="email" required />
-            </Field>
-            <Field label="Password">
-              <Input
-                name="password"
-                type="password"
-                autoComplete={flow === "signIn" ? "current-password" : "new-password"}
-                required
-              />
-            </Field>
-            {status ? (
-              <Badge variant={status.tone === "destructive" ? "destructive" : "outline"} className="w-fit">
-                {status.message}
-              </Badge>
-            ) : null}
-            <Button type="submit" disabled={isSubmitting}>
-              {flow === "signIn" ? "Sign in" : "Sign up"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
-  );
-}
-
 function HeaderActions({
   isRefreshingSnapshot,
   onRefreshSnapshot,
@@ -1382,8 +1288,6 @@ function HeaderActions({
   isRefreshingSnapshot: boolean;
   onRefreshSnapshot: () => void;
 }) {
-  const { isAuthenticated } = useConvexAuth();
-  const { signOut } = useAuthActions();
   const { resolvedTheme, setTheme } = useTheme();
   const mounted = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
   const isDark = mounted && resolvedTheme === "dark";
@@ -1411,18 +1315,16 @@ function HeaderActions({
       >
         {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
       </Button>
-      {isAuthenticated ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={() => void signOut()}
-        >
-          <LogOut className="size-4" />
-          <span className="hidden sm:inline">Sign out</span>
-        </Button>
-      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-2"
+        onClick={() => void authClient.signOut().then(() => window.location.assign("/sign-in"))}
+      >
+        <LogOut className="size-4" />
+        <span className="hidden sm:inline">Sign out</span>
+      </Button>
     </div>
   );
 }
@@ -5555,11 +5457,8 @@ function MasterTablesPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
-  const { results: liveMasterRows, status: liveMasterRowsStatus, loadMore: loadMoreMasterRows } = usePaginatedQuery(api.dashboard.masterTableRows, selectedSpec ? { entryType: selectedSpec.entryType } : "skip", { initialNumItems: 200 });
-  const isLoadingMasterRows = liveMasterRowsStatus === "LoadingFirstPage";
-  const directMasterRows = isLoadingMasterRows ? undefined : asArray(liveMasterRows);
   const dataEntry = asRecord(payload.dataEntry);
-  const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl, directMasterRows) : [], [directMasterRows, payload, productionControl, selectedSpec]);
+  const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [], [payload, productionControl, selectedSpec]);
   const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec, rows) : [], [selectedSpec, rows]);
   const filteredRows = useMemo(
     () => rows.filter((row) => masterTableRowMatches(row, columns, searchQuery, columnFilters)),
@@ -5631,9 +5530,7 @@ function MasterTablesPanel({
           </div>
         </CardHeader>
         <CardContent>
-          {isLoadingMasterRows ? (
-            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">Loading saved rows...</div>
-          ) : !rows.length ? (
+          {!rows.length ? (
             <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No saved rows found for this master.</div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
@@ -5671,13 +5568,6 @@ function MasterTablesPanel({
               </Table>
             </div>
           )}
-          {liveMasterRowsStatus === "CanLoadMore" || liveMasterRowsStatus === "LoadingMore" ? (
-            <div className="mt-3 flex justify-center">
-              <Button type="button" variant="outline" disabled={liveMasterRowsStatus === "LoadingMore"} onClick={() => loadMoreMasterRows(500)}>
-                {liveMasterRowsStatus === "LoadingMore" ? "Loading..." : "Load more rows"}
-              </Button>
-            </div>
-          ) : null}
         </CardContent>
       </Card>
       {summaryRows.length ? (
@@ -6210,26 +6100,18 @@ function QualityParameterMasterForm({
   defaults: Record<string, unknown>;
   dataEntry?: DashboardPayload;
 }) {
-  const hourlyQualityPageData = useQuery(api.dashboard.hourlyQualityPage, {});
-  const saveDataEntry = useMutation(api.dashboard.saveDataEntry);
+  const hourlyQualityPageData = usePostgresDashboardPage("/api/hourly-quality", 5_000).data;
   const hourlyQualityPageRecord = asRecord(hourlyQualityPageData);
   const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
   const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([]);
   const [status, setStatus] = useState<ActionStatus>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const { results: liveQualityRows, status: liveQualityRowsStatus, loadMore: loadMoreQualityRows } = usePaginatedQuery(
-    api.dashboard.masterTableRows,
-    { entryType: "quality_parameter_master" },
-    { initialNumItems: 500 },
-  );
   const persistedRows = useMemo(() => {
-    const fallbackRows = mergeQualityParameterRows([
+    return mergeQualityParameterRows([
       ...qualityParameterRowsFromDataEntry(dataEntry),
       ...asArray(hourlyQualityPageRecord.qualityParameterMasterRows),
     ]);
-    if (liveQualityRowsStatus === "LoadingFirstPage") return fallbackRows;
-    return mergeQualityParameterRows(asArray(liveQualityRows));
-  }, [dataEntry, hourlyQualityPageRecord.qualityParameterMasterRows, liveQualityRows, liveQualityRowsStatus]);
+  }, [dataEntry, hourlyQualityPageRecord.qualityParameterMasterRows]);
   const savedRows = useMemo(() => mergeQualityParameterRows([...persistedRows, ...localRows]), [persistedRows, localRows]);
   const setupOptions = useMemo(() => qualityParameterSetupOptions(savedRows), [savedRows]);
   const defaultSetupKey = qualityParameterSetupKey(defaults);
@@ -6305,7 +6187,7 @@ function QualityParameterMasterForm({
       const activePayloads = activeDrafts.map((draft, index) => qualityParameterPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, setupFields, "Active"));
       const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
       for (const payload of [...activePayloads, ...inactivePayloads]) {
-        await saveDataEntry({ entryType: spec.entryType, key: dataEntryKey(spec.entryType, payload), payload });
+        await savePostgresDashboardEntry(spec.entryType, payload);
       }
       setLocalRows((current) => mergeQualityParameterRows([...current, ...activePayloads, ...inactivePayloads]));
       setRemovedRows([]);
@@ -6337,9 +6219,6 @@ function QualityParameterMasterForm({
               <Plus className="size-4" />
               New set
             </Button>
-            {liveQualityRowsStatus === "CanLoadMore" || liveQualityRowsStatus === "LoadingMore" ? (
-              <Button type="button" variant="outline" disabled={liveQualityRowsStatus === "LoadingMore"} onClick={() => loadMoreQualityRows(500)}>{liveQualityRowsStatus === "LoadingMore" ? "Loading" : "Load more"}</Button>
-            ) : null}
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
@@ -6512,16 +6391,10 @@ function MaintenanceChecklistMasterForm({
   const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([]);
   const [status, setStatus] = useState<ActionStatus>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const { results: liveChecklistRows, status: liveChecklistRowsStatus, loadMore: loadMoreChecklistRows } = usePaginatedQuery(
-    api.dashboard.masterTableRows,
-    { entryType: "maintenance_checklist_master" },
-    { initialNumItems: 500 },
+  const persistedRows = useMemo(
+    () => maintenanceChecklistMasterRowsFromDataEntry(dataEntry),
+    [dataEntry],
   );
-  const persistedRows = useMemo(() => {
-    const fallbackRows = maintenanceChecklistMasterRowsFromDataEntry(dataEntry);
-    if (liveChecklistRowsStatus === "LoadingFirstPage") return fallbackRows;
-    return asArray(liveChecklistRows);
-  }, [dataEntry, liveChecklistRows, liveChecklistRowsStatus]);
   const savedRows = useMemo(() => mergeMaintenanceChecklistRows([...persistedRows, ...localRows]), [persistedRows, localRows]);
   const checklistOptions = useMemo(() => maintenanceChecklistOptions(savedRows), [savedRows]);
   const defaultCode = displayValue(defaults.checklistCode) !== "-" ? displayValue(defaults.checklistCode) : nextMaintenanceChecklistCode(savedRows);
@@ -6625,9 +6498,6 @@ function MaintenanceChecklistMasterForm({
           </Field>
           <div className="flex items-end gap-2">
             <Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New checklist</Button>
-            {liveChecklistRowsStatus === "CanLoadMore" || liveChecklistRowsStatus === "LoadingMore" ? (
-              <Button type="button" variant="outline" disabled={liveChecklistRowsStatus === "LoadingMore"} onClick={() => loadMoreChecklistRows(500)}>{liveChecklistRowsStatus === "LoadingMore" ? "Loading" : "Load more"}</Button>
-            ) : null}
           </div>
           <TileField label="Steps" value={drafts.filter((draft) => draft.stepDescription.trim()).length} numeric />
         </div>
@@ -7886,7 +7756,7 @@ type DashboardActionMutations = {
     downtimeMinutes?: number;
     downtimeReason?: string;
   }) => Promise<unknown>;
-  saveDataEntry: (args: { id?: Id<"dataEntries">; entryType: string; key?: string; payload: unknown }) => Promise<unknown>;
+  saveDataEntry: (args: { id?: string; entryType: string; key?: string; payload: unknown }) => Promise<unknown>;
   reverseEntry: (args: {
     targetTable: string;
     targetId: string;
@@ -8009,8 +7879,8 @@ async function runDashboardAction(
     const id = optionalText(body.id);
     const key = optionalText(body.key) || dataEntryKey(entryType, payload);
 
-    await mutations.saveDataEntry({ id: id ? id as Id<"dataEntries"> : undefined, entryType, key: key || undefined, payload });
-    return "Saved to Convex.";
+    await mutations.saveDataEntry({ id: id || undefined, entryType, key: key || undefined, payload });
+    return "Saved to PostgreSQL.";
   }
 
   if (path === "reverse-entry") {
@@ -8026,11 +7896,11 @@ async function runDashboardAction(
   }
 
   if (path === "reschedule") {
-    throw new Error("Reschedule is not wired to a Convex mutation yet.");
+    throw new Error("Reschedule is not available through the compatibility API.");
   }
 
   if (path === "data-import") {
-    throw new Error("Bulk Excel import needs an authenticated Convex upload/import action.");
+    throw new Error("Bulk Excel import is not available through the compatibility API.");
   }
 
   throw new Error(`Unsupported dashboard action: ${path}`);
@@ -8052,6 +7922,8 @@ async function postDashboardApi(path: string, body: Record<string, unknown>): Pr
   }
   return {
     message: str(payload.message || payload.savedText) || "Import complete.",
+    queued: payload.queued === true,
+    skipped: payload.skipped === true,
   };
 }
 

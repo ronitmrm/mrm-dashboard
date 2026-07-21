@@ -5,9 +5,12 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "fingerprint:database": "tsx src/commands/fingerprint-database.ts",
     "inspect:artifacts": "tsx src/commands/inspect-artifacts.ts",
     "lint": "eslint src --max-warnings 0",
     "rehearse:foundation": "tsx src/commands/rehearse-foundation.ts",
+    "rehearse:convex": "tsx src/commands/rehearse-convex.ts",
+    "rehearse:pricing": "tsx src/commands/rehearse-pricing.ts",
     "stage:artifacts": "tsx src/commands/stage-artifacts.ts",
     "stage:convex": "tsx src/commands/stage-convex.ts",
     "test": "vitest run",

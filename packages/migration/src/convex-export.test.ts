@@ -119,3 +119,46 @@ test("Convex working inventory excludes identity and derived snapshot tables", a
   expect(inventory.byteSize).toBeGreaterThan(0)
   expect(inventory.sha256).toMatch(/^[a-f0-9]{64}$/)
 })
+
+test("Convex inspection rejects unsafe, incomplete, and malformed artifacts", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mrmpl-convex-invalid-"))
+  temporaryDirectories.push(directory)
+  const unsafePath = join(directory, "unsafe.zip")
+  const incompletePath = join(directory, "incomplete.zip")
+  const malformedPath = join(directory, "malformed.zip")
+
+  await writeFile(
+    unsafePath,
+    zipSync({
+      "../ignored/documents.jsonl": strToU8('{"_id":"unsafe"}\n'),
+      "dataEntries/documents.jsonl": strToU8(
+        '{"_id":"entry-1","entryType":"work_order","payload":{}}\n'
+      ),
+    })
+  )
+  await writeFile(
+    incompletePath,
+    zipSync({
+      "_tables/documents.jsonl": strToU8('{"_id":"table-1"}\n'),
+    })
+  )
+  await writeFile(
+    malformedPath,
+    zipSync({
+      "dataEntries/documents.jsonl": strToU8(
+        '{"_id":"entry-1","entryType":"work_order","payload":{}}\n'
+      ),
+      "productionEntries/documents.jsonl": strToU8(
+        '{"_id":"production-1"}\nnot-json\n'
+      ),
+    })
+  )
+
+  await expect(inspectConvexExport(unsafePath)).rejects.toThrow("unsafe")
+  await expect(inspectConvexExport(incompletePath)).rejects.toThrow(
+    "dataEntries/documents.jsonl"
+  )
+  await expect(inspectConvexExport(malformedPath)).rejects.toThrow(
+    "productionEntries"
+  )
+})

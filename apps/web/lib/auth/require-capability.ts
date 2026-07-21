@@ -9,14 +9,7 @@ export async function requireCapability(
   capability: string,
   returnPath: string
 ) {
-  const session = await getAuth().api.getSession({
-    headers: await headers(),
-  })
-
-  if (!session) {
-    const next = encodeURIComponent(safeReturnPath(returnPath))
-    redirect(`/sign-in?next=${next}`)
-  }
+  const session = await requireAuthenticatedSession(returnPath)
 
   const authorization = createAuthorizationRepository({
     connectionString: readAuthEnvironment().connectionString,
@@ -35,4 +28,40 @@ export async function requireCapability(
   }
 
   return session
+}
+
+export async function requireAuthenticatedSession(returnPath: string) {
+  const session = await getAuth().api.getSession({
+    headers: await headers(),
+  })
+
+  if (!session) {
+    const next = encodeURIComponent(safeReturnPath(returnPath))
+    redirect(`/sign-in?next=${next}`)
+  }
+
+  return session
+}
+
+export async function listGrantedCapabilities(
+  userId: string,
+  capabilities: readonly string[]
+) {
+  const authorization = createAuthorizationRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+
+  try {
+    const grants = await Promise.all(
+      capabilities.map(async (capability) => ({
+        allowed: await authorization.hasCapability(userId, capability),
+        capability,
+      }))
+    )
+    return grants
+      .filter(({ allowed }) => allowed)
+      .map(({ capability }) => capability)
+  } finally {
+    await authorization.close()
+  }
 }

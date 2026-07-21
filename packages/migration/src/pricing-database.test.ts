@@ -177,3 +177,33 @@ test("Pricing ZIP inventory verifies its manifest and embedded SQLite snapshot",
   expect(inventory.database.byteSize).toBe(databaseContents.byteLength)
   expect(inventory.sha256).toMatch(/^[a-f0-9]{64}$/)
 })
+
+test("Pricing inspection rejects an unsafe archive entry before opening SQLite", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mrmpl-pricing-unsafe-"))
+  temporaryDirectories.push(directory)
+  const artifactPath = join(directory, "unsafe-export.zip")
+
+  await writeFile(
+    artifactPath,
+    zipSync({
+      "../outside.txt": strToU8("unsafe"),
+      "manifest.json": strToU8(
+        JSON.stringify({
+          created_at: "2026-07-18T15:03:37.801Z",
+          integrity_check: "ok",
+          rows_by_table: {},
+          snapshot: "pricing-data/pricing_app.db",
+          snapshot_sha256:
+            "0000000000000000000000000000000000000000000000000000000000000000",
+          snapshot_size_bytes: 0,
+          source: "pricing-data/pricing_app.db",
+          table_count: 0,
+          total_rows: 0,
+        })
+      ),
+      "pricing-data/pricing_app.db": new Uint8Array(),
+    })
+  )
+
+  await expect(inspectPricingExport(artifactPath)).rejects.toThrow("unsafe")
+})

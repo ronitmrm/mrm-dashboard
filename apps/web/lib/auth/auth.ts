@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto"
+
 import { drizzleAdapter } from "@better-auth/drizzle-adapter"
 import { createDatabase, identitySchema } from "@workspace/db"
+import { consumeOptionalRateLimit } from "@workspace/runtime"
 import { betterAuth } from "better-auth"
 import { admin } from "better-auth/plugins"
 
@@ -7,20 +10,48 @@ type CreateAuthSystemOptions = {
   allowSignUp?: boolean
   baseURL: string
   connectionString: string
+  redisUrl?: string
   secret: string
 }
 
 type AuthEnvironment = Record<string, string | undefined>
 
+type RateLimitConsumer = typeof consumeOptionalRateLimit
+
+export function createAuthRateLimitStorage(
+  redisUrl: string,
+  consume: RateLimitConsumer = consumeOptionalRateLimit
+) {
+  return {
+    consume: async (key: string, rule: { max: number; window: number }) => {
+      const digest = createHash("sha256").update(key).digest("hex")
+      const result = await consume({
+        key: `mrm:auth:rate:${digest}`,
+        limit: rule.max,
+        redisUrl,
+        windowSeconds: rule.window,
+      })
+      return {
+        allowed: result.allowed,
+        retryAfter: result.retryAfterSeconds || null,
+      }
+    },
+    get: async () => null,
+    set: async () => undefined,
+  }
+}
+
 function configureAuth({
   allowSignUp,
   baseURL,
   database,
+  redisUrl,
   secret,
 }: {
   allowSignUp: boolean
   baseURL: string
   database: ReturnType<typeof createDatabase>["database"]
+  redisUrl: string
   secret: string
 }) {
   return betterAuth({
@@ -39,6 +70,10 @@ function configureAuth({
       enabled: true,
     },
     plugins: [admin()],
+    rateLimit: {
+      customStorage: createAuthRateLimitStorage(redisUrl),
+      enabled: true,
+    },
     secret,
     session: {
       cookieCache: {
@@ -50,7 +85,7 @@ function configureAuth({
 
 type ConfiguredAuth = ReturnType<typeof configureAuth>
 
-type AuthSystem = {
+export type AuthSystem = {
   auth: ConfiguredAuth
   close: () => Promise<void>
   database: ReturnType<typeof createDatabase>["database"]
@@ -60,6 +95,7 @@ export function createAuthSystem({
   allowSignUp = false,
   baseURL,
   connectionString,
+  redisUrl = "redis://localhost:6380",
   secret,
 }: CreateAuthSystemOptions): AuthSystem {
   const connection = createDatabase(connectionString)
@@ -67,6 +103,7 @@ export function createAuthSystem({
     allowSignUp,
     baseURL,
     database: connection.database,
+    redisUrl,
     secret,
   })
 
@@ -96,6 +133,7 @@ export function readAuthEnvironment(
       environment.NEXT_PUBLIC_APP_URL ??
       "http://localhost:3001",
     connectionString,
+    redisUrl: environment.REDIS_URL ?? "redis://localhost:6380",
     secret,
   }
 }

@@ -40,6 +40,8 @@ yarn-error.log*
 !**/.env.example
 
 # local data and generated agent artifacts
+local-data/
+/memory/
 *.xls
 *.xlsx
 backups/
@@ -59,4 +61,8 @@ mrm-dashboard-convex-*.zip
 
 # typescript
 *.tsbuildinfo
+*.d.ts.map
 next-env.d.ts
+
+# local database tooling
+/.neon

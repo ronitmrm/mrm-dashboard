@@ -6,6 +6,8 @@ import { join } from "node:path"
 import Database from "better-sqlite3"
 import { unzipSync } from "fflate"
 
+import { normalizeArchive, normalizeArchivePath } from "./archive-safety"
+
 const EXCLUDED_IDENTITY_TABLES = new Set([
   "app_sessions",
   "app_user_permissions",
@@ -77,10 +79,6 @@ function quotedIdentifier(identifier: string) {
 
 function isFileReferenceColumn(column: string) {
   return /(^|_)(attachment|document|drawing|file|path)(_|$)/i.test(column)
-}
-
-function normalizedArchivePath(path: string) {
-  return path.replaceAll("\\", "/")
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -327,10 +325,10 @@ export async function readPricingExportSnapshot(
   artifactPath: string
 ): Promise<PricingExportSnapshot> {
   const artifact = await readFile(artifactPath)
-  const archive = unzipSync(artifact)
+  const archive = normalizeArchive(unzipSync(artifact))
   const entries = Object.entries(archive).map(([path, contents]) => ({
     contents,
-    path: normalizedArchivePath(path),
+    path,
   }))
   const manifestEntries = entries.filter(
     (entry) => entry.path === "manifest.json"
@@ -341,7 +339,7 @@ export async function readPricingExportSnapshot(
   }
 
   const manifest = parseManifest(manifestEntries[0]!.contents)
-  const databaseEntry = normalizedArchivePath(manifest.snapshot)
+  const databaseEntry = normalizeArchivePath(manifest.snapshot)
   assertSafeSnapshotPath(databaseEntry)
   const databaseEntries = entries.filter(
     (entry) => entry.path === databaseEntry

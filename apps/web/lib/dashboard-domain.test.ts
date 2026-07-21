@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDashboardSnapshot } from "./dashboard-domain";
+import { buildDashboardSnapshot } from "@workspace/db/dashboard-domain";
 
 describe("buildDashboardSnapshot", () => {
   it("aggregates production rows into the dashboard contract", () => {

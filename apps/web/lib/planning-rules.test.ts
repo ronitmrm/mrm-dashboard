@@ -9,7 +9,7 @@ import {
   rescheduleActionLabel,
   isPlanningWorkday,
   sourcePlannerDecisions,
-} from "./planning-rules";
+} from "@workspace/db/planning-rules";
 
 describe("machineFamilyKey", () => {
   it("maps route machine family codes and concrete machine numbers to the same family", () => {

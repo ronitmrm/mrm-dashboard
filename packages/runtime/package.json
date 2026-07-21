@@ -1,0 +1,35 @@
+{
+  "name": "@workspace/runtime",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src --max-warnings 0",
+    "runtime:verify": "tsx src/commands/verify-local.ts",
+    "test": "vitest run",
+    "test:integration": "vitest run src/local-runtime.integration.test.ts",
+    "typecheck": "tsc --noEmit",
+    "worker": "tsx src/commands/run-worker.ts",
+    "worker:once": "tsx src/commands/run-worker.ts --once",
+    "worker:status": "tsx src/commands/run-worker.ts --status"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "pg": "8.22.0",
+    "redis": "5.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/pg": "^8.15.5",
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "eslint": "^9",
+    "tsx": "4.23.1",
+    "typescript": "^5",
+    "vitest": "4.1.10"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

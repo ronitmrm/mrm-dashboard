@@ -24,6 +24,108 @@ const expectedSchemas = [
   "workforce",
 ] as const
 
+const expectedCanonicalTables = [
+  "audit.events",
+  "audit.legacy_convex_corrections",
+  "audit.legacy_pricing_corrections",
+  "audit.pricing_correction_requests",
+  "audit.record_reversals",
+  "catalog.bom_lines",
+  "catalog.design_processes",
+  "catalog.drawings",
+  "catalog.item_aliases",
+  "catalog.item_categories",
+  "catalog.item_subcategories",
+  "catalog.items",
+  "catalog.machine_types",
+  "catalog.machines",
+  "catalog.material_grades",
+  "catalog.rod_types",
+  "catalog.website_applications",
+  "catalog.website_certifications",
+  "catalog.website_field_options",
+  "catalog.website_product_profiles",
+  "core.file_links",
+  "core.files",
+  "core.number_sequences",
+  "core.organizations",
+  "maintenance.checklist_items",
+  "maintenance.definitions",
+  "maintenance.machine_schedules",
+  "maintenance.task_results",
+  "maintenance.tasks",
+  "manufacturing.dispatch_approval_events",
+  "manufacturing.downtime_reasons",
+  "manufacturing.machine_constraint_event_details",
+  "manufacturing.machine_constraint_events",
+  "manufacturing.operation_cycle_standards",
+  "manufacturing.operation_setups",
+  "manufacturing.operation_tooling",
+  "manufacturing.plan_override_event_details",
+  "manufacturing.plan_override_events",
+  "manufacturing.planner_priority_event_details",
+  "manufacturing.planner_priority_events",
+  "manufacturing.planning_calendar_exceptions",
+  "manufacturing.production_card_events",
+  "manufacturing.production_cards",
+  "manufacturing.production_entries",
+  "manufacturing.raw_material_receipts",
+  "manufacturing.route_change_event_setups",
+  "manufacturing.route_change_events",
+  "manufacturing.route_options",
+  "manufacturing.route_selections",
+  "manufacturing.setup_completion_events",
+  "manufacturing.shop_floor_setup_state",
+  "manufacturing.shop_floor_stage_events",
+  "manufacturing.work_orders",
+  "quality.first_piece_inspections",
+  "quality.first_piece_reading_samples",
+  "quality.first_piece_readings",
+  "quality.hourly_check_readings",
+  "quality.hourly_checks",
+  "quality.parameter_definitions",
+  "quality.rejection_reasons",
+  "quality.rejection_remarks",
+  "quality.rejection_types",
+  "quality.setup_checklist_results",
+  "quality.setup_checklist_sessions",
+  "quality.setup_checklist_template_items",
+  "quality.setup_checklist_templates",
+  "sales.bulk_price_revision_changes",
+  "sales.bulk_price_revisions",
+  "sales.clarification_tasks",
+  "sales.commercial_terms",
+  "sales.customer_contacts",
+  "sales.customers",
+  "sales.design_bom_lines",
+  "sales.design_tasks",
+  "sales.engineering_change_decisions",
+  "sales.engineering_change_notes",
+  "sales.enquiries",
+  "sales.enquiry_import_review_rows",
+  "sales.enquiry_import_reviews",
+  "sales.enquiry_item_revisions",
+  "sales.enquiry_items",
+  "sales.followups",
+  "sales.material_rates",
+  "sales.packaging_options",
+  "sales.proforma_invoice_lines",
+  "sales.proforma_invoices",
+  "sales.purchase_order_lines",
+  "sales.purchase_orders",
+  "sales.quote_items",
+  "sales.quote_package_components",
+  "sales.quote_product_snapshots",
+  "sales.quote_revision_requests",
+  "sales.quote_terms",
+  "sales.shipping_terms",
+  "workforce.attendance_record_events",
+  "workforce.attendance_records",
+  "workforce.employee_aliases",
+  "workforce.employees",
+  "workforce.training_records",
+] as const
+
 const pool = new Pool({ connectionString })
 
 beforeAll(async () => {
@@ -50,6 +152,339 @@ test("an empty database migrates into the MRMPL bounded contexts", async () => {
   )
 
   expect(result.rows.map((row) => row.schema_name)).toEqual(expectedSchemas)
+})
+
+test("the complete canonical bounded-context table contract is present", async () => {
+  await migrateDatabase({ connectionString })
+
+  const result = await pool.query<{
+    table_name: string
+    table_schema: string
+  }>(`
+    SELECT table_schema, table_name
+    FROM information_schema.tables
+    WHERE table_schema = ANY(
+      ARRAY[
+        'audit',
+        'catalog',
+        'core',
+        'maintenance',
+        'manufacturing',
+        'quality',
+        'sales',
+        'workforce'
+      ]
+    )
+    ORDER BY table_schema, table_name
+  `)
+
+  expect(
+    result.rows.map((row) => `${row.table_schema}.${row.table_name}`)
+  ).toEqual(expectedCanonicalTables)
+})
+
+test("canonical columns use the approved PostgreSQL types and mutable-row contract", async () => {
+  await migrateDatabase({ connectionString })
+
+  const types = await pool.query<{
+    column_name: string
+    data_type: string
+    numeric_precision: number | null
+    numeric_scale: number | null
+    table_name: string
+    table_schema: string
+  }>(`
+    SELECT
+      table_schema,
+      table_name,
+      column_name,
+      data_type,
+      numeric_precision,
+      numeric_scale
+    FROM information_schema.columns
+    WHERE (table_schema, table_name, column_name) IN (
+      ('sales', 'quote_items', 'unit_price'),
+      ('manufacturing', 'production_entries', 'quantity_good'),
+      ('manufacturing', 'work_orders', 'due_date'),
+      ('manufacturing', 'planner_priority_events', 'occurred_at'),
+      ('workforce', 'attendance_records', 'clock_in')
+    )
+    ORDER BY table_schema, table_name, column_name
+  `)
+
+  expect(types.rows).toEqual([
+    {
+      column_name: "occurred_at",
+      data_type: "timestamp with time zone",
+      numeric_precision: null,
+      numeric_scale: null,
+      table_name: "planner_priority_events",
+      table_schema: "manufacturing",
+    },
+    {
+      column_name: "quantity_good",
+      data_type: "numeric",
+      numeric_precision: 20,
+      numeric_scale: 8,
+      table_name: "production_entries",
+      table_schema: "manufacturing",
+    },
+    {
+      column_name: "due_date",
+      data_type: "date",
+      numeric_precision: null,
+      numeric_scale: null,
+      table_name: "work_orders",
+      table_schema: "manufacturing",
+    },
+    {
+      column_name: "unit_price",
+      data_type: "numeric",
+      numeric_precision: 18,
+      numeric_scale: 6,
+      table_name: "quote_items",
+      table_schema: "sales",
+    },
+    {
+      column_name: "clock_in",
+      data_type: "time without time zone",
+      numeric_precision: null,
+      numeric_scale: null,
+      table_name: "attendance_records",
+      table_schema: "workforce",
+    },
+  ])
+
+  const sharedColumns = await pool.query<{
+    column_name: string
+    table_name: string
+    table_schema: string
+  }>(`
+    SELECT table_schema, table_name, column_name
+    FROM information_schema.columns
+    WHERE (table_schema, table_name) IN (
+      ('sales', 'enquiries'),
+      ('manufacturing', 'work_orders'),
+      ('quality', 'parameter_definitions'),
+      ('maintenance', 'definitions')
+    )
+      AND column_name = ANY(
+        ARRAY[
+          'id',
+          'organization_id',
+          'created_at',
+          'updated_at',
+          'created_by_user_id',
+          'updated_by_user_id',
+          'row_version',
+          'source_system',
+          'source_table',
+          'source_id',
+          'source_payload'
+        ]
+      )
+    ORDER BY table_schema, table_name, column_name
+  `)
+
+  const grouped = new Map<string, typeof sharedColumns.rows>()
+  for (const row of sharedColumns.rows) {
+    const key = `${row.table_schema}.${row.table_name}`
+    const columns = grouped.get(key) ?? []
+    columns.push(row)
+    grouped.set(key, columns)
+  }
+  for (const table of [
+    "maintenance.definitions",
+    "manufacturing.work_orders",
+    "quality.parameter_definitions",
+    "sales.enquiries",
+  ]) {
+    expect(
+      grouped
+        .get(table)
+        ?.map((row) => row.column_name)
+        .sort()
+    ).toEqual([
+      "created_at",
+      "created_by_user_id",
+      "id",
+      "organization_id",
+      "row_version",
+      "source_id",
+      "source_payload",
+      "source_system",
+      "source_table",
+      "updated_at",
+      "updated_by_user_id",
+    ])
+  }
+})
+
+test("commercial import review and follow-up fidelity columns are explicit", async () => {
+  await migrateDatabase({ connectionString })
+
+  const columns = await pool.query<{
+    column_default: string | null
+    column_name: string
+    data_type: string
+    is_nullable: "NO" | "YES"
+    table_name: string
+  }>(`
+    SELECT table_name, column_name, data_type, is_nullable, column_default
+    FROM information_schema.columns
+    WHERE table_schema = 'sales'
+      AND (table_name, column_name) IN (
+        ('enquiry_import_review_rows', 'matched_quote_item_id'),
+        ('enquiry_import_review_rows', 'match_note'),
+        ('followups', 'quote_item_id'),
+        ('followups', 'channel')
+      )
+    ORDER BY table_name, column_name
+  `)
+
+  expect(columns.rows).toEqual([
+    {
+      column_default: null,
+      column_name: "match_note",
+      data_type: "text",
+      is_nullable: "YES",
+      table_name: "enquiry_import_review_rows",
+    },
+    {
+      column_default: null,
+      column_name: "matched_quote_item_id",
+      data_type: "uuid",
+      is_nullable: "YES",
+      table_name: "enquiry_import_review_rows",
+    },
+    {
+      column_default: "'Email'::text",
+      column_name: "channel",
+      data_type: "text",
+      is_nullable: "NO",
+      table_name: "followups",
+    },
+    {
+      column_default: null,
+      column_name: "quote_item_id",
+      data_type: "uuid",
+      is_nullable: "YES",
+      table_name: "followups",
+    },
+  ])
+})
+
+test("critical lineage, machine-lock, and quality-scope invariants are indexed", async () => {
+  await migrateDatabase({ connectionString })
+
+  const indexes = await pool.query<{ indexname: string }>(`
+    SELECT indexname
+    FROM pg_indexes
+    WHERE indexname = ANY(
+      ARRAY[
+        'quote_items_active_price_unique',
+        'quote_items_active_blank_child_unique',
+        'enquiry_import_review_rows_quote_idx',
+        'followups_quote_item_idx',
+        'shop_floor_active_machine_unique',
+        'quality_parameter_scope_unique'
+      ]
+    )
+    ORDER BY indexname
+  `)
+
+  expect(indexes.rows.map((row) => row.indexname)).toEqual([
+    "enquiry_import_review_rows_quote_idx",
+    "followups_quote_item_idx",
+    "quality_parameter_scope_unique",
+    "quote_items_active_blank_child_unique",
+    "quote_items_active_price_unique",
+    "shop_floor_active_machine_unique",
+  ])
+})
+
+test("database roles enforce least privilege across migration, web, worker, and reporting", async () => {
+  await migrateDatabase({ connectionString })
+
+  const roles = await pool.query<{
+    rolcanlogin: boolean
+    rolcreatedb: boolean
+    rolcreaterole: boolean
+    rolinherit: boolean
+    rolname: string
+    rolsuper: boolean
+  }>(`
+    SELECT
+      rolname,
+      rolsuper,
+      rolcreatedb,
+      rolcreaterole,
+      rolinherit,
+      rolcanlogin
+    FROM pg_roles
+    WHERE rolname = ANY(
+      ARRAY[
+        'mrmpl_migration',
+        'mrmpl_reporting',
+        'mrmpl_web',
+        'mrmpl_worker'
+      ]
+    )
+    ORDER BY rolname
+  `)
+
+  expect(roles.rows).toEqual(
+    ["mrmpl_migration", "mrmpl_reporting", "mrmpl_web", "mrmpl_worker"].map(
+      (rolname) => ({
+        rolcanlogin: false,
+        rolcreatedb: false,
+        rolcreaterole: false,
+        rolinherit: false,
+        rolname,
+        rolsuper: false,
+      })
+    )
+  )
+
+  const privileges = await pool.query<{
+    migration_can_migrate: boolean
+    reporting_can_update_quotes: boolean
+    reporting_reads_quotes: boolean
+    web_can_delete_customers: boolean
+    web_can_migrate: boolean
+    web_writes_customers: boolean
+    worker_reads_work_orders: boolean
+    worker_writes_work_orders: boolean
+  }>(`
+    SELECT
+      has_table_privilege('mrmpl_web', 'sales.customers', 'INSERT')
+        AS web_writes_customers,
+      has_table_privilege('mrmpl_web', 'sales.customers', 'DELETE')
+        AS web_can_delete_customers,
+      has_table_privilege('mrmpl_web', 'migration.schema_migrations', 'INSERT')
+        AS web_can_migrate,
+      has_table_privilege('mrmpl_worker', 'manufacturing.work_orders', 'SELECT')
+        AS worker_reads_work_orders,
+      has_table_privilege('mrmpl_worker', 'manufacturing.work_orders', 'INSERT')
+        AS worker_writes_work_orders,
+      has_table_privilege('mrmpl_reporting', 'sales.quote_items', 'SELECT')
+        AS reporting_reads_quotes,
+      has_table_privilege('mrmpl_reporting', 'sales.quote_items', 'UPDATE')
+        AS reporting_can_update_quotes,
+      has_table_privilege('mrmpl_migration', 'migration.schema_migrations', 'INSERT')
+        AS migration_can_migrate
+  `)
+
+  expect(privileges.rows[0]).toEqual({
+    migration_can_migrate: true,
+    reporting_can_update_quotes: false,
+    reporting_reads_quotes: true,
+    web_can_delete_customers: false,
+    web_can_migrate: false,
+    web_writes_customers: true,
+    worker_reads_work_orders: true,
+    worker_writes_work_orders: false,
+  })
 })
 
 test("identity starts fresh without legacy Pricing auth tables", async () => {
@@ -130,6 +565,7 @@ test("foundation includes provenance, conflict review, and durable work tables",
   ).toEqual([
     "derived.dashboard_read_models",
     "derived.outbox_events",
+    "derived.refresh_job_attempts",
     "derived.refresh_jobs",
     "derived.refresh_watermarks",
     "migration.artifacts",

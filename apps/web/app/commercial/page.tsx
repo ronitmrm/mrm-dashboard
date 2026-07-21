@@ -19,6 +19,9 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card"
 
+import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
+import { requireCapability } from "@/lib/auth/require-capability"
+
 const modules = [
   {
     description:
@@ -54,7 +57,9 @@ const modules = [
   },
 ]
 
-export default function CommercialPage() {
+export default async function CommercialPage() {
+  await requireCapability(commercialCapabilities.dashboard.read, "/commercial")
+
   return (
     <>
       <section className="grid gap-2">

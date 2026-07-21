@@ -1,7 +1,11 @@
 import type { ReactNode } from "react"
 
 import { CommercialShell } from "@/components/commercial/commercial-shell"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { commercialNavigationAccess } from "@/lib/auth/commercial-capabilities"
+import {
+  listGrantedCapabilities,
+  requireAuthenticatedSession,
+} from "@/lib/auth/require-capability"
 
 export const dynamic = "force-dynamic"
 
@@ -10,13 +14,21 @@ export default async function CommercialLayout({
 }: {
   children: ReactNode
 }) {
-  const session = await requireCapability(
-    "pricing.dashboard.read",
-    "/commercial"
+  const session = await requireAuthenticatedSession("/commercial")
+  const grantedCapabilities = new Set(
+    await listGrantedCapabilities(session.user.id, [
+      ...new Set(
+        commercialNavigationAccess.map(([, capability]) => capability)
+      ),
+    ])
   )
+  const accessibleHrefs = commercialNavigationAccess
+    .filter(([, capability]) => grantedCapabilities.has(capability))
+    .map(([href]) => href)
 
   return (
     <CommercialShell
+      accessibleHrefs={accessibleHrefs}
       user={{ email: session.user.email, name: session.user.name }}
     >
       {children}

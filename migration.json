@@ -1,0 +1,971 @@
+{
+  "$schema": "./docs/migration-ledger.schema.json",
+  "migration": {
+    "name": "Unified PostgreSQL, Redis, Better Auth, and Pricing migration",
+    "targetRepository": "mrm-dashboard",
+    "sourceRepositories": ["mrm-dashboard", "../pricing"],
+    "implementationBranch": "feat/logic-migration",
+    "logicMigrationBranch": "feat/logic-migration",
+    "status": "in_progress",
+    "updatedAt": "2026-07-21",
+    "testSeams": [
+      {
+        "name": "unified_application",
+        "description": "Authenticated Next.js pages, route handlers, and server actions backed by real Dockerized PostgreSQL and Redis; outcomes are observed through public reads and rendered application behavior."
+      },
+      {
+        "name": "migration_cli",
+        "description": "Immutable SQLite and Convex fixtures are processed through public extraction, staging, transformation, and reconciliation commands backed by real Dockerized PostgreSQL."
+      }
+    ],
+    "tasks": [
+      {
+        "id": "MIG-01",
+        "title": "Local PostgreSQL and Redis runtime",
+        "blockedBy": [],
+        "status": "complete",
+        "delivers": "A persistent local Docker Compose environment for PostgreSQL 16+ and Redis, service health checks, migrations, and isolated test databases.",
+        "acceptanceCriteria": [
+          "PostgreSQL and Redis start from one pnpm command and report healthy.",
+          "Application, worker, migration, and test connection settings are documented without committing secrets.",
+          "An empty PostgreSQL database can apply every checked-in migration.",
+          "Redis can be deleted or restarted without losing canonical business data."
+        ]
+      },
+      {
+        "id": "MIG-02",
+        "title": "Fresh Better Auth and access administration",
+        "blockedBy": ["MIG-01"],
+        "status": "complete",
+        "delivers": "Fresh Better Auth sign-in, administrator bootstrap, staff provisioning, roles, capabilities, overrides, and consistent shadcn administration surfaces.",
+        "acceptanceCriteria": [
+          "No legacy Convex or SQLite identity row is imported.",
+          "The first administrator can be provisioned exactly once through an explicit command.",
+          "Authenticated capability checks protect reads and writes at the server boundary.",
+          "Access administration uses shared @workspace/ui shadcn primitives and the existing dashboard design system."
+        ]
+      },
+      {
+        "id": "MIG-03",
+        "title": "Complete bounded-context schema",
+        "blockedBy": ["MIG-01"],
+        "status": "complete",
+        "delivers": "All catalog, sales, manufacturing, workforce, quality, maintenance, audit, derived-state, and migration structures from an empty PostgreSQL database.",
+        "acceptanceCriteria": [
+          "All tables in the approved logical target model exist with constraints and indexes.",
+          "Money and rates use numeric types and business dates and instants use their specified PostgreSQL types.",
+          "Canonical rows carry organization, version, actor, and source-provenance fields where required.",
+          "Database roles and least-privilege grants are migration tested."
+        ]
+      },
+      {
+        "id": "MIG-04",
+        "title": "Immutable source acquisition and staging",
+        "blockedBy": ["MIG-03"],
+        "status": "complete",
+        "delivers": "Verified manifests, identity exclusion, checksums, file inventory, idempotent SQLite staging, and idempotent Convex staging.",
+        "acceptanceCriteria": [
+          "Source artifacts are explicit, checksummed, immutable, and never committed.",
+          "All legacy identity tables are recorded but excluded from working staging.",
+          "Rerunning either loader does not duplicate staging or canonical rows.",
+          "Malformed, unsafe, or incomplete artifacts fail before canonical writes."
+        ]
+      },
+      {
+        "id": "MIG-05",
+        "title": "Pricing transformation and reconciliation",
+        "blockedBy": ["MIG-04"],
+        "status": "complete",
+        "delivers": "All Pricing SQLite business tables in canonical PostgreSQL structures with source mappings, conflicts, counts, hashes, and known exceptions.",
+        "acceptanceCriteria": [
+          "All 41 business SQLite tables are transformed or explicitly reconciled as empty, and all 3 identity tables remain excluded.",
+          "Source identifiers map idempotently to application-generated UUIDs.",
+          "Financial, relationship, and workflow reconciliation preserves known source findings.",
+          "File references are inventoried and unresolved files enter a review queue."
+        ]
+      },
+      {
+        "id": "MIG-06",
+        "title": "Convex transformation and reconciliation",
+        "blockedBy": ["MIG-04"],
+        "status": "complete",
+        "delivers": "Every canonical Convex table and known dataEntries type, correction resolution, production-overlap reporting, and unknown-type failure gates.",
+        "acceptanceCriteria": [
+          "All canonical physical tables and approved logical entry types are mapped.",
+          "Unknown non-approved entry types block completeness acceptance.",
+          "Corrections resolve through source mappings or remain visible in conflict queues.",
+          "software_raw and productionEntries overlap is reported without silently dropping either source."
+        ]
+      },
+      {
+        "id": "MIG-07",
+        "title": "Enquiry-to-design workflow on PostgreSQL",
+        "blockedBy": ["MIG-02", "MIG-05"],
+        "status": "complete",
+        "delivers": "Customers, enquiries, imports, clarification, technical review, design handoff, attachments, and matching without changing workflow behavior.",
+        "acceptanceCriteria": [
+          "Existing enquiry and design state transitions behave identically through public application interfaces.",
+          "Workflow writes are transactional and authorized through Better Auth capabilities.",
+          "Imports and attachment metadata are safe, observable, and idempotent where applicable.",
+          "Pages use the dashboard design system and shared shadcn primitives."
+        ]
+      },
+      {
+        "id": "MIG-08",
+        "title": "Product costing and quote workflow on PostgreSQL",
+        "blockedBy": ["MIG-07"],
+        "status": "complete",
+        "delivers": "Products, BOMs, package and assembly snapshots, Excel-equivalent costing, quote history, sending, and active-price invariants.",
+        "acceptanceCriteria": [
+          "Existing costing formulas match known worked examples without functional modification.",
+          "Sent quote history is immutable and active price uniqueness remains lineage scoped.",
+          "Package and assembly snapshots retain the source immediate-child structure.",
+          "Money calculations preserve declared decimal precision and rounding behavior."
+        ]
+      },
+      {
+        "id": "MIG-09",
+        "title": "Purchase order and proforma-invoice workflow on PostgreSQL",
+        "blockedBy": ["MIG-08"],
+        "status": "complete",
+        "delivers": "PO import and matching, ambiguity handling, quote revision requests, PI lifecycle, and Q-to-M/P conversion.",
+        "acceptanceCriteria": [
+          "Ambiguous customer codes never auto-match across product lineages.",
+          "PI approval activates the correct quote and performs existing product conversion atomically.",
+          "Historical sent documents use historical quote snapshots.",
+          "Cancellation and correction behavior remains auditable."
+        ]
+      },
+      {
+        "id": "MIG-10",
+        "title": "Bulk revision, ECN, and pricing corrections",
+        "blockedBy": ["MIG-08"],
+        "status": "complete",
+        "delivers": "Lineage-aware supersession, recursive affected-price updates, immutable revisions, and reversal and audit behavior.",
+        "acceptanceCriteria": [
+          "Direct, package, assembly, and nested-parent prices follow source revision rules.",
+          "Historical quote snapshots are never rewritten by later child changes.",
+          "Every correction is append-only and resolves or remains visibly quarantined.",
+          "The ported Pricing workflow audit reports no new findings."
+        ]
+      },
+      {
+        "id": "MIG-11",
+        "title": "Dashboard masters, work orders, and planning writes",
+        "blockedBy": ["MIG-02", "MIG-06"],
+        "status": "complete",
+        "delivers": "Normalized masters, routes, setups, planning events, machine assignment stability, and current planning behavior.",
+        "acceptanceCriteria": [
+          "All current master and planning mutations have PostgreSQL equivalents.",
+          "Machine and setup locks are enforced in the write transaction.",
+          "Planning algorithms remain functionally unchanged.",
+          "Every accepted planning-impacting write creates durable refresh work."
+        ]
+      },
+      {
+        "id": "MIG-12",
+        "title": "Production and shop-floor workflows",
+        "blockedBy": ["MIG-11"],
+        "status": "complete",
+        "delivers": "Production entry, production cards, machine locks, setup progression, dispatch, setup completion, and corrections.",
+        "acceptanceCriteria": [
+          "Existing production and shop-floor transitions pass public-interface tests.",
+          "Actual production locks and explicit machine switches retain current rules.",
+          "Conflicting production sources remain reconciled and traceable.",
+          "Reversals preserve immutable source and actor evidence."
+        ]
+      },
+      {
+        "id": "MIG-13",
+        "title": "Workforce, quality, and maintenance workflows",
+        "blockedBy": ["MIG-11"],
+        "status": "complete",
+        "delivers": "Attendance, training, inspections, hourly checks, setup checklists, maintenance schedules and tasks, and their corrections.",
+        "acceptanceCriteria": [
+          "Existing workforce, quality, and maintenance workflows use normalized repositories.",
+          "Quality parameters and checklist identities are relationally constrained.",
+          "Maintenance schedules reference physical machines and preserve task history.",
+          "Specialized screens use bounded PostgreSQL reads."
+        ]
+      },
+      {
+        "id": "MIG-14",
+        "title": "Durable refresh worker and Redis invalidation",
+        "blockedBy": ["MIG-11", "MIG-12", "MIG-13"],
+        "status": "complete",
+        "delivers": "Transactional outbox events, coalesced jobs, retry-safe read models, bounded polling, optional caching, and disposable Redis invalidation.",
+        "acceptanceCriteria": [
+          "Canonical writes and durable refresh jobs commit atomically in PostgreSQL.",
+          "Worker retries do not duplicate read-model versions.",
+          "Redis accelerates invalidation and rate limiting but is not required for correctness.",
+          "Refresh lag, failure, and retry state are observable."
+        ]
+      },
+      {
+        "id": "MIG-15",
+        "title": "Dashboard read cutover",
+        "blockedBy": ["MIG-14"],
+        "status": "complete",
+        "delivers": "PostgreSQL-backed dashboard screens and removal of runtime dependence on Convex subscriptions and snapshot chunks.",
+        "acceptanceCriteria": [
+          "The main dashboard reads versioned derived state without chunk serialization.",
+          "Specialized screens query bounded normalized projections.",
+          "Client invalidation and polling recover from Redis loss.",
+          "Source fixtures produce equivalent operational views."
+        ]
+      },
+      {
+        "id": "MIG-16",
+        "title": "Remove legacy runtime dependencies",
+        "blockedBy": ["MIG-09", "MIG-10", "MIG-15"],
+        "status": "complete",
+        "delivers": "Zero production imports or reads from Convex and better-sqlite3, migrated file metadata, and honest compatibility routes.",
+        "acceptanceCriteria": [
+          "No runtime code imports Convex client or server packages.",
+          "No production code imports better-sqlite3 or reads pricing_app.db.",
+          "Compatibility routes expose real behavior or explicit unsupported errors.",
+          "Old sources remain untouched read-only evidence."
+        ]
+      },
+      {
+        "id": "MIG-17",
+        "title": "Full rehearsals, rollback, and local acceptance",
+        "blockedBy": ["MIG-16"],
+        "status": "complete",
+        "delivers": "Two deterministic rehearsals, reconciliation reports, backup and restore proof, workflow smoke tests, and cutover and rollback command sheets.",
+        "acceptanceCriteria": [
+          "Two consecutive runs produce identical counts and hashes.",
+          "PostgreSQL backup and restore is proven locally.",
+          "Pricing and critical manufacturing workflows pass end to end.",
+          "The requested business-logic audit starts from a verified baseline."
+        ]
+      },
+      {
+        "id": "LM-00",
+        "title": "Freeze Pricing behavior and reconciliation fixtures",
+        "blockedBy": ["MIG-17"],
+        "status": "complete",
+        "delivers": "Executable source-characterization tests, deterministic PostgreSQL workflow fixtures, output golden fixtures, and explicit resolutions for known source-versus-target contradictions.",
+        "acceptanceCriteria": [
+          "All 45 executable Pricing regression test cases plus the canonical costing boundary map to 46 behavior-oriented target test IDs, and all 57 workflow audit checks have unique target IDs.",
+          "Archived List, Package, Assembly, quote, PO, bulk-revision, and ECN relationships have deterministic PostgreSQL fixtures.",
+          "JSON, XLSX, PDF metadata, file, and route behavior have stable golden fixtures without committing source archives or secrets.",
+          "Executable source behavior is recorded as authoritative for active-price supersession and deterministic ranked PO matching, with archive anomalies retained as visible exceptions."
+        ]
+      },
+      {
+        "id": "LM-01",
+        "title": "Correct commercial authorization and behavioral drift",
+        "blockedBy": ["LM-00"],
+        "status": "in_progress",
+        "delivers": "Exact Better Auth capability boundaries, source-compatible active-price and import behavior, quote-send follow-ups, complete audit side effects, and source-safe correction reversals.",
+        "acceptanceCriteria": [
+          "Orders, quotes, revisions, corrections, and every narrower commercial route enforce their dedicated read/write capabilities.",
+          "Active prices supersede using the executable source scopes under transactional locking.",
+          "Enquiry imports never auto-create all rows and instead persist source classifications and explicit idempotent review decisions.",
+          "Quote sending creates exactly one 15-day follow-up and source-safe reversals coexist with historical-change quarantine."
+        ]
+      },
+      {
+        "id": "LM-02",
+        "title": "Customer and pricing-master maintenance",
+        "blockedBy": ["LM-01"],
+        "status": "pending",
+        "delivers": "Source-equivalent customer CRUD, pricing/design/website/terms master CRUD, and atomic multi-sheet workbook template/import workflows.",
+        "acceptanceCriteria": [
+          "An empty organization can bootstrap every required customer and commercial master through authorized shadcn screens.",
+          "Source defaults, uniqueness, grade and rod material lookup, term ordering, activation, and actor auditing are preserved.",
+          "Workbook sheets, aliases, transformations, duplicate behavior, error reporting, filename, and atomicity match the source.",
+          "A source master fixture round-trips through target export/import without canonical differences."
+        ]
+      },
+      {
+        "id": "LM-03",
+        "title": "Enquiry, Sales, Technical Review, and follow-up parity",
+        "blockedBy": ["LM-02"],
+        "status": "pending",
+        "delivers": "Complete enquiry and line lifecycle, drawing replacement/download, import review, Sales and Technical queues, clarification decisions, follow-ups, and enquiry/register outputs.",
+        "acceptanceCriteria": [
+          "Enquiry and line edit/delete gates, post-handover resets, drawing history, and authenticated file delivery match the source.",
+          "CSV/XLS/XLSX import classification and all row decisions produce identical states, links, clarifications, and idempotency.",
+          "Sales matching, Technical Review checklist ordering, queue transitions, and manual/chained follow-ups preserve source behavior.",
+          "Enquiry spreadsheet/register views, templates, and exports match golden headers, ordering, filters, omissions, and filenames."
+        ]
+      },
+      {
+        "id": "LM-04",
+        "title": "Full Design dossier and workflow handoffs",
+        "blockedBy": ["LM-03"],
+        "status": "pending",
+        "delivers": "Dedicated Design queues, complete dossier and files, portfolio/package selection, Q/C allocation, nested BOM editing, clarifications, costing handoff, and safe reversal behavior.",
+        "acceptanceCriteria": [
+          "All Design fields, requirements, costs, approval fields, internal/customer/CAD files, locks, and queue states are available in the target.",
+          "List, Package, nested Assembly, and existing-portfolio flows produce source-equivalent identities, products, BOM rows, and transitions.",
+          "Only valid Assembly nesting and internal ordered components are accepted, with source material/process fallback behavior.",
+          "Technical/Design/Costing clarification directions and handoff reversal preserve blockers and correction evidence."
+        ]
+      },
+      {
+        "id": "LM-05",
+        "title": "Complete costing, pricing registers, and quote documents",
+        "blockedBy": ["LM-04"],
+        "status": "pending",
+        "delivers": "Full product and customer costing workbenches, Product and Assembly registers, pricing/revision spreadsheets, quote sending, and historical quote PDF generation.",
+        "acceptanceCriteria": [
+          "Every source costing input, default, process guard, backflow, package/assembly editor, and one-piece-grams meaning is preserved.",
+          "Formula intermediates, source derived-cost persistence, rounding, and immutable snapshot trees match exact storage precision.",
+          "Current pricing and revision registers and XLSX outputs match source datasets, filters, columns, omissions, and filenames.",
+          "Historical quote PDFs select source-equivalent rows and preserve live Westmetall/Frankfurter fallback behavior through deterministic adapters."
+        ]
+      },
+      {
+        "id": "LM-06",
+        "title": "Complete PO/PI files, reports, and order side effects",
+        "blockedBy": ["LM-05"],
+        "status": "pending",
+        "delivers": "PO source-file lifecycle, source-compatible matching, all PO/PI reports, exact quote-to-order conversion, Drawing History creation, and Website Product creation.",
+        "acceptanceCriteria": [
+          "PO upload/download, unmatched, Keep Our Price, Accept PO Price, ranked-match, PI issue/send/approve, and pre-approval cancellation match source outcomes.",
+          "PI lines retain exact historical quote IDs and prices, and approved PI records remain immutable and non-cancellable.",
+          "Q conversion recursively preserves source M/P identity behavior and creates complete drawing, website, assembly-sync, actor, and audit side effects atomically.",
+          "PO template/detail, PI PDF/XLSX, PO master, and approved-PI exports match golden sheets, fields, formatting, selection, and filenames."
+        ]
+      },
+      {
+        "id": "LM-07",
+        "title": "Full bulk revisions, ECN, and corrections",
+        "blockedBy": ["LM-06"],
+        "status": "pending",
+        "delivers": "All source bulk field matrices and staging behavior, complete ECN Design/Product Costing/decision stages, and unified correction candidate, reversal, log, and quarantine workflows.",
+        "acceptanceCriteria": [
+          "Customer and product bulk routes retain exact field allowlists, percentage conventions, process aliases, previews, multi-select staging, deletion, and completion-once behavior.",
+          "ECNs retain Pending Design, Pending Product Costing, Pending Costing, and Completed states with complete product/BOM changes and one decision per affected price.",
+          "Direct, Package, Assembly, and two-level nested fixtures revise child-before-parent exactly once without changing historical digests.",
+          "Source-safe correction reversals and technical-revision evidence share one register while forbidden history changes remain visibly quarantined."
+        ]
+      },
+      {
+        "id": "LM-08",
+        "title": "Website, drawing, analytics, and remaining registers",
+        "blockedBy": ["LM-07"],
+        "status": "pending",
+        "delivers": "Complete Drawing History and Website Product maintenance/exports, source Pricing dashboard analytics, Sales history, and every remaining register/filter/export.",
+        "acceptanceCriteria": [
+          "Drawing revision/date/laminated-quantity maintenance and export retain source uniqueness, date display, columns, and filenames.",
+          "Website part codes, category combinations, materials, thread standards, six assembly slots, completion status, and export match source rules.",
+          "Every source dashboard metric, aging bucket, trend, Pareto, workflow load, quote mix, and material lead-time definition reconciles against archived data.",
+          "No Pricing source screen, register, history view, or output remains unaccounted for; adjacent HR is recorded as an external proxy dependency because no HR repository/data was supplied."
+        ]
+      },
+      {
+        "id": "LM-09",
+        "title": "Full business-logic acceptance and source retirement readiness",
+        "blockedBy": ["LM-08"],
+        "status": "pending",
+        "delivers": "End-to-end parity proof across PostgreSQL, Redis-loss behavior, Better Auth, files, documents, exports, responsive shadcn UI, archived data, and source-runtime retirement readiness.",
+        "acceptanceCriteria": [
+          "All 74 source write entry points, 63 routes/pages, 46 regression/formula oracles, 57 workflow checks, source tables, screens, and outputs are implemented or explicitly accounted for.",
+          "The full Enquiry-to-PI-to-internal-product/drawing/website lifecycle and revision workflows pass repository, HTTP, browser, accessibility, desktop, and 390px tests.",
+          "All migrated file metadata resolves, local ignored attachment bytes have proven backup/restore commands, and every file route passes traversal and authorization tests.",
+          "PostgreSQL remains canonical with Redis stopped; no runtime SQLite or Convex import exists; all tests, typechecks, lint, production build, data reconciliation, and source-retirement gates pass."
+        ]
+      }
+    ],
+    "changeLog": [
+      {
+        "at": "2026-07-21",
+        "task": "MIG-01",
+        "type": "planning",
+        "summary": "Created the approved local task ledger, dependency edges, and two public TDD seams."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-01",
+        "type": "red",
+        "summary": "Added a public runtime verification test; it failed because the local runtime contract did not exist."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-01",
+        "type": "green",
+        "summary": "Added persistent PostgreSQL 16 and Redis 7 Docker services, an isolated test database, a runtime verification command, and environment contracts. The integration test passed against both live containers."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-01",
+        "type": "verification",
+        "summary": "pnpm local:up applied 7 migrations and reported both services ready. PostgreSQL retained all migration state while Redis was stopped and remained valid after Redis restarted. Runtime lint, focused type-check, test, and Docker Compose validation passed."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-02",
+        "type": "planning",
+        "summary": "Confirmed the fresh-identity boundary, Better Auth PostgreSQL adapter contract, capability seed, Next.js server-side authorization boundary, and shared shadcn administration primitives."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-02",
+        "type": "red",
+        "summary": "Added an application-seam integration test for capability-gated staff provisioning and credential authentication; it failed because the access administration service did not exist."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-02",
+        "type": "red",
+        "summary": "Added a second application-seam test for role grants, effective capabilities, explicit deny and allow overrides, and the administration snapshot; it failed at the missing role-management behavior."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-02",
+        "type": "green",
+        "summary": "Implemented capability-gated Better Auth staff provisioning, PostgreSQL application roles and permissions, user overrides, stable administration snapshots, protected Next.js server actions, and a shared-shadcn access administration surface."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-02",
+        "type": "verification",
+        "summary": "Live PostgreSQL auth and access tests passed, including one-time administrator promotion, staff credential authentication, deny precedence, explicit allow, and unauthorized provisioning. Focused lint, formatting, DB and web type-checks, and the Next.js production build passed. Browser verification covered redirect and sign-in, authenticated rendering, a real staff-provision server action, no framework errors, correct navigation state, and a 390px layout with no horizontal overflow."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-03",
+        "type": "planning",
+        "summary": "Expanded the logical schema contract into canonical tables for every approved bounded context, including relational planner event details and the previously implicit proforma-invoice aggregate required by the Pricing workflow."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-03",
+        "type": "red",
+        "summary": "Added an empty-database schema contract for all 95 canonical tables; it failed with only 11 tables present."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-03",
+        "type": "green",
+        "summary": "Added migration 0008 with the complete catalog, sales, manufacturing, workforce, quality, maintenance, and audit model; relational planner detail tables; PI aggregates; source provenance; actor/version columns; constraints and indexes; and separate migration, web, worker, and reporting roles."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-03",
+        "type": "verification",
+        "summary": "Eleven empty-database contracts passed for all 95 tables, approved PostgreSQL types, shared mutable columns, active-price lineage, active-machine locking, quality scope, and least-privilege grants. Package lint and type-check passed, and pnpm local:up upgraded the persistent database to 8 migrations while PostgreSQL and Redis remained healthy."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-04",
+        "type": "planning",
+        "summary": "Audited the existing SQLite and Convex inspectors and idempotent staging loaders against the immutable-artifact gate; identified archive-path and full-JSONL validation as the remaining pre-write safety gap."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-04",
+        "type": "red",
+        "summary": "Added inspector tests for path traversal, missing Convex dataEntries, and malformed canonical JSONL; both source inspectors accepted unsafe archive content before the safety layer existed."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-04",
+        "type": "green",
+        "summary": "Added normalized archive-path validation, duplicate-path detection, required Convex dataEntries enforcement, complete JSONL validation, identity and derived-state disposition evidence, and safe idempotent staging for immutable SQLite and Convex artifacts."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-04",
+        "type": "verification",
+        "summary": "Verified the untouched 2026-07-18 exports by SHA-256 (Pricing ZIP 40e6d256dc1279b343951c3024efb0470663e0cf4d546537318c888b25bd190b, SQLite cda45d16fcd50908b94b84e2958c30cd32c33e28c5f0b0ea80d78f414fc43cb3, Convex e31158f68b082af720c9d36816ce967de181c1132f1f8867f5e642dc068409d3). Run aa040457-b12e-461d-add0-d6ac647a6495 staged 17 populated Pricing business tables and 13,752 Convex rows (13,524 dataEntries plus physical-table rows), preserved three source relationship conflicts, recorded 654 legacy identity rows and 39 archive-only rows in manifests, and staged zero identity documents. Seven migration tests, lint, type-check, and formatting passed."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-05",
+        "type": "planning",
+        "summary": "Corrected the source contract to 44 total SQLite tables: 41 business tables plus 3 excluded identity tables. The 17 populated business tables must produce 628 source mappings and matching source/target payload hashes; the other 24 require explicit zero-row reconciliation."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-05",
+        "type": "red",
+        "summary": "Added a public migration-CLI integration test covering all 17 populated Pricing table shapes, preservation of costing and catalog fields, row mappings, hashes, reconciliation, and rerun stability. It failed because the complete snapshot transformer did not exist."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-05",
+        "type": "green",
+        "summary": "Added migration 0009 and the complete Pricing snapshot transformer. It preserves legacy-only costing and master fields, transforms all 17 populated tables, maps and SHA-256 verifies each source payload, reconciles every canonical table, queues unresolved file references, and keeps known relationship conflicts visible."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-05",
+        "type": "verification",
+        "summary": "Two real-source rehearsals (d439181a-cb6a-4d10-9e22-72a7c287673f and 6c61848a-5f16-4d1b-a223-c9a40a3d8ece) each passed 41 of 41 table checks with 628 source rows, 628 target rows, 628 mappings, and 628 matching hashes. All 625 versioned targets remained at row_version 1 after the second rehearsal; three source FK conflicts remained explicit and zero file references required quarantine. Eight migration tests, 11 empty-database contracts, lint, type-check, formatting, and the nine-migration local runtime check passed."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-06",
+        "type": "planning",
+        "summary": "Fixed the real-source transformation contract at 13,751 canonical Convex rows: 13,523 logical dataEntries plus 228 populated physical-table rows. The single _summary row remains archive-only; rejection_classification follows its approved typed-quarantine rule; every other observed type maps to a relational target with source mappings and hashes."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-06",
+        "type": "red",
+        "summary": "Added a migration-CLI integration test for relational part/route/setup normalization, exact decimal setup-code preservation, physical production, typed quarantine, correction resolution, overlap reporting, hashes, and rerun idempotency. It failed because the Convex snapshot transformer did not exist."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-06",
+        "type": "green",
+        "summary": "Added migration 0010 and the complete Convex snapshot transformer. It normalizes every observed logical and physical source type, preserves decimal setup codes, reports competing production sources, resolves corrections into auditable reversals, explicitly quarantines approved typed exceptions, and fails on unknown types, count gaps, or hash mismatches."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-06",
+        "type": "verification",
+        "summary": "Two real-source rehearsals (44da427c-4759-4989-b649-9c03931d564c and ed43f349-6bef-4d52-b508-b9021bdfafc1) each reconciled 13,751 canonical Convex rows with 13,751 source mappings and matching hashes, 205 resolved corrections, 69 approved typed quarantines, zero orphan corrections, zero unknown entry types, three physical production rows, and zero software_raw rows. The single _summary row remained archive-only and all 17 versioned Convex target groups stayed at row_version 1."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-07",
+        "type": "planning",
+        "summary": "Audited the recovered Pricing enquiry, handover, technical review, clarification, design, import, matching, and attachment rules. Fixed the PostgreSQL service seam around one transaction client and the Next.js mutation seam around per-action capability checks."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-07",
+        "type": "red",
+        "summary": "Added a PostgreSQL integration contract for enquiry creation, commercial-term handover gates, clarification lifecycle, design-to-costing handoff, safe attachment metadata, idempotent imports, and portfolio matching. It failed because the commercial workflow repository did not exist."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-07",
+        "type": "green",
+        "summary": "Added migration 0011, the transactional commercial workflow repository, capability-protected Server Actions, local attachment persistence, and shared-shadcn enquiry screens. The recovered monthly numbering, handover gates, six-key technical checklist, clarification reuse, design branches, imports, matching, and audit behavior now run on PostgreSQL without a SQLite runtime dependency."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-07",
+        "type": "verification",
+        "summary": "The real-PostgreSQL workflow suite passed alongside all database tests (13 tests total); database and web typechecks, lint, and the production build passed. A real Better Auth browser session created ENQ-2607-001 against the migrated customer/product data, added a line, handed it over, opened and resolved a Sales clarification, persisted all six technical gates as Feasible, and produced actor-linked audit events. Desktop and 390px checks had no page errors or horizontal overflow."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-08",
+        "type": "planning",
+        "summary": "Audited the recovered product-parameter costing, exact workbook chain, draft replacement, sent immutability, active-price lineage, and recursive package/assembly quote rules. PostgreSQL NUMERIC remains the exact storage boundary; the legacy JavaScript calculation order is preserved, and a partial unique index owns the one-active-price invariant."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-08",
+        "type": "red",
+        "summary": "Added a real-PostgreSQL integration contract for material-rate defaults, Barstock and package costing branches, workbook outputs, editable drafts, immutable sent snapshots, lineage supersession, and immediate-child package/assembly snapshots. It fails because the commercial costing repository does not exist."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-08",
+        "type": "green",
+        "summary": "Implemented the shared Pricing calculation module and transactional PostgreSQL costing repository. The focused real-database contract now passes material defaults, explicit pieces-per-kilogram and weight derivation, Barstock zero-forging behavior, draft upsert, recursive package quotes, sent immutability, and lineage-scoped active-price supersession."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-08",
+        "type": "implementation",
+        "summary": "Added migration 0012 with exact quote inputs/results, calculation and product snapshots, nested child-quote links, the partial one-active-lineage index, and database triggers protecting sent quote trees. Added capability-protected costing and send actions plus shared-shadcn product-parameter, quote-register, and quote-detail screens. The pure calculation subpath keeps PostgreSQL drivers out of the client bundle."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-08",
+        "type": "verification",
+        "summary": "All database tests passed (16 tests), database and web typechecks passed, database lint passed, web lint retained only three pre-existing React Compiler warnings, the focused browser calculation tests passed, and the Next.js production build passed with local environment values. A real Better Auth browser session completed M1 product costing, saved ENQ-2607-001-M1 at USD 1.235625, marked it Sent and active, and verified actor-linked quote.saved/quote.sent audit events, no console errors, and no horizontal overflow at 390px."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-09",
+        "type": "planning",
+        "summary": "Recovered the Pricing PO matcher, explicit price decisions, unmatched quote-request reuse, PI transitions, Q-to-M/P conversion, immediate package-child conversion, and cancellation rules. Tightened the recovered matcher so a customer code spanning multiple active lineages is always Ambiguous."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-09",
+        "type": "red",
+        "summary": "Added a real-PostgreSQL integration contract for ambiguous lineages, matched and differing prices, revision requests, atomic workbook imports, reusable PO quote requests, immutable issued PI lines, PI approval, permanent product conversion, and approved-order cancellation protection. It initially failed at the missing commercial-orders repository."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-09",
+        "type": "green",
+        "summary": "Implemented the transactional commercial-orders repository and migrations 0013-0014. PO lines retain PO and historical system values, revision requests remain visible, PI lines retain exact quote IDs and prices, issued documents are immutable, and approval activates quotes plus converts Q identities inside one transaction."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-09",
+        "type": "implementation",
+        "summary": "Added capability-protected Server Actions, atomic Excel worksheet import, and shared-shadcn purchase-order register and detail routes for matching, ambiguity, price decisions, quote requests, PI generation/sending/approval, and auditable cancellation."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-09",
+        "type": "verification",
+        "summary": "All 20 database tests, database and web typechecks, database lint, and the Next.js production build passed; web lint retained only three pre-existing React Compiler warnings. A real Better Auth session created PO-BROWSER-260721-1, matched BROWSER-001 at USD 1.235625, generated/sent/approved its PI, retained the exact quote ID, activated and accepted the quote, and produced five actor-linked audit events. Fresh-session browser checks showed the source date unchanged in Asia/Kolkata, no page errors, and no horizontal overflow at 390px."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-10",
+        "type": "planning",
+        "summary": "Recovered the Pricing bulk-revision and ECN state machines, field eligibility, percentage normalization, recursively affected customer prices, child-to-parent supersession order, and correction semantics. The PostgreSQL port preserves these rules without rewriting historical quote snapshots."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-10",
+        "type": "red",
+        "summary": "Added a real-PostgreSQL integration contract for leaf, assembly, and nested-package propagation; immutable source snapshot digests; ECN design and keep-or-revise decisions; and visible destructive-correction quarantine. It initially failed because the commercial-revisions repository did not exist."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-10",
+        "type": "green",
+        "summary": "Implemented migration 0015 and the transactional revision repository. Completion creates inactive draft replacements, clones snapshots/components/terms, supersedes sources, activates sent replacements, recalculates nested parents child-first, records append-only ECN decisions, and quarantines destructive correction requests with audit events."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-10",
+        "type": "implementation",
+        "summary": "Added capability-protected Server Actions and a shared-shadcn Price revisions workbench for creating/staging/completing bulk revisions, separate ECN design and costing stages, eligible customer-price selection, and visible pricing-correction quarantine. Added the route to the commercial navigation and the correction table to the canonical schema contract."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-10",
+        "type": "verification",
+        "summary": "All 23 database tests and database/web typechecks passed; database lint passed and web lint retained only three pre-existing React Compiler warnings. A real Better Auth browser session completed BPR-0002 from USD 1.235625 to 1.276813, completed ECN-0001 with a keep-price replacement at 1.276813, and created an actor-linked Quarantined deletion request. The page reported no runtime errors and no horizontal overflow at 390px."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-11",
+        "type": "planning",
+        "summary": "Mapped the legacy machine, route, cycle, tooling, work-order, calendar, route-selection, priority, constraint, override, and route-change mutations to normalized PostgreSQL writes. Retained planner algorithms in the existing read layer while defining transaction locks and one coalesced durable dashboard refresh job per organization."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-11",
+        "type": "red",
+        "summary": "Added a real-PostgreSQL contract for business-key master upserts, route/setup identity, work orders, cycle/tooling/calendar records, route supersession, all four planner events, physical-machine locking, and coalesced refresh work. Extended it to fail while nested interrupted setups, queue blockers, placements, and remaining-route setups existed only in source JSON."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-11",
+        "type": "green",
+        "summary": "Implemented migration 0016 and createDashboardPlanningRepository. Master writes use advisory business-key locks and row locks; planner writes use work-order, route-selection, setup-state, and physical-machine locks; accepted writes atomically upsert one pending dashboard refresh job. Nested planner evidence now retains both the immutable source payload and joinable child rows."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-11",
+        "type": "implementation",
+        "summary": "Moved the five planner POST endpoints and six master/data-import entry types behind Better Auth capability checks onto PostgreSQL. Legacy option numbers resolve against canonical OPTION-* routes, CSV master imports reuse the same typed repository path, authenticated actors and raw master payloads are retained, and remaining Convex-backed workflow types stay explicitly scheduled for MIG-12 through MIG-15."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-11",
+        "type": "verification",
+        "summary": "All 26 database tests, focused planning-input tests, database/web typechecks, database lint, and the Next.js production build passed; web lint retained only three pre-existing React Compiler warnings. A real Better Auth browser session selected canonical routes through legacy option 1, recorded a priority with three normalized details, wrote a machine and planning holiday through /api/data-entry, retained the authenticated actor and machineType source payload, produced exactly one pending coalesced dashboard refresh job, and reported no page errors."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-12",
+        "type": "planning",
+        "summary": "Recovered production-card merge semantics, append-only production and correction behavior, raw-material receipt identity, six-stage shop-floor progression, physical-machine ownership, explicit planner-switch exceptions, dispatch approval, and setup completion from the Convex implementation and its dashboard tests."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-12",
+        "type": "red",
+        "summary": "Added real-PostgreSQL contracts for blank-preserving production-card updates, immutable card events, idempotent raw-material receipt updates, append-only production, machine locking and planner-approved switching, completion release, dispatch, and actor-linked reversal evidence."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-12",
+        "type": "green",
+        "summary": "Implemented migration 0017 and createProductionShopFloorRepository. Transactional writes resolve canonical work orders, selected routes, legacy setup codes, machines, and employees; enforce one active setup per machine; retain source payloads and actors; and coalesce planning refresh work without making Redis authoritative."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-12",
+        "type": "implementation",
+        "summary": "Moved raw-material receipt, production-card, shop-floor status, software production, CSV production/raw-material import, dispatch approval, setup completion, and production reversal POST paths behind Better Auth capabilities onto PostgreSQL. Test execution is serialized wherever suites mutate the shared test database, and the legacy planner calendar fixture now pins time deterministically without changing production logic."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-12",
+        "type": "verification",
+        "summary": "Root tests passed with 29 database, 113 web, 5 migration, and 1 runtime tests; root typecheck and the Next.js production build passed; root lint retained only three pre-existing React Compiler warnings. A real Better Auth browser session completed seven production/shop-floor HTTP writes, retained non-null PostgreSQL actors, recorded three stage events, released the physical machine on completion, preserved production/card/dispatch/completion evidence, and left exactly one coalesced active dashboard refresh job with no server errors."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-13",
+        "type": "planning",
+        "summary": "Recovered attendance current-state and event history, training, first-piece five-sample inspections, hourly quality cards, two-phase setup checklists, maintenance schedules/tasks/breakdowns, legacy key fallback, and the bounded read shapes consumed by the two dedicated quality screens."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-13",
+        "type": "red",
+        "summary": "Added real-PostgreSQL contracts for workforce traceability, relational quality samples and readings, checklist phase identity, maintenance task history, bounded parameter/check/session projections, and exact reconstruction of existing hourly and two-phase setup values. The bounded-read contract initially failed because the quality repository exposed no read methods."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-13",
+        "type": "green",
+        "summary": "Implemented migrations 0018-0020 plus workforce, quality, and maintenance repositories. Archived evidence now reconciles exactly, duplicate first-piece keys remain deterministic and lossless, orphaned readings receive provenance-marked fallback parameters, and bounded PostgreSQL projections reconstruct canonical masters and checklist results."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-13",
+        "type": "implementation",
+        "summary": "Moved the workforce, quality, checklist, and maintenance entry families behind Better Auth onto PostgreSQL; added authenticated hourly-quality and setup-checklist GET projections; guarded both dedicated pages with operations.dashboard.read; and replaced only their Convex transport while retaining the existing shared-shadcn UI and business helpers."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-13",
+        "type": "verification",
+        "summary": "Root tests passed with 32 database, 118 web, 5 migration, and 1 runtime tests; root typecheck passed; root lint retained only three pre-existing React Compiler warnings. Authenticated HTTP returned both bounded projections, and browser acceptance rendered the Better Auth user, existing hourly screen, and both recovered setup-checklist values with no Convex dependency in the dedicated screens."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-14",
+        "type": "planning",
+        "summary": "Grounded the local worker against PostgreSQL queue-locking, node-redis connection, and Better Auth custom rate-limit storage contracts. Fixed PostgreSQL as the authority, Redis as fail-open acceleration, SKIP LOCKED as the multi-worker claim primitive, and a versioned read-model watermark as the retry boundary."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-14",
+        "type": "red",
+        "summary": "Added real PostgreSQL and Redis contracts for concurrent claims, synthetic failure and retry, non-duplicated model versions, idempotent maximum-version invalidation, durable Redis delivery failure, fail-open rate limiting, queue/outbox atomicity, and observable lag/error/retry state."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-14",
+        "type": "green",
+        "summary": "Implemented migration 0021 and the durable refresh runtime. Refresh jobs and attempts are claimed with FOR UPDATE SKIP LOCKED, model payload/version/watermark/outbox commit atomically under a repeatable-read transaction, failed attempts reschedule without consuming a version, and Redis delivery remains independently retryable."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-14",
+        "type": "implementation",
+        "summary": "Planning and shop-floor writes now append dashboard.refresh.requested outbox events in the same PostgreSQL transaction as their coalesced refresh job. Added bounded continuous, one-shot, and status worker commands; Redis publishes invalidations and monotonic dashboard versions; Better Auth client requests use its atomic custom limiter through a hashed, fail-open Redis counter."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-14",
+        "type": "verification",
+        "summary": "Root tests passed with 32 database, 119 web, 5 migration, and 4 runtime tests; root typecheck passed; root lint retained only three pre-existing React Compiler warnings. The populated Docker database applied all 21 migrations, processed its pending refresh in 22 ms, committed read-model version 1 and its complete attempt, published the matching Redis version, and reported zero pending, running, failed, or retrying work."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-15",
+        "type": "planning",
+        "summary": "Fixed the versioned PostgreSQL read model as the main dashboard contract, bounded normalized projections for specialized screens, Better Auth capability boundaries for pages and APIs, and polling as the correctness path with Redis used only for optional acceleration."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-15",
+        "type": "red",
+        "summary": "Added client-cutover contracts that rejected Convex auth, query, mutation, API fallback, middleware, and root-provider dependencies; real-PostgreSQL correction and rejection-master tests initially failed at their missing normalized write paths."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-15",
+        "type": "green",
+        "summary": "Moved the unchanged dashboard domain, planner, analysis, and correction behavior into the database package; built the full durable read model from normalized PostgreSQL projections; added PostgreSQL correction and rejection-master repositories; and cut the dashboard client and API over to versioned polling."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-15",
+        "type": "implementation",
+        "summary": "The root and specialized dashboard routes now use Better Auth capabilities, the root layout and proxy have no Convex provider or environment dependency, dashboard writes use authenticated PostgreSQL repositories, and the main UI consumes derived PostgreSQL state while preserving the existing shared-shadcn design composition."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-15",
+        "type": "verification",
+        "summary": "Focused cutover and operational tests passed 11 web and 5 database contracts with clean typechecks. A fresh Better Auth browser session rendered read-model version 3 with 100 work orders and no errors; the 390px interaction tree remained usable; and stopping Redis left the authenticated dashboard at HTTP 200 with identical PostgreSQL data before Redis restarted healthy."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-16",
+        "type": "planning",
+        "summary": "Scoped legacy removal to production runtime code and active local-development contracts while preserving the source repositories, immutable archives, migration loaders, staging tables, reconciliation commands, and historical documentation as read-only evidence."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-16",
+        "type": "red",
+        "summary": "Added a workspace contract covering package dependencies and scripts, Turborepo and environment configuration, recursive production-source imports, obsolete runtime files, and the retired Convex compose stack. All three tests initially failed on the remaining legacy runtime."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-16",
+        "type": "green",
+        "summary": "Removed the target app's Convex backend, generated bindings, providers, environment helper, CLI scripts, workbook importer, Docker stack, direct dependencies, task graph, and environment variables. Production web, database, and worker source now has zero Convex or SQLite-driver imports."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-16",
+        "type": "implementation",
+        "summary": "Rewrote active setup and agent documentation around PostgreSQL, Redis, Better Auth, the durable worker, and read-only source loaders; retained local attachment metadata and bytes contracts; and kept compatibility endpoints honest with real PostgreSQL behavior or explicit 400/404 unsupported responses."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-16",
+        "type": "verification",
+        "summary": "The legacy-removal and dashboard-cutover contracts passed, all 35 database, 129 web, 9 migration, and 4 runtime tests passed, workspace typecheck and lint passed, and the Next.js 16 production build compiled every application route without Convex packages or environment values."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-17",
+        "type": "planning",
+        "summary": "Fixed the final acceptance boundary around two complete immutable-source rehearsals, order-independent source-hash comparison, exact per-table PostgreSQL backup fingerprints, a separate restore database, production-build browser workflows, and explicit local cutover and rollback sheets."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-17",
+        "type": "red",
+        "summary": "The first real-archive rehearsal exposed required final-schema quality identities missing from the archived transformer and a reconciled run left in reconciling. Added regression contracts for collision-safe check/session keys and completed-run state; added a red unit contract for order-independent database fingerprints."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-17",
+        "type": "green",
+        "summary": "Updated the source transformer to preserve duplicate quality evidence with newest-canonical and |legacy|<source_id> keys, mark successful runs complete with completed_at, and added a generic exact table/row database fingerprint command for restore verification."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-17",
+        "type": "implementation",
+        "summary": "Delivered dated acceptance evidence plus local cutover and non-destructive rollback command sheets. Two complete runs matched all 14,379 source/target hashes with identical digest and zero failures; the main database retains 13,751 Convex and 628 Pricing mappings with no unknown types."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "MIG-17",
+        "type": "verification",
+        "summary": "A 13,660,547-byte custom dump restored into mrmpl_restore_verify with the same 143-table, 149,093-row fingerprint. Production-build Better Auth, dashboard, commercial order, quality, checklist, and 390px browser checks passed without errors. The final gate passed 35 database, 12 migration, 4 runtime, and 129 web tests, workspace typecheck and lint, and the complete production build."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-00",
+        "type": "specification",
+        "summary": "Audited 74 Pricing write entry points, 63 routes/pages, 36 source schema tables, 46 regression oracles, all current PostgreSQL commercial repositories and their UI seams, and delivered docs/pricing-project-business-logic-migration-spec.md with an exhaustive source-to-target parity matrix and LM-00 through LM-09 dependency plan."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-00",
+        "type": "decision",
+        "summary": "Applied the approved no-functional-change precedence: current executable Pricing behavior is authoritative for customer-plus-code active-price supersession and deterministic ranked PO matching; current live-rate fallback behavior remains; HR is an external proxy dependency because no HR repository or export was supplied; existing archive anomalies remain visible exceptions."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-00",
+        "type": "planning",
+        "summary": "Created the behavior-freeze and golden-fixture ticket, marked it in progress, expanded the ledger schema for LM ticket identifiers, and switched the implementation worktree to feat/logic-migration."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-01",
+        "type": "planning",
+        "summary": "Created the authorization-and-drift ticket for exact commercial capabilities, active-price scope, explicit import review, quote-send follow-ups, audit effects, and source-safe reversals."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-02",
+        "type": "planning",
+        "summary": "Created the customer/master-maintenance ticket for source-equivalent CRUD plus atomic workbook template/import behavior."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-03",
+        "type": "planning",
+        "summary": "Created the enquiry/Sales/Technical/follow-up ticket covering full line gates, files, classification review, queues, clarifications, follow-ups, registers, templates, and exports."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-04",
+        "type": "planning",
+        "summary": "Created the Design-dossier ticket covering complete fields/files, portfolio and Q/C identity selection, nested BOMs, all clarification directions, costing handoff, and reversals."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-05",
+        "type": "planning",
+        "summary": "Created the full-costing-and-documents ticket covering product/customer workbenches, registers, pricing spreadsheets, immutable quote history, and deterministic live-rate PDF behavior."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-06",
+        "type": "planning",
+        "summary": "Created the PO/PI-completion ticket covering source files, deterministic matching, every report, exact Q conversion, and atomic Drawing History and Website Product side effects."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-07",
+        "type": "planning",
+        "summary": "Created the bulk-revision/ECN/corrections ticket covering full source field matrices, process guards, Product Costing ECN stage, recursive decisions, safe reversals, and quarantine."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-08",
+        "type": "planning",
+        "summary": "Created the drawing/website/analytics ticket covering both maintenance surfaces and exports, complete commercial analytics, Sales history, and all remaining registers."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-09",
+        "type": "planning",
+        "summary": "Created the final parity and source-retirement ticket with capability, route, workflow, calculation, history, revision, file, report, authorization, Redis-loss, shadcn UI, quality, archive-reconciliation, and backup/restore gates."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-00",
+        "type": "red",
+        "summary": "Added oracle-accounting and deterministic workflow-fixture contracts. They failed first at the missing parity manifest, missing output metadata fixture, and missing digest-locked nested workflow fixture."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-00",
+        "type": "green",
+        "summary": "Added 46 PR target IDs, 57 unique WF target IDs including both source PACKAGE-010 checks, explicit no-functional-change decisions, fifteen output metadata families, and a stable nested Package/Assembly/quote/PO/bulk/ECN fixture with SHA-256 49872b26b1d45244cf96bd2487e1f601d44fe2d99ba681b0325cfcd0153e561e."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-00",
+        "type": "verification",
+        "summary": "The immutable Pricing ZIP and SQLite checksums matched prior evidence. An isolated virtual-environment run executed all 57 source workflow checks with zero findings and confirmed that this archive has no transactional status snapshots. All 43 database tests passed; package lint, package typecheck, JSON validation, and git diff checking passed."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-01",
+        "type": "planning",
+        "summary": "Started the drift-correction phase at public repository and authenticated route seams: exact capabilities, source customer-code price scope and ranked PO match, explicit enquiry import review, quote-send follow-up, complete audit effects, and safe reversals."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-01",
+        "type": "implementation",
+        "summary": "Added exact session and per-route commercial capabilities, a dedicated shared-shadcn corrections route, source-ranked PO matching, customer-plus-normalized-code active-price scope, advisory transaction locks, and migrations 0022 through 0024 for price, import-review, and follow-up fidelity."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-01",
+        "type": "implementation",
+        "summary": "Replaced enquiry import auto-creation with the six source classifications and explicit idempotent review actions; added atomic 15-day Email follow-ups on quote send; restored safe design-handoff and unused-Q-product reversals while keeping sent/history corrections quarantined with before/after audit evidence."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-01",
+        "type": "data-migration",
+        "summary": "Extended Pricing snapshot transformation to preserve suggested/applied import actions and match notes, then restore review enquiry, quote, product, enquiry-item, and created-item relationships from source ID mappings after all target tables load. The focused archive-transform integration test and migration package typecheck pass."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-01",
+        "type": "pause-checkpoint",
+        "summary": "LM-01 remains in progress. Schema contract passed 12 tests, commercial capability/auth passed 5 tests, database and web typechecks passed, and 22 of 25 selected commercial tests passed in one combined run. The workflow file then deadlocked against the shared test database and produced cascading missing-fixture errors; reproduce it alone before deciding whether this is only harness isolation. Main mrmpl has not applied migrations 0022-0024 or the final import-review relationship backfill. PostgreSQL and Redis containers were stopped without removing volumes; no mrm workspace app or worker process remains."
+      }
+    ]
+  }
+}
