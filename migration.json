@@ -257,7 +257,7 @@
         "id": "LM-01",
         "title": "Correct commercial authorization and behavioral drift",
         "blockedBy": ["LM-00"],
-        "status": "in_progress",
+        "status": "complete",
         "delivers": "Exact Better Auth capability boundaries, source-compatible active-price and import behavior, quote-send follow-ups, complete audit side effects, and source-safe correction reversals.",
         "acceptanceCriteria": [
           "Orders, quotes, revisions, corrections, and every narrower commercial route enforce their dedicated read/write capabilities.",
@@ -270,7 +270,7 @@
         "id": "LM-02",
         "title": "Customer and pricing-master maintenance",
         "blockedBy": ["LM-01"],
-        "status": "pending",
+        "status": "complete",
         "delivers": "Source-equivalent customer CRUD, pricing/design/website/terms master CRUD, and atomic multi-sheet workbook template/import workflows.",
         "acceptanceCriteria": [
           "An empty organization can bootstrap every required customer and commercial master through authorized shadcn screens.",
@@ -965,6 +965,36 @@
         "task": "LM-01",
         "type": "pause-checkpoint",
         "summary": "LM-01 remains in progress. Schema contract passed 12 tests, commercial capability/auth passed 5 tests, database and web typechecks passed, and 22 of 25 selected commercial tests passed in one combined run. The workflow file then deadlocked against the shared test database and produced cascading missing-fixture errors; reproduce it alone before deciding whether this is only harness isolation. Main mrmpl has not applied migrations 0022-0024 or the final import-review relationship backfill. PostgreSQL and Redis containers were stopped without removing volumes; no mrm workspace app or worker process remains."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-01",
+        "type": "verification",
+        "summary": "Reproducing the workflow suite alone passed all three tests. A sentinel organization then proved that the Better Auth reset helper's TRUNCATE identity tables CASCADE followed incoming foreign keys and erased shared business fixtures; replacing it with transactional session/account/user DELETE statements removed the cross-suite failure, and the auth regression now preserves unrelated organizations. The serial commercial gate passed 29 tests, the focused Pricing snapshot transform passed, two isolated commercial workflows passed 3/3, the main archive rehearsal retained all 628 Pricing mappings and known exceptions, and migrations 0022-0024 were applied to main mrmpl."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-02",
+        "type": "red",
+        "summary": "Added real-PostgreSQL customer and commercial-master contracts plus workbook parser/export tests. They initially failed because managed customer mutations, the source master families, quote-term templates, grade-and-rod lookup, atomic snapshot import, and source-compatible workbook handling did not exist."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-02",
+        "type": "implementation",
+        "summary": "Implemented organization-scoped customer create/update with managed numeric UIDs and actor audit; migration 0025 and a commercial-master repository for pricing, design, website, rate, shipping, packaging, commercial-term, and quote-PDF-term families; authorized shared-shadcn maintenance screens; activation controls; and source-compatible XLS/XLSX template, export, alias/default transformation, error reporting, and all-or-nothing import routes."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-02",
+        "type": "verification",
+        "summary": "An empty-organization fixture created all 15 customer/master rows, enforced case-insensitive natural keys, resolved material rates by grade and rod, preserved term order and activation, and recorded the authenticated actor. Invalid cross-sheet references rolled back every row; a canonical fixture exported and re-imported with no snapshot difference. Browser acceptance created and updated a customer and representative masters, toggled activation, downloaded the exact masters-template.xlsx, exported and re-imported the live workbook atomically with 0 new and 10 updated rows, and passed desktop plus 390px checks. The final gate passed 53 database, 12 migration, 4 runtime, and 136 web tests, workspace typecheck and lint, and the complete Next.js production build."
+      },
+      {
+        "at": "2026-07-21",
+        "task": "LM-02",
+        "type": "pause-checkpoint",
+        "summary": "LM-02 is complete and work is paused before LM-03 as requested. The browser and Next.js development sessions are closed; Docker PostgreSQL and Redis containers are stopped without removing their retained volumes. The implementation remains uncommitted for user review."
       }
     ]
   }

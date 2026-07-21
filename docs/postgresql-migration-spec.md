@@ -1727,3 +1727,33 @@ LM-09 in `migration.json`.
 - Main `mrmpl` has not applied `0022`-`0024` or the final review-relationship
   backfill. At this pause, the local PostgreSQL and Redis containers are
   stopped with volumes retained and no mrm application/worker server running.
+
+### 20.11 Delivered LM-01 drift correction and LM-02 master maintenance
+
+LM-01 and LM-02 are complete on `feat/logic-migration`; implementation pauses
+before LM-03.
+
+- The earlier commercial-suite failure was traced to the Better Auth test reset
+  helper. `TRUNCATE` with `CASCADE` on identity tables traversed incoming
+  business foreign keys and erased fixtures. The helper now transactionally
+  deletes only sessions, accounts, and users, with a sentinel organization test.
+- Serial PostgreSQL verification passed schema, costing, orders, revisions,
+  workflow, customers, and commercial masters without deadlock or fixture loss.
+- Migration `0025_commercial_master_maintenance.sql` adds organization-wide
+  quote term templates and aligns material-rate uniqueness with the source
+  grade-plus-rod lookup. Main `mrmpl` is migrated through `0025` and retains all
+  628 Pricing source mappings.
+- `createCustomerRepository` owns managed customer UIDs, organization lookup,
+  source-editable updates, versions, provenance, and actor audit.
+- `createCommercialMasterRepository` owns all Pricing design, website, rate,
+  shipping, packaging, commercial-term, and quote-template master families.
+  Natural-key writes and a multi-sheet import run in PostgreSQL transactions.
+- The web application exposes Better Auth-protected shared-shadcn customer and
+  master maintenance. Workbook routes preserve the source sheet names,
+  aliases, defaults, exact template filename, XLS/XLSX handling, export shape,
+  row errors, and atomic failure behavior.
+- Integration acceptance proved empty-organization bootstrap, uniqueness,
+  grade-and-rod lookup, term ordering, activation, actor audit, rollback on a
+  cross-sheet error, and canonical export/import equality. Authenticated browser
+  acceptance covered representative writes, template/export delivery, a real
+  exported-file import, and 390px layout behavior.

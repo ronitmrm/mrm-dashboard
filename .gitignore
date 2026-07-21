@@ -44,6 +44,10 @@ local-data/
 /memory/
 *.xls
 *.xlsx
+!apps/web/app/commercial/masters/template.xlsx/
+!apps/web/app/commercial/masters/template.xlsx/route.ts
+!apps/web/app/commercial/masters/export.xlsx/
+!apps/web/app/commercial/masters/export.xlsx/route.ts
 backups/
 .handoff/
 .agents/

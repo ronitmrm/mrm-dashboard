@@ -117,6 +117,7 @@ const expectedCanonicalTables = [
   "sales.quote_package_components",
   "sales.quote_product_snapshots",
   "sales.quote_revision_requests",
+  "sales.quote_term_templates",
   "sales.quote_terms",
   "sales.shipping_terms",
   "workforce.attendance_record_events",

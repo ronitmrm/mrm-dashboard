@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { randomUUID } from "node:crypto"
+import { Pool } from "pg"
 
 import {
   createAuthorizationRepository,
@@ -12,20 +14,22 @@ const connectionString =
   process.env.TEST_DATABASE_URL ??
   "postgres://mrmpl:mrmpl@localhost:5434/mrmpl_test"
 
+const pool = new Pool({ connectionString })
+
 async function resetIdentity() {
-  const system = createAuthSystem({
-    allowSignUp: true,
-    baseURL: "http://localhost:3001",
-    connectionString,
-    secret: "test-only-better-auth-secret-000000000000",
-  })
+  const client = await pool.connect()
 
   try {
-    await system.database.execute(
-      "TRUNCATE identity.sessions, identity.accounts, identity.users CASCADE"
-    )
+    await client.query("BEGIN")
+    await client.query("DELETE FROM identity.sessions")
+    await client.query("DELETE FROM identity.accounts")
+    await client.query("DELETE FROM identity.users")
+    await client.query("COMMIT")
+  } catch (error) {
+    await client.query("ROLLBACK")
+    throw error
   } finally {
-    await system.close()
+    client.release()
   }
 }
 
@@ -36,9 +40,38 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await resetIdentity()
+  await pool.end()
 })
 
 describe("PostgreSQL Better Auth", () => {
+  it("resets identity rows without deleting business data", async () => {
+    const organizationId = randomUUID()
+    const organizationCode = `AUTH-${organizationId.slice(0, 8)}`
+
+    await pool.query(
+      `INSERT INTO core.organizations (id, code, name)
+       VALUES ($1::uuid, $2, $3)`,
+      [organizationId, organizationCode, "Auth reset sentinel"]
+    )
+
+    try {
+      await resetIdentity()
+
+      const result = await pool.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count
+         FROM core.organizations
+         WHERE id = $1::uuid`,
+        [organizationId]
+      )
+
+      expect(result.rows[0]?.count).toBe("1")
+    } finally {
+      await pool.query("DELETE FROM core.organizations WHERE id = $1::uuid", [
+        organizationId,
+      ])
+    }
+  })
+
   it("uses a fail-open Redis accelerator through Better Auth's atomic limiter", async () => {
     const calls: Array<Record<string, unknown>> = []
     const storage = createAuthRateLimitStorage(
