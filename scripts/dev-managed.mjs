@@ -16,22 +16,38 @@ const webOnly = argumentsSet.has("--web-only")
 const workerOnce = argumentsSet.has("--worker-once")
 const workerStatus = argumentsSet.has("--worker-status")
 const workerOnly = workerOnce || workerStatus
-const branch = process.env.MRM_NEON_BRANCH ?? "staging"
-const database = process.env.MRM_NEON_DATABASE ?? "neondb"
+function managedResourceName(value, label) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(value)) {
+    throw new Error(`${label} contains unsupported characters`)
+  }
+  return value
+}
+
+const branch = managedResourceName(
+  process.env.MRM_NEON_BRANCH ?? "staging",
+  "MRM_NEON_BRANCH"
+)
+const database = managedResourceName(
+  process.env.MRM_NEON_DATABASE ?? "neondb",
+  "MRM_NEON_DATABASE"
+)
 const upstashDatabase =
   process.env.MRM_UPSTASH_DATABASE ?? "mrmpl-staging-acceleration"
 
 function capture(command, args) {
-  return execFileSync(command, args, {
+  const executable =
+    process.platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : command
+  const executableArguments =
+    process.platform === "win32" ? ["/d", "/s", "/c", command, ...args] : args
+
+  return execFileSync(executable, executableArguments, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "inherit"],
   }).trim()
 }
 
 function neonConnectionString(role, pooled = true) {
-  const output = capture("pnpm", [
-    "dlx",
-    "neonctl",
+  const output = capture("neon", [
     "connection-string",
     branch,
     "--database-name",
@@ -67,6 +83,17 @@ function upstashCredentials() {
       ? target.endpoint
       : `https://${target.endpoint}`,
   }
+}
+
+function spawnPnpm(args, options) {
+  const executable = process.env.npm_execpath
+  if (!executable) {
+    throw new Error("Run managed commands through a pnpm package script")
+  }
+  if (executable.toLowerCase().endsWith(".exe")) {
+    return spawn(executable, args, options)
+  }
+  return spawn(process.execPath, [executable, ...args], options)
 }
 
 const webDatabaseUrl = neonConnectionString("mrmpl_staging_web")
@@ -110,8 +137,7 @@ const children = []
 
 if (seedAdmin) {
   children.push(
-    spawn(
-      "pnpm",
+    spawnPnpm(
       ["--filter", "web", "auth:provision-admin", "--", ...seedAdminArguments],
       {
         detached: process.platform !== "win32",
@@ -122,7 +148,7 @@ if (seedAdmin) {
   )
 } else if (!workerOnly) {
   children.push(
-    spawn("pnpm", ["--filter", "web", "dev"], {
+    spawnPnpm(["--filter", "web", "dev"], {
       detached: process.platform !== "win32",
       env: managedEnvironment,
       stdio: "inherit",
@@ -137,7 +163,7 @@ if (!webOnly && !seedAdmin) {
       ? "worker:status"
       : "worker"
   children.push(
-    spawn("pnpm", ["--filter", "@workspace/runtime", workerCommand], {
+    spawnPnpm(["--filter", "@workspace/runtime", workerCommand], {
       detached: process.platform !== "win32",
       env: managedEnvironment,
       stdio: "inherit",

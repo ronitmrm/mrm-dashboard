@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "dangerouslyDisablePackageManagerCheck": true,
   "ui": "tui",
   "globalEnv": [
     "ADMIN_EMAIL",

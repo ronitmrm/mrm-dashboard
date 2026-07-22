@@ -27,7 +27,7 @@ tokens must not appear in Git, logs, tickets, or `migration.json`.
 
 ## Prerequisites
 
-1. Install Node 20.9 through 24 and pnpm 10.
+1. Install Node 20.9 through 24 and pnpm.
 2. Authenticate `neonctl` and `upstash` locally.
 3. Link the checkout to the intended Neon project without committing `.neon`.
 4. Confirm the Upstash account contains exactly one staging database with the
@@ -134,7 +134,7 @@ an empty, named, non-authoritative restore target. Follow Neon's current
 Before branch creation:
 
 ```bash
-pnpm dlx neonctl branches list
+neon branches list
 ```
 
 Retain `production`, `staging`, two successful rehearsal branches, and any

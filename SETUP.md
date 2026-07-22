@@ -12,11 +12,14 @@ Redis is disposable acceleration state.
 ## Prerequisites
 
 - Node.js 20.19 through 24
-- pnpm 10 (`corepack enable` if `pnpm` is unavailable)
+- pnpm (`pnpm -v` should succeed)
 - Docker Engine with Docker Compose for the local-container topology
 - Neon and Upstash accounts plus their CLIs for the managed topology
 
 Install the workspace dependencies and create the untracked environment file:
+
+This repository intentionally uses the pnpm version installed on the machine;
+it does not pin pnpm through the root `package.json`.
 
 ```bash
 pnpm install
@@ -112,12 +115,12 @@ credentials to `.env.local`.
 Authenticate and link this checkout to the existing Neon project:
 
 ```bash
-pnpm dlx neonctl auth
-pnpm dlx neonctl link
+neon auth
+neon link
 upstash login
 ```
 
-Neon's current CLI is invoked as `neon`; `neonctl` remains an alias. See the
+Neon's CLI is invoked as `neon`; `neonctl` remains an alias. See the
 [Neon CLI installation and authentication guide](https://neon.com/docs/cli/install)
 and [CLI reference](https://neon.com/docs/cli). Upstash login uses a Developer
 API key; the application itself uses the Redis REST URL and token described by
@@ -135,21 +138,14 @@ of 10 branches; inspect existing branches and remove obsolete disposable
 branches before intentionally creating another one. Never delete `staging` or
 the production/default branch as cleanup.
 
-Load the stable auth secret and public URLs from `.env.local` into the shell:
+The managed commands load `apps/web/.env.local` automatically. The launcher
+then overrides local database and Redis values with the selected provider
+credentials. Optional selectors can also be placed in `.env.local`:
 
-```bash
-set -a
-source apps/web/.env.local
-set +a
-```
-
-The managed launcher overrides local database and Redis values with the
-selected provider credentials. Optional selectors are:
-
-```bash
-export MRM_NEON_BRANCH=staging
-export MRM_NEON_DATABASE=neondb
-export MRM_UPSTASH_DATABASE=mrmpl-staging-acceleration
+```dotenv
+MRM_NEON_BRANCH=staging
+MRM_NEON_DATABASE=neondb
+MRM_UPSTASH_DATABASE=mrmpl-staging-acceleration
 ```
 
 Check provider resolution without starting a server:

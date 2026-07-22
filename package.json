@@ -4,12 +4,12 @@
   "private": true,
   "scripts": {
     "auth:seed-admin": "pnpm --filter web auth:provision-admin",
-    "auth:seed-admin:managed": "node scripts/dev-managed.mjs --seed-admin",
+    "auth:seed-admin:managed": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs --seed-admin",
     "build": "turbo run build",
     "dev": "turbo run dev --filter=web --ui=tui",
-    "dev:managed": "node scripts/dev-managed.mjs",
-    "dev:managed:check": "node scripts/dev-managed.mjs --check",
-    "dev:managed:web": "node scripts/dev-managed.mjs --web-only",
+    "dev:managed": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs",
+    "dev:managed:check": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs --check",
+    "dev:managed:web": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs --web-only",
     "dev:web": "turbo run dev --filter=web --ui=tui",
     "files:backup": "pnpm --filter @workspace/runtime files:backup",
     "files:restore": "pnpm --filter @workspace/runtime files:restore",
@@ -21,8 +21,8 @@
     "services:logs": "docker compose -f docker-compose.postgres.yml logs -f",
     "local:up": "pnpm services:up && pnpm --filter @workspace/runtime runtime:verify",
     "runtime:worker": "pnpm --filter @workspace/runtime worker",
-    "runtime:worker:managed:once": "node scripts/dev-managed.mjs --worker-once",
-    "runtime:worker:managed:status": "node scripts/dev-managed.mjs --worker-status",
+    "runtime:worker:managed:once": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs --worker-once",
+    "runtime:worker:managed:status": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs --worker-status",
     "runtime:worker:once": "pnpm --filter @workspace/runtime worker:once",
     "runtime:worker:status": "pnpm --filter @workspace/runtime worker:status",
     "postgres:up": "pnpm services:up",
@@ -41,7 +41,6 @@
     "turbo": "^2.9.15",
     "typescript": "^5"
   },
-  "packageManager": "pnpm@10.33.4",
   "engines": {
     "node": ">=20.9 <25"
   }
