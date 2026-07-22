@@ -1,8 +1,9 @@
 import { createMigrationRun, stageConvexExport } from "../load/convex-staging"
+import { readMigrationPostgresEnvironment } from "../managed-environment"
 
 const [artifactPath, gitCommit, operator, targetMigrationVersion] =
   process.argv.slice(2)
-const connectionString = process.env.DATABASE_URL
+const { connectionString } = readMigrationPostgresEnvironment()
 
 if (
   !connectionString ||

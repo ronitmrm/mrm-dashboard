@@ -1,5 +1,6 @@
 import { createMigrationRun, stageConvexExport } from "../load/convex-staging"
 import { stagePricingExport } from "../load/pricing-staging"
+import { readMigrationPostgresEnvironment } from "../managed-environment"
 
 const [
   pricingArtifactPath,
@@ -8,7 +9,7 @@ const [
   operator,
   targetMigrationVersion,
 ] = process.argv.slice(2)
-const connectionString = process.env.DATABASE_URL
+const { connectionString } = readMigrationPostgresEnvironment()
 
 if (
   !connectionString ||

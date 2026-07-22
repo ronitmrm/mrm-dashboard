@@ -1,4 +1,4 @@
-import { Pool } from "pg"
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
 type CatalogMasterKind = "machineType" | "materialGrade" | "rodType"
 
@@ -15,8 +15,7 @@ type CreateCatalogMaster = {
   source: CatalogMasterSource
 }
 
-type CatalogMasterRepositoryOptions = {
-  connectionString: string
+type CatalogMasterRepositoryOptions = RepositoryPoolOptions & {
   kind: CatalogMasterKind
 }
 
@@ -53,14 +52,14 @@ function mapMaster(row: CatalogMasterRow) {
 }
 
 export function createCatalogMasterRepository({
-  connectionString,
   kind,
+  ...databaseOptions
 }: CatalogMasterRepositoryOptions) {
-  const pool = new Pool({ connectionString })
+  const { close, pool } = repositoryPool(databaseOptions)
   const table = tables[kind]
 
   return {
-    close: () => pool.end(),
+    close,
 
     async create(input: CreateCatalogMaster) {
       const name = input.name.trim()

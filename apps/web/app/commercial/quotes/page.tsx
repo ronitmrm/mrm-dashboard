@@ -107,24 +107,39 @@ export default async function QuotesPage() {
                       $ {money(quote.rateUsd)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {quote.status === "Draft" ? (
-                        <form action={sendQuoteAction}>
-                          <input
-                            name="quote_item_id"
-                            type="hidden"
-                            value={quote.id}
-                          />
-                          <Button size="sm" type="submit">
-                            Mark sent
+                      <div className="flex justify-end gap-2">
+                        {quote.enquiryId ? (
+                          <Button asChild size="sm" variant="outline">
+                            <Link
+                              href={
+                                "/commercial/quotes/enquiry/" +
+                                quote.enquiryId +
+                                "/pdf"
+                              }
+                            >
+                              PDF
+                            </Link>
                           </Button>
-                        </form>
-                      ) : (
-                        <Button asChild size="sm" variant="ghost">
-                          <Link href={`/commercial/quotes/${quote.id}`}>
-                            View
-                          </Link>
-                        </Button>
-                      )}
+                        ) : null}
+                        {quote.status === "Draft" ? (
+                          <form action={sendQuoteAction}>
+                            <input
+                              name="quote_item_id"
+                              type="hidden"
+                              value={quote.id}
+                            />
+                            <Button size="sm" type="submit">
+                              Mark sent
+                            </Button>
+                          </form>
+                        ) : (
+                          <Button asChild size="sm" variant="ghost">
+                            <Link href={`/commercial/quotes/${quote.id}`}>
+                              View
+                            </Link>
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

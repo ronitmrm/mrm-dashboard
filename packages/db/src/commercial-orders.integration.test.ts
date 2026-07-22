@@ -35,6 +35,7 @@ async function createSentQuote(input: {
   itemId: string
   price: number
   revision?: number
+  sent?: boolean
 }) {
   const suffix = randomUUID()
   const result = await pool.query<{ id: string }>(
@@ -47,8 +48,8 @@ async function createSentQuote(input: {
         price_lineage_key, source_system, source_table, source_id
       )
       VALUES (
-        $1, $2, $9, $3, $4, $4, $5, 1, $6, 'USD', 'Sent', true,
-        now(), $6, $6, $6::numeric * 80, 80, $7, 'test', 'quote_items', $8
+        $1, $2, $9, $3, $4, $4, $5, 1, $6, 'USD', $10, true,
+        $11, $6, $6, $6::numeric * 80, 80, $7, 'test', 'quote_items', $8
       )
       RETURNING id
     `,
@@ -62,9 +63,53 @@ async function createSentQuote(input: {
       `code:${input.customerPartCode.toLowerCase()}`,
       suffix,
       input.revision ?? 1,
+      input.sent === false ? "Draft" : "Sent",
+      input.sent === false ? null : new Date(),
     ]
   )
   return result.rows[0]!.id
+}
+
+async function linkQuotedChild(input: {
+  childItemId: string
+  childQuoteItemId: string
+  parentQuoteItemId: string
+}) {
+  const snapshot = await pool.query<{ id: string }>(
+    `
+      INSERT INTO sales.quote_product_snapshots (
+        organization_id, quote_item_id, item_uid, description, item_type,
+        calculation_version, source_system, source_table, source_id
+      )
+      SELECT $1, quote.id, item.uid, item.description, 'Package', 'test-v1',
+        'test', 'quote_product_snapshots', $3
+      FROM sales.quote_items quote
+      JOIN catalog.items item ON item.id = quote.item_id
+      WHERE quote.id = $2
+      RETURNING id
+    `,
+    [organizationId, input.parentQuoteItemId, randomUUID()]
+  )
+  await pool.query(
+    `
+      INSERT INTO sales.quote_package_components (
+        organization_id, quote_product_snapshot_id, component_item_id,
+        component_uid, description, quantity, child_quote_item_id,
+        source_system, source_table, source_id
+      )
+      SELECT $1, $2, item.id, item.uid, item.description, 1, $3,
+        'test', 'quote_package_components', $4
+      FROM catalog.items item
+      WHERE item.id = $5
+    `,
+    [
+      organizationId,
+      snapshot.rows[0]!.id,
+      input.childQuoteItemId,
+      randomUUID(),
+      input.childItemId,
+    ]
+  )
 }
 
 beforeAll(async () => {
@@ -213,9 +258,197 @@ describe("commercial purchase orders and proforma invoices", () => {
     })
     expect(state.rows[0]!.uid).toMatch(/^M\d+$/)
     expect(state.rows[0]!.ordered_at).toBeInstanceOf(Date)
+    const sideEffects = await pool.query<{
+      drawing_count: string
+      website_count: string
+    }>(
+      `
+        SELECT
+          (SELECT count(*)::text FROM catalog.drawings
+            WHERE item_id = $1 AND revision = '0') AS drawing_count,
+          (SELECT count(*)::text FROM catalog.website_product_profiles
+            WHERE item_id = $1
+              AND source_payload ->> 'websiteStatus' = 'In Progress')
+            AS website_count
+      `,
+      [itemId]
+    )
+    expect(sideEffects.rows[0]).toEqual({
+      drawing_count: "1",
+      website_count: "1",
+    })
     await expect(
       repository.cancelPurchaseOrder({ purchaseOrderId: order.id })
     ).rejects.toThrow("approved")
+  })
+
+  test("recursively converts quoted package children and creates atomic order artifacts", async () => {
+    const rootItemId = await createItem(`Q-${randomUUID()}`, "QUOTE")
+    const childItemId = await createItem(`Q-${randomUUID()}`, "QUOTE")
+    const grandchildItemId = await createItem(`Q-${randomUUID()}`, "QUOTE")
+    const adjacentItemId = await createItem(`M-${randomUUID()}`)
+    const rootCode = `TREE-${randomUUID()}`
+    const rootQuoteItemId = await createSentQuote({
+      customerPartCode: rootCode,
+      itemId: rootItemId,
+      price: 25,
+      sent: false,
+    })
+    const childQuoteItemId = await createSentQuote({
+      customerPartCode: `CHILD-${randomUUID()}`,
+      itemId: childItemId,
+      price: 10,
+      sent: false,
+    })
+    const grandchildQuoteItemId = await createSentQuote({
+      customerPartCode: `GRAND-${randomUUID()}`,
+      itemId: grandchildItemId,
+      price: 5,
+      sent: false,
+    })
+    await linkQuotedChild({
+      childItemId,
+      childQuoteItemId,
+      parentQuoteItemId: rootQuoteItemId,
+    })
+    await linkQuotedChild({
+      childItemId: grandchildItemId,
+      childQuoteItemId: grandchildQuoteItemId,
+      parentQuoteItemId: childQuoteItemId,
+    })
+    await pool.query(
+      `
+        UPDATE sales.quote_items
+        SET status = 'Sent', sent_at = now(), is_active = true
+        WHERE id = ANY($1::uuid[])
+      `,
+      [[rootQuoteItemId, childQuoteItemId, grandchildQuoteItemId]]
+    )
+    await pool.query(
+      `
+        INSERT INTO catalog.bom_lines (
+          organization_id, parent_item_id, component_item_id, quantity,
+          source_system, source_table, source_id
+        )
+        VALUES ($1, $2, $3, 1, 'test', 'bom_lines', $4)
+      `,
+      [organizationId, rootItemId, adjacentItemId, randomUUID()]
+    )
+    const order = await repository.createPurchaseOrder({
+      customerId,
+      organizationId,
+      poDate: "2026-07-22",
+      poNumber: `PO-${randomUUID()}`,
+    })
+    await repository.addPurchaseOrderLine({
+      customerPartCode: rootCode,
+      lineNumber: 1,
+      poPrice: 25,
+      purchaseOrderId: order.id,
+      quantity: 2,
+    })
+    const invoice = await repository.generateProformaInvoice({
+      purchaseOrderId: order.id,
+    })
+    await repository.markProformaInvoiceSent({
+      proformaInvoiceId: invoice.id,
+    })
+    await repository.approveProformaInvoice({
+      proformaInvoiceId: invoice.id,
+    })
+
+    const items = await pool.query<{
+      id: string
+      lifecycle_status: string
+      uid_kind: string
+    }>(
+      `
+        SELECT id, uid_kind, lifecycle_status
+        FROM catalog.items
+        WHERE id = ANY($1::uuid[])
+        ORDER BY id
+      `,
+      [[rootItemId, childItemId, grandchildItemId]]
+    )
+    expect(items.rows).toHaveLength(3)
+    expect(items.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          lifecycle_status: "P",
+          uid_kind: "INTERNAL",
+        }),
+        expect.objectContaining({
+          lifecycle_status: "P",
+          uid_kind: "INTERNAL",
+        }),
+        expect.objectContaining({
+          lifecycle_status: "P",
+          uid_kind: "INTERNAL",
+        }),
+      ])
+    )
+    const artifacts = await pool.query<{
+      drawing_count: string
+      ordered_website_count: string
+      related_is_active: string
+    }>(
+      `
+        SELECT
+          (SELECT count(*)::text FROM catalog.drawings
+            WHERE item_id = ANY($1::uuid[])) AS drawing_count,
+          (SELECT count(*)::text FROM catalog.website_product_profiles
+            WHERE item_id = ANY($1::uuid[])
+              AND source_payload ->> 'isActive' = 'true')
+            AS ordered_website_count,
+          (SELECT source_payload ->> 'isActive'
+            FROM catalog.website_product_profiles
+            WHERE item_id = $2) AS related_is_active
+      `,
+      [[rootItemId, childItemId, grandchildItemId], adjacentItemId]
+    )
+    expect(artifacts.rows[0]).toEqual({
+      drawing_count: "3",
+      ordered_website_count: "3",
+      related_is_active: "false",
+    })
+    const orderedAudit = await pool.query(
+      `
+        SELECT id FROM audit.events
+        WHERE target_id = $1 AND event_type = 'quote_item.ordered'
+      `,
+      [rootQuoteItemId]
+    )
+    expect(orderedAudit.rowCount).toBe(1)
+  })
+
+  test("retains PO source-file metadata and exposes the current file", async () => {
+    const order = await repository.createPurchaseOrder({
+      customerId,
+      organizationId,
+      poDate: "2026-07-22",
+      poNumber: `PO-${randomUUID()}`,
+    })
+    const sourceId = randomUUID()
+    const file = await repository.recordPurchaseOrderFile({
+      byteSize: 12,
+      fileName: "customer-po.pdf",
+      mediaType: "application/pdf",
+      purchaseOrderId: order.id,
+      sha256: "abc123",
+      sourceId,
+      storageKey: `attachments/purchase-orders/${order.id}/${sourceId}/customer-po.pdf`,
+    })
+    expect(file.fileName).toBe("customer-po.pdf")
+    await expect(repository.getPurchaseOrderFile(order.id)).resolves.toEqual({
+      byteSize: 12,
+      fileName: "customer-po.pdf",
+      mediaType: "application/pdf",
+      sha256: "abc123",
+      storageKey: `attachments/purchase-orders/${order.id}/${sourceId}/customer-po.pdf`,
+    })
+    expect((await repository.getPurchaseOrder(order.id)).fileName).toBe(
+      "customer-po.pdf"
+    )
   })
 
   test("keeps our price or creates a visible costing revision request", async () => {

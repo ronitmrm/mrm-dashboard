@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto"
 
-import { Pool, type PoolClient } from "pg"
+import type { Pool, PoolClient } from "pg"
 
-type RepositoryOptions = {
-  connectionString: string
-}
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+
+type RepositoryOptions = RepositoryPoolOptions
 
 type ChecklistItemInput = {
   active?: boolean
@@ -331,15 +331,11 @@ async function completeMaintenanceTask(
   return result.rows[0]!
 }
 
-export function createMaintenanceRepository({
-  connectionString,
-}: RepositoryOptions) {
-  const pool = new Pool({ connectionString })
+export function createMaintenanceRepository(options: RepositoryOptions) {
+  const { close, pool } = repositoryPool(options)
 
   return {
-    async close() {
-      await pool.end()
-    },
+    close,
 
     async organizationIdForCode(code: string) {
       const result = await pool.query<{ id: string }>(

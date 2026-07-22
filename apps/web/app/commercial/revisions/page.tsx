@@ -1,4 +1,7 @@
-import { createCommercialRevisionsRepository } from "@workspace/db"
+import {
+  bulkRevisionFields,
+  createCommercialRevisionsRepository,
+} from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -30,23 +33,35 @@ import {
   applyEngineeringChangeDecisionAction,
   completeBulkPriceRevisionAction,
   completeEngineeringChangeDesignAction,
+  completeEngineeringChangeProductCostingAction,
   createBulkPriceRevisionAction,
   createEngineeringChangeNoteAction,
+  deleteBulkPriceRevisionStageAction,
   stageBulkPriceRevisionAction,
 } from "./actions"
+import { EcnBomEditor } from "./ecn-bom-editor"
 
 export const dynamic = "force-dynamic"
 
-const bulkFields = [
-  ["profit_percent", "Profit percent"],
-  ["scrap_rate", "Scrap percent"],
-  ["alloy_premium", "Alloy premium · product route"],
-  ["extrusion_cost", "Extrusion cost · product route"],
-  ["forging_cost", "Forging cost · product route"],
-  ["packing_cost", "Packing cost"],
-  ["shipping_cost", "Shipping cost"],
-  ["overhead_cost_input", "Overhead cost"],
-  ["purchase_times", "Purchase multiplier"],
+const bulkFields = Object.entries(bulkRevisionFields)
+
+const productCostingFields = [
+  ["alloy_premium", "Alloy premium"],
+  ["ext_cost", "Extrusion cost"],
+  ["forging_cost", "Forging cost"],
+  ["machining_cost", "Machining cost"],
+  ["washing", "Washing"],
+  ["checking", "Checking"],
+  ["marking", "Marking"],
+  ["plating", "Plating"],
+  ["annealing", "Annealing"],
+  ["deburring", "Deburring"],
+  ["buffing", "Buffing"],
+  ["sealant", "Sealant"],
+  ["assembly_operation_cost", "Package assembly cost"],
+  ["overhead_cost", "Overhead cost"],
+  ["rejection_percent", "Rejection %"],
+  ["burning_loss_percent", "Burning loss %"],
 ] as const
 
 function localDate() {
@@ -72,7 +87,7 @@ export default async function CommercialRevisionsPage() {
   const repository = createCommercialRevisionsRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const { affectedByEcn, bulkRevisions, ecns, reference } =
+  const { affectedByEcn, bulkRevisions, ecns, reference, stagesByRevision } =
     await (async () => {
       const [bulkRevisions, ecns, reference] = await Promise.all([
         repository.listBulkPriceRevisions("MRMPL"),
@@ -92,7 +107,26 @@ export default async function CommercialRevisionsPage() {
             )
         )
       )
-      return { affectedByEcn, bulkRevisions, ecns, reference }
+      const stagesByRevision = new Map(
+        await Promise.all(
+          bulkRevisions
+            .filter((revision) => revision.status !== "Completed")
+            .map(
+              async (revision) =>
+                [
+                  revision.id,
+                  await repository.listBulkPriceRevisionStages(revision.id),
+                ] as const
+            )
+        )
+      )
+      return {
+        affectedByEcn,
+        bulkRevisions,
+        ecns,
+        reference,
+        stagesByRevision,
+      }
     })().finally(() => repository.close())
 
   return (
@@ -254,6 +288,14 @@ export default async function CommercialRevisionsPage() {
                   !revision.companyName ||
                   price.companyName === revision.companyName
               )
+              const stagedChanges = stagesByRevision.get(revision.id) ?? []
+              const allowedFields = bulkFields.filter(
+                ([, field]) =>
+                  field.route ===
+                  (revision.revisionRoute === "Product Parameter Bulk Revision"
+                    ? "product"
+                    : "customer")
+              )
               return (
                 <div
                   className="grid gap-4 rounded-3xl border p-4"
@@ -298,12 +340,13 @@ export default async function CommercialRevisionsPage() {
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                           <Field>
                             <FieldLabel htmlFor={`bulk-price-${revision.id}`}>
-                              Active price
+                              Active prices
                             </FieldLabel>
                             <NativeSelect
                               disabled={!eligiblePrices.length}
                               id={`bulk-price-${revision.id}`}
-                              name="selected_quote_item_id"
+                              multiple
+                              name="selected_quote_item_ids"
                               required
                             >
                               {eligiblePrices.map((price) => (
@@ -327,9 +370,9 @@ export default async function CommercialRevisionsPage() {
                               name="field_name"
                               required
                             >
-                              {bulkFields.map(([value, label]) => (
+                              {allowedFields.map(([value, field]) => (
                                 <NativeSelectOption key={value} value={value}>
-                                  {label}
+                                  {field.label}
                                 </NativeSelectOption>
                               ))}
                             </NativeSelect>
@@ -363,7 +406,7 @@ export default async function CommercialRevisionsPage() {
                           type="submit"
                           variant="outline"
                         >
-                          Stage price
+                          Stage selected prices
                         </Button>
                       </form>
                       <form
@@ -379,6 +422,56 @@ export default async function CommercialRevisionsPage() {
                           Complete revision
                         </Button>
                       </form>
+                      {stagedChanges.length ? (
+                        <div className="grid gap-2 xl:col-span-2">
+                          {stagedChanges.map((stage) => (
+                            <div
+                              className="flex flex-col gap-3 rounded-2xl border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between"
+                              key={stage.stageGroupId}
+                            >
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {stage.fieldLabel} →{" "}
+                                  {stage.fieldName === "profit_percent"
+                                    ? `${money(stage.newValue * 100)}%`
+                                    : money(stage.newValue)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {stage.selectedCount} selected
+                                  {stage.skippedCount
+                                    ? ` · ${stage.skippedCount} skipped by process guard`
+                                    : ""}
+                                  {" · "}
+                                  {stage.previewRows
+                                    .map(
+                                      (preview) =>
+                                        `$${money(preview.oldPrice)} → $${money(preview.newPrice)}`
+                                    )
+                                    .join(", ")}
+                                </p>
+                                {stage.notes ? (
+                                  <p className="mt-1 text-xs">{stage.notes}</p>
+                                ) : null}
+                              </div>
+                              <form action={deleteBulkPriceRevisionStageAction}>
+                                <input
+                                  name="bulk_price_revision_id"
+                                  type="hidden"
+                                  value={revision.id}
+                                />
+                                <input
+                                  name="stage_group_id"
+                                  type="hidden"
+                                  value={stage.stageGroupId}
+                                />
+                                <Button size="sm" type="submit" variant="ghost">
+                                  Delete staged change
+                                </Button>
+                              </form>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -430,77 +523,227 @@ export default async function CommercialRevisionsPage() {
                   {ecn.status === "Pending Design" ? (
                     <form
                       action={completeEngineeringChangeDesignAction}
-                      className="grid gap-3 border-t pt-4 sm:grid-cols-[1fr_auto]"
+                      className="grid gap-4 border-t pt-4"
                     >
                       <input
                         name="engineering_change_note_id"
                         type="hidden"
                         value={ecn.id}
                       />
-                      <Field>
-                        <FieldLabel>Revised product description</FieldLabel>
-                        <Input
-                          defaultValue={ecn.description}
-                          name="description"
-                        />
-                      </Field>
-                      <Button className="self-end" type="submit">
-                        Complete design
-                      </Button>
-                    </form>
-                  ) : null}
-                  {ecn.status === "Pending Costing" ? (
-                    affected.length ? (
-                      <form
-                        action={applyEngineeringChangeDecisionAction}
-                        className="grid gap-3 border-t pt-4 sm:grid-cols-2 xl:grid-cols-5"
-                      >
-                        <input
-                          name="engineering_change_note_id"
-                          type="hidden"
-                          value={ecn.id}
-                        />
-                        <Field>
-                          <FieldLabel>Affected customer price</FieldLabel>
-                          <NativeSelect name="source_quote_item_id" required>
-                            {affected.map((price) => (
-                              <NativeSelectOption
-                                key={price.quoteItemId}
-                                value={price.quoteItemId}
-                              >
-                                {price.customerPartCode} · $
-                                {money(price.approvedPriceUsd)}
-                              </NativeSelectOption>
-                            ))}
-                          </NativeSelect>
-                        </Field>
-                        <Field>
-                          <FieldLabel>Decision</FieldLabel>
-                          <NativeSelect name="decision" required>
-                            <NativeSelectOption value="Keep Price Same">
-                              Keep price same
-                            </NativeSelectOption>
-                            <NativeSelectOption value="Revise Price">
-                              Revise price
-                            </NativeSelectOption>
-                          </NativeSelect>
-                        </Field>
-                        <Field>
-                          <FieldLabel>New profit % · revise only</FieldLabel>
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <Field className="sm:col-span-2">
+                          <FieldLabel>Revised product description</FieldLabel>
                           <Input
-                            name="new_profit_percent"
+                            defaultValue={ecn.description}
+                            name="description"
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel>Item type</FieldLabel>
+                          <NativeSelect
+                            defaultValue={ecn.itemType}
+                            name="item_type"
+                          >
+                            <NativeSelectOption value="List">
+                              List
+                            </NativeSelectOption>
+                            <NativeSelectOption value="Package">
+                              Package
+                            </NativeSelectOption>
+                            <NativeSelectOption value="Assembly">
+                              Assembly
+                            </NativeSelectOption>
+                          </NativeSelect>
+                        </Field>
+                        <Field>
+                          <FieldLabel>Production type</FieldLabel>
+                          <Input name="production_type" />
+                        </Field>
+                        <Field>
+                          <FieldLabel>One-piece weight (g)</FieldLabel>
+                          <Input
+                            min="0"
+                            name="weight_100_pcs"
                             step="any"
                             type="number"
                           />
                         </Field>
                         <Field>
-                          <FieldLabel>Notes</FieldLabel>
-                          <Input name="notes" />
+                          <FieldLabel>Casting</FieldLabel>
+                          <Input
+                            min="0"
+                            name="casting"
+                            step="any"
+                            type="number"
+                          />
                         </Field>
-                        <Button className="self-end" type="submit">
-                          Record decision
-                        </Button>
-                      </form>
+                        <Field>
+                          <FieldLabel>Rod size</FieldLabel>
+                          <Input name="rod_size" />
+                        </Field>
+                        <Field>
+                          <FieldLabel>Die code</FieldLabel>
+                          <Input name="die_code" />
+                        </Field>
+                        <Field className="sm:col-span-2 xl:col-span-4">
+                          <FieldLabel>Design/process remarks</FieldLabel>
+                          <Textarea name="remarks" />
+                        </Field>
+                      </div>
+                      <EcnBomEditor
+                        items={reference.items}
+                        parentItemId={ecn.itemId}
+                      />
+                      <Button className="w-fit" type="submit">
+                        Complete Design and send to Product Costing
+                      </Button>
+                    </form>
+                  ) : null}
+                  {ecn.status === "Pending Product Costing" ? (
+                    <form
+                      action={completeEngineeringChangeProductCostingAction}
+                      className="grid gap-4 border-t pt-4"
+                    >
+                      <input
+                        name="engineering_change_note_id"
+                        type="hidden"
+                        value={ecn.id}
+                      />
+                      <div>
+                        <p className="text-sm font-medium">
+                          Product Costing changes
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Blank values preserve the Design-stage product.
+                          Percent fields accept whole percentages.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        {productCostingFields.map(([name, label]) => (
+                          <Field key={name}>
+                            <FieldLabel>{label}</FieldLabel>
+                            <Input name={name} step="any" type="number" />
+                          </Field>
+                        ))}
+                        <Field>
+                          <FieldLabel>Pricing method</FieldLabel>
+                          <NativeSelect name="pricing_method">
+                            <NativeSelectOption value="">
+                              Preserve current
+                            </NativeSelectOption>
+                            <NativeSelectOption value="Derived">
+                              Derived
+                            </NativeSelectOption>
+                            <NativeSelectOption value="Direct Purchase">
+                              Direct Purchase
+                            </NativeSelectOption>
+                          </NativeSelect>
+                        </Field>
+                        <Field>
+                          <FieldLabel>Pieces / kg</FieldLabel>
+                          <Input
+                            name="pieces_per_kg"
+                            step="any"
+                            type="number"
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel>Direct purchase / kg</FieldLabel>
+                          <Input
+                            name="direct_purchase_price_per_kg"
+                            step="any"
+                            type="number"
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel>Direct purchase / piece</FieldLabel>
+                          <Input
+                            name="direct_purchase_price_per_piece"
+                            step="any"
+                            type="number"
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel>Stored product cost INR</FieldLabel>
+                          <Input
+                            name="product_cost_inr"
+                            step="any"
+                            type="number"
+                          />
+                        </Field>
+                      </div>
+                      <Button className="w-fit" type="submit">
+                        Complete Product Costing
+                      </Button>
+                    </form>
+                  ) : null}
+                  {ecn.status === "Pending Costing" ? (
+                    affected.length ? (
+                      <div className="grid gap-3 border-t pt-4">
+                        {affected.map((price) => (
+                          <div
+                            className="grid gap-3 rounded-2xl border p-3 lg:grid-cols-[1.1fr_1fr_1fr_2fr]"
+                            key={price.quoteItemId}
+                          >
+                            <div>
+                              <p className="font-medium">
+                                {price.customerPartCode}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Current USD {money(price.approvedPriceUsd)}
+                              </p>
+                            </div>
+                            <div className="text-sm">
+                              <p className="font-medium">Keep Price Same</p>
+                              <p className="text-muted-foreground">
+                                USD {money(price.keepSamePriceUsd)} · profit{" "}
+                                {money(price.keepSameProfitPercent * 100)}%
+                              </p>
+                            </div>
+                            <div className="text-sm">
+                              <p className="font-medium">Revise Price</p>
+                              <p className="text-muted-foreground">
+                                USD {money(price.revisePriceUsd)} · profit{" "}
+                                {money(price.reviseProfitPercent * 100)}%
+                              </p>
+                            </div>
+                            {price.decision ? (
+                              <div className="flex items-center justify-end">
+                                <Badge>{price.decision}</Badge>
+                              </div>
+                            ) : (
+                              <form
+                                action={applyEngineeringChangeDecisionAction}
+                                className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]"
+                              >
+                                <input
+                                  name="engineering_change_note_id"
+                                  type="hidden"
+                                  value={ecn.id}
+                                />
+                                <input
+                                  name="source_quote_item_id"
+                                  type="hidden"
+                                  value={price.quoteItemId}
+                                />
+                                <NativeSelect name="decision" required>
+                                  <NativeSelectOption value="Keep Price Same">
+                                    Keep price same
+                                  </NativeSelectOption>
+                                  <NativeSelectOption value="Revise Price">
+                                    Revise price
+                                  </NativeSelectOption>
+                                </NativeSelect>
+                                <Input
+                                  name="notes"
+                                  placeholder="Decision note"
+                                />
+                                <Button type="submit">Record</Button>
+                              </form>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <p className="border-t pt-4 text-sm text-muted-foreground">
                         No active customer price contains this product.
@@ -517,7 +760,6 @@ export default async function CommercialRevisionsPage() {
           )}
         </CardContent>
       </Card>
-
     </div>
   )
 }

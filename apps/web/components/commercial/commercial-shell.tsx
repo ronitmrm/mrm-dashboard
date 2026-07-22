@@ -6,10 +6,14 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Calculator,
+  Boxes,
   ClipboardList,
   Factory,
+  FileClock,
+  Globe2,
   LayoutDashboard,
   ListTree,
+  MessageSquareText,
   PackageSearch,
   RefreshCcw,
   ScrollText,
@@ -18,6 +22,8 @@ import {
   ShieldCheck,
   Undo2,
   UsersRound,
+  Wrench,
+  TableProperties,
 } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
@@ -56,6 +62,21 @@ const navigation = [
     label: "Enquiries",
   },
   {
+    href: "/commercial/sales",
+    icon: MessageSquareText,
+    label: "Sales",
+  },
+  {
+    href: "/commercial/technical-review",
+    icon: Wrench,
+    label: "Technical Review",
+  },
+  {
+    href: "/commercial/design",
+    icon: Factory,
+    label: "Design",
+  },
+  {
     href: "/commercial/masters",
     icon: ListTree,
     label: "Pricing masters",
@@ -66,6 +87,21 @@ const navigation = [
     label: "Products",
   },
   {
+    href: "/commercial/assemblies",
+    icon: Boxes,
+    label: "Assembly / BOM",
+  },
+  {
+    href: "/commercial/drawing-history",
+    icon: FileClock,
+    label: "Drawing History",
+  },
+  {
+    href: "/commercial/website-products",
+    icon: Globe2,
+    label: "Website Products",
+  },
+  {
     href: "/commercial/costing",
     icon: Calculator,
     label: "Product costing",
@@ -74,6 +110,11 @@ const navigation = [
     href: "/commercial/quotes",
     icon: ScrollText,
     label: "Quote register",
+  },
+  {
+    href: "/commercial/pricing",
+    icon: TableProperties,
+    label: "Pricing",
   },
   {
     href: "/commercial/orders",

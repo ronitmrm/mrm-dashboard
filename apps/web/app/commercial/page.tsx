@@ -1,104 +1,264 @@
-import Link from "next/link"
 import {
-  ArrowRight,
-  Calculator,
-  Database,
-  ListTree,
-  PackageSearch,
-  UsersRound,
-} from "lucide-react"
+  createCommercialReportingRepository,
+  createCustomerRepository,
+} from "@workspace/db"
+import { ArrowRight, BarChart3, Database } from "lucide-react"
+import Link from "next/link"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
 
+import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 
-const modules = [
-  {
-    description:
-      "The first Pricing master now reads through a typed PostgreSQL repository.",
-    href: "/commercial/customers",
-    icon: UsersRound,
-    label: "Customers",
-    status: "Live slice",
-  },
-  {
-    description:
-      "Case-insensitive grade, rod-type, and machine-type masters with provenance.",
-    href: "/commercial/masters",
-    icon: ListTree,
-    label: "Pricing masters",
-    status: "Live slice",
-  },
-  {
-    description:
-      "Canonical product identity, costing inputs, and BOM-ready relationships.",
-    href: "/commercial/products",
-    icon: PackageSearch,
-    label: "Products",
-    status: "Live slice",
-  },
-  {
-    description:
-      "Audited workbook equations are ported and regression-tested in this app.",
-    href: "/commercial/costing",
-    icon: Calculator,
-    label: "Product costing",
-    status: "Formula port",
-  },
-]
+function MetricBars({
+  rows,
+}: {
+  rows: Array<{ count: number; label: string }>
+}) {
+  const maximum = Math.max(1, ...rows.map((row) => row.count))
+  return (
+    <div className="grid gap-3">
+      {rows.map((row) => (
+        <div className="grid gap-1" key={row.label}>
+          <div className="flex justify-between gap-3 text-sm">
+            <span>{row.label}</span>
+            <span className="font-medium tabular-nums">{row.count}</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary"
+              style={{
+                width: String(Math.max(2, (row.count / maximum) * 100)) + "%",
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default async function CommercialPage() {
   await requireCapability(commercialCapabilities.dashboard.read, "/commercial")
+  const connectionString = readAuthEnvironment().connectionString
+  const customers = createCustomerRepository({ connectionString })
+  const repository = createCommercialReportingRepository({ connectionString })
+  let dashboard
+  try {
+    dashboard = await repository.dashboard({
+      organizationId: await customers.organizationIdForCode("MRMPL"),
+    })
+  } finally {
+    await repository.close()
+    await customers.close()
+  }
+  const stats = [
+    ["Customers", dashboard.stats.customers],
+    ["Enquiries", dashboard.stats.enquiries],
+    ["Quoted this month", dashboard.stats.monthlyQuoted],
+    ["Pending costing", dashboard.stats.pendingCosting],
+    ["Q prices", dashboard.stats.quoted],
+    ["Ordered", dashboard.stats.ordered],
+    ["Active P prices", dashboard.stats.pPrices],
+    ["Follow-ups due", dashboard.stats.pendingFollowups],
+  ] as const
 
   return (
-    <>
+    <div className="grid gap-6">
       <section className="grid gap-2">
         <Badge className="w-fit" variant="outline">
-          <Database />
-          Canonical PostgreSQL module
+          <Database /> Canonical PostgreSQL analytics
         </Badge>
         <h2 className="font-heading text-2xl font-medium tracking-tight">
-          Commercial workflows are moving into the MRMPL shell
+          Commercial workflow dashboard
         </h2>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Each workflow replaces SQLite at a tested repository boundary while
-          preserving approved Pricing behavior and source provenance.
+          Source-equivalent counts, six-month quoting, workflow load, quote mix,
+          material lead time, and customer Pareto—all bounded to MRMPL.
         </p>
       </section>
-      <section className="grid gap-4 md:grid-cols-2">
-        {modules.map((module) => (
-          <Card key={module.href}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <module.icon className="size-4" />
-                {module.label}
-              </CardTitle>
-              <CardDescription>{module.description}</CardDescription>
-              <CardAction>
-                <Badge variant="secondary">{module.status}</Badge>
-              </CardAction>
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map(([label, count]) => (
+          <Card key={label}>
+            <CardHeader className="pb-2">
+              <CardDescription>{label}</CardDescription>
+              <CardTitle className="text-3xl tabular-nums">{count}</CardTitle>
             </CardHeader>
-            <CardContent>
-              <Button asChild variant="outline">
-                <Link href={module.href}>
-                  Open module
-                  <ArrowRight />
-                </Link>
-              </Button>
-            </CardContent>
           </Card>
         ))}
       </section>
-    </>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="size-4" /> Quoted items — six months
+            </CardTitle>
+            <CardDescription>
+              Sent, non-superseded quote items by source month bucket.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MetricBars
+              rows={dashboard.monthlyQuotedItems.map((row) => ({
+                count: row.count,
+                label: row.month,
+              }))}
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Workflow load</CardTitle>
+            <CardDescription>
+              Open work using the source queue definitions.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MetricBars rows={dashboard.workflowLoad} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Quote mix</CardTitle>
+            <CardDescription>
+              Purchase, quoted, and in-costing commercial rows.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MetricBars rows={dashboard.quoteMix} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Material lead time</CardTitle>
+            <CardDescription>
+              Average days from enquiry receipt to quote send.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto rounded-xl border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Material</TableHead>
+                    <TableHead className="text-right">Quoted</TableHead>
+                    <TableHead className="text-right">Average days</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dashboard.materialLeadTimes.length ? (
+                    dashboard.materialLeadTimes.map((row) => (
+                      <TableRow key={row.material}>
+                        <TableCell>{row.material}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {row.quotedItems}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {row.averageDays.toFixed(1)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        className="h-24 text-center text-muted-foreground"
+                        colSpan={3}
+                      >
+                        No sent quote lead-time data yet.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Customer quote Pareto</CardTitle>
+          <CardDescription>
+            Top eight customers by sent quote items with cumulative share.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto rounded-xl border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead className="text-right">Quoted items</TableHead>
+                  <TableHead className="text-right">Cumulative</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {dashboard.customerPareto.length ? (
+                  dashboard.customerPareto.map((row) => (
+                    <TableRow key={row.customer}>
+                      <TableCell>{row.customer}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.count}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.cumulativePercent}%
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      className="h-24 text-center text-muted-foreground"
+                      colSpan={3}
+                    >
+                      No sent quote customer data yet.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <section className="grid gap-3 sm:grid-cols-2">
+        {(
+          [
+            ["Drawing History", "/commercial/drawing-history"],
+            ["Website Product Data", "/commercial/website-products"],
+          ] as const
+        ).map(([label, href]) => (
+          <Button
+            asChild
+            className="justify-between"
+            key={href}
+            variant="outline"
+          >
+            <Link href={href}>
+              {label} <ArrowRight />
+            </Link>
+          </Button>
+        ))}
+      </section>
+    </div>
   )
 }

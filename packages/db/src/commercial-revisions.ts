@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto"
 
-import { Pool, type PoolClient } from "pg"
+import type { Pool, PoolClient } from "pg"
 
-type RepositoryOptions = {
-  connectionString: string
-}
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import { calculateCosting } from "./pricing-calculation"
+
+type RepositoryOptions = RepositoryPoolOptions
 
 type QuoteRow = {
   alloy_premium: string
@@ -54,33 +55,225 @@ type ComponentRow = {
   unit_cost: string
 }
 
-type QuoteOverride = {
-  fieldName: string
-  value: number
+type ProductRow = {
+  alloy_premium: string
+  annealing: string
+  assembly_operation_cost: string
+  buffing: string
+  burning_loss_percent: string
+  casting: string
+  checking: string
+  deburring: string
+  description: string
+  direct_purchase_price_per_piece: string
+  extrusion_cost: string
+  forging_cost: string
+  id: string
+  item_type: string
+  machining_cost: string
+  marking: string
+  overhead_cost: string
+  pieces_per_kg: string
+  plating: string
+  pricing_method: string
+  product_cost_inr: string
+  production_type: string | null
+  rejection_percent: string
+  remarks: string | null
+  sealant: string
+  uid: string
+  washing: string
+  weight_100_pcs: string
 }
+
+type QuoteOverride = Map<string, number>
 
 type RevisedQuote = {
   newPrice: number
+  newProfitPercent: number
   replacementQuoteItemId: string
 }
 
-const fieldLabels: Record<string, string> = {
-  alloy_premium: "Alloy premium",
-  extrusion_cost: "Extrusion cost",
-  forging_cost: "Forging cost",
-  overhead_cost_input: "Overhead cost",
-  packing_cost: "Packing cost",
-  profit_percent: "Profit percent",
-  purchase_times: "Purchase multiplier",
-  scrap_rate: "Scrap rate",
-  shipping_cost: "Shipping cost",
+export const bulkRevisionFields = {
+  casting: { label: "Casting", route: "product", valueType: "number" },
+  scrap_rate: {
+    label: "Scrap Rate (INR/kg)",
+    route: "customer",
+    valueType: "number",
+  },
+  alloy_premium: {
+    label: "Alloy Premium (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  ext_cost: {
+    label: "Extrusion Cost (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  forging_cost: {
+    label: "Forging Cost (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  machining_cost: {
+    label: "M/c Cost (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  washing: {
+    label: "Washing (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  checking: {
+    label: "Checking (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  marking: {
+    label: "Marking (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  plating: {
+    label: "Plating (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  annealing: {
+    label: "Annealing (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  deburring: {
+    label: "Deburring (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  buffing: {
+    label: "Buffing (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  sealant: {
+    label: "Sealant (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  assembly_operation_cost: {
+    label: "Package Assembly Cost (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  packing_cost: {
+    label: "Packing Cost (INR/kg)",
+    route: "customer",
+    valueType: "number",
+  },
+  shipping_cost: {
+    label: "Shipping Cost (INR/kg)",
+    route: "customer",
+    valueType: "number",
+  },
+  overhead_cost: {
+    label: "Overhead Cost (INR/kg)",
+    route: "product",
+    valueType: "number",
+  },
+  purchase_times: {
+    label: "OR / Purchase Times",
+    route: "customer",
+    valueType: "number",
+  },
+  profit_percent: {
+    label: "Profit %",
+    route: "customer",
+    valueType: "percent",
+  },
+  conversion_rate: {
+    label: "FX / Conversion Rate",
+    route: "customer",
+    valueType: "number",
+  },
+} as const
+
+type BulkRevisionFieldName = keyof typeof bulkRevisionFields
+
+const productFields = new Set<BulkRevisionFieldName>([
+  "casting",
+  "alloy_premium",
+  "ext_cost",
+  "forging_cost",
+  "machining_cost",
+  "washing",
+  "checking",
+  "marking",
+  "plating",
+  "annealing",
+  "deburring",
+  "buffing",
+  "sealant",
+  "assembly_operation_cost",
+  "overhead_cost",
+])
+
+const customerFields = new Set<BulkRevisionFieldName>([
+  "scrap_rate",
+  "packing_cost",
+  "shipping_cost",
+  "purchase_times",
+  "profit_percent",
+  "conversion_rate",
+])
+
+const productColumnByField: Partial<Record<BulkRevisionFieldName, string>> = {
+  alloy_premium: "alloy_premium",
+  annealing: "annealing",
+  assembly_operation_cost: "assembly_operation_cost",
+  buffing: "buffing",
+  casting: "casting",
+  checking: "checking",
+  deburring: "deburring",
+  ext_cost: "extrusion_cost",
+  forging_cost: "forging_cost",
+  machining_cost: "machining_cost",
+  marking: "marking",
+  overhead_cost: "overhead_cost",
+  plating: "plating",
+  sealant: "sealant",
+  washing: "washing",
 }
 
-const productFields = new Set([
-  "alloy_premium",
-  "extrusion_cost",
-  "forging_cost",
+const lockedBulkProcessFields = new Set<BulkRevisionFieldName>([
+  "washing",
+  "checking",
+  "marking",
+  "plating",
+  "annealing",
+  "deburring",
+  "buffing",
+  "sealant",
+  "assembly_operation_cost",
 ])
+
+const bulkProcessFieldAliases: Partial<
+  Record<BulkRevisionFieldName, string[]>
+> = {
+  annealing: ["annealing", "anneling"],
+  assembly_operation_cost: ["assembly", "package process", "package assembly"],
+  buffing: ["buffing", "buff"],
+  checking: ["checking", "inspection", "quality checking"],
+  deburring: ["deburring", "debbring"],
+  marking: ["marking", "mark"],
+  plating: ["plating", "plate"],
+  sealant: ["sealant", "sealing"],
+  washing: ["washing", "wash"],
+}
+
+function isBulkRevisionField(value: string): value is BulkRevisionFieldName {
+  return value in bulkRevisionFields
+}
 
 const asNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value)
@@ -237,18 +430,153 @@ async function collectQuoteAncestors(
   return all
 }
 
+async function getProduct(client: PoolClient, itemId: string, lock = false) {
+  const result = await client.query<ProductRow>(
+    `SELECT * FROM catalog.items WHERE id = $1 ${lock ? "FOR UPDATE" : ""}`,
+    [itemId]
+  )
+  if (!result.rows[0]) {
+    throw new Error("Revision product was not found.")
+  }
+  return result.rows[0]
+}
+
+function productSnapshot(product: ProductRow) {
+  return {
+    alloyPremium: asNumber(product.alloy_premium),
+    annealing: asNumber(product.annealing),
+    assemblyOperationCost: asNumber(product.assembly_operation_cost),
+    buffing: asNumber(product.buffing),
+    burningLossPercent: asNumber(product.burning_loss_percent),
+    casting: asNumber(product.casting, 1),
+    checking: asNumber(product.checking),
+    deburring: asNumber(product.deburring),
+    description: product.description,
+    directPurchasePricePerPiece: asNumber(
+      product.direct_purchase_price_per_piece
+    ),
+    extrusionCost: asNumber(product.extrusion_cost),
+    forgingCost: asNumber(product.forging_cost),
+    itemType: product.item_type,
+    machiningCost: asNumber(product.machining_cost),
+    marking: asNumber(product.marking),
+    overheadCost: asNumber(product.overhead_cost),
+    piecesPerKg: asNumber(product.pieces_per_kg),
+    plating: asNumber(product.plating),
+    pricingMethod: product.pricing_method,
+    productCostInr: asNumber(product.product_cost_inr),
+    productionType: product.production_type,
+    rejectionPercent: asNumber(product.rejection_percent),
+    remarks: product.remarks,
+    sealant: asNumber(product.sealant),
+    uid: product.uid,
+    washing: asNumber(product.washing),
+    weight100Pcs: asNumber(product.weight_100_pcs),
+  }
+}
+
+function productWithOverrides(
+  product: ProductRow,
+  override?: QuoteOverride
+): ProductRow {
+  if (!override) return product
+  const revised = { ...product }
+  for (const [fieldName, value] of override) {
+    if (!isBulkRevisionField(fieldName)) continue
+    const column = productColumnByField[fieldName]
+    if (column) {
+      ;(revised as unknown as Record<string, unknown>)[column] = String(value)
+    }
+  }
+  return revised
+}
+
+function overrideNumber(
+  override: QuoteOverride | undefined,
+  fieldName: string,
+  fallback: unknown
+) {
+  return override?.get(fieldName) ?? asNumber(fallback)
+}
+
+function processTextAllowsField(
+  processText: string | null,
+  fieldName: BulkRevisionFieldName
+) {
+  const normalized = asText(processText).toLowerCase()
+  return (bulkProcessFieldAliases[fieldName] ?? []).some((alias) =>
+    normalized.includes(alias)
+  )
+}
+
+async function quoteAllowsBulkProcessField(
+  client: PoolClient,
+  quoteItemId: string,
+  fieldName: BulkRevisionFieldName
+) {
+  const column = productColumnByField[fieldName]
+  if (!column) return false
+  const result = await client.query<{
+    current_value: string
+    item_type: string
+    remarks: string | null
+  }>(
+    `
+      WITH RECURSIVE quote_tree AS (
+        SELECT quote.id, quote.item_id
+        FROM sales.quote_items quote
+        WHERE quote.id = $1
+        UNION
+        SELECT child.id, child.item_id
+        FROM quote_tree parent
+        JOIN sales.quote_product_snapshots snapshot
+          ON snapshot.quote_item_id = parent.id
+        JOIN sales.quote_package_components component
+          ON component.quote_product_snapshot_id = snapshot.id
+        JOIN sales.quote_items child
+          ON child.id = component.child_quote_item_id
+      )
+      SELECT item.item_type, item.remarks, item.${column}::text AS current_value
+      FROM quote_tree
+      JOIN catalog.items item ON item.id = quote_tree.item_id
+    `,
+    [quoteItemId]
+  )
+  return result.rows.some((row) => {
+    if (
+      fieldName === "assembly_operation_cost" &&
+      !["Package", "Assembly"].includes(row.item_type)
+    ) {
+      return false
+    }
+    return (
+      asNumber(row.current_value) > 0 ||
+      processTextAllowsField(row.remarks, fieldName)
+    )
+  })
+}
+
 function revisedCalculation(
   quote: QuoteRow,
+  productInput: ProductRow,
   components: ComponentRow[],
   revisedChildren: Map<string, RevisedQuote>,
   override?: QuoteOverride
 ) {
   const oldPrice = asNumber(quote.approved_price_usd, asNumber(quote.rate_usd))
-  const conversionRate = asNumber(quote.conversion_rate, 1)
-  const oldProfit = asNumber(quote.profit_percent)
-  const profit =
-    override?.fieldName === "profit_percent" ? override.value : oldProfit
+  const product = productWithOverrides(productInput, override)
+  const conversionRate = overrideNumber(
+    override,
+    "conversion_rate",
+    quote.conversion_rate
+  )
+  const profit = overrideNumber(
+    override,
+    "profit_percent",
+    quote.profit_percent
+  )
   const calculation = { ...quote.calculation_json }
+  const targetPriceUsd = override?.get("__target_price_usd")
 
   if (components.length) {
     const childQuoteTotal = components.reduce((total, component) => {
@@ -260,14 +588,27 @@ function revisedCalculation(
         : asNumber(component.unit_cost)
       return total + asNumber(component.quantity, 1) * unitCost
     }, 0)
-    const processBase = asNumber(
+    const piecesPerKg =
+      asNumber(product.weight_100_pcs) > 0
+        ? 1000 / asNumber(product.weight_100_pcs)
+        : asNumber(product.pieces_per_kg)
+    const storedProcessBase = asNumber(
       quote.calculation_json.packageProcessCostPerPiece,
       asNumber(quote.calculation_json.totalA)
     )
-    const rejectionPercent = asNumber(
-      quote.snapshot_product_json.rejectionPercent
-    )
-    const profitB = processBase * profit
+    const processBase =
+      override?.has("assembly_operation_cost") && piecesPerKg > 0
+        ? asNumber(product.assembly_operation_cost) / piecesPerKg
+        : storedProcessBase
+    const rejectionPercent = asNumber(product.rejection_percent)
+    let revisedProfit = profit
+    if (targetPriceUsd !== undefined && processBase > 0) {
+      const targetBeforeRejection =
+        (targetPriceUsd * conversionRate) / (1 + rejectionPercent)
+      revisedProfit =
+        (targetBeforeRejection - childQuoteTotal - processBase) / processBase
+    }
+    const profitB = processBase * revisedProfit
     const packageBeforeRejection = childQuoteTotal + processBase + profitB
     const rejectionCost = packageBeforeRejection * rejectionPercent
     const totalRateInr = packageBeforeRejection + rejectionCost
@@ -283,48 +624,151 @@ function revisedCalculation(
         totalRateInr,
         totalRodsCost: childQuoteTotal,
       },
-      profit,
+      profit: revisedProfit,
       totalRateInr,
-      totalRateUsd: conversionRate > 0 ? totalRateInr / conversionRate : 0,
+      totalRateUsd:
+        targetPriceUsd ??
+        (conversionRate > 0 ? totalRateInr / conversionRate : 0),
     }
   }
 
-  if (!override) {
+  const canUseCanonicalCalculation =
+    asNumber(product.weight_100_pcs) > 0 ||
+    asNumber(product.product_cost_inr) > 0 ||
+    asNumber(product.direct_purchase_price_per_piece) > 0
+  if (!canUseCanonicalCalculation) {
+    if (!override || override.size === 0) {
+      return {
+        calculation,
+        profit,
+        totalRateInr: asNumber(quote.total_rate_inr),
+        totalRateUsd: oldPrice,
+      }
+    }
+    const oldProfit = asNumber(quote.profit_percent)
+    const oldTotalInr = asNumber(quote.total_rate_inr)
+    let totalRateInr = oldTotalInr
+    if (override.has("profit_percent")) {
+      const totalA = asNumber(quote.calculation_json.totalA)
+      const fixedAfterProfit = oldTotalInr - totalA * (1 + oldProfit)
+      totalRateInr = totalA * (1 + profit) + fixedAfterProfit
+    } else {
+      for (const [fieldName, value] of override) {
+        if (fieldName.startsWith("__")) continue
+        const quoteField =
+          fieldName === "ext_cost"
+            ? "extrusion_cost"
+            : fieldName === "overhead_cost"
+              ? "overhead_cost_input"
+              : fieldName
+        const current = asNumber(
+          quote[quoteField as keyof QuoteRow] ??
+            quote.snapshot_product_json[fieldName]
+        )
+        totalRateInr += value - current
+      }
+    }
+    const totalRateUsd =
+      targetPriceUsd ??
+      (conversionRate > 0 ? Math.max(0, totalRateInr) / conversionRate : 0)
     return {
-      calculation,
+      calculation: { ...calculation, totalRateInr },
       profit,
-      totalRateInr: asNumber(quote.total_rate_inr),
-      totalRateUsd: oldPrice,
+      totalRateInr: targetPriceUsd
+        ? targetPriceUsd * conversionRate
+        : Math.max(0, totalRateInr),
+      totalRateUsd,
     }
   }
 
-  const oldTotalInr = asNumber(quote.total_rate_inr)
-  if (override.fieldName === "profit_percent") {
-    const totalA = asNumber(quote.calculation_json.totalA)
-    const fixedAfterProfit = oldTotalInr - totalA * (1 + oldProfit)
-    const profitB = totalA * override.value
-    const totalRateInr = totalA + profitB + fixedAfterProfit
-    return {
-      calculation: {
-        ...calculation,
-        profitB,
-        totalAPlusB: totalA + profitB,
-        totalRateInr,
-      },
-      profit: override.value,
-      totalRateInr,
-      totalRateUsd: conversionRate > 0 ? totalRateInr / conversionRate : 0,
-    }
+  const storedCost =
+    product.pricing_method === "Direct Purchase"
+      ? asNumber(product.direct_purchase_price_per_piece)
+      : asNumber(product.product_cost_inr)
+  const assembledPartInr = asNumber(quote.assembled_part_inr)
+  const base =
+    storedCost > 0
+      ? {
+          profitB: storedCost * profit,
+          totalA: storedCost,
+          totalAPlusB: storedCost * (1 + profit),
+          totalRateInr: storedCost * (1 + profit) + assembledPartInr,
+        }
+      : calculateCosting(
+          {
+            annealing: asNumber(product.annealing),
+            assemblyOperationCost: 0,
+            buffing: asNumber(product.buffing),
+            burningLossPercent: asNumber(product.burning_loss_percent),
+            casting: asNumber(product.casting, 1),
+            checking: asNumber(product.checking),
+            deburring: asNumber(product.deburring),
+            machiningCost: asNumber(product.machining_cost),
+            marking: asNumber(product.marking),
+            overheadCost: asNumber(product.overhead_cost),
+            plating: asNumber(product.plating),
+            rejectionPercent: asNumber(product.rejection_percent),
+            sealant: asNumber(product.sealant),
+            washing: asNumber(product.washing),
+            weight100Pcs: asNumber(product.weight_100_pcs),
+          },
+          {
+            alloyPremium: asNumber(product.alloy_premium),
+            assembledPartInr,
+            conversionRate,
+            extCost: asNumber(product.extrusion_cost),
+            forgingCost:
+              product.production_type?.toLowerCase() === "barstock"
+                ? 0
+                : asNumber(product.forging_cost),
+            overheadCost: overrideNumber(
+              override,
+              "overhead_cost_input",
+              quote.overhead_cost_input
+            ),
+            packingCost: overrideNumber(
+              override,
+              "packing_cost",
+              quote.packing_cost
+            ),
+            profitPercent: profit,
+            purchaseTimes: overrideNumber(
+              override,
+              "purchase_times",
+              quote.purchase_times
+            ),
+            scrapRate: overrideNumber(override, "scrap_rate", quote.scrap_rate),
+            shippingCost: overrideNumber(
+              override,
+              "shipping_cost",
+              quote.shipping_cost
+            ),
+          }
+        )
+  let revisedProfit = profit
+  if (targetPriceUsd !== undefined && asNumber(base.totalA) > 0) {
+    revisedProfit =
+      (targetPriceUsd * conversionRate -
+        assembledPartInr -
+        asNumber(base.totalA)) /
+      asNumber(base.totalA)
   }
-
-  const oldFieldValue = asNumber(quote[override.fieldName as keyof QuoteRow])
-  const delta = override.value - oldFieldValue
-  const totalRateInr = Math.max(0, oldTotalInr + delta)
+  const profitB = asNumber(base.totalA) * revisedProfit
+  const totalAPlusB = asNumber(base.totalA) + profitB
+  const totalRateInr = totalAPlusB + assembledPartInr
   return {
-    calculation: { ...calculation, totalRateInr },
-    profit,
+    calculation: {
+      ...calculation,
+      ...base,
+      profitB,
+      totalAPlusB,
+      totalRateInr,
+    },
+    profit: revisedProfit,
     totalRateInr,
-    totalRateUsd: conversionRate > 0 ? totalRateInr / conversionRate : 0,
+    totalRateUsd:
+      targetPriceUsd ??
+      (conversionRate > 0 ? totalRateInr / conversionRate : 0),
   }
 }
 
@@ -350,6 +794,7 @@ async function createRevisedQuote(
   visiting.add(input.quoteItemId)
 
   const quote = await getQuote(client, input.quoteItemId, true)
+  const product = await getProduct(client, quote.item_id)
   const components = await getComponents(client, input.quoteItemId)
   const revisedChildren = new Map<string, RevisedQuote>()
   for (const component of components) {
@@ -370,10 +815,13 @@ async function createRevisedQuote(
 
   const revised = revisedCalculation(
     quote,
+    product,
     components,
     revisedChildren,
     input.overrides.get(input.quoteItemId)
   )
+  const override = input.overrides.get(quote.id)
+  const revisedProduct = productWithOverrides(product, override)
   const nextRevision = await client.query<{ revision: number }>(
     `
       SELECT COALESCE(max(revision), 0)::integer + 1 AS revision
@@ -404,34 +852,34 @@ async function createRevisedQuote(
         organization_id, quote_number, $1, enquiry_id, enquiry_item_id,
         customer_id, item_id, lineage_item_id, customer_part_code, quantity,
         $2, currency_code, 'Draft', false, NULL, quote_type, packaging,
-        shipping_terms,
-        CASE WHEN $3 = 'scrap_rate' THEN $4 ELSE scrap_rate END,
-        CASE WHEN $3 = 'alloy_premium' THEN $4 ELSE alloy_premium END,
-        CASE WHEN $3 = 'extrusion_cost' THEN $4 ELSE extrusion_cost END,
-        CASE WHEN $3 = 'forging_cost' THEN $4 ELSE forging_cost END,
-        CASE WHEN $3 = 'packing_cost' THEN $4 ELSE packing_cost END,
-        CASE WHEN $3 = 'shipping_cost' THEN $4 ELSE shipping_cost END,
-        CASE WHEN $3 = 'overhead_cost_input' THEN $4
-          ELSE overhead_cost_input END,
-        CASE WHEN $3 = 'purchase_times' THEN $4 ELSE purchase_times END,
-        $5, conversion_rate, assembled_part_inr, $6, $6, $2, $2, $7,
-        price_lineage_key, $8, $8, 'mrm-dashboard',
-        'quote_revisions', $9, $10
+        shipping_terms, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+        assembled_part_inr, $13, $14, $2, $2, $15, price_lineage_key,
+        $16, $16, 'mrm-dashboard', 'quote_revisions', $17, $18
       FROM sales.quote_items
-      WHERE id = $11
+      WHERE id = $19
       RETURNING id
     `,
     [
       nextRevision.rows[0]!.revision,
       revised.totalRateUsd,
-      input.overrides.get(quote.id)?.fieldName ?? "",
-      input.overrides.get(quote.id)?.value ?? 0,
+      overrideNumber(override, "scrap_rate", quote.scrap_rate),
+      asNumber(revisedProduct.alloy_premium),
+      asNumber(revisedProduct.extrusion_cost),
+      asNumber(revisedProduct.forging_cost),
+      overrideNumber(override, "packing_cost", quote.packing_cost),
+      overrideNumber(override, "shipping_cost", quote.shipping_cost),
+      asNumber(quote.overhead_cost_input),
+      overrideNumber(override, "purchase_times", quote.purchase_times),
       revised.profit,
+      overrideNumber(override, "conversion_rate", quote.conversion_rate),
+      asNumber(revised.calculation.rateInr, revised.totalRateInr),
       revised.totalRateInr,
       revised.calculation,
       input.actorUserId ?? null,
       sourceId,
       {
+        appliedOverrides: override ? Object.fromEntries(override) : {},
+        revisionOrder: input.cache.size + 1,
         sourceKind: input.sourceKind,
         sourceQuoteItemId: quote.id,
         sourceRecordId: input.sourceRecordId,
@@ -456,10 +904,10 @@ async function createRevisedQuote(
         organization_id, $1, item_uid, description, item_type,
         production_type, weight_100_pcs, pieces_per_kg, material_rate,
         material_cost, conversion_cost, packaging_cost, shipping_cost,
-        overhead_cost, $2, $3, $4, calculation_version, product_snapshot,
-        $5, $6, 'mrm-dashboard', 'quote_revision_snapshots', $7, $8
+        overhead_cost, $2, $3, $4, calculation_version, $5,
+        $6, $7, 'mrm-dashboard', 'quote_revision_snapshots', $8, $9
       FROM sales.quote_product_snapshots
-      WHERE quote_item_id = $9
+      WHERE quote_item_id = $10
       RETURNING id
     `,
     [
@@ -467,6 +915,7 @@ async function createRevisedQuote(
       asNumber(revised.calculation.rejectionCost),
       revised.totalRateInr,
       revised.totalRateInr,
+      productSnapshot(revisedProduct),
       revised.calculation,
       input.actorUserId ?? null,
       randomUUID(),
@@ -484,7 +933,8 @@ async function createRevisedQuote(
       ? revisedChildren.get(component.child_quote_item_id)
       : undefined
     const unitCost = childRevision
-      ? childRevision.newPrice * asNumber(quote.conversion_rate, 1)
+      ? childRevision.newPrice *
+        overrideNumber(override, "conversion_rate", quote.conversion_rate)
       : asNumber(component.unit_cost)
     await client.query(
       `
@@ -552,6 +1002,7 @@ async function createRevisedQuote(
   )
   const result = {
     newPrice: revised.totalRateUsd,
+    newProfitPercent: revised.profit,
     replacementQuoteItemId,
   }
   input.cache.set(quote.id, result)
@@ -583,15 +1034,370 @@ async function nextRevisionNumber(
     .padStart(4, "0")}`
 }
 
-export function createCommercialRevisionsRepository({
-  connectionString,
-}: RepositoryOptions) {
-  const pool = new Pool({ connectionString })
+type EngineeringChangeBomLine = {
+  componentItemId: string
+  notes?: string | null
+  quantity: number
+}
+
+type EngineeringChangeDesignPatch = {
+  bomLines?: EngineeringChangeBomLine[]
+  casting?: number
+  description?: string
+  dieCode?: string | null
+  itemType?: string
+  materialGradeId?: string | null
+  productionType?: string | null
+  remarks?: string | null
+  rodSize?: string | null
+  rodTypeId?: string | null
+  weight100Pcs?: number
+}
+
+type EngineeringChangeProductCostingPatch = {
+  alloyPremium?: number
+  annealing?: number
+  assemblyOperationCost?: number
+  buffing?: number
+  burningLossPercent?: number
+  checking?: number
+  deburring?: number
+  directPurchasePricePerKg?: number
+  directPurchasePricePerPiece?: number
+  extrusionCost?: number
+  forgingCost?: number
+  machiningCost?: number
+  marking?: number
+  overheadCost?: number
+  piecesPerKg?: number
+  plating?: number
+  pricingMethod?: string
+  productCostInr?: number
+  rejectionPercent?: number
+  sealant?: number
+  washing?: number
+}
+
+const designPatchColumns: Record<
+  Exclude<keyof EngineeringChangeDesignPatch, "bomLines">,
+  string
+> = {
+  casting: "casting",
+  description: "description",
+  dieCode: "die_code",
+  itemType: "item_type",
+  materialGradeId: "material_grade_id",
+  productionType: "production_type",
+  remarks: "remarks",
+  rodSize: "rod_size",
+  rodTypeId: "rod_type_id",
+  weight100Pcs: "weight_100_pcs",
+}
+
+const productCostingPatchColumns: Record<
+  keyof EngineeringChangeProductCostingPatch,
+  string
+> = {
+  alloyPremium: "alloy_premium",
+  annealing: "annealing",
+  assemblyOperationCost: "assembly_operation_cost",
+  buffing: "buffing",
+  burningLossPercent: "burning_loss_percent",
+  checking: "checking",
+  deburring: "deburring",
+  directPurchasePricePerKg: "direct_purchase_price_per_kg",
+  directPurchasePricePerPiece: "direct_purchase_price_per_piece",
+  extrusionCost: "extrusion_cost",
+  forgingCost: "forging_cost",
+  machiningCost: "machining_cost",
+  marking: "marking",
+  overheadCost: "overhead_cost",
+  piecesPerKg: "pieces_per_kg",
+  plating: "plating",
+  pricingMethod: "pricing_method",
+  productCostInr: "product_cost_inr",
+  rejectionPercent: "rejection_percent",
+  sealant: "sealant",
+  washing: "washing",
+}
+
+async function applyAllowlistedItemPatch(
+  client: PoolClient,
+  itemId: string,
+  patch: Record<string, unknown>,
+  columns: Record<string, string>,
+  actorUserId?: string | null
+) {
+  const entries = Object.entries(patch).filter(
+    ([key, value]) => key in columns && value !== undefined
+  )
+  if (!entries.length) return
+  const assignments = entries.map(
+    ([key], index) => `${columns[key]} = $${index + 1}`
+  )
+  const values = entries.map(([, value]) => value)
+  await client.query(
+    `
+      UPDATE catalog.items
+      SET ${assignments.join(", ")}, updated_by_user_id = $${values.length + 1},
+        updated_at = now(), row_version = row_version + 1
+      WHERE id = $${values.length + 2}
+    `,
+    [...values, actorUserId ?? null, itemId]
+  )
+}
+
+async function itemAndBomEvidence(client: PoolClient, itemId: string) {
+  const [item, bom] = await Promise.all([
+    client.query<Record<string, unknown>>(
+      "SELECT * FROM catalog.items WHERE id = $1",
+      [itemId]
+    ),
+    client.query<{
+      component_item_id: string
+      component_uid: string
+      notes: string | null
+      quantity: string
+      sequence: number
+    }>(
+      `
+        SELECT line.component_item_id, component.uid AS component_uid,
+          line.quantity::text, line.notes, line.sequence
+        FROM catalog.bom_lines line
+        JOIN catalog.items component ON component.id = line.component_item_id
+        WHERE line.parent_item_id = $1
+        ORDER BY line.sequence, line.created_at, line.id
+      `,
+      [itemId]
+    ),
+  ])
+  return {
+    bomLines: bom.rows.map((line) => ({
+      componentItemId: line.component_item_id,
+      componentUid: line.component_uid,
+      notes: line.notes,
+      quantity: asNumber(line.quantity),
+      sequence: line.sequence,
+    })),
+    item: item.rows[0] ?? {},
+  }
+}
+
+async function replaceEngineeringChangeBom(
+  client: PoolClient,
+  input: {
+    actorUserId?: string | null
+    bomLines: EngineeringChangeBomLine[]
+    itemId: string
+    organizationId: string
+  }
+) {
+  const parent = await getProduct(client, input.itemId, true)
+  if (!["Package", "Assembly"].includes(parent.item_type)) {
+    throw new Error("Only Package or Assembly products can have an ECN BOM.")
+  }
+  const seen = new Set<string>()
+  for (const [sequence, line] of input.bomLines.entries()) {
+    if (!Number.isFinite(line.quantity) || line.quantity <= 0) {
+      throw new Error("ECN BOM quantity must be greater than zero.")
+    }
+    if (
+      line.componentItemId === input.itemId ||
+      seen.has(line.componentItemId)
+    ) {
+      throw new Error(
+        "ECN BOM components must be unique and cannot be self-referential."
+      )
+    }
+    seen.add(line.componentItemId)
+    const component = await client.query<{ id: string }>(
+      "SELECT id FROM catalog.items WHERE id = $1 AND organization_id = $2",
+      [line.componentItemId, input.organizationId]
+    )
+    if (!component.rows[0]) {
+      throw new Error("ECN BOM component is outside this organization.")
+    }
+    const cycle = await client.query(
+      `
+        WITH RECURSIVE descendants AS (
+          SELECT component_item_id
+          FROM catalog.bom_lines
+          WHERE parent_item_id = $1
+          UNION
+          SELECT line.component_item_id
+          FROM descendants
+          JOIN catalog.bom_lines line
+            ON line.parent_item_id = descendants.component_item_id
+        )
+        SELECT 1 FROM descendants WHERE component_item_id = $2 LIMIT 1
+      `,
+      [line.componentItemId, input.itemId]
+    )
+    if (cycle.rows[0]) {
+      throw new Error("ECN BOM change would create a cycle.")
+    }
+    input.bomLines[sequence] = line
+  }
+  await client.query(
+    "DELETE FROM catalog.bom_lines WHERE parent_item_id = $1",
+    [input.itemId]
+  )
+  for (const [sequence, line] of input.bomLines.entries()) {
+    await client.query(
+      `
+        INSERT INTO catalog.bom_lines (
+          organization_id, parent_item_id, component_item_id, quantity, notes,
+          sequence, created_by_user_id, updated_by_user_id, source_system,
+          source_table, source_id, source_payload
+        )
+        VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $7, 'mrm-dashboard',
+          'engineering_change_bom_lines', $8, $9
+        )
+      `,
+      [
+        input.organizationId,
+        input.itemId,
+        line.componentItemId,
+        line.quantity,
+        line.notes ?? null,
+        sequence,
+        input.actorUserId ?? null,
+        randomUUID(),
+        { engineeringChange: true },
+      ]
+    )
+  }
+}
+
+async function activeAffectedQuoteIds(
+  client: PoolClient,
+  itemId: string,
+  organizationId: string
+) {
+  const result = await client.query<{ quote_item_id: string }>(
+    `
+      WITH RECURSIVE quote_tree AS (
+        SELECT root.id AS root_quote_item_id, root.id AS quote_item_id,
+          root.item_id
+        FROM sales.quote_items root
+        WHERE root.organization_id = $2 AND root.is_active
+          AND root.status IN ('Sent', 'Accepted')
+          AND NULLIF(btrim(root.customer_part_code), '') IS NOT NULL
+        UNION
+        SELECT quote_tree.root_quote_item_id,
+          component.child_quote_item_id, component.component_item_id
+        FROM quote_tree
+        JOIN sales.quote_product_snapshots snapshot
+          ON snapshot.quote_item_id = quote_tree.quote_item_id
+        JOIN sales.quote_package_components component
+          ON component.quote_product_snapshot_id = snapshot.id
+        WHERE component.child_quote_item_id IS NOT NULL
+      )
+      SELECT DISTINCT root_quote_item_id AS quote_item_id
+      FROM quote_tree
+      WHERE item_id = $1
+      ORDER BY root_quote_item_id
+    `,
+    [itemId, organizationId]
+  )
+  return result.rows.map((row) => row.quote_item_id)
+}
+
+async function collectAffectedQuotePath(
+  client: PoolClient,
+  rootQuoteItemId: string,
+  affectedItemId: string,
+  depth = 0,
+  visiting = new Set<string>()
+): Promise<{ affected: Set<string>; containsAffectedItem: boolean }> {
+  if (depth > 20) {
+    throw new Error("ECN quote tree exceeds the supported depth of 20.")
+  }
+  if (visiting.has(rootQuoteItemId)) {
+    throw new Error("ECN quote tree contains a cycle.")
+  }
+  const nextVisiting = new Set(visiting)
+  nextVisiting.add(rootQuoteItemId)
+  const quote = await getQuote(client, rootQuoteItemId)
+  const affected = new Set<string>()
+  let containsAffectedItem = quote.item_id === affectedItemId
+  for (const component of await getComponents(client, rootQuoteItemId)) {
+    if (!component.child_quote_item_id) continue
+    const child = await collectAffectedQuotePath(
+      client,
+      component.child_quote_item_id,
+      affectedItemId,
+      depth + 1,
+      nextVisiting
+    )
+    if (child.containsAffectedItem) {
+      containsAffectedItem = true
+      for (const id of child.affected) affected.add(id)
+    }
+  }
+  if (containsAffectedItem) affected.add(rootQuoteItemId)
+  return { affected, containsAffectedItem }
+}
+
+async function previewRevisedQuote(
+  client: PoolClient,
+  input: {
+    affectedQuoteIds: Set<string>
+    cache: Map<string, { newPrice: number; newProfitPercent: number }>
+    overrides: Map<string, QuoteOverride>
+    quoteItemId: string
+    visiting?: Set<string>
+  }
+): Promise<{ newPrice: number; newProfitPercent: number }> {
+  const cached = input.cache.get(input.quoteItemId)
+  if (cached) return cached
+  const visiting = input.visiting ?? new Set<string>()
+  if (visiting.has(input.quoteItemId)) {
+    throw new Error("Quote package cycle detected during ECN preview.")
+  }
+  const nextVisiting = new Set(visiting)
+  nextVisiting.add(input.quoteItemId)
+  const quote = await getQuote(client, input.quoteItemId)
+  const product = await getProduct(client, quote.item_id)
+  const components = await getComponents(client, input.quoteItemId)
+  const revisedChildren = new Map<string, RevisedQuote>()
+  for (const component of components) {
+    if (
+      component.child_quote_item_id &&
+      input.affectedQuoteIds.has(component.child_quote_item_id)
+    ) {
+      const child = await previewRevisedQuote(client, {
+        ...input,
+        quoteItemId: component.child_quote_item_id,
+        visiting: nextVisiting,
+      })
+      revisedChildren.set(component.child_quote_item_id, {
+        ...child,
+        replacementQuoteItemId: component.child_quote_item_id,
+      })
+    }
+  }
+  const revised = revisedCalculation(
+    quote,
+    product,
+    components,
+    revisedChildren,
+    input.overrides.get(input.quoteItemId)
+  )
+  const result = {
+    newPrice: revised.totalRateUsd,
+    newProfitPercent: revised.profit,
+  }
+  input.cache.set(input.quoteItemId, result)
+  return result
+}
+
+export function createCommercialRevisionsRepository(options: RepositoryOptions) {
+  const { close, pool } = repositoryPool(options)
 
   return {
-    async close() {
-      await pool.end()
-    },
+    close,
 
     async listBulkPriceRevisions(organizationCode: string) {
       const result = await pool.query<{
@@ -609,8 +1415,8 @@ export function createCommercialRevisionsRepository({
           SELECT revision.id, revision.revision_number, revision.status,
             revision.reason, revision.effective_on::text,
             revision.revision_route, customer.company_name,
-            count(change.id)::text AS change_count,
-            count(change.replacement_quote_item_id)::text
+            count(DISTINCT change.stage_group_id)::text AS change_count,
+            count(DISTINCT change.replacement_quote_item_id)::text
               AS revised_quote_count
           FROM sales.bulk_price_revisions revision
           JOIN core.organizations organization
@@ -638,6 +1444,50 @@ export function createCommercialRevisionsRepository({
       }))
     },
 
+    async listBulkPriceRevisionStages(bulkPriceRevisionId: string) {
+      const result = await pool.query<{
+        field_label: string
+        field_name: string
+        new_value: string
+        notes: string | null
+        preview_rows: Array<{
+          newPrice: number
+          oldPrice: number
+          quoteItemId: string
+        }>
+        selected_count: number
+        skipped_count: number
+        stage_group_id: string
+      }>(
+        `
+          SELECT change.stage_group_id, change.field_name,
+            change.field_label, change.new_value::text,
+            max(change.selected_count)::integer AS selected_count,
+            max(change.skipped_count)::integer AS skipped_count,
+            max(change.notes) AS notes,
+            jsonb_agg(change.preview_json ORDER BY change.created_at, change.id)
+              AS preview_rows
+          FROM sales.bulk_price_revision_changes change
+          WHERE change.bulk_price_revision_id = $1
+            AND change.replacement_quote_item_id IS NULL
+          GROUP BY change.stage_group_id, change.field_name,
+            change.field_label, change.new_value
+          ORDER BY min(change.created_at), change.stage_group_id
+        `,
+        [bulkPriceRevisionId]
+      )
+      return result.rows.map((row) => ({
+        fieldLabel: row.field_label,
+        fieldName: row.field_name,
+        newValue: asNumber(row.new_value),
+        notes: row.notes,
+        previewRows: row.preview_rows,
+        selectedCount: row.selected_count,
+        skippedCount: row.skipped_count,
+        stageGroupId: row.stage_group_id,
+      }))
+    },
+
     async listEngineeringChangeNotes(organizationCode: string) {
       const result = await pool.query<{
         decision_count: string
@@ -646,6 +1496,7 @@ export function createCommercialRevisionsRepository({
         effective_on: string | null
         id: string
         item_id: string
+        item_type: string
         item_uid: string
         reason: string
         status: string
@@ -653,7 +1504,7 @@ export function createCommercialRevisionsRepository({
         `
           SELECT ecn.id, ecn.ecn_number, ecn.item_id, ecn.status,
             ecn.reason, ecn.effective_on::text, item.uid AS item_uid,
-            item.description,
+            item.description, item.item_type,
             count(decision.id)::text AS decision_count
           FROM sales.engineering_change_notes ecn
           JOIN core.organizations organization
@@ -662,7 +1513,7 @@ export function createCommercialRevisionsRepository({
           LEFT JOIN sales.engineering_change_decisions decision
             ON decision.engineering_change_note_id = ecn.id
           WHERE lower(organization.code) = lower($1)
-          GROUP BY ecn.id, item.uid, item.description
+          GROUP BY ecn.id, item.uid, item.description, item.item_type
           ORDER BY ecn.created_at DESC, ecn.id DESC
         `,
         [organizationCode]
@@ -674,6 +1525,7 @@ export function createCommercialRevisionsRepository({
         effectiveOn: row.effective_on,
         id: row.id,
         itemId: row.item_id,
+        itemType: row.item_type,
         itemUid: row.item_uid,
         reason: row.reason,
         status: row.status,
@@ -761,14 +1613,41 @@ export function createCommercialRevisionsRepository({
         target_table: string
       }>(
         `
-          SELECT correction.id, correction.target_table,
-            correction.target_id, correction.requested_action,
-            correction.reason, correction.status, correction.created_at
-          FROM audit.pricing_correction_requests correction
-          JOIN core.organizations organization
-            ON organization.id = correction.organization_id
-          WHERE lower(organization.code) = lower($1)
-          ORDER BY correction.created_at DESC, correction.id DESC
+          SELECT register.*
+          FROM (
+            SELECT correction.id, correction.target_table,
+              correction.target_id::text AS target_id,
+              correction.requested_action, correction.reason,
+              correction.status, correction.created_at
+            FROM audit.pricing_correction_requests correction
+            JOIN core.organizations organization
+              ON organization.id = correction.organization_id
+            WHERE lower(organization.code) = lower($1)
+
+            UNION ALL
+
+            SELECT event.id, event.target_table, event.target_id::text,
+              coalesce(
+                event.metadata->>'correctionType',
+                event.event_type
+              ) AS requested_action,
+              coalesce(
+                event.reason,
+                event.metadata->>'remarks',
+                'Workflow correction'
+              ) AS reason,
+              'Applied' AS status, event.occurred_at AS created_at
+            FROM audit.events event
+            JOIN core.organizations organization
+              ON organization.id = event.organization_id
+            WHERE lower(organization.code) = lower($1)
+              AND event.event_type IN (
+                'pricing_correction.design_costing_handoff_reversed',
+                'pricing_correction.product_entry_reversed',
+                'enquiry_item.technical_revision_matched'
+              )
+          ) register
+          ORDER BY register.created_at DESC, register.id DESC
         `,
         [organizationCode]
       )
@@ -794,23 +1673,40 @@ export function createCommercialRevisionsRepository({
       }
       const [designHandoffs, products] = await Promise.all([
         pool.query<{
+          company_name: string
+          description: string
           design_task_id: string
+          design_status: string
           enquiry_number: string
+          item_type: string
           line_number: number
+          next_stage_status: string
+          part: string | null
           part_reference: string | null
+          quote_count: string
         }>(
           `
             SELECT design.id AS design_task_id, enquiry.enquiry_number,
               enquiry_item.line_number,
               coalesce(design.quoted_part_uid, design.internal_drawing_no)
-                AS part_reference
+                AS part_reference,
+              customer.company_name, enquiry_item.customer_part_code AS part,
+              enquiry_item.description, design.design_status,
+              design.next_stage_status, design.item_type,
+              count(quote.id)::text AS quote_count
             FROM sales.design_tasks design
             JOIN sales.enquiry_items enquiry_item
               ON enquiry_item.id = design.enquiry_item_id
             JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+            JOIN sales.customers customer ON customer.id = enquiry.customer_id
+            LEFT JOIN sales.quote_items quote
+              ON quote.enquiry_item_id = enquiry_item.id
             WHERE design.organization_id = $1
               AND design.design_status IN ('Design Complete', 'Not Required')
               AND design.next_stage_status = 'Started'
+            GROUP BY design.id, enquiry.enquiry_number,
+              enquiry_item.line_number, customer.company_name,
+              enquiry_item.customer_part_code, enquiry_item.description
             ORDER BY enquiry.enquiry_number, enquiry_item.line_number,
               design.id
           `,
@@ -820,25 +1716,32 @@ export function createCommercialRevisionsRepository({
           description: string
           id: string
           item_type: string
+          component_bom_count: string
+          design_uid_reference_count: string
+          matched_design_count: string
+          parent_bom_count: string
+          quote_count: string
           uid: string
         }>(
           `
-            SELECT item.id, item.uid, item.description, item.item_type
+            SELECT item.id, item.uid, item.description, item.item_type,
+              (SELECT count(*)::text FROM sales.quote_items quote
+                WHERE quote.item_id = item.id) AS quote_count,
+              (SELECT count(*)::text FROM catalog.bom_lines bom
+                WHERE bom.parent_item_id = item.id) AS parent_bom_count,
+              (SELECT count(*)::text FROM catalog.bom_lines bom
+                WHERE bom.component_item_id = item.id) AS component_bom_count,
+              (SELECT count(*)::text FROM sales.design_tasks design
+                WHERE design.matched_product_id = item.id)
+                AS matched_design_count,
+              (SELECT count(*)::text FROM sales.design_tasks design
+                WHERE coalesce(
+                  design.quoted_part_uid,
+                  design.internal_drawing_no
+                ) = item.uid) AS design_uid_reference_count
             FROM catalog.items item
             WHERE item.organization_id = $1
               AND (item.lifecycle_status = 'Q' OR item.uid_kind = 'QUOTE')
-              AND NOT EXISTS (
-                SELECT 1 FROM sales.quote_items quote
-                WHERE quote.item_id = item.id
-              )
-              AND NOT EXISTS (
-                SELECT 1 FROM catalog.bom_lines bom
-                WHERE bom.component_item_id = item.id
-              )
-              AND NOT EXISTS (
-                SELECT 1 FROM sales.design_tasks design
-                WHERE design.matched_product_id = item.id
-              )
             ORDER BY item.uid, item.id
           `,
           [organizationId]
@@ -846,13 +1749,31 @@ export function createCommercialRevisionsRepository({
       ])
       return {
         designHandoffs: designHandoffs.rows.map((row) => ({
+          companyName: row.company_name,
+          description: row.description,
           designTaskId: row.design_task_id,
+          designStatus: row.design_status,
           enquiryNumber: row.enquiry_number,
+          itemType: row.item_type,
           lineNumber: row.line_number,
+          nextStageStatus: row.next_stage_status,
+          part: row.part,
           partReference: row.part_reference,
+          quoteCount: Number(row.quote_count),
         })),
         organizationId,
         products: products.rows.map((row) => ({
+          blockerCounts: {
+            componentBom: Number(row.component_bom_count),
+            designUidReference: Number(row.design_uid_reference_count),
+            matchedDesign: Number(row.matched_design_count),
+            parentBom: Number(row.parent_bom_count),
+            quotes: Number(row.quote_count),
+          },
+          canReverse:
+            Number(row.quote_count) === 0 &&
+            Number(row.component_bom_count) === 0 &&
+            Number(row.matched_design_count) === 0,
           description: row.description,
           id: row.id,
           itemType: row.item_type,
@@ -959,15 +1880,24 @@ export function createCommercialRevisionsRepository({
         if (!row || row.status === "Completed") {
           throw new Error("Open bulk revision was not found.")
         }
-        if (!fieldLabels[input.fieldName]) {
+        if (!isBulkRevisionField(input.fieldName)) {
           throw new Error("Unsupported bulk revision field.")
         }
+        const field = bulkRevisionFields[input.fieldName]
         if (
           row.revision_route === "Product Parameter Bulk Revision" &&
           !productFields.has(input.fieldName)
         ) {
           throw new Error(
             "Product revisions can only stage product-level parameters."
+          )
+        }
+        if (
+          row.revision_route === "Customer Parameter Bulk Revision" &&
+          !customerFields.has(input.fieldName)
+        ) {
+          throw new Error(
+            "Customer revisions can only stage customer-level parameters."
           )
         }
         if (!input.selectedQuoteItemIds.length) {
@@ -987,19 +1917,68 @@ export function createCommercialRevisionsRepository({
         if (valid.rows.length !== new Set(input.selectedQuoteItemIds).size) {
           throw new Error("One or more selected prices are no longer active.")
         }
-        const createdIds: string[] = []
+        const eligible = []
         for (const quote of valid.rows) {
+          if (
+            !lockedBulkProcessFields.has(input.fieldName) ||
+            (await quoteAllowsBulkProcessField(
+              client,
+              quote.id,
+              input.fieldName
+            ))
+          ) {
+            eligible.push(quote)
+          }
+        }
+        const skippedCount = valid.rows.length - eligible.length
+        if (!eligible.length) {
+          throw new Error(
+            `${field.label} is not active in any selected product.`
+          )
+        }
+        const stageGroupId = randomUUID()
+        const notes =
+          skippedCount > 0
+            ? [
+                asText(input.notes) || null,
+                `${skippedCount} selected product(s) were skipped because ${field.label} is not active there.`,
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : (input.notes ?? null)
+        const createdIds: string[] = []
+        for (const quote of eligible) {
+          const source = await getQuote(client, quote.id)
+          const product = await getProduct(client, source.item_id)
+          const components = await getComponents(client, quote.id)
+          const override = new Map<string, number>([
+            [input.fieldName, input.newValue],
+          ])
+          const preview = revisedCalculation(
+            source,
+            product,
+            components,
+            new Map(),
+            override
+          )
+          const previewJson = {
+            newPrice: preview.totalRateUsd,
+            oldPrice: asNumber(quote.price),
+            quoteItemId: quote.id,
+          }
           const created = await client.query<{ id: string }>(
             `
               INSERT INTO sales.bulk_price_revision_changes (
                 organization_id, bulk_price_revision_id, prior_quote_item_id,
                 old_price, new_price, field_name, field_label, new_value,
-                selection_json, selected_count, notes, created_by_user_id,
-                source_system, source_table, source_id, source_payload
+                selection_json, selected_count, skipped_count, stage_group_id,
+                preview_json, notes, created_by_user_id, source_system,
+                source_table, source_id, source_payload
               )
               VALUES (
-                $1, $2, $3, $4, $4, $5, $6, $7, $8, $9, $10, $11,
-                'mrm-dashboard', 'bulk_price_revision_changes', $12, $13
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                $14, $15, 'mrm-dashboard', 'bulk_price_revision_changes',
+                $16, $17
               )
               RETURNING id
             `,
@@ -1008,20 +1987,72 @@ export function createCommercialRevisionsRepository({
               input.bulkPriceRevisionId,
               quote.id,
               quote.price,
+              preview.totalRateUsd,
               input.fieldName,
-              fieldLabels[input.fieldName],
+              field.label,
               input.newValue,
-              JSON.stringify(input.selectedQuoteItemIds),
-              input.selectedQuoteItemIds.length,
-              input.notes ?? null,
+              JSON.stringify(eligible.map((row) => row.id)),
+              eligible.length,
+              skippedCount,
+              stageGroupId,
+              previewJson,
+              notes,
               input.actorUserId ?? null,
               randomUUID(),
-              input,
+              { ...input, eligibleQuoteItemIds: eligible.map((row) => row.id) },
             ]
           )
           createdIds.push(created.rows[0]!.id)
         }
-        return { changeIds: createdIds, selectedCount: valid.rows.length }
+        return {
+          changeIds: createdIds,
+          selectedCount: eligible.length,
+          skippedCount,
+          stageGroupId,
+        }
+      })
+    },
+
+    async deleteBulkPriceRevisionStage(input: {
+      actorUserId?: string | null
+      bulkPriceRevisionId: string
+      stageGroupId: string
+    }) {
+      return transaction(pool, async (client) => {
+        const revision = await client.query<{
+          organization_id: string
+          status: string
+        }>(
+          "SELECT organization_id, status FROM sales.bulk_price_revisions WHERE id = $1 FOR UPDATE",
+          [input.bulkPriceRevisionId]
+        )
+        const row = revision.rows[0]
+        if (!row || row.status === "Completed") {
+          throw new Error("Open bulk revision was not found.")
+        }
+        const deleted = await client.query(
+          `
+            DELETE FROM sales.bulk_price_revision_changes
+            WHERE bulk_price_revision_id = $1 AND stage_group_id = $2
+              AND replacement_quote_item_id IS NULL
+          `,
+          [input.bulkPriceRevisionId, input.stageGroupId]
+        )
+        if (!deleted.rowCount) {
+          throw new Error("Staged bulk change was not found.")
+        }
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "bulk_price_revision.stage_deleted",
+          metadata: {
+            deletedCount: deleted.rowCount,
+            stageGroupId: input.stageGroupId,
+          },
+          organizationId: row.organization_id,
+          targetId: input.bulkPriceRevisionId,
+          targetTable: "bulk_price_revisions",
+        })
+        return { deletedCount: deleted.rowCount }
       })
     },
 
@@ -1067,15 +2098,20 @@ export function createCommercialRevisionsRepository({
         const affected = await collectQuoteAncestors(client, selectedIds)
         const overrides = new Map<string, QuoteOverride>()
         for (const change of changes.rows) {
-          overrides.set(change.prior_quote_item_id, {
-            fieldName: change.field_name,
-            value: asNumber(change.new_value),
-          })
-          if (productFields.has(change.field_name)) {
+          if (!isBulkRevisionField(change.field_name)) {
+            throw new Error("Unsupported staged bulk revision field.")
+          }
+          const quoteOverrides =
+            overrides.get(change.prior_quote_item_id) ??
+            new Map<string, number>()
+          quoteOverrides.set(change.field_name, asNumber(change.new_value))
+          overrides.set(change.prior_quote_item_id, quoteOverrides)
+          const productColumn = productColumnByField[change.field_name]
+          if (productFields.has(change.field_name) && productColumn) {
             await client.query(
               `
                 UPDATE catalog.items item
-                SET ${change.field_name} = $1, updated_by_user_id = $2,
+                SET ${productColumn} = $1, updated_by_user_id = $2,
                   updated_at = now(), row_version = row_version + 1
                 FROM sales.quote_items quote
                 WHERE quote.id = $3 AND item.id = quote.item_id
@@ -1107,25 +2143,30 @@ export function createCommercialRevisionsRepository({
         const finalIds = [...cache.values()].map(
           (quote) => quote.replacementQuoteItemId
         )
+        let revisionOrder = 0
         for (const [oldQuoteId, revised] of cache) {
-          const staged = changes.rows.find(
+          revisionOrder += 1
+          const staged = changes.rows.filter(
             (change) => change.prior_quote_item_id === oldQuoteId
           )
-          if (staged) {
+          if (staged.length) {
             await client.query(
               `
                 UPDATE sales.bulk_price_revision_changes
                 SET replacement_quote_item_id = $1, new_price = $2,
                   applied_at = now(), final_quote_item_ids_json = $3,
                   calculation_evidence = $4
-                WHERE id = $5
+                WHERE id = ANY($5::uuid[])
               `,
               [
                 revised.replacementQuoteItemId,
                 revised.newPrice,
                 JSON.stringify(finalIds),
-                { propagatedQuoteCount: cache.size },
-                staged.id,
+                {
+                  propagatedQuoteCount: cache.size,
+                  revisionOrder,
+                },
+                staged.map((change) => change.id),
               ]
             )
           } else {
@@ -1155,7 +2196,7 @@ export function createCommercialRevisionsRepository({
                 old.approved_price_usd,
                 revised.newPrice,
                 JSON.stringify(finalIds),
-                { propagatedFrom: selectedIds },
+                { propagatedFrom: selectedIds, revisionOrder },
                 input.actorUserId ?? null,
                 randomUUID(),
                 { derived: true },
@@ -1240,53 +2281,53 @@ export function createCommercialRevisionsRepository({
     async completeEngineeringChangeDesign(input: {
       actorUserId?: string | null
       engineeringChangeNoteId: string
-      itemPatch: { description?: string }
+      itemPatch: EngineeringChangeDesignPatch
     }) {
       return transaction(pool, async (client) => {
         const ecn = await client.query<{
+          affected_quote_item_ids_json: string[]
           item_id: string
           organization_id: string
           status: string
         }>(
-          "SELECT organization_id, item_id, status FROM sales.engineering_change_notes WHERE id = $1 FOR UPDATE",
+          "SELECT organization_id, item_id, status, affected_quote_item_ids_json FROM sales.engineering_change_notes WHERE id = $1 FOR UPDATE",
           [input.engineeringChangeNoteId]
         )
         const row = ecn.rows[0]
         if (!row || row.status !== "Pending Design") {
           throw new Error("Pending-design ECN was not found.")
         }
-        const before = await client.query<Record<string, unknown>>(
-          "SELECT * FROM catalog.items WHERE id = $1 FOR UPDATE",
-          [row.item_id]
+        await getProduct(client, row.item_id, true)
+        const before = await itemAndBomEvidence(client, row.item_id)
+        const { bomLines, ...itemPatch } = input.itemPatch
+        await applyAllowlistedItemPatch(
+          client,
+          row.item_id,
+          itemPatch,
+          designPatchColumns,
+          input.actorUserId
         )
-        const description = asText(input.itemPatch.description)
-        if (description) {
-          await client.query(
-            `
-              UPDATE catalog.items
-              SET description = $1, updated_by_user_id = $2,
-                updated_at = now(), row_version = row_version + 1
-              WHERE id = $3
-            `,
-            [description, input.actorUserId ?? null, row.item_id]
-          )
+        if (bomLines) {
+          await replaceEngineeringChangeBom(client, {
+            actorUserId: input.actorUserId,
+            bomLines,
+            itemId: row.item_id,
+            organizationId: row.organization_id,
+          })
         }
-        const after = await client.query<Record<string, unknown>>(
-          "SELECT * FROM catalog.items WHERE id = $1",
-          [row.item_id]
-        )
+        const after = await itemAndBomEvidence(client, row.item_id)
         await client.query(
           `
             UPDATE sales.engineering_change_notes
-            SET status = 'Pending Costing', design_before = $1,
+            SET status = 'Pending Product Costing', design_before = $1,
               design_after = $2, design_completed_at = now(),
               updated_by_user_id = $3, updated_at = now(),
               row_version = row_version + 1
             WHERE id = $4
           `,
           [
-            before.rows[0],
-            after.rows[0],
+            before,
+            after,
             input.actorUserId ?? null,
             input.engineeringChangeNoteId,
           ]
@@ -1298,53 +2339,178 @@ export function createCommercialRevisionsRepository({
           targetId: input.engineeringChangeNoteId,
           targetTable: "engineering_change_notes",
         })
-        return { id: input.engineeringChangeNoteId, status: "Pending Costing" }
+        return {
+          id: input.engineeringChangeNoteId,
+          status: "Pending Product Costing",
+        }
+      })
+    },
+
+    async completeEngineeringChangeProductCosting(input: {
+      actorUserId?: string | null
+      engineeringChangeNoteId: string
+      itemPatch: EngineeringChangeProductCostingPatch
+    }) {
+      return transaction(pool, async (client) => {
+        const ecn = await client.query<{
+          affected_quote_item_ids_json: string[]
+          item_id: string
+          organization_id: string
+          status: string
+        }>(
+          "SELECT organization_id, item_id, status, affected_quote_item_ids_json FROM sales.engineering_change_notes WHERE id = $1 FOR UPDATE",
+          [input.engineeringChangeNoteId]
+        )
+        const row = ecn.rows[0]
+        if (!row || row.status !== "Pending Product Costing") {
+          throw new Error("Pending-product-costing ECN was not found.")
+        }
+        const before = await itemAndBomEvidence(client, row.item_id)
+        await applyAllowlistedItemPatch(
+          client,
+          row.item_id,
+          input.itemPatch,
+          productCostingPatchColumns,
+          input.actorUserId
+        )
+        const after = await itemAndBomEvidence(client, row.item_id)
+        const affectedQuoteItemIds = await activeAffectedQuoteIds(
+          client,
+          row.item_id,
+          row.organization_id
+        )
+        const status =
+          affectedQuoteItemIds.length > 0 ? "Pending Costing" : "Completed"
+        await client.query(
+          `
+            UPDATE sales.engineering_change_notes
+            SET status = $1, product_costing_before = $2,
+              product_costing_after = $3, product_costing_completed_at = now(),
+              affected_quote_item_ids_json = $4,
+              completed_at = CASE WHEN $1 = 'Completed' THEN now() ELSE NULL END,
+              updated_by_user_id = $5, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $6
+          `,
+          [
+            status,
+            before,
+            after,
+            JSON.stringify(affectedQuoteItemIds),
+            input.actorUserId ?? null,
+            input.engineeringChangeNoteId,
+          ]
+        )
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "engineering_change.product_costing_completed",
+          metadata: { affectedPriceCount: affectedQuoteItemIds.length, status },
+          organizationId: row.organization_id,
+          targetId: input.engineeringChangeNoteId,
+          targetTable: "engineering_change_notes",
+        })
+        return {
+          affectedPriceCount: affectedQuoteItemIds.length,
+          id: input.engineeringChangeNoteId,
+          status,
+        }
       })
     },
 
     async listEngineeringChangeAffectedPrices(engineeringChangeNoteId: string) {
-      const result = await pool.query<{
-        approved_price_usd: string
-        customer_part_code: string
-        quote_item_id: string
-      }>(
-        `
-          WITH RECURSIVE ecn AS (
-            SELECT item_id
+      const client = await pool.connect()
+      try {
+        const ecn = await client.query<{
+          affected_quote_item_ids_json: string[]
+          item_id: string
+          organization_id: string
+        }>(
+          `
+            SELECT organization_id, item_id, affected_quote_item_ids_json
             FROM sales.engineering_change_notes
             WHERE id = $1
-          ), quote_tree AS (
-            SELECT root.id AS root_quote_item_id, root.id AS quote_item_id,
-              root.item_id
-            FROM sales.quote_items root
-            WHERE root.is_active
-              AND root.status IN ('Sent', 'Accepted')
-              AND NULLIF(btrim(root.customer_part_code), '') IS NOT NULL
-            UNION ALL
-            SELECT quote_tree.root_quote_item_id,
-              component.child_quote_item_id, component.component_item_id
-            FROM quote_tree
-            JOIN sales.quote_product_snapshots snapshot
-              ON snapshot.quote_item_id = quote_tree.quote_item_id
-            JOIN sales.quote_package_components component
-              ON component.quote_product_snapshot_id = snapshot.id
-            WHERE component.child_quote_item_id IS NOT NULL
+          `,
+          [engineeringChangeNoteId]
+        )
+        const row = ecn.rows[0]
+        if (!row) return []
+        const affectedQuoteItemIds = row.affected_quote_item_ids_json.length
+          ? row.affected_quote_item_ids_json
+          : await activeAffectedQuoteIds(
+              client,
+              row.item_id,
+              row.organization_id
+            )
+        if (!affectedQuoteItemIds.length) return []
+        const prices = await client.query<{
+          approved_price_usd: string
+          customer_part_code: string
+          decision: string | null
+          new_price: string | null
+          new_profit_percent: string | null
+          quote_item_id: string
+        }>(
+          `
+            SELECT quote.id AS quote_item_id, quote.customer_part_code,
+              quote.approved_price_usd, decision.decision,
+              decision.new_price, decision.new_profit_percent
+            FROM sales.quote_items quote
+            LEFT JOIN sales.engineering_change_decisions decision
+              ON decision.engineering_change_note_id = $1
+             AND decision.source_quote_item_id = quote.id
+            WHERE quote.id = ANY($2::uuid[])
+            ORDER BY quote.customer_part_code, quote.id
+          `,
+          [engineeringChangeNoteId, affectedQuoteItemIds]
+        )
+        const result = []
+        for (const price of prices.rows) {
+          const path = await collectAffectedQuotePath(
+            client,
+            price.quote_item_id,
+            row.item_id
           )
-          SELECT DISTINCT root.id AS quote_item_id,
-            root.customer_part_code, root.approved_price_usd
-          FROM quote_tree
-          JOIN ecn ON ecn.item_id = quote_tree.item_id
-          JOIN sales.quote_items root
-            ON root.id = quote_tree.root_quote_item_id
-          ORDER BY root.customer_part_code, root.id
-        `,
-        [engineeringChangeNoteId]
-      )
-      return result.rows.map((row) => ({
-        approvedPriceUsd: asNumber(row.approved_price_usd),
-        customerPartCode: row.customer_part_code,
-        quoteItemId: row.quote_item_id,
-      }))
+          const revise = await previewRevisedQuote(client, {
+            affectedQuoteIds: path.affected,
+            cache: new Map(),
+            overrides: new Map(),
+            quoteItemId: price.quote_item_id,
+          })
+          const keepOverrides = new Map<string, QuoteOverride>([
+            [
+              price.quote_item_id,
+              new Map([
+                ["__target_price_usd", asNumber(price.approved_price_usd)],
+              ]),
+            ],
+          ])
+          const keep = await previewRevisedQuote(client, {
+            affectedQuoteIds: path.affected,
+            cache: new Map(),
+            overrides: keepOverrides,
+            quoteItemId: price.quote_item_id,
+          })
+          result.push({
+            approvedPriceUsd: asNumber(price.approved_price_usd),
+            customerPartCode: price.customer_part_code,
+            decision: price.decision,
+            keepSamePriceUsd: asNumber(price.approved_price_usd),
+            keepSameProfitPercent: keep.newProfitPercent,
+            newPrice:
+              price.new_price === null ? null : asNumber(price.new_price),
+            newProfitPercent:
+              price.new_profit_percent === null
+                ? null
+                : asNumber(price.new_profit_percent),
+            quoteItemId: price.quote_item_id,
+            revisePriceUsd: revise.newPrice,
+            reviseProfitPercent: revise.newProfitPercent,
+          })
+        }
+        return result
+      } finally {
+        client.release()
+      }
     },
 
     async applyEngineeringChangeDecision(input: {
@@ -1357,11 +2523,12 @@ export function createCommercialRevisionsRepository({
     }) {
       return transaction(pool, async (client) => {
         const ecn = await client.query<{
+          affected_quote_item_ids_json: string[]
           item_id: string
           organization_id: string
           status: string
         }>(
-          "SELECT organization_id, item_id, status FROM sales.engineering_change_notes WHERE id = $1 FOR UPDATE",
+          "SELECT organization_id, item_id, status, affected_quote_item_ids_json FROM sales.engineering_change_notes WHERE id = $1 FOR UPDATE",
           [input.engineeringChangeNoteId]
         )
         const row = ecn.rows[0]
@@ -1375,22 +2542,33 @@ export function createCommercialRevisionsRepository({
         if (existing.rows[0]) {
           throw new Error("This affected price already has an ECN decision.")
         }
+        if (
+          !row.affected_quote_item_ids_json.includes(input.sourceQuoteItemId)
+        ) {
+          throw new Error("This price is outside the ECN affected set.")
+        }
         const source = await getQuote(client, input.sourceQuoteItemId, true)
-        const affected = new Set([input.sourceQuoteItemId])
+        const path = await collectAffectedQuotePath(
+          client,
+          input.sourceQuoteItemId,
+          row.item_id
+        )
+        if (!path.containsAffectedItem) {
+          throw new Error("The affected ECN product is absent from this price.")
+        }
         const overrides = new Map<string, QuoteOverride>()
-        if (input.decision === "Revise Price") {
-          if (input.newProfitPercent === undefined) {
-            throw new Error("Revised profit is required.")
-          }
-          overrides.set(input.sourceQuoteItemId, {
-            fieldName: "profit_percent",
-            value: input.newProfitPercent,
-          })
+        if (input.decision === "Keep Price Same") {
+          overrides.set(
+            input.sourceQuoteItemId,
+            new Map([
+              ["__target_price_usd", asNumber(source.approved_price_usd)],
+            ])
+          )
         }
         const cache = new Map<string, RevisedQuote>()
         const revised = await createRevisedQuote(client, {
           actorUserId: input.actorUserId,
-          affectedQuoteIds: affected,
+          affectedQuoteIds: path.affected,
           cache,
           overrides,
           quoteItemId: input.sourceQuoteItemId,
@@ -1422,8 +2600,7 @@ export function createCommercialRevisionsRepository({
             },
             {
               price: revised.newPrice,
-              profitPercent:
-                input.newProfitPercent ?? asNumber(source.profit_percent),
+              profitPercent: revised.newProfitPercent,
             },
             input.actorUserId ?? null,
             input.sourceQuoteItemId,
@@ -1431,36 +2608,11 @@ export function createCommercialRevisionsRepository({
             source.approved_price_usd,
             revised.newPrice,
             source.profit_percent,
-            input.newProfitPercent ?? source.profit_percent,
+            revised.newProfitPercent,
             input.notes ?? null,
             randomUUID(),
             input,
           ]
-        )
-        const affectedPrices = await client.query<{ count: string }>(
-          `
-            WITH RECURSIVE quote_tree AS (
-              SELECT root.id AS root_quote_item_id, root.id AS quote_item_id,
-                root.item_id
-              FROM sales.quote_items root
-              WHERE root.is_active
-                AND root.status IN ('Sent', 'Accepted')
-                AND NULLIF(btrim(root.customer_part_code), '') IS NOT NULL
-              UNION ALL
-              SELECT quote_tree.root_quote_item_id,
-                component.child_quote_item_id, component.component_item_id
-              FROM quote_tree
-              JOIN sales.quote_product_snapshots snapshot
-                ON snapshot.quote_item_id = quote_tree.quote_item_id
-              JOIN sales.quote_package_components component
-                ON component.quote_product_snapshot_id = snapshot.id
-              WHERE component.child_quote_item_id IS NOT NULL
-            )
-            SELECT count(DISTINCT root_quote_item_id)::text AS count
-            FROM quote_tree
-            WHERE item_id = $1
-          `,
-          [row.item_id]
         )
         const decisions = await client.query<{ count: string }>(
           "SELECT count(*)::text AS count FROM sales.engineering_change_decisions WHERE engineering_change_note_id = $1",
@@ -1468,7 +2620,7 @@ export function createCommercialRevisionsRepository({
         )
         const completed =
           Number(decisions.rows[0]!.count) >=
-          Math.max(1, Number(affectedPrices.rows[0]!.count))
+          row.affected_quote_item_ids_json.length
         if (completed) {
           await client.query(
             `
@@ -1494,6 +2646,7 @@ export function createCommercialRevisionsRepository({
         })
         return {
           newPrice: revised.newPrice,
+          newProfitPercent: revised.newProfitPercent,
           replacementQuoteItemId: revised.replacementQuoteItemId,
           status: completed ? "Completed" : "Pending Costing",
         }
@@ -1606,7 +2759,9 @@ export function createCommercialRevisionsRepository({
           throw new Error("Quoted product correction candidate was not found.")
         }
         if (item.lifecycle_status !== "Q" && item.uid_kind !== "QUOTE") {
-          throw new Error("Only an unused quoted product entry can be reversed.")
+          throw new Error(
+            "Only an unused quoted product entry can be reversed."
+          )
         }
         const blockers = await client.query<{
           bom_component_count: string
@@ -1694,7 +2849,9 @@ export function createCommercialRevisionsRepository({
           [input.targetId, input.organizationId]
         )
         if (!target.rows[0]) {
-          throw new Error("Historical correction target is outside this organization.")
+          throw new Error(
+            "Historical correction target is outside this organization."
+          )
         }
         const created = await client.query<{ id: string; status: string }>(
           `

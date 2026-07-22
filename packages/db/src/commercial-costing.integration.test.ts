@@ -15,6 +15,7 @@ const repository = createCommercialCostingRepository({ connectionString })
 let customerId: string
 let enquiryItemId: string
 let itemId: string
+let organizationCode: string
 let organizationId: string
 
 async function createEnquiryItem(input: {
@@ -51,7 +52,13 @@ async function createEnquiryItem(input: {
       )
       RETURNING id
     `,
-    [organizationId, enquiry.rows[0]!.id, input.customerPartCode, input.itemId, suffix]
+    [
+      organizationId,
+      enquiry.rows[0]!.id,
+      input.customerPartCode,
+      input.itemId,
+      suffix,
+    ]
   )
   await pool.query(
     `
@@ -80,13 +87,14 @@ async function createEnquiryItem(input: {
 beforeAll(async () => {
   await migrateDatabase({ connectionString })
   const suffix = randomUUID()
+  organizationCode = `MIG08-${suffix}`
   const organization = await pool.query<{ id: string }>(
     `
       INSERT INTO core.organizations (code, name)
       VALUES ($1, 'MIG-08 Test')
       RETURNING id
     `,
-    [`MIG08-${suffix}`]
+    [organizationCode]
   )
   organizationId = organization.rows[0]!.id
   const customer = await pool.query<{ id: string }>(
@@ -558,7 +566,11 @@ describe("PostgreSQL product-costing and quote workflow", () => {
 
   test("retains immediate package and nested assembly quote snapshots", async () => {
     const suffix = randomUUID()
-    const items = await pool.query<{ id: string; item_type: string; uid: string }>(
+    const items = await pool.query<{
+      id: string
+      item_type: string
+      uid: string
+    }>(
       `
         INSERT INTO catalog.items (
           organization_id, uid, lifecycle_status, description, item_type,
@@ -649,5 +661,60 @@ describe("PostgreSQL product-costing and quote workflow", () => {
     expect(nestedSnapshot.components.map((row) => row.componentUid)).toEqual([
       `M-B-${suffix}`,
     ])
+
+    const register = await repository.listPricingRegister(organizationCode)
+    const packageRows = register.filter(
+      (row) =>
+        row.customerPartCode === `PACKAGE-${suffix}` || row.componentDepth > 0
+    )
+    expect(packageRows.some((row) => row.componentDepth === 2)).toBe(true)
+    expect(
+      packageRows.every((row) => typeof row.calculation === "object")
+    ).toBe(true)
+
+    const packageEnquiry = await pool.query<{ enquiry_id: string }>(
+      "SELECT enquiry_id FROM sales.enquiry_items WHERE id = $1",
+      [packageEnquiryItemId]
+    )
+    await expect(
+      repository.sendQuoteBackToProductCosting({
+        enquiryId: packageEnquiry.rows[0]!.enquiry_id,
+        itemId: packageId,
+      })
+    ).resolves.toEqual({ nextStageStatus: "Product Costing" })
+    await repository.sendQuote({ quoteItemId: quote.id })
+    await expect(
+      repository.sendQuoteBackToProductCosting({
+        enquiryId: packageEnquiry.rows[0]!.enquiry_id,
+        itemId: packageId,
+      })
+    ).rejects.toThrow("revision flow")
+  })
+
+  test("keeps a superseded sent row available to its historical quote PDF", async () => {
+    const enquiry = await pool.query<{ enquiry_id: string }>(
+      "SELECT enquiry_id FROM sales.enquiry_items WHERE id = $1",
+      [enquiryItemId]
+    )
+    const document = await repository.getQuoteDocument(
+      enquiry.rows[0]!.enquiry_id
+    )
+    expect(document.lines[0]).toMatchObject({
+      customerPartCode: "CUSTOMER-PART-08",
+      revision: 1,
+      status: "Superseded",
+    })
+    expect(document.lines[0]?.sentAt).toBeInstanceOf(Date)
+
+    const revisions = await repository.listPricingRegister(organizationCode, {
+      revisions: true,
+    })
+    expect(
+      revisions.some(
+        (row) =>
+          row.customerPartCode === "CUSTOMER-PART-08" &&
+          row.status === "Superseded"
+      )
+    ).toBe(true)
   })
 })

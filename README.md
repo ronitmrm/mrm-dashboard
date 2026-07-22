@@ -19,6 +19,9 @@ canonical write or dashboard read model.
 
 ## Local setup
 
+The complete setup guide covers both local Docker and managed Neon + Upstash
+development: [`SETUP.md`](SETUP.md).
+
 ```bash
 pnpm install
 cp apps/web/.env.example apps/web/.env.local
@@ -32,9 +35,9 @@ Local service defaults are:
 - Redis: `redis://localhost:6380`
 - web application: `http://localhost:3001`
 
-Set `BETTER_AUTH_SECRET` to a local value with at least 32 characters. Configure
-the one-time `ADMIN_*` values only while running
-`pnpm --filter web auth:provision-admin`, then remove them.
+Set `BETTER_AUTH_SECRET` to a local value with at least 32 characters. Seed the
+first administrator with `pnpm auth:seed-admin -- --email <address>`; the
+password prompt is hidden.
 
 Start the worker and web application in separate terminals:
 
@@ -45,6 +48,30 @@ pnpm dev
 
 Stop PostgreSQL and Redis without deleting their named volumes with
 `pnpm services:down`.
+
+## Managed staging from local development
+
+The managed launcher resolves credentials from the authenticated Neon and
+Upstash CLIs, keeps them in process memory, and targets the populated Neon
+`staging` branch plus the disposable Upstash staging database. It does not
+start or depend on the local PostgreSQL and Redis containers.
+
+```bash
+pnpm dev:managed:check
+pnpm dev:managed
+```
+
+Open `http://localhost:3001`. The second command runs both Next.js and the
+durable worker. Use `pnpm dev:managed:web` for the web process only, or the
+managed worker once/status commands for operator checks:
+
+```bash
+pnpm runtime:worker:managed:once
+pnpm runtime:worker:managed:status
+```
+
+See [`docs/neon-upstash-staging-runbook.md`](docs/neon-upstash-staging-runbook.md)
+for prerequisites, role boundaries, branch-capacity rules, and failure modes.
 
 ## Runtime commands
 
@@ -88,3 +115,6 @@ The complete mapping, reconciliation, cutover, and rollback contract is in
 PostgreSQL stores canonical file metadata, checksums, ownership, and entity
 links. Local attachment bytes live below `LOCAL_FILE_STORAGE_PATH`, which must
 remain outside version control.
+
+The checksum-verified backup and empty-root restore commands are documented in
+[`docs/local-file-storage-backup-restore.md`](docs/local-file-storage-backup-restore.md).

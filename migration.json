@@ -4,10 +4,10 @@
     "name": "Unified PostgreSQL, Redis, Better Auth, and Pricing migration",
     "targetRepository": "mrm-dashboard",
     "sourceRepositories": ["mrm-dashboard", "../pricing"],
-    "implementationBranch": "feat/logic-migration",
+    "implementationBranch": "staging",
     "logicMigrationBranch": "feat/logic-migration",
     "status": "in_progress",
-    "updatedAt": "2026-07-21",
+    "updatedAt": "2026-07-22",
     "testSeams": [
       {
         "name": "unified_application",
@@ -283,7 +283,7 @@
         "id": "LM-03",
         "title": "Enquiry, Sales, Technical Review, and follow-up parity",
         "blockedBy": ["LM-02"],
-        "status": "pending",
+        "status": "complete",
         "delivers": "Complete enquiry and line lifecycle, drawing replacement/download, import review, Sales and Technical queues, clarification decisions, follow-ups, and enquiry/register outputs.",
         "acceptanceCriteria": [
           "Enquiry and line edit/delete gates, post-handover resets, drawing history, and authenticated file delivery match the source.",
@@ -296,7 +296,7 @@
         "id": "LM-04",
         "title": "Full Design dossier and workflow handoffs",
         "blockedBy": ["LM-03"],
-        "status": "pending",
+        "status": "complete",
         "delivers": "Dedicated Design queues, complete dossier and files, portfolio/package selection, Q/C allocation, nested BOM editing, clarifications, costing handoff, and safe reversal behavior.",
         "acceptanceCriteria": [
           "All Design fields, requirements, costs, approval fields, internal/customer/CAD files, locks, and queue states are available in the target.",
@@ -309,7 +309,7 @@
         "id": "LM-05",
         "title": "Complete costing, pricing registers, and quote documents",
         "blockedBy": ["LM-04"],
-        "status": "pending",
+        "status": "complete",
         "delivers": "Full product and customer costing workbenches, Product and Assembly registers, pricing/revision spreadsheets, quote sending, and historical quote PDF generation.",
         "acceptanceCriteria": [
           "Every source costing input, default, process guard, backflow, package/assembly editor, and one-piece-grams meaning is preserved.",
@@ -322,7 +322,7 @@
         "id": "LM-06",
         "title": "Complete PO/PI files, reports, and order side effects",
         "blockedBy": ["LM-05"],
-        "status": "pending",
+        "status": "complete",
         "delivers": "PO source-file lifecycle, source-compatible matching, all PO/PI reports, exact quote-to-order conversion, Drawing History creation, and Website Product creation.",
         "acceptanceCriteria": [
           "PO upload/download, unmatched, Keep Our Price, Accept PO Price, ranked-match, PI issue/send/approve, and pre-approval cancellation match source outcomes.",
@@ -335,7 +335,7 @@
         "id": "LM-07",
         "title": "Full bulk revisions, ECN, and corrections",
         "blockedBy": ["LM-06"],
-        "status": "pending",
+        "status": "complete",
         "delivers": "All source bulk field matrices and staging behavior, complete ECN Design/Product Costing/decision stages, and unified correction candidate, reversal, log, and quarantine workflows.",
         "acceptanceCriteria": [
           "Customer and product bulk routes retain exact field allowlists, percentage conventions, process aliases, previews, multi-select staging, deletion, and completion-once behavior.",
@@ -348,7 +348,7 @@
         "id": "LM-08",
         "title": "Website, drawing, analytics, and remaining registers",
         "blockedBy": ["LM-07"],
-        "status": "pending",
+        "status": "complete",
         "delivers": "Complete Drawing History and Website Product maintenance/exports, source Pricing dashboard analytics, Sales history, and every remaining register/filter/export.",
         "acceptanceCriteria": [
           "Drawing revision/date/laminated-quantity maintenance and export retain source uniqueness, date display, columns, and filenames.",
@@ -361,13 +361,109 @@
         "id": "LM-09",
         "title": "Full business-logic acceptance and source retirement readiness",
         "blockedBy": ["LM-08"],
-        "status": "pending",
+        "status": "complete",
         "delivers": "End-to-end parity proof across PostgreSQL, Redis-loss behavior, Better Auth, files, documents, exports, responsive shadcn UI, archived data, and source-runtime retirement readiness.",
         "acceptanceCriteria": [
           "All 74 source write entry points, 63 routes/pages, 46 regression/formula oracles, 57 workflow checks, source tables, screens, and outputs are implemented or explicitly accounted for.",
           "The full Enquiry-to-PI-to-internal-product/drawing/website lifecycle and revision workflows pass repository, HTTP, browser, accessibility, desktop, and 390px tests.",
           "All migrated file metadata resolves, local ignored attachment bytes have proven backup/restore commands, and every file route passes traversal and authorization tests.",
           "PostgreSQL remains canonical with Redis stopped; no runtime SQLite or Convex import exists; all tests, typechecks, lint, production build, data reconciliation, and source-retirement gates pass."
+        ]
+      },
+      {
+        "id": "NU-01",
+        "title": "Bound PostgreSQL connections and separate runtime secrets",
+        "blockedBy": ["LM-09"],
+        "status": "complete",
+        "delivers": "Shared bounded PostgreSQL pools and separate validated web, worker, migration, reporting, and test identities.",
+        "acceptanceCriteria": [
+          "Repositories accept injected pools and managed web calls reuse a Vercel-attached module-scope pool.",
+          "Worker and migration callers use separately bounded or direct-only identities with redacted metrics.",
+          "Hosted validation rejects local, plaintext, pooled-migration, or role-mismatched credentials without exposing values."
+        ]
+      },
+      {
+        "id": "NU-02",
+        "title": "Establish the Neon staging foundation and least privilege",
+        "blockedBy": ["NU-01"],
+        "status": "complete",
+        "delivers": "An isolated PostgreSQL 16 Neon staging target with the full schema, accepted safety settings, and least-privilege login roles.",
+        "acceptanceCriteria": [
+          "Redacted preflight proves target isolation, TLS, protection, capacity, retention, and the repository migration head.",
+          "Web, worker, migration, and reporting login identities pass positive and negative privilege checks.",
+          "No provider identifier or credential is written to the repository or ledger."
+        ]
+      },
+      {
+        "id": "NU-03",
+        "title": "Connect the disposable Redis contract to Upstash",
+        "blockedBy": ["NU-02"],
+        "status": "complete",
+        "delivers": "An isolated Upstash database and connectionless Redis adapter preserving atomic fail-open rate limiting and PostgreSQL outbox authority.",
+        "acceptanceCriteria": [
+          "Hosted runtime requires server-only Upstash REST credentials and never falls back to localhost.",
+          "Rate limiting is atomic and fail-open; dashboard versions remain monotonic and failed publication remains retryable.",
+          "Provider policy and live smoke evidence are recorded only in redacted form."
+        ]
+      },
+      {
+        "id": "NU-04",
+        "title": "Rehearse deterministic local-to-Neon transfer twice",
+        "blockedBy": ["NU-03"],
+        "status": "complete",
+        "delivers": "Two measured direct-TLS dump/restore rehearsals with exact data, identity, schema, and privilege reconciliation.",
+        "acceptanceCriteria": [
+          "The frozen source applies every migration before a checksummed custom-format dump.",
+          "Both empty non-authoritative restore targets exactly match every table fingerprint and schema/privilege gate.",
+          "Representative auth, business, worker, audit, and attachment gates pass."
+        ]
+      },
+      {
+        "id": "NU-05",
+        "title": "Cut the hosted staging app and worker to managed services",
+        "blockedBy": ["NU-04"],
+        "status": "in_progress",
+        "delivers": "Source-controlled staging web and bounded worker operation against Neon and Upstash without local containers.",
+        "acceptanceCriteria": [
+          "Hosted auth, business writes, reads, exports, audit attribution, responsive browser routes, and worker/outbox flow pass.",
+          "The same canonical flows pass with Upstash unavailable and connection use remains within budget.",
+          "Stopping local Docker services does not affect hosted staging."
+        ]
+      },
+      {
+        "id": "NU-06",
+        "title": "Make managed capacity, lag, and spend observable",
+        "blockedBy": ["NU-05"],
+        "status": "in_progress",
+        "delivers": "Redacted Neon, pool, worker/outbox, Redis fallback, Upstash capacity, and budget observability.",
+        "acceptanceCriteria": [
+          "Connection saturation, queue/outbox lag, Redis fallback, provider usage, and budget headroom are visible.",
+          "Protection, retention, backup, eviction, and budget settings are included in periodic preflight.",
+          "Logs and alerts contain no provider identifiers, credentials, or business payloads."
+        ]
+      },
+      {
+        "id": "NU-07",
+        "title": "Prove Neon restore, PITR rollback, and empty-Redis recovery",
+        "blockedBy": ["NU-06"],
+        "status": "complete",
+        "delivers": "Verified isolated custom restore, reversible Neon PITR drill, and PostgreSQL-driven empty-Redis recovery.",
+        "acceptanceCriteria": [
+          "Restored PostgreSQL state exactly matches the source fingerprint and privilege contract.",
+          "PITR and its reversal affect only verification targets and record the effective recovery window.",
+          "An empty Redis recovers without affecting authentication, authorization, or canonical writes."
+        ]
+      },
+      {
+        "id": "NU-08",
+        "title": "Deliver hosted staging and close the managed migration ledger",
+        "blockedBy": ["NU-07"],
+        "status": "pending",
+        "delivers": "Complete hosted-staging acceptance and a redacted closed Neon/Upstash migration ledger without production promotion.",
+        "acceptanceCriteria": [
+          "All repository, provider, hosted browser, failure, and recovery gates pass from the staging branch.",
+          "Neon matches the frozen source and least-privilege web/worker operation is proved.",
+          "NU-01 through NU-08 and their evidence are recorded without secrets; production promotion remains unperformed."
         ]
       }
     ],
@@ -995,6 +1091,228 @@
         "task": "LM-02",
         "type": "pause-checkpoint",
         "summary": "LM-02 is complete and work is paused before LM-03 as requested. The browser and Next.js development sessions are closed; Docker PostgreSQL and Redis containers are stopped without removing their retained volumes. The implementation remains uncommitted for user review."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-03",
+        "type": "planning",
+        "summary": "Started enquiry, Sales, Technical Review, follow-up, and register-output parity using the approved public seams: transactional PostgreSQL repository outcomes, authenticated Server Actions/routes/pages, generated file metadata/content, browser-visible queues and decisions, and immutable archive reconciliation. Source executable gates and output shapes remain authoritative."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-03",
+        "type": "red",
+        "summary": "Added PostgreSQL lifecycle regressions for enquiry/header and line correction gates, post-handover resets, drawing replacement history, Sales commercial and technical match decisions, queue transitions, chained follow-ups, and atomic register import; added golden CSV/XLS/XLSX parser, template, register, and logged-lines workbook contracts."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-03",
+        "type": "implementation",
+        "summary": "Implemented source-equivalent enquiry update/delete, line correction and reset behavior, drawing history and authenticated local-file delivery, explicit six-classification import review, dedicated Sales and Technical Review queues, full Sales decisions, manual and chained follow-ups, atomic register import, and source-named enquiry/Sales templates and exports through shared-shadcn pages."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-03",
+        "type": "verification",
+        "summary": "The real-PostgreSQL commercial workflow gate passed 56 tests including new, duplicate, in-progress, possible-code, description-match, correction, drawing, matching, follow-up, and register rollback cases. The web gate passed 145 tests; database/web and workspace typechecks, lint, diff checking, and the complete Next.js 16.2.6 production build passed. All new output routes compiled as authenticated dynamic routes. The installed agent-browser skill could not run because its CLI is absent from PATH, so no new browser recording was produced."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-04",
+        "type": "red",
+        "summary": "Added real-PostgreSQL characterization for Technical release, full Design dossier values, automatic Q/C/A identities, invalid nested parents, nested Package materialization, normalized Design files, dedicated queue state, portfolio matching, and both Design clarification directions."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-04",
+        "type": "implementation",
+        "summary": "Added migration 0026, the complete Design repository contract, ordered-internal portfolio and component validation, atomic identity allocation, multi-row Package/Assembly BOM persistence, normalized internal/customer-marked/CAD attachments, Design/Technical/Product Costing clarification transitions, and an authenticated shared-shadcn Design queue and file route."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-04",
+        "type": "verification",
+        "summary": "The serial database gate passed 57 tests and the web gate passed 145 tests. Database and web typechecks and lint passed, with only four pre-existing dashboard React Compiler/unused warnings. Migration 0026 applied to main mrmpl and runtime verification reported PostgreSQL and Redis ready. A deliberately parallel database/web attempt reproduced the known shared-test-database interference; the required serial rerun passed."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-05",
+        "type": "red",
+        "summary": "Added deterministic PDF adapter/fallback tests, recursive current/revision pricing register assertions, exact Pricing View workbook metadata checks, historical superseded-row selection, and the unsent-only Product Costing backflow lock."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-05",
+        "type": "implementation",
+        "summary": "Completed the Product/customer costing workbench, corrected one-piece-grams semantics, added safe Product Costing backflow, the source six-column Assembly/BOM register and guarded editor, recursive snapshot-backed Pricing and revision screens/XLSX, quote-register PDF links, and historical quote PDF generation with no-store Westmetall/Frankfurter adapters and saved-rate fallbacks."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-05",
+        "type": "verification",
+        "summary": "The serial database gate passed 58 tests and the web gate passed 148 tests. Workspace typecheck and lint passed, with the four pre-existing dashboard warnings. The Next.js 16.2.6 production build passed with the documented local PostgreSQL and Better Auth build environment and compiled every Assembly, Pricing, revision-export, and quote-PDF route."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-06",
+        "type": "red",
+        "summary": "Added real-PostgreSQL contracts for revision-0 Drawing History, ordered Website Product rows, a two-level quoted Package conversion, BOM-adjacent inactive website entries, source-file metadata, and ordered audit evidence; added golden sheet/header/value and PDF metadata contracts for every PO/PI artifact."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-06",
+        "type": "implementation",
+        "summary": "Completed checksum-backed PO source-file upload/download, capability-protected template/detail/PI/PO-master/approved-PI outputs, exact source filenames and spreadsheet formatting, historical PI PDF rendering, recursive quote-snapshot conversion, revision-0 Drawing History creation, active ordered and inactive BOM-adjacent Website Product creation, and ordered audit side effects in the PI approval transaction."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-06",
+        "type": "verification",
+        "summary": "The serial real-PostgreSQL gate passed 60 tests and the web gate passed 298 tests. Focused and workspace typechecks, lint, and diff checking passed, with only four pre-existing dashboard warnings. The Next.js 16.2.6 production build compiled every PO file, template, detail XLSX, PI PDF/XLSX, PO master, and approved-PI master handler as authenticated dynamic routes."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-07",
+        "type": "red",
+        "summary": "Added failing real-PostgreSQL contracts for the 21-field source bulk matrix, customer/product route rejection, inspection alias process filtering, grouped multi-selection, price previews, staged deletion, full ECN Design/BOM evidence, the Pending Product Costing stage, frozen affected-price sets, Keep Price Same semantics, and the unified correction register/blocker list."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-07",
+        "type": "implementation",
+        "summary": "Restored exact product/customer bulk allowlists and percent conventions, process aliases and guards, grouped staging/previews/deletion, multi-field child-before-parent completion, four-stage ECNs with locked full Design/BOM and Product Costing patches, frozen recursive affected-price previews and one Keep/Revise decision per price, and a correction register combining source-safe reversals, technical-revision evidence, blockers, and forbidden-history quarantine."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-07",
+        "type": "verification",
+        "summary": "The serial real-PostgreSQL gate passed 64 tests and the web gate passed 150 tests. Workspace typecheck, lint, and diff checking passed, with only the four documented pre-existing dashboard warnings. The Next.js 16.2.6 production build passed and compiled the expanded revisions and corrections workbenches; the existing PO file-route Turbopack NFT trace warning remains non-blocking."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-08",
+        "type": "red",
+        "summary": "Added real-PostgreSQL contracts for Drawing History laminated quantities, exact Website Product part-code/thread/BOM/status derivation, and all dashboard datasets; added exact workbook filename, sheet, column-order, and calculated-status omission contracts."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-08",
+        "type": "implementation",
+        "summary": "Normalized the full Drawing History and Website Product source models, made PI side effects populate those contracts, added organization-scoped maintenance and exact XLSX routes, implemented advisory-locked part codes plus material/thread/assembly/status derivation, and replaced the dashboard placeholder with eight counts and five bounded PostgreSQL analytics datasets."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-08",
+        "type": "verification",
+        "summary": "The serial real-PostgreSQL gate passed 67 tests and the web gate passed 152 tests. Database, web, and workspace typechecks, lint, diff checking, and the Next.js 16.2.6 production build passed. The immutable Pricing archive reconciles Drawing History and Website Product zero-to-zero, and every Section 9 screen/output is accounted for; browser acceptance remains assigned to LM-09 because the installed agent-browser skill has no CLI on PATH."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-09",
+        "type": "red",
+        "summary": "Added failing checksum backup/restore contracts, then live agent-browser acceptance exposed inaccessible Design dossier controls and a PostgreSQL ECN register GROUP BY failure on an empty organization. Added a focused ECN startup regression before correcting the query."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-09",
+        "type": "implementation",
+        "summary": "Added guarded manifest-backed local-file backup and empty-root restore commands plus operating documentation, classified every Pricing retirement exception under the approved LM-00 decisions, associated every Design control with its shared FieldLabel, and corrected ECN item-type grouping."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-09",
+        "type": "verification",
+        "summary": "The immutable source checksums matched, all 45 source tests and 57 archive workflow checks passed, and Redis-offline acceptance passed 67 database plus 152 web tests and a live Better Auth Customer-to-Design flow. A clean agent-browser sweep returned zero page errors and no 390px overflow. The file commands restored 8,512 bytes with identical manifests. Final gates passed 68 database, 8 migration, 6 runtime, and 152 web tests plus typecheck, formatting, lint, diff/JSON checks, and the Next.js 16.2.6 build."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-01",
+        "type": "implementation",
+        "summary": "Centralized repository connection ownership in bounded shared native pg pools, separated web, worker, migration, reporting, and test environment responsibilities, added managed Neon TLS/role/endpoint validation, Vercel pool attachment, and redacted pool metrics. Managed persistent Node processes use provider-pooled TCP endpoints; local Docker continues to use pg TCP."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-02",
+        "type": "provider-foundation",
+        "summary": "Created an isolated PostgreSQL 16 staging branch, applied all 28 migrations, replaced provider-default elevated roles with SQL-native least-privilege web, worker, migration, and reporting logins, and proved positive/negative grants plus bounded connection limits. The six-hour history window and current-plan branch-protection limitation are explicitly accepted for non-authoritative staging only."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-03",
+        "type": "provider-foundation",
+        "summary": "Provisioned a free hard-capped Upstash staging database with eviction disabled and no backup authority; implemented the server-only REST adapter, atomic fail-open rate limiting, monotonic dashboard versions, retryable publication, and redacted telemetry. Live Lua, TTL, version, publish, and cleanup probes passed without persisting credentials or provider IDs."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-04",
+        "type": "data-transfer",
+        "summary": "Applied the source through migration 0028, froze 144 tables and 164,156 rows at aggregate digest 1a57aec90842cb976ed106491b0e315e7a3f769e739c586cd9a0ed76f2eeef60, and completed two retained custom-dump rehearsals with zero table mismatches, 495 validated foreign keys, enabled triggers, exact identity/migration state, and least-privilege boundaries. Raw TCP was unavailable, so PostgreSQL-generated SQL used Neon's embedded TLS client; rehearsal 2 completed atomically in 680.33 seconds."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-04",
+        "type": "staging-promotion",
+        "summary": "Promoted the second verified rehearsal state into non-production staging while preserving the prior empty staging branch. Staging immediately matched all 144 tables, 164,156 rows, zero mismatches, and the frozen aggregate digest before later controlled acceptance writes. Five superseded failed rehearsal branches were deleted at the user's direction to respect Neon's ten-branch hard limit."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-05",
+        "type": "managed-smoke",
+        "summary": "Added a credential-ephemeral pnpm dev:managed launcher that resolves least-privilege Neon and Upstash settings from authenticated CLIs, starts local Next.js plus the durable worker without Docker, and supports managed worker once/status checks. A live session request returned HTTP 200 and the worker stayed healthy; the source-controlled Vercel deployment and continuous hosted-worker owner remain open."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-06",
+        "type": "observability",
+        "summary": "Added redacted connection, queue, outbox, error-category, Redis-command, outbox-failure, and rate-limit-fallback telemetry plus checked-in capacity, retention, branch-protection, eviction, backup, budget, and alert policy. Live managed worker status showed one total/idle connection, zero waiters, no failed/pending work, and zero Redis retries; hosted provider alert integration remains open."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-07",
+        "type": "recovery",
+        "summary": "Completed an isolated PITR drill within the accepted six-hour window: the post-timestamp marker disappeared after a 3.3-second restore, canonical baseline remained, and a 3.1-second reversal from the preserved backup restored the marker. Production and staging were untouched, seven branches remained below the hard limit, and both verification branches were retained."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-07",
+        "type": "empty-redis-recovery",
+        "summary": "Proved recovery from an empty Upstash keyspace: Better Auth session reads remained HTTP 200, PostgreSQL queued one refresh, the managed worker processed it and published two outbox events without retry, Redis rebuilt one monotonic version key at version 4, and final status showed zero failed/pending jobs, zero unpublished/retrying outbox rows, and no pool waiters. No Redis backup restore was used."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-08",
+        "type": "delivery-gate",
+        "summary": "Implementation, provider foundations, exact transfer, managed local smoke, PITR, empty-Redis recovery, runbooks, and redacted acceptance evidence are present. Final closure remains gated on user review and commits, source-controlled Vercel staging deployment, a continuous hosted-worker owner, hosted browser/failure acceptance, and hosted capacity and alert evidence. Production promotion remains unperformed."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-08",
+        "type": "verification",
+        "summary": "Final repository gates passed after the managed migration updates: 72 database, 12 runtime, 12 migration, and 154 web tests; workspace typecheck and lint; and the complete Next.js 16.2.6 production build with the documented local build environment. The existing file-route NFT trace warning remains non-blocking. Hosted deployment gates remain open."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-01",
+        "type": "bugfix",
+        "summary": "A user managed-development run exposed ETIMEDOUT on the forced Neon WebSocket transport; a follow-up native TCP probe also timed out intermittently while the official regional status remained operational. Replaced the runtime transport with bounded native pg TCP for persistent processes, aligned the launcher on sslmode=verify-full, and made the continuous worker emit redacted poll-error events with bounded exponential backoff instead of terminating Next.js. Live smoke preserved HTTP 200 through a timeout and recovered to one idle connection with no queued or failed work. Final gates passed 73 database, 14 runtime, 12 migration, and 154 web tests plus typecheck, lint, build, formatting, JSON, and diff checks."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "LM-09",
+        "type": "logical-acceptance",
+        "summary": "The user accepted the business-logic migration as functionally complete. All MIG and LM tickets remain complete; managed-service performance, hosted capacity, and production-promotion evidence remain explicitly outside this logical acceptance and continue under the open NU gates."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-08",
+        "type": "developer-setup",
+        "summary": "Added a root development setup guide for local Docker and managed Neon plus Upstash topologies, including the ten-branch Neon limit, provider preflight, shutdown, and troubleshooting. Added a bootstrap-only administrator seed command with hidden interactive password entry, stdin support for automation, local and managed launchers, and no password-bearing command-line option."
+      },
+      {
+        "at": "2026-07-22",
+        "task": "NU-08",
+        "type": "verification",
+        "summary": "The staging commit candidate passed 73 database, 14 runtime, 12 migration, and 154 web tests; workspace typecheck and lint; the complete Next.js 16.2.6 production build; targeted formatting, JSON, diff, seed-help, background-process, and route-duplication checks. Untracked compiler-emitted JavaScript and declaration copies were excluded and removed from TypeScript source trees; the known file-route NFT trace warning remains non-blocking."
       }
     ]
   }

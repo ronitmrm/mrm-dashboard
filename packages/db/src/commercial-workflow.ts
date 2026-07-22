@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto"
 import path from "node:path"
 
-import { Pool, type PoolClient } from "pg"
+import type { Pool, PoolClient } from "pg"
 
-type RepositoryOptions = {
-  connectionString: string
-}
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+
+type RepositoryOptions = RepositoryPoolOptions
 
 type CommercialTerms = {
   conversionRate?: number
@@ -33,6 +33,7 @@ type AddEnquiryItem = {
 type TechnicalChecklist = Record<string, boolean>
 
 type DesignBomLine = {
+  bomItem?: string | null
   casting?: number | null
   componentCode: string
   componentItemType?: string
@@ -149,11 +150,7 @@ async function classifyImportRow(
         quote.id DESC
       LIMIT 1
     `,
-    [
-      input.organizationId,
-      input.customerId,
-      normalizedPart,
-    ]
+    [input.organizationId, input.customerId, normalizedPart]
   )
   if (exactMatch.rows[0]) {
     return {
@@ -204,12 +201,7 @@ async function classifyImportRow(
         enquiry_item.id DESC
       LIMIT 1
     `,
-    [
-      input.organizationId,
-      input.customerId,
-      input.enquiryId,
-      normalizedPart,
-    ]
+    [input.organizationId, input.customerId, input.enquiryId, normalizedPart]
   )
   if (inProgressMatch.rows[0]) {
     const match = inProgressMatch.rows[0]
@@ -246,11 +238,7 @@ async function classifyImportRow(
         quote.id DESC
       LIMIT 1
     `,
-    [
-      input.organizationId,
-      input.customerId,
-      `%${normalizedPart.slice(0, 6)}%`,
-    ]
+    [input.organizationId, input.customerId, `%${normalizedPart.slice(0, 6)}%`]
   )
   if (possibleCodeMatch.rows[0]) {
     return {
@@ -372,6 +360,45 @@ async function nextEnquiryNumber(client: PoolClient, organizationId: string) {
   )
   const value = Number(sequence.rows[0]!.current_value)
   return `ENQ-${year}${month}-${value.toString().padStart(3, "0")}`
+}
+
+async function nextDesignUid(
+  client: PoolClient,
+  organizationId: string,
+  kind: "ASSEMBLY" | "PACKAGE" | "QUOTE"
+) {
+  const prefix = kind === "ASSEMBLY" ? "A" : kind === "PACKAGE" ? "C" : "Q"
+  const key = `DESIGN_${kind}_UID`
+  const sequence = await client.query<{ current_value: string }>(
+    `
+      INSERT INTO core.number_sequences (
+        organization_id, key, current_value, source_system, source_table,
+        source_id
+      )
+      SELECT $1, $2,
+        COALESCE(max(value), 0) + 1,
+        'mrm-dashboard', 'design_tasks', $2
+      FROM (
+        SELECT substring(uid FROM 2)::bigint AS value
+        FROM catalog.items
+        WHERE organization_id = $1 AND uid ~ $3
+        UNION ALL
+        SELECT substring(quoted_part_uid FROM 2)::bigint AS value
+        FROM sales.design_tasks
+        WHERE organization_id = $1 AND quoted_part_uid ~ $3
+        UNION ALL
+        SELECT substring(package_part_uid FROM 2)::bigint AS value
+        FROM sales.design_bom_lines
+        WHERE organization_id = $1 AND package_part_uid ~ $3
+      ) existing
+      ON CONFLICT (organization_id, key) DO UPDATE SET
+        current_value = core.number_sequences.current_value + 1,
+        updated_at = now()
+      RETURNING current_value::text
+    `,
+    [organizationId, key, `^${prefix}[0-9]+$`]
+  )
+  return `${prefix}${sequence.rows[0]!.current_value}`
 }
 
 async function addEnquiryItemWithClient(
@@ -596,15 +623,11 @@ async function getImportReviewWithClient(client: PoolClient, reviewId: string) {
   }
 }
 
-export function createCommercialWorkflowRepository({
-  connectionString,
-}: RepositoryOptions) {
-  const pool = new Pool({ connectionString })
+export function createCommercialWorkflowRepository(options: RepositoryOptions) {
+  const { close, pool } = repositoryPool(options)
 
   return {
-    async close() {
-      await pool.end()
-    },
+    close,
 
     async createEnquiry(input: {
       actorUserId?: string | null
@@ -692,10 +715,636 @@ export function createCommercialWorkflowRepository({
       })
     },
 
+    async importEnquiryRegister(input: {
+      actorUserId?: string | null
+      organizationId: string
+      receivedOn: string
+      rows: Array<{
+        buyerName?: string | null
+        customerName?: string | null
+        customerUid?: string | null
+        enquiryNumber?: string | null
+        priority?: string | null
+        remarks?: string | null
+        rowNumber: number
+        source?: string | null
+      }>
+    }) {
+      if (!input.rows.length) {
+        throw new Error("Import file does not contain enquiry register rows.")
+      }
+      return transaction(pool, async (client) => {
+        let createdCount = 0
+        let updatedCount = 0
+        for (const row of input.rows) {
+          let customerId: string | null = null
+          if (row.customerUid?.trim()) {
+            const customer = await client.query<{ id: string }>(
+              `
+                SELECT id FROM sales.customers
+                WHERE organization_id = $1
+                  AND lower(btrim(customer_uid)) = lower(btrim($2))
+              `,
+              [input.organizationId, row.customerUid]
+            )
+            customerId = customer.rows[0]?.id ?? null
+          }
+          if (!customerId && row.customerName?.trim()) {
+            const customers = await client.query<{ id: string }>(
+              `
+                SELECT id FROM sales.customers
+                WHERE organization_id = $1
+                  AND lower(btrim(company_name)) = lower(btrim($2))
+              `,
+              [input.organizationId, row.customerName]
+            )
+            if (customers.rowCount === 1) customerId = customers.rows[0]!.id
+            if ((customers.rowCount ?? 0) > 1) {
+              throw new Error(
+                `Enquiry import row ${row.rowNumber} matches multiple customers named ${row.customerName}. Use Customer UID.`
+              )
+            }
+          }
+          if (!customerId) {
+            throw new Error(
+              `Enquiry import row ${row.rowNumber} needs a valid Customer UID or Customer name.`
+            )
+          }
+
+          if (row.enquiryNumber?.trim()) {
+            const enquiry = await client.query<{ id: string }>(
+              `
+                SELECT id FROM sales.enquiries
+                WHERE organization_id = $1
+                  AND lower(btrim(enquiry_number)) = lower(btrim($2))
+                FOR UPDATE
+              `,
+              [input.organizationId, row.enquiryNumber]
+            )
+            const enquiryId = enquiry.rows[0]?.id
+            if (!enquiryId) {
+              throw new Error(
+                `Enquiry import row ${row.rowNumber} references unknown ENQ ${row.enquiryNumber}. Leave ENQ No. blank to create a new enquiry.`
+              )
+            }
+            const gate = await client.query<{ can_edit: boolean }>(
+              `
+                SELECT (
+                  NOT EXISTS (
+                    SELECT 1 FROM sales.quote_items quote
+                    WHERE quote.enquiry_id = enquiry.id
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM sales.purchase_order_lines po_line
+                    JOIN sales.quote_items quote
+                      ON quote.id = po_line.quote_item_id
+                    WHERE quote.enquiry_id = enquiry.id
+                  )
+                  AND (
+                    enquiry.technical_handover_status <> 'Handed Over'
+                    OR EXISTS (
+                      SELECT 1 FROM sales.clarification_tasks clarification
+                      WHERE clarification.enquiry_id = enquiry.id
+                        AND clarification.target_stage = 'Sales'
+                        AND clarification.status = 'Open'
+                    )
+                    OR (
+                      NOT EXISTS (
+                        SELECT 1 FROM sales.enquiry_items item
+                        WHERE item.enquiry_id = enquiry.id
+                          AND item.reviewed_at IS NOT NULL
+                      )
+                      AND NOT EXISTS (
+                        SELECT 1 FROM sales.design_tasks design
+                        JOIN sales.enquiry_items item
+                          ON item.id = design.enquiry_item_id
+                        WHERE item.enquiry_id = enquiry.id
+                      )
+                    )
+                  )
+                ) AS can_edit
+                FROM sales.enquiries enquiry WHERE enquiry.id = $1
+              `,
+              [enquiryId]
+            )
+            if (!gate.rows[0]?.can_edit) {
+              throw new Error(
+                `Enquiry import row ${row.rowNumber} cannot update ${row.enquiryNumber} because the next stage has already started.`
+              )
+            }
+            await client.query(
+              `
+                UPDATE sales.enquiries
+                SET customer_id = $1, source = $2, priority = $3,
+                  buyer_name = $4, remarks = $5,
+                  updated_by_user_id = $6, updated_at = now(),
+                  row_version = row_version + 1
+                WHERE id = $7
+              `,
+              [
+                customerId,
+                row.source?.trim() || "Email",
+                row.priority?.trim() || "Normal",
+                row.buyerName?.trim() || null,
+                row.remarks?.trim() || null,
+                input.actorUserId ?? null,
+                enquiryId,
+              ]
+            )
+            await writeAuditEvent(client, {
+              actorUserId: input.actorUserId,
+              eventType: "enquiry.updated",
+              metadata: { importRow: row.rowNumber },
+              organizationId: input.organizationId,
+              targetId: enquiryId,
+              targetTable: "enquiries",
+            })
+            updatedCount += 1
+            continue
+          }
+
+          const enquiryNumber = await nextEnquiryNumber(
+            client,
+            input.organizationId
+          )
+          const sourceId = randomUUID()
+          const created = await client.query<{ id: string }>(
+            `
+              INSERT INTO sales.enquiries (
+                organization_id, enquiry_number, customer_id, received_on,
+                status, source, priority, buyer_name, payment_terms,
+                currency, conversion_rate, remarks,
+                technical_handover_status, source_system, source_table,
+                source_id, source_payload, created_by_user_id,
+                updated_by_user_id
+              ) VALUES (
+                $1, $2, $3, $4, 'Logged', $5, $6, $7, NULL,
+                'USD', 1, $8, 'Draft', 'mrm-dashboard', 'enquiries',
+                $9, $10, $11, $11
+              ) RETURNING id
+            `,
+            [
+              input.organizationId,
+              enquiryNumber,
+              customerId,
+              input.receivedOn,
+              row.source?.trim() || "Email",
+              row.priority?.trim() || "Normal",
+              row.buyerName?.trim() || null,
+              row.remarks?.trim() || null,
+              sourceId,
+              row,
+              input.actorUserId ?? null,
+            ]
+          )
+          await writeAuditEvent(client, {
+            actorUserId: input.actorUserId,
+            eventType: "enquiry.created",
+            metadata: { importRow: row.rowNumber },
+            organizationId: input.organizationId,
+            targetId: created.rows[0]!.id,
+            targetTable: "enquiries",
+          })
+          createdCount += 1
+        }
+        return { createdCount, updatedCount }
+      })
+    },
+
     async addEnquiryItem(input: AddEnquiryItem) {
       return transaction(pool, (client) =>
         addEnquiryItemWithClient(client, input)
       )
+    },
+
+    async updateEnquiry(input: {
+      actorUserId?: string | null
+      buyerName?: string | null
+      commercialTerms?: CommercialTerms
+      customerId: string
+      enquiryId: string
+      organizationId: string
+      priority?: string
+      receivedOn?: string
+      remarks?: string | null
+      source?: string
+      status?: string
+    }) {
+      return transaction(pool, async (client) => {
+        const customer = await client.query<{ id: string }>(
+          `
+            SELECT id FROM sales.customers
+            WHERE id = $1 AND organization_id = $2
+          `,
+          [input.customerId, input.organizationId]
+        )
+        if (!customer.rows[0]) {
+          throw new Error("Customer was not found in this organization.")
+        }
+        const current = await client.query<{
+          buyer_name: string | null
+          conversion_rate: string
+          currency: string
+          incoterms: string | null
+          packaging_terms: string | null
+          payment_terms: string | null
+          priority: string
+          received_on: string
+          remarks: string | null
+          shipment_mode: string | null
+          source: string
+          status: string
+          technical_handover_status: string
+          open_sales_clarification_count: string
+          po_line_count: string
+          quote_item_count: string
+          technical_started_count: string
+          design_task_count: string
+        }>(
+          `
+            SELECT enquiry.buyer_name, enquiry.conversion_rate::text,
+              enquiry.currency, enquiry.incoterms, enquiry.packaging_terms,
+              enquiry.payment_terms, enquiry.priority,
+              enquiry.received_on::text, enquiry.remarks,
+              enquiry.shipment_mode, enquiry.source, enquiry.status,
+              enquiry.technical_handover_status,
+              (
+                SELECT count(*)::text
+                FROM sales.quote_items quote
+                WHERE quote.enquiry_id = enquiry.id
+              ) AS quote_item_count,
+              (
+                SELECT count(*)::text
+                FROM sales.purchase_order_lines po_line
+                JOIN sales.quote_items quote
+                  ON quote.id = po_line.quote_item_id
+                WHERE quote.enquiry_id = enquiry.id
+              ) AS po_line_count,
+              (
+                SELECT count(*)::text
+                FROM sales.enquiry_items enquiry_item
+                WHERE enquiry_item.enquiry_id = enquiry.id
+                  AND enquiry_item.reviewed_at IS NOT NULL
+              ) AS technical_started_count,
+              (
+                SELECT count(*)::text
+                FROM sales.design_tasks design
+                JOIN sales.enquiry_items enquiry_item
+                  ON enquiry_item.id = design.enquiry_item_id
+                WHERE enquiry_item.enquiry_id = enquiry.id
+              ) AS design_task_count,
+              (
+                SELECT count(*)::text
+                FROM sales.clarification_tasks clarification
+                WHERE clarification.enquiry_id = enquiry.id
+                  AND clarification.target_stage = 'Sales'
+                  AND clarification.status = 'Open'
+              ) AS open_sales_clarification_count
+            FROM sales.enquiries enquiry
+            WHERE enquiry.id = $1 AND enquiry.organization_id = $2
+            FOR UPDATE
+          `,
+          [input.enquiryId, input.organizationId]
+        )
+        const row = current.rows[0]
+        if (!row) {
+          throw new Error("ENQ was not found.")
+        }
+        const hasLockedCommercialWork =
+          Number(row.quote_item_count) > 0 || Number(row.po_line_count) > 0
+        const canEditAfterHandover =
+          Number(row.open_sales_clarification_count) > 0 ||
+          (Number(row.technical_started_count) === 0 &&
+            Number(row.design_task_count) === 0)
+        if (
+          hasLockedCommercialWork ||
+          (row.technical_handover_status === "Handed Over" &&
+            !canEditAfterHandover)
+        ) {
+          throw new Error(
+            "This enquiry cannot be edited after downstream work has started."
+          )
+        }
+        const terms = input.commercialTerms
+        const updated = await client.query<{
+          buyer_name: string | null
+          id: string
+          priority: string
+          source: string
+        }>(
+          `
+            UPDATE sales.enquiries
+            SET customer_id = $1, received_on = $2, status = $3,
+              source = $4, priority = $5, buyer_name = $6,
+              remarks = $7, incoterms = $8, delivery_terms = $8,
+              payment_terms = $9, currency = $10, conversion_rate = $11,
+              shipment_mode = $12, packaging_terms = $13,
+              updated_by_user_id = $14, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $15
+            RETURNING id, source, priority, buyer_name
+          `,
+          [
+            input.customerId,
+            input.receivedOn ?? row.received_on,
+            input.status ?? row.status,
+            input.source ?? row.source,
+            input.priority ?? row.priority,
+            input.buyerName === undefined ? row.buyer_name : input.buyerName,
+            input.remarks === undefined ? row.remarks : input.remarks,
+            terms?.incoterms === undefined ? row.incoterms : terms.incoterms,
+            terms?.paymentTerms === undefined
+              ? row.payment_terms
+              : terms.paymentTerms,
+            terms?.currency ?? row.currency,
+            terms?.conversionRate ?? Number(row.conversion_rate),
+            terms?.shipmentMode === undefined
+              ? row.shipment_mode
+              : terms.shipmentMode,
+            terms?.packagingTerms === undefined
+              ? row.packaging_terms
+              : terms.packagingTerms,
+            input.actorUserId ?? null,
+            input.enquiryId,
+          ]
+        )
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "enquiry.updated",
+          organizationId: input.organizationId,
+          targetId: input.enquiryId,
+          targetTable: "enquiries",
+        })
+        return {
+          buyerName: updated.rows[0]!.buyer_name,
+          id: updated.rows[0]!.id,
+          priority: updated.rows[0]!.priority,
+          source: updated.rows[0]!.source,
+        }
+      })
+    },
+
+    async deleteEnquiry(enquiryId: string, actorUserId?: string | null) {
+      return transaction(pool, async (client) => {
+        const current = await client.query<{
+          design_task_count: string
+          organization_id: string
+          po_line_count: string
+          quote_item_count: string
+          technical_handover_status: string
+          technical_started_count: string
+        }>(
+          `
+            SELECT enquiry.organization_id,
+              enquiry.technical_handover_status,
+              (
+                SELECT count(*)::text FROM sales.quote_items quote
+                WHERE quote.enquiry_id = enquiry.id
+              ) AS quote_item_count,
+              (
+                SELECT count(*)::text
+                FROM sales.purchase_order_lines po_line
+                JOIN sales.quote_items quote
+                  ON quote.id = po_line.quote_item_id
+                WHERE quote.enquiry_id = enquiry.id
+              ) AS po_line_count,
+              (
+                SELECT count(*)::text
+                FROM sales.enquiry_items enquiry_item
+                WHERE enquiry_item.enquiry_id = enquiry.id
+                  AND enquiry_item.reviewed_at IS NOT NULL
+              ) AS technical_started_count,
+              (
+                SELECT count(*)::text
+                FROM sales.design_tasks design
+                JOIN sales.enquiry_items enquiry_item
+                  ON enquiry_item.id = design.enquiry_item_id
+                WHERE enquiry_item.enquiry_id = enquiry.id
+              ) AS design_task_count
+            FROM sales.enquiries enquiry
+            WHERE enquiry.id = $1
+            FOR UPDATE
+          `,
+          [enquiryId]
+        )
+        const row = current.rows[0]
+        if (!row) {
+          throw new Error("ENQ was not found.")
+        }
+        if (
+          Number(row.quote_item_count) > 0 ||
+          Number(row.po_line_count) > 0 ||
+          row.technical_handover_status === "Handed Over" ||
+          Number(row.technical_started_count) > 0 ||
+          Number(row.design_task_count) > 0
+        ) {
+          throw new Error(
+            "This enquiry cannot be deleted after downstream work has started."
+          )
+        }
+        await client.query("DELETE FROM sales.enquiries WHERE id = $1", [
+          enquiryId,
+        ])
+        await writeAuditEvent(client, {
+          actorUserId,
+          eventType: "enquiry.deleted",
+          organizationId: row.organization_id,
+          targetId: enquiryId,
+          targetTable: "enquiries",
+        })
+        return { id: enquiryId }
+      })
+    },
+
+    async updateEnquiryItem(input: {
+      actorUserId?: string | null
+      customerPartCode: string
+      description: string
+      drawingReference?: string | null
+      enquiryItemId: string
+      grade?: string | null
+      quantity?: number
+      remarks?: string | null
+      targetPrice?: number
+    }) {
+      const customerPartCode = input.customerPartCode.trim()
+      const description = input.description.trim()
+      if (!customerPartCode || !description) {
+        throw new Error("Part and description are required.")
+      }
+      return transaction(pool, async (client) => {
+        const current = await client.query<{
+          customer_part_code: string
+          description: string
+          design_blocked: boolean
+          enquiry_id: string
+          open_sales_clarification_count: string
+          organization_id: string
+          po_line_count: string
+          quote_item_count: string
+          technical_handover_status: string
+          technical_review_status: string
+        }>(
+          `
+            SELECT enquiry_item.organization_id, enquiry_item.enquiry_id,
+              enquiry_item.customer_part_code, enquiry_item.description,
+              enquiry_item.technical_review_status,
+              enquiry.technical_handover_status,
+              (
+                SELECT count(*)::text FROM sales.quote_items quote
+                WHERE quote.enquiry_item_id = enquiry_item.id
+              ) AS quote_item_count,
+              (
+                SELECT count(*)::text
+                FROM sales.purchase_order_lines po_line
+                JOIN sales.quote_items quote
+                  ON quote.id = po_line.quote_item_id
+                WHERE quote.enquiry_item_id = enquiry_item.id
+              ) AS po_line_count,
+              EXISTS (
+                SELECT 1 FROM sales.design_tasks design
+                WHERE design.enquiry_item_id = enquiry_item.id
+                  AND (
+                    design.next_stage_status IN (
+                      'Product Costing', 'Product Costing Complete',
+                      'Started', 'Quoted'
+                    )
+                    OR design.design_status IN ('Started', 'Quoted')
+                  )
+              ) AS design_blocked,
+              (
+                SELECT count(*)::text
+                FROM sales.clarification_tasks clarification
+                WHERE clarification.enquiry_item_id = enquiry_item.id
+                  AND clarification.target_stage = 'Sales'
+                  AND clarification.status = 'Open'
+              ) AS open_sales_clarification_count
+            FROM sales.enquiry_items enquiry_item
+            JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+            WHERE enquiry_item.id = $1
+            FOR UPDATE OF enquiry_item
+          `,
+          [input.enquiryItemId]
+        )
+        const row = current.rows[0]
+        if (!row) {
+          throw new Error("Line item was not found.")
+        }
+        const editableTechnicalStatuses = new Set([
+          "Pending Review",
+          "Need Clarification",
+          "Need Sales Confirmation",
+          "Not Feasible",
+        ])
+        const canEdit =
+          Number(row.quote_item_count) === 0 &&
+          Number(row.po_line_count) === 0 &&
+          (row.technical_handover_status !== "Handed Over" ||
+            (!row.design_blocked &&
+              (Number(row.open_sales_clarification_count) > 0 ||
+                editableTechnicalStatuses.has(row.technical_review_status))))
+        if (!canEdit) {
+          throw new Error(
+            "This line cannot be edited after downstream work has started."
+          )
+        }
+        const handedOver = row.technical_handover_status === "Handed Over"
+        const updated = await client.query<{
+          customer_part_code: string
+          id: string
+          technical_review_status: string
+        }>(
+          `
+            UPDATE sales.enquiry_items
+            SET customer_part_code = $1, description = $2, grade = $3,
+              quantity = $4, target_price = $5, drawing_reference = $6,
+              remarks = $7, status = 'Open',
+              technical_review_status = CASE WHEN $8
+                THEN 'Pending Review' ELSE technical_review_status END,
+              technical_checklist = CASE WHEN $8
+                THEN '{}'::jsonb ELSE technical_checklist END,
+              missing_information = CASE WHEN $8
+                THEN NULL ELSE missing_information END,
+              feasibility_reason = CASE WHEN $8
+                THEN NULL ELSE feasibility_reason END,
+              technical_remarks = CASE WHEN $8
+                THEN NULL ELSE technical_remarks END,
+              reviewed_at = CASE WHEN $8 THEN NULL ELSE reviewed_at END,
+              updated_by_user_id = $9, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $10
+            RETURNING id, customer_part_code, technical_review_status
+          `,
+          [
+            customerPartCode,
+            description,
+            input.grade ?? null,
+            input.quantity ?? 0,
+            input.targetPrice ?? 0,
+            input.drawingReference ?? null,
+            input.remarks ?? null,
+            handedOver,
+            input.actorUserId ?? null,
+            input.enquiryItemId,
+          ]
+        )
+        if (handedOver) {
+          await client.query(
+            `
+              UPDATE sales.clarification_tasks
+              SET status = 'Resolved',
+                response = COALESCE(response, 'Line corrected by Sales'),
+                resolved_at = now(), updated_at = now(),
+                row_version = row_version + 1
+              WHERE enquiry_item_id = $1
+                AND target_stage = 'Sales'
+                AND status = 'Open'
+            `,
+            [input.enquiryItemId]
+          )
+          await client.query(
+            `
+              DELETE FROM sales.design_bom_lines
+              WHERE design_task_id IN (
+                SELECT id FROM sales.design_tasks
+                WHERE enquiry_item_id = $1
+              )
+            `,
+            [input.enquiryItemId]
+          )
+          await client.query(
+            `
+              UPDATE sales.design_tasks
+              SET status = 'Pending', portfolio_match_status = NULL,
+                matched_product_id = NULL,
+                design_status = 'Pending Design',
+                quoted_part_uid = NULL, item_type = NULL,
+                design_bom_completed = 'No',
+                next_stage_status = 'Not Started',
+                actual_completion_date = NULL, updated_at = now(),
+                updated_by_user_id = $2, row_version = row_version + 1
+              WHERE enquiry_item_id = $1
+            `,
+            [input.enquiryItemId, input.actorUserId ?? null]
+          )
+        }
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "enquiry_item.corrected",
+          metadata: {
+            previousDescription: row.description,
+            previousPart: row.customer_part_code,
+          },
+          organizationId: row.organization_id,
+          targetId: input.enquiryItemId,
+          targetTable: "enquiry_items",
+        })
+        return {
+          customerPartCode: updated.rows[0]!.customer_part_code,
+          id: updated.rows[0]!.id,
+          technicalReviewStatus: updated.rows[0]!.technical_review_status,
+        }
+      })
     },
 
     async handOverToTechnicalReview(
@@ -905,38 +1554,885 @@ export function createCommercialWorkflowRepository({
       })
     },
 
-    async completeSalesClarification(input: {
+    async listSalesHandoverQueue(organizationCode: string) {
+      const result = await pool.query<{
+        company_name: string
+        conversion_rate: string
+        currency: string
+        customer_uid: string
+        enquiry_id: string
+        enquiry_number: string
+        incoterms: string | null
+        packaging_terms: string | null
+        payment_terms: string | null
+        received_on: string
+        sales_hold_lines: string
+        shipment_mode: string | null
+        technical_handover_status: string
+        total_lines: string
+      }>(
+        `
+          SELECT enquiry.id AS enquiry_id, enquiry.enquiry_number,
+            customer.customer_uid, customer.company_name,
+            enquiry.received_on::text,
+            count(enquiry_item.id)::text AS total_lines,
+            count(enquiry_item.id) FILTER (
+              WHERE enquiry_item.technical_review_status
+                = 'Need Sales Confirmation'
+            )::text AS sales_hold_lines,
+            enquiry.technical_handover_status, enquiry.incoterms,
+            enquiry.payment_terms, enquiry.shipment_mode,
+            enquiry.packaging_terms, enquiry.currency,
+            enquiry.conversion_rate::text
+          FROM sales.enquiries enquiry
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          JOIN sales.enquiry_items enquiry_item
+            ON enquiry_item.enquiry_id = enquiry.id
+          WHERE organization.code = $1
+            AND enquiry.technical_handover_status <> 'Handed Over'
+          GROUP BY enquiry.id, customer.customer_uid, customer.company_name
+          ORDER BY enquiry.created_at DESC
+        `,
+        [organizationCode.trim()]
+      )
+      return result.rows.map((row) => ({
+        companyName: row.company_name,
+        conversionRate: Number(row.conversion_rate),
+        currency: row.currency,
+        customerUid: row.customer_uid,
+        enquiryId: row.enquiry_id,
+        enquiryNumber: row.enquiry_number,
+        incoterms: row.incoterms,
+        packagingTerms: row.packaging_terms,
+        paymentTerms: row.payment_terms,
+        receivedOn: row.received_on,
+        salesHoldLines: Number(row.sales_hold_lines),
+        shipmentMode: row.shipment_mode,
+        technicalHandoverStatus: row.technical_handover_status,
+        totalLines: Number(row.total_lines),
+      }))
+    },
+
+    async listSalesQuoteReadyQueue(organizationCode: string) {
+      const result = await pool.query<{
+        company_name: string
+        currency: string
+        customer_uid: string
+        enquiry_id: string
+        enquiry_number: string
+        latest_quote_at: Date | null
+        not_quoted_lines: string
+        quoted_lines: string
+        total_lines: string
+      }>(
+        `
+          SELECT enquiry.id AS enquiry_id, enquiry.enquiry_number,
+            customer.customer_uid, customer.company_name,
+            enquiry.currency, count(DISTINCT item.id)::text AS total_lines,
+            count(DISTINCT quote.enquiry_item_id)::text AS quoted_lines,
+            count(DISTINCT item.id) FILTER (
+              WHERE item.technical_review_status = 'Not Feasible'
+            )::text AS not_quoted_lines,
+            max(quote.updated_at) AS latest_quote_at
+          FROM sales.enquiries enquiry
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          JOIN sales.enquiry_items item ON item.enquiry_id = enquiry.id
+          LEFT JOIN sales.quote_items quote
+            ON quote.enquiry_item_id = item.id
+            AND quote.status IN ('Draft', 'Sent', 'Accepted', 'Ordered')
+          WHERE organization.code = $1
+            AND EXISTS (
+              SELECT 1 FROM sales.quote_items ready_quote
+              WHERE ready_quote.enquiry_id = enquiry.id
+                AND ready_quote.status = 'Draft'
+                AND ready_quote.sent_at IS NULL
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM sales.enquiry_items pending_item
+              WHERE pending_item.enquiry_id = enquiry.id
+                AND pending_item.technical_review_status <> 'Not Feasible'
+                AND NOT EXISTS (
+                  SELECT 1 FROM sales.quote_items resolved_quote
+                  WHERE resolved_quote.enquiry_item_id = pending_item.id
+                    AND resolved_quote.status IN (
+                      'Draft', 'Sent', 'Accepted', 'Ordered'
+                    )
+                )
+            )
+          GROUP BY enquiry.id, customer.customer_uid, customer.company_name
+          ORDER BY latest_quote_at DESC NULLS LAST, enquiry.created_at DESC
+        `,
+        [organizationCode.trim()]
+      )
+      return result.rows.map((row) => ({
+        companyName: row.company_name,
+        currency: row.currency,
+        customerUid: row.customer_uid,
+        enquiryId: row.enquiry_id,
+        enquiryNumber: row.enquiry_number,
+        latestQuoteAt: row.latest_quote_at,
+        notQuotedLines: Number(row.not_quoted_lines),
+        quotedLines: Number(row.quoted_lines),
+        totalLines: Number(row.total_lines),
+      }))
+    },
+
+    async listSalesSentQuoteQueue(organizationCode: string) {
+      const result = await pool.query<{
+        company_name: string
+        currency: string
+        customer_uid: string
+        enquiry_id: string
+        enquiry_number: string
+        latest_sent_at: Date
+        next_followup_due: string | null
+        pending_followups: string
+        sent_quote_items: string
+        total_lines: string
+      }>(
+        `
+          SELECT enquiry.id AS enquiry_id, enquiry.enquiry_number,
+            customer.customer_uid, customer.company_name,
+            enquiry.currency,
+            count(DISTINCT item.id)::text AS total_lines,
+            count(DISTINCT quote.id)::text AS sent_quote_items,
+            max(quote.sent_at) AS latest_sent_at,
+            min(followup.due_on) FILTER (
+              WHERE followup.status = 'Pending'
+            )::text AS next_followup_due,
+            count(DISTINCT followup.id) FILTER (
+              WHERE followup.status = 'Pending'
+            )::text AS pending_followups
+          FROM sales.enquiries enquiry
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          LEFT JOIN sales.enquiry_items item ON item.enquiry_id = enquiry.id
+          JOIN sales.quote_items quote ON quote.enquiry_id = enquiry.id
+            AND quote.status <> 'Superseded'
+            AND quote.sent_at IS NOT NULL
+          LEFT JOIN sales.followups followup
+            ON followup.enquiry_id = enquiry.id
+          WHERE organization.code = $1
+          GROUP BY enquiry.id, customer.customer_uid, customer.company_name
+          ORDER BY latest_sent_at DESC, enquiry.created_at DESC
+          LIMIT 50
+        `,
+        [organizationCode.trim()]
+      )
+      return result.rows.map((row) => ({
+        companyName: row.company_name,
+        currency: row.currency,
+        customerUid: row.customer_uid,
+        enquiryId: row.enquiry_id,
+        enquiryNumber: row.enquiry_number,
+        latestSentAt: row.latest_sent_at,
+        nextFollowupDue: row.next_followup_due,
+        pendingFollowups: Number(row.pending_followups),
+        sentQuoteItems: Number(row.sent_quote_items),
+        totalLines: Number(row.total_lines),
+      }))
+    },
+
+    async listSalesClarificationQueue(organizationCode: string) {
+      const result = await pool.query<{
+        clarification_task_id: string
+        company_name: string
+        customer_id: string
+        customer_part_code: string
+        customer_uid: string
+        description: string
+        drawing_reference: string | null
+        enquiry_id: string
+        enquiry_item_id: string
+        enquiry_number: string
+        grade: string | null
+        line_number: number
+        organization_id: string
+        quantity: string
+        question: string
+        target_price: string | null
+      }>(
+        `
+          SELECT clarification.id AS clarification_task_id,
+            enquiry.id AS enquiry_id, enquiry.enquiry_number,
+            enquiry_item.id AS enquiry_item_id, enquiry_item.line_number,
+            enquiry_item.customer_part_code, enquiry_item.description,
+            enquiry_item.grade, enquiry_item.quantity::text,
+            enquiry_item.target_price::text, enquiry_item.drawing_reference,
+            clarification.question, customer.id AS customer_id,
+            customer.customer_uid, customer.company_name,
+            enquiry.organization_id
+          FROM sales.clarification_tasks clarification
+          JOIN sales.enquiry_items enquiry_item
+            ON enquiry_item.id = clarification.enquiry_item_id
+          JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          WHERE organization.code = $1
+            AND clarification.target_stage = 'Sales'
+            AND clarification.status = 'Open'
+          ORDER BY clarification.created_at, clarification.id
+        `,
+        [organizationCode.trim()]
+      )
+      return result.rows.map((row) => ({
+        clarificationTaskId: row.clarification_task_id,
+        companyName: row.company_name,
+        customerId: row.customer_id,
+        customerPartCode: row.customer_part_code,
+        customerUid: row.customer_uid,
+        description: row.description,
+        drawingReference: row.drawing_reference,
+        enquiryId: row.enquiry_id,
+        enquiryItemId: row.enquiry_item_id,
+        enquiryNumber: row.enquiry_number,
+        grade: row.grade,
+        lineNumber: row.line_number,
+        organizationId: row.organization_id,
+        quantity: Number(row.quantity),
+        question: row.question,
+        targetPrice:
+          row.target_price === null ? null : Number(row.target_price),
+      }))
+    },
+
+    async listSalesMatchCandidates(enquiryItemId: string) {
+      const item = await pool.query<{
+        customer_id: string
+        customer_part_code: string
+        organization_id: string
+      }>(
+        `
+          SELECT enquiry.customer_id, enquiry.organization_id,
+            enquiry_item.customer_part_code
+          FROM sales.enquiry_items enquiry_item
+          JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+          WHERE enquiry_item.id = $1
+        `,
+        [enquiryItemId]
+      )
+      if (!item.rows[0]) {
+        throw new Error("Line item was not found.")
+      }
+      const candidates = await pool.query<{
+        customer_part_code: string | null
+        description: string
+        item_type: string | null
+        product_id: string
+        product_uid: string
+        quote_item_id: string
+        quote_number: string
+        revision: number
+        status: string
+        unit_price: string
+      }>(
+        `
+          SELECT quote.id AS quote_item_id, quote.quote_number,
+            quote.revision, quote.customer_part_code,
+            quote.unit_price::text, quote.status,
+            item.id AS product_id, item.uid AS product_uid,
+            item.description, item.item_type
+          FROM sales.quote_items quote
+          JOIN catalog.items item ON item.id = quote.item_id
+          WHERE quote.organization_id = $1
+            AND quote.customer_id = $2
+            AND quote.status IN ('Draft', 'Sent', 'Accepted', 'Ordered')
+          ORDER BY
+            CASE WHEN lower(btrim(coalesce(quote.customer_part_code, '')))
+              = lower(btrim($3)) THEN 0 ELSE 1 END,
+            quote.sent_at DESC NULLS LAST, quote.updated_at DESC,
+            quote.id DESC
+        `,
+        [
+          item.rows[0].organization_id,
+          item.rows[0].customer_id,
+          item.rows[0].customer_part_code,
+        ]
+      )
+      return candidates.rows.map((row) => ({
+        customerPartCode: row.customer_part_code,
+        description: row.description,
+        itemType: row.item_type,
+        productId: row.product_id,
+        productUid: row.product_uid,
+        quoteItemId: row.quote_item_id,
+        quoteNumber: row.quote_number,
+        revision: row.revision,
+        status: row.status,
+        unitPrice: Number(row.unit_price),
+      }))
+    },
+
+    async listTechnicalReviewQueue(organizationCode: string) {
+      const result = await pool.query<{
+        company_name: string
+        customer_part_code: string
+        customer_uid: string
+        description: string
+        drawing_reference: string | null
+        enquiry_id: string
+        enquiry_item_id: string
+        enquiry_number: string
+        feasibility_reason: string | null
+        grade: string | null
+        latest_clarification_message: string | null
+        latest_clarification_source: string | null
+        line_number: number
+        missing_information: string | null
+        quantity: string
+        reviewed_at: Date | null
+        target_price: string | null
+        technical_checklist: TechnicalChecklist
+        technical_remarks: string | null
+        technical_review_status: string
+      }>(
+        `
+          SELECT enquiry_item.id AS enquiry_item_id,
+            enquiry.id AS enquiry_id, enquiry.enquiry_number,
+            customer.customer_uid, customer.company_name,
+            enquiry_item.line_number, enquiry_item.customer_part_code,
+            enquiry_item.description, enquiry_item.grade,
+            enquiry_item.quantity::text, enquiry_item.target_price::text,
+            enquiry_item.drawing_reference,
+            enquiry_item.technical_review_status,
+            enquiry_item.technical_checklist,
+            enquiry_item.missing_information,
+            enquiry_item.feasibility_reason,
+            enquiry_item.technical_remarks, enquiry_item.reviewed_at,
+            (
+              SELECT clarification.question
+              FROM sales.clarification_tasks clarification
+              WHERE clarification.enquiry_item_id = enquiry_item.id
+                AND clarification.status = 'Open'
+                AND clarification.target_stage = 'Technical'
+              ORDER BY clarification.created_at DESC, clarification.id DESC
+              LIMIT 1
+            ) AS latest_clarification_message,
+            (
+              SELECT clarification.source_stage
+              FROM sales.clarification_tasks clarification
+              WHERE clarification.enquiry_item_id = enquiry_item.id
+                AND clarification.status = 'Open'
+                AND clarification.target_stage = 'Technical'
+              ORDER BY clarification.created_at DESC, clarification.id DESC
+              LIMIT 1
+            ) AS latest_clarification_source
+          FROM sales.enquiry_items enquiry_item
+          JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          WHERE organization.code = $1
+            AND enquiry_item.linked_enquiry_item_id IS NULL
+            AND enquiry.technical_handover_status = 'Handed Over'
+            AND enquiry_item.technical_review_status
+              <> 'Need Sales Confirmation'
+            AND NOT EXISTS (
+              SELECT 1 FROM sales.clarification_tasks sales_clarification
+              WHERE sales_clarification.enquiry_item_id = enquiry_item.id
+                AND sales_clarification.status = 'Open'
+                AND sales_clarification.target_stage = 'Sales'
+            )
+          ORDER BY CASE enquiry_item.technical_review_status
+              WHEN 'Pending Review' THEN 0
+              WHEN 'Need Clarification' THEN 1
+              WHEN 'Feasible' THEN 2
+              WHEN 'Not Feasible' THEN 3
+              ELSE 5
+            END,
+            enquiry.created_at DESC, enquiry_item.line_number
+        `,
+        [organizationCode.trim()]
+      )
+      return result.rows.map((row) => ({
+        companyName: row.company_name,
+        customerPartCode: row.customer_part_code,
+        customerUid: row.customer_uid,
+        description: row.description,
+        drawingReference: row.drawing_reference,
+        enquiryId: row.enquiry_id,
+        enquiryItemId: row.enquiry_item_id,
+        enquiryNumber: row.enquiry_number,
+        feasibilityReason: row.feasibility_reason,
+        grade: row.grade,
+        latestClarificationMessage: row.latest_clarification_message,
+        latestClarificationSource: row.latest_clarification_source,
+        lineNumber: row.line_number,
+        missingInformation: row.missing_information,
+        quantity: Number(row.quantity),
+        reviewedAt: row.reviewed_at,
+        targetPrice:
+          row.target_price === null ? null : Number(row.target_price),
+        technicalChecklist: row.technical_checklist ?? {},
+        technicalRemarks: row.technical_remarks,
+        technicalReviewStatus: row.technical_review_status,
+      }))
+    },
+
+    async listDesignPortfolioProducts(organizationCode: string) {
+      const products = await pool.query<{
+        description: string
+        id: string
+        item_type: string
+        uid: string
+      }>(
+        `
+          SELECT item.id, item.uid, item.description, item.item_type
+          FROM catalog.items item
+          JOIN core.organizations organization
+            ON organization.id = item.organization_id
+          WHERE organization.code = $1
+            AND item.uid_kind = 'INTERNAL'
+            AND item.lifecycle_status = 'P'
+          ORDER BY item.uid
+        `,
+        [organizationCode.trim()]
+      )
+      return products.rows.map((row) => ({
+        description: row.description,
+        id: row.id,
+        itemType: row.item_type,
+        uid: row.uid,
+      }))
+    },
+
+    async listDesignQueue(organizationCode: string) {
+      const items = await pool.query<{
+        approval_status: string | null
+        assembly_required: string | null
+        bom_lines: DesignBomLine[]
+        checked_by: string | null
+        company_name: string
+        components_required: string | null
+        customer_part_code: string
+        customer_uid: string
+        design_bom_completed: string | null
+        design_bom_required: string | null
+        design_id: string | null
+        design_remarks: string | null
+        design_status: string | null
+        designer_name: string | null
+        description: string
+        enquiry_id: string
+        enquiry_item_id: string
+        enquiry_number: string
+        fixture_approx_cost: string | null
+        fixture_required: string | null
+        gauges_required: string | null
+        inspection_approx_cost: string | null
+        internal_part_category: string | null
+        internal_part_size: string | null
+        internal_part_sub_category: string | null
+        item_type: string | null
+        latest_clarification_message: string | null
+        line_number: number
+        manufacturing_process: string | null
+        matched_product_id: string | null
+        next_stage_status: string | null
+        operation_notes: string | null
+        organization_id: string
+        package_process_required: string | null
+        portfolio_match_status: string | null
+        quantity: string
+        quoted_part_uid: string | null
+        revision_no: string | null
+        target_completion_date: string | null
+        technical_review_status: string
+        tooling_approx_cost: string | null
+        tooling_required: string | null
+      }>(
+        `
+          SELECT enquiry_item.id AS enquiry_item_id,
+            enquiry.id AS enquiry_id, enquiry.organization_id,
+            enquiry.enquiry_number, customer.customer_uid,
+            customer.company_name, enquiry_item.line_number,
+            enquiry_item.customer_part_code, enquiry_item.description,
+            enquiry_item.quantity::text,
+            enquiry_item.technical_review_status,
+            design.id AS design_id, design.design_status,
+            design.portfolio_match_status, design.matched_product_id,
+            design.quoted_part_uid, design.item_type,
+            design.design_bom_completed, design.next_stage_status,
+            design.manufacturing_process, design.package_process_required,
+            design.design_remarks, design.designer_name,
+            design.target_completion_date::text,
+            design.internal_part_size, design.internal_part_sub_category,
+            design.internal_part_category, design.revision_no,
+            design.design_bom_required, design.components_required,
+            design.assembly_required, design.operation_notes,
+            design.tooling_required, design.tooling_approx_cost::text,
+            design.fixture_required, design.fixture_approx_cost::text,
+            design.gauges_required, design.inspection_approx_cost::text,
+            design.checked_by, design.approval_status,
+            COALESCE((
+              SELECT jsonb_agg(
+                jsonb_build_object(
+                  'componentCode', bom.component_code,
+                  'componentItemType', bom.component_item_type,
+                  'componentSource', bom.component_source,
+                  'existingProductId', bom.existing_product_id,
+                  'lineNumber', bom.line_number,
+                  'notes', bom.design_notes,
+                  'packagePart', bom.package_part,
+                  'packagePartUid', bom.package_part_uid,
+                  'parentLineNumber', bom.parent_line_number,
+                  'quantity', bom.quantity
+                )
+                ORDER BY bom.line_number
+              )
+              FROM sales.design_bom_lines bom
+              WHERE bom.design_task_id = design.id
+            ), '[]'::jsonb) AS bom_lines,
+            (
+              SELECT clarification.question
+              FROM sales.clarification_tasks clarification
+              WHERE clarification.enquiry_item_id = enquiry_item.id
+                AND clarification.target_stage = 'Design'
+                AND clarification.status = 'Open'
+              ORDER BY clarification.created_at DESC
+              LIMIT 1
+            ) AS latest_clarification_message
+          FROM sales.enquiry_items enquiry_item
+          JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          LEFT JOIN sales.design_tasks design
+            ON design.enquiry_item_id = enquiry_item.id
+          WHERE organization.code = $1
+            AND (
+              enquiry_item.technical_review_status IN (
+                'Feasible', 'Duplicate / Existing Product'
+              )
+              OR design.design_status IN (
+                'Need Clarification', 'Changes Required'
+              )
+            )
+          ORDER BY CASE COALESCE(design.design_status, 'Pending Design')
+              WHEN 'Changes Required' THEN 0
+              WHEN 'Need Clarification' THEN 1
+              WHEN 'Pending Design' THEN 2
+              ELSE 3
+            END,
+            enquiry.created_at, enquiry_item.line_number
+        `,
+        [organizationCode.trim()]
+      )
+      return items.rows.map((row) => ({
+        approvalStatus: row.approval_status ?? "Pending",
+        assemblyRequired: row.assembly_required ?? "No",
+        bomLines: row.bom_lines,
+        checkedBy: row.checked_by,
+        companyName: row.company_name,
+        componentsRequired: row.components_required,
+        customerPartCode: row.customer_part_code,
+        customerUid: row.customer_uid,
+        designBomCompleted: row.design_bom_completed ?? "No",
+        designBomRequired: row.design_bom_required ?? "No",
+        designId: row.design_id,
+        designRemarks: row.design_remarks,
+        designStatus: row.design_status ?? "Pending Design",
+        designerName: row.designer_name,
+        description: row.description,
+        enquiryId: row.enquiry_id,
+        enquiryItemId: row.enquiry_item_id,
+        enquiryNumber: row.enquiry_number,
+        fixtureApproxCost: Number(row.fixture_approx_cost ?? 0),
+        fixtureRequired: row.fixture_required ?? "No",
+        gaugesRequired: row.gauges_required ?? "No",
+        inspectionApproxCost: Number(row.inspection_approx_cost ?? 0),
+        internalPartCategory: row.internal_part_category,
+        internalPartSize: row.internal_part_size,
+        internalPartSubCategory: row.internal_part_sub_category,
+        itemType: row.item_type ?? "List",
+        latestClarificationMessage: row.latest_clarification_message,
+        lineNumber: row.line_number,
+        manufacturingProcess: row.manufacturing_process,
+        matchedProductId: row.matched_product_id,
+        nextStageStatus: row.next_stage_status ?? "Not Started",
+        operationNotes: row.operation_notes,
+        organizationId: row.organization_id,
+        packageProcessRequired: row.package_process_required,
+        portfolioMatchStatus:
+          row.portfolio_match_status ?? "New Design Required",
+        quantity: Number(row.quantity),
+        quotedPartUid: row.quoted_part_uid,
+        revisionNo: row.revision_no ?? "0",
+        targetCompletionDate: row.target_completion_date,
+        technicalReviewStatus: row.technical_review_status,
+        toolingApproxCost: Number(row.tooling_approx_cost ?? 0),
+        toolingRequired: row.tooling_required ?? "No",
+      }))
+    },
+
+    async requestDesignClarification(input: {
       actorUserId?: string | null
-      clarificationTaskId: string
+      direction: "Design to Technical" | "Product Costing to Design"
       enquiryItemId: string
-      response?: string | null
+      message: string
     }) {
       return transaction(pool, async (client) => {
-        const task = await client.query<{
-          id: string
+        const context = await client.query<{
+          design_id: string | null
+          enquiry_id: string
+          next_stage_status: string | null
           organization_id: string
         }>(
           `
-            SELECT id, organization_id
-            FROM sales.clarification_tasks
-            WHERE id = $1 AND enquiry_item_id = $2
-              AND target_stage = 'Sales'
-            FOR UPDATE
-          `,
-          [input.clarificationTaskId, input.enquiryItemId]
-        )
-        if (!task.rows[0]) {
-          throw new Error("Sales clarification task is required.")
-        }
-        await client.query(
-          `
-            UPDATE sales.enquiry_items
-            SET technical_review_status = 'Pending Review',
-              updated_at = now(), row_version = row_version + 1
-            WHERE id = $1
+            SELECT enquiry_item.enquiry_id, enquiry_item.organization_id,
+              design.id AS design_id, design.next_stage_status
+            FROM sales.enquiry_items enquiry_item
+            LEFT JOIN sales.design_tasks design
+              ON design.enquiry_item_id = enquiry_item.id
+            WHERE enquiry_item.id = $1
+            FOR UPDATE OF enquiry_item
           `,
           [input.enquiryItemId]
         )
+        const row = context.rows[0]
+        if (!row) {
+          throw new Error("Line item was not found.")
+        }
+        if (input.direction === "Product Costing to Design") {
+          if (!row.design_id) {
+            throw new Error("Design task was not found.")
+          }
+          if (["Started", "Quoted"].includes(row.next_stage_status ?? "")) {
+            throw new Error(
+              "Design cannot be reopened after Customer Costing has started."
+            )
+          }
+          await client.query(
+            `
+              UPDATE sales.design_tasks
+              SET design_status = 'Changes Required',
+                next_stage_status = 'Changes Required',
+                updated_at = now(), row_version = row_version + 1
+              WHERE id = $1
+            `,
+            [row.design_id]
+          )
+        } else {
+          await client.query(
+            `
+              UPDATE sales.enquiry_items
+              SET technical_review_status = 'Need Clarification',
+                missing_information = $1, updated_at = now(),
+                row_version = row_version + 1
+              WHERE id = $2
+            `,
+            [input.message.trim(), input.enquiryItemId]
+          )
+          if (row.design_id) {
+            await client.query(
+              `
+                UPDATE sales.design_tasks
+                SET design_status = 'Need Clarification',
+                  updated_at = now(), row_version = row_version + 1
+                WHERE id = $1
+              `,
+              [row.design_id]
+            )
+          }
+        }
+        const sourceStage =
+          input.direction === "Product Costing to Design"
+            ? "Product Costing"
+            : "Design"
+        const targetStage =
+          input.direction === "Product Costing to Design"
+            ? "Design"
+            : "Technical"
+        const clarificationId = await createOrUpdateClarification(client, {
+          enquiryId: row.enquiry_id,
+          enquiryItemId: input.enquiryItemId,
+          message: input.message,
+          organizationId: row.organization_id,
+          sourceStage,
+          targetStage,
+        })
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "design.clarification_requested",
+          metadata: {
+            clarificationId,
+            direction: input.direction,
+            message: input.message,
+          },
+          organizationId: row.organization_id,
+          targetId: row.design_id ?? input.enquiryItemId,
+          targetTable: row.design_id ? "design_tasks" : "enquiry_items",
+        })
+        return { clarificationId, targetStage }
+      })
+    },
+
+    async completeSalesClarification(input: {
+      actorUserId?: string | null
+      clarificationTaskId: string
+      customerPartCode?: string
+      description?: string
+      drawingReference?: string | null
+      enquiryItemId: string
+      grade?: string | null
+      quantity?: number
+      remarks?: string | null
+      response?: string | null
+      salesMatchDecision?: string
+      targetPrice?: number
+    }) {
+      return transaction(pool, async (client) => {
+        const task = await client.query<{
+          customer_id: string
+          customer_part_code: string
+          description: string
+          drawing_reference: string | null
+          grade: string | null
+          id: string
+          organization_id: string
+          quantity: string
+          remarks: string | null
+          target_price: string | null
+        }>(
+          `
+            SELECT clarification.id, clarification.organization_id,
+              enquiry.customer_id, enquiry_item.customer_part_code,
+              enquiry_item.description, enquiry_item.grade,
+              enquiry_item.quantity::text, enquiry_item.target_price::text,
+              enquiry_item.drawing_reference, enquiry_item.remarks
+            FROM sales.clarification_tasks clarification
+            JOIN sales.enquiry_items enquiry_item
+              ON enquiry_item.id = clarification.enquiry_item_id
+            JOIN sales.enquiries enquiry
+              ON enquiry.id = enquiry_item.enquiry_id
+            WHERE clarification.id = $1
+              AND clarification.enquiry_item_id = $2
+              AND clarification.target_stage = 'Sales'
+              AND clarification.status = 'Open'
+            FOR UPDATE OF clarification, enquiry_item
+          `,
+          [input.clarificationTaskId, input.enquiryItemId]
+        )
+        const taskRow = task.rows[0]
+        if (!taskRow) {
+          throw new Error("Sales clarification task is required.")
+        }
+        const decision = input.salesMatchDecision ?? "new"
+        const isCommercialMatch = decision.startsWith("quote:")
+        const isTechnicalRevision = decision.startsWith("technical:")
+        const quoteItemId =
+          isCommercialMatch || isTechnicalRevision
+            ? decision.slice(decision.indexOf(":") + 1)
+            : null
+        const matchedQuote = quoteItemId
+          ? await client.query<{
+              item_type: string | null
+              product_id: string
+            }>(
+              `
+                SELECT quote.item_id AS product_id, item.item_type
+                FROM sales.quote_items quote
+                JOIN catalog.items item ON item.id = quote.item_id
+                WHERE quote.id = $1 AND quote.customer_id = $2
+                  AND quote.status IN (
+                    'Draft', 'Sent', 'Accepted', 'Ordered'
+                  )
+              `,
+              [quoteItemId, taskRow.customer_id]
+            )
+          : null
+        if (quoteItemId && !matchedQuote?.rows[0]) {
+          throw new Error("Selected match was not found for this customer.")
+        }
+        const matched = matchedQuote?.rows[0]
+        const technicalReviewStatus =
+          matched && isCommercialMatch
+            ? "Duplicate / Existing Product"
+            : "Pending Review"
+        await client.query(
+          `
+            UPDATE sales.enquiry_items
+            SET customer_part_code = $1, description = $2, grade = $3,
+              quantity = $4, target_price = $5, drawing_reference = $6,
+              remarks = $7, technical_review_status = $8,
+              item_id = CASE WHEN $9 THEN $10 ELSE item_id END,
+              link_type = CASE
+                WHEN $9 THEN 'Matched Quote - Commercial Requote'
+                WHEN $11 THEN 'Matched Quote - Technical Revision'
+                ELSE link_type
+              END,
+              revision_type = CASE WHEN $11
+                THEN 'Technical Revision' ELSE revision_type END,
+              revision_reason = CASE WHEN $11
+                THEN COALESCE($12, revision_reason) ELSE revision_reason END,
+              updated_by_user_id = $13, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $14
+          `,
+          [
+            input.customerPartCode?.trim() || taskRow.customer_part_code,
+            input.description?.trim() || taskRow.description,
+            input.grade === undefined ? taskRow.grade : input.grade,
+            input.quantity ?? Number(taskRow.quantity),
+            input.targetPrice ??
+              (taskRow.target_price === null
+                ? null
+                : Number(taskRow.target_price)),
+            input.drawingReference === undefined
+              ? taskRow.drawing_reference
+              : input.drawingReference,
+            input.remarks === undefined ? taskRow.remarks : input.remarks,
+            technicalReviewStatus,
+            Boolean(matched && isCommercialMatch),
+            matched?.product_id ?? null,
+            Boolean(matched && isTechnicalRevision),
+            input.response ?? null,
+            input.actorUserId ?? null,
+            input.enquiryItemId,
+          ]
+        )
+        if (matched && isCommercialMatch) {
+          await client.query(
+            `
+              INSERT INTO sales.design_tasks (
+                organization_id, enquiry_item_id, status,
+                portfolio_match_status, matched_product_id, design_status,
+                item_type, design_bom_completed, next_stage_status,
+                assigned_date, actual_completion_date, source_system,
+                source_table, source_id, source_payload
+              )
+              VALUES (
+                $1, $2, 'Completed', 'Matches Existing Portfolio', $3,
+                'Not Required', $4, 'Yes', 'Product Costing Complete',
+                now(), now(), 'mrm-dashboard', 'design_tasks', $5, $6
+              )
+              ON CONFLICT (enquiry_item_id) DO UPDATE SET
+                status = 'Completed',
+                portfolio_match_status = EXCLUDED.portfolio_match_status,
+                matched_product_id = EXCLUDED.matched_product_id,
+                design_status = EXCLUDED.design_status,
+                item_type = EXCLUDED.item_type,
+                design_bom_completed = EXCLUDED.design_bom_completed,
+                next_stage_status = EXCLUDED.next_stage_status,
+                actual_completion_date = now(), updated_at = now(),
+                row_version = sales.design_tasks.row_version + 1
+            `,
+            [
+              taskRow.organization_id,
+              input.enquiryItemId,
+              matched.product_id,
+              matched.item_type ?? "List",
+              `sales-match:${input.enquiryItemId}`,
+              { quoteItemId },
+            ]
+          )
+        }
         const resolved = await client.query<{
           id: string
           status: string
@@ -944,16 +2440,24 @@ export function createCommercialWorkflowRepository({
           `
             UPDATE sales.clarification_tasks
             SET status = 'Resolved', response = $1, resolved_at = now(),
-              updated_at = now(), row_version = row_version + 1
-            WHERE id = $2
+              updated_by_user_id = $2, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $3
             RETURNING id, status
           `,
-          [input.response ?? null, input.clarificationTaskId]
+          [
+            input.response ?? null,
+            input.actorUserId ?? null,
+            input.clarificationTaskId,
+          ]
         )
         await writeAuditEvent(client, {
           actorUserId: input.actorUserId,
-          eventType: "clarification.resolved",
-          organizationId: task.rows[0].organization_id,
+          eventType: isTechnicalRevision
+            ? "enquiry_item.technical_revision_matched"
+            : "clarification.resolved",
+          metadata: { decision, quoteItemId },
+          organizationId: taskRow.organization_id,
           targetId: input.clarificationTaskId,
           targetTable: "clarification_tasks",
         })
@@ -961,34 +2465,273 @@ export function createCommercialWorkflowRepository({
       })
     },
 
-    async saveDesign(input: {
+    async createFollowup(input: {
       actorUserId?: string | null
+      channel?: string
+      dueOn: string
+      enquiryId: string
+      note?: string | null
+      organizationId: string
+      quoteItemId?: string | null
+      status?: string
+    }) {
+      return transaction(pool, async (client) => {
+        const enquiry = await client.query<{ id: string }>(
+          `
+            SELECT id FROM sales.enquiries
+            WHERE id = $1 AND organization_id = $2
+          `,
+          [input.enquiryId, input.organizationId]
+        )
+        if (!enquiry.rows[0]) {
+          throw new Error("ENQ was not found.")
+        }
+        if (input.quoteItemId) {
+          const quote = await client.query<{ id: string }>(
+            `
+              SELECT id FROM sales.quote_items
+              WHERE id = $1 AND enquiry_id = $2
+                AND organization_id = $3
+            `,
+            [input.quoteItemId, input.enquiryId, input.organizationId]
+          )
+          if (!quote.rows[0]) {
+            throw new Error("Quote item was not found for this enquiry.")
+          }
+        }
+        const sourceId = randomUUID()
+        const created = await client.query<{ id: string; status: string }>(
+          `
+            INSERT INTO sales.followups (
+              organization_id, enquiry_id, quote_item_id, due_on,
+              channel, status, note, source_system, source_table,
+              source_id, source_payload, created_by_user_id,
+              updated_by_user_id
+            )
+            VALUES (
+              $1, $2, $3, $4, $5, $6, $7, 'mrm-dashboard',
+              'followups', $8, $9, $10, $10
+            )
+            RETURNING id, status
+          `,
+          [
+            input.organizationId,
+            input.enquiryId,
+            input.quoteItemId ?? null,
+            input.dueOn,
+            input.channel ?? "Email",
+            input.status ?? "Pending",
+            input.note ?? "",
+            sourceId,
+            input,
+            input.actorUserId ?? null,
+          ]
+        )
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "followup.created",
+          organizationId: input.organizationId,
+          targetId: created.rows[0]!.id,
+          targetTable: "followups",
+        })
+        return created.rows[0]!
+      })
+    },
+
+    async completeFollowup(input: {
+      actorUserId?: string | null
+      channel?: string
+      followupId: string
+      nextDueOn?: string | null
+      nextNote?: string | null
+      note?: string | null
+      status?: string
+    }) {
+      return transaction(pool, async (client) => {
+        const current = await client.query<{
+          enquiry_id: string
+          organization_id: string
+        }>(
+          `
+            SELECT organization_id, enquiry_id FROM sales.followups
+            WHERE id = $1 FOR UPDATE
+          `,
+          [input.followupId]
+        )
+        if (!current.rows[0]) {
+          throw new Error("Follow-up is required.")
+        }
+        const status = input.status ?? "Completed"
+        const updated = await client.query<{ id: string; status: string }>(
+          `
+            UPDATE sales.followups
+            SET status = $1, note = COALESCE($2, note),
+              completed_at = CASE WHEN $1 = 'Completed'
+                THEN now() ELSE completed_at END,
+              updated_by_user_id = $3, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $4
+            RETURNING id, status
+          `,
+          [
+            status,
+            input.note ?? null,
+            input.actorUserId ?? null,
+            input.followupId,
+          ]
+        )
+        let nextFollowupId: string | null = null
+        if (input.nextDueOn) {
+          const sourceId = randomUUID()
+          const next = await client.query<{ id: string }>(
+            `
+              INSERT INTO sales.followups (
+                organization_id, enquiry_id, due_on, channel, status,
+                note, source_system, source_table, source_id,
+                source_payload, created_by_user_id, updated_by_user_id
+              )
+              VALUES (
+                $1, $2, $3, $4, 'Pending', $5, 'mrm-dashboard',
+                'followups', $6, $7, $8, $8
+              )
+              RETURNING id
+            `,
+            [
+              current.rows[0].organization_id,
+              current.rows[0].enquiry_id,
+              input.nextDueOn,
+              input.channel ?? "Email",
+              input.nextNote ?? "",
+              sourceId,
+              input,
+              input.actorUserId ?? null,
+            ]
+          )
+          nextFollowupId = next.rows[0]!.id
+        }
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "followup.completed",
+          metadata: { nextFollowupId, status },
+          organizationId: current.rows[0].organization_id,
+          targetId: input.followupId,
+          targetTable: "followups",
+        })
+        return {
+          id: updated.rows[0]!.id,
+          nextFollowupId,
+          status: updated.rows[0]!.status,
+        }
+      })
+    },
+
+    async listFollowups(organizationCode: string) {
+      const result = await pool.query<{
+        channel: string
+        company_name: string
+        customer_uid: string
+        due_on: string
+        enquiry_id: string
+        enquiry_number: string
+        id: string
+        note: string
+        quote_item_id: string | null
+        quote_number: string | null
+        status: string
+      }>(
+        `
+          SELECT followup.id, followup.enquiry_id,
+            followup.quote_item_id, followup.due_on::text,
+            followup.channel, followup.status, followup.note,
+            enquiry.enquiry_number, customer.customer_uid,
+            customer.company_name, quote.quote_number
+          FROM sales.followups followup
+          JOIN sales.enquiries enquiry ON enquiry.id = followup.enquiry_id
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = followup.organization_id
+          LEFT JOIN sales.quote_items quote
+            ON quote.id = followup.quote_item_id
+          WHERE organization.code = $1
+          ORDER BY followup.due_on, followup.created_at, followup.id
+        `,
+        [organizationCode.trim()]
+      )
+      return result.rows.map((row) => ({
+        channel: row.channel,
+        companyName: row.company_name,
+        customerUid: row.customer_uid,
+        dueOn: row.due_on,
+        enquiryId: row.enquiry_id,
+        enquiryNumber: row.enquiry_number,
+        id: row.id,
+        note: row.note,
+        quoteItemId: row.quote_item_id,
+        quoteNumber: row.quote_number,
+        status: row.status,
+      }))
+    },
+
+    async saveDesign(input: {
+      approvalStatus?: string
+      actorUserId?: string | null
+      assemblyRequired?: string
       bomLines?: DesignBomLine[]
+      checkedBy?: string | null
+      componentsRequired?: string | null
+      designBomCompleted?: string
+      designBomRequired?: string
       designRemarks?: string | null
       designStatus: string
+      designerName?: string | null
       enquiryItemId: string
+      fixtureApproxCost?: number
+      fixtureRequired?: string
+      gaugesRequired?: string
+      inspectionApproxCost?: number
+      internalPartCategory?: string | null
+      internalPartSize?: string | null
+      internalPartSubCategory?: string | null
       itemType: string
       manufacturingProcess?: string | null
       matchedProductId?: string | null
+      operationNotes?: string | null
       packageProcessRequired?: string | null
       portfolioMatchStatus: string
       quotedPartUid: string | null
+      revisionNo?: string | null
+      targetCompletionDate?: string | null
+      toolingApproxCost?: number
+      toolingRequired?: string
     }) {
       return transaction(pool, async (client) => {
         const line = await client.query<{
+          existing_quoted_part_uid: string | null
           organization_id: string
           technical_review_status: string
         }>(
           `
-            SELECT organization_id, technical_review_status
-            FROM sales.enquiry_items
-            WHERE id = $1
-            FOR UPDATE
+            SELECT enquiry_item.organization_id,
+              enquiry_item.technical_review_status,
+              design.quoted_part_uid AS existing_quoted_part_uid
+            FROM sales.enquiry_items enquiry_item
+            LEFT JOIN sales.design_tasks design
+              ON design.enquiry_item_id = enquiry_item.id
+            WHERE enquiry_item.id = $1
+            FOR UPDATE OF enquiry_item
           `,
           [input.enquiryItemId]
         )
-        if (!line.rows[0]) {
+        const enquiryLine = line.rows[0]
+        if (!enquiryLine) {
           throw new Error("Line item was not found.")
+        }
+        if (
+          !["Feasible", "Duplicate / Existing Product"].includes(
+            enquiryLine.technical_review_status
+          )
+        ) {
+          throw new Error("Technical Review must release the line to Design.")
         }
         const isPortfolioMatch =
           input.portfolioMatchStatus === "Matches Existing Portfolio"
@@ -998,33 +2741,78 @@ export function createCommercialWorkflowRepository({
         if (input.matchedProductId) {
           const product = await client.query<{ id: string }>(
             `
-              SELECT id
-              FROM catalog.items
+              SELECT id FROM catalog.items
               WHERE id = $1 AND organization_id = $2
+                AND lifecycle_status = 'P' AND uid_kind = 'INTERNAL'
               FOR SHARE
             `,
-            [input.matchedProductId, line.rows[0].organization_id]
+            [input.matchedProductId, enquiryLine.organization_id]
           )
           if (!product.rows[0]) {
             throw new Error(
-              "Matched product was not found in this organization."
+              "Portfolio product must be an ordered internal product."
             )
           }
         }
-        if (
-          !isPortfolioMatch &&
-          input.designStatus === "Design Complete" &&
-          !input.quotedPartUid?.trim()
-        ) {
-          throw new Error("Design part number is required before completion.")
-        }
 
+        const itemType = input.itemType === "Package" ? "Package" : "List"
+        const designBomCompleted = isPortfolioMatch
+          ? "Yes"
+          : (input.designBomCompleted ??
+            (input.designStatus === "Design Complete" ? "Yes" : "No"))
         const designStatus = isPortfolioMatch
           ? "Not Required"
-          : input.designStatus
+          : designBomCompleted === "Yes"
+            ? "Design Complete"
+            : input.designStatus
         const nextStageStatus = isPortfolioMatch
           ? "Product Costing Complete"
           : "Not Started"
+        const quotedPartUid = isPortfolioMatch
+          ? null
+          : input.quotedPartUid?.trim() ||
+            enquiryLine.existing_quoted_part_uid ||
+            (await nextDesignUid(
+              client,
+              enquiryLine.organization_id,
+              itemType === "Package" ? "PACKAGE" : "QUOTE"
+            ))
+        const internalPartName =
+          [
+            input.internalPartSize,
+            input.internalPartSubCategory,
+            input.internalPartCategory,
+          ]
+            .filter(Boolean)
+            .join(" ") || null
+        const inputBomLines = isPortfolioMatch ? [] : (input.bomLines ?? [])
+        if (designStatus === "Design Complete" && inputBomLines.length === 0) {
+          throw new Error(
+            "A completed new design requires at least one BOM line."
+          )
+        }
+        const lineNumbers = new Set<number>()
+        for (const bomLine of inputBomLines) {
+          if (bomLine.lineNumber <= 0 || bomLine.quantity <= 0) {
+            throw new Error("Design BOM line and quantity must be positive.")
+          }
+          if (lineNumbers.has(bomLine.lineNumber)) {
+            throw new Error("Design BOM line numbers must be unique.")
+          }
+          lineNumbers.add(bomLine.lineNumber)
+        }
+        for (const bomLine of inputBomLines) {
+          if (!bomLine.parentLineNumber) continue
+          const parent = inputBomLines.find(
+            (candidate) => candidate.lineNumber === bomLine.parentLineNumber
+          )
+          if (!parent || parent.componentItemType !== "Assembly") {
+            throw new Error(
+              "Nested child parts can only be placed under an Assembly row."
+            )
+          }
+        }
+
         const design = await client.query<{
           id: string
           next_stage_status: string
@@ -1036,14 +2824,22 @@ export function createCommercialWorkflowRepository({
               quoted_part_uid, item_type, design_bom_completed,
               next_stage_status, assigned_date, actual_completion_date,
               manufacturing_process, package_process_required,
-              design_remarks, source_system, source_table, source_id,
-              source_payload
-            )
-            VALUES (
+              design_remarks, designer_name, target_completion_date,
+              internal_part_size, internal_part_sub_category,
+              internal_part_category, internal_part_name,
+              internal_drawing_no, revision_no, design_bom_required,
+              components_required, assembly_required, operation_notes,
+              tooling_required, tooling_approx_cost, fixture_required,
+              fixture_approx_cost, gauges_required, inspection_approx_cost,
+              checked_by, approval_status, source_system, source_table,
+              source_id, source_payload
+            ) VALUES (
               $1, $2, $3, $4, $5, $3, $6, $7, $8, $9, now(),
               CASE WHEN $3 IN ('Design Complete', 'Not Required')
                 THEN now() ELSE NULL END,
-              $10, $11, $12, 'mrm-dashboard', 'design_tasks', $13, $14
+              $10, $11, $12, $13, $14, $15, $16, $17, $18, $6,
+              $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
+              $29, $30, $31, 'mrm-dashboard', 'design_tasks', $32, $33
             )
             ON CONFLICT (enquiry_item_id) DO UPDATE SET
               status = EXCLUDED.status,
@@ -1058,7 +2854,28 @@ export function createCommercialWorkflowRepository({
               manufacturing_process = EXCLUDED.manufacturing_process,
               package_process_required = EXCLUDED.package_process_required,
               design_remarks = EXCLUDED.design_remarks,
+              designer_name = EXCLUDED.designer_name,
+              target_completion_date = EXCLUDED.target_completion_date,
+              internal_part_size = EXCLUDED.internal_part_size,
+              internal_part_sub_category = EXCLUDED.internal_part_sub_category,
+              internal_part_category = EXCLUDED.internal_part_category,
+              internal_part_name = EXCLUDED.internal_part_name,
+              internal_drawing_no = EXCLUDED.internal_drawing_no,
+              revision_no = EXCLUDED.revision_no,
+              design_bom_required = EXCLUDED.design_bom_required,
+              components_required = EXCLUDED.components_required,
+              assembly_required = EXCLUDED.assembly_required,
+              operation_notes = EXCLUDED.operation_notes,
+              tooling_required = EXCLUDED.tooling_required,
+              tooling_approx_cost = EXCLUDED.tooling_approx_cost,
+              fixture_required = EXCLUDED.fixture_required,
+              fixture_approx_cost = EXCLUDED.fixture_approx_cost,
+              gauges_required = EXCLUDED.gauges_required,
+              inspection_approx_cost = EXCLUDED.inspection_approx_cost,
+              checked_by = EXCLUDED.checked_by,
+              approval_status = EXCLUDED.approval_status,
               source_payload = EXCLUDED.source_payload,
+              updated_by_user_id = EXCLUDED.updated_by_user_id,
               updated_at = now(),
               row_version = sales.design_tasks.row_version + 1
             WHERE sales.design_tasks.next_stage_status IN (
@@ -1067,20 +2884,43 @@ export function createCommercialWorkflowRepository({
             RETURNING id, next_stage_status
           `,
           [
-            line.rows[0].organization_id,
+            enquiryLine.organization_id,
             input.enquiryItemId,
             designStatus,
             input.portfolioMatchStatus,
             input.matchedProductId ?? null,
-            input.quotedPartUid?.trim() || null,
-            input.itemType,
-            designStatus === "Design Complete" || isPortfolioMatch
-              ? "Yes"
-              : "No",
+            quotedPartUid,
+            itemType,
+            designBomCompleted,
             nextStageStatus,
             input.manufacturingProcess ?? null,
             input.packageProcessRequired ?? null,
             input.designRemarks ?? null,
+            input.designerName ?? null,
+            input.targetCompletionDate ?? null,
+            input.internalPartSize ?? null,
+            input.internalPartSubCategory ?? null,
+            input.internalPartCategory ?? null,
+            internalPartName,
+            input.revisionNo ?? "0",
+            isPortfolioMatch ? "No" : (input.designBomRequired ?? "Yes"),
+            input.componentsRequired ?? null,
+            itemType === "Package" ? "Yes" : (input.assemblyRequired ?? "No"),
+            input.operationNotes ?? null,
+            input.toolingRequired ?? "No",
+            input.toolingRequired === "Yes"
+              ? (input.toolingApproxCost ?? 0)
+              : 0,
+            input.fixtureRequired ?? "No",
+            input.fixtureRequired === "Yes"
+              ? (input.fixtureApproxCost ?? 0)
+              : 0,
+            input.gaugesRequired ?? "No",
+            input.gaugesRequired === "Yes"
+              ? (input.inspectionApproxCost ?? 0)
+              : 0,
+            input.checkedBy ?? null,
+            input.approvalStatus ?? "Pending",
             randomUUID(),
             input,
           ]
@@ -1090,44 +2930,85 @@ export function createCommercialWorkflowRepository({
             "Design task cannot be edited because the next step has already started."
           )
         }
+
+        const bomRows: Array<
+          DesignBomLine & { packagePartUid: string | null }
+        > = []
+        for (const bomLine of inputBomLines) {
+          let existingUid: string | null = null
+          if (bomLine.existingProductId) {
+            const existing = await client.query<{ uid: string }>(
+              `
+                SELECT uid FROM catalog.items
+                WHERE id = $1 AND organization_id = $2
+                  AND lifecycle_status = 'P' AND uid_kind = 'INTERNAL'
+              `,
+              [bomLine.existingProductId, enquiryLine.organization_id]
+            )
+            existingUid = existing.rows[0]?.uid ?? null
+            if (!existingUid) {
+              throw new Error(
+                "Package existing part must be an ordered internal product."
+              )
+            }
+          }
+          const packagePartUid =
+            itemType === "Package" && bomLine.componentSource !== "Existing"
+              ? bomLine.packagePartUid?.trim() ||
+                (await nextDesignUid(
+                  client,
+                  enquiryLine.organization_id,
+                  bomLine.componentItemType === "Assembly"
+                    ? "ASSEMBLY"
+                    : "QUOTE"
+                ))
+              : null
+          const componentCode =
+            packagePartUid ||
+            bomLine.componentCode.trim() ||
+            existingUid ||
+            (itemType === "List" ? quotedPartUid : null)
+          if (!componentCode) {
+            throw new Error("Every Design BOM row requires a component code.")
+          }
+          bomRows.push({ ...bomLine, componentCode, packagePartUid })
+        }
+
         await client.query(
           "DELETE FROM sales.design_bom_lines WHERE design_task_id = $1",
           [design.rows[0].id]
         )
-        for (const bomLine of isPortfolioMatch ? [] : (input.bomLines ?? [])) {
-          if (bomLine.lineNumber <= 0 || bomLine.quantity <= 0) {
-            throw new Error("Design BOM line and quantity must be positive.")
-          }
+        for (const bomLine of bomRows) {
           await client.query(
             `
               INSERT INTO sales.design_bom_lines (
                 organization_id, design_task_id, component_code, description,
                 quantity, sequence, line_number, parent_line_number,
                 component_source, existing_product_id, component_item_type,
-                package_part_uid, package_part, rod_size, rod_type, grade,
-                manufacturing_process, casting, piece_weight,
+                package_part_uid, package_part, bom_item, rod_size, rod_type,
+                grade, manufacturing_process, casting, piece_weight,
                 process_required, design_notes, source_system, source_table,
                 source_id, source_payload
-              )
-              VALUES (
+              ) VALUES (
                 $1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11,
-                $12, $13, $14, $15, $16, $17, $18, $19, $20,
-                'mrm-dashboard', 'design_bom_lines', $21, $22
+                $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+                'mrm-dashboard', 'design_bom_lines', $22, $23
               )
             `,
             [
-              line.rows[0].organization_id,
+              enquiryLine.organization_id,
               design.rows[0].id,
-              bomLine.componentCode.trim(),
-              bomLine.packagePart ?? null,
+              bomLine.componentCode,
+              bomLine.packagePart ?? bomLine.bomItem ?? null,
               bomLine.quantity,
               bomLine.lineNumber,
               bomLine.parentLineNumber ?? null,
               bomLine.componentSource,
               bomLine.existingProductId ?? null,
               bomLine.componentItemType ?? "List",
-              bomLine.packagePartUid ?? null,
+              bomLine.packagePartUid,
               bomLine.packagePart ?? null,
+              bomLine.bomItem ?? null,
               bomLine.rodSize ?? null,
               bomLine.rodType ?? null,
               bomLine.grade ?? null,
@@ -1147,14 +3028,16 @@ export function createCommercialWorkflowRepository({
           metadata: {
             designStatus,
             portfolioMatchStatus: input.portfolioMatchStatus,
+            quotedPartUid,
           },
-          organizationId: line.rows[0].organization_id,
+          organizationId: enquiryLine.organization_id,
           targetId: design.rows[0].id,
           targetTable: "design_tasks",
         })
         return {
           id: design.rows[0].id,
           nextStageStatus: design.rows[0].next_stage_status,
+          quotedPartUid,
         }
       })
     },
@@ -1442,10 +3325,12 @@ export function createCommercialWorkflowRepository({
       fileName: string
       mediaType?: string | null
       organizationId: string
+      purpose?: "cad" | "customer_marked" | "drawing" | "internal_drawing"
       sha256?: string | null
       sourceId: string
       storageKey: string
       targetId: string
+      targetTable?: "design_tasks" | "enquiry_items"
     }) {
       if (
         path.basename(input.fileName) !== input.fileName ||
@@ -1467,11 +3352,18 @@ export function createCommercialWorkflowRepository({
         throw new Error("Attachment byte size cannot be negative.")
       }
       return transaction(pool, async (client) => {
+        const targetTable = input.targetTable ?? "enquiry_items"
+        const purpose = input.purpose ?? "drawing"
         const target = await client.query<{ id: string }>(
-          `
-            SELECT id FROM sales.enquiry_items
-            WHERE id = $1 AND organization_id = $2
-          `,
+          targetTable === "design_tasks"
+            ? `
+                SELECT id FROM sales.design_tasks
+                WHERE id = $1 AND organization_id = $2
+              `
+            : `
+                SELECT id FROM sales.enquiry_items
+                WHERE id = $1 AND organization_id = $2
+              `,
           [input.targetId, input.organizationId]
         )
         if (!target.rows[0]) {
@@ -1490,7 +3382,7 @@ export function createCommercialWorkflowRepository({
             )
             VALUES (
               $1, $2, $3, $4, $5, $6, 'mrm-dashboard',
-              'enquiry_attachments', $7, $8
+              $7, $8, $9
             )
             ON CONFLICT (source_system, source_table, source_id) DO UPDATE SET
               file_name = EXCLUDED.file_name,
@@ -1509,6 +3401,9 @@ export function createCommercialWorkflowRepository({
             input.byteSize,
             input.sha256 ?? null,
             normalizedStorageKey,
+            targetTable === "design_tasks"
+              ? "design_attachments"
+              : "enquiry_attachments",
             input.sourceId,
             input,
           ]
@@ -1519,10 +3414,16 @@ export function createCommercialWorkflowRepository({
               organization_id, file_id, target_schema, target_table,
               target_id, purpose
             )
-            VALUES ($1, $2, 'sales', 'enquiry_items', $3, 'drawing')
+            VALUES ($1, $2, 'sales', $3, $4, $5)
             ON CONFLICT DO NOTHING
           `,
-          [input.organizationId, file.rows[0]!.id, input.targetId]
+          [
+            input.organizationId,
+            file.rows[0]!.id,
+            targetTable,
+            input.targetId,
+            purpose,
+          ]
         )
         return {
           fileName: file.rows[0]!.file_name,
@@ -1530,6 +3431,129 @@ export function createCommercialWorkflowRepository({
           storageKey: file.rows[0]!.storage_key,
         }
       })
+    },
+
+    async listAttachments(input: {
+      organizationId: string
+      purpose?: "cad" | "customer_marked" | "drawing" | "internal_drawing"
+      targetId: string
+      targetTable: "design_tasks" | "enquiry_items"
+    }) {
+      const files = await pool.query<{
+        byte_size: string
+        created_at: Date
+        file_name: string
+        id: string
+        media_type: string | null
+        purpose: string
+        storage_key: string
+      }>(
+        `
+          SELECT file.id, file.file_name, file.media_type,
+            file.byte_size::text, file.storage_key, file.created_at,
+            file_link.purpose
+          FROM core.file_links file_link
+          JOIN core.files file ON file.id = file_link.file_id
+          WHERE file_link.organization_id = $1
+            AND file_link.target_schema = 'sales'
+            AND file_link.target_table = $2
+            AND file_link.target_id = $3
+            AND ($4::text IS NULL OR file_link.purpose = $4)
+          ORDER BY file.created_at DESC, file.id DESC
+        `,
+        [
+          input.organizationId,
+          input.targetTable,
+          input.targetId,
+          input.purpose ?? null,
+        ]
+      )
+      return files.rows.map((row) => ({
+        byteSize: Number(row.byte_size),
+        createdAt: row.created_at,
+        fileName: row.file_name,
+        id: row.id,
+        mediaType: row.media_type,
+        purpose: row.purpose,
+        storageKey: row.storage_key,
+      }))
+    },
+
+    async listDrawingHistory(input: {
+      enquiryItemId: string
+      organizationId: string
+    }) {
+      const drawings = await pool.query<{
+        byte_size: string
+        created_at: Date
+        file_name: string
+        id: string
+        media_type: string | null
+        storage_key: string
+      }>(
+        `
+          SELECT file.id, file.file_name, file.media_type,
+            file.byte_size::text, file.storage_key, file.created_at
+          FROM core.file_links file_link
+          JOIN core.files file ON file.id = file_link.file_id
+          WHERE file_link.organization_id = $1
+            AND file_link.target_schema = 'sales'
+            AND file_link.target_table = 'enquiry_items'
+            AND file_link.target_id = $2
+            AND file_link.purpose = 'drawing'
+          ORDER BY file.created_at DESC, file.id DESC
+        `,
+        [input.organizationId, input.enquiryItemId]
+      )
+      return drawings.rows.map((row) => ({
+        byteSize: Number(row.byte_size),
+        createdAt: row.created_at,
+        fileName: row.file_name,
+        id: row.id,
+        mediaType: row.media_type,
+        storageKey: row.storage_key,
+      }))
+    },
+
+    async getCurrentDrawing(input: {
+      enquiryItemId: string
+      organizationId: string
+    }) {
+      const drawings = await pool.query<{
+        byte_size: string
+        created_at: Date
+        file_name: string
+        id: string
+        media_type: string | null
+        storage_key: string
+      }>(
+        `
+          SELECT file.id, file.file_name, file.media_type,
+            file.byte_size::text, file.storage_key, file.created_at
+          FROM core.file_links file_link
+          JOIN core.files file ON file.id = file_link.file_id
+          WHERE file_link.organization_id = $1
+            AND file_link.target_schema = 'sales'
+            AND file_link.target_table = 'enquiry_items'
+            AND file_link.target_id = $2
+            AND file_link.purpose = 'drawing'
+          ORDER BY file.created_at DESC, file.id DESC
+          LIMIT 1
+        `,
+        [input.organizationId, input.enquiryItemId]
+      )
+      const row = drawings.rows[0]
+      if (!row) {
+        throw new Error("Drawing was not found.")
+      }
+      return {
+        byteSize: Number(row.byte_size),
+        createdAt: row.created_at,
+        fileName: row.file_name,
+        id: row.id,
+        mediaType: row.media_type,
+        storageKey: row.storage_key,
+      }
     },
 
     async createImportReview(input: {
@@ -1655,7 +3679,9 @@ export function createCommercialWorkflowRepository({
         const decisions = new Map<number, string>()
         for (const decision of input.decisions) {
           if (decisions.has(decision.rowNumber)) {
-            throw new Error(`Import row ${decision.rowNumber} has two decisions.`)
+            throw new Error(
+              `Import row ${decision.rowNumber} has two decisions.`
+            )
           }
           decisions.set(decision.rowNumber, decision.action)
         }
@@ -1891,17 +3917,39 @@ export function createCommercialWorkflowRepository({
           "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
         )
         const enquiry = await client.query<{
+          buyer_name: string | null
+          company_name: string
+          conversion_rate: string
+          currency: string
+          customer_id: string
+          customer_uid: string
           enquiry_number: string
           id: string
+          incoterms: string | null
           organization_id: string
+          packaging_terms: string | null
+          payment_terms: string | null
+          priority: string
+          received_on: string
+          remarks: string | null
+          shipment_mode: string | null
+          source: string
           status: string
           technical_handover_status: string
         }>(
           `
-            SELECT id, organization_id, enquiry_number, status,
-              technical_handover_status
-            FROM sales.enquiries
-            WHERE id = $1
+            SELECT enquiry.id, enquiry.organization_id,
+              enquiry.enquiry_number, enquiry.status,
+              enquiry.technical_handover_status, enquiry.customer_id,
+              enquiry.received_on::text, enquiry.source, enquiry.priority,
+              enquiry.buyer_name, enquiry.remarks, enquiry.incoterms,
+              enquiry.payment_terms, enquiry.currency,
+              enquiry.conversion_rate::text, enquiry.shipment_mode,
+              enquiry.packaging_terms, customer.customer_uid,
+              customer.company_name
+            FROM sales.enquiries enquiry
+            JOIN sales.customers customer ON customer.id = enquiry.customer_id
+            WHERE enquiry.id = $1
           `,
           [enquiryId]
         )
@@ -1912,18 +3960,46 @@ export function createCommercialWorkflowRepository({
           customer_part_code: string | null
           description: string
           design_status: string | null
+          drawing_file_id: string | null
+          drawing_file_name: string | null
+          drawing_reference: string | null
+          feasibility_reason: string | null
+          grade: string | null
           id: string
           line_number: number
+          missing_information: string | null
           next_stage_status: string | null
+          quantity: string
+          remarks: string | null
+          target_price: string | null
+          technical_checklist: TechnicalChecklist
+          technical_remarks: string | null
           technical_review_status: string
         }>(
           `
             SELECT item.id, item.line_number, item.customer_part_code,
               item.description, item.technical_review_status,
-              design.design_status, design.next_stage_status
+              item.grade, item.quantity::text, item.target_price::text,
+              item.drawing_reference, item.remarks,
+              item.technical_checklist, item.missing_information,
+              item.feasibility_reason, item.technical_remarks,
+              design.design_status, design.next_stage_status,
+              drawing.id AS drawing_file_id,
+              drawing.file_name AS drawing_file_name
             FROM sales.enquiry_items item
             LEFT JOIN sales.design_tasks design
               ON design.enquiry_item_id = item.id
+            LEFT JOIN LATERAL (
+              SELECT file.id, file.file_name
+              FROM core.file_links file_link
+              JOIN core.files file ON file.id = file_link.file_id
+              WHERE file_link.target_schema = 'sales'
+                AND file_link.target_table = 'enquiry_items'
+                AND file_link.target_id = item.id
+                AND file_link.purpose = 'drawing'
+              ORDER BY file.created_at DESC, file.id DESC
+              LIMIT 1
+            ) drawing ON true
             WHERE item.enquiry_id = $1
             ORDER BY item.line_number
           `,
@@ -1973,9 +4049,23 @@ export function createCommercialWorkflowRepository({
             targetStage: row.target_stage,
           })),
           enquiry: {
+            buyerName: enquiry.rows[0].buyer_name,
+            companyName: enquiry.rows[0].company_name,
+            conversionRate: Number(enquiry.rows[0].conversion_rate),
+            currency: enquiry.rows[0].currency,
+            customerId: enquiry.rows[0].customer_id,
+            customerUid: enquiry.rows[0].customer_uid,
             enquiryNumber: enquiry.rows[0].enquiry_number,
             id: enquiry.rows[0].id,
+            incoterms: enquiry.rows[0].incoterms,
             organizationId: enquiry.rows[0].organization_id,
+            packagingTerms: enquiry.rows[0].packaging_terms,
+            paymentTerms: enquiry.rows[0].payment_terms,
+            priority: enquiry.rows[0].priority,
+            receivedOn: enquiry.rows[0].received_on,
+            remarks: enquiry.rows[0].remarks,
+            shipmentMode: enquiry.rows[0].shipment_mode,
+            source: enquiry.rows[0].source,
             status: enquiry.rows[0].status,
             technicalHandoverStatus: enquiry.rows[0].technical_handover_status,
           },
@@ -1984,45 +4074,191 @@ export function createCommercialWorkflowRepository({
             customerPartCode: row.customer_part_code,
             description: row.description,
             designStatus: row.design_status,
+            drawingFileId: row.drawing_file_id,
+            drawingFileName: row.drawing_file_name,
+            drawingReference: row.drawing_reference,
+            feasibilityReason: row.feasibility_reason,
+            grade: row.grade,
             id: row.id,
             lineNumber: row.line_number,
+            missingInformation: row.missing_information,
             nextStageStatus: row.next_stage_status,
+            quantity: Number(row.quantity),
+            remarks: row.remarks,
+            targetPrice:
+              row.target_price === null ? null : Number(row.target_price),
+            technicalChecklist: row.technical_checklist ?? {},
+            technicalRemarks: row.technical_remarks,
             technicalReviewStatus: row.technical_review_status,
           })),
         }
       })
     },
 
+    async getImportReview(reviewId: string) {
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        return getImportReviewWithClient(client, reviewId)
+      })
+    },
+
     async listEnquiries(organizationCode: string) {
       const result = await pool.query<{
+        buyer_name: string | null
         company_name: string
+        customer_uid: string
+        due_followup_count: string
         enquiry_number: string
         id: string
         item_count: string
+        latest_quote_sent_at: Date | null
+        next_followup_due: string | null
+        not_feasible_line_count: string
+        organization_id: string
+        ordered_line_count: string
+        pending_line_count: string
+        po_line_count: string
+        priority: string
+        quote_item_count: string
+        quote_sent_count: string
+        quoted_line_count: string
+        received_on: string
+        remarks: string | null
+        source: string
         status: string
+        technical_handover_at: Date | null
         technical_handover_status: string
+        technical_started_count: string
+        design_task_count: string
+        open_sales_clarification_count: string
       }>(
         `
-          SELECT enquiry.id, enquiry.enquiry_number, enquiry.status,
-            enquiry.technical_handover_status, customer.company_name,
-            count(item.id)::text AS item_count
+          SELECT enquiry.id, enquiry.organization_id,
+            enquiry.enquiry_number, enquiry.status,
+            enquiry.technical_handover_status,
+            enquiry.technical_handover_at, enquiry.received_on::text,
+            enquiry.source, enquiry.priority, enquiry.buyer_name,
+            enquiry.remarks, customer.customer_uid, customer.company_name,
+            count(DISTINCT item.id)::text AS item_count,
+            count(DISTINCT item.id) FILTER (
+              WHERE EXISTS (
+                SELECT 1 FROM sales.quote_items quote
+                WHERE quote.enquiry_item_id = item.id
+              )
+            )::text AS quoted_line_count,
+            count(DISTINCT item.id) FILTER (
+              WHERE EXISTS (
+                SELECT 1 FROM sales.purchase_order_lines po_line
+                JOIN sales.quote_items quote
+                  ON quote.id = po_line.quote_item_id
+                WHERE quote.enquiry_item_id = item.id
+              )
+            )::text AS ordered_line_count,
+            count(DISTINCT item.id) FILTER (
+              WHERE item.technical_review_status IN (
+                'Pending Review', 'Need Clarification',
+                'Need Sales Confirmation'
+              )
+            )::text AS pending_line_count,
+            count(DISTINCT item.id) FILTER (
+              WHERE item.technical_review_status = 'Not Feasible'
+            )::text AS not_feasible_line_count,
+            (
+              SELECT count(*)::text FROM sales.quote_items quote
+              WHERE quote.enquiry_id = enquiry.id
+            ) AS quote_item_count,
+            (
+              SELECT count(*)::text FROM sales.quote_items quote
+              WHERE quote.enquiry_id = enquiry.id
+                AND quote.sent_at IS NOT NULL
+            ) AS quote_sent_count,
+            (
+              SELECT max(quote.sent_at) FROM sales.quote_items quote
+              WHERE quote.enquiry_id = enquiry.id
+            ) AS latest_quote_sent_at,
+            (
+              SELECT min(followup.due_on)::text FROM sales.followups followup
+              WHERE followup.enquiry_id = enquiry.id
+                AND followup.status = 'Pending'
+            ) AS next_followup_due,
+            (
+              SELECT count(*)::text FROM sales.followups followup
+              WHERE followup.enquiry_id = enquiry.id
+                AND followup.status = 'Pending'
+                AND followup.due_on <= current_date
+            ) AS due_followup_count,
+            (
+              SELECT count(*)::text
+              FROM sales.purchase_order_lines po_line
+              JOIN sales.quote_items quote ON quote.id = po_line.quote_item_id
+              WHERE quote.enquiry_id = enquiry.id
+            ) AS po_line_count,
+            (
+              SELECT count(*)::text FROM sales.enquiry_items started
+              WHERE started.enquiry_id = enquiry.id
+                AND started.reviewed_at IS NOT NULL
+            ) AS technical_started_count,
+            (
+              SELECT count(*)::text FROM sales.design_tasks design
+              JOIN sales.enquiry_items design_item
+                ON design_item.id = design.enquiry_item_id
+              WHERE design_item.enquiry_id = enquiry.id
+            ) AS design_task_count,
+            (
+              SELECT count(*)::text
+              FROM sales.clarification_tasks clarification
+              WHERE clarification.enquiry_id = enquiry.id
+                AND clarification.target_stage = 'Sales'
+                AND clarification.status = 'Open'
+            ) AS open_sales_clarification_count
           FROM sales.enquiries enquiry
           JOIN core.organizations organization
             ON organization.id = enquiry.organization_id
           JOIN sales.customers customer ON customer.id = enquiry.customer_id
           LEFT JOIN sales.enquiry_items item ON item.enquiry_id = enquiry.id
           WHERE lower(organization.code) = lower($1)
-          GROUP BY enquiry.id, customer.company_name
+          GROUP BY enquiry.id, customer.customer_uid, customer.company_name
           ORDER BY enquiry.created_at DESC
         `,
         [organizationCode.trim()]
       )
       return result.rows.map((row) => ({
+        buyerName: row.buyer_name,
+        canDelete:
+          Number(row.quote_item_count) === 0 &&
+          Number(row.po_line_count) === 0 &&
+          row.technical_handover_status !== "Handed Over" &&
+          Number(row.technical_started_count) === 0 &&
+          Number(row.design_task_count) === 0,
+        canEdit:
+          Number(row.quote_item_count) === 0 &&
+          Number(row.po_line_count) === 0 &&
+          (row.technical_handover_status !== "Handed Over" ||
+            Number(row.open_sales_clarification_count) > 0 ||
+            (Number(row.technical_started_count) === 0 &&
+              Number(row.design_task_count) === 0)),
         companyName: row.company_name,
+        customerUid: row.customer_uid,
+        dueFollowupCount: Number(row.due_followup_count),
         enquiryNumber: row.enquiry_number,
         id: row.id,
         itemCount: Number(row.item_count),
+        latestQuoteSentAt: row.latest_quote_sent_at,
+        nextFollowupDue: row.next_followup_due,
+        notFeasibleLineCount: Number(row.not_feasible_line_count),
+        orderedLineCount: Number(row.ordered_line_count),
+        organizationId: row.organization_id,
+        pendingLineCount: Number(row.pending_line_count),
+        priority: row.priority,
+        quoteSentCount: Number(row.quote_sent_count),
+        quotedLineCount: Number(row.quoted_line_count),
+        receivedOn: row.received_on,
+        remarks: row.remarks,
+        source: row.source,
         status: row.status,
+        technicalHandoverAt: row.technical_handover_at,
         technicalHandoverStatus: row.technical_handover_status,
       }))
     },

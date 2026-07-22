@@ -37,7 +37,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
-import { createEnquiryAction } from "./actions"
+import { createEnquiryAction, importEnquiryRegisterAction } from "./actions"
 
 export const dynamic = "force-dynamic"
 
@@ -63,7 +63,56 @@ export default async function EnquiriesPage() {
           Sales intake, commercial handover, technical review, clarification,
           and design progression in one PostgreSQL workflow.
         </p>
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button asChild size="sm" variant="outline">
+            <Link href="/commercial/enquiries/register/export.xlsx">
+              Export register
+            </Link>
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/commercial/enquiries/register/template.xlsx">
+              Register template
+            </Link>
+          </Button>
+        </div>
       </section>
+
+      {organizationId ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Import enquiry register</CardTitle>
+            <CardDescription>
+              CSV, XLS, or XLSX rows update an editable ENQ or create a new one.
+              The whole file rolls back if any customer or gate is invalid.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={importEnquiryRegisterAction}>
+              <input
+                type="hidden"
+                name="organization_id"
+                value={organizationId}
+              />
+              <input type="hidden" name="received_on" value={today} />
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="enquiry-register-file">
+                    Register file
+                  </FieldLabel>
+                  <Input
+                    id="enquiry-register-file"
+                    name="enquiry_register_file"
+                    type="file"
+                    accept=".csv,.xls,.xlsx"
+                    required
+                  />
+                </Field>
+                <Button type="submit">Import register</Button>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -233,7 +282,10 @@ export default async function EnquiriesPage() {
                 <TableRow>
                   <TableHead>ENQ</TableHead>
                   <TableHead>Customer</TableHead>
+                  <TableHead>Received</TableHead>
                   <TableHead>Lines</TableHead>
+                  <TableHead>Quoted / ordered</TableHead>
+                  <TableHead>Follow-up</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Handover</TableHead>
                   <TableHead className="text-right">Open</TableHead>
@@ -247,7 +299,17 @@ export default async function EnquiriesPage() {
                         {enquiry.enquiryNumber}
                       </TableCell>
                       <TableCell>{enquiry.companyName}</TableCell>
+                      <TableCell>{enquiry.receivedOn}</TableCell>
                       <TableCell>{enquiry.itemCount}</TableCell>
+                      <TableCell>
+                        {enquiry.quotedLineCount} / {enquiry.orderedLineCount}
+                      </TableCell>
+                      <TableCell>
+                        {enquiry.nextFollowupDue ?? "—"}
+                        {enquiry.dueFollowupCount > 0
+                          ? ` · ${enquiry.dueFollowupCount} due`
+                          : ""}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="secondary">{enquiry.status}</Badge>
                       </TableCell>
@@ -269,7 +331,7 @@ export default async function EnquiriesPage() {
                   <TableRow>
                     <TableCell
                       className="h-32 text-center text-muted-foreground"
-                      colSpan={6}
+                      colSpan={9}
                     >
                       No enquiries have been logged.
                     </TableCell>

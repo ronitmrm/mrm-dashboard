@@ -15,18 +15,20 @@ const repository = createCommercialWorkflowRepository({ connectionString })
 let customerId: string
 let enquiryId: string
 let existingProductId: string
+let organizationCode: string
 let organizationId: string
 
 beforeAll(async () => {
   await migrateDatabase({ connectionString })
   const suffix = Date.now().toString(36)
+  organizationCode = `MIG07-${suffix}`
   const organization = await pool.query<{ id: string }>(
     `
       INSERT INTO core.organizations (code, name)
       VALUES ($1, 'MIG-07 Test')
       RETURNING id
     `,
-    [`MIG07-${suffix}`]
+    [organizationCode]
   )
   organizationId = organization.rows[0]!.id
   const customer = await pool.query<{ id: string }>(
@@ -44,10 +46,10 @@ beforeAll(async () => {
   const product = await pool.query<{ id: string }>(
     `
       INSERT INTO catalog.items (
-        organization_id, uid, description, source_system, source_table,
-        source_id
+        organization_id, uid, uid_kind, lifecycle_status, description,
+        source_system, source_table, source_id
       )
-      VALUES ($1, $2, 'Existing product', 'test', 'products', $2)
+      VALUES ($1, $2, 'INTERNAL', 'P', 'Existing product', 'test', 'products', $2)
       RETURNING id
     `,
     [organizationId, `M-${suffix}`]
@@ -139,28 +141,72 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       importKey: `classifier-${suffix}`,
       organizationId,
       rows: [
-        { rawValues: { part: exactCode, description: "Exact" }, rowNumber: 1, status: "Unclassified" },
-        { rawValues: { part: inProgressCode, description: "Work" }, rowNumber: 2, status: "Unclassified" },
-        { rawValues: { part: `${exactCode.slice(0, 6)}-REVIEW`, description: "Possible" }, rowNumber: 3, status: "Unclassified" },
-        { rawValues: { part: `DESC-${suffix}`, description: "Existing product" }, rowNumber: 4, status: "Unclassified" },
-        { rawValues: { part: `NEW-${suffix}`, description: "Brand new component" }, rowNumber: 5, status: "Unclassified" },
-        { rawValues: { part: "", description: "Missing part" }, rowNumber: 6, status: "Unclassified" },
-        { rawValues: { part: legacyQuoteUid, description: "Historical Q alias" }, rowNumber: 7, status: "Unclassified" },
-        { rawValues: { part: "", description: "" }, rowNumber: 8, status: "Unclassified" },
+        {
+          rawValues: { part: exactCode, description: "Exact" },
+          rowNumber: 1,
+          status: "Unclassified",
+        },
+        {
+          rawValues: { part: inProgressCode, description: "Work" },
+          rowNumber: 2,
+          status: "Unclassified",
+        },
+        {
+          rawValues: {
+            part: `${exactCode.slice(0, 6)}-REVIEW`,
+            description: "Possible",
+          },
+          rowNumber: 3,
+          status: "Unclassified",
+        },
+        {
+          rawValues: {
+            part: `DESC-${suffix}`,
+            description: "Existing product",
+          },
+          rowNumber: 4,
+          status: "Unclassified",
+        },
+        {
+          rawValues: {
+            part: `NEW-${suffix}`,
+            description: "Brand new component",
+          },
+          rowNumber: 5,
+          status: "Unclassified",
+        },
+        {
+          rawValues: { part: "", description: "Missing part" },
+          rowNumber: 6,
+          status: "Unclassified",
+        },
+        {
+          rawValues: {
+            part: legacyQuoteUid,
+            description: "Historical Q alias",
+          },
+          rowNumber: 7,
+          status: "Unclassified",
+        },
+        {
+          rawValues: { part: "", description: "" },
+          rowNumber: 8,
+          status: "Unclassified",
+        },
       ],
     })
 
-    expect(
-      review.rows.map((row) => [row.status, row.suggestedAction])
-    ).toEqual([
-      ["Existing Quoted Match", "Commercial Requote"],
-      ["In Progress Match", "Link to existing work"],
-      ["Possible Match", "Review Manually"],
-      ["Description Match - Sales Check", "Ask Sales"],
-      ["New Line", "Add New Line"],
-      ["Missing Information", "Skip"],
-      ["Existing Quoted Match", "Commercial Requote"],
-    ])
+    expect(review.rows.map((row) => [row.status, row.suggestedAction])).toEqual(
+      [
+        ["Existing Quoted Match", "Commercial Requote"],
+        ["In Progress Match", "Link to existing work"],
+        ["Possible Match", "Review Manually"],
+        ["Description Match - Sales Check", "Ask Sales"],
+        ["New Line", "Add New Line"],
+        ["Missing Information", "Skip"],
+        ["Existing Quoted Match", "Commercial Requote"],
+      ]
+    )
 
     const applied = await repository.applyImportReview({
       decisions: [
@@ -182,9 +228,9 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       "Skip",
       "Commercial Requote",
     ])
-    expect(
-      applied.rows.filter((row) => row.createdEnquiryItemId)
-    ).toHaveLength(6)
+    expect(applied.rows.filter((row) => row.createdEnquiryItemId)).toHaveLength(
+      6
+    )
   })
 
   test("preserves handover, clarification, design, attachment, and import rules", async () => {
@@ -362,6 +408,18 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
 
   test("preserves the existing-portfolio design shortcut", async () => {
     const snapshot = await repository.getEnquiry(enquiryId)
+    await repository.updateTechnicalReview({
+      checklist: {
+        drawing_available: true,
+        drawing_information_complete: true,
+        finish_plating_clear: true,
+        grade_material_clear: true,
+        packaging_clear: true,
+        tooling_process_feasible: true,
+      },
+      enquiryItemId: snapshot.items[1]!.id,
+      status: "Duplicate / Existing Product",
+    })
     await expect(
       repository.saveDesign({
         designStatus: "Not Required",
@@ -374,5 +432,655 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     ).resolves.toMatchObject({
       nextStageStatus: "Product Costing Complete",
     })
+  })
+
+  test("persists the full Design dossier and materializes a nested Package BOM", async () => {
+    const suffix = Date.now().toString(36)
+    const enquiry = await repository.createEnquiry({
+      commercialTerms: {
+        conversionRate: 83.25,
+        currency: "USD",
+        incoterms: "FOB",
+        packagingTerms: "Export",
+        paymentTerms: "Net 30",
+        shipmentMode: "Sea",
+      },
+      customerId,
+      organizationId,
+      receivedOn: "2026-07-22",
+      source: "Email",
+    })
+    const item = await repository.addEnquiryItem({
+      customerPartCode: `PKG-${suffix}`,
+      description: "Nested package",
+      enquiryId: enquiry.id,
+      organizationId,
+      quantity: 2,
+    })
+    await repository.handOverToTechnicalReview(enquiry.id)
+    await repository.updateTechnicalReview({
+      checklist: {
+        drawing_available: true,
+        drawing_information_complete: true,
+        finish_plating_clear: true,
+        grade_material_clear: true,
+        packaging_clear: true,
+        tooling_process_feasible: true,
+      },
+      enquiryItemId: item.id,
+      status: "Feasible",
+    })
+    await repository.requestDesignClarification({
+      direction: "Design to Technical",
+      enquiryItemId: item.id,
+      message: "Confirm the package assembly boundary.",
+    })
+    await repository.updateTechnicalReview({
+      checklist: {
+        drawing_available: true,
+        drawing_information_complete: true,
+        finish_plating_clear: true,
+        grade_material_clear: true,
+        packaging_clear: true,
+        tooling_process_feasible: true,
+      },
+      enquiryItemId: item.id,
+      status: "Feasible",
+      technicalRemarks: "Assembly boundary confirmed.",
+    })
+
+    const dossier = {
+      approvalStatus: "Approved",
+      assemblyRequired: "Yes",
+      bomLines: [
+        {
+          componentCode: "",
+          componentItemType: "List",
+          componentSource: "New",
+          lineNumber: 1,
+          parentLineNumber: null,
+          quantity: 1,
+        },
+        {
+          componentCode: "",
+          componentItemType: "List",
+          componentSource: "New",
+          lineNumber: 2,
+          parentLineNumber: 1,
+          quantity: 2,
+        },
+      ],
+      checkedBy: "Design checker",
+      componentsRequired: "Yes",
+      designBomCompleted: "Yes",
+      designBomRequired: "Yes",
+      designRemarks: "Release after nested validation.",
+      designStatus: "Design Complete",
+      designerName: "Design owner",
+      enquiryItemId: item.id,
+      fixtureApproxCost: 12.5,
+      fixtureRequired: "Yes",
+      gaugesRequired: "Yes",
+      inspectionApproxCost: 8.75,
+      internalPartCategory: "Valve",
+      internalPartSize: "10mm",
+      internalPartSubCategory: "Stem",
+      itemType: "Package",
+      manufacturingProcess: "Machining",
+      operationNotes: "Machine, assemble, inspect.",
+      packageProcessRequired: "Assembly",
+      portfolioMatchStatus: "New Design Required",
+      quotedPartUid: null,
+      revisionNo: "2",
+      targetCompletionDate: "2026-08-05",
+      toolingApproxCost: 25,
+      toolingRequired: "Yes",
+    }
+
+    await expect(repository.saveDesign(dossier)).rejects.toThrow(
+      "under an Assembly"
+    )
+    dossier.bomLines[0]!.componentItemType = "Assembly"
+    const design = await repository.saveDesign(dossier)
+    expect(design.quotedPartUid).toMatch(/^C\d+$/)
+    await repository.recordAttachment({
+      byteSize: 128,
+      fileName: "internal-drawing.pdf",
+      mediaType: "application/pdf",
+      organizationId,
+      purpose: "internal_drawing",
+      sourceId: `design-file-${suffix}`,
+      storageKey: `attachments/${suffix}/internal-drawing.pdf`,
+      targetId: design.id,
+      targetTable: "design_tasks",
+    })
+    await expect(
+      repository.listAttachments({
+        organizationId,
+        purpose: "internal_drawing",
+        targetId: design.id,
+        targetTable: "design_tasks",
+      })
+    ).resolves.toEqual([
+      expect.objectContaining({ fileName: "internal-drawing.pdf" }),
+    ])
+    expect(
+      (await repository.listDesignQueue(organizationCode)).find(
+        (row) => row.enquiryItemId === item.id
+      )
+    ).toMatchObject({
+      approvalStatus: "Approved",
+      designId: design.id,
+      quotedPartUid: design.quotedPartUid,
+    })
+
+    const persisted = await pool.query<{
+      approval_status: string
+      assembly_required: string
+      checked_by: string
+      designer_name: string
+      fixture_approx_cost: string
+      inspection_approx_cost: string
+      internal_part_name: string
+      tooling_approx_cost: string
+    }>(
+      `
+        SELECT approval_status, assembly_required, checked_by, designer_name,
+          fixture_approx_cost::text, inspection_approx_cost::text,
+          internal_part_name, tooling_approx_cost::text
+        FROM sales.design_tasks
+        WHERE id = $1
+      `,
+      [design.id]
+    )
+    expect(persisted.rows[0]).toMatchObject({
+      approval_status: "Approved",
+      assembly_required: "Yes",
+      checked_by: "Design checker",
+      designer_name: "Design owner",
+      fixture_approx_cost: "12.500000",
+      inspection_approx_cost: "8.750000",
+      internal_part_name: "10mm Stem Valve",
+      tooling_approx_cost: "25.000000",
+    })
+    const designBom = await pool.query<{
+      component_item_type: string
+      line_number: number
+      package_part_uid: string
+      parent_line_number: number | null
+    }>(
+      `
+        SELECT component_item_type, line_number, package_part_uid,
+          parent_line_number
+        FROM sales.design_bom_lines
+        WHERE design_task_id = $1
+        ORDER BY line_number
+      `,
+      [design.id]
+    )
+    expect(designBom.rows[0]).toMatchObject({
+      component_item_type: "Assembly",
+      line_number: 1,
+      parent_line_number: null,
+    })
+    expect(designBom.rows[0]!.package_part_uid).toMatch(/^A\d+$/)
+    expect(designBom.rows[1]!.package_part_uid).toMatch(/^Q\d+$/)
+
+    const prepared = await repository.prepareCostingFromDesign(item.id)
+    expect(prepared).toMatchObject({
+      nextStageStatus: "Product Costing",
+      productUid: design.quotedPartUid,
+    })
+    const nestedBom = await pool.query<{ count: string }>(
+      `
+        SELECT count(*)::text AS count
+        FROM catalog.bom_lines child
+        JOIN catalog.bom_lines parent
+          ON parent.component_item_id = child.parent_item_id
+        WHERE parent.parent_item_id = $1
+      `,
+      [prepared.productId]
+    )
+    expect(nestedBom.rows[0]!.count).toBe("1")
+    await repository.requestDesignClarification({
+      direction: "Product Costing to Design",
+      enquiryItemId: item.id,
+      message: "Revise the Assembly operation sequence.",
+    })
+    const reopened = await pool.query<{
+      design_status: string
+      next_stage_status: string
+    }>(
+      `
+        SELECT design_status, next_stage_status
+        FROM sales.design_tasks
+        WHERE id = $1
+      `,
+      [design.id]
+    )
+    expect(reopened.rows[0]).toEqual({
+      design_status: "Changes Required",
+      next_stage_status: "Changes Required",
+    })
+  })
+
+  test("preserves enquiry correction gates and drawing replacement history", async () => {
+    const suffix = Date.now().toString(36)
+    const enquiry = await repository.createEnquiry({
+      buyerName: "Initial buyer",
+      commercialTerms: {
+        conversionRate: 83.25,
+        currency: "USD",
+        incoterms: "FOB",
+        packagingTerms: "Export",
+        paymentTerms: "Net 30",
+        shipmentMode: "Sea",
+      },
+      customerId,
+      organizationId,
+      receivedOn: "2026-07-22",
+      source: "Email",
+    })
+
+    await expect(
+      repository.updateEnquiry({
+        buyerName: "Updated buyer",
+        customerId,
+        enquiryId: enquiry.id,
+        organizationId,
+        priority: "High",
+        remarks: "Register correction",
+        source: "Portal",
+      })
+    ).resolves.toMatchObject({
+      buyerName: "Updated buyer",
+      priority: "High",
+      source: "Portal",
+    })
+
+    const line = await repository.addEnquiryItem({
+      customerPartCode: `CORR-${suffix}`,
+      description: "Original description",
+      enquiryId: enquiry.id,
+      organizationId,
+      quantity: 4,
+    })
+    await repository.handOverToTechnicalReview(enquiry.id)
+    await repository.updateTechnicalReview({
+      checklist: {
+        drawing_available: true,
+        drawing_information_complete: false,
+        finish_plating_clear: true,
+        grade_material_clear: true,
+        packaging_clear: true,
+        tooling_process_feasible: true,
+      },
+      enquiryItemId: line.id,
+      missingInformation: "Confirm drawing tolerance.",
+      status: "Need Clarification",
+    })
+
+    const firstDrawing = await repository.recordAttachment({
+      byteSize: 12,
+      fileName: "drawing-r0.pdf",
+      mediaType: "application/pdf",
+      organizationId,
+      sourceId: `drawing-r0-${suffix}`,
+      storageKey: `attachments/${suffix}/drawing-r0.pdf`,
+      targetId: line.id,
+    })
+    const replacementDrawing = await repository.recordAttachment({
+      byteSize: 18,
+      fileName: "drawing-r1.pdf",
+      mediaType: "application/pdf",
+      organizationId,
+      sourceId: `drawing-r1-${suffix}`,
+      storageKey: `attachments/${suffix}/drawing-r1.pdf`,
+      targetId: line.id,
+    })
+
+    await expect(
+      repository.updateEnquiryItem({
+        actorUserId: null,
+        customerPartCode: `CORR-${suffix}-R1`,
+        description: "Corrected description",
+        drawingReference: "DRG-R1",
+        enquiryItemId: line.id,
+        grade: "CW614N",
+        quantity: 8,
+        remarks: "Customer correction",
+        targetPrice: 7.5,
+      })
+    ).resolves.toMatchObject({
+      customerPartCode: `CORR-${suffix}-R1`,
+      technicalReviewStatus: "Pending Review",
+    })
+
+    const correctionState = await pool.query<{
+      open_sales_clarifications: string
+      reviewed_at: Date | null
+      technical_checklist: Record<string, boolean> | null
+      technical_review_status: string
+    }>(
+      `
+        SELECT enquiry_item.technical_review_status,
+          enquiry_item.technical_checklist, enquiry_item.reviewed_at,
+          count(clarification.id) FILTER (
+            WHERE clarification.target_stage = 'Sales'
+              AND clarification.status = 'Open'
+          )::text AS open_sales_clarifications
+        FROM sales.enquiry_items enquiry_item
+        LEFT JOIN sales.clarification_tasks clarification
+          ON clarification.enquiry_item_id = enquiry_item.id
+        WHERE enquiry_item.id = $1
+        GROUP BY enquiry_item.id
+      `,
+      [line.id]
+    )
+    expect(correctionState.rows[0]).toEqual({
+      open_sales_clarifications: "0",
+      reviewed_at: null,
+      technical_checklist: {},
+      technical_review_status: "Pending Review",
+    })
+
+    await expect(
+      repository.getCurrentDrawing({
+        enquiryItemId: line.id,
+        organizationId,
+      })
+    ).resolves.toMatchObject({ id: replacementDrawing.id })
+    await expect(
+      repository.listDrawingHistory({
+        enquiryItemId: line.id,
+        organizationId,
+      })
+    ).resolves.toMatchObject([
+      { id: replacementDrawing.id },
+      { id: firstDrawing.id },
+    ])
+
+    await expect(repository.deleteEnquiry(enquiry.id)).rejects.toThrow(
+      "cannot be deleted"
+    )
+
+    const disposable = await repository.createEnquiry({
+      customerId,
+      organizationId,
+      receivedOn: "2026-07-22",
+    })
+    await expect(repository.deleteEnquiry(disposable.id)).resolves.toEqual({
+      id: disposable.id,
+    })
+    await expect(repository.getEnquiry(disposable.id)).rejects.toThrow(
+      "not found"
+    )
+  })
+
+  test("preserves Sales match decisions, dedicated queues, and chained follow-ups", async () => {
+    const suffix = Date.now().toString(36)
+    const enquiry = await repository.createEnquiry({
+      commercialTerms: {
+        conversionRate: 83.25,
+        currency: "USD",
+        incoterms: "FOB",
+        packagingTerms: "Export",
+        paymentTerms: "Net 30",
+        shipmentMode: "Sea",
+      },
+      customerId,
+      organizationId,
+      receivedOn: "2026-07-22",
+    })
+    const commercialLine = await repository.addEnquiryItem({
+      customerPartCode: `DUP-${suffix}`,
+      description: "Commercial match",
+      enquiryId: enquiry.id,
+      organizationId,
+      quantity: 2,
+    })
+    const technicalLine = await repository.addEnquiryItem({
+      customerPartCode: `REV-${suffix}`,
+      description: "Technical revision",
+      enquiryId: enquiry.id,
+      organizationId,
+      quantity: 3,
+    })
+    await repository.handOverToTechnicalReview(enquiry.id)
+    for (const line of [commercialLine, technicalLine]) {
+      await repository.updateTechnicalReview({
+        checklist: {
+          drawing_available: true,
+          drawing_information_complete: false,
+          finish_plating_clear: true,
+          grade_material_clear: true,
+          packaging_clear: true,
+          tooling_process_feasible: true,
+        },
+        enquiryItemId: line.id,
+        missingInformation: "Sales decision required.",
+        status: "Need Clarification",
+      })
+    }
+
+    const quote = await pool.query<{ id: string }>(
+      `
+        INSERT INTO sales.quote_items (
+          organization_id, quote_number, revision, enquiry_id,
+          enquiry_item_id, customer_id, item_id, lineage_item_id,
+          customer_part_code, quantity, unit_price, currency_code,
+          status, is_active, sent_at, price_lineage_key,
+          source_system, source_table, source_id
+        )
+        VALUES (
+          $1, $2, 1, $3, $4, $5, $6, $6, $7, 1, 25, 'USD',
+          'Sent', true, now(), $8, 'test', 'quote_items', $9
+        )
+        RETURNING id
+      `,
+      [
+        organizationId,
+        `QT-SALES-${suffix}`,
+        enquiry.id,
+        commercialLine.id,
+        customerId,
+        existingProductId,
+        `MATCH-${suffix}`,
+        `sales-match:${suffix}`,
+        `sales-match-${suffix}`,
+      ]
+    )
+
+    const salesQueue =
+      await repository.listSalesClarificationQueue(organizationCode)
+    expect(
+      salesQueue.filter((row) => row.enquiryId === enquiry.id)
+    ).toHaveLength(2)
+    await expect(
+      repository.listSalesMatchCandidates(commercialLine.id)
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ quoteItemId: quote.rows[0]!.id }),
+      ])
+    )
+    expect(
+      (await repository.listTechnicalReviewQueue(organizationCode)).some(
+        (row) => row.enquiryId === enquiry.id
+      )
+    ).toBe(false)
+
+    const snapshot = await repository.getEnquiry(enquiry.id)
+    const clarificationFor = (lineId: string) =>
+      snapshot.clarifications.find(
+        (clarification) => clarification.enquiryItemId === lineId
+      )!
+    await repository.completeSalesClarification({
+      clarificationTaskId: clarificationFor(commercialLine.id).id,
+      customerPartCode: `DUP-${suffix}-CONFIRMED`,
+      description: "Commercial match confirmed",
+      enquiryItemId: commercialLine.id,
+      quantity: 5,
+      response: "Use the sent commercial item.",
+      salesMatchDecision: `quote:${quote.rows[0]!.id}`,
+      targetPrice: 24,
+    })
+    await repository.completeSalesClarification({
+      clarificationTaskId: clarificationFor(technicalLine.id).id,
+      customerPartCode: `REV-${suffix}-CONFIRMED`,
+      description: "Technical revision confirmed",
+      enquiryItemId: technicalLine.id,
+      quantity: 6,
+      response: "Dimensions changed; review again.",
+      salesMatchDecision: `technical:${quote.rows[0]!.id}`,
+      targetPrice: 28,
+    })
+
+    const matchStates = await pool.query<{
+      design_status: string | null
+      enquiry_item_id: string
+      link_type: string | null
+      matched_product_id: string | null
+      next_stage_status: string | null
+      revision_type: string | null
+      technical_review_status: string
+    }>(
+      `
+        SELECT enquiry_item.id AS enquiry_item_id,
+          enquiry_item.technical_review_status, enquiry_item.link_type,
+          enquiry_item.revision_type, design.design_status,
+          design.matched_product_id, design.next_stage_status
+        FROM sales.enquiry_items enquiry_item
+        LEFT JOIN sales.design_tasks design
+          ON design.enquiry_item_id = enquiry_item.id
+        WHERE enquiry_item.id = ANY($1::uuid[])
+        ORDER BY enquiry_item.id
+      `,
+      [[commercialLine.id, technicalLine.id]]
+    )
+    expect(matchStates.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          design_status: "Not Required",
+          enquiry_item_id: commercialLine.id,
+          link_type: "Matched Quote - Commercial Requote",
+          matched_product_id: existingProductId,
+          next_stage_status: "Product Costing Complete",
+          technical_review_status: "Duplicate / Existing Product",
+        }),
+        expect.objectContaining({
+          enquiry_item_id: technicalLine.id,
+          link_type: "Matched Quote - Technical Revision",
+          revision_type: "Technical Revision",
+          technical_review_status: "Pending Review",
+        }),
+      ])
+    )
+    expect(
+      (await repository.listTechnicalReviewQueue(organizationCode)).some(
+        (row) => row.enquiryItemId === technicalLine.id
+      )
+    ).toBe(true)
+
+    const followup = await repository.createFollowup({
+      channel: "Phone",
+      dueOn: "2026-07-23",
+      enquiryId: enquiry.id,
+      note: "Call the buyer.",
+      organizationId,
+      quoteItemId: quote.rows[0]!.id,
+    })
+    const completed = await repository.completeFollowup({
+      channel: "Email",
+      followupId: followup.id,
+      nextDueOn: "2026-07-30",
+      nextNote: "Send the revised drawing.",
+      note: "Buyer contacted.",
+      status: "Completed",
+    })
+    expect(completed).toMatchObject({
+      id: followup.id,
+      status: "Completed",
+      nextFollowupId: expect.any(String),
+    })
+    await expect(repository.listFollowups(organizationCode)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          enquiryId: enquiry.id,
+          id: completed.nextFollowupId,
+          status: "Pending",
+        }),
+        expect.objectContaining({
+          enquiryId: enquiry.id,
+          id: followup.id,
+          status: "Completed",
+        }),
+      ])
+    )
+  })
+
+  test("imports enquiry register creates and gated updates atomically", async () => {
+    const existing = await repository.createEnquiry({
+      customerId,
+      organizationId,
+      receivedOn: "2026-07-22",
+      source: "Email",
+    })
+    const customer = await pool.query<{ customer_uid: string }>(
+      "SELECT customer_uid FROM sales.customers WHERE id = $1",
+      [customerId]
+    )
+    await expect(
+      repository.importEnquiryRegister({
+        organizationId,
+        receivedOn: "2026-07-22",
+        rows: [
+          {
+            buyerName: "Imported buyer",
+            customerUid: customer.rows[0]!.customer_uid,
+            enquiryNumber: existing.enquiryNumber,
+            priority: "High",
+            remarks: "Updated from register",
+            rowNumber: 2,
+            source: "Portal",
+          },
+          {
+            customerName: "Workflow Customer",
+            priority: "Normal",
+            rowNumber: 3,
+            source: "Email",
+          },
+        ],
+      })
+    ).resolves.toEqual({ createdCount: 1, updatedCount: 1 })
+    await expect(repository.getEnquiry(existing.id)).resolves.toMatchObject({
+      enquiry: {
+        buyerName: "Imported buyer",
+        priority: "High",
+        remarks: "Updated from register",
+        source: "Portal",
+      },
+    })
+
+    const before = (await repository.listEnquiries(organizationCode)).length
+    await expect(
+      repository.importEnquiryRegister({
+        organizationId,
+        receivedOn: "2026-07-22",
+        rows: [
+          {
+            customerUid: customer.rows[0]!.customer_uid,
+            rowNumber: 2,
+          },
+          {
+            customerUid: customer.rows[0]!.customer_uid,
+            enquiryNumber: "ENQ-UNKNOWN",
+            rowNumber: 3,
+          },
+        ],
+      })
+    ).rejects.toThrow("references unknown ENQ")
+    expect((await repository.listEnquiries(organizationCode)).length).toBe(
+      before
+    )
   })
 })

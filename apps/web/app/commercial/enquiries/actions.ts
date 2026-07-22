@@ -11,6 +11,11 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
+import {
+  parseEnquiryImportFile,
+  parseEnquiryRegisterFile,
+} from "./enquiry-workbook"
+
 const enquiriesPath = "/commercial/enquiries"
 
 function requiredText(formData: FormData, name: string) {
@@ -61,9 +66,12 @@ function safeFileName(fileName: string) {
 async function persistAttachment(
   file: File,
   input: {
+    capability?: string
     enquiryId: string
-    enquiryItemId: string
     organizationId: string
+    purpose?: "cad" | "customer_marked" | "drawing" | "internal_drawing"
+    targetId: string
+    targetTable?: "design_tasks" | "enquiry_items"
   }
 ) {
   if (file.size > 25 * 1024 * 1024) {
@@ -79,7 +87,7 @@ async function persistAttachment(
   const storageKey = path.posix.join(
     "attachments",
     input.enquiryId,
-    input.enquiryItemId,
+    input.targetId,
     sourceId,
     fileName
   )
@@ -88,13 +96,13 @@ async function persistAttachment(
     path.join(/*turbopackIgnore: true*/ process.cwd(), "local-data")
   const filePath = path.join(
     /*turbopackIgnore: true*/ storageRoot,
-    ...storageKey.split("/"),
+    ...storageKey.split("/")
   )
   await mkdir(path.dirname(filePath), { recursive: true })
   await writeFile(filePath, bytes, { flag: "wx" })
   try {
     await withWorkflow(
-      "pricing.enquiries.write",
+      input.capability ?? "pricing.enquiries.write",
       `${enquiriesPath}/${input.enquiryId}`,
       (workflow) =>
         workflow.recordAttachment({
@@ -105,7 +113,9 @@ async function persistAttachment(
           sha256,
           sourceId,
           storageKey,
-          targetId: input.enquiryItemId,
+          purpose: input.purpose,
+          targetId: input.targetId,
+          targetTable: input.targetTable,
         })
     )
   } catch (error) {
@@ -142,6 +152,31 @@ export async function createEnquiryAction(formData: FormData) {
   redirect(`${enquiriesPath}/${enquiry.id}`)
 }
 
+export async function importEnquiryRegisterAction(formData: FormData) {
+  const file = formData.get("enquiry_register_file")
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("Enquiry register import file is required.")
+  }
+  const rows = parseEnquiryRegisterFile(
+    Buffer.from(await file.arrayBuffer()),
+    file.name
+  )
+  await withWorkflow(
+    "pricing.enquiries.write",
+    enquiriesPath,
+    (workflow, actorUserId) =>
+      workflow.importEnquiryRegister({
+        actorUserId,
+        organizationId: requiredText(formData, "organization_id"),
+        receivedOn: requiredText(formData, "received_on"),
+        rows,
+      })
+  )
+  revalidatePath(enquiriesPath)
+  revalidatePath("/commercial/sales")
+  redirect(enquiriesPath)
+}
+
 export async function addEnquiryItemAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const organizationId = requiredText(formData, "organization_id")
@@ -166,13 +201,86 @@ export async function addEnquiryItemAction(formData: FormData) {
   if (drawing instanceof File && drawing.size > 0) {
     await persistAttachment(drawing, {
       enquiryId,
-      enquiryItemId: line.id,
       organizationId,
+      targetId: line.id,
     })
   }
   revalidatePath(enquiriesPath)
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
   redirect(`${enquiriesPath}/${enquiryId}`)
+}
+
+export async function updateEnquiryAction(formData: FormData) {
+  const enquiryId = requiredText(formData, "enquiry_id")
+  await withWorkflow(
+    "pricing.enquiries.write",
+    `${enquiriesPath}/${enquiryId}`,
+    (workflow, actorUserId) =>
+      workflow.updateEnquiry({
+        actorUserId,
+        buyerName: optionalText(formData, "buyer_name"),
+        commercialTerms: {
+          conversionRate: numeric(formData, "conversion_rate", 1),
+          currency: requiredText(formData, "currency"),
+          incoterms: optionalText(formData, "incoterms"),
+          packagingTerms: optionalText(formData, "packaging_terms"),
+          paymentTerms: optionalText(formData, "payment_terms"),
+          shipmentMode: optionalText(formData, "shipment_mode"),
+        },
+        customerId: requiredText(formData, "customer_id"),
+        enquiryId,
+        organizationId: requiredText(formData, "organization_id"),
+        priority: requiredText(formData, "priority"),
+        receivedOn: requiredText(formData, "received_on"),
+        remarks: optionalText(formData, "remarks"),
+        source: requiredText(formData, "source"),
+      })
+  )
+  revalidatePath(enquiriesPath)
+  revalidatePath(`${enquiriesPath}/${enquiryId}`)
+}
+
+export async function deleteEnquiryAction(formData: FormData) {
+  const enquiryId = requiredText(formData, "enquiry_id")
+  await withWorkflow(
+    "pricing.enquiries.write",
+    `${enquiriesPath}/${enquiryId}`,
+    (workflow, actorUserId) => workflow.deleteEnquiry(enquiryId, actorUserId)
+  )
+  revalidatePath(enquiriesPath)
+  redirect(enquiriesPath)
+}
+
+export async function updateEnquiryItemAction(formData: FormData) {
+  const enquiryId = requiredText(formData, "enquiry_id")
+  const enquiryItemId = requiredText(formData, "enquiry_item_id")
+  const organizationId = requiredText(formData, "organization_id")
+  await withWorkflow(
+    "pricing.enquiries.write",
+    `${enquiriesPath}/${enquiryId}`,
+    (workflow, actorUserId) =>
+      workflow.updateEnquiryItem({
+        actorUserId,
+        customerPartCode: requiredText(formData, "part"),
+        description: requiredText(formData, "description"),
+        drawingReference: optionalText(formData, "drawing_reference"),
+        enquiryItemId,
+        grade: optionalText(formData, "grade"),
+        quantity: numeric(formData, "quantity"),
+        remarks: optionalText(formData, "remarks"),
+        targetPrice: numeric(formData, "target_price"),
+      })
+  )
+  const drawing = formData.get("drawing_file")
+  if (drawing instanceof File && drawing.size > 0) {
+    await persistAttachment(drawing, {
+      enquiryId,
+      organizationId,
+      targetId: enquiryItemId,
+    })
+  }
+  revalidatePath(enquiriesPath)
+  revalidatePath(`${enquiriesPath}/${enquiryId}`)
 }
 
 export async function handOverEnquiryAction(formData: FormData) {
@@ -219,6 +327,8 @@ export async function updateTechnicalReviewAction(formData: FormData) {
 
 export async function completeSalesClarificationAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
+  const enquiryItemId = requiredText(formData, "enquiry_item_id")
+  const organizationId = requiredText(formData, "organization_id")
   await withWorkflow(
     "pricing.sales.write",
     `${enquiriesPath}/${enquiryId}`,
@@ -226,51 +336,175 @@ export async function completeSalesClarificationAction(formData: FormData) {
       workflow.completeSalesClarification({
         actorUserId,
         clarificationTaskId: requiredText(formData, "clarification_task_id"),
-        enquiryItemId: requiredText(formData, "enquiry_item_id"),
+        customerPartCode: requiredText(formData, "part"),
+        description: requiredText(formData, "description"),
+        drawingReference: optionalText(formData, "drawing_reference"),
+        enquiryItemId,
+        grade: optionalText(formData, "grade"),
+        quantity: numeric(formData, "quantity"),
+        remarks: optionalText(formData, "remarks"),
         response: optionalText(formData, "response"),
+        salesMatchDecision: requiredText(formData, "sales_match_decision"),
+        targetPrice: numeric(formData, "target_price"),
       })
   )
+  const drawing = formData.get("drawing_file")
+  if (drawing instanceof File && drawing.size > 0) {
+    await persistAttachment(drawing, {
+      enquiryId,
+      organizationId,
+      targetId: enquiryItemId,
+    })
+  }
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
+  revalidatePath("/commercial/sales")
+  revalidatePath("/commercial/technical-review")
 }
 
 export async function saveDesignAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
+  const organizationId = requiredText(formData, "organization_id")
   const portfolioMatchStatus = requiredText(formData, "portfolio_match_status")
   const quotedPartUid = optionalText(formData, "quoted_part_uid")
-  await withWorkflow(
+  const values = (name: string) =>
+    formData
+      .getAll(name)
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+  const lineNumbers = values("bom_line_number")
+  const componentCodes = values("bom_component_code")
+  const componentSources = values("bom_component_source")
+  const componentItemTypes = values("bom_component_item_type")
+  const existingProductIds = values("bom_existing_product_id")
+  const parentLineNumbers = values("bom_parent_line_number")
+  const quantities = values("bom_quantity")
+  const packageParts = values("bom_package_part")
+  const parsedBomLines =
+    portfolioMatchStatus === "Matches Existing Portfolio"
+      ? []
+      : lineNumbers
+          .map((lineNumber, index) => ({
+            componentCode: componentCodes[index] ?? "",
+            componentItemType: componentItemTypes[index] || "List",
+            componentSource: componentSources[index] || "New",
+            existingProductId: existingProductIds[index] || null,
+            lineNumber: Number(lineNumber || index + 1),
+            packagePart: packageParts[index] || null,
+            parentLineNumber: parentLineNumbers[index]
+              ? Number(parentLineNumbers[index])
+              : null,
+            quantity: Number(quantities[index] || 1),
+          }))
+          .filter(
+            (line) =>
+              line.componentCode ||
+              line.existingProductId ||
+              line.packagePart ||
+              (lineNumbers.length === 1 && line.lineNumber === 1)
+          )
+  const bomLines =
+    parsedBomLines.length || !quotedPartUid
+      ? parsedBomLines
+      : [
+          {
+            casting: numeric(formData, "casting", 1),
+            componentCode: quotedPartUid,
+            componentItemType: "List",
+            componentSource: "New",
+            grade: optionalText(formData, "grade"),
+            lineNumber: 1,
+            pieceWeight: numeric(formData, "piece_weight"),
+            quantity: 1,
+            rodSize: optionalText(formData, "rod_size"),
+            rodType: optionalText(formData, "rod_type"),
+          },
+        ]
+  const saved = await withWorkflow(
     "pricing.design.write",
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) =>
       workflow.saveDesign({
+        approvalStatus: optionalText(formData, "approval_status") ?? "Pending",
         actorUserId,
-        bomLines:
-          portfolioMatchStatus === "Matches Existing Portfolio" ||
-          !quotedPartUid
-            ? []
-            : [
-                {
-                  casting: numeric(formData, "casting", 1),
-                  componentCode: quotedPartUid,
-                  componentSource: "New",
-                  grade: optionalText(formData, "grade"),
-                  lineNumber: 1,
-                  pieceWeight: numeric(formData, "piece_weight"),
-                  quantity: 1,
-                  rodSize: optionalText(formData, "rod_size"),
-                  rodType: optionalText(formData, "rod_type"),
-                },
-              ],
+        assemblyRequired: optionalText(formData, "assembly_required") ?? "No",
+        bomLines,
+        checkedBy: optionalText(formData, "checked_by"),
+        componentsRequired: optionalText(formData, "components_required"),
+        designBomCompleted:
+          optionalText(formData, "design_bom_completed") ??
+          (requiredText(formData, "design_status") === "Design Complete"
+            ? "Yes"
+            : "No"),
+        designBomRequired:
+          optionalText(formData, "design_bom_required") ?? "Yes",
         designRemarks: optionalText(formData, "design_remarks"),
         designStatus: requiredText(formData, "design_status"),
+        designerName: optionalText(formData, "designer_name"),
         enquiryItemId: requiredText(formData, "enquiry_item_id"),
+        fixtureApproxCost: numeric(formData, "fixture_approx_cost"),
+        fixtureRequired: optionalText(formData, "fixture_required") ?? "No",
+        gaugesRequired: optionalText(formData, "gauges_required") ?? "No",
+        inspectionApproxCost: numeric(formData, "inspection_approx_cost"),
+        internalPartCategory: optionalText(formData, "internal_part_category"),
+        internalPartSize: optionalText(formData, "internal_part_size"),
+        internalPartSubCategory: optionalText(
+          formData,
+          "internal_part_sub_category"
+        ),
         itemType: requiredText(formData, "item_type"),
         manufacturingProcess: optionalText(formData, "manufacturing_process"),
         matchedProductId: optionalText(formData, "matched_product_id"),
+        operationNotes: optionalText(formData, "operation_notes"),
+        packageProcessRequired: optionalText(
+          formData,
+          "package_process_required"
+        ),
         portfolioMatchStatus,
         quotedPartUid: quotedPartUid ?? null,
+        revisionNo: optionalText(formData, "revision_no"),
+        targetCompletionDate: optionalText(formData, "target_completion_date"),
+        toolingApproxCost: numeric(formData, "tooling_approx_cost"),
+        toolingRequired: optionalText(formData, "tooling_required") ?? "No",
+      })
+  )
+  for (const [field, purpose] of [
+    ["internal_drawing_file", "internal_drawing"],
+    ["customer_marked_file", "customer_marked"],
+    ["cad_file", "cad"],
+  ] as const) {
+    const file = formData.get(field)
+    if (file instanceof File && file.size > 0) {
+      await persistAttachment(file, {
+        capability: "pricing.design.write",
+        enquiryId,
+        organizationId,
+        purpose,
+        targetId: saved.id,
+        targetTable: "design_tasks",
+      })
+    }
+  }
+  revalidatePath(`${enquiriesPath}/${enquiryId}`)
+  revalidatePath("/commercial/design")
+}
+
+export async function requestDesignClarificationAction(formData: FormData) {
+  const enquiryId = requiredText(formData, "enquiry_id")
+  await withWorkflow(
+    "pricing.design.write",
+    "/commercial/design",
+    (workflow, actorUserId) =>
+      workflow.requestDesignClarification({
+        actorUserId,
+        direction: requiredText(formData, "direction") as
+          | "Design to Technical"
+          | "Product Costing to Design",
+        enquiryItemId: requiredText(formData, "enquiry_item_id"),
+        message: requiredText(formData, "message"),
       })
   )
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
+  revalidatePath("/commercial/design")
+  revalidatePath("/commercial/technical-review")
 }
 
 export async function prepareCostingAction(formData: FormData) {
@@ -291,33 +525,32 @@ export async function prepareCostingAction(formData: FormData) {
 export async function importEnquiryLinesAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const organizationId = requiredText(formData, "organization_id")
-  const raw = JSON.parse(requiredText(formData, "rows_json")) as unknown
-  if (!Array.isArray(raw) || raw.length === 0) {
-    throw new Error("rows_json must be a non-empty JSON array")
+  const file = formData.get("template_file")
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("Import file is required.")
   }
-  const rows = raw.map((value, index) => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      throw new Error(`Import row ${index + 1} must be an object`)
-    }
-    return {
-      rawValues: value as Record<string, unknown>,
-      rowNumber: index + 1,
-      status: "Unclassified",
-    }
-  })
-  await withWorkflow(
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const rows = parseEnquiryImportFile(buffer, file.name)
+  if (!rows.length) {
+    throw new Error("Template has no line items.")
+  }
+  const importKey = createHash("sha256")
+    .update(buffer)
+    .update(enquiryId)
+    .digest("hex")
+  const review = await withWorkflow(
     "pricing.enquiries.write",
     `${enquiriesPath}/${enquiryId}`,
-    async (workflow) => {
-      await workflow.createImportReview({
+    (workflow) =>
+      workflow.createImportReview({
         enquiryId,
-        importKey: requiredText(formData, "import_key"),
+        importKey,
         organizationId,
         rows,
       })
-    }
   )
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
+  redirect(`${enquiriesPath}/${enquiryId}/import-review/${review.id}`)
 }
 
 export async function applyEnquiryImportReviewAction(formData: FormData) {
@@ -327,8 +560,7 @@ export async function applyEnquiryImportReviewAction(formData: FormData) {
   if (
     !Array.isArray(parsed) ||
     parsed.some(
-      (rowNumber) =>
-        !Number.isInteger(rowNumber) || Number(rowNumber) <= 0
+      (rowNumber) => !Number.isInteger(rowNumber) || Number(rowNumber) <= 0
     )
   ) {
     throw new Error("row_numbers must contain positive integers")
@@ -349,4 +581,43 @@ export async function applyEnquiryImportReviewAction(formData: FormData) {
       })
   )
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
+  redirect(`${enquiriesPath}/${enquiryId}`)
+}
+
+export async function createFollowupAction(formData: FormData) {
+  const enquiryId = requiredText(formData, "enquiry_id")
+  await withWorkflow(
+    "pricing.sales.write",
+    "/commercial/sales",
+    (workflow, actorUserId) =>
+      workflow.createFollowup({
+        actorUserId,
+        channel: requiredText(formData, "channel"),
+        dueOn: requiredText(formData, "due_on"),
+        enquiryId,
+        note: optionalText(formData, "note"),
+        organizationId: requiredText(formData, "organization_id"),
+        quoteItemId: optionalText(formData, "quote_item_id"),
+        status: requiredText(formData, "status"),
+      })
+  )
+  revalidatePath("/commercial/sales")
+}
+
+export async function completeFollowupAction(formData: FormData) {
+  await withWorkflow(
+    "pricing.sales.write",
+    "/commercial/sales",
+    (workflow, actorUserId) =>
+      workflow.completeFollowup({
+        actorUserId,
+        channel: requiredText(formData, "channel"),
+        followupId: requiredText(formData, "followup_id"),
+        nextDueOn: optionalText(formData, "next_due_on"),
+        nextNote: optionalText(formData, "next_note"),
+        note: optionalText(formData, "note"),
+        status: requiredText(formData, "status"),
+      })
+  )
+  revalidatePath("/commercial/sales")
 }

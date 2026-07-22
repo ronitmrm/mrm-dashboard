@@ -54,6 +54,9 @@ export default async function CommercialCorrectionsPage() {
     repository.listPricingCorrections("MRMPL"),
     repository.listRevisionReferenceData("MRMPL"),
   ]).finally(() => repository.close())
+  const hasReversibleProducts = candidates.products.some(
+    (product) => product.canReverse
+  )
 
   return (
     <div className="grid gap-6">
@@ -89,7 +92,8 @@ export default async function CommercialCorrectionsPage() {
                           key={candidate.designTaskId}
                           value={candidate.designTaskId}
                         >
-                          {candidate.enquiryNumber} · Line {candidate.lineNumber}
+                          {candidate.enquiryNumber} · {candidate.companyName} ·
+                          Line {candidate.lineNumber}
                           {candidate.partReference
                             ? ` · ${candidate.partReference}`
                             : ""}
@@ -128,8 +132,27 @@ export default async function CommercialCorrectionsPage() {
                     <FieldLabel>Quoted product</FieldLabel>
                     <NativeSelect name="item_id" required>
                       {candidates.products.map((product) => (
-                        <NativeSelectOption key={product.id} value={product.id}>
+                        <NativeSelectOption
+                          disabled={!product.canReverse}
+                          key={product.id}
+                          value={product.id}
+                        >
                           {product.uid} · {product.description}
+                          {!product.canReverse
+                            ? ` · blocked: ${[
+                                product.blockerCounts.quotes
+                                  ? `${product.blockerCounts.quotes} quote(s)`
+                                  : null,
+                                product.blockerCounts.componentBom
+                                  ? "used in BOM"
+                                  : null,
+                                product.blockerCounts.matchedDesign
+                                  ? "design match"
+                                  : null,
+                              ]
+                                .filter(Boolean)
+                                .join(", ")}`
+                            : ""}
                         </NativeSelectOption>
                       ))}
                     </NativeSelect>
@@ -141,7 +164,11 @@ export default async function CommercialCorrectionsPage() {
                     <FieldLabel>Remarks</FieldLabel>
                     <Textarea name="remarks" />
                   </Field>
-                  <Button type="submit" variant="destructive">
+                  <Button
+                    disabled={!hasReversibleProducts}
+                    type="submit"
+                    variant="destructive"
+                  >
                     Delete unused quoted product
                   </Button>
                 </FieldGroup>

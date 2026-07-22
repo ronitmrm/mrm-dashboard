@@ -45,6 +45,7 @@ import {
   generateProformaInvoiceAction,
   importPurchaseOrderWorkbookAction,
   markProformaInvoiceSentAction,
+  uploadPurchaseOrderFileAction,
 } from "../actions"
 
 function money(value: number | null) {
@@ -112,9 +113,23 @@ export default async function PurchaseOrderPage({
                 {money(order.totalAmount)}
               </CardDescription>
             </div>
-            <Button asChild variant="outline">
-              <Link href="/commercial/orders">Purchase-order register</Link>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {order.fileName ? (
+                <Button asChild variant="outline">
+                  <Link href={`/commercial/orders/${order.id}/file`}>
+                    Open {order.fileName}
+                  </Link>
+                </Button>
+              ) : null}
+              <Button asChild variant="outline">
+                <Link href={`/commercial/orders/${order.id}/export.xlsx`}>
+                  Export PO Excel
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/commercial/orders">Purchase-order register</Link>
+              </Button>
+            </div>
           </div>
         </CardHeader>
         {order.cancellationReason ? (
@@ -127,7 +142,7 @@ export default async function PurchaseOrderPage({
       </Card>
 
       {!closed ? (
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid gap-6 xl:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle>Add PO line</CardTitle>
@@ -240,6 +255,11 @@ export default async function PurchaseOrderPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <Button asChild className="mb-4" size="sm" variant="outline">
+                <Link href="/commercial/orders/template.xlsx">
+                  Download import template
+                </Link>
+              </Button>
               <form action={importPurchaseOrderWorkbookAction}>
                 <input
                   name="purchase_order_id"
@@ -259,6 +279,42 @@ export default async function PurchaseOrderPage({
                   </Field>
                   <Button className="w-fit" type="submit" variant="secondary">
                     Import and match worksheet
+                  </Button>
+                </FieldGroup>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Original PO file</CardTitle>
+              <CardDescription>
+                Retain the customer-supplied PDF, spreadsheet, or document with
+                its checksum and audit trail. Uploading again replaces the
+                current link without deleting retained file evidence.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={uploadPurchaseOrderFileAction}>
+                <input
+                  name="purchase_order_id"
+                  type="hidden"
+                  value={order.id}
+                />
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="po-source-file">
+                      Customer PO file
+                    </FieldLabel>
+                    <Input
+                      id="po-source-file"
+                      name="po_file"
+                      required
+                      type="file"
+                    />
+                  </Field>
+                  <Button className="w-fit" type="submit" variant="secondary">
+                    Retain source file
                   </Button>
                 </FieldGroup>
               </form>
@@ -440,6 +496,23 @@ export default async function PurchaseOrderPage({
                     {currentInvoice.invoiceDate} · Total{" "}
                     {money(currentInvoice.totalAmount)}
                   </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link
+                      href={`/commercial/orders/${order.id}/pi`}
+                      target="_blank"
+                    >
+                      Open PI PDF
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link
+                      href={`/commercial/orders/${order.id}/pi.xlsx`}
+                    >
+                      Export PI Excel
+                    </Link>
+                  </Button>
                 </div>
                 {currentInvoice.status === "Draft" ? (
                   <form action={markProformaInvoiceSentAction}>

@@ -3,6 +3,7 @@ import { Pool } from "pg"
 
 import { createMigrationRun, stageConvexExport } from "../load/convex-staging"
 import { stagePricingExport } from "../load/pricing-staging"
+import { readMigrationPostgresEnvironment } from "../managed-environment"
 import { transformConvexSnapshot } from "../transform/convex-snapshot"
 import { transformPricingSnapshot } from "../transform/pricing-snapshot"
 
@@ -16,7 +17,7 @@ const [
   organizationName,
   transformationVersion,
 ] = process.argv.slice(2)
-const connectionString = process.env.DATABASE_URL
+const { connectionString } = readMigrationPostgresEnvironment()
 
 if (
   !connectionString ||

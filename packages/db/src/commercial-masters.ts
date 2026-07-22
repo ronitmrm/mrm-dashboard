@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto"
 
-import { Pool, type PoolClient } from "pg"
+import type { Pool, PoolClient } from "pg"
+
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
 export const websiteFieldTypes = [
   "material",
@@ -749,12 +751,8 @@ async function upsertCustomerClient(
   return row
 }
 
-export function createCommercialMasterRepository({
-  connectionString,
-}: {
-  connectionString: string
-}) {
-  const pool = new Pool({ connectionString })
+export function createCommercialMasterRepository(options: RepositoryPoolOptions) {
+  const { close, pool } = repositoryPool(options)
 
   async function snapshot(organizationId: string) {
     const client = await pool.connect()
@@ -891,7 +889,7 @@ export function createCommercialMasterRepository({
   }
 
   return {
-    close: () => pool.end(),
+    close,
 
     async importSnapshot(
       input: MutationContext & {

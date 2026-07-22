@@ -29,7 +29,11 @@ import { CostingCalculator } from "@/components/commercial/costing-calculator"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
-import { saveQuoteAction, updateProductCostingAction } from "./actions"
+import {
+  saveQuoteAction,
+  sendQuoteBackToProductCostingAction,
+  updateProductCostingAction,
+} from "./actions"
 
 function NumberField({
   defaultValue,
@@ -137,7 +141,7 @@ export default async function CostingPage() {
                         <NumberField
                           defaultValue={task.product.weight100Pcs}
                           id={`${prefix}-weight`}
-                          label="Weight / 100 pcs (g)"
+                          label="One-piece weight (g)"
                           name="weight_100_pcs"
                         />
                         <NumberField
@@ -475,6 +479,19 @@ export default async function CostingPage() {
                     parameters.
                   </div>
                 )}
+                {task.nextStageStatus === "Started" ? (
+                  <form action={sendQuoteBackToProductCostingAction}>
+                    <input
+                      name="enquiry_id"
+                      type="hidden"
+                      value={task.enquiryId}
+                    />
+                    <input name="item_id" type="hidden" value={task.itemId} />
+                    <Button type="submit" variant="outline">
+                      Return unsent quote to Product Costing
+                    </Button>
+                  </form>
+                ) : null}
               </CardContent>
             </Card>
           )

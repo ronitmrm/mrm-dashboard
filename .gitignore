@@ -42,6 +42,7 @@ yarn-error.log*
 # local data and generated agent artifacts
 local-data/
 /memory/
+/.scratch/
 *.xls
 *.xlsx
 !apps/web/app/commercial/masters/template.xlsx/
@@ -65,8 +66,20 @@ mrm-dashboard-convex-*.zip
 
 # typescript
 *.tsbuildinfo
+*.d.ts
 *.d.ts.map
 next-env.d.ts
+
+# compiler byproducts emitted beside TypeScript sources
+/apps/web/app/**/*.js
+/apps/web/components/**/*.js
+/apps/web/lib/**/*.js
+/apps/web/scripts/**/*.js
+/apps/web/next.config.js
+/apps/web/proxy.js
+/apps/web/vitest.config.js
+/packages/*/src/**/*.js
+/packages/*/vitest.config.js
 
 # local database tooling
 /.neon

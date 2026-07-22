@@ -202,7 +202,7 @@ describe("durable dashboard refresh runtime", () => {
         failedJobs: 0,
         lastVersion: 3,
         oldestOutboxSeconds: expect.any(Number),
-        outboxLastError: expect.stringContaining("ECONNREFUSED"),
+        outboxLastErrorCategory: "connectivity",
         pendingOutbox: expect.any(Number),
         retryingOutbox: expect.any(Number),
       })

@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto"
 
 import { asc, eq, getTableColumns, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
-import { Pool, type PoolClient } from "pg"
+import type { Pool, PoolClient } from "pg"
 
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 import { customers, type Customer } from "./schema/customers"
 import { organizations } from "./schema/organizations"
 
@@ -27,9 +28,7 @@ type CreateCustomer = {
   status?: string
 }
 
-type CreateCustomerRepositoryOptions = {
-  connectionString: string
-}
+type CreateCustomerRepositoryOptions = RepositoryPoolOptions
 
 type CreateManagedCustomer = {
   actorUserId?: string | null
@@ -75,16 +74,14 @@ function optionalText(value: string | null | undefined) {
   return normalized ? normalized : null
 }
 
-export function createCustomerRepository({
-  connectionString,
-}: CreateCustomerRepositoryOptions) {
-  const pool = new Pool({ connectionString })
+export function createCustomerRepository(
+  options: CreateCustomerRepositoryOptions
+) {
+  const { close, pool } = repositoryPool(options)
   const database = drizzle(pool)
 
   return {
-    async close() {
-      await pool.end()
-    },
+    close,
 
     async create(input: CreateCustomer) {
       const customerUid = input.customerUid.trim()

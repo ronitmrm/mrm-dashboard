@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
-import { createCommercialRevisionsRepository } from "./commercial-revisions"
+import {
+  bulkRevisionFields,
+  createCommercialRevisionsRepository,
+} from "./commercial-revisions"
 import { migrateDatabase } from "./migrate"
 
 const connectionString =
@@ -180,6 +183,40 @@ afterAll(async () => {
 })
 
 describe("commercial revisions and corrections", () => {
+  test("publishes the exact source customer and product bulk field matrix", () => {
+    expect(Object.keys(bulkRevisionFields)).toEqual([
+      "casting",
+      "scrap_rate",
+      "alloy_premium",
+      "ext_cost",
+      "forging_cost",
+      "machining_cost",
+      "washing",
+      "checking",
+      "marking",
+      "plating",
+      "annealing",
+      "deburring",
+      "buffing",
+      "sealant",
+      "assembly_operation_cost",
+      "packing_cost",
+      "shipping_cost",
+      "overhead_cost",
+      "purchase_times",
+      "profit_percent",
+      "conversion_rate",
+    ])
+    expect(bulkRevisionFields.profit_percent.valueType).toBe("percent")
+    expect(bulkRevisionFields.scrap_rate.valueType).toBe("number")
+  })
+
+  test("lists engineering change notes for an organization with no ECNs", async () => {
+    await expect(
+      repository.listEngineeringChangeNotes("MRMPL")
+    ).resolves.toEqual([])
+  })
+
   test("revises a child and every active nested parent without rewriting history", async () => {
     const leafId = await createItem(`M${Date.now()}1`, "List")
     const assemblyId = await createItem(`A-${randomUUID()}`, "Assembly")
@@ -285,6 +322,202 @@ describe("commercial revisions and corrections", () => {
     expect(after.rows[0]!.digest).toBe(before.rows[0]!.digest)
   })
 
+  test("uses the source bulk matrices, process guards, grouped selection, previews, and staged deletion", async () => {
+    const suffix = randomUUID()
+    const inspectionItemId = await createItem(`M-BULK-${suffix}`, "List")
+    const plainItemId = await createItem(`M-PLAIN-${suffix}`, "List")
+    await pool.query(
+      "UPDATE catalog.items SET remarks = 'Quality inspection required' WHERE id = $1",
+      [inspectionItemId]
+    )
+    const inspectionQuoteId = await createQuote({
+      itemId: inspectionItemId,
+      itemType: "List",
+      processBase: 10,
+      profitPercent: 0.2,
+      total: 12,
+    })
+    const plainQuoteId = await createQuote({
+      itemId: plainItemId,
+      itemType: "List",
+      processBase: 10,
+      profitPercent: 0.2,
+      total: 12,
+    })
+    const revision = await repository.createBulkPriceRevision({
+      effectiveOn: "2026-07-22",
+      organizationId,
+      reason: "Characterize source product-field selection",
+      revisionRoute: "Product Parameter Bulk Revision",
+    })
+
+    await expect(
+      repository.stageBulkPriceRevisionChange({
+        bulkPriceRevisionId: revision.id,
+        fieldName: "profit_percent",
+        newValue: 0.3,
+        selectedQuoteItemIds: [inspectionQuoteId],
+      })
+    ).rejects.toThrow("product-level")
+    const staged = await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: revision.id,
+      fieldName: "checking",
+      newValue: 7,
+      selectedQuoteItemIds: [inspectionQuoteId, plainQuoteId],
+    })
+    expect(staged).toMatchObject({ selectedCount: 1, skippedCount: 1 })
+    expect(staged.stageGroupId).toBeTruthy()
+
+    const stages = await repository.listBulkPriceRevisionStages(revision.id)
+    expect(stages).toEqual([
+      expect.objectContaining({
+        fieldName: "checking",
+        fieldLabel: "Checking (INR/kg)",
+        previewRows: [
+          expect.objectContaining({
+            oldPrice: 12,
+            quoteItemId: inspectionQuoteId,
+          }),
+        ],
+        selectedCount: 1,
+        stageGroupId: staged.stageGroupId,
+      }),
+    ])
+    await expect(
+      repository.deleteBulkPriceRevisionStage({
+        bulkPriceRevisionId: revision.id,
+        stageGroupId: staged.stageGroupId,
+      })
+    ).resolves.toMatchObject({ deletedCount: 1 })
+    await expect(
+      repository.completeBulkPriceRevision({
+        bulkPriceRevisionId: revision.id,
+      })
+    ).rejects.toThrow("at least one")
+  })
+
+  test("runs ECN through Design, Product Costing, Costing, and completion with BOM evidence", async () => {
+    const suffix = randomUUID()
+    const firstComponentId = await createItem(`M-ECN-A-${suffix}`, "List")
+    const secondComponentId = await createItem(`M-ECN-B-${suffix}`, "List")
+    const packageId = await createItem(`P-ECN-${suffix}`, "Package")
+    await pool.query(
+      `
+        INSERT INTO catalog.bom_lines (
+          organization_id, parent_item_id, component_item_id, quantity,
+          source_system, source_table, source_id
+        )
+        VALUES ($1, $2, $3, 1, 'test', 'bom_lines', $4)
+      `,
+      [organizationId, packageId, firstComponentId, randomUUID()]
+    )
+    const ecn = await repository.createEngineeringChangeNote({
+      effectiveOn: "2026-07-22",
+      itemId: packageId,
+      organizationId,
+      reason: "Replace package component and recost",
+    })
+    const designed = await repository.completeEngineeringChangeDesign({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: {
+        bomLines: [
+          {
+            componentItemId: secondComponentId,
+            notes: "ECN replacement",
+            quantity: 2,
+          },
+        ],
+        description: "Revised ECN package",
+        remarks: "Package process: assembly",
+      },
+    })
+    expect(designed.status).toBe("Pending Product Costing")
+    const designEvidence = await pool.query<{
+      design_after: Record<string, unknown>
+      design_before: Record<string, unknown>
+    }>(
+      "SELECT design_before, design_after FROM sales.engineering_change_notes WHERE id = $1",
+      [ecn.id]
+    )
+    expect(designEvidence.rows[0]!.design_before).toHaveProperty("bomLines")
+    expect(designEvidence.rows[0]!.design_after).toMatchObject({
+      item: { description: "Revised ECN package" },
+    })
+
+    const costed = await repository.completeEngineeringChangeProductCosting({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: { assemblyOperationCost: 25 },
+    })
+    expect(costed.status).toBe("Completed")
+    const stored = await pool.query<{
+      assembly_operation_cost: string
+      status: string
+    }>(
+      `
+        SELECT item.assembly_operation_cost, ecn.status
+        FROM sales.engineering_change_notes ecn
+        JOIN catalog.items item ON item.id = ecn.item_id
+        WHERE ecn.id = $1
+      `,
+      [ecn.id]
+    )
+    expect(Number(stored.rows[0]!.assembly_operation_cost)).toBe(25)
+    expect(stored.rows[0]!.status).toBe("Completed")
+  })
+
+  test("freezes ECN affected prices and preserves Keep Price Same semantics", async () => {
+    const suffix = randomUUID()
+    const itemId = await createItem(`M-ECN-PRICE-${suffix}`, "List")
+    await pool.query(
+      `
+        UPDATE catalog.items
+        SET weight_100_pcs = 10, casting = 1, machining_cost = 100
+        WHERE id = $1
+      `,
+      [itemId]
+    )
+    const quoteItemId = await createQuote({
+      customerPartCode: `ECN-KEEP-${suffix}`,
+      itemId,
+      itemType: "List",
+      processBase: 100,
+      profitPercent: 0.2,
+      total: 120,
+    })
+    const ecn = await repository.createEngineeringChangeNote({
+      itemId,
+      organizationId,
+      reason: "Machine cost changed",
+    })
+    await repository.completeEngineeringChangeDesign({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: { description: `Revised ${suffix}` },
+    })
+    const costing = await repository.completeEngineeringChangeProductCosting({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: { machiningCost: 140 },
+    })
+    expect(costing).toMatchObject({
+      affectedPriceCount: 1,
+      status: "Pending Costing",
+    })
+    const affected = await repository.listEngineeringChangeAffectedPrices(
+      ecn.id
+    )
+    expect(affected).toEqual([
+      expect.objectContaining({
+        keepSamePriceUsd: 120,
+        quoteItemId,
+      }),
+    ])
+    const decision = await repository.applyEngineeringChangeDecision({
+      decision: "Keep Price Same",
+      engineeringChangeNoteId: ecn.id,
+      sourceQuoteItemId: quoteItemId,
+    })
+    expect(decision).toMatchObject({ newPrice: 120, status: "Completed" })
+  })
+
   test("records ECN decisions against recursive active customer prices", async () => {
     const itemId = await createItem(`M${Date.now()}2`, "List")
     const quoteItemId = await createQuote({
@@ -304,6 +537,10 @@ describe("commercial revisions and corrections", () => {
     await repository.completeEngineeringChangeDesign({
       engineeringChangeNoteId: ecn.id,
       itemPatch: { description: "Revised drawing product" },
+    })
+    await repository.completeEngineeringChangeProductCosting({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: {},
     })
     const affected = await repository.listEngineeringChangeAffectedPrices(
       ecn.id
@@ -432,6 +669,14 @@ describe("commercial revisions and corrections", () => {
       after_state: { nextStageStatus: "Not Started" },
       before_state: { nextStageStatus: "Started" },
     })
+    const register = await repository.listPricingCorrections("MRMPL")
+    expect(register).toContainEqual(
+      expect.objectContaining({
+        requestedAction: "Reverse Costing Handoff",
+        status: "Applied",
+        targetId: enquiryItem.rows[0]!.id,
+      })
+    )
   })
 
   test("deletes only unused quoted product entries and their parent BOM", async () => {
@@ -502,5 +747,13 @@ describe("commercial revisions and corrections", () => {
     await expect(
       repository.reverseProductEntry({ itemId: blockedItemId })
     ).rejects.toThrow("quote")
+    const candidates = await repository.listCorrectionCandidates("MRMPL")
+    expect(candidates.products).toContainEqual(
+      expect.objectContaining({
+        blockerCounts: expect.objectContaining({ quotes: 1 }),
+        canReverse: false,
+        id: blockedItemId,
+      })
+    )
   })
 })

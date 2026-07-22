@@ -190,6 +190,22 @@ export async function saveQuoteAction(formData: FormData) {
   revalidatePath("/commercial/quotes")
 }
 
+export async function sendQuoteBackToProductCostingAction(formData: FormData) {
+  await withCosting(
+    commercialCapabilities.costing.write,
+    costingPath,
+    (repository, actorUserId) =>
+      repository.sendQuoteBackToProductCosting({
+        actorUserId,
+        enquiryId: requiredText(formData, "enquiry_id"),
+        itemId: requiredText(formData, "item_id"),
+      })
+  )
+  revalidatePath(costingPath)
+  revalidatePath("/commercial/design")
+  revalidatePath("/commercial/quotes")
+}
+
 export async function sendQuoteAction(formData: FormData) {
   const quoteItemId = requiredText(formData, "quote_item_id")
   await withCosting(

@@ -1,6 +1,22 @@
-import { buildCanonicalDashboardReadModel } from "@workspace/db"
+import {
+  buildCanonicalDashboardReadModel,
+  connectionTargetSummary,
+  createBoundedPostgresPool,
+} from "@workspace/db"
 import { Pool, type PoolClient } from "pg"
-import { createClient } from "redis"
+
+import {
+  createRedisAcceleration,
+  type RedisAcceleration,
+  type RedisAccelerationOptions,
+} from "./redis-acceleration"
+import {
+  managedRuntimeTelemetrySnapshot,
+  recordRedisCommand,
+  recordRedisOutboxFailure,
+  recordRedisRateLimitFallback,
+  runtimeErrorCategory,
+} from "./managed-telemetry"
 
 type JsonRecord = Record<string, unknown>
 
@@ -25,9 +41,14 @@ type DurableRefreshWorkerOptions = {
   buildReadModel?: ReadModelBuilder
   maxAttempts?: number
   organizationId?: string
+  postgresPool?: Pool
+  postgresPoolMax?: number
   postgresUrl: string
-  redisUrl: string
+  redisAcceleration?: RedisAcceleration
+  redisUrl?: string
   retryDelayMs?: number
+  upstashRedisRestToken?: string
+  upstashRedisRestUrl?: string
   workerId: string
 }
 
@@ -46,22 +67,6 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-function optionalRedisClient(redisUrl: string) {
-  const client = createClient({
-    socket: {
-      connectTimeout: 250,
-      reconnectStrategy: false,
-    },
-    url: redisUrl,
-  })
-  client.on("error", () => undefined)
-  return client
-}
-
-async function closeRedis(client: ReturnType<typeof createClient>) {
-  if (client.isOpen) await client.close()
-}
-
 export async function buildCanonicalRuntimeReadModel(
   client: PoolClient,
   context: RefreshBuildContext
@@ -73,16 +78,35 @@ export function createDurableRefreshWorker({
   buildReadModel = buildCanonicalRuntimeReadModel,
   maxAttempts = 5,
   organizationId,
+  postgresPool,
+  postgresPoolMax = 2,
   postgresUrl,
+  redisAcceleration,
   redisUrl,
   retryDelayMs = 1_000,
+  upstashRedisRestToken,
+  upstashRedisRestUrl,
   workerId,
 }: DurableRefreshWorkerOptions) {
-  const pool = new Pool({ connectionString: postgresUrl })
+  const pool =
+    postgresPool ??
+    createBoundedPostgresPool({
+      applicationName: "mrm-worker",
+      connectionString: postgresUrl,
+      max: postgresPoolMax,
+    })
+  const acceleration =
+    redisAcceleration ??
+    createRedisAcceleration({
+      redisUrl,
+      upstashRedisRestToken,
+      upstashRedisRestUrl,
+    })
 
   return {
     async close() {
-      await pool.end()
+      if (!postgresPool) await pool.end()
+      await acceleration.close()
     },
 
     async runRefreshOnce() {
@@ -308,41 +332,22 @@ export function createDurableRefreshWorker({
         client.release()
       }
 
-      const redis = optionalRedisClient(redisUrl)
       try {
-        await redis.connect()
         const version = Number(event.payload.version)
-        if (
-          event.topic === "dashboard.read_model.updated" &&
-          event.organization_id &&
-          Number.isFinite(version)
-        ) {
-          await redis.eval(
-            `
-              local current = tonumber(redis.call('GET', KEYS[1]) or '0')
-              local incoming = tonumber(ARGV[1])
-              if incoming > current then
-                redis.call('SET', KEYS[1], ARGV[1])
-              end
-              return math.max(current, incoming)
-            `,
-            {
-              arguments: [String(version)],
-              keys: [`mrm:dashboard:version:${event.organization_id}`],
-            }
-          )
-        }
-        await redis.publish(
-          "mrm:invalidations",
-          JSON.stringify({
-            aggregateId: event.aggregate_id,
-            aggregateType: event.aggregate_type,
-            idempotencyKey: event.idempotency_key,
-            organizationId: event.organization_id,
-            payload: event.payload,
-            topic: event.topic,
-          })
-        )
+        await acceleration.publishInvalidation({
+          aggregateId: event.aggregate_id,
+          aggregateType: event.aggregate_type,
+          idempotencyKey: event.idempotency_key,
+          organizationId: event.organization_id,
+          payload: event.payload,
+          topic: event.topic,
+          version:
+            event.topic === "dashboard.read_model.updated" &&
+            Number.isFinite(version)
+              ? version
+              : undefined,
+        })
+        recordRedisCommand()
         await pool.query(
           `
             UPDATE derived.outbox_events
@@ -355,6 +360,7 @@ export function createDurableRefreshWorker({
         return { eventId: event.id, status: "published" as const }
       } catch (error) {
         const message = errorMessage(error)
+        recordRedisOutboxFailure()
         await pool.query(
           `
             UPDATE derived.outbox_events
@@ -369,8 +375,6 @@ export function createDurableRefreshWorker({
           eventId: event.id,
           status: "retrying" as const,
         }
-      } finally {
-        await closeRedis(redis)
       }
     },
 
@@ -444,7 +448,7 @@ export function createDurableRefreshWorker({
       const row = result.rows[0]!
       return {
         failedJobs: Number(row.failed_jobs),
-        lastError: row.last_error,
+        lastErrorCategory: runtimeErrorCategory(row.last_error),
         lastVersion:
           row.last_version === null ? null : Number(row.last_version),
         oldestPendingSeconds:
@@ -455,11 +459,13 @@ export function createDurableRefreshWorker({
           row.oldest_outbox_seconds === null
             ? null
             : Math.max(0, Number(row.oldest_outbox_seconds)),
-        outboxLastError: row.outbox_last_error,
+        outboxLastErrorCategory: runtimeErrorCategory(row.outbox_last_error),
         pendingJobs: Number(row.pending_jobs),
         pendingOutbox: Number(row.pending_outbox),
+        postgresPool: connectionTargetSummary(pool),
         retryingOutbox: Number(row.retrying_outbox),
         runningJobs: Number(row.running_jobs),
+        telemetry: managedRuntimeTelemetrySnapshot(),
       }
     },
   }
@@ -468,27 +474,37 @@ export function createDurableRefreshWorker({
 export async function consumeOptionalRateLimit({
   key,
   limit,
+  redisAcceleration,
   redisUrl,
+  upstashRedisRestToken,
+  upstashRedisRestUrl,
   windowSeconds,
 }: {
   key: string
   limit: number
-  redisUrl: string
+  redisAcceleration?: RedisAcceleration
   windowSeconds: number
-}) {
-  const redis = optionalRedisClient(redisUrl)
+} & RedisAccelerationOptions) {
+  const acceleration =
+    redisAcceleration ??
+    createRedisAcceleration({
+      redisUrl,
+      upstashRedisRestToken,
+      upstashRedisRestUrl,
+    })
   try {
-    await redis.connect()
-    const count = await redis.incr(key)
-    if (count === 1) await redis.expire(key, windowSeconds)
-    const ttl = await redis.ttl(key)
+    const result = await acceleration.consumeRateLimit({
+      key,
+      limit,
+      windowSeconds,
+    })
+    recordRedisCommand()
     return {
-      allowed: count <= limit,
-      count,
-      retryAfterSeconds: Math.max(0, ttl),
+      ...result,
       source: "redis" as const,
     }
   } catch {
+    recordRedisRateLimitFallback()
     return {
       allowed: true,
       count: null,
@@ -496,6 +512,6 @@ export async function consumeOptionalRateLimit({
       source: "unavailable" as const,
     }
   } finally {
-    await closeRedis(redis)
+    if (!redisAcceleration) await acceleration.close()
   }
 }

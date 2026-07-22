@@ -1,21 +1,19 @@
-import { Pool } from "pg"
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
-type ProvisionerOptions = {
-  connectionString: string
-}
+type ProvisionerOptions = RepositoryPoolOptions
 
 type PromoteAdministratorInput = {
   email: string
   userId: string
 }
 
-export function createInitialAdministratorProvisioner({
-  connectionString,
-}: ProvisionerOptions) {
-  const pool = new Pool({ connectionString })
+export function createInitialAdministratorProvisioner(
+  options: ProvisionerOptions
+) {
+  const { close, pool } = repositoryPool(options)
 
   return {
-    close: () => pool.end(),
+    close,
 
     async countUsers() {
       const result = await pool.query<{ count: string }>(

@@ -1,7 +1,8 @@
 import { asc, eq, getTableColumns, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
-import { Pool } from "pg"
+import { randomUUID } from "node:crypto"
 
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 import { items } from "./schema/products"
 import { organizations } from "./schema/organizations"
 
@@ -51,20 +52,16 @@ type CreateProduct = {
   weight100Pcs?: number
 }
 
-type ProductRepositoryOptions = {
-  connectionString: string
-}
+type ProductRepositoryOptions = RepositoryPoolOptions
 
 const decimal = (value = 0) => value.toString()
 
-export function createProductRepository({
-  connectionString,
-}: ProductRepositoryOptions) {
-  const pool = new Pool({ connectionString })
+export function createProductRepository(options: ProductRepositoryOptions) {
+  const { close, pool } = repositoryPool(options)
   const database = drizzle(pool)
 
   return {
-    close: () => pool.end(),
+    close,
 
     async create(input: CreateProduct) {
       const uid = input.uid.trim()
@@ -160,6 +157,122 @@ export function createProductRepository({
           sql`lower(${organizations.code}) = lower(${organizationCode.trim()})`
         )
         .orderBy(asc(items.uid))
+    },
+
+    async listBomLines(organizationCode: string) {
+      const result = await pool.query<{
+        component_description: string
+        component_item_id: string
+        component_uid: string
+        id: string
+        notes: string | null
+        parent_description: string
+        parent_item_id: string
+        parent_uid: string
+        quantity: string
+      }>(
+        `
+          SELECT bom.id, bom.parent_item_id, bom.component_item_id,
+            bom.quantity::text, bom.notes, parent.uid AS parent_uid,
+            parent.description AS parent_description,
+            component.uid AS component_uid,
+            component.description AS component_description
+          FROM catalog.bom_lines bom
+          JOIN catalog.items parent ON parent.id = bom.parent_item_id
+          JOIN catalog.items component ON component.id = bom.component_item_id
+          JOIN core.organizations organization
+            ON organization.id = bom.organization_id
+          WHERE lower(organization.code) = lower($1)
+          ORDER BY parent.uid, bom.created_at, bom.id
+        `,
+        [organizationCode.trim()]
+      )
+      return result.rows.map((row) => ({
+        componentDescription: row.component_description,
+        componentItemId: row.component_item_id,
+        componentUid: row.component_uid,
+        id: row.id,
+        notes: row.notes,
+        parentDescription: row.parent_description,
+        parentItemId: row.parent_item_id,
+        parentUid: row.parent_uid,
+        quantity: Number(row.quantity),
+      }))
+    },
+
+    async addBomLine(input: {
+      actorUserId?: string | null
+      componentItemId: string
+      notes?: string | null
+      parentItemId: string
+      quantity: number
+    }) {
+      if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
+        throw new Error("BOM quantity must be greater than zero.")
+      }
+      const result = await pool.query<{ id: string }>(
+        `
+          WITH created AS (
+            INSERT INTO catalog.bom_lines (
+              organization_id, parent_item_id, component_item_id, quantity,
+              notes, created_by_user_id, source_system, source_table, source_id
+            )
+            SELECT parent.organization_id, parent.id, component.id, $3, $4, $5,
+              'mrm-dashboard', 'bom_lines', $6
+            FROM catalog.items parent
+            JOIN catalog.items component
+              ON component.id = $2
+              AND component.organization_id = parent.organization_id
+            WHERE parent.id = $1
+              AND parent.item_type IN ('Package', 'Assembly')
+              AND parent.id <> component.id
+              AND NOT EXISTS (
+                WITH RECURSIVE descendants AS (
+                  SELECT line.component_item_id
+                  FROM catalog.bom_lines line
+                  WHERE line.parent_item_id = component.id
+                  UNION
+                  SELECT line.component_item_id
+                  FROM catalog.bom_lines line
+                  JOIN descendants descendant
+                    ON line.parent_item_id = descendant.component_item_id
+                )
+                SELECT 1 FROM descendants
+                WHERE component_item_id = parent.id
+              )
+            RETURNING id, organization_id
+          ),
+          audited AS (
+            INSERT INTO core.audit_events (
+              organization_id, actor_user_id, event_type, target_table,
+              target_id, metadata
+            )
+            SELECT organization_id, $5, 'bom_line.created', 'bom_lines', id,
+              jsonb_build_object(
+                'parentItemId', $1::text,
+                'componentItemId', $2::text,
+                'quantity', $3::numeric
+              )
+            FROM created
+            RETURNING target_id
+          )
+          SELECT target_id AS id FROM audited
+        `,
+        [
+          input.parentItemId,
+          input.componentItemId,
+          input.quantity,
+          input.notes?.trim() || null,
+          input.actorUserId ?? null,
+          randomUUID(),
+        ]
+      )
+      if (!result.rows[0]) {
+        throw new Error(
+          "Choose a Package or Assembly parent and a different component from the same organization; cyclic BOMs are not allowed."
+        )
+      }
+      return { id: result.rows[0].id }
     },
   }
 }

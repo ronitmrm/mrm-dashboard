@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto"
 
-import { Pool, type PoolClient } from "pg"
+import type { Pool, PoolClient } from "pg"
 
-type RepositoryOptions = { connectionString: string }
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+
+type RepositoryOptions = RepositoryPoolOptions
 
 type WorkOrderContext = {
   item_id: string
@@ -241,15 +243,11 @@ async function plannerSwitchExists(
   return Boolean(result.rows[0])
 }
 
-export function createProductionShopFloorRepository({
-  connectionString,
-}: RepositoryOptions) {
-  const pool = new Pool({ connectionString })
+export function createProductionShopFloorRepository(options: RepositoryOptions) {
+  const { close, pool } = repositoryPool(options)
 
   return {
-    async close() {
-      await pool.end()
-    },
+    close,
 
     async organizationIdForCode(code: string) {
       const result = await pool.query<{ id: string }>(

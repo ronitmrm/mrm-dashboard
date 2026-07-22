@@ -1,0 +1,59 @@
+{
+  "deployment": {
+    "authoritative": false,
+    "productionPromotion": "requires-separate-business-approval",
+    "sourceBranch": "staging",
+    "workerOwnerCategory": "application-operations",
+    "workerHosting": "must-be-confirmed-before-cutover"
+  },
+  "neon": {
+    "backupPolicy": "custom-dump-plus-provider-history",
+    "branchProtection": "unavailable-on-current-plan",
+    "computeUnits": {
+      "maximum": 1,
+      "minimum": 0.25
+    },
+    "historyWindowHours": 6,
+    "postgresMajor": 16,
+    "regionClass": "us-east",
+    "roleConnectionLimits": {
+      "migration": 1,
+      "reporting": 2,
+      "web": 8,
+      "worker": 4
+    },
+    "runtimePoolLimits": {
+      "migration": 1,
+      "reporting": 2,
+      "web": 2,
+      "worker": 2
+    },
+    "suspendPolicy": "provider-plan-default"
+  },
+  "observability": {
+    "ownerCategory": "application-operations",
+    "thresholds": {
+      "connectionHeadroomPercentMinimum": 30,
+      "failedRefreshJobs": 1,
+      "oldestOutboxSeconds": 300,
+      "oldestRefreshJobSeconds": 300,
+      "poolWaiting": 1,
+      "redisFallbacksPerFiveMinutes": 5,
+      "retryingOutbox": 1
+    }
+  },
+  "recovery": {
+    "postgresCanonical": true,
+    "productionPromotionPerformed": false,
+    "redisBackupRequired": false,
+    "rollbackHistoryWindowHours": 6
+  },
+  "upstash": {
+    "autoUpgrade": "unavailable-on-free-plan",
+    "backupPolicy": "not-required-disposable-state",
+    "eviction": false,
+    "plan": "free-hard-cap",
+    "regionClass": "us-east",
+    "spendLimit": "free-plan-quota"
+  }
+}

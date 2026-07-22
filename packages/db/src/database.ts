@@ -1,14 +1,16 @@
 import { drizzle } from "drizzle-orm/node-postgres"
-import { Pool } from "pg"
 
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 import * as schema from "./schema"
 
-export function createDatabase(connectionString: string) {
-  const pool = new Pool({ connectionString })
+export function createDatabase(options: RepositoryPoolOptions | string) {
+  const { close, pool } = repositoryPool(
+    typeof options === "string" ? { connectionString: options } : options
+  )
   const database = drizzle(pool, { schema })
 
   return {
-    close: () => pool.end(),
+    close,
     database,
   }
 }

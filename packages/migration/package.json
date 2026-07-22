@@ -5,9 +5,14 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "database:migrate": "tsx src/commands/migrate-database.ts",
+    "database:emit-sql": "tsx src/commands/emit-migration-sql.ts",
+    "database:emit-fingerprint-verification": "tsx src/commands/emit-fingerprint-verification-sql.ts",
+    "database:transfer-constraints": "tsx src/commands/emit-transfer-constraints-sql.ts",
     "fingerprint:database": "tsx src/commands/fingerprint-database.ts",
     "inspect:artifacts": "tsx src/commands/inspect-artifacts.ts",
     "lint": "eslint src --max-warnings 0",
+    "provider:preflight": "tsx src/commands/provider-preflight.ts",
     "rehearse:foundation": "tsx src/commands/rehearse-foundation.ts",
     "rehearse:convex": "tsx src/commands/rehearse-convex.ts",
     "rehearse:pricing": "tsx src/commands/rehearse-pricing.ts",
@@ -18,6 +23,7 @@
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
+    "@workspace/runtime": "workspace:*",
     "better-sqlite3": "12.2.0",
     "fflate": "0.8.3",
     "pg": "8.22.0"
@@ -25,7 +31,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
-    "@types/pg": "8.15.5",
+    "@types/pg": "8.20.0",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
     "eslint": "^9",

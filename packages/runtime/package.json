@@ -5,6 +5,8 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "files:backup": "tsx src/commands/file-storage-backup.ts backup",
+    "files:restore": "tsx src/commands/file-storage-backup.ts restore",
     "lint": "eslint src --max-warnings 0",
     "runtime:verify": "tsx src/commands/verify-local.ts",
     "test": "vitest run",
@@ -15,13 +17,14 @@
     "worker:status": "tsx src/commands/run-worker.ts --status"
   },
   "dependencies": {
+    "@upstash/redis": "^1.38.0",
     "@workspace/db": "workspace:*",
     "pg": "8.22.0",
     "redis": "5.8.2"
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/pg": "^8.15.5",
+    "@types/pg": "^8.20.0",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
     "eslint": "^9",

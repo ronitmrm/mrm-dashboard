@@ -1,8 +1,6 @@
-import { Pool } from "pg"
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
-type AccessAdministrationRepositoryOptions = {
-  connectionString: string
-}
+type AccessAdministrationRepositoryOptions = RepositoryPoolOptions
 
 type CreateRoleInput = {
   description?: string
@@ -58,13 +56,13 @@ type PermissionRow = {
   name: string
 }
 
-export function createAccessAdministrationRepository({
-  connectionString,
-}: AccessAdministrationRepositoryOptions) {
-  const pool = new Pool({ connectionString })
+export function createAccessAdministrationRepository(
+  options: AccessAdministrationRepositoryOptions
+) {
+  const { close, pool } = repositoryPool(options)
 
   return {
-    close: () => pool.end(),
+    close,
 
     async createRole({
       description,

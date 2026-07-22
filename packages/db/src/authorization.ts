@@ -1,16 +1,14 @@
-import { Pool } from "pg"
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
-type AuthorizationRepositoryOptions = {
-  connectionString: string
-}
+type AuthorizationRepositoryOptions = RepositoryPoolOptions
 
-export function createAuthorizationRepository({
-  connectionString,
-}: AuthorizationRepositoryOptions) {
-  const pool = new Pool({ connectionString })
+export function createAuthorizationRepository(
+  options: AuthorizationRepositoryOptions
+) {
+  const { close, pool } = repositoryPool(options)
 
   return {
-    close: () => pool.end(),
+    close,
 
     async hasCapability(userId: string, capability: string) {
       const result = await pool.query<{ allowed: boolean }>(

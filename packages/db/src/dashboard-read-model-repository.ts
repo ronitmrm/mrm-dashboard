@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import { Pool, type PoolClient } from "pg"
+import type { Pool, PoolClient } from "pg"
 
 import {
   activeCorrectionTargetKeys,
@@ -9,8 +9,9 @@ import {
   type DataEntryCorrectionRow,
 } from "./dashboard-corrections"
 import { readCanonicalDashboardSource } from "./dashboard-read-model"
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
-type RepositoryOptions = { connectionString: string }
+type RepositoryOptions = RepositoryPoolOptions
 type JsonRecord = Record<string, unknown>
 
 function text(value: unknown) {
@@ -79,15 +80,11 @@ async function transaction<T>(
   }
 }
 
-export function createDashboardReadModelRepository({
-  connectionString,
-}: RepositoryOptions) {
-  const pool = new Pool({ connectionString })
+export function createDashboardReadModelRepository(options: RepositoryOptions) {
+  const { close, pool } = repositoryPool(options)
 
   return {
-    async close() {
-      await pool.end()
-    },
+    close,
 
     async organizationIdForCode(code: string) {
       const result = await pool.query<{ id: string }>(

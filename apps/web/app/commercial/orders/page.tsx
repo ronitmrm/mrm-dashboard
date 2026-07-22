@@ -160,6 +160,23 @@ export default async function PurchaseOrdersPage() {
             Imported, matched, PI, approved, and cancelled orders with their
             retained source prices.
           </CardDescription>
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/commercial/orders/master/export.xlsx">
+                Export PO master
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/commercial/orders/pi-master/export.xlsx">
+                Export approved PI master
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/commercial/orders/template.xlsx">
+                Download PO template
+              </Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-hidden rounded-3xl border">

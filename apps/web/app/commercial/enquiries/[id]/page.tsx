@@ -2,6 +2,7 @@ import Link from "next/link"
 
 import {
   createCommercialWorkflowRepository,
+  createCustomerRepository,
   createProductRepository,
 } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
@@ -36,11 +37,13 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import {
   addEnquiryItemAction,
   applyEnquiryImportReviewAction,
-  completeSalesClarificationAction,
+  deleteEnquiryAction,
   handOverEnquiryAction,
   importEnquiryLinesAction,
   prepareCostingAction,
   saveDesignAction,
+  updateEnquiryAction,
+  updateEnquiryItemAction,
   updateTechnicalReviewAction,
 } from "../actions"
 
@@ -67,11 +70,38 @@ export default async function EnquiryDetailPage({
   )
   const connectionString = readAuthEnvironment().connectionString
   const workflow = createCommercialWorkflowRepository({ connectionString })
-  const snapshot = await workflow.getEnquiry(id).finally(() => workflow.close())
+  const loaded = await (async () => {
+    try {
+      const snapshot = await workflow.getEnquiry(id)
+      const drawingHistoryEntries = await Promise.all(
+        snapshot.items.map(
+          async (item) =>
+            [
+              item.id,
+              await workflow.listDrawingHistory({
+                enquiryItemId: item.id,
+                organizationId: snapshot.enquiry.organizationId,
+              }),
+            ] as const
+        )
+      )
+      return { drawingHistoryEntries, snapshot }
+    } finally {
+      await workflow.close()
+    }
+  })()
+  const { snapshot } = loaded
+  const drawingHistory = new Map(loaded.drawingHistoryEntries)
+  const customerRepository = createCustomerRepository({ connectionString })
   const productRepository = createProductRepository({ connectionString })
-  const products = await productRepository
-    .list(snapshot.enquiry.organizationId)
-    .finally(() => productRepository.close())
+  const [customers, products] = await Promise.all([
+    customerRepository
+      .listForOrganization("MRMPL")
+      .finally(() => customerRepository.close()),
+    productRepository
+      .list(snapshot.enquiry.organizationId)
+      .finally(() => productRepository.close()),
+  ])
 
   return (
     <div className="grid gap-6">
@@ -93,6 +123,18 @@ export default async function EnquiryDetailPage({
             Each mutation below repeats its Better Auth capability check and
             commits the workflow transition atomically in PostgreSQL.
           </p>
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/commercial/enquiries/${id}/lines/export.xlsx`}>
+                Export logged lines
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/commercial/enquiries/template.csv">
+                Line import template
+              </Link>
+            </Button>
+          </div>
         </div>
         {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" ? (
           <form action={handOverEnquiryAction}>
@@ -101,6 +143,178 @@ export default async function EnquiryDetailPage({
           </form>
         ) : null}
       </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Enquiry register details</CardTitle>
+          <CardDescription>
+            Corrections remain available only while the source downstream-work
+            gate permits them.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={updateEnquiryAction}>
+            <input type="hidden" name="enquiry_id" value={id} />
+            <input
+              type="hidden"
+              name="organization_id"
+              value={snapshot.enquiry.organizationId}
+            />
+            <FieldGroup>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <Field>
+                  <FieldLabel htmlFor="edit-enquiry-customer">
+                    Customer
+                  </FieldLabel>
+                  <NativeSelect
+                    id="edit-enquiry-customer"
+                    name="customer_id"
+                    defaultValue={snapshot.enquiry.customerId}
+                  >
+                    {customers.map((customer) => (
+                      <NativeSelectOption key={customer.id} value={customer.id}>
+                        {customer.customerUid} · {customer.companyName}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-enquiry-received">
+                    Received on
+                  </FieldLabel>
+                  <Input
+                    id="edit-enquiry-received"
+                    name="received_on"
+                    type="date"
+                    defaultValue={snapshot.enquiry.receivedOn}
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-enquiry-source">Source</FieldLabel>
+                  <Input
+                    id="edit-enquiry-source"
+                    name="source"
+                    defaultValue={snapshot.enquiry.source}
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-enquiry-priority">
+                    Priority
+                  </FieldLabel>
+                  <NativeSelect
+                    id="edit-enquiry-priority"
+                    name="priority"
+                    defaultValue={snapshot.enquiry.priority}
+                  >
+                    {["Normal", "High", "Urgent"].map((priority) => (
+                      <NativeSelectOption key={priority} value={priority}>
+                        {priority}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-enquiry-buyer">
+                    Buyer name
+                  </FieldLabel>
+                  <Input
+                    id="edit-enquiry-buyer"
+                    name="buyer_name"
+                    defaultValue={snapshot.enquiry.buyerName ?? ""}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-enquiry-incoterms">
+                    Incoterms
+                  </FieldLabel>
+                  <Input
+                    id="edit-enquiry-incoterms"
+                    name="incoterms"
+                    defaultValue={snapshot.enquiry.incoterms ?? ""}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-enquiry-payment">
+                    Payment terms
+                  </FieldLabel>
+                  <Input
+                    id="edit-enquiry-payment"
+                    name="payment_terms"
+                    defaultValue={snapshot.enquiry.paymentTerms ?? ""}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-enquiry-shipment">
+                    Shipment mode
+                  </FieldLabel>
+                  <Input
+                    id="edit-enquiry-shipment"
+                    name="shipment_mode"
+                    defaultValue={snapshot.enquiry.shipmentMode ?? ""}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-enquiry-packaging">
+                    Packaging
+                  </FieldLabel>
+                  <Input
+                    id="edit-enquiry-packaging"
+                    name="packaging_terms"
+                    defaultValue={snapshot.enquiry.packagingTerms ?? ""}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-enquiry-currency">
+                    Currency
+                  </FieldLabel>
+                  <Input
+                    id="edit-enquiry-currency"
+                    name="currency"
+                    defaultValue={snapshot.enquiry.currency}
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="edit-enquiry-fx">
+                    FX / exchange rate
+                  </FieldLabel>
+                  <Input
+                    id="edit-enquiry-fx"
+                    name="conversion_rate"
+                    type="number"
+                    min="0.00000001"
+                    step="0.00000001"
+                    defaultValue={snapshot.enquiry.conversionRate}
+                    required
+                  />
+                </Field>
+              </div>
+              <Field>
+                <FieldLabel htmlFor="edit-enquiry-remarks">Remarks</FieldLabel>
+                <Textarea
+                  id="edit-enquiry-remarks"
+                  name="remarks"
+                  defaultValue={snapshot.enquiry.remarks ?? ""}
+                />
+              </Field>
+              <div className="flex flex-wrap gap-3">
+                <Button type="submit">Update enquiry</Button>
+                {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" ? (
+                  <Button
+                    formAction={deleteEnquiryAction}
+                    type="submit"
+                    variant="destructive"
+                  >
+                    Delete enquiry
+                  </Button>
+                ) : null}
+              </div>
+            </FieldGroup>
+          </form>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
@@ -193,8 +407,8 @@ export default async function EnquiryDetailPage({
           <CardHeader>
             <CardTitle>Import line items</CardTitle>
             <CardDescription>
-              Local JSON intake uses an immutable import key, classifies every
-              nonblank row, and waits for an explicit review decision.
+              Upload CSV, XLS, or XLSX. Every nonblank row is classified before
+              an explicit review decision.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -207,30 +421,27 @@ export default async function EnquiryDetailPage({
               />
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="import-key">Import key</FieldLabel>
+                  <FieldLabel htmlFor="import-file">Import file</FieldLabel>
                   <Input
-                    id="import-key"
-                    name="import_key"
-                    placeholder="customer-file-2026-07-21"
-                    required
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="import-rows">Rows JSON</FieldLabel>
-                  <Textarea
-                    id="import-rows"
-                    name="rows_json"
-                    className="min-h-36 font-mono text-xs"
-                    defaultValue={'[{"part":"","description":"","quantity":0}]'}
+                    id="import-file"
+                    name="template_file"
+                    type="file"
+                    accept=".csv,.xls,.xlsx"
                     required
                   />
                   <FieldDescription>
-                    Every row requires part and description. quantity,
-                    target_price, grade, drawing_reference, and remarks are
-                    optional.
+                    The content hash is the idempotency key; uploading the same
+                    file reopens the same review.
                   </FieldDescription>
                 </Field>
-                <Button type="submit">Classify import rows</Button>
+                <div className="flex flex-wrap gap-3">
+                  <Button type="submit">Classify import rows</Button>
+                  <Button asChild type="button" variant="outline">
+                    <Link href="/commercial/enquiries/template.csv">
+                      Download CSV template
+                    </Link>
+                  </Button>
+                </div>
               </FieldGroup>
             </form>
           </CardContent>
@@ -278,8 +489,8 @@ export default async function EnquiryDetailPage({
                         )
                         const hasMatch = Boolean(
                           row.matchedQuoteItemId ||
-                            row.matchedProductId ||
-                            row.matchedEnquiryItemId
+                          row.matchedProductId ||
+                          row.matchedEnquiryItemId
                         )
                         const defaultAction =
                           row.suggestedAction === "Review Manually"
@@ -398,6 +609,165 @@ export default async function EnquiryDetailPage({
                   </div>
                 </CardHeader>
                 <CardContent className="grid gap-6">
+                  <form
+                    action={updateEnquiryItemAction}
+                    className="rounded-2xl border p-4"
+                  >
+                    <input type="hidden" name="enquiry_id" value={id} />
+                    <input
+                      type="hidden"
+                      name="enquiry_item_id"
+                      value={item.id}
+                    />
+                    <input
+                      type="hidden"
+                      name="organization_id"
+                      value={snapshot.enquiry.organizationId}
+                    />
+                    <FieldGroup>
+                      <FieldSet>
+                        <FieldLegend>Sales line correction</FieldLegend>
+                        <FieldDescription>
+                          Corrections after handover reset Technical and pending
+                          Design state. Downstream quotes and orders lock edits.
+                        </FieldDescription>
+                      </FieldSet>
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <Field>
+                          <FieldLabel htmlFor={`${item.id}-edit-part`}>
+                            Part
+                          </FieldLabel>
+                          <Input
+                            id={`${item.id}-edit-part`}
+                            name="part"
+                            defaultValue={item.customerPartCode ?? ""}
+                            required
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={`${item.id}-edit-description`}>
+                            Description
+                          </FieldLabel>
+                          <Input
+                            id={`${item.id}-edit-description`}
+                            name="description"
+                            defaultValue={item.description}
+                            required
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={`${item.id}-edit-grade`}>
+                            Grade
+                          </FieldLabel>
+                          <Input
+                            id={`${item.id}-edit-grade`}
+                            name="grade"
+                            defaultValue={item.grade ?? ""}
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={`${item.id}-edit-quantity`}>
+                            Quantity
+                          </FieldLabel>
+                          <Input
+                            id={`${item.id}-edit-quantity`}
+                            name="quantity"
+                            type="number"
+                            min="0"
+                            step="0.00000001"
+                            defaultValue={item.quantity}
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={`${item.id}-edit-target`}>
+                            Target price
+                          </FieldLabel>
+                          <Input
+                            id={`${item.id}-edit-target`}
+                            name="target_price"
+                            type="number"
+                            min="0"
+                            step="0.000001"
+                            defaultValue={item.targetPrice ?? 0}
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={`${item.id}-edit-drawing-ref`}>
+                            Drawing reference
+                          </FieldLabel>
+                          <Input
+                            id={`${item.id}-edit-drawing-ref`}
+                            name="drawing_reference"
+                            defaultValue={item.drawingReference ?? ""}
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={`${item.id}-edit-drawing-file`}>
+                            Replacement drawing
+                          </FieldLabel>
+                          <Input
+                            id={`${item.id}-edit-drawing-file`}
+                            name="drawing_file"
+                            type="file"
+                            accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg"
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor={`${item.id}-edit-remarks`}>
+                            Remarks
+                          </FieldLabel>
+                          <Input
+                            id={`${item.id}-edit-remarks`}
+                            name="remarks"
+                            defaultValue={item.remarks ?? ""}
+                          />
+                        </Field>
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        <Button type="submit">Update line</Button>
+                        {item.drawingFileId ? (
+                          <Button asChild type="button" variant="outline">
+                            <Link
+                              href={`/commercial/enquiry-items/${item.id}/drawing`}
+                            >
+                              Open {item.drawingFileName ?? "drawing"}
+                            </Link>
+                          </Button>
+                        ) : null}
+                      </div>
+                      {(drawingHistory.get(item.id)?.length ?? 0) > 0 ? (
+                        <div className="grid gap-2 rounded-2xl bg-muted/40 p-3">
+                          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                            Drawing history
+                          </p>
+                          {drawingHistory
+                            .get(item.id)!
+                            .map((drawing, index) => (
+                              <div
+                                className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                                key={drawing.id}
+                              >
+                                <span>
+                                  {index === 0
+                                    ? "Current"
+                                    : `Revision ${index}`}{" "}
+                                  · {drawing.fileName} · {drawing.byteSize}{" "}
+                                  bytes
+                                </span>
+                                {index === 0 ? (
+                                  <Link
+                                    className="font-medium underline underline-offset-4"
+                                    href={`/commercial/enquiry-items/${item.id}/drawing`}
+                                  >
+                                    Open
+                                  </Link>
+                                ) : null}
+                              </div>
+                            ))}
+                        </div>
+                      ) : null}
+                    </FieldGroup>
+                  </form>
                   <div className="grid gap-6 xl:grid-cols-2">
                     <form action={updateTechnicalReviewAction}>
                       <input type="hidden" name="enquiry_id" value={id} />
@@ -476,6 +846,11 @@ export default async function EnquiryDetailPage({
 
                     <form action={saveDesignAction}>
                       <input type="hidden" name="enquiry_id" value={id} />
+                      <input
+                        type="hidden"
+                        name="organization_id"
+                        value={snapshot.enquiry.organizationId}
+                      />
                       <input
                         type="hidden"
                         name="enquiry_item_id"
@@ -637,38 +1012,17 @@ export default async function EnquiryDetailPage({
                   {clarification ? (
                     <>
                       <Separator />
-                      <form action={completeSalesClarificationAction}>
-                        <input type="hidden" name="enquiry_id" value={id} />
-                        <input
-                          type="hidden"
-                          name="enquiry_item_id"
-                          value={item.id}
-                        />
-                        <input
-                          type="hidden"
-                          name="clarification_task_id"
-                          value={clarification.id}
-                        />
-                        <FieldGroup>
-                          <Field>
-                            <FieldLabel
-                              htmlFor={`${item.id}-clarification-response`}
-                            >
-                              Sales clarification response
-                            </FieldLabel>
-                            <Textarea
-                              id={`${item.id}-clarification-response`}
-                              name="response"
-                              required
-                            />
-                            <FieldDescription>
-                              Requested by {clarification.sourceStage}; returns
-                              the line to Pending Review.
-                            </FieldDescription>
-                          </Field>
-                          <Button type="submit">Resolve clarification</Button>
-                        </FieldGroup>
-                      </form>
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+                        <p className="text-sm text-muted-foreground">
+                          {clarification.sourceStage} requested a Sales match
+                          decision for this line.
+                        </p>
+                        <Button asChild>
+                          <Link href="/commercial/sales">
+                            Resolve in Sales queue
+                          </Link>
+                        </Button>
+                      </div>
                     </>
                   ) : null}
 

@@ -607,3 +607,291 @@ Acceptance evidence:
 - At the requested pause, the browser and Next.js sessions are closed and the
   Docker PostgreSQL/Redis containers are stopped with their volumes retained.
   No LM-03 implementation has started.
+
+## 22. LM-03 completion checkpoint — 2026-07-22
+
+LM-03 is complete on `feat/logic-migration`.
+
+Delivered behavior:
+
+- Enquiry and line corrections use the recovered edit/delete gates. A valid
+  post-handover correction resets Technical fields, resolves open Sales work,
+  removes an unconsumed Design BOM, and returns the task to its source state.
+- Drawing replacement preserves every file-link revision. Current bytes are
+  delivered only through a Better Auth capability check, organization-scoped
+  metadata lookup, contained storage path, and no-sniff response.
+- CSV, XLS, and XLSX line imports preserve physical row numbers and pass all
+  rows through explicit new, duplicate, in-progress, possible-code,
+  description-match, and invalid-row decisions before application.
+- Dedicated Sales and Technical Review pages expose source queue ordering,
+  six fixed Technical checks, commercial-requote and technical-revision
+  matching, line/drawing corrections, and manual or chained follow-ups.
+- Enquiry register import is atomic, resolves Customer UID before an exact
+  unique company name, updates only source-editable ENQs, and creates new ENQs
+  with source defaults. Register, line, and Sales history workbooks preserve
+  the recovered headers, sheet names, and filenames.
+
+Acceptance evidence:
+
+- The real-PostgreSQL commercial workflow gate passed 56 tests, including all
+  five classifier outcomes, edit/delete locks, post-handover reset effects,
+  drawing history, both Sales match branches, dedicated queues, chained
+  follow-ups, and register rollback after a later invalid row.
+- The web gate passed 145 tests, including physical-row/alias parsing and exact
+  template/export metadata. Database, web, and workspace typechecks passed;
+  lint completed with the four pre-existing dashboard warnings; diff checking
+  and the complete Next.js 16.2.6 production build passed.
+- The installed `agent-browser` skill could not execute because its matching
+  CLI is not installed on PATH, so this checkpoint has no new browser recording.
+  All new pages and authenticated output handlers compiled as dynamic routes.
+
+## 23. LM-04 completion checkpoint — 2026-07-22
+
+LM-04 is complete on `feat/logic-migration`.
+
+Delivered behavior:
+
+- Migration `0026_design_dossier_parity.sql` stores the complete recovered
+  Design assignment, internal-part, BOM requirement, tooling, fixture, gauge,
+  checking, approval, revision, and completion dossier.
+- The dedicated Design queue exposes only Technical-released or explicitly
+  reopened work, locks handed-off tasks, and offers ordered internal products
+  for portfolio and existing-component selection.
+- New List and Package work allocates organization-scoped Q and C identifiers;
+  new Package Assembly and List rows allocate A and Q identifiers atomically.
+- Multi-row BOMs preserve Assembly nesting, reject List parents, reject
+  non-ordered/external existing components, and materialize the same nested
+  catalog graph during Product Costing handoff.
+- Internal drawing, customer-marked drawing, and CAD files use normalized
+  organization-owned file metadata, append-only links, contained local paths,
+  Better Auth delivery, and metadata-failure byte cleanup.
+- Design-to-Technical and Product-Costing-to-Design clarifications preserve
+  source queue states and blockers. The existing safe costing-handoff reversal
+  remains the correction seam.
+
+Acceptance evidence:
+
+- The real-PostgreSQL gate passed 57 tests, including List, existing-portfolio,
+  Package, nested Assembly, invalid nesting, ordered-component, dossier,
+  attachment, queue, clarification, and catalog materialization assertions.
+- The web gate passed 145 tests. Database and web typechecks and lint passed,
+  with only the four pre-existing dashboard warnings.
+- Migration 0026 is applied to main `mrmpl`; runtime verification reports
+  PostgreSQL and Redis ready. The database gate was run serially because the
+  shared integration database is intentionally incompatible with concurrent
+  web identity-fixture mutation.
+
+## 24. LM-05 completion checkpoint — 2026-07-22
+
+LM-05 is complete on `feat/logic-migration`.
+
+Delivered behavior:
+
+- Product and customer costing expose every recovered List, Direct Purchase,
+  Package, Assembly, child, commercial, percentage, FX, and process input.
+  One-piece weight is explicitly grams, while Product Costing backflow accepts
+  only an unsent Draft-equivalent quote and records the actor in the same
+  transaction.
+- The Assembly/BOM register preserves Parent, Parent Description, Component,
+  Component Description, Qty, and Notes ordering. Its write command accepts
+  only Package/Assembly parents, rejects self/cross-organization/cyclic links,
+  and atomically creates audit evidence.
+- Current Pricing and historical revision views traverse immutable quote
+  snapshot trees through ten levels, retain parent/depth/quantity identity,
+  display the source spreadsheet column order, convert stored decimal
+  percentages for display, and export exact `Pricing View` /
+  `pricing-view.xlsx` metadata.
+- Historical quote PDF selection retains an originally sent quote after it is
+  superseded. PDF generation includes commercial terms and injectable no-store
+  Westmetall/Frankfurter adapters; an unavailable source yields `-` for metal
+  rates and the saved enquiry conversion rate for FX without blocking output.
+
+Acceptance evidence:
+
+- The serial real-PostgreSQL gate passed 58 tests, including exact formula
+  boundaries, immutable recursive Package/Assembly snapshots, active-price
+  serialization, sent-history locks, recursive register rows, historical PDF
+  precedence, and unsent/sent backflow behavior.
+- The web gate passed 148 tests, including the PDF adapters/offline fallback,
+  valid PDF bytes, exact workbook sheet/header/filename and percentage display,
+  and route-capability mappings.
+- Workspace typecheck and lint passed; lint retains only the four documented
+  pre-existing dashboard warnings. The Next.js 16.2.6 production build passed
+  with the documented local PostgreSQL and Better Auth environment and compiled
+  every Assembly, Pricing, revision-export, and quote-PDF handler as dynamic.
+
+## 25. LM-06 completion checkpoint — 2026-07-22
+
+LM-06 is complete on `feat/logic-migration`.
+
+Delivered behavior:
+
+- Customer PO files are checksum-backed normalized `core.files` evidence.
+  Upload failure removes the newly written bytes, replacement changes only the
+  current PO link, retained file/audit rows remain append-only, and authenticated
+  download resolves only a contained `LOCAL_FILE_STORAGE_PATH` path.
+- PO import uses the LM-00 ranked source matcher and retains unmatched,
+  difference, Keep Our Price, Accept PO Price/revision-request, PI Draft, Sent,
+  Approved, and pre-approval Cancelled outcomes without recalculating historical
+  quote IDs or PI prices.
+- PI approval traverses the immutable quote-snapshot tree recursively, converts
+  every Q identity to organization-scoped M/P state, creates revision-0 Drawing
+  History for each Q conversion, creates active In Progress Website Product
+  rows for ordered quote products, creates inactive In Progress rows for
+  BOM-adjacent products, and records ordered audit evidence in the same
+  PostgreSQL transaction.
+- Authenticated routes now emit exact `po-line-import-template.xlsx`,
+  `<po>-po.xlsx`, `<pi>-pi.xlsx`, `<pi>.pdf`, `po-master.xlsx`, and
+  `approved-pi-master.xlsx` artifacts with source sheet names, field order,
+  percentage display, selection, disposition, and column widths.
+
+Acceptance evidence:
+
+- The serial real-PostgreSQL gate passed 60 tests, including unmatched and
+  differing decisions, immutable PI evidence, approved cancellation rejection,
+  retained PO files, two-level quoted Package conversion, three Drawing History
+  rows, ordered Website Product rows, BOM-adjacent inactive entries, and audit
+  evidence.
+- The web gate passed 298 tests, including exact PO/PI sheet names, headers,
+  totals, percent display and PDF metadata. Workspace typecheck, lint, and diff
+  checking passed; lint retains only the four documented pre-existing dashboard
+  warnings.
+- The Next.js 16.2.6 production build passed and compiled all seven new
+  authenticated PO/PI file and report handlers as dynamic routes. The known
+  Turbopack NFT filesystem-tracing warning remains non-blocking.
+
+## 26. LM-07 completion checkpoint — 2026-07-22
+
+LM-07 is complete on `feat/logic-migration`.
+
+Delivered behavior:
+
+- Bulk revisions expose the exact 15 product and six customer fields, preserve
+  whole-percentage input only for Profit %, retain the source process aliases
+  and compatibility guards, stage multiple selected active prices as one
+  deletable group, show stored price previews, and apply every staged field
+  once. Recursive revisions remain child-before-parent, record their order and
+  final IDs, and never alter the source quote or snapshot digest.
+- ECNs now retain Pending Design, Pending Product Costing, Pending Costing, and
+  Completed. Design accepts the complete allowlisted product patch plus an
+  organization-scoped, positive-quantity, unique and cycle-safe replacement
+  BOM; before/after product and BOM evidence is stored before the Design view
+  locks. Product Costing accepts every source costing input and freezes the
+  recursively affected active-price set before customer decisions begin.
+- Each frozen price exposes deterministic Keep Price Same and Revise Price
+  previews. Keep Price Same recomputes the required profit against the changed
+  product/BOM while preserving the historical price; Revise Price preserves
+  the recalculated profit basis and emits the recalculated price. Exactly one
+  append-only decision is accepted per affected source price.
+- Corrections retain source-safe Design-to-Costing and unused-Q-product
+  reversals with complete blocker rechecks. Pending candidates, blocker counts,
+  completed reversal/technical-match evidence, and forbidden historical-price
+  quarantine remain visible through the same correction repository/register.
+
+Acceptance evidence:
+
+- The serial real-PostgreSQL gate passed 64 tests, including the exact 21-field
+  matrix, inspection alias guard and skip evidence, grouped staging/deletion,
+  recursive List/Assembly/Package ordering and immutable digests, BOM evidence,
+  all four ECN states, frozen affected prices, Keep Price Same output, unified
+  correction evidence, and blocked product reversal candidates.
+- The web gate passed 150 tests. Workspace typecheck, lint, and diff checking
+  passed; lint retains only the four documented pre-existing dashboard
+  warnings.
+- The Next.js 16.2.6 production build passed and compiled the expanded
+  revision and correction workbenches. The existing PO file-route Turbopack NFT
+  trace warning remains non-blocking.
+
+## 27. LM-08 completion checkpoint — 2026-07-22
+
+LM-08 is complete on `feat/logic-migration`.
+
+Delivered behavior:
+
+- Drawing History now exposes revision number/date, drawing number, remarks,
+  and Buffoli, conventional, and CNC laminated quantities through an
+  organization-scoped maintenance register and exact XLSX output. The
+  revision-0 PI side effect writes the same normalized contract.
+- Website Product maintenance normalizes the complete recovered source field
+  set, allocates category/subcategory part codes under a PostgreSQL advisory
+  lock, derives product description, material construction, thread standard,
+  six assembly slots and final assembly codes, and calculates In Progress or
+  Completed from the source required-field set. Its XLSX retains the exact 41
+  source columns, including the source `additiolNotes` spelling, while omitting
+  the displayed calculated status.
+- The commercial dashboard now reports all eight source counts and the five
+  recovered datasets: six-month enquiry trend, workflow load, quote mix,
+  material lead time, and customer Pareto. One repeatable-read PostgreSQL
+  snapshot bounds every dataset to the same organization and instant.
+- The Section 9 screen/output inventory is fully represented under
+  `/commercial`; Sales history and its three exports were delivered in LM-03.
+  HR remains an explicitly accounted external proxy dependency because its
+  repository and data were not supplied.
+
+Acceptance evidence:
+
+- The serial real-PostgreSQL gate passed 67 tests, including Drawing History
+  laminated quantities, source part-code/thread/BOM/status derivation, and all
+  dashboard datasets. The web gate passed 152 tests, including exact Drawing
+  History and 41-column Website Product workbook metadata.
+- The immutable 2026-07-18 Pricing archive contains zero `drawing_history` and
+  zero `website_product_entries` rows, so both LM-08 target datasets reconcile
+  zero-to-zero without inventing canonical rows. Existing master and workflow
+  source mappings remain untouched.
+- Database, web, and workspace typechecks passed. Workspace lint passed with
+  only the four documented pre-existing dashboard warnings; diff checking and
+  the Next.js 16.2.6 production build passed. The existing PO file-route
+  Turbopack NFT trace warning remains non-blocking.
+- The installed `agent-browser` skill still cannot execute because its CLI is
+  absent from PATH. LM-09 therefore owns the final browser, accessibility, and
+  responsive acceptance gate.
+
+## 28. LM-09 completion checkpoint — 2026-07-22
+
+LM-09 is complete on `feat/logic-migration`. The Pricing business-logic
+migration defined by this specification is delivered. The sealed source remains
+read-only until the separately approved retention period expires.
+
+Delivered acceptance behavior:
+
+- The runtime file package now provides guarded `pnpm files:backup` and
+  `pnpm files:restore` commands. They reject nested destinations, symlinks,
+  unsafe manifest paths, unexpected files, size/checksum drift, and nonempty
+  restore roots, and verify every copied and restored byte against a manifest.
+- The source-retirement exception register classifies every known Pricing
+  archive warning under the approved LM-00 behavior and scope decisions. The
+  three orphan import-review relationships remain visible evidence; no source
+  anomaly was silently repaired. Physical destruction still requires the
+  separate retention approval.
+- Live browser acceptance found and fixed two final defects: every Design
+  dossier control now has an accessible name, and the ECN register query groups
+  `item_type` correctly on an empty organization. The latter is protected by a
+  real-PostgreSQL regression.
+- Runtime dependency accounting confirms SQLite and Convex readers exist only
+  in the explicit migration package. The web, database, and runtime packages
+  use PostgreSQL and Better Auth; Redis remains fail-open acceleration.
+
+Acceptance evidence:
+
+- The immutable archive ZIP and SQLite checksums remain
+  `40e6d256dc1279b343951c3024efb0470663e0cf4d546537318c888b25bd190b`
+  and `cda45d16fcd50908b94b84e2958c30cd32c33e28c5f0b0ea80d78f414fc43cb3`.
+  All 45 executable source tests passed, and the isolated virtual-environment
+  audit ran all 57 workflow checks with zero findings.
+- With Redis stopped, all 67 then-current database tests and all 152 web tests
+  passed. A fresh Better Auth session then created a customer and enquiry,
+  added a line, handed it to Technical Review, marked it feasible, and observed
+  it in Design while Redis remained unavailable. Anonymous `/commercial`
+  returned a 307 redirect to sign-in.
+- Agent-browser accessibility snapshots verified the corrected Design labels.
+  All 17 commercial destinations returned HTTP 200 in the authenticated sweep;
+  the high-risk post-fix routes produced zero browser errors, and every route
+  checked at 390px reported no document overflow.
+- The attachment command rehearsal restored two nested files totaling 8,512
+  bytes with identical paths, sizes, checksums, count, and total. Automated
+  tests also covered binary bytes and every refusal gate.
+- The final serial target gate passed 68 database, eight migration, six
+  runtime, and 152 web tests. Workspace typecheck, formatting, lint, diff/JSON
+  checks, and the Next.js 16.2.6 production build passed. Lint retains only the
+  four documented pre-existing dashboard warnings, and the existing PO
+  file-route Turbopack trace warning remains non-blocking.

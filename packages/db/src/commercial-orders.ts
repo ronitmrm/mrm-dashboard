@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto"
+import path from "node:path"
 
-import { Pool, type PoolClient } from "pg"
+import type { Pool, PoolClient } from "pg"
 
-type RepositoryOptions = {
-  connectionString: string
-}
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+
+type RepositoryOptions = RepositoryPoolOptions
 
 type PriceDecision = "Accept PO Price" | "Keep Our Price"
 
@@ -18,27 +19,39 @@ type PurchaseOrderLineRow = {
   currency_code: string
   customer_part_code: string
   decision: string
+  decision_comment?: string | null
   description: string | null
   id: string
   line_number: number
   match_evidence: MatchEvidence | null
   match_status: string
   matched_item_id: string | null
+  matched_uid?: string | null
   pi_price: string | null
   price_difference: string | null
   purchase_order_id: string
   quantity: string
   quote_item_id: string | null
+  quote_enquiry_number?: string | null
+  quote_number?: string | null
+  system_packaging?: string | null
+  system_profit_percent?: string | null
+  system_purchase_times?: string | null
+  system_quote_revision?: number | null
+  system_scrap_rate?: string | null
+  system_shipping_terms?: string | null
   system_price: string | null
   unit_price: string
 }
 
 type ProformaInvoiceRow = {
+  approved_at?: Date | null
   id: string
   invoice_date: string
   invoice_number: string
   purchase_order_id: string
   revision: number
+  sent_at?: Date | null
   status: string
   total_amount: string
 }
@@ -132,6 +145,7 @@ function mapPurchaseOrderLine(row: PurchaseOrderLineRow) {
     currencyCode: row.currency_code,
     customerPartCode: row.customer_part_code,
     decision: row.decision,
+    decisionComment: row.decision_comment ?? null,
     description: row.description,
     id: row.id,
     lineNumber: row.line_number,
@@ -142,6 +156,7 @@ function mapPurchaseOrderLine(row: PurchaseOrderLineRow) {
     },
     matchStatus: row.match_status,
     matchedItemId: row.matched_item_id,
+    matchedUid: row.matched_uid ?? null,
     piPrice: row.pi_price === null ? null : asNumber(row.pi_price),
     poPrice: asNumber(row.unit_price),
     priceDifference:
@@ -149,6 +164,25 @@ function mapPurchaseOrderLine(row: PurchaseOrderLineRow) {
     purchaseOrderId: row.purchase_order_id,
     quantity: asNumber(row.quantity),
     quoteItemId: row.quote_item_id,
+    quoteEnquiryNumber: row.quote_enquiry_number ?? null,
+    quoteNumber: row.quote_number ?? null,
+    systemPackaging: row.system_packaging ?? null,
+    systemProfitPercent:
+      row.system_profit_percent === null ||
+      row.system_profit_percent === undefined
+        ? null
+        : asNumber(row.system_profit_percent),
+    systemPurchaseTimes:
+      row.system_purchase_times === null ||
+      row.system_purchase_times === undefined
+        ? null
+        : asNumber(row.system_purchase_times),
+    systemQuoteRevision: row.system_quote_revision ?? null,
+    systemScrapRate:
+      row.system_scrap_rate === null || row.system_scrap_rate === undefined
+        ? null
+        : asNumber(row.system_scrap_rate),
+    systemShippingTerms: row.system_shipping_terms ?? null,
     systemPrice: row.system_price === null ? null : asNumber(row.system_price),
   }
 }
@@ -160,6 +194,8 @@ function mapInvoice(row: ProformaInvoiceRow) {
     invoiceNumber: row.invoice_number,
     purchaseOrderId: row.purchase_order_id,
     revision: row.revision,
+    approvedAt: row.approved_at ?? null,
+    sentAt: row.sent_at ?? null,
     status: row.status,
     totalAmount: asNumber(row.total_amount),
   }
@@ -349,12 +385,15 @@ async function approveQuoteAndProduct(
   const result = await client.query<{
     customer_id: string
     item_id: string
+    item_uid: string
     price_lineage_key: string | null
   }>(
     `
-      SELECT customer_id, item_id, price_lineage_key
-      FROM sales.quote_items
-      WHERE id = $1 AND organization_id = $2
+      SELECT quote.customer_id, quote.item_id, quote.price_lineage_key,
+        item.uid AS item_uid
+      FROM sales.quote_items quote
+      JOIN catalog.items item ON item.id = quote.item_id
+      WHERE quote.id = $1 AND quote.organization_id = $2
       FOR UPDATE
     `,
     [input.quoteItemId, input.organizationId]
@@ -364,17 +403,14 @@ async function approveQuoteAndProduct(
     throw new Error("Historical quote was not found.")
   }
 
-  await client.query(
-    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
     [
-      [
-        "pricing-active",
-        input.organizationId,
-        quote.customer_id,
-        quote.price_lineage_key ?? "legacy-null",
-      ].join(":"),
-    ]
-  )
+      "pricing-active",
+      input.organizationId,
+      quote.customer_id,
+      quote.price_lineage_key ?? "legacy-null",
+    ].join(":"),
+  ])
 
   await client.query(
     `
@@ -404,42 +440,164 @@ async function approveQuoteAndProduct(
     `,
     [input.actorUserId ?? null, input.quoteItemId]
   )
-  await convertQuotedItem(client, {
-    actorUserId: input.actorUserId,
-    itemId: quote.item_id,
-    organizationId: input.organizationId,
-  })
-
-  const components = await client.query<{ item_id: string }>(
+  const quoteTree = await client.query<{
+    depth: number
+    item_id: string
+    item_uid: string
+    quote_item_id: string
+    uid_kind: string
+  }>(
     `
-      SELECT DISTINCT child_quote.item_id
-      FROM sales.quote_product_snapshots snapshot
-      JOIN sales.quote_package_components component
-        ON component.quote_product_snapshot_id = snapshot.id
-      JOIN sales.quote_items child_quote
-        ON child_quote.id = component.child_quote_item_id
-      WHERE snapshot.quote_item_id = $1
+      WITH RECURSIVE quote_tree AS (
+        SELECT quote.id AS quote_item_id, quote.item_id, 0 AS depth,
+          ARRAY[quote.id]::uuid[] AS path
+        FROM sales.quote_items quote
+        WHERE quote.id = $1
+        UNION ALL
+        SELECT child.id, child.item_id, quote_tree.depth + 1,
+          quote_tree.path || child.id
+        FROM quote_tree
+        JOIN sales.quote_product_snapshots snapshot
+          ON snapshot.quote_item_id = quote_tree.quote_item_id
+        JOIN sales.quote_package_components component
+          ON component.quote_product_snapshot_id = snapshot.id
+        JOIN sales.quote_items child
+          ON child.id = component.child_quote_item_id
+        WHERE quote_tree.depth < 20
+          AND NOT child.id = ANY(quote_tree.path)
+      )
+      SELECT DISTINCT ON (quote_tree.item_id)
+        quote_tree.quote_item_id, quote_tree.item_id, quote_tree.depth,
+        item.uid AS item_uid, item.uid_kind
+      FROM quote_tree
+      JOIN catalog.items item ON item.id = quote_tree.item_id
+      ORDER BY quote_tree.item_id, quote_tree.depth
     `,
     [input.quoteItemId]
   )
-  for (const component of components.rows) {
+  for (const component of quoteTree.rows.sort(
+    (left, right) => left.depth - right.depth
+  )) {
     await convertQuotedItem(client, {
       actorUserId: input.actorUserId,
       itemId: component.item_id,
       organizationId: input.organizationId,
     })
+    if (component.uid_kind === "QUOTE") {
+      await client.query(
+        `
+          INSERT INTO catalog.drawings (
+            organization_id, item_id, source_quote_item_id, revision,
+            drawing_number, status, effective_at, created_by_user_id,
+            updated_by_user_id,
+            source_system, source_table, source_id, source_payload
+          )
+          SELECT $1, item.id, $4::uuid, '0', item.uid, 'current', now(), $2, $2,
+            'mrm-dashboard', 'ordered_quote_drawings', $3,
+            jsonb_build_object(
+              'quoteItemId', $4::text,
+              'previousQuoteUid', $5::text
+            )
+          FROM catalog.items item
+          WHERE item.id = $6
+          ON CONFLICT (item_id, revision) DO NOTHING
+        `,
+        [
+          input.organizationId,
+          input.actorUserId ?? null,
+          `${component.quote_item_id}:0`,
+          component.quote_item_id,
+          component.item_uid,
+          component.item_id,
+        ]
+      )
+    }
+    await client.query(
+      `
+        INSERT INTO catalog.website_product_profiles (
+          organization_id, item_id, source_quote_item_id, title, summary,
+          published, product_description, material_construction, is_active,
+          website_status,
+          created_by_user_id, updated_by_user_id, source_system,
+          source_table, source_id, source_payload
+        )
+        SELECT $1, item.id, $3::uuid, item.description, item.production_type, false,
+          item.description, item.production_type, true, 'In Progress',
+          $2, $2, 'mrm-dashboard', 'ordered_quote_website_products',
+          item.id::text,
+          jsonb_build_object(
+            'quoteItemId', $3::text,
+            'websiteStatus', 'In Progress',
+            'isActive', true
+          )
+        FROM catalog.items item
+        WHERE item.id = $4
+          AND item.uid_kind = 'INTERNAL'
+          AND item.lifecycle_status = 'P'
+        ON CONFLICT (item_id) DO NOTHING
+      `,
+      [
+        input.organizationId,
+        input.actorUserId ?? null,
+        component.quote_item_id,
+        component.item_id,
+      ]
+    )
   }
+
+  const convertedItemIds = quoteTree.rows.map((row) => row.item_id)
+  await client.query(
+    `
+      WITH adjacent_items AS (
+        SELECT bom.component_item_id AS item_id
+        FROM catalog.bom_lines bom
+        WHERE bom.parent_item_id = ANY($1::uuid[])
+        UNION
+        SELECT bom.parent_item_id
+        FROM catalog.bom_lines bom
+        WHERE bom.component_item_id = ANY($1::uuid[])
+      )
+      INSERT INTO catalog.website_product_profiles (
+        organization_id, item_id, source_quote_item_id, title, summary,
+        published, product_description, material_construction, is_active,
+        website_status,
+        created_by_user_id, updated_by_user_id, source_system,
+        source_table, source_id, source_payload
+      )
+      SELECT $2, item.id, NULL, item.description, item.production_type, false,
+        item.description, item.production_type, false, 'In Progress',
+        $3, $3, 'mrm-dashboard', 'ordered_bom_website_products',
+        item.id::text,
+        jsonb_build_object(
+          'quoteItemId', null,
+          'websiteStatus', 'In Progress',
+          'isActive', false
+        )
+      FROM adjacent_items
+      JOIN catalog.items item ON item.id = adjacent_items.item_id
+      ON CONFLICT (item_id) DO NOTHING
+    `,
+    [convertedItemIds, input.organizationId, input.actorUserId ?? null]
+  )
+  await writeAuditEvent(client, {
+    actorUserId: input.actorUserId,
+    eventType: "quote_item.ordered",
+    metadata: {
+      convertedItemIds,
+      quoteItemIds: quoteTree.rows.map((row) => row.quote_item_id),
+      rootPreviousUid: quote.item_uid,
+    },
+    organizationId: input.organizationId,
+    targetId: input.quoteItemId,
+    targetTable: "quote_items",
+  })
 }
 
-export function createCommercialOrdersRepository({
-  connectionString,
-}: RepositoryOptions) {
-  const pool = new Pool({ connectionString })
+export function createCommercialOrdersRepository(options: RepositoryOptions) {
+  const { close, pool } = repositoryPool(options)
 
   return {
-    async close() {
-      await pool.end()
-    },
+    close,
 
     async createPurchaseOrder(input: {
       actorUserId?: string | null
@@ -1561,24 +1719,186 @@ export function createCommercialOrdersRepository({
       })
     },
 
+    async recordPurchaseOrderFile(input: {
+      actorUserId?: string | null
+      byteSize: number
+      fileName: string
+      mediaType?: string | null
+      purchaseOrderId: string
+      sha256?: string | null
+      sourceId: string
+      storageKey: string
+    }) {
+      if (
+        path.basename(input.fileName) !== input.fileName ||
+        input.fileName === "." ||
+        input.fileName === ".."
+      ) {
+        throw new Error("PO file name must be a safe base name.")
+      }
+      const storageKey = path.posix.normalize(input.storageKey)
+      if (
+        storageKey.startsWith("../") ||
+        storageKey.startsWith("/") ||
+        storageKey === ".." ||
+        storageKey.includes("\\")
+      ) {
+        throw new Error("PO storage key must be a safe relative path.")
+      }
+      if (input.byteSize < 0) {
+        throw new Error("PO file byte size cannot be negative.")
+      }
+      return transaction(pool, async (client) => {
+        const orderResult = await client.query<{
+          organization_id: string
+          status: string
+        }>(
+          `
+            SELECT organization_id, status
+            FROM sales.purchase_orders
+            WHERE id = $1
+            FOR UPDATE
+          `,
+          [input.purchaseOrderId]
+        )
+        const order = orderResult.rows[0]
+        if (!order) {
+          throw new Error("Purchase order was not found.")
+        }
+        if (["Approved", "Cancelled"].includes(order.status)) {
+          throw new Error("A closed purchase order file cannot be replaced.")
+        }
+        const file = await client.query<{
+          file_name: string
+          id: string
+          storage_key: string
+        }>(
+          `
+            INSERT INTO core.files (
+              organization_id, file_name, media_type, byte_size, sha256,
+              storage_key, created_by_user_id, updated_by_user_id,
+              source_system, source_table, source_id, source_payload
+            )
+            VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $7, 'mrm-dashboard',
+              'purchase_order_files', $8, $9
+            )
+            RETURNING id, file_name, storage_key
+          `,
+          [
+            order.organization_id,
+            input.fileName,
+            input.mediaType ?? null,
+            input.byteSize,
+            input.sha256 ?? null,
+            storageKey,
+            input.actorUserId ?? null,
+            input.sourceId,
+            input,
+          ]
+        )
+        await client.query(
+          `
+            INSERT INTO core.file_links (
+              organization_id, file_id, target_schema, target_table,
+              target_id, purpose, created_by_user_id, updated_by_user_id
+            )
+            VALUES ($1, $2, 'sales', 'purchase_orders', $3, 'source_po', $4, $4)
+            ON CONFLICT DO NOTHING
+          `,
+          [
+            order.organization_id,
+            file.rows[0]!.id,
+            input.purchaseOrderId,
+            input.actorUserId ?? null,
+          ]
+        )
+        await client.query(
+          `
+            UPDATE sales.purchase_orders
+            SET file_id = $1, updated_by_user_id = $2, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $3
+          `,
+          [file.rows[0]!.id, input.actorUserId ?? null, input.purchaseOrderId]
+        )
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "purchase_order.file_recorded",
+          metadata: {
+            byteSize: input.byteSize,
+            fileId: file.rows[0]!.id,
+            fileName: input.fileName,
+            sha256: input.sha256 ?? null,
+          },
+          organizationId: order.organization_id,
+          targetId: input.purchaseOrderId,
+          targetTable: "purchase_orders",
+        })
+        return {
+          fileName: file.rows[0]!.file_name,
+          id: file.rows[0]!.id,
+          storageKey: file.rows[0]!.storage_key,
+        }
+      })
+    },
+
+    async getPurchaseOrderFile(purchaseOrderId: string) {
+      const result = await pool.query<{
+        byte_size: string | null
+        file_name: string
+        media_type: string | null
+        sha256: string | null
+        storage_key: string
+      }>(
+        `
+          SELECT file.file_name, file.media_type, file.byte_size::text,
+            file.sha256, file.storage_key
+          FROM sales.purchase_orders purchase_order
+          JOIN core.files file ON file.id = purchase_order.file_id
+          WHERE purchase_order.id = $1
+        `,
+        [purchaseOrderId]
+      )
+      const file = result.rows[0]
+      if (!file) {
+        throw new Error("Purchase-order source file was not found.")
+      }
+      return {
+        byteSize: file.byte_size === null ? null : Number(file.byte_size),
+        fileName: file.file_name,
+        mediaType: file.media_type,
+        sha256: file.sha256,
+        storageKey: file.storage_key,
+      }
+    },
+
     async getPurchaseOrder(purchaseOrderId: string) {
       const order = await pool.query<{
         cancellation_reason: string | null
         company_name: string
+        currency_code: string
+        customer_uid: string
+        file_name: string | null
         id: string
+        notes: string | null
+        organization_id: string
         po_date: string
         po_number: string
         status: string
         total_amount: string
       }>(
         `
-          SELECT purchase_order.id, purchase_order.po_number,
+          SELECT purchase_order.id, purchase_order.organization_id,
+            purchase_order.po_number,
             purchase_order.po_date, purchase_order.status,
             purchase_order.total_amount, purchase_order.cancellation_reason,
-            customer.company_name
+            purchase_order.currency_code, purchase_order.notes,
+            customer.customer_uid, customer.company_name, file.file_name
           FROM sales.purchase_orders purchase_order
           JOIN sales.customers customer
             ON customer.id = purchase_order.customer_id
+          LEFT JOIN core.files file ON file.id = purchase_order.file_id
           WHERE purchase_order.id = $1
         `,
         [purchaseOrderId]
@@ -1588,10 +1908,14 @@ export function createCommercialOrdersRepository({
       }
       const lines = await pool.query<PurchaseOrderLineRow>(
         `
-          SELECT *
-          FROM sales.purchase_order_lines
-          WHERE purchase_order_id = $1
-          ORDER BY line_number
+          SELECT line.*, item.uid AS matched_uid,
+            quote.quote_number, enquiry.enquiry_number AS quote_enquiry_number
+          FROM sales.purchase_order_lines line
+          LEFT JOIN catalog.items item ON item.id = line.matched_item_id
+          LEFT JOIN sales.quote_items quote ON quote.id = line.quote_item_id
+          LEFT JOIN sales.enquiries enquiry ON enquiry.id = quote.enquiry_id
+          WHERE line.purchase_order_id = $1
+          ORDER BY line.line_number
         `,
         [purchaseOrderId]
       )
@@ -1608,9 +1932,14 @@ export function createCommercialOrdersRepository({
       return {
         cancellationReason: row.cancellation_reason,
         companyName: row.company_name,
+        currencyCode: row.currency_code,
+        customerUid: row.customer_uid,
+        fileName: row.file_name,
         id: row.id,
         invoices: invoices.rows.map(mapInvoice),
         lines: lines.rows.map(mapPurchaseOrderLine),
+        notes: row.notes,
+        organizationId: row.organization_id,
         poDate: asDateText(row.po_date as string | Date),
         poNumber: row.po_number,
         status: row.status,
@@ -1654,6 +1983,136 @@ export function createCommercialOrdersRepository({
         poNumber: row.po_number,
         status: row.status,
         totalAmount: asNumber(row.total_amount),
+      }))
+    },
+
+    async listPurchaseOrderReportRows(
+      organizationCode: string,
+      options: { approvedOnly?: boolean } = {}
+    ) {
+      const result = await pool.query<{
+        approved_at: Date | null
+        cancellation_reason: string | null
+        company_name: string
+        currency_code: string
+        customer_part_code: string
+        customer_uid: string
+        decision: string
+        decision_comment: string | null
+        description: string | null
+        invoice_number: string | null
+        invoice_status: string | null
+        line_number: number
+        matched_uid: string | null
+        pi_price: string | null
+        po_date: string
+        po_number: string
+        price_difference: string | null
+        quantity: string
+        quote_enquiry_number: string | null
+        quote_number: string | null
+        quote_request_enquiry_number: string | null
+        quote_request_line_number: number | null
+        sent_at: Date | null
+        system_price: string | null
+        system_profit_percent: string | null
+        system_purchase_times: string | null
+        system_scrap_rate: string | null
+        unit_price: string
+      }>(
+        `
+          SELECT purchase_order.po_number, purchase_order.po_date,
+            purchase_order.cancellation_reason, customer.customer_uid,
+            customer.company_name, line.line_number,
+            line.customer_part_code, line.description, line.quantity,
+            line.currency_code, line.unit_price, line.system_price,
+            line.price_difference, line.pi_price, line.decision,
+            line.decision_comment, line.system_scrap_rate,
+            line.system_purchase_times, line.system_profit_percent,
+            item.uid AS matched_uid, quote.quote_number,
+            quote_enquiry.enquiry_number AS quote_enquiry_number,
+            quote_request_enquiry.enquiry_number
+              AS quote_request_enquiry_number,
+            quote_request.line_number AS quote_request_line_number,
+            invoice.invoice_number, invoice.status AS invoice_status,
+            invoice.sent_at, invoice.approved_at
+          FROM sales.purchase_order_lines line
+          JOIN sales.purchase_orders purchase_order
+            ON purchase_order.id = line.purchase_order_id
+          JOIN core.organizations organization
+            ON organization.id = purchase_order.organization_id
+          JOIN sales.customers customer
+            ON customer.id = purchase_order.customer_id
+          LEFT JOIN catalog.items item ON item.id = line.matched_item_id
+          LEFT JOIN sales.quote_items quote ON quote.id = line.quote_item_id
+          LEFT JOIN sales.enquiries quote_enquiry
+            ON quote_enquiry.id = quote.enquiry_id
+          LEFT JOIN sales.enquiry_items quote_request
+            ON quote_request.source_system = 'mrm-dashboard'
+            AND quote_request.source_table = 'po_quote_request_lines'
+            AND quote_request.source_id = line.id::text
+          LEFT JOIN sales.enquiries quote_request_enquiry
+            ON quote_request_enquiry.id = quote_request.enquiry_id
+          LEFT JOIN LATERAL (
+            SELECT candidate.*
+            FROM sales.proforma_invoices candidate
+            WHERE candidate.purchase_order_id = purchase_order.id
+            ORDER BY candidate.revision DESC, candidate.created_at DESC
+            LIMIT 1
+          ) invoice ON true
+          WHERE lower(organization.code) = lower($1)
+            AND (NOT $2::boolean OR invoice.status = 'Approved')
+          ORDER BY purchase_order.po_date DESC,
+            purchase_order.created_at DESC, line.line_number
+        `,
+        [organizationCode.trim(), options.approvedOnly ?? false]
+      )
+      return result.rows.map((row) => ({
+        cancellationReason: row.cancellation_reason,
+        companyName: row.company_name,
+        currencyCode: row.currency_code,
+        customerPartCode: row.customer_part_code,
+        customerUid: row.customer_uid,
+        decision: row.decision,
+        decisionComment: row.decision_comment,
+        description: row.description,
+        invoiceApprovedAt: row.approved_at,
+        invoiceNumber: row.invoice_number,
+        invoiceSentAt: row.sent_at,
+        invoiceStatus: row.invoice_status,
+        lineNumber: row.line_number,
+        matchedUid: row.matched_uid,
+        piPrice: row.pi_price === null ? null : asNumber(row.pi_price),
+        poDate: asDateText(row.po_date as string | Date),
+        poNumber: row.po_number,
+        poPrice: asNumber(row.unit_price),
+        priceDifference:
+          row.price_difference === null ? null : asNumber(row.price_difference),
+        quantity: asNumber(row.quantity),
+        quoteEnquiryNumber: row.quote_enquiry_number,
+        quoteNumber: row.quote_number,
+        quoteRequest:
+          row.quote_request_enquiry_number === null
+            ? null
+            : `${row.quote_request_enquiry_number}${
+                row.quote_request_line_number
+                  ? ` / Line ${row.quote_request_line_number}`
+                  : ""
+              }`,
+        systemPrice:
+          row.system_price === null ? null : asNumber(row.system_price),
+        systemProfitPercent:
+          row.system_profit_percent === null
+            ? null
+            : asNumber(row.system_profit_percent),
+        systemPurchaseTimes:
+          row.system_purchase_times === null
+            ? null
+            : asNumber(row.system_purchase_times),
+        systemScrapRate:
+          row.system_scrap_rate === null
+            ? null
+            : asNumber(row.system_scrap_rate),
       }))
     },
   }

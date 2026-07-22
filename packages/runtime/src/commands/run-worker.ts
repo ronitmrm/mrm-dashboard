@@ -1,10 +1,12 @@
 import { hostname } from "node:os"
 
 import { createDurableRefreshWorker } from "../durable-refresh-worker"
+import { readWorkerPostgresEnvironment } from "../managed-runtime"
+import { readRedisAccelerationEnvironment } from "../redis-acceleration"
+import { runContinuousWorkerCycle } from "../worker-loop"
 
-const postgresUrl =
-  process.env.DATABASE_URL ?? "postgres://mrmpl:mrmpl@localhost:5434/mrmpl"
-const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6380"
+const postgres = readWorkerPostgresEnvironment()
+const redis = readRedisAccelerationEnvironment(process.env, postgres.hosted)
 const workerId = process.env.REFRESH_WORKER_ID ?? `${hostname()}:${process.pid}`
 const pollIntervalMs = Math.max(
   100,
@@ -14,12 +16,17 @@ const batchSize = Math.max(
   1,
   Number(process.env.REFRESH_WORKER_BATCH_SIZE ?? 10)
 )
+const maxRetryDelayMs = Math.max(
+  pollIntervalMs,
+  Number(process.env.REFRESH_WORKER_MAX_RETRY_DELAY_MS ?? 30_000)
+)
 const once = process.argv.includes("--once")
 const statusOnly = process.argv.includes("--status")
 
 const worker = createDurableRefreshWorker({
-  postgresUrl,
-  redisUrl,
+  postgresPoolMax: postgres.max,
+  postgresUrl: postgres.connectionString,
+  ...redis,
   workerId,
 })
 
@@ -59,20 +66,22 @@ try {
     process.stdout.write(`${JSON.stringify({ batch, status, workerId })}\n`)
   } else {
     process.stdout.write(`${JSON.stringify({ event: "started", workerId })}\n`)
+    let consecutiveFailures = 0
     while (!stopping) {
-      const batch = await runBatch()
-      if (
-        batch.processed > 0 ||
-        batch.retrying > 0 ||
-        batch.failed > 0 ||
-        batch.outbox.published > 0 ||
-        batch.outbox.retrying > 0
-      ) {
-        process.stdout.write(
-          `${JSON.stringify({ batch, event: "batch", workerId })}\n`
-        )
+      const cycle = await runContinuousWorkerCycle({
+        consecutiveFailures,
+        maxRetryDelayMs,
+        pollIntervalMs,
+        runBatch,
+        workerId,
+      })
+      consecutiveFailures = cycle.consecutiveFailures
+      if (cycle.event) {
+        const output = `${JSON.stringify(cycle.event)}\n`
+        if (cycle.event.event === "poll-error") process.stderr.write(output)
+        else process.stdout.write(output)
       }
-      if (!stopping) await wait(pollIntervalMs)
+      if (!stopping) await wait(cycle.waitMs)
     }
     process.stdout.write(`${JSON.stringify({ event: "stopped", workerId })}\n`)
   }

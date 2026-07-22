@@ -32,7 +32,7 @@
               "acceptanceCriteria"
             ],
             "properties": {
-              "id": { "pattern": "^(MIG|LM)-[0-9]{2}$" },
+              "id": { "pattern": "^(MIG|LM|NU)-[0-9]{2}$" },
               "status": {
                 "enum": ["pending", "in_progress", "complete", "blocked"]
               }

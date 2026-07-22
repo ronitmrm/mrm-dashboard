@@ -1,5 +1,9 @@
 "use server"
 
+import { createHash, randomUUID } from "node:crypto"
+import { mkdir, unlink, writeFile } from "node:fs/promises"
+import path from "node:path"
+
 import { createCommercialOrdersRepository } from "@workspace/db"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
@@ -30,6 +34,10 @@ function numberValue(formData: FormData, name: string) {
     throw new Error(`${name} must be a number`)
   }
   return value
+}
+
+function safeFileName(fileName: string) {
+  return fileName.replace(/[<>:"/\\|?*]+/g, "_")
 }
 
 async function withOrders<T>(
@@ -169,6 +177,62 @@ export async function importPurchaseOrderWorkbookAction(formData: FormData) {
         rows,
       })
   )
+  revalidatePath(ordersPath)
+  revalidatePath(`${ordersPath}/${purchaseOrderId}`)
+}
+
+export async function uploadPurchaseOrderFileAction(formData: FormData) {
+  const purchaseOrderId = requiredText(formData, "purchase_order_id")
+  const upload = formData.get("po_file")
+  if (!(upload instanceof File) || upload.size === 0) {
+    throw new Error("PO source file is required.")
+  }
+  if (upload.size > 25 * 1024 * 1024) {
+    throw new Error("PO source file must be 25 MB or smaller.")
+  }
+  const fileName = safeFileName(upload.name)
+  if (!fileName || fileName === "." || fileName === "..") {
+    throw new Error("PO source file name is invalid.")
+  }
+  const bytes = Buffer.from(await upload.arrayBuffer())
+  const sha256 = createHash("sha256").update(bytes).digest("hex")
+  const sourceId = randomUUID()
+  const storageKey = path.posix.join(
+    "attachments",
+    "purchase-orders",
+    purchaseOrderId,
+    sourceId,
+    fileName
+  )
+  const storageRoot =
+    process.env.LOCAL_FILE_STORAGE_PATH ??
+    path.join(/*turbopackIgnore: true*/ process.cwd(), "local-data")
+  const filePath = path.join(
+    /*turbopackIgnore: true*/ storageRoot,
+    ...storageKey.split("/")
+  )
+  await mkdir(path.dirname(filePath), { recursive: true })
+  await writeFile(filePath, bytes, { flag: "wx" })
+  try {
+    await withOrders(
+      commercialCapabilities.purchaseOrders.write,
+      `${ordersPath}/${purchaseOrderId}`,
+      (repository, actorUserId) =>
+        repository.recordPurchaseOrderFile({
+          actorUserId,
+          byteSize: bytes.byteLength,
+          fileName,
+          mediaType: upload.type || null,
+          purchaseOrderId,
+          sha256,
+          sourceId,
+          storageKey,
+        })
+    )
+  } catch (error) {
+    await unlink(filePath).catch(() => undefined)
+    throw error
+  }
   revalidatePath(ordersPath)
   revalidatePath(`${ordersPath}/${purchaseOrderId}`)
 }

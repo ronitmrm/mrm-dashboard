@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto"
 
-import { Pool, type PoolClient } from "pg"
+import type { Pool, PoolClient } from "pg"
 
+import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 import { calculateCosting, type CostingResult } from "./pricing-calculation"
 
-type RepositoryOptions = {
-  connectionString: string
-}
+type RepositoryOptions = RepositoryPoolOptions
 
 type ProductRow = {
   alloy_premium: string
@@ -658,15 +657,11 @@ async function persistQuote(
   return quoteItemId
 }
 
-export function createCommercialCostingRepository({
-  connectionString,
-}: RepositoryOptions) {
-  const pool = new Pool({ connectionString })
+export function createCommercialCostingRepository(options: RepositoryOptions) {
+  const { close, pool } = repositoryPool(options)
 
   return {
-    async close() {
-      await pool.end()
-    },
+    close,
 
     async updateProductCostParameters(input: {
       action?: "complete" | "in_progress"
@@ -1323,6 +1318,7 @@ export function createCommercialCostingRepository({
         customer_part_code: string | null
         deburring: string
         direct_purchase_price_per_kg: string
+        enquiry_id: string
         enquiry_item_id: string
         enquiry_number: string
         extrusion_cost: string
@@ -1345,6 +1341,7 @@ export function createCommercialCostingRepository({
       }>(
         `
           SELECT design.enquiry_item_id, design.next_stage_status,
+            enquiry.id AS enquiry_id,
             enquiry.enquiry_number, customer.company_name,
             enquiry_item.customer_part_code, enquiry_item.quantity,
             enquiry.conversion_rate, item.id AS item_id, item.uid,
@@ -1484,6 +1481,7 @@ export function createCommercialCostingRepository({
         companyName: row.company_name,
         conversionRate: asNumber(row.conversion_rate, 1),
         customerPartCode: row.customer_part_code,
+        enquiryId: row.enquiry_id,
         enquiryItemId: row.enquiry_item_id,
         enquiryNumber: row.enquiry_number,
         itemId: row.item_id,
@@ -1516,9 +1514,388 @@ export function createCommercialCostingRepository({
       }))
     },
 
+    async sendQuoteBackToProductCosting(input: {
+      actorUserId?: string | null
+      enquiryId: string
+      itemId: string
+    }) {
+      return transaction(pool, async (client) => {
+        const quote = await client.query<{
+          id: string
+          organization_id: string
+          sent_at: Date | null
+          status: string
+        }>(
+          `
+            SELECT id, organization_id, status, sent_at
+            FROM sales.quote_items
+            WHERE enquiry_id = $1
+              AND item_id = $2
+              AND status <> 'Superseded'
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            FOR UPDATE
+          `,
+          [input.enquiryId, input.itemId]
+        )
+        const latest = quote.rows[0]
+        if (latest?.sent_at || (latest && latest.status !== "Draft")) {
+          throw new Error(
+            "Sent or quoted prices are locked. Start the proper revision flow before changing product parameter costing."
+          )
+        }
+        const product = await client.query<{
+          organization_id: string
+          uid: string
+        }>(
+          `
+            SELECT organization_id, uid
+            FROM catalog.items
+            WHERE id = $1
+          `,
+          [input.itemId]
+        )
+        const item = product.rows[0]
+        if (!item) {
+          throw new Error("Product was not found.")
+        }
+        const design = await client.query<{ id: string }>(
+          `
+            UPDATE sales.design_tasks
+            SET next_stage_status = 'Product Costing',
+              updated_at = now(), row_version = row_version + 1
+            WHERE enquiry_item_id IN (
+              SELECT id FROM sales.enquiry_items WHERE enquiry_id = $1
+            )
+              AND (
+                matched_product_id = $2
+                OR lower(quoted_part_uid) = lower($3)
+              )
+            RETURNING id
+          `,
+          [input.enquiryId, input.itemId, item.uid]
+        )
+        if (!design.rows[0]) {
+          throw new Error("Design costing handoff was not found.")
+        }
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "quote.returned_to_product_costing",
+          metadata: {
+            enquiryId: input.enquiryId,
+            itemId: input.itemId,
+            quoteItemId: latest?.id ?? null,
+          },
+          organizationId: item.organization_id,
+          targetId: design.rows[0].id,
+          targetTable: "design_tasks",
+        })
+        return { nextStageStatus: "Product Costing" }
+      })
+    },
+
+    async getQuoteDocument(enquiryId: string) {
+      const header = await pool.query<{
+        company_name: string
+        conversion_rate: string
+        currency: string
+        customer_uid: string
+        enquiry_number: string
+        incoterms: string | null
+        packaging_terms: string | null
+        payment_terms: string | null
+        shipment_mode: string | null
+      }>(
+        `
+          SELECT enquiry.enquiry_number, enquiry.currency,
+            enquiry.conversion_rate::text, enquiry.incoterms,
+            enquiry.payment_terms, enquiry.shipment_mode,
+            enquiry.packaging_terms, customer.customer_uid,
+            customer.company_name
+          FROM sales.enquiries enquiry
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          WHERE enquiry.id = $1
+        `,
+        [enquiryId]
+      )
+      if (!header.rows[0]) {
+        throw new Error("Enquiry was not found.")
+      }
+      const lines = await pool.query<{
+        customer_part_code: string | null
+        description: string
+        line_number: number
+        price: string | null
+        quantity: string
+        quote_number: string | null
+        revision: number | null
+        sent_at: Date | null
+        status: string | null
+      }>(
+        `
+          SELECT enquiry_item.line_number,
+            COALESCE(selected.customer_part_code,
+              enquiry_item.customer_part_code) AS customer_part_code,
+            enquiry_item.description, enquiry_item.quantity::text,
+            selected.quote_number, selected.revision, selected.status,
+            selected.sent_at, selected.unit_price::text AS price
+          FROM sales.enquiry_items enquiry_item
+          LEFT JOIN LATERAL (
+            SELECT quote.customer_part_code, quote.quote_number,
+              quote.revision, quote.status, quote.sent_at, quote.unit_price,
+              quote.created_at, quote.updated_at
+            FROM sales.quote_items quote
+            WHERE quote.enquiry_item_id = enquiry_item.id
+            ORDER BY CASE
+                WHEN quote.sent_at IS NOT NULL
+                  AND quote.created_at <= quote.sent_at THEN 0
+                WHEN quote.sent_at IS NULL AND quote.status = 'Draft' THEN 1
+                WHEN quote.sent_at IS NOT NULL THEN 2
+                WHEN quote.status = 'Accepted' THEN 3
+                WHEN quote.is_active THEN 4
+                ELSE 5
+              END,
+              CASE
+                WHEN quote.sent_at IS NOT NULL
+                  AND quote.created_at <= quote.sent_at THEN quote.sent_at
+                ELSE quote.updated_at
+              END DESC,
+              quote.created_at DESC, quote.id DESC
+            LIMIT 1
+          ) selected ON true
+          WHERE enquiry_item.enquiry_id = $1
+          ORDER BY enquiry_item.line_number
+        `,
+        [enquiryId]
+      )
+      const organization = await pool.query<{ organization_id: string }>(
+        "SELECT organization_id FROM sales.enquiries WHERE id = $1",
+        [enquiryId]
+      )
+      const terms = await pool.query<{
+        label: string
+        sort_order: number
+        value: string
+      }>(
+        `
+          SELECT label, value, sort_order
+          FROM sales.quote_term_templates
+          WHERE organization_id = $1 AND active
+          ORDER BY sort_order, label
+        `,
+        [organization.rows[0]!.organization_id]
+      )
+      const row = header.rows[0]
+      return {
+        companyName: row.company_name,
+        conversionRate: asNumber(row.conversion_rate, 1),
+        currency: row.currency,
+        customerUid: row.customer_uid,
+        enquiryNumber: row.enquiry_number,
+        incoterms: row.incoterms,
+        lines: lines.rows.map((line) => ({
+          customerPartCode: line.customer_part_code,
+          description: line.description,
+          lineNumber: line.line_number,
+          price: line.price === null ? null : asNumber(line.price),
+          quantity: asNumber(line.quantity),
+          quoteNumber: line.quote_number,
+          revision: line.revision,
+          sentAt: line.sent_at,
+          status: line.status,
+        })),
+        packagingTerms: row.packaging_terms,
+        paymentTerms: row.payment_terms,
+        revision: Math.max(0, ...lines.rows.map((line) => line.revision ?? 0)),
+        shipmentMode: row.shipment_mode,
+        terms: terms.rows.map((term) => ({
+          label: term.label,
+          sortOrder: term.sort_order,
+          value: term.value,
+        })),
+      }
+    },
+
+    async listPricingRegister(
+      organizationCode: string,
+      options: { revisions?: boolean } = {}
+    ) {
+      const result = await pool.query<{
+        calculation_json: Record<string, unknown>
+        change_date: Date
+        company_name: string
+        component_depth: number
+        component_quantity: string
+        currency: string
+        customer_id: string
+        customer_part_code: string | null
+        customer_uid: string
+        enquiry_description: string
+        enquiry_number: string | null
+        id: string
+        is_active: boolean
+        item_type: string
+        lifecycle_status: string
+        line_number: number | null
+        packaging: string | null
+        parent_uid: string | null
+        product_context: Record<string, unknown>
+        product_snapshot: Record<string, unknown>
+        quote_inputs: Record<string, unknown>
+        quote_number: string
+        row_key: string
+        revision: number
+        sent_at: Date | null
+        shipping_terms: string | null
+        status: string
+        unit_price: string
+        uid: string
+      }>(
+        `
+          WITH RECURSIVE roots AS (
+            SELECT quote.*
+            FROM sales.quote_items quote
+            JOIN core.organizations organization
+              ON organization.id = quote.organization_id
+            WHERE lower(organization.code) = lower($1)
+              AND (
+                $2::boolean
+                OR quote.status = 'Draft'
+                OR quote.is_active
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM sales.quote_package_components component
+                WHERE component.child_quote_item_id = quote.id
+              )
+          ),
+          quote_tree AS (
+            SELECT root.id AS root_quote_item_id,
+              root.id AS quote_item_id, root.item_id,
+              NULL::uuid AS parent_item_id, 0 AS component_depth,
+              1::numeric AS component_quantity, ARRAY[root.id] AS path
+            FROM roots root
+            UNION ALL
+            SELECT tree.root_quote_item_id, component.child_quote_item_id,
+              component.component_item_id, tree.item_id,
+              tree.component_depth + 1, component.quantity,
+              tree.path || COALESCE(component.child_quote_item_id,
+                component.component_item_id)
+            FROM quote_tree tree
+            JOIN sales.quote_product_snapshots parent_snapshot
+              ON parent_snapshot.quote_item_id = tree.quote_item_id
+            JOIN sales.quote_package_components component
+              ON component.quote_product_snapshot_id = parent_snapshot.id
+            WHERE tree.component_depth < 10
+              AND NOT COALESCE(component.child_quote_item_id,
+                component.component_item_id) = ANY(tree.path)
+          )
+          SELECT COALESCE(member.id, tree.item_id) AS id,
+            tree.root_quote_item_id::text || ':' ||
+              array_to_string(tree.path, '/') AS row_key,
+            root.quote_number, root.revision, root.status, root.is_active,
+            root.sent_at, CASE WHEN tree.component_depth = 0
+              THEN root.customer_part_code ELSE NULL END
+              AS customer_part_code,
+            COALESCE(member.unit_price, 0)::text AS unit_price,
+            customer.id AS customer_id, customer.customer_uid,
+            customer.company_name, item.uid,
+            COALESCE(snapshot.item_type, item.item_type) AS item_type,
+            item.lifecycle_status, enquiry.enquiry_number,
+            enquiry.currency, enquiry_item.line_number,
+            enquiry_item.description AS enquiry_description,
+            parent.uid AS parent_uid, tree.component_depth,
+            tree.component_quantity::text,
+            COALESCE(member.updated_at, item.updated_at) AS change_date,
+            COALESCE(snapshot.product_snapshot, '{}'::jsonb)
+              AS product_snapshot,
+            COALESCE(snapshot.calculation_json, '{}'::jsonb)
+              AS calculation_json,
+            jsonb_build_object(
+              'scrapRate', COALESCE(member.scrap_rate, root.scrap_rate),
+              'packingCost', COALESCE(member.packing_cost, root.packing_cost),
+              'shippingCost', COALESCE(member.shipping_cost, root.shipping_cost),
+              'overheadCost', COALESCE(member.overhead_cost_input,
+                root.overhead_cost_input),
+              'purchaseTimes', COALESCE(member.purchase_times,
+                root.purchase_times),
+              'profitPercent', COALESCE(member.profit_percent,
+                root.profit_percent),
+              'conversionRate', COALESCE(member.conversion_rate,
+                root.conversion_rate),
+              'assembledPartInr', COALESCE(member.assembled_part_inr, 0)
+            ) AS quote_inputs,
+            jsonb_build_object(
+              'grade', grade.name,
+              'rodType', rod_type.name,
+              'machineType', machine_type.name,
+              'rodSize', item.rod_size,
+              'dieCode', item.die_code,
+              'remarks', item.remarks
+            ) AS product_context,
+            COALESCE(member.packaging, root.packaging) AS packaging,
+            COALESCE(member.shipping_terms, root.shipping_terms)
+              AS shipping_terms
+          FROM quote_tree tree
+          JOIN roots root ON root.id = tree.root_quote_item_id
+          LEFT JOIN sales.quote_items member ON member.id = tree.quote_item_id
+          JOIN sales.customers customer ON customer.id = root.customer_id
+          JOIN catalog.items item ON item.id = tree.item_id
+          LEFT JOIN catalog.items parent ON parent.id = tree.parent_item_id
+          LEFT JOIN catalog.material_grades grade
+            ON grade.id = item.material_grade_id
+          LEFT JOIN catalog.rod_types rod_type ON rod_type.id = item.rod_type_id
+          LEFT JOIN catalog.machine_types machine_type
+            ON machine_type.id = item.machine_type_id
+          LEFT JOIN sales.enquiries enquiry ON enquiry.id = root.enquiry_id
+          LEFT JOIN sales.enquiry_items enquiry_item
+            ON enquiry_item.id = root.enquiry_item_id
+          LEFT JOIN sales.quote_product_snapshots snapshot
+            ON snapshot.quote_item_id = tree.quote_item_id
+          JOIN core.organizations organization
+            ON organization.id = root.organization_id
+          ORDER BY customer.company_name, root.customer_part_code,
+            root.revision DESC, tree.path
+        `,
+        [organizationCode.trim(), options.revisions ?? false]
+      )
+      return result.rows.map((row) => ({
+        calculation: row.calculation_json,
+        changeDate: row.change_date,
+        companyName: row.company_name,
+        componentDepth: row.component_depth,
+        componentQuantity: asNumber(row.component_quantity, 1),
+        currency: row.currency,
+        customerId: row.customer_id,
+        customerPartCode: row.customer_part_code,
+        customerUid: row.customer_uid,
+        enquiryDescription: row.enquiry_description,
+        enquiryNumber: row.enquiry_number,
+        id: row.id,
+        isActive: row.is_active,
+        itemType: row.item_type,
+        lifecycleStatus: row.lifecycle_status,
+        lineNumber: row.line_number,
+        packaging: row.packaging,
+        parentUid: row.parent_uid,
+        productContext: row.product_context,
+        product: row.product_snapshot,
+        quoteInputs: row.quote_inputs,
+        quoteNumber: row.quote_number,
+        rowKey: row.row_key,
+        revision: row.revision,
+        sentAt: row.sent_at,
+        shippingTerms: row.shipping_terms,
+        status: row.status,
+        unitPrice: asNumber(row.unit_price),
+        uid: row.uid,
+      }))
+    },
+
     async listQuotes(organizationCode: string) {
       const result = await pool.query<{
         company_name: string
+        enquiry_id: string | null
         id: string
         is_active: boolean
         quote_number: string
@@ -1528,7 +1905,8 @@ export function createCommercialCostingRepository({
         uid: string
       }>(
         `
-          SELECT quote.id, quote.quote_number, quote.revision, quote.status,
+          SELECT quote.id, quote.enquiry_id, quote.quote_number,
+            quote.revision, quote.status,
             quote.is_active, quote.rate_usd, customer.company_name, item.uid
           FROM sales.quote_items quote
           JOIN core.organizations organization
@@ -1547,6 +1925,7 @@ export function createCommercialCostingRepository({
       )
       return result.rows.map((row) => ({
         companyName: row.company_name,
+        enquiryId: row.enquiry_id,
         id: row.id,
         isActive: row.is_active,
         quoteNumber: row.quote_number,
