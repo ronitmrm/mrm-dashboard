@@ -6,6 +6,7 @@ import {
   commercialNavigation,
   dashboardNavigation,
   dashboardTabHref,
+  hrNavigation,
 } from "./unified-navigation"
 
 describe("unified navigation", () => {
@@ -19,12 +20,16 @@ describe("unified navigation", () => {
     const hrefs = [
       ...dashboardNavigation.map(({ href }) => href),
       ...commercialNavigation.map(({ href }) => href),
+      ...hrNavigation.map(({ href }) => href),
       ...administrationNavigation.map(({ href }) => href),
     ]
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
     expect(dashboardNavigation).toHaveLength(16)
     expect(commercialNavigation).toHaveLength(17)
+    expect(hrNavigation).toEqual([
+      expect.objectContaining({ href: "/hr", label: "HR Recruitment" }),
+    ])
   })
 
   it("creates shareable links for operations tabs", () => {

@@ -30,6 +30,7 @@ import {
   administrationNavigation,
   commercialNavigation,
   dashboardNavigation,
+  hrNavigation,
 } from "@/lib/unified-navigation"
 
 function isNavigationItemActive(pathname: string, href: string) {
@@ -53,9 +54,12 @@ export function CommercialShell({
     navigationAccess.commercialHrefs.includes(item.href)
   )
   const current =
-    [...commercialNavigation, ...administrationNavigation].find((item) =>
-      isNavigationItemActive(pathname, item.href)
-    ) ?? commercialNavigation[0]!
+    [
+      ...commercialNavigation,
+      ...hrNavigation,
+      ...administrationNavigation,
+    ].find((item) => isNavigationItemActive(pathname, item.href)) ??
+    commercialNavigation[0]!
 
   return (
     <SidebarProvider
@@ -105,6 +109,28 @@ export function CommercialShell({
               <SidebarGroupContent>
                 <SidebarMenu>
                   {visibleCommercialNavigation.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isNavigationItemActive(pathname, item.href)}
+                      >
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : null}
+          {navigationAccess.hrRecruitment ? (
+            <SidebarGroup>
+              <SidebarGroupLabel>Human Resources</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {hrNavigation.map((item) => (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton
                         asChild

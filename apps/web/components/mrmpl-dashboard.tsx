@@ -91,6 +91,7 @@ import {
   commercialNavigation,
   dashboardNavigation as navItems,
   dashboardTabHref,
+  hrNavigation,
   type DashboardTabId,
 } from "@/lib/unified-navigation";
 
@@ -1098,6 +1099,25 @@ function DashboardShell({
               <SidebarGroupContent>
                 <SidebarMenu>
                   {visibleCommercialNavigation.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild>
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : null}
+          {navigationAccess.hrRecruitment ? (
+            <SidebarGroup>
+              <SidebarGroupLabel>Human Resources</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {hrNavigation.map((item) => (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton asChild>
                         <Link href={item.href}>

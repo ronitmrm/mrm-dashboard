@@ -1,5 +1,6 @@
 import {
   Boxes,
+  BriefcaseBusiness,
   Calculator,
   CalendarDays,
   ClipboardList,
@@ -257,6 +258,14 @@ export const commercialNavigation = [
     href: "/commercial/corrections",
     icon: Undo2,
     label: "Corrections",
+  },
+] as const
+
+export const hrNavigation = [
+  {
+    href: "/hr",
+    icon: BriefcaseBusiness,
+    label: "HR Recruitment",
   },
 ] as const
 
