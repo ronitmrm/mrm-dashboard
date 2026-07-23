@@ -12,24 +12,18 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
 } from "@workspace/ui/components/sidebar"
 
+import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation"
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
   administrationNavigation,
   commercialNavigation,
-  dashboardNavigation,
   hrNavigation,
 } from "@/lib/unified-navigation"
 
@@ -50,9 +44,6 @@ export function CommercialShell({
   user: { email: string; name: string }
 }) {
   const pathname = usePathname()
-  const visibleCommercialNavigation = commercialNavigation.filter((item) =>
-    navigationAccess.commercialHrefs.includes(item.href)
-  )
   const current =
     [
       ...commercialNavigation,
@@ -84,91 +75,7 @@ export function CommercialShell({
           </Link>
         </SidebarHeader>
         <SidebarContent>
-          {navigationAccess.operations ? (
-            <SidebarGroup>
-              <SidebarGroupLabel>Operations</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {dashboardNavigation.map((item) => (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton asChild>
-                        <Link href={item.href}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ) : null}
-          {visibleCommercialNavigation.length ? (
-            <SidebarGroup>
-              <SidebarGroupLabel>Commercial &amp; Pricing</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {visibleCommercialNavigation.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isNavigationItemActive(pathname, item.href)}
-                      >
-                        <Link href={item.href}>
-                          <item.icon />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ) : null}
-          {navigationAccess.hrRecruitment ? (
-            <SidebarGroup>
-              <SidebarGroupLabel>Human Resources</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {hrNavigation.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isNavigationItemActive(pathname, item.href)}
-                      >
-                        <Link href={item.href}>
-                          <item.icon />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ) : null}
-          {navigationAccess.administration ? (
-            <SidebarGroup>
-              <SidebarGroupLabel>Administration</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {administrationNavigation.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isNavigationItemActive(pathname, item.href)}
-                      >
-                        <Link href={item.href}>
-                          <item.icon />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ) : null}
+          <UnifiedSidebarNavigation navigationAccess={navigationAccess} />
         </SidebarContent>
         <SidebarFooter>
           <div className="grid gap-0.5 px-2 py-2">

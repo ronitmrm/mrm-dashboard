@@ -265,7 +265,7 @@ export const hrNavigation = [
   {
     href: "/hr",
     icon: BriefcaseBusiness,
-    label: "HR Recruitment",
+    label: "Recruitment workspace",
   },
 ] as const
 

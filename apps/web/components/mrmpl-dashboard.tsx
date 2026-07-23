@@ -43,14 +43,8 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
@@ -84,14 +78,12 @@ import {
   type ShopFloorStatusPatch,
 } from "@/lib/shop-floor-optimistic";
 import { useTheme } from "@/components/theme-provider";
+import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation";
 import { authClient } from "@/lib/auth/auth-client";
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access";
 import {
-  administrationNavigation,
-  commercialNavigation,
   dashboardNavigation as navItems,
   dashboardTabHref,
-  hrNavigation,
   type DashboardTabId,
 } from "@/lib/unified-navigation";
 
@@ -1045,9 +1037,6 @@ function DashboardShell({
     [basePayload, optimisticShopFloorStatuses, optimisticSetupChecklistSessions, optimisticProductionCards],
   );
   const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
-  const visibleCommercialNavigation = commercialNavigation.filter((item) =>
-    navigationAccess.commercialHrefs.includes(item.href)
-  );
   const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
 
   const view = useMemo(
@@ -1078,78 +1067,11 @@ function DashboardShell({
           </Link>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>Operations</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {navItems.map((item) => (
-                  <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton isActive={item.id === activeTab} onClick={() => setActiveTab(item.id)}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          {visibleCommercialNavigation.length ? (
-            <SidebarGroup>
-              <SidebarGroupLabel>Commercial &amp; Pricing</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {visibleCommercialNavigation.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild>
-                        <Link href={item.href}>
-                          <item.icon />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ) : null}
-          {navigationAccess.hrRecruitment ? (
-            <SidebarGroup>
-              <SidebarGroupLabel>Human Resources</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {hrNavigation.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild>
-                        <Link href={item.href}>
-                          <item.icon />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ) : null}
-          {navigationAccess.administration ? (
-            <SidebarGroup>
-              <SidebarGroupLabel>Administration</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {administrationNavigation.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild>
-                        <Link href={item.href}>
-                          <item.icon />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ) : null}
+          <UnifiedSidebarNavigation
+            activeDashboardTab={activeTab}
+            navigationAccess={navigationAccess}
+            onDashboardTabSelect={setActiveTab}
+          />
         </SidebarContent>
         <SidebarFooter>
           <div className="grid gap-0.5 px-2 py-2">

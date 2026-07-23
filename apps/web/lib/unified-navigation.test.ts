@@ -28,7 +28,10 @@ describe("unified navigation", () => {
     expect(dashboardNavigation).toHaveLength(16)
     expect(commercialNavigation).toHaveLength(17)
     expect(hrNavigation).toEqual([
-      expect.objectContaining({ href: "/hr", label: "HR Recruitment" }),
+      expect.objectContaining({
+        href: "/hr",
+        label: "Recruitment workspace",
+      }),
     ])
   })
 
