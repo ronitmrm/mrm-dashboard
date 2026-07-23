@@ -31,6 +31,15 @@ export {
 } from "./dashboard-read-model"
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 export { createMaintenanceRepository } from "./maintenance"
+export {
+  createRecruitmentRepository,
+  type RecruitmentCandidateRow,
+  type RecruitmentInterviewRow,
+  type RecruitmentJobRow,
+  type RecruitmentMasterSnapshot,
+  type RecruitmentPostRow,
+  type RecruitmentTemplateRow,
+} from "./recruitment"
 export { createQualityRepository } from "./quality"
 export { createProductionShopFloorRepository } from "./production-shop-floor"
 export { createWorkforceRepository } from "./workforce"

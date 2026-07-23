@@ -1,12 +1,13 @@
-import { BriefcaseBusiness, ExternalLink, Link2Off } from "lucide-react"
-import { redirect } from "next/navigation"
-
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@workspace/ui/components/alert"
-import { Button } from "@workspace/ui/components/button"
+  createRecruitmentRepository,
+  type RecruitmentCandidateRow,
+  type RecruitmentInterviewRow,
+  type RecruitmentJobRow,
+  type RecruitmentMasterSnapshot,
+  type RecruitmentPostRow,
+  type RecruitmentTemplateRow,
+} from "@workspace/db"
+import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import {
   Card,
   CardContent,
@@ -14,55 +15,122 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import { BriefcaseBusiness } from "lucide-react"
+import { redirect } from "next/navigation"
 
+import { RecruitmentPanel } from "@/components/hr/recruitment-panel"
+import { readAuthEnvironment } from "@/lib/auth/auth"
+import {
+  listGrantedCapabilities,
+  requireCapability,
+} from "@/lib/auth/require-capability"
 import { hrNavigation } from "@/lib/unified-navigation"
-import { requireAuthenticatedSession } from "@/lib/auth/require-capability"
-import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 
-type RecruitmentService =
-  | { status: "connected"; url: string }
-  | { status: "invalid" | "missing" }
-
-function recruitmentService(panel: string): RecruitmentService {
-  const configuredUrl = process.env.HR_RECRUITMENT_URL?.trim()
-  if (!configuredUrl) return { status: "missing" }
-
-  try {
-    const url = new URL(configuredUrl)
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return { status: "invalid" }
-    }
-    url.searchParams.set("panel", panel)
-    return { status: "connected", url: url.toString() }
-  } catch {
-    return { status: "invalid" }
-  }
-}
+export const dynamic = "force-dynamic"
 
 export default async function HrRecruitmentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ panel?: string }>
+  searchParams: Promise<{
+    error?: string
+    panel?: string
+    success?: string
+  }>
 }) {
-  const { panel } = await searchParams
-  const session = await requireAuthenticatedSession("/hr")
-  const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
-  const requestedItem = hrNavigation.find((item) => item.panelId === panel)
-  if (requestedItem && !navigationAccess.hrHrefs.includes(requestedItem.href)) {
-    redirect("/unauthorized")
-  }
+  const feedback = await searchParams
+  const requestedItem = hrNavigation.find(
+    (item) => item.panelId === feedback.panel
+  )
+  const activeItem = requestedItem ?? hrNavigation[0]
+  if (!activeItem) redirect("/unauthorized")
 
-  const activeItem =
-    requestedItem ??
-    hrNavigation.find((item) => navigationAccess.hrHrefs.includes(item.href))
-  if (!activeItem) {
-    redirect("/unauthorized")
-  }
+  const session = await requireCapability(
+    activeItem.requiredCapability,
+    activeItem.href
+  )
+  const grants = await listGrantedCapabilities(session.user.id, [
+    "hr.recruitment.write",
+    "hr.employees.write",
+  ])
+  const canWrite = grants.includes("hr.recruitment.write")
+  const canManageEmployees = grants.includes("hr.employees.write")
 
-  const service = recruitmentService(activeItem.panelId)
+  const repository = createRecruitmentRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  let candidates: RecruitmentCandidateRow[] = []
+  let interviews: RecruitmentInterviewRow[] = []
+  let jobs: RecruitmentJobRow[] = []
+  let posts: RecruitmentPostRow[] = []
+  let templates: RecruitmentTemplateRow[] = []
+  let masters: RecruitmentMasterSnapshot = {
+    departments: [],
+    designations: [],
+  }
+  let stats
+  try {
+    const organizationId = await repository.organizationIdForCode("MRMPL")
+    const panelId = activeItem.panelId
+    const needsMasters = [
+      "mastersPanel",
+      "postMasterPanel",
+      "approvedPostPanel",
+      "candidatesPanel",
+    ].includes(panelId)
+    const needsTemplates = ["postMasterPanel", "approvedPostPanel"].includes(
+      panelId
+    )
+    const needsPosts = [
+      "approvedPostPanel",
+      "employeeMasterPanel",
+      "jobsPanel",
+    ].includes(panelId)
+    const needsCandidates = [
+      "candidatesPanel",
+      "candidateSearchPanel",
+    ].includes(panelId)
+    const needsJobs = ["jobsPanel", "candidateSearchPanel"].includes(panelId)
+
+    const [
+      loadedStats,
+      loadedMasters,
+      loadedTemplates,
+      loadedPosts,
+      loadedCandidates,
+      loadedJobs,
+      loadedInterviews,
+    ] = await Promise.all([
+      repository.count(organizationId),
+      needsMasters
+        ? repository.listMasters(organizationId)
+        : Promise.resolve(masters),
+      needsTemplates
+        ? repository.listTemplates(organizationId)
+        : Promise.resolve(templates),
+      needsPosts
+        ? repository.listPosts(organizationId)
+        : Promise.resolve(posts),
+      needsCandidates
+        ? repository.listCandidates(organizationId)
+        : Promise.resolve(candidates),
+      needsJobs ? repository.listJobs(organizationId) : Promise.resolve(jobs),
+      panelId === "interviewsPanel"
+        ? repository.listInterviews(organizationId)
+        : Promise.resolve(interviews),
+    ])
+    stats = loadedStats
+    masters = loadedMasters
+    templates = loadedTemplates
+    posts = loadedPosts
+    candidates = loadedCandidates
+    jobs = loadedJobs
+    interviews = loadedInterviews
+  } finally {
+    await repository.close()
+  }
 
   return (
-    <>
+    <div className="flex flex-col gap-6">
       <section className="grid gap-2">
         <div className="flex items-center gap-2">
           <BriefcaseBusiness className="size-5 text-primary" />
@@ -71,51 +139,53 @@ export default async function HrRecruitmentPage({
           </h2>
         </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Recruitment remains a separately managed service inside the unified
-          MRMPL application.
+          {activeItem.label} is part of the authenticated MRMPL dashboard and
+          uses the same account, permissions, and PostgreSQL records.
         </p>
       </section>
 
-      {service.status === "connected" ? (
-        <Card className="overflow-hidden">
-          <CardHeader className="border-b">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="grid gap-1.5">
-                <CardTitle>{activeItem.label}</CardTitle>
-                <CardDescription>
-                  The external HR service is shown inside the authenticated
-                  MRMPL shell.
-                </CardDescription>
-              </div>
-              <Button asChild variant="outline">
-                <a href={service.url} rel="noopener noreferrer" target="_blank">
-                  <ExternalLink />
-                  Open separately
-                </a>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <iframe
-              allow="clipboard-read; clipboard-write"
-              className="min-h-[75vh] w-full border-0"
-              referrerPolicy="strict-origin-when-cross-origin"
-              src={service.url}
-              title="MRMPL HR Recruitment"
-            />
-          </CardContent>
-        </Card>
-      ) : (
-        <Alert>
-          <Link2Off />
-          <AlertTitle>HR Recruitment service is not connected</AlertTitle>
-          <AlertDescription>
-            {service.status === "invalid"
-              ? "The configured HR Recruitment URL is invalid. Ask the application administrator to correct HR_RECRUITMENT_URL."
-              : "The HR Recruitment service and its records were not included in this repository. Configure HR_RECRUITMENT_URL to reconnect the existing external service."}
-          </AlertDescription>
+      {feedback.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{feedback.error}</AlertDescription>
         </Alert>
-      )}
-    </>
+      ) : null}
+      {feedback.success ? (
+        <Alert>
+          <AlertDescription>{feedback.success}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        {[
+          ["Approved posts", stats.posts],
+          ["Vacant posts", stats.vacantPosts],
+          ["Templates", stats.templates],
+          ["Open jobs", stats.openJobs],
+          ["Candidates", stats.candidates],
+          ["Interviews", stats.interviews],
+        ].map(([label, value]) => (
+          <Card key={label}>
+            <CardHeader className="pb-1">
+              <CardDescription>{label}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CardTitle className="font-mono text-2xl">{value}</CardTitle>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+
+      <RecruitmentPanel
+        canManageEmployees={canManageEmployees}
+        canWrite={canWrite}
+        candidates={candidates}
+        interviews={interviews}
+        jobs={jobs}
+        masters={masters}
+        panelId={activeItem.panelId}
+        posts={posts}
+        templates={templates}
+      />
+    </div>
   )
 }

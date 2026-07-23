@@ -36,4 +36,4 @@ Status: Approved classification; retention durations require business approval
 - Retention duration for failed rehearsal artifacts and conflict evidence.
 - Object-storage provider, region, lifecycle policy, and legal retention for
   business files.
-- HR JSON and resume retention after the separate HR discovery gate.
+- Historical HR JSON and resume retention after normalized recruitment import.

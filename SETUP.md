@@ -176,19 +176,21 @@ pnpm runtime:worker:managed:status
 
 Press `Ctrl-C` in the launcher terminal to stop all child processes.
 
-## HR Recruitment service
+## HR Recruitment
 
-HR Recruitment remains an existing separate local service. It does not use
-Docker. Start it from the supplied `recruitment_dashboard` folder before
-opening the HR module:
+HR Recruitment is part of the same Next.js application and uses the same
+Better Auth session. Its canonical records are stored in PostgreSQL; no
+separate Python server or second login is required.
+
+For a one-time import of the historical recruitment JSON, set
+`RECRUITMENT_JSON_PATH` for the command process and run:
 
 ```powershell
-python server.py 8770
+pnpm migration:recruitment:import
 ```
 
-The managed launcher automatically connects the dashboard to
-`http://127.0.0.1:8770`. Set `HR_RECRUITMENT_URL` in `apps/web/.env.local` only
-when the service runs at a different address.
+The source file is read as immutable evidence and is never used by the running
+application.
 
 ## Verification and troubleshooting
 

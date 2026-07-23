@@ -73,9 +73,9 @@ below.
 - Uploaded documents remain on an explicit persistent local filesystem volume
   for this delivery. Object-storage migration stays behind the production
   deployment gate.
-- HR recruitment data remains a separately gated source. The unified shell may
-  retain the existing HR boundary, but the external HR service is not silently
-  decommissioned or represented as migrated.
+- HR recruitment source JSON is imported through `packages/migration` into the
+  normalized `recruitment` schema. The unified application then owns its
+  authentication, authorization, reads, and writes.
 - `migration.json` is the local ticket ledger and append-only implementation
   change log for this delivery. Plane or another external issue tracker is not
   used.
@@ -184,23 +184,16 @@ Final source-table groups:
 
 ### 4.3 HR Recruitment source boundary
 
-The checked-in pricing project does not contain HR recruitment records.
-`/hr` authenticates the user, checks page permissions, and renders an iframe to
-an external backend. Existing deployment documentation identifies:
+The audited HR source is `recruitment_data.json`. Its departments,
+designations, templates, approved posts, combined roles, job posts, candidates,
+applications, events, and interviews are normalized into PostgreSQL by
+`packages/migration`.
 
-- `recruitment_data.json`
-- a `resumes/` directory
-- a separate Python service
-- the SQLite pricing database as the central authentication source
-
-Therefore:
-
-1. Legacy identity and HR page grants are not migrated. HR capabilities are
-   recreated in the fresh authorization model.
-2. Recruitment business data is not covered until the external service,
-   JSON shape, resume metadata, and file set are audited.
-3. The unified application must not decommission the HR service until that
-   separate audit and import pass acceptance.
+Legacy identity and HR page grants are excluded. Better Auth identities and the
+`hr.recruitment.*` / `hr.employees.*` capabilities are authoritative. The
+running `/hr` route reads and writes only the PostgreSQL `recruitment` schema;
+it does not open the JSON source, the Pricing SQLite database, or a Python
+sidecar.
 
 ## 5. Target architecture
 
@@ -209,7 +202,7 @@ flowchart LR
   subgraph SOURCES["Migration sources"]
     CONVEX["Existing Convex deployment\nconsistent export ZIP"]
     SQLITE["pricing_app.db\nconsistent SQLite backup"]
-    HR["External HR JSON + files\nseparate discovery gate"]
+    HR["Audited HR JSON\nimmutable source"]
   end
 
   subgraph PIPELINE["Idempotent migration pipeline"]
@@ -224,6 +217,7 @@ flowchart LR
     CATALOG["catalog + sales"]
     OPS["manufacturing + workforce"]
     QUALITY["quality + maintenance"]
+    RECRUITMENT["recruitment"]
     AUDIT["audit"]
     DERIVED["derived read models + jobs"]
   end
@@ -235,7 +229,7 @@ flowchart LR
 
   CONVEX --> RAW
   SQLITE --> RAW
-  HR -. "later gated workstream" .-> RAW
+  HR --> RAW
   RAW --> STAGING
   STAGING --> TRANSFORM
   TRANSFORM --> RECONCILE
@@ -243,6 +237,7 @@ flowchart LR
   RECONCILE --> CATALOG
   RECONCILE --> OPS
   RECONCILE --> QUALITY
+  RECONCILE --> RECRUITMENT
   RECONCILE --> AUDIT
   WEB --> POSTGRES
   POSTGRES --> WEB
@@ -280,6 +275,7 @@ outbox before optional Redis invalidation.
 | `core`          | Organization, shared number sequences, shared file metadata          |
 | `catalog`       | Products/parts, aliases, materials, grades, machines, shared masters |
 | `sales`         | Customers, enquiries, quotes, pricing, purchase orders               |
+| `recruitment`   | Approved posts, openings, candidates, applications, and interviews   |
 | `manufacturing` | Work orders, routes, setups, production, workflow and planner events |
 | `workforce`     | Employees, attendance, training                                      |
 | `quality`       | Inspections, parameters, rejections, setup checklists                |

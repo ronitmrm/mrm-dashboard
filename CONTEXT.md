@@ -55,3 +55,24 @@ _Avoid_: Separate FPIR master, hourly QC parameter master.
 **Defect / Downtime Reason**:
 A coded reason describing a quality defect or a downtime cause that can stop or affect machine production.
 _Avoid_: Separate defect code, separate downtime code.
+
+**Approved Post**:
+One sanctioned staffing position identified by a post code. It is vacant,
+occupied, or inactive and may participate in one combined role.
+_Avoid_: Job post.
+
+**Job Requirement Template**:
+The reusable qualification, salary, and responsibility profile attached to an
+approved post and copied into a recruitment opening.
+_Avoid_: Job post.
+
+**Recruitment Opening**:
+A time-bounded hiring request created from an approved post and identified by
+a vacancy code.
+_Avoid_: Approved post, vacancy master.
+
+**Candidate Application**:
+The relationship between one candidate and one recruitment opening. Interview
+planning, round outcomes, and a possible joining date belong to this
+relationship.
+_Avoid_: Candidate, interview.

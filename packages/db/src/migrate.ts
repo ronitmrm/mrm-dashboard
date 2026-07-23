@@ -21,7 +21,9 @@ type AppliedMigration = {
 }
 
 function checksum(contents: string) {
-  return createHash("sha256").update(contents).digest("hex")
+  return createHash("sha256")
+    .update(contents.replaceAll("\r\n", "\n"))
+    .digest("hex")
 }
 
 async function migrationFiles() {

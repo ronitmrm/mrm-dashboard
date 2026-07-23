@@ -37,7 +37,9 @@ CREATE TABLE IF NOT EXISTS migration.schema_migrations (
 
 for (const name of names) {
   const sql = await readFile(resolve(migrationsDirectory, name), "utf8")
-  const checksum = createHash("sha256").update(sql).digest("hex")
+  const checksum = createHash("sha256")
+    .update(sql.replaceAll("\r\n", "\n"))
+    .digest("hex")
   const escapedName = name.replaceAll("'", "''")
   process.stdout.write(`
 DO $$
