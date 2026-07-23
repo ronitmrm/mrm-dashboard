@@ -52,15 +52,7 @@ export async function listGrantedCapabilities(
   })
 
   try {
-    const grants = await Promise.all(
-      capabilities.map(async (capability) => ({
-        allowed: await authorization.hasCapability(userId, capability),
-        capability,
-      }))
-    )
-    return grants
-      .filter(({ allowed }) => allowed)
-      .map(({ capability }) => capability)
+    return await authorization.listGrantedCapabilities(userId, capabilities)
   } finally {
     await authorization.close()
   }

@@ -143,7 +143,7 @@ export function createBoundedPostgresPool({
     application_name: applicationName,
     connectionString,
     connectionTimeoutMillis: neon ? 30_000 : 5_000,
-    idleTimeoutMillis: 10_000,
+    idleTimeoutMillis: neon ? 300_000 : 10_000,
     max,
   }
   const pool = new Pool(config)

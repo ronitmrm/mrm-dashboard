@@ -445,34 +445,35 @@ function usePostgresDashboardPage(url: string | null, pollIntervalMs = 0) {
   useEffect(() => {
     if (!url) return;
     const controller = new AbortController();
-    const load = () => {
-      void fetch(url, {
-        cache: "no-store",
-        credentials: "same-origin",
-        signal: controller.signal,
-      })
-        .then(async (response) => {
-          const body = asRecord(await response.json().catch(() => ({})));
-          if (!response.ok) {
-            throw new Error(str(body.error) || "Dashboard data could not be loaded.");
-          }
-          setResult({ data: body, url });
-        })
-        .catch((error: unknown) => {
-          if (controller.signal.aborted) return;
-          setResult({
-            error: error instanceof Error ? error.message : "Dashboard data could not be loaded.",
-            url,
-          });
+    let nextLoad: number | undefined;
+    const load = async () => {
+      try {
+        const response = await fetch(url, {
+          cache: "no-store",
+          credentials: "same-origin",
+          signal: controller.signal,
         });
+        const body = asRecord(await response.json().catch(() => ({})));
+        if (!response.ok) {
+          throw new Error(str(body.error) || "Dashboard data could not be loaded.");
+        }
+        setResult({ data: body, url });
+      } catch (error: unknown) {
+        if (controller.signal.aborted) return;
+        setResult({
+          error: error instanceof Error ? error.message : "Dashboard data could not be loaded.",
+          url,
+        });
+      } finally {
+        if (!controller.signal.aborted && pollIntervalMs > 0) {
+          nextLoad = window.setTimeout(load, pollIntervalMs);
+        }
+      }
     };
-    load();
-    const interval = pollIntervalMs > 0
-      ? window.setInterval(load, pollIntervalMs)
-      : undefined;
+    void load();
     return () => {
       controller.abort();
-      if (interval !== undefined) window.clearInterval(interval);
+      if (nextLoad !== undefined) window.clearTimeout(nextLoad);
     };
   }, [pollIntervalMs, url]);
 

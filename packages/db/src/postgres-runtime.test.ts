@@ -33,8 +33,8 @@ describe("managed PostgreSQL runtime contract", () => {
     })
 
     expect(pool.options.max).toBe(3)
-    expect(pool.options.connectionTimeoutMillis).toBeGreaterThan(0)
-    expect(pool.options.idleTimeoutMillis).toBeGreaterThan(0)
+    expect(pool.options.connectionTimeoutMillis).toBe(5_000)
+    expect(pool.options.idleTimeoutMillis).toBe(10_000)
     expect(connectionTargetSummary(pool)).toEqual({
       idle: 0,
       total: 0,
@@ -55,6 +55,8 @@ describe("managed PostgreSQL runtime contract", () => {
     })
 
     expect(pool).toBeInstanceOf(Pool)
+    expect(pool.options.connectionTimeoutMillis).toBe(30_000)
+    expect(pool.options.idleTimeoutMillis).toBe(300_000)
     await pool.end()
   })
 
