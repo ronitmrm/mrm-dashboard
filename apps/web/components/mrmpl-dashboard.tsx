@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type DragEvent, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   ArrowDown,
   ArrowUp,
@@ -9,23 +10,17 @@ import {
   ChevronDown,
   ChevronRight,
   CheckCircle2,
-  ClipboardList,
-  Database,
   Download,
-  Factory,
   Gauge,
   GripVertical,
   LayoutDashboard,
-  ListChecks,
   LogOut,
   Moon,
-  PackageCheck,
   Plus,
   RefreshCw,
   Route,
   Search,
   Settings2,
-  ShieldCheck,
   Sun,
   Trash2,
   Undo2,
@@ -47,6 +42,7 @@ import { Separator } from "@workspace/ui/components/separator";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -89,6 +85,14 @@ import {
 } from "@/lib/shop-floor-optimistic";
 import { useTheme } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth/auth-client";
+import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access";
+import {
+  administrationNavigation,
+  commercialNavigation,
+  dashboardNavigation as navItems,
+  dashboardTabHref,
+  type DashboardTabId,
+} from "@/lib/unified-navigation";
 
 type DashboardPayload = Record<string, unknown>;
 
@@ -135,47 +139,6 @@ type MaintenanceChecklistStepDraft = {
   inputType: string;
   remark: string;
 };
-
-type DashboardTabId =
-  | "productionControlTab"
-  | "jobCardStatusTab"
-  | "machineDetailTab"
-  | "machineMasterTab"
-  | "masterGapsTab"
-  | "masterTablesTab"
-  | "dataEntryTab"
-  | "planningHolidayTab"
-  | "maintenanceTab"
-  | "planningControlTab"
-  | "shopFloorStatusTab"
-  | "shopFloorTasksTab"
-  | "machinistTasksTab"
-  | "qualityControlTasksTab"
-  | "firstPieceInspectionTab"
-  | "correctionsTab";
-
-const navItems: Array<{ id: DashboardTabId; title: string; subtitle: string; icon: typeof LayoutDashboard }> = [
-  { id: "productionControlTab", title: "Planner Actions", subtitle: "priority, route, dispatch", icon: ClipboardList },
-  { id: "jobCardStatusTab", title: "Job Cards", subtitle: "running and completed", icon: PackageCheck },
-  { id: "machineDetailTab", title: "Machine Detail", subtitle: "setup planning", icon: Factory },
-  { id: "machineMasterTab", title: "Machine Master", subtitle: "schedules and history", icon: Factory },
-  { id: "masterGapsTab", title: "Master Readiness", subtitle: "missing planning data", icon: Database },
-  { id: "masterTablesTab", title: "Master Tables", subtitle: "search saved masters", icon: Database },
-  { id: "dataEntryTab", title: "Data Entry", subtitle: "imports and manual entry", icon: ListChecks },
-  { id: "planningHolidayTab", title: "Planning Holidays", subtitle: "Friday shutdown, holidays", icon: CalendarDays },
-  { id: "maintenanceTab", title: "Maintenance", subtitle: "machine PM schedule", icon: Settings2 },
-  { id: "planningControlTab", title: "Planning Control", subtitle: "route and plan checks", icon: Route },
-  { id: "shopFloorStatusTab", title: "Shop Floor Status", subtitle: "machine queue", icon: Factory },
-  { id: "shopFloorTasksTab", title: "Shop Floor Tasks", subtitle: "raw material at machine", icon: PackageCheck },
-  { id: "machinistTasksTab", title: "Machinist", subtitle: "pre setting, setting, start", icon: Wrench },
-  { id: "qualityControlTasksTab", title: "Quality Control", subtitle: "setup approvals", icon: ShieldCheck },
-  { id: "firstPieceInspectionTab", title: "First Piece Inspection", subtitle: "quality readings", icon: Gauge },
-  { id: "correctionsTab", title: "Corrections", subtitle: "reverse wrong entries", icon: Undo2 },
-];
-
-function dashboardTabHref(tab: DashboardTabId) {
-  return `/?tab=${encodeURIComponent(tab)}`;
-}
 
 function initialDashboardTabFromLocation(): DashboardTabId {
   if (typeof window === "undefined") return "productionControlTab";
@@ -537,8 +500,14 @@ async function savePostgresDashboardEntry(entryType: string, payload: DashboardP
   return body;
 }
 
-export function MrmplDashboard() {
-  return <DashboardShell />;
+export function MrmplDashboard({
+  navigationAccess,
+  user,
+}: {
+  navigationAccess: UnifiedNavigationAccess;
+  user: { email: string; name: string };
+}) {
+  return <DashboardShell navigationAccess={navigationAccess} user={user} />;
 }
 
 
@@ -919,7 +888,13 @@ function SetupChecklistShell() {
   );
 }
 
-function DashboardShell() {
+function DashboardShell({
+  navigationAccess,
+  user,
+}: {
+  navigationAccess: UnifiedNavigationAccess;
+  user: { email: string; name: string };
+}) {
   const [activeTab, setActiveTab] = useState<DashboardTabId>(() => initialDashboardTabFromLocation());
   const [preferredDataEntryType, setPreferredDataEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
@@ -1069,6 +1044,9 @@ function DashboardShell() {
     [basePayload, optimisticShopFloorStatuses, optimisticSetupChecklistSessions, optimisticProductionCards],
   );
   const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
+  const visibleCommercialNavigation = commercialNavigation.filter((item) =>
+    navigationAccess.commercialHrefs.includes(item.href)
+  );
   const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
 
   const view = useMemo(
@@ -1087,7 +1065,7 @@ function DashboardShell() {
     >
       <Sidebar variant="inset">
         <SidebarHeader>
-          <div className="flex items-center px-2 py-2">
+          <Link className="flex items-center px-2 py-2" href="/">
             <Image
               src="/mrm-green.svg"
               alt="MRMPL"
@@ -1096,28 +1074,69 @@ function DashboardShell() {
               priority
               className="h-8 w-auto max-w-full object-contain"
             />
-          </div>
+          </Link>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>Dashboard sections</SidebarGroupLabel>
+            <SidebarGroupLabel>Operations</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {navItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
+                  <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton isActive={item.id === activeTab} onClick={() => setActiveTab(item.id)}>
                       <item.icon />
-                      <span className="grid">
-                        <span>{item.title}</span>
-                        <span className="text-xs font-normal text-muted-foreground">{item.subtitle}</span>
-                      </span>
+                      <span>{item.title}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+          {visibleCommercialNavigation.length ? (
+            <SidebarGroup>
+              <SidebarGroupLabel>Commercial &amp; Pricing</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {visibleCommercialNavigation.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild>
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : null}
+          {navigationAccess.administration ? (
+            <SidebarGroup>
+              <SidebarGroupLabel>Administration</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {administrationNavigation.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild>
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : null}
         </SidebarContent>
+        <SidebarFooter>
+          <div className="grid gap-0.5 px-2 py-2">
+            <span className="truncate text-sm font-medium">{user.name}</span>
+            <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+          </div>
+        </SidebarFooter>
         <SidebarRail />
       </Sidebar>
       <SidebarInset>

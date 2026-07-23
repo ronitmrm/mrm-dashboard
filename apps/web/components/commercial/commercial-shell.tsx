@@ -4,27 +4,7 @@ import type { ReactNode } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import {
-  Calculator,
-  Boxes,
-  ClipboardList,
-  Factory,
-  FileClock,
-  Globe2,
-  LayoutDashboard,
-  ListTree,
-  MessageSquareText,
-  PackageSearch,
-  RefreshCcw,
-  ScrollText,
-  Settings2,
-  ShoppingCart,
-  ShieldCheck,
-  Undo2,
-  UsersRound,
-  Wrench,
-  TableProperties,
-} from "lucide-react"
+import { Settings2 } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
@@ -45,130 +25,37 @@ import {
   SidebarTrigger,
 } from "@workspace/ui/components/sidebar"
 
-const navigation = [
-  {
-    href: "/commercial",
-    icon: LayoutDashboard,
-    label: "Commercial overview",
-  },
-  {
-    href: "/commercial/customers",
-    icon: UsersRound,
-    label: "Customers",
-  },
-  {
-    href: "/commercial/enquiries",
-    icon: ClipboardList,
-    label: "Enquiries",
-  },
-  {
-    href: "/commercial/sales",
-    icon: MessageSquareText,
-    label: "Sales",
-  },
-  {
-    href: "/commercial/technical-review",
-    icon: Wrench,
-    label: "Technical Review",
-  },
-  {
-    href: "/commercial/design",
-    icon: Factory,
-    label: "Design",
-  },
-  {
-    href: "/commercial/masters",
-    icon: ListTree,
-    label: "Pricing masters",
-  },
-  {
-    href: "/commercial/products",
-    icon: PackageSearch,
-    label: "Products",
-  },
-  {
-    href: "/commercial/assemblies",
-    icon: Boxes,
-    label: "Assembly / BOM",
-  },
-  {
-    href: "/commercial/drawing-history",
-    icon: FileClock,
-    label: "Drawing History",
-  },
-  {
-    href: "/commercial/website-products",
-    icon: Globe2,
-    label: "Website Products",
-  },
-  {
-    href: "/commercial/costing",
-    icon: Calculator,
-    label: "Product costing",
-  },
-  {
-    href: "/commercial/quotes",
-    icon: ScrollText,
-    label: "Quote register",
-  },
-  {
-    href: "/commercial/pricing",
-    icon: TableProperties,
-    label: "Pricing",
-  },
-  {
-    href: "/commercial/orders",
-    icon: ShoppingCart,
-    label: "Purchase orders",
-  },
-  {
-    href: "/commercial/revisions",
-    icon: RefreshCcw,
-    label: "Price revisions",
-  },
-  {
-    href: "/commercial/corrections",
-    icon: Undo2,
-    label: "Corrections",
-  },
-]
-
-const unifiedNavigation = [
-  {
-    href: "/",
-    icon: Factory,
-    label: "Operations dashboard",
-  },
-  {
-    href: "/administration/access",
-    icon: ShieldCheck,
-    label: "Access administration",
-  },
-]
+import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
+import {
+  administrationNavigation,
+  commercialNavigation,
+  dashboardNavigation,
+} from "@/lib/unified-navigation"
 
 function isNavigationItemActive(pathname: string, href: string) {
-  return href === "/" || href === "/commercial"
-    ? pathname === href
-    : pathname.startsWith(href)
+  const hrefPath = href.split("?")[0] ?? href
+  return hrefPath === "/" || hrefPath === "/commercial"
+    ? pathname === hrefPath
+    : pathname.startsWith(hrefPath)
 }
 
 export function CommercialShell({
-  accessibleHrefs,
   children,
+  navigationAccess,
   user,
 }: {
-  accessibleHrefs: string[]
   children: ReactNode
+  navigationAccess: UnifiedNavigationAccess
   user: { email: string; name: string }
 }) {
   const pathname = usePathname()
-  const visibleNavigation = navigation.filter((item) =>
-    accessibleHrefs.includes(item.href)
+  const visibleCommercialNavigation = commercialNavigation.filter((item) =>
+    navigationAccess.commercialHrefs.includes(item.href)
   )
   const current =
-    [...navigation, ...unifiedNavigation].find((item) =>
+    [...commercialNavigation, ...administrationNavigation].find((item) =>
       isNavigationItemActive(pathname, item.href)
-    ) ?? navigation[0]!
+    ) ?? commercialNavigation[0]!
 
   return (
     <SidebarProvider
@@ -193,46 +80,69 @@ export function CommercialShell({
           </Link>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>Commercial</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {visibleNavigation.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isNavigationItemActive(pathname, item.href)}
-                    >
-                      <Link href={item.href}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          <SidebarGroup>
-            <SidebarGroupLabel>Unified application</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {unifiedNavigation.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isNavigationItemActive(pathname, item.href)}
-                    >
-                      <Link href={item.href}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          {navigationAccess.operations ? (
+            <SidebarGroup>
+              <SidebarGroupLabel>Operations</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {dashboardNavigation.map((item) => (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton asChild>
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : null}
+          {visibleCommercialNavigation.length ? (
+            <SidebarGroup>
+              <SidebarGroupLabel>Commercial &amp; Pricing</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {visibleCommercialNavigation.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isNavigationItemActive(pathname, item.href)}
+                      >
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : null}
+          {navigationAccess.administration ? (
+            <SidebarGroup>
+              <SidebarGroupLabel>Administration</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {administrationNavigation.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isNavigationItemActive(pathname, item.href)}
+                      >
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : null}
         </SidebarContent>
         <SidebarFooter>
           <div className="grid gap-0.5 px-2 py-2">
@@ -253,7 +163,7 @@ export function CommercialShell({
               {current.label}
             </h1>
             <p className="truncate text-xs text-muted-foreground">
-              Unified commercial workflow
+              Unified MRMPL workflow
             </p>
           </div>
           <Badge variant="outline">
