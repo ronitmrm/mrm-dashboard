@@ -1,14 +1,14 @@
 import { commercialNavigationAccess } from "./commercial-capabilities"
 import { listGrantedCapabilities } from "./require-capability"
+import { hrNavigation } from "../unified-navigation"
 
 const operationsCapability = "operations.dashboard.read"
 const administrationCapability = "administration.roles.manage"
-const hrRecruitmentCapability = "hr.recruitment.read"
 
 export type UnifiedNavigationAccess = {
   administration: boolean
   commercialHrefs: string[]
-  hrRecruitment: boolean
+  hrHrefs: string[]
   operations: boolean
 }
 
@@ -18,7 +18,7 @@ export async function getUnifiedNavigationAccess(
   const capabilities = [
     operationsCapability,
     administrationCapability,
-    hrRecruitmentCapability,
+    ...hrNavigation.map(({ requiredCapability }) => requiredCapability),
     ...commercialNavigationAccess.map(([, capability]) => capability),
   ]
   const grantedCapabilities = new Set(
@@ -30,7 +30,11 @@ export async function getUnifiedNavigationAccess(
     commercialHrefs: commercialNavigationAccess
       .filter(([, capability]) => grantedCapabilities.has(capability))
       .map(([href]) => href),
-    hrRecruitment: grantedCapabilities.has(hrRecruitmentCapability),
+    hrHrefs: hrNavigation
+      .filter(({ requiredCapability }) =>
+        grantedCapabilities.has(requiredCapability)
+      )
+      .map(({ href }) => href),
     operations: grantedCapabilities.has(operationsCapability),
   }
 }

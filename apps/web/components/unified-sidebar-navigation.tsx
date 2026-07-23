@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import {
   BriefcaseBusiness,
   Calculator,
@@ -33,6 +33,7 @@ import {
   commercialNavigation,
   dashboardNavigation,
   hrNavigation,
+  navigationHrefMatches,
   type DashboardTabId,
 } from "@/lib/unified-navigation"
 
@@ -72,13 +73,6 @@ function storedExpandedSections(
   }
 }
 
-function isNavigationItemActive(pathname: string, href: string) {
-  const hrefPath = href.split("?")[0] ?? href
-  return hrefPath === "/" || hrefPath === "/commercial"
-    ? pathname === hrefPath
-    : pathname.startsWith(hrefPath)
-}
-
 function subscribeToExpandedSections(onStoreChange: () => void) {
   window.addEventListener("storage", onStoreChange)
   window.addEventListener(stateChangedEvent, onStoreChange)
@@ -107,6 +101,7 @@ export function UnifiedSidebarNavigation({
   onDashboardTabSelect?: (tab: DashboardTabId) => void
 }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const storedSections = useSyncExternalStore(
     subscribeToExpandedSections,
     expandedSectionsSnapshot,
@@ -119,6 +114,9 @@ export function UnifiedSidebarNavigation({
   const visibleCommercialNavigation = commercialNavigation.filter((item) =>
     navigationAccess.commercialHrefs.includes(item.href)
   )
+  const visibleHrNavigation = hrNavigation.filter((item) =>
+    navigationAccess.hrHrefs.includes(item.href)
+  )
 
   function setSectionOpen(section: SectionId, open: boolean) {
     const next = { ...expandedSections, [section]: open }
@@ -128,18 +126,22 @@ export function UnifiedSidebarNavigation({
 
   return (
     <>
-      {navigationAccess.hrRecruitment ? (
+      {visibleHrNavigation.length ? (
         <NavigationSection
           icon={BriefcaseBusiness}
           label="HR Recruitment"
           onOpenChange={(open) => setSectionOpen("hr", open)}
           open={expandedSections.hr}
         >
-          {hrNavigation.map((item) => (
+          {visibleHrNavigation.map((item) => (
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                isActive={isNavigationItemActive(pathname, item.href)}
+                isActive={navigationHrefMatches(
+                  pathname,
+                  searchParams,
+                  item.href
+                )}
               >
                 <Link href={item.href}>
                   <item.icon />
@@ -162,7 +164,11 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                isActive={isNavigationItemActive(pathname, item.href)}
+                isActive={navigationHrefMatches(
+                  pathname,
+                  searchParams,
+                  item.href
+                )}
               >
                 <Link href={item.href}>
                   <item.icon />
@@ -216,7 +222,11 @@ export function UnifiedSidebarNavigation({
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
-                    isActive={isNavigationItemActive(pathname, item.href)}
+                    isActive={navigationHrefMatches(
+                      pathname,
+                      searchParams,
+                      item.href
+                    )}
                   >
                     <Link href={item.href}>
                       <item.icon />

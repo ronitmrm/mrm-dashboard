@@ -58,6 +58,25 @@ export function dashboardTabHref(tab: DashboardTabId) {
   return `/?tab=${encodeURIComponent(tab)}`
 }
 
+export function navigationHrefMatches(
+  pathname: string,
+  searchParams: Pick<URLSearchParams, "get">,
+  href: string
+) {
+  const destination = new URL(href, "http://mrmpl.local")
+  const pathMatches =
+    destination.pathname === "/" || destination.pathname === "/commercial"
+      ? pathname === destination.pathname
+      : pathname.startsWith(destination.pathname)
+
+  return (
+    pathMatches &&
+    [...destination.searchParams.entries()].every(
+      ([key, value]) => searchParams.get(key) === value
+    )
+  )
+}
+
 export const dashboardNavigation: readonly DashboardNavigationItem[] = [
   {
     href: dashboardTabHref("productionControlTab"),
@@ -263,9 +282,60 @@ export const commercialNavigation = [
 
 export const hrNavigation = [
   {
-    href: "/hr",
+    href: "/hr?panel=mastersPanel",
+    icon: Database,
+    label: "Masters",
+    panelId: "mastersPanel",
+    requiredCapability: "hr.recruitment.read",
+  },
+  {
+    href: "/hr?panel=postMasterPanel",
+    icon: ClipboardList,
+    label: "Job Templates",
+    panelId: "postMasterPanel",
+    requiredCapability: "hr.recruitment.read",
+  },
+  {
+    href: "/hr?panel=approvedPostPanel",
+    icon: ListChecks,
+    label: "Approved Post Form",
+    panelId: "approvedPostPanel",
+    requiredCapability: "hr.recruitment.read",
+  },
+  {
+    href: "/hr?panel=employeeMasterPanel",
+    icon: UsersRound,
+    label: "Employee Master",
+    panelId: "employeeMasterPanel",
+    requiredCapability: "hr.employees.read",
+  },
+  {
+    href: "/hr?panel=jobsPanel",
     icon: BriefcaseBusiness,
-    label: "Recruitment workspace",
+    label: "Job Posts",
+    panelId: "jobsPanel",
+    requiredCapability: "hr.recruitment.read",
+  },
+  {
+    href: "/hr?panel=candidatesPanel",
+    icon: UsersRound,
+    label: "Log Candidate",
+    panelId: "candidatesPanel",
+    requiredCapability: "hr.recruitment.read",
+  },
+  {
+    href: "/hr?panel=candidateSearchPanel",
+    icon: PackageSearch,
+    label: "Search Candidate",
+    panelId: "candidateSearchPanel",
+    requiredCapability: "hr.recruitment.read",
+  },
+  {
+    href: "/hr?panel=interviewsPanel",
+    icon: MessageSquareText,
+    label: "Interviews",
+    panelId: "interviewsPanel",
+    requiredCapability: "hr.recruitment.read",
   },
 ] as const
 

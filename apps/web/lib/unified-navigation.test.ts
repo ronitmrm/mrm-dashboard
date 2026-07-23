@@ -7,6 +7,7 @@ import {
   dashboardNavigation,
   dashboardTabHref,
   hrNavigation,
+  navigationHrefMatches,
 } from "./unified-navigation"
 
 describe("unified navigation", () => {
@@ -27,15 +28,37 @@ describe("unified navigation", () => {
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
     expect(dashboardNavigation).toHaveLength(16)
     expect(commercialNavigation).toHaveLength(17)
-    expect(hrNavigation).toEqual([
-      expect.objectContaining({
-        href: "/hr",
-        label: "Recruitment workspace",
-      }),
+    expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([
+      { href: "/hr?panel=mastersPanel", label: "Masters" },
+      { href: "/hr?panel=postMasterPanel", label: "Job Templates" },
+      { href: "/hr?panel=approvedPostPanel", label: "Approved Post Form" },
+      { href: "/hr?panel=employeeMasterPanel", label: "Employee Master" },
+      { href: "/hr?panel=jobsPanel", label: "Job Posts" },
+      { href: "/hr?panel=candidatesPanel", label: "Log Candidate" },
+      {
+        href: "/hr?panel=candidateSearchPanel",
+        label: "Search Candidate",
+      },
+      { href: "/hr?panel=interviewsPanel", label: "Interviews" },
     ])
   })
 
   it("creates shareable links for operations tabs", () => {
     expect(dashboardTabHref("maintenanceTab")).toBe("/?tab=maintenanceTab")
+  })
+
+  it("matches the selected HR panel instead of every HR link", () => {
+    const searchParams = new URLSearchParams("panel=candidateSearchPanel")
+
+    expect(
+      navigationHrefMatches(
+        "/hr",
+        searchParams,
+        "/hr?panel=candidateSearchPanel"
+      )
+    ).toBe(true)
+    expect(
+      navigationHrefMatches("/hr", searchParams, "/hr?panel=mastersPanel")
+    ).toBe(false)
   })
 })

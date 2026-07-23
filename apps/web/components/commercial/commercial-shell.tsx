@@ -3,7 +3,7 @@
 import type { ReactNode } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { Settings2 } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
@@ -25,14 +25,8 @@ import {
   administrationNavigation,
   commercialNavigation,
   hrNavigation,
+  navigationHrefMatches,
 } from "@/lib/unified-navigation"
-
-function isNavigationItemActive(pathname: string, href: string) {
-  const hrefPath = href.split("?")[0] ?? href
-  return hrefPath === "/" || hrefPath === "/commercial"
-    ? pathname === hrefPath
-    : pathname.startsWith(hrefPath)
-}
 
 export function CommercialShell({
   children,
@@ -44,12 +38,15 @@ export function CommercialShell({
   user: { email: string; name: string }
 }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const current =
     [
       ...commercialNavigation,
       ...hrNavigation,
       ...administrationNavigation,
-    ].find((item) => isNavigationItemActive(pathname, item.href)) ??
+    ].find((item) =>
+      navigationHrefMatches(pathname, searchParams, item.href)
+    ) ??
     commercialNavigation[0]!
 
   return (

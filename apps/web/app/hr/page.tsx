@@ -1,4 +1,5 @@
 import { BriefcaseBusiness, ExternalLink, Link2Off } from "lucide-react"
+import { redirect } from "next/navigation"
 
 import {
   Alert,
@@ -14,11 +15,15 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card"
 
+import { hrNavigation } from "@/lib/unified-navigation"
+import { requireAuthenticatedSession } from "@/lib/auth/require-capability"
+import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
+
 type RecruitmentService =
   | { status: "connected"; url: string }
   | { status: "invalid" | "missing" }
 
-function recruitmentService(): RecruitmentService {
+function recruitmentService(panel: string): RecruitmentService {
   const configuredUrl = process.env.HR_RECRUITMENT_URL?.trim()
   if (!configuredUrl) return { status: "missing" }
 
@@ -27,14 +32,34 @@ function recruitmentService(): RecruitmentService {
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       return { status: "invalid" }
     }
+    url.searchParams.set("panel", panel)
     return { status: "connected", url: url.toString() }
   } catch {
     return { status: "invalid" }
   }
 }
 
-export default function HrRecruitmentPage() {
-  const service = recruitmentService()
+export default async function HrRecruitmentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ panel?: string }>
+}) {
+  const { panel } = await searchParams
+  const session = await requireAuthenticatedSession("/hr")
+  const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
+  const requestedItem = hrNavigation.find((item) => item.panelId === panel)
+  if (requestedItem && !navigationAccess.hrHrefs.includes(requestedItem.href)) {
+    redirect("/unauthorized")
+  }
+
+  const activeItem =
+    requestedItem ??
+    hrNavigation.find((item) => navigationAccess.hrHrefs.includes(item.href))
+  if (!activeItem) {
+    redirect("/unauthorized")
+  }
+
+  const service = recruitmentService(activeItem.panelId)
 
   return (
     <>
@@ -56,7 +81,7 @@ export default function HrRecruitmentPage() {
           <CardHeader className="border-b">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="grid gap-1.5">
-                <CardTitle>Recruitment workspace</CardTitle>
+                <CardTitle>{activeItem.label}</CardTitle>
                 <CardDescription>
                   The external HR service is shown inside the authenticated
                   MRMPL shell.
