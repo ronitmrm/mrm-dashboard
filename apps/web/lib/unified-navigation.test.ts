@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+
 import { describe, expect, it } from "vitest"
 
 import { commercialNavigationAccess } from "./auth/commercial-capabilities"
@@ -11,6 +13,17 @@ import {
 } from "./unified-navigation"
 
 describe("unified navigation", () => {
+  it("does not prefetch every visible sidebar destination", () => {
+    const source = readFileSync(
+      new URL("../components/unified-sidebar-navigation.tsx", import.meta.url),
+      "utf8"
+    )
+    const links = source.match(/<Link\b[\s\S]*?>/g) ?? []
+
+    expect(links.length).toBeGreaterThan(0)
+    links.forEach((link) => expect(link).toContain("prefetch={false}"))
+  })
+
   it("keeps every commercial destination tied to a permission", () => {
     expect(commercialNavigation.map(({ href }) => href)).toEqual(
       commercialNavigationAccess.map(([href]) => href)

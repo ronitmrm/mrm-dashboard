@@ -1,9 +1,16 @@
 import { createAuthorizationRepository } from "@workspace/db"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
+import { cache } from "react"
 
 import { getAuth, readAuthEnvironment } from "./auth"
 import { safeReturnPath } from "./navigation"
+
+const getAuthenticatedSession = cache(async () =>
+  getAuth().api.getSession({
+    headers: await headers(),
+  })
+)
 
 export async function requireCapability(
   capability: string,
@@ -31,9 +38,7 @@ export async function requireCapability(
 }
 
 export async function requireAuthenticatedSession(returnPath: string) {
-  const session = await getAuth().api.getSession({
-    headers: await headers(),
-  })
+  const session = await getAuthenticatedSession()
 
   if (!session) {
     const next = encodeURIComponent(safeReturnPath(returnPath))

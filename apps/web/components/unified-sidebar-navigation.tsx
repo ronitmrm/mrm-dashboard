@@ -143,7 +143,7 @@ export function UnifiedSidebarNavigation({
                   item.href
                 )}
               >
-                <Link href={item.href}>
+                <Link href={item.href} prefetch={false}>
                   <item.icon />
                   <span>{item.label}</span>
                 </Link>
@@ -170,7 +170,7 @@ export function UnifiedSidebarNavigation({
                   item.href
                 )}
               >
-                <Link href={item.href}>
+                <Link href={item.href} prefetch={false}>
                   <item.icon />
                   <span>{item.label}</span>
                 </Link>
@@ -202,7 +202,7 @@ export function UnifiedSidebarNavigation({
                     <span>{item.title}</span>
                   </button>
                 ) : (
-                  <Link href={item.href}>
+                  <Link href={item.href} prefetch={false}>
                     <item.icon />
                     <span>{item.title}</span>
                   </Link>
@@ -228,7 +228,7 @@ export function UnifiedSidebarNavigation({
                       item.href
                     )}
                   >
-                    <Link href={item.href}>
+                    <Link href={item.href} prefetch={false}>
                       <item.icon />
                       <span>{item.label}</span>
                     </Link>
