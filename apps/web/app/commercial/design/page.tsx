@@ -37,6 +37,10 @@ import {
 
 export const dynamic = "force-dynamic"
 
+function designItemIsEditable(nextStageStatus: string) {
+  return ["Not Started", "Changes Required"].includes(nextStageStatus)
+}
+
 function ChoiceField({
   defaultValue,
   label,
@@ -98,10 +102,12 @@ export default async function DesignPage() {
   })
   const { items, products } = await (async () => {
     try {
-      const [queue, portfolioProducts] = await Promise.all([
-        workflow.listDesignQueue("MRMPL"),
-        workflow.listDesignPortfolioProducts("MRMPL"),
-      ])
+      const queue = await workflow.listDesignQueue("MRMPL")
+      const portfolioProducts = queue.some((item) =>
+        designItemIsEditable(item.nextStageStatus)
+      )
+        ? await workflow.listDesignPortfolioProducts("MRMPL")
+        : []
       const withFiles = await Promise.all(
         queue.map(async (item) => ({
           ...item,
@@ -133,9 +139,7 @@ export default async function DesignPage() {
 
       {items.length ? (
         items.map((item) => {
-          const editable = ["Not Started", "Changes Required"].includes(
-            item.nextStageStatus
-          )
+          const editable = designItemIsEditable(item.nextStageStatus)
           const rows = Array.from(
             { length: Math.max(4, item.bomLines.length) },
             (_, index) => item.bomLines[index]
@@ -207,22 +211,33 @@ export default async function DesignPage() {
                         <Field>
                           <FieldLabel>
                             Matched product
-                            <NativeSelect
-                              name="matched_product_id"
-                              defaultValue={item.matchedProductId ?? ""}
-                            >
-                              <NativeSelectOption value="">
-                                No portfolio match
-                              </NativeSelectOption>
-                              {products.map((product) => (
-                                <NativeSelectOption
-                                  key={product.id}
-                                  value={product.id}
-                                >
-                                  {product.uid} · {product.description}
+                            {editable ? (
+                              <NativeSelect
+                                name="matched_product_id"
+                                defaultValue={item.matchedProductId ?? ""}
+                              >
+                                <NativeSelectOption value="">
+                                  No portfolio match
                                 </NativeSelectOption>
-                              ))}
-                            </NativeSelect>
+                                {products.map((product) => (
+                                  <NativeSelectOption
+                                    key={product.id}
+                                    value={product.id}
+                                  >
+                                    {product.uid} · {product.description}
+                                  </NativeSelectOption>
+                                ))}
+                              </NativeSelect>
+                            ) : (
+                              <Input
+                                disabled
+                                value={
+                                  item.matchedProductUid
+                                    ? `${item.matchedProductUid} · ${item.matchedProductDescription ?? ""}`
+                                    : "No portfolio match"
+                                }
+                              />
+                            )}
                           </FieldLabel>
                         </Field>
                         <ChoiceField

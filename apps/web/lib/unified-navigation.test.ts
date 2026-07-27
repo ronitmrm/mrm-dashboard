@@ -18,10 +18,14 @@ describe("unified navigation", () => {
       new URL("../components/unified-sidebar-navigation.tsx", import.meta.url),
       "utf8"
     )
-    const links = source.match(/<Link\b[\s\S]*?>/g) ?? []
+    const links = source.match(/<Link\b[\s\S]*?\n\s*>/g) ?? []
 
     expect(links.length).toBeGreaterThan(0)
-    links.forEach((link) => expect(link).toContain("prefetch={false}"))
+    links.forEach((link) => {
+      expect(link).toContain("onFocus=")
+      expect(link).toContain("onMouseEnter=")
+      expect(link).toContain("prefetch={false}")
+    })
   })
 
   it("keeps every commercial destination tied to a permission", () => {

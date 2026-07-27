@@ -65,6 +65,7 @@ import {
   jobCardScheduleSummary,
   toDashboardViewModel,
 } from "@/lib/dashboard-view-model";
+import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { shopFloorNoPendingActionLabel } from "@/lib/shop-floor-workflow";
@@ -446,7 +447,10 @@ function usePostgresDashboardPage(url: string | null, pollIntervalMs = 0) {
     if (!url) return;
     const controller = new AbortController();
     let nextLoad: number | undefined;
+    let loading = false;
     const load = async () => {
+      if (loading || document.visibilityState === "hidden") return;
+      loading = true;
       try {
         const response = await fetch(url, {
           cache: "no-store",
@@ -465,14 +469,29 @@ function usePostgresDashboardPage(url: string | null, pollIntervalMs = 0) {
           url,
         });
       } finally {
-        if (!controller.signal.aborted && pollIntervalMs > 0) {
-          nextLoad = window.setTimeout(load, pollIntervalMs);
+        loading = false;
+        const nextDelay = nextDashboardPollDelay(
+          pollIntervalMs,
+          document.visibilityState,
+        );
+        if (!controller.signal.aborted && nextDelay !== null) {
+          nextLoad = window.setTimeout(load, nextDelay);
         }
       }
     };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") {
+        if (nextLoad !== undefined) window.clearTimeout(nextLoad);
+        nextLoad = undefined;
+        return;
+      }
+      void load();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     void load();
     return () => {
       controller.abort();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (nextLoad !== undefined) window.clearTimeout(nextLoad);
     };
   }, [pollIntervalMs, url]);
@@ -901,8 +920,8 @@ function DashboardShell({
   const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
-  const dashboardPage = usePostgresDashboardPage("/api/dashboard", 5_000);
-  const dashboardStatusPage = usePostgresDashboardPage("/api/dashboard-refresh-status", 2_000);
+  const dashboardPage = usePostgresDashboardPage("/api/dashboard", 15_000);
+  const dashboardStatusPage = usePostgresDashboardPage("/api/dashboard-refresh-status", 5_000);
   const correctionCandidatesPage = usePostgresDashboardPage(
     activeTab === "correctionsTab" ? "/api/correction-candidates?limit=200" : null,
     5_000,

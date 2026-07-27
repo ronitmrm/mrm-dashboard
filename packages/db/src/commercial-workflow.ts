@@ -2033,7 +2033,9 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
         latest_clarification_message: string | null
         line_number: number
         manufacturing_process: string | null
+        matched_product_description: string | null
         matched_product_id: string | null
+        matched_product_uid: string | null
         next_stage_status: string | null
         operation_notes: string | null
         organization_id: string
@@ -2057,6 +2059,8 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
             enquiry_item.technical_review_status,
             design.id AS design_id, design.design_status,
             design.portfolio_match_status, design.matched_product_id,
+            matched_product.uid AS matched_product_uid,
+            matched_product.description AS matched_product_description,
             design.quoted_part_uid, design.item_type,
             design.design_bom_completed, design.next_stage_status,
             design.manufacturing_process, design.package_process_required,
@@ -2105,6 +2109,8 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
             ON organization.id = enquiry.organization_id
           LEFT JOIN sales.design_tasks design
             ON design.enquiry_item_id = enquiry_item.id
+          LEFT JOIN catalog.items matched_product
+            ON matched_product.id = design.matched_product_id
           WHERE organization.code = $1
             AND (
               enquiry_item.technical_review_status IN (
@@ -2154,7 +2160,9 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
         latestClarificationMessage: row.latest_clarification_message,
         lineNumber: row.line_number,
         manufacturingProcess: row.manufacturing_process,
+        matchedProductDescription: row.matched_product_description,
         matchedProductId: row.matched_product_id,
+        matchedProductUid: row.matched_product_uid,
         nextStageStatus: row.next_stage_status ?? "Not Started",
         operationNotes: row.operation_notes,
         organizationId: row.organization_id,

@@ -159,6 +159,28 @@ export function createProductRepository(options: ProductRepositoryOptions) {
         .orderBy(asc(items.uid))
     },
 
+    async listPageForOrganization(
+      organizationCode: string,
+      options: { limit: number; offset: number }
+    ) {
+      const limit = Math.min(Math.max(Math.trunc(options.limit), 1), 200)
+      const offset = Math.max(Math.trunc(options.offset), 0)
+
+      return database
+        .select({
+          ...getTableColumns(items),
+          totalCount: sql<number>`cast(count(*) over() as integer)`,
+        })
+        .from(items)
+        .innerJoin(organizations, eq(items.organizationId, organizations.id))
+        .where(
+          sql`lower(${organizations.code}) = lower(${organizationCode.trim()})`
+        )
+        .orderBy(asc(items.uid))
+        .limit(limit)
+        .offset(offset)
+    },
+
     async listBomLines(organizationCode: string) {
       const result = await pool.query<{
         component_description: string

@@ -1,8 +1,8 @@
 "use client"
 
-import { useSyncExternalStore } from "react"
+import { useRef, useSyncExternalStore } from "react"
 import Link from "next/link"
-import { usePathname, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   BriefcaseBusiness,
   Calculator,
@@ -101,6 +101,8 @@ export function UnifiedSidebarNavigation({
   onDashboardTabSelect?: (tab: DashboardTabId) => void
 }) {
   const pathname = usePathname()
+  const router = useRouter()
+  const prefetchedHrefs = useRef(new Set<string>())
   const searchParams = useSearchParams()
   const storedSections = useSyncExternalStore(
     subscribeToExpandedSections,
@@ -124,6 +126,12 @@ export function UnifiedSidebarNavigation({
     window.dispatchEvent(new Event(stateChangedEvent))
   }
 
+  function prefetchDestination(href: string) {
+    if (prefetchedHrefs.current.has(href)) return
+    prefetchedHrefs.current.add(href)
+    router.prefetch(href)
+  }
+
   return (
     <>
       {visibleHrNavigation.length ? (
@@ -143,7 +151,12 @@ export function UnifiedSidebarNavigation({
                   item.href
                 )}
               >
-                <Link href={item.href} prefetch={false}>
+                <Link
+                  href={item.href}
+                  onFocus={() => prefetchDestination(item.href)}
+                  onMouseEnter={() => prefetchDestination(item.href)}
+                  prefetch={false}
+                >
                   <item.icon />
                   <span>{item.label}</span>
                 </Link>
@@ -170,7 +183,12 @@ export function UnifiedSidebarNavigation({
                   item.href
                 )}
               >
-                <Link href={item.href} prefetch={false}>
+                <Link
+                  href={item.href}
+                  onFocus={() => prefetchDestination(item.href)}
+                  onMouseEnter={() => prefetchDestination(item.href)}
+                  prefetch={false}
+                >
                   <item.icon />
                   <span>{item.label}</span>
                 </Link>
@@ -202,7 +220,12 @@ export function UnifiedSidebarNavigation({
                     <span>{item.title}</span>
                   </button>
                 ) : (
-                  <Link href={item.href} prefetch={false}>
+                  <Link
+                    href={item.href}
+                    onFocus={() => prefetchDestination(item.href)}
+                    onMouseEnter={() => prefetchDestination(item.href)}
+                    prefetch={false}
+                  >
                     <item.icon />
                     <span>{item.title}</span>
                   </Link>
@@ -228,7 +251,12 @@ export function UnifiedSidebarNavigation({
                       item.href
                     )}
                   >
-                    <Link href={item.href} prefetch={false}>
+                    <Link
+                      href={item.href}
+                      onFocus={() => prefetchDestination(item.href)}
+                      onMouseEnter={() => prefetchDestination(item.href)}
+                      prefetch={false}
+                    >
                       <item.icon />
                       <span>{item.label}</span>
                     </Link>

@@ -1,5 +1,9 @@
+import Link from "next/link"
+import { redirect } from "next/navigation"
+
 import { createProductRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
@@ -19,18 +23,29 @@ import {
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { money } from "@/lib/pricing/costing"
+import { productPageBounds } from "@/lib/product-pagination"
 
 export const dynamic = "force-dynamic"
 
-export default async function ProductsPage() {
+export default async function ProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string | string[] }>
+}) {
   await requireCapability("pricing.masters.read", "/commercial/products")
+  const bounds = productPageBounds((await searchParams).page)
 
   const repository = createProductRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
   const products = await repository
-    .listForOrganization("MRMPL")
+    .listPageForOrganization("MRMPL", bounds)
     .finally(() => repository.close())
+  if (!products.length && bounds.page > 1) {
+    redirect("/commercial/products")
+  }
+  const totalCount = products[0]?.totalCount ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalCount / bounds.limit))
 
   return (
     <Card>
@@ -42,6 +57,40 @@ export default async function ProductsPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+          <span>
+            Showing {products.length ? bounds.offset + 1 : 0}–
+            {Math.min(bounds.offset + products.length, totalCount)} of{" "}
+            {totalCount} products
+          </span>
+          <div className="flex items-center gap-2">
+            {bounds.page > 1 ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/commercial/products?page=${bounds.page - 1}`}>
+                  Previous
+                </Link>
+              </Button>
+            ) : (
+              <Button disabled size="sm" variant="outline">
+                Previous
+              </Button>
+            )}
+            <span>
+              Page {Math.min(bounds.page, totalPages)} of {totalPages}
+            </span>
+            {bounds.page < totalPages ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/commercial/products?page=${bounds.page + 1}`}>
+                  Next
+                </Link>
+              </Button>
+            ) : (
+              <Button disabled size="sm" variant="outline">
+                Next
+              </Button>
+            )}
+          </div>
+        </div>
         <div className="overflow-hidden rounded-3xl border">
           <Table>
             <TableHeader>
