@@ -10,6 +10,22 @@ const connectionString =
   process.env.TEST_DATABASE_URL ??
   "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
 
+function assertDisposableLocalDatabase(value: string) {
+  const url = new URL(value)
+  const hostname = url.hostname.toLowerCase()
+  const databaseName = decodeURIComponent(url.pathname.slice(1))
+  const isLoopback = ["127.0.0.1", "::1", "[::1]", "localhost"].includes(
+    hostname
+  )
+  const isTestDatabase = /(^|[-_])test($|[-_])/i.test(databaseName)
+
+  if (!isLoopback || !isTestDatabase) {
+    throw new Error(
+      "schema-contract.test.ts is destructive and only runs against a loopback database whose name contains 'test'."
+    )
+  }
+}
+
 const expectedSchemas = [
   "audit",
   "catalog",
@@ -143,6 +159,7 @@ const expectedCanonicalTables = [
 const pool = new Pool({ connectionString })
 
 beforeAll(async () => {
+  assertDisposableLocalDatabase(connectionString)
   for (const schema of expectedSchemas) {
     await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
   }
@@ -466,7 +483,11 @@ test("database roles enforce least privilege across migration, web, worker, and 
     reporting_can_update_quotes: boolean
     reporting_reads_quotes: boolean
     web_can_delete_customers: boolean
+    web_can_execute_try_date: boolean
+    web_can_execute_try_timestamptz: boolean
     web_can_migrate: boolean
+    web_can_read_migration_evidence: boolean
+    web_can_use_migration_schema: boolean
     web_writes_customers: boolean
     worker_reads_work_orders: boolean
     worker_writes_work_orders: boolean
@@ -478,6 +499,20 @@ test("database roles enforce least privilege across migration, web, worker, and 
         AS web_can_delete_customers,
       has_table_privilege('mrmpl_web', 'migration.schema_migrations', 'INSERT')
         AS web_can_migrate,
+      has_table_privilege('mrmpl_web', 'migration.schema_migrations', 'SELECT')
+        AS web_can_read_migration_evidence,
+      has_schema_privilege('mrmpl_web', 'migration', 'USAGE')
+        AS web_can_use_migration_schema,
+      has_function_privilege(
+        'mrmpl_web',
+        'migration.try_date(text)',
+        'EXECUTE'
+      ) AS web_can_execute_try_date,
+      has_function_privilege(
+        'mrmpl_web',
+        'migration.try_timestamptz(text)',
+        'EXECUTE'
+      ) AS web_can_execute_try_timestamptz,
       has_table_privilege('mrmpl_worker', 'manufacturing.work_orders', 'SELECT')
         AS worker_reads_work_orders,
       has_table_privilege('mrmpl_worker', 'manufacturing.work_orders', 'INSERT')
@@ -495,7 +530,11 @@ test("database roles enforce least privilege across migration, web, worker, and 
     reporting_can_update_quotes: false,
     reporting_reads_quotes: true,
     web_can_delete_customers: false,
+    web_can_execute_try_date: true,
+    web_can_execute_try_timestamptz: true,
     web_can_migrate: false,
+    web_can_read_migration_evidence: false,
+    web_can_use_migration_schema: true,
     web_writes_customers: true,
     worker_reads_work_orders: true,
     worker_writes_work_orders: false,
