@@ -4510,6 +4510,23 @@ function codedMasterLabel(options: Array<{ code: string; label: string }>, code:
   return options.find((option) => option.code === code)?.label ?? code;
 }
 
+function CompactEntryField({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Label className={`grid min-w-0 gap-0.5 text-[11px] font-medium text-muted-foreground ${className}`}>
+      <span>{label}</span>
+      {children}
+    </Label>
+  );
+}
+
 function ProductionCardRoleEntryForm({
   role,
   rows,
@@ -4778,188 +4795,243 @@ useEffect(() => {
     }
   }
 
+  const entryTabClass = "h-7 rounded px-3 text-xs shadow-none";
+  const compactInputClass = "h-8 text-xs";
+  const compactSelectClass = "h-8 w-full min-w-0 rounded-md border bg-background px-2 text-xs";
+
   return (
-    <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
+    <div className="grid gap-2 rounded-md border bg-muted/10 p-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <div className="text-sm font-medium">{roleLabel}</div>
-          <div className="text-xs text-muted-foreground">Select the machine first; item and setup details are filled from the current plan.</div>
+          <div className="hidden text-[11px] text-muted-foreground sm:block">
+            Select a machine; item and setup details come from the current plan.
+          </div>
         </div>
         {role === "shopFloor" ? <StatusBadge value={isShopFloorProductionEntry && producedPcs > 0 ? `${formatNumber(producedPcs)} pcs` : isShopFloorBulkDowntimeEntry ? `${formatNumber(bulkRows.length)} machines` : "Select entry"} /> : null}
         {role === "quality" ? <StatusBadge value={isQualityRejectionEntry && rejectQty > 0 ? `${formatNumber(rejectQty)} rejected pcs` : isQualityDowntimeEntry && downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : qualityEntryKind ? "Quality pending" : "Select entry"} /> : null}
         {role === "machinist" ? <StatusBadge value={downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Downtime pending"} /> : null}
       </div>
+
+      {role === "shopFloor" ? (
+        <div aria-label="Shop floor entry type" className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5" role="group">
+          <Button
+            aria-pressed={shopFloorEntryKind === "production"}
+            className={entryTabClass}
+            onClick={() => setShopFloorEntryKind("production")}
+            type="button"
+            variant={shopFloorEntryKind === "production" ? "default" : "ghost"}
+          >
+            Production
+          </Button>
+          <Button
+            aria-pressed={shopFloorEntryKind === "bulkDowntime"}
+            className={entryTabClass}
+            onClick={() => setShopFloorEntryKind("bulkDowntime")}
+            type="button"
+            variant={shopFloorEntryKind === "bulkDowntime" ? "default" : "ghost"}
+          >
+            Bulk downtime
+          </Button>
+        </div>
+      ) : null}
+
       {role !== "shopFloor" ? (
-        <div className="grid gap-2 md:grid-cols-3">
-          <Field label={role === "quality" || role === "machinist" ? "Machine no." : "Machine / item"}>
-            <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+        <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-6">
+          <CompactEntryField className="lg:col-span-2" label="Machine no.">
+            <select className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
               <option value="">Select machine</option>
               {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
             </select>
-          </Field>
-<Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
-          <Field label="Shift">
-            <select className="h-8 rounded-md border bg-background px-2 text-sm" value={shift} onChange={(event) => setShift(event.target.value)}>
+          </CompactEntryField>
+          <CompactEntryField label="Date">
+            <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+          </CompactEntryField>
+          <CompactEntryField label="Shift">
+            <select className={compactSelectClass} value={shift} onChange={(event) => setShift(event.target.value)}>
               <option value="Day">Day</option>
               <option value="Night">Night</option>
               <option value="General">General</option>
             </select>
-          </Field>        </div>
-      ) : null}
-      {role === "shopFloor" ? (
-        <>
-          <div className="grid gap-2 rounded-md border bg-background p-2.5 sm:grid-cols-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={shopFloorEntryKind === "production" ? "default" : "outline"}
-              onClick={() => setShopFloorEntryKind("production")}
-            >
-              Production entry
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={shopFloorEntryKind === "bulkDowntime" ? "default" : "outline"}
-              onClick={() => setShopFloorEntryKind("bulkDowntime")}
-            >
-              Bulk downtime entry
-            </Button>
-          </div>
-          {isShopFloorProductionEntry ? (
-            <>
-              <div className="grid gap-2 md:grid-cols-3">
-                <Field label="Machine no.">
-                  <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
-                    <option value="">Select machine</option>
-                    {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-                  </select>
-                </Field>
-<Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
-                <Field label="Shift">
-                  <select className="h-8 rounded-md border bg-background px-2 text-sm" value={shift} onChange={(event) => setShift(event.target.value)}>
-                    <option value="Day">Day</option>
-                    <option value="Night">Night</option>
-                    <option value="General">General</option>
-                  </select>
-                </Field>
-                {selectedRow ? (
-                  <div className="self-end md:col-span-3">
-                    <ShopFloorItemSummary row={selectedRow} tone="current" compact />
-                  </div>
-                ) : null}            <Field label="Cycle time sec"><Input className="h-8" type="number" step="0.01" value={cycleSecondsInput} onChange={(event) => setCycleSecondsByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
-            <Field label="1 piece weight gm"><Input className="h-8" type="number" step="0.01" value={pieceWeightInput} onChange={(event) => setPieceWeightByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
-            <Field label="Operator number"><Input className="h-8" value={operatorNumber} onChange={(event) => setOperatorNumber(event.target.value)} /></Field>
-            <Field label="Machine start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} /></Field>
-            <Field label="Machine end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} /></Field>
-            <Field label="Produced kg gross"><Input className="h-8" type="number" step="0.001" value={producedGrossKg} onChange={(event) => setProducedGrossKg(event.target.value)} /></Field>
-            <Field label="Crates used"><Input className="h-8" type="number" step="1" value={cratesUsed} onChange={(event) => setCratesUsed(event.target.value)} /></Field>
-            <Field label="Crate weight kg">
-              <select className="h-8 rounded-md border bg-background px-2 text-sm" value={crateWeightKg} onChange={(event) => setCrateWeightKg(event.target.value)}>
-                {CRATE_WEIGHT_OPTIONS_KG.map((weight) => <option key={weight} value={String(weight)}>{formatNumber(weight)} kg</option>)}
-              </select>
-            </Field>
-            <Field label="Net produced kg"><Input className="h-8" value={formatNumber(netProducedKg)} readOnly /></Field>
-            <Field label="Produced pcs"><Input className="h-8" value={formatNumber(producedPcs)} readOnly /></Field>
-              </div>
-            </>
-          ) : null}
-          {isShopFloorBulkDowntimeEntry ? (
-            <div className="grid gap-3 rounded-md border bg-background p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-medium">Bulk downtime for running machines</div>
-              <StatusBadge value={`${formatNumber(bulkRows.length)} machines`} />
-            </div>
-            <div className="grid gap-2 md:grid-cols-4">
-              <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
-              <Field label="Downtime code">
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={bulkDowntimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setBulkDowntimeCode(event.target.value)}>
-                  <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add defect / downtime reason master"}</option>
-                  {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Downtime start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(time24Input(event.target.value))} /></Field>
-              <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeEnd} onChange={(event) => setBulkDowntimeEnd(time24Input(event.target.value))} /></Field>
-              <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(bulkDowntimeMinutes)} readOnly /></Field>
-            </div>
-            <Button type="button" size="sm" variant="outline" className="w-fit" disabled={!canSaveBulkDowntime || isBulkSaving} onClick={() => void submitBulkDowntime()}>
-              <CheckCircle2 className="size-4" />
-              Save downtime for running machines
-            </Button>
-            </div>
-          ) : null}
-        </>
-      ) : null}
-
-      {role === "quality" || role === "machinist" ? (
-        <>
+          </CompactEntryField>
           {selectedRow ? (
-            <div className="rounded-md border bg-background px-2.5 py-2">
+            <div className="flex min-h-8 items-center rounded-md border bg-background px-2 sm:col-span-2 lg:col-span-2">
               <ShopFloorItemSummary row={selectedRow} tone="current" compact />
             </div>
           ) : null}
-          {role === "quality" ? (
-            <div className="grid gap-2 rounded-md border bg-background p-2.5 sm:grid-cols-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={qualityEntryKind === "downtime" ? "default" : "outline"}
-                onClick={() => setQualityEntryKind("downtime")}
-              >
-                Downtime entry
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={qualityEntryKind === "rejection" ? "default" : "outline"}
-                onClick={() => setQualityEntryKind("rejection")}
-              >
-                Rejection entry
-              </Button>
-            </div>
-          ) : null}
-          {isDowntimeEntry ? (
-            <div className="grid gap-2 md:grid-cols-4">
-              <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
-              <Field label="Downtime code">
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
-                  <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add defect / downtime reason master"}</option>
-                  {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Downtime start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} /></Field>
-              <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} /></Field>
-              <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(downtimeDurationMinutes)} readOnly /></Field>
-            </div>
-          ) : null}
-          {isRejectionEntry ? (
-            <div className="grid gap-2 rounded-md border bg-background p-2.5 md:grid-cols-4">
-              <Field label="Rejection type">
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={rejectionTypeCode} onChange={(event) => setRejectionTypeCode(event.target.value)}>
-                  <option value="">Select type</option>
-                  {rejectionTypeOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Rejection reason">
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}>
-                  <option value="">Select reason</option>
-                  {rejectionReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Rejection remark">
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={rejectionRemarkCode} onChange={(event) => setRejectionRemarkCode(event.target.value)}>
-                  <option value="">Select remark</option>
-                  {rejectionRemarkOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Rejected pcs"><Input className="h-8" type="number" step="1" min="0" value={rejectedPieces} onChange={(event) => setRejectedPieces(event.target.value)} /></Field>
-            </div>
-          ) : null}
+        </div>
+      ) : null}
+
+      {role === "shopFloor" && isShopFloorProductionEntry ? (
+        <>
+          <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-6">
+            <CompactEntryField className="lg:col-span-2" label="Machine no.">
+              <select className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+                <option value="">Select machine</option>
+                {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+              </select>
+            </CompactEntryField>
+            <CompactEntryField label="Date">
+              <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+            </CompactEntryField>
+            <CompactEntryField label="Shift">
+              <select className={compactSelectClass} value={shift} onChange={(event) => setShift(event.target.value)}>
+                <option value="Day">Day</option>
+                <option value="Night">Night</option>
+                <option value="General">General</option>
+              </select>
+            </CompactEntryField>
+            {selectedRow ? (
+              <div className="flex min-h-8 items-center rounded-md border bg-background px-2 sm:col-span-2 lg:col-span-2">
+                <ShopFloorItemSummary row={selectedRow} tone="current" compact />
+              </div>
+            ) : null}
+          </div>
+          <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
+            <CompactEntryField label="Cycle time sec">
+              <Input className={compactInputClass} type="number" step="0.01" value={cycleSecondsInput} onChange={(event) => setCycleSecondsByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} />
+            </CompactEntryField>
+            <CompactEntryField label="Piece weight gm">
+              <Input className={compactInputClass} type="number" step="0.01" value={pieceWeightInput} onChange={(event) => setPieceWeightByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} />
+            </CompactEntryField>
+            <CompactEntryField label="Operator no.">
+              <Input className={compactInputClass} value={operatorNumber} onChange={(event) => setOperatorNumber(event.target.value)} />
+            </CompactEntryField>
+            <CompactEntryField label="Machine start">
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />
+            </CompactEntryField>
+            <CompactEntryField label="Machine end">
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} />
+            </CompactEntryField>
+            <CompactEntryField label="Gross produced kg">
+              <Input className={compactInputClass} type="number" step="0.001" value={producedGrossKg} onChange={(event) => setProducedGrossKg(event.target.value)} />
+            </CompactEntryField>
+            <CompactEntryField label="Crates used">
+              <Input className={compactInputClass} type="number" step="1" value={cratesUsed} onChange={(event) => setCratesUsed(event.target.value)} />
+            </CompactEntryField>
+            <CompactEntryField label="Crate weight kg">
+              <select className={compactSelectClass} value={crateWeightKg} onChange={(event) => setCrateWeightKg(event.target.value)}>
+                {CRATE_WEIGHT_OPTIONS_KG.map((weight) => <option key={weight} value={String(weight)}>{formatNumber(weight)} kg</option>)}
+              </select>
+            </CompactEntryField>
+            <CompactEntryField label="Net produced kg">
+              <Input className={compactInputClass} value={formatNumber(netProducedKg)} readOnly />
+            </CompactEntryField>
+            <CompactEntryField label="Produced pcs">
+              <Input className={compactInputClass} value={formatNumber(producedPcs)} readOnly />
+            </CompactEntryField>
+          </div>
         </>
       ) : null}
+
+      {role === "shopFloor" && isShopFloorBulkDowntimeEntry ? (
+        <div className="grid gap-2 rounded-md border bg-background p-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs font-medium">Running-machine downtime</div>
+            <StatusBadge value={`${formatNumber(bulkRows.length)} machines`} />
+          </div>
+          <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            <CompactEntryField label="Date">
+              <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+            </CompactEntryField>
+            <CompactEntryField label="Downtime code">
+              <select className={compactSelectClass} value={bulkDowntimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setBulkDowntimeCode(event.target.value)}>
+                <option value="">{downtimeReasonOptions.length ? "Select code" : "Add downtime reason master"}</option>
+                {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+              </select>
+            </CompactEntryField>
+            <CompactEntryField label="Start">
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(time24Input(event.target.value))} />
+            </CompactEntryField>
+            <CompactEntryField label="End">
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeEnd} onChange={(event) => setBulkDowntimeEnd(time24Input(event.target.value))} />
+            </CompactEntryField>
+            <CompactEntryField label="Minutes">
+              <Input className={compactInputClass} value={formatNumber(bulkDowntimeMinutes)} readOnly />
+            </CompactEntryField>
+          </div>
+          <Button type="button" size="sm" variant="outline" className="h-7 w-fit px-2.5 text-xs" disabled={!canSaveBulkDowntime || isBulkSaving} onClick={() => void submitBulkDowntime()}>
+            <CheckCircle2 className="size-3.5" />
+            Save running-machine downtime
+          </Button>
+        </div>
+      ) : null}
+
+      {role === "quality" ? (
+        <div aria-label="Quality entry type" className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5" role="group">
+          <Button
+            aria-pressed={qualityEntryKind === "downtime"}
+            className={entryTabClass}
+            onClick={() => setQualityEntryKind("downtime")}
+            type="button"
+            variant={qualityEntryKind === "downtime" ? "default" : "ghost"}
+          >
+            Downtime
+          </Button>
+          <Button
+            aria-pressed={qualityEntryKind === "rejection"}
+            className={entryTabClass}
+            onClick={() => setQualityEntryKind("rejection")}
+            type="button"
+            variant={qualityEntryKind === "rejection" ? "default" : "ghost"}
+          >
+            Rejection
+          </Button>
+        </div>
+      ) : null}
+
+      {isDowntimeEntry ? (
+        <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          <CompactEntryField label="Date">
+            <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+          </CompactEntryField>
+          <CompactEntryField label="Downtime code">
+            <select className={compactSelectClass} value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
+              <option value="">{downtimeReasonOptions.length ? "Select code" : "Add downtime reason master"}</option>
+              {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+            </select>
+          </CompactEntryField>
+          <CompactEntryField label="Start">
+            <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />
+          </CompactEntryField>
+          <CompactEntryField label="End">
+            <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} />
+          </CompactEntryField>
+          <CompactEntryField label="Minutes">
+            <Input className={compactInputClass} value={formatNumber(downtimeDurationMinutes)} readOnly />
+          </CompactEntryField>
+        </div>
+      ) : null}
+
+      {isRejectionEntry ? (
+        <div className="grid gap-1.5 rounded-md border bg-background p-2 sm:grid-cols-2 lg:grid-cols-4">
+          <CompactEntryField label="Rejection type">
+            <select className={compactSelectClass} value={rejectionTypeCode} onChange={(event) => setRejectionTypeCode(event.target.value)}>
+              <option value="">Select type</option>
+              {rejectionTypeOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+            </select>
+          </CompactEntryField>
+          <CompactEntryField label="Rejection reason">
+            <select className={compactSelectClass} value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}>
+              <option value="">Select reason</option>
+              {rejectionReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+            </select>
+          </CompactEntryField>
+          <CompactEntryField label="Rejection remark">
+            <select className={compactSelectClass} value={rejectionRemarkCode} onChange={(event) => setRejectionRemarkCode(event.target.value)}>
+              <option value="">Select remark</option>
+              {rejectionRemarkOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+            </select>
+          </CompactEntryField>
+          <CompactEntryField label="Rejected pcs">
+            <Input className={compactInputClass} type="number" step="1" min="0" value={rejectedPieces} onChange={(event) => setRejectedPieces(event.target.value)} />
+          </CompactEntryField>
+        </div>
+      ) : null}
+
       {showSaveButton ? (
-        <Button type="button" size="sm" className="w-fit" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
-          <CheckCircle2 className="size-4" />
+        <Button type="button" size="sm" className="h-7 w-fit px-2.5 text-xs" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
+          <CheckCircle2 className="size-3.5" />
           {role === "shopFloor" ? "Save production" : isQualityRejectionEntry ? "Save rejection" : "Save downtime"}
         </Button>
       ) : null}
