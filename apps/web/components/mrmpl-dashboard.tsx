@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type DragEvent, type FormEvent, type ReactNode, type SetStateAction } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type DragEvent, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -458,7 +458,11 @@ const subscribeToHydration = () => () => {};
 const clientHydrationSnapshot = () => true;
 const serverHydrationSnapshot = () => false;
 
-function usePostgresDashboardPage(url: string | null, pollIntervalMs = 0) {
+function usePostgresDashboardPage(
+  url: string | null,
+  pollIntervalMs = 0,
+  onData?: (data: DashboardPayload) => void,
+) {
   const [result, setResult] = useState<{
     data?: DashboardPayload;
     error?: string;
@@ -484,6 +488,7 @@ function usePostgresDashboardPage(url: string | null, pollIntervalMs = 0) {
           throw new Error(str(body.error) || "Dashboard data could not be loaded.");
         }
         setResult({ data: body, url });
+        onData?.(body);
       } catch (error: unknown) {
         if (controller.signal.aborted) return;
         setResult({
@@ -516,7 +521,7 @@ function usePostgresDashboardPage(url: string | null, pollIntervalMs = 0) {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (nextLoad !== undefined) window.clearTimeout(nextLoad);
     };
-  }, [pollIntervalMs, url]);
+  }, [onData, pollIntervalMs, url]);
 
   return result.url === url ? result : { url: url ?? "" };
 }
@@ -989,8 +994,22 @@ function DashboardShell({
   const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
-  const dashboardPage = usePostgresDashboardPage("/api/dashboard", 15_000);
-  const dashboardStatusPage = usePostgresDashboardPage("/api/dashboard-refresh-status", 5_000);
+  const handleDashboardStatusData = useCallback((status: DashboardPayload) => {
+    setPlanningRefreshLock((current) =>
+      current && refreshLockHasSettled(current, status) ? null : current,
+    );
+  }, []);
+  const dashboardPage = usePostgresDashboardPage(
+    `/api/dashboard?floor=${encodeURIComponent(activeProductionFloor)}`,
+    30_000,
+  );
+  const dashboardStatusPage = usePostgresDashboardPage(
+    planningRefreshLock || isRefreshingSnapshot
+      ? "/api/dashboard-refresh-status"
+      : null,
+    5_000,
+    handleDashboardStatusData,
+  );
   const correctionCandidatesPage = usePostgresDashboardPage(
     activeTab === "correctionsTab" ? "/api/correction-candidates?limit=200" : null,
     5_000,

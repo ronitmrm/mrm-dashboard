@@ -74,15 +74,23 @@ export function dashboardPayloadForProductionFloor(
   const snapshots = isRecord(dashboard.productionFloorSnapshots)
     ? dashboard.productionFloorSnapshots
     : {};
+  const payloadFloorCode =
+    typeof dashboard.productionFloorCode === "string"
+      ? normalizeProductionFloorCode(dashboard.productionFloorCode)
+      : undefined;
   const selected = isRecord(snapshots[floorCode])
     ? snapshots[floorCode]
+    : payloadFloorCode === floorCode
+      ? dashboard
     : floorCode === defaultProductionFloorCode
       ? dashboard
       : {};
+  const selectedPayload = { ...selected };
+  delete selectedPayload.productionFloorSnapshots;
+  delete selectedPayload.productionFloors;
   return {
-    ...selected,
+    ...selectedPayload,
     productionFloorCode: floorCode,
-    productionFloorSnapshots: snapshots,
     productionFloors,
   };
 }

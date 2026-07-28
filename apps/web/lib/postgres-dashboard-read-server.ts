@@ -2,6 +2,7 @@ import {
   createAuthorizationRepository,
   createDashboardReadModelRepository,
 } from "@workspace/db"
+import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 import type { NextRequest } from "next/server"
 
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
@@ -64,12 +65,17 @@ async function withDashboardReadRepository<T>(
 
 export async function readPostgresDashboard(
   request: NextRequest,
-  filters: Record<string, string | undefined>
+  filters: Record<string, string | undefined>,
+  requestedProductionFloor?: string | null
 ) {
   return withDashboardReadRepository(
     request,
     async ({ organizationId, repository }) => {
-      const payload = await repository.latest(organizationId, filters)
+      const payload = await repository.latest(
+        organizationId,
+        filters,
+        normalizeProductionFloorCode(requestedProductionFloor)
+      )
       if (payload) return payload
       await repository.requestRefresh(organizationId)
       return { cacheStatus: "missing", filters }

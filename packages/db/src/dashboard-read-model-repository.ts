@@ -96,7 +96,11 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
       return result.rows[0].id
     },
 
-    async latest(organizationId: string, filters: JsonRecord = {}) {
+    async latest(
+      organizationId: string,
+      filters: JsonRecord = {},
+      productionFloorCode = "conventional"
+    ) {
       const result = await pool.query<{
         created_at: Date
         payload: JsonRecord
@@ -104,19 +108,34 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
         version: string
       }>(
         `
-          SELECT version::text AS version, payload, source_watermark, created_at
+          SELECT version::text AS version,
+            COALESCE(
+              jsonb_extract_path(
+                payload,
+                'productionFloorSnapshots',
+                $2::text
+              ),
+              CASE
+                WHEN $2 = 'conventional'
+                  THEN payload - 'productionFloorSnapshots'
+                ELSE '{}'::jsonb
+              END
+            ) AS payload,
+            source_watermark,
+            created_at
           FROM derived.dashboard_read_models
           WHERE organization_id = $1
           ORDER BY version DESC
           LIMIT 1
         `,
-        [organizationId]
+        [organizationId, productionFloorCode]
       )
       const row = result.rows[0]
       if (!row) return null
       return {
         ...row.payload,
         filters,
+        productionFloorCode,
         readModelVersion: Number(row.version),
         snapshotCacheUpdatedAt: row.created_at.toISOString(),
         sourceWatermark: row.source_watermark,

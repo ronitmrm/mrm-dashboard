@@ -74,4 +74,40 @@ describe("toDashboardViewModel", () => {
       machineRows: [{ machine: "N1" }],
     });
   });
+
+  it("does not retain every production-floor snapshot after selecting one floor", () => {
+    const rows = Array.from({ length: 1_000 }, (_, index) => ({
+      machine: `M-${index}`,
+      output: index,
+    }));
+    const payload = {
+      productionFloorSnapshots: {
+        conventional: { productionControl: { machineRows: rows } },
+        cnc: { productionControl: { machineRows: rows } },
+        forging: { productionControl: { machineRows: rows } },
+      },
+    };
+
+    const selected = dashboardPayloadForProductionFloor(payload, "cnc");
+
+    expect(selected.productionFloorSnapshots).toBeUndefined();
+    expect(JSON.stringify(selected).length).toBeLessThan(
+      JSON.stringify(payload).length / 2,
+    );
+  });
+
+  it("accepts a payload that the server already scoped to one floor", () => {
+    const selected = dashboardPayloadForProductionFloor(
+      {
+        productionFloorCode: "forging",
+        productionControl: { machineRows: [{ machine: "F1" }] },
+      },
+      "forging",
+    );
+
+    expect(selected.productionFloorCode).toBe("forging");
+    expect(selected.productionControl).toEqual({
+      machineRows: [{ machine: "F1" }],
+    });
+  });
 });

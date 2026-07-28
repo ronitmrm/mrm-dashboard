@@ -545,14 +545,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     if (path === "dashboard") {
       return json(
-        await readPostgresDashboard(request, {
-          endDate: search.get("endDate") || undefined,
-          machine: search.get("machine") || undefined,
-          machineType: search.get("machineType") || undefined,
-          month: search.get("month") || undefined,
-          operatorId: search.get("operatorId") || undefined,
-          startDate: search.get("startDate") || undefined,
-        })
+        await readPostgresDashboard(
+          request,
+          {
+            endDate: search.get("endDate") || undefined,
+            machine: search.get("machine") || undefined,
+            machineType: search.get("machineType") || undefined,
+            month: search.get("month") || undefined,
+            operatorId: search.get("operatorId") || undefined,
+            startDate: search.get("startDate") || undefined,
+          },
+          search.get("floor")
+        )
       )
     }
 
