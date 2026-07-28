@@ -7547,7 +7547,7 @@ function FilterSelect({
       <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
         <span>{label}</span>
         <select
-          className="h-9 rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+          className="h-9 rounded-3xl border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors hover:border-primary/45 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 dark:bg-input/20"
           value={value}
           onChange={(event) => onChange(event.target.value)}
         >
@@ -7605,7 +7605,7 @@ function ExcelStyleFilters({
         <Label key={filter.id} className="grid gap-1 text-xs font-medium text-muted-foreground">
           <span>{filter.label}</span>
           <select
-            className="h-9 rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+            className="h-9 rounded-3xl border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors hover:border-primary/45 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 dark:bg-input/20"
             value={filter.value}
             onChange={(event) => filter.onChange(event.target.value)}
           >

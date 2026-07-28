@@ -137,7 +137,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary/10 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
+                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-primary/15 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/20 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -166,7 +166,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary/10 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
+                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-primary/15 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/20 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -195,7 +195,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.id}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary/10 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
+                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-primary/15 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/20 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
                 isActive={item.id === activeDashboardTab}
               >
                 {onDashboardTabSelect ? (
@@ -274,7 +274,7 @@ function NavigationSection({
           <SidebarMenuItem className="overflow-hidden rounded-xl border border-sidebar-border/70 bg-sidebar/70 transition-colors group-data-[state=open]/collapsible:bg-sidebar-accent/25">
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
-                className="h-11 rounded-xl px-2.5 font-semibold hover:bg-sidebar-accent/70 data-[state=open]:bg-transparent"
+                className="h-11 rounded-xl px-2.5 font-semibold hover:bg-sidebar-primary/15 hover:text-sidebar-primary"
                 type="button"
               >
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary/10 text-sidebar-primary ring-1 ring-sidebar-primary/15">
