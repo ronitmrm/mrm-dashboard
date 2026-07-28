@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto"
 import type { Pool, PoolClient } from "pg"
 
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  normalizeProductionFloorCode,
+  type ProductionFloorCode,
+} from "./production-floors"
 
 type RepositoryOptions = RepositoryPoolOptions
 
@@ -33,6 +37,7 @@ type CompleteTaskInput = {
   nextDueOn?: string | null
   organizationId: string
   payload: Record<string, unknown>
+  productionFloorCode?: string
   results: TaskResultInput[]
   scheduleKey: string
   taskKey: string
@@ -66,14 +71,23 @@ async function transaction<T>(
 async function machineIdFor(
   client: PoolClient,
   organizationId: string,
-  machineNumber: string
+  machineNumber: string,
+  productionFloorCode: ProductionFloorCode
 ) {
   const result = await client.query<{ id: string }>(
     `
-      SELECT id FROM catalog.machines
-      WHERE organization_id = $1 AND lower(machine_number) = lower($2)
+      SELECT machine.id FROM catalog.machines machine
+      JOIN manufacturing.production_floors floor
+        ON floor.id = machine.production_floor_id
+      WHERE machine.organization_id = $1
+        AND lower(machine.machine_number) = lower($2)
+        AND floor.code = $3
     `,
-    [organizationId, requiredText(machineNumber, "Machine")]
+    [
+      organizationId,
+      requiredText(machineNumber, "Machine"),
+      productionFloorCode,
+    ]
   )
   if (!result.rows[0]) throw new Error("Machine was not found.")
   return result.rows[0].id
@@ -156,7 +170,8 @@ async function completeMaintenanceTask(
   const machineId = await machineIdFor(
     client,
     input.organizationId,
-    input.machineNumber
+    input.machineNumber,
+    normalizeProductionFloorCode(input.productionFloorCode)
   )
   const schedule = await client.query<{
     checklist_definition_id: string
@@ -177,11 +192,13 @@ async function completeMaintenanceTask(
         )
       WHERE schedule.organization_id = $1
         AND lower(schedule.schedule_key) = lower($2)
+        AND schedule.machine_id = $3
       FOR UPDATE OF schedule
     `,
     [
       input.organizationId,
       requiredText(input.scheduleKey, "Maintenance schedule key"),
+      machineId,
     ]
   )
   if (!schedule.rows[0]) throw new Error("Maintenance schedule was not found.")
@@ -191,10 +208,12 @@ async function completeMaintenanceTask(
   const existing = await client.query<{ id: string }>(
     `
       SELECT id FROM maintenance.tasks
-      WHERE organization_id = $1 AND lower(task_key) = lower($2)
+      WHERE organization_id = $1
+        AND lower(task_key) = lower($2)
+        AND machine_schedule_id = $3
       FOR UPDATE
     `,
-    [input.organizationId, taskKey]
+    [input.organizationId, taskKey, schedule.rows[0].id]
   )
   const result = existing.rows[0]
     ? await client.query<{ id: string }>(
@@ -480,13 +499,15 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
       nextDueOn: string
       organizationId: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
       scheduleKey: string
     }) {
       return transaction(pool, async (client) => {
         const machineId = await machineIdFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const definition = await client.query<{ id: string }>(
           `
@@ -548,13 +569,15 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
       machineNumber: string
       organizationId: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
       taskKey: string
     }) {
       return transaction(pool, async (client) => {
         const machineId = await machineIdFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const definition = await client.query<{ id: string }>(
           `
@@ -605,6 +628,7 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
           machineNumber: input.machineNumber,
           organizationId: input.organizationId,
           payload: input.payload,
+          productionFloorCode: input.productionFloorCode,
           results: [],
           scheduleKey,
           taskKey: input.taskKey,

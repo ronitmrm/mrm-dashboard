@@ -8,6 +8,12 @@ import {
   ChevronRight,
   Factory,
 } from "lucide-react"
+import {
+  defaultProductionFloorCode,
+  normalizeProductionFloorCode,
+  productionFloors,
+  type ProductionFloorCode,
+} from "@workspace/db/production-floors"
 
 import {
   Collapsible,
@@ -31,6 +37,7 @@ import {
   administrationNavigation,
   commercialNavigation,
   dashboardNavigation,
+  dashboardTabHref,
   hrNavigation,
   navigationHrefMatches,
   type DashboardTabId,
@@ -39,14 +46,32 @@ import {
 const storageKey = "mrmpl:sidebar:expanded-modules"
 const stateChangedEvent = "mrmpl:sidebar:expanded-modules-changed"
 
-type SectionId = "costing" | "hr" | "production"
+type SectionId =
+  | "costing"
+  | "hr"
+  | "productionConventional"
+  | "productionCnc"
+  | "productionForging"
 type ExpandedSections = Record<SectionId, boolean>
 
-function defaultExpandedSections(pathname: string): ExpandedSections {
+const productionSectionIds: Record<ProductionFloorCode, SectionId> = {
+  conventional: "productionConventional",
+  cnc: "productionCnc",
+  forging: "productionForging",
+}
+
+function defaultExpandedSections(
+  pathname: string,
+  activeProductionFloor: ProductionFloorCode
+): ExpandedSections {
+  const onProduction = pathname === "/" || pathname.startsWith("/dashboard")
   return {
     costing: pathname.startsWith("/commercial"),
     hr: pathname.startsWith("/hr"),
-    production: pathname === "/" || pathname.startsWith("/dashboard"),
+    productionConventional:
+      onProduction && activeProductionFloor === "conventional",
+    productionCnc: onProduction && activeProductionFloor === "cnc",
+    productionForging: onProduction && activeProductionFloor === "forging",
   }
 }
 
@@ -57,15 +82,27 @@ function storedExpandedSections(
   if (!value) return fallback
 
   try {
-    const parsed = JSON.parse(value) as Partial<ExpandedSections>
+    const parsed = JSON.parse(value) as Partial<ExpandedSections> & {
+      production?: boolean
+    }
     return {
       costing:
         typeof parsed.costing === "boolean" ? parsed.costing : fallback.costing,
       hr: typeof parsed.hr === "boolean" ? parsed.hr : fallback.hr,
-      production:
-        typeof parsed.production === "boolean"
-          ? parsed.production
-          : fallback.production,
+      productionConventional:
+        typeof parsed.productionConventional === "boolean"
+          ? parsed.productionConventional
+          : typeof parsed.production === "boolean"
+            ? parsed.production
+            : fallback.productionConventional,
+      productionCnc:
+        typeof parsed.productionCnc === "boolean"
+          ? parsed.productionCnc
+          : fallback.productionCnc,
+      productionForging:
+        typeof parsed.productionForging === "boolean"
+          ? parsed.productionForging
+          : fallback.productionForging,
     }
   } catch {
     return fallback
@@ -92,12 +129,17 @@ function serverExpandedSectionsSnapshot() {
 
 export function UnifiedSidebarNavigation({
   activeDashboardTab,
+  activeProductionFloor = defaultProductionFloorCode,
   navigationAccess,
   onDashboardTabSelect,
 }: {
   activeDashboardTab?: DashboardTabId
+  activeProductionFloor?: ProductionFloorCode
   navigationAccess: UnifiedNavigationAccess
-  onDashboardTabSelect?: (tab: DashboardTabId) => void
+  onDashboardTabSelect?: (
+    tab: DashboardTabId,
+    productionFloor: ProductionFloorCode
+  ) => void
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -108,7 +150,12 @@ export function UnifiedSidebarNavigation({
   )
   const expandedSections = storedExpandedSections(
     storedSections,
-    defaultExpandedSections(pathname)
+    defaultExpandedSections(
+      pathname,
+      normalizeProductionFloorCode(
+        searchParams.get("floor") ?? activeProductionFloor
+      )
+    )
   )
   const visibleCommercialNavigation = commercialNavigation.filter((item) =>
     navigationAccess.commercialHrefs.includes(item.href)
@@ -184,38 +231,49 @@ export function UnifiedSidebarNavigation({
       ) : null}
 
       {navigationAccess.operations ? (
-        <NavigationSection
-          icon={Factory}
-          label="Production Floor"
-          onOpenChange={(open) => setSectionOpen("production", open)}
-          open={expandedSections.production}
-          submoduleCount={dashboardNavigation.length}
-        >
-          {dashboardNavigation.map((item) => (
-            <SidebarMenuSubItem key={item.id}>
-              <SidebarMenuSubButton
-                asChild
-                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-primary/15 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/20 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
-                isActive={item.id === activeDashboardTab}
-              >
-                {onDashboardTabSelect ? (
-                  <button
-                    onClick={() => onDashboardTabSelect(item.id)}
-                    type="button"
+        productionFloors.map((floor) => {
+          const sectionId = productionSectionIds[floor.code]
+          return (
+            <NavigationSection
+              icon={Factory}
+              key={floor.code}
+              label={floor.label}
+              onOpenChange={(open) => setSectionOpen(sectionId, open)}
+              open={expandedSections[sectionId]}
+              submoduleCount={dashboardNavigation.length}
+            >
+              {dashboardNavigation.map((item) => (
+                <SidebarMenuSubItem key={`${floor.code}:${item.id}`}>
+                  <SidebarMenuSubButton
+                    asChild
+                    className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-primary/15 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/20 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
+                    isActive={
+                      floor.code === activeProductionFloor &&
+                      item.id === activeDashboardTab
+                    }
                   >
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </button>
-                ) : (
-                  <a href={item.href}>
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </a>
-                )}
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          ))}
-        </NavigationSection>
+                    {onDashboardTabSelect ? (
+                      <button
+                        onClick={() =>
+                          onDashboardTabSelect(item.id, floor.code)
+                        }
+                        type="button"
+                      >
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </button>
+                    ) : (
+                      <a href={dashboardTabHref(item.id, floor.code)}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </a>
+                    )}
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              ))}
+            </NavigationSection>
+          )
+        })
       ) : null}
 
       {navigationAccess.administration ? (

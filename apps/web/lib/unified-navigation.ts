@@ -27,6 +27,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react"
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
 
 export type DashboardTabId =
   | "productionControlTab"
@@ -54,8 +55,13 @@ type DashboardNavigationItem = {
   title: string
 }
 
-export function dashboardTabHref(tab: DashboardTabId) {
-  return `/?tab=${encodeURIComponent(tab)}`
+export function dashboardTabHref(
+  tab: DashboardTabId,
+  productionFloorCode?: ProductionFloorCode
+) {
+  const params = new URLSearchParams({ tab })
+  if (productionFloorCode) params.set("floor", productionFloorCode)
+  return `/?${params.toString()}`
 }
 
 export function navigationHrefMatches(

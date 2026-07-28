@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto"
 import type { Pool, PoolClient } from "pg"
 
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  normalizeProductionFloorCode,
+  type ProductionFloorCode,
+} from "./production-floors"
 
 type RepositoryOptions = RepositoryPoolOptions
 
@@ -180,17 +184,22 @@ async function operationSetupForCode(
 async function machineIdFor(
   client: PoolClient,
   organizationId: string,
-  machineNumber?: string | null
+  machineNumber: string | null | undefined,
+  productionFloorCode: ProductionFloorCode
 ) {
   if (!machineNumber?.trim()) return null
   const result = await client.query<{ id: string }>(
     `
-      SELECT id FROM catalog.machines
-      WHERE organization_id = $1 AND lower(machine_number) = lower($2)
-        AND active
+      SELECT machine.id FROM catalog.machines machine
+      JOIN manufacturing.production_floors floor
+        ON floor.id = machine.production_floor_id
+      WHERE machine.organization_id = $1
+        AND lower(machine.machine_number) = lower($2)
+        AND floor.code = $3
+        AND machine.active
       FOR UPDATE
     `,
-    [organizationId, machineNumber.trim()]
+    [organizationId, machineNumber.trim(), productionFloorCode]
   )
   if (!result.rows[0]) throw new Error("Physical machine was not found.")
   return result.rows[0].id
@@ -262,6 +271,7 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
       actorUserId?: string | null
       organizationId: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
       quantityKg: number
       receiptNumber: string
       receivedOn: string
@@ -337,6 +347,7 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
       jobCardNumber: string
       organizationId: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
     }) {
       return transaction(pool, async (client) => {
         const cardNumber = requiredText(input.cardNumber, "Production card")
@@ -416,7 +427,8 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
         const machineId = await machineIdFor(
           client,
           input.organizationId,
-          String(payload.machine ?? "")
+          String(payload.machine ?? ""),
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         await client.query(
           `
@@ -452,6 +464,7 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
       operatorCode?: string | null
       organizationId: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
       productionDate: string
       quantityGood: number
       quantityRejected: number
@@ -474,7 +487,8 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
         const machineId = await machineIdFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const employeeId = await employeeIdFor(
           client,
@@ -526,6 +540,7 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
       operationSetupCode: string
       organizationId: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
       stage: string
     }) {
       return transaction(pool, async (client) => {
@@ -546,7 +561,8 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
         const machineId = await machineIdFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         if (!machineId) throw new Error("Shop-floor machine is required.")
         const stage = canonicalStage(input.stage)
@@ -684,6 +700,7 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
       approvedBy: string
       jobCardNumber: string
       organizationId: string
+      productionFloorCode?: string
       remark?: string | null
     }) {
       return transaction(pool, async (client) => {
@@ -725,6 +742,7 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
       machineNumber?: string | null
       operationSetupCode?: string | null
       organizationId: string
+      productionFloorCode?: string
       remark?: string | null
     }) {
       return transaction(pool, async (client) => {
@@ -744,7 +762,8 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
         let machineId = await machineIdFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const state = await client.query<{
           id: string

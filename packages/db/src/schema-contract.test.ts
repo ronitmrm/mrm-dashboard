@@ -83,6 +83,7 @@ const expectedCanonicalTables = [
   "manufacturing.planner_priority_event_details",
   "manufacturing.planner_priority_events",
   "manufacturing.planning_calendar_exceptions",
+  "manufacturing.production_floors",
   "manufacturing.production_card_events",
   "manufacturing.production_cards",
   "manufacturing.production_entries",

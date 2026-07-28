@@ -3,6 +3,7 @@ import {
   createDashboardPlanningRepository,
   createProductionShopFloorRepository,
 } from "@workspace/db"
+import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
@@ -388,6 +389,7 @@ async function savePlanningMasterEntry(
       machineNumber: text(payload.machineNo),
       name: optionalText(payload.machineName),
       organizationId,
+      productionFloorCode: text(payload.productionFloorCode),
       sourcePayload: payload,
     })
   }
@@ -417,6 +419,7 @@ async function savePlanningMasterEntry(
       actorUserId,
       itemUid,
       organizationId,
+      productionFloorCode: text(payload.productionFloorCode),
       replaceSetups: false,
       routeCode,
       setups: [
@@ -438,6 +441,7 @@ async function savePlanningMasterEntry(
       cycleTimeSeconds: numeric(payload.cycleTime),
       itemUid,
       organizationId,
+      productionFloorCode: text(payload.productionFloorCode),
       routeCode,
       setupNumber: setupNumber!,
       setupTimeMinutes: numeric(payload.loadingUnloading),
@@ -476,6 +480,7 @@ async function savePlanningMasterEntry(
           description: optionalText(payload.remarks) || row.type,
           itemUid,
           organizationId,
+          productionFloorCode: text(payload.productionFloorCode),
           quantity: numeric(row.quantity) || 1,
           routeCode,
           setupNumber: setupNumber!,
@@ -520,13 +525,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
   try {
     if (path === "hourly-quality") {
       return json(
-        await readPostgresHourlyQualityPage(request, search.get("checkKey"))
+        await readPostgresHourlyQualityPage(
+          request,
+          search.get("checkKey"),
+          search.get("floor")
+        )
       )
     }
 
     if (path === "setup-checklist") {
       return json(
-        await readPostgresSetupChecklistPage(request, search.get("sessionId"))
+        await readPostgresSetupChecklistPage(
+          request,
+          search.get("sessionId"),
+          search.get("floor")
+        )
       )
     }
 
@@ -624,6 +637,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             actorUserId,
             jobCardNumber: String(body.jcNo || ""),
             organizationId,
+            productionFloorCode: text(body.productionFloorCode),
             routeCode: String(body.optionNumber || ""),
           })
       )
@@ -661,6 +675,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             organizationId,
             partCode: optionalText(body.partCode),
             priority: String(body.priority || "Normal"),
+            productionFloorCode: text(body.productionFloorCode),
             queueBeforeSetups: normalizeQueueBeforeSetups(
               body.queueBeforeSetups
             ),
@@ -689,6 +704,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             machineNumber: String(body.machineNo || ""),
             organizationId,
             planningMode: optionalText(body.planningMode),
+            productionFloorCode: text(body.productionFloorCode),
             queuePlacements: normalizeQueuePlacements(body.queuePlacements),
             reason: String(body.reason || ""),
             remark: optionalText(body.remark),
@@ -722,6 +738,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             ),
             jobCardNumber: String(body.target || ""),
             organizationId,
+            productionFloorCode: text(body.productionFloorCode),
             queuePlacements: normalizeQueuePlacements(body.queuePlacements),
             reason: String(body.reason || "Planner machine override"),
             setupNumber: planningSetupNumber(body.setupNo),
@@ -748,6 +765,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             jobCardNumber: String(body.target || ""),
             newRouteCode: String(body.newOption || ""),
             organizationId,
+            productionFloorCode: text(body.productionFloorCode),
             remainingSetups: normalizeRemainingSetups(body.remainingSetups),
             reason: String(body.reason || "Planner route change"),
             wipQuantity:
@@ -776,6 +794,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             approvedBy: text(body.approvedBy),
             jobCardNumber: text(body.jcNo),
             organizationId,
+            productionFloorCode: text(body.productionFloorCode),
             remark: optionalText(body.remark),
           })
       )
@@ -794,6 +813,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             machineNumber: optionalText(body.machine),
             operationSetupCode: optionalText(body.setupNo),
             organizationId,
+            productionFloorCode: text(body.productionFloorCode),
             remark: optionalText(body.remark),
           })
       )
@@ -843,7 +863,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
-      const payload = plainRecord(body.payload)
+      const payload = productionFloorPayload(
+        plainRecord(body.payload),
+        body.productionFloorCode
+      )
       if (isPostgresOperationalEntryType(entryType)) {
         const result = await executePostgresOperationalEntry(
           request,
@@ -869,6 +892,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               jobCardNumber: text(payload.jobCard || payload.jcNo),
               organizationId,
               payload,
+              productionFloorCode: text(payload.productionFloorCode),
             })
         )
         return json(
@@ -888,6 +912,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               actorUserId,
               organizationId,
               payload,
+              productionFloorCode: text(payload.productionFloorCode),
               quantityKg: firstNumeric(payload.rmInwardKg),
               receiptNumber: text(payload.rmPoNo) || text(payload.jcNo),
               receivedOn:
@@ -915,6 +940,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               operationSetupCode: text(payload.setupNo),
               organizationId,
               payload,
+              productionFloorCode: text(payload.productionFloorCode),
               stage: text(payload.stage),
             })
         )
@@ -939,6 +965,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               operatorCode: optionalText(payload.operatorId),
               organizationId,
               payload,
+              productionFloorCode: text(payload.productionFloorCode),
               productionDate:
                 text(payload.prodDate) || new Date().toISOString().slice(0, 10),
               quantityGood: firstNumeric(payload.outputQty, payload.actualQty),
@@ -963,7 +990,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const entryType = String(body.entryType || "")
       const fileName = String(body.fileName || "")
       const fileBase64 = String(body.fileBase64 || "")
-      const importedRows = parseTemplateUpload(entryType, fileName, fileBase64)
+      const importedRows = parseTemplateUpload(
+        entryType,
+        fileName,
+        fileBase64
+      ).map((payload) =>
+        productionFloorPayload(payload, body.productionFloorCode)
+      )
       const importPolicy = browserImportPolicy(entryType, importedRows.length)
       if (!importPolicy.ok) {
         throw new RouteError(importPolicy.status, importPolicy.error)
@@ -979,6 +1012,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
                 actorUserId,
                 organizationId,
                 payload,
+                productionFloorCode: text(payload.productionFloorCode),
                 quantityKg: firstNumeric(payload.rmInwardKg),
                 receiptNumber: text(payload.rmPoNo) || text(payload.jcNo),
                 receivedOn:
@@ -994,6 +1028,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
                 operatorCode: optionalText(payload.operatorId),
                 organizationId,
                 payload,
+                productionFloorCode: text(payload.productionFloorCode),
                 productionDate:
                   text(payload.prodDate) ||
                   new Date().toISOString().slice(0, 10),
@@ -1023,7 +1058,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
       if (postgresMasterEntryTypes.has(entryType)) {
-        const payload = plainRecord(body.payload)
+        const payload = productionFloorPayload(
+          plainRecord(body.payload),
+          body.productionFloorCode
+        )
         const result = await withPlanningRepository(
           request,
           "operations.shop_floor.write",
@@ -1049,6 +1087,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
           entryType,
           fileName,
           fileBase64
+        ).map((payload) =>
+          productionFloorPayload(payload, body.productionFloorCode)
         )
         const importPolicy = browserImportPolicy(entryType, importedRows.length)
         if (!importPolicy.ok) {
@@ -1146,6 +1186,18 @@ function plainRecord(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>
   }
   return {}
+}
+
+function productionFloorPayload(
+  payload: Record<string, unknown>,
+  requestedFloor: unknown
+): Record<string, unknown> {
+  return {
+    ...payload,
+    productionFloorCode: normalizeProductionFloorCode(
+      requestedFloor ?? payload.productionFloorCode
+    ),
+  }
 }
 
 function text(value: unknown) {

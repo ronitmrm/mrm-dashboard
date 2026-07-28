@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { jobCardScheduleSummary, toDashboardViewModel } from "./dashboard-view-model";
+import {
+  dashboardPayloadForProductionFloor,
+  jobCardScheduleSummary,
+  toDashboardViewModel,
+} from "./dashboard-view-model";
 
 describe("toDashboardViewModel", () => {
   it("normalizes the legacy dashboard payload for the shadcn dashboard", () => {
@@ -51,5 +55,23 @@ describe("toDashboardViewModel", () => {
 
     expect(summary.plannedStart).toBe("27-June-26");
     expect(summary.plannedEnd).toBe("29-July-26");
+  });
+
+  it("selects one isolated production-floor snapshot", () => {
+    const selected = dashboardPayloadForProductionFloor(
+      {
+        productionFloorSnapshots: {
+          conventional: { productionControl: { machineRows: [{ machine: "C1" }] } },
+          cnc: { productionControl: { machineRows: [{ machine: "N1" }] } },
+          forging: { productionControl: { machineRows: [{ machine: "F1" }] } },
+        },
+      },
+      "cnc",
+    );
+
+    expect(selected.productionFloorCode).toBe("cnc");
+    expect(selected.productionControl).toEqual({
+      machineRows: [{ machine: "N1" }],
+    });
   });
 });

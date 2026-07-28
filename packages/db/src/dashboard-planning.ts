@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto"
 import type { Pool, PoolClient } from "pg"
 
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  normalizeProductionFloorCode,
+  type ProductionFloorCode,
+} from "./production-floors"
 
 type RepositoryOptions = RepositoryPoolOptions
 
@@ -252,16 +256,25 @@ async function insertOverrideDetail(
 async function machineFor(
   client: PoolClient,
   organizationId: string,
-  machineNumber: string
+  machineNumber: string,
+  productionFloorCode: ProductionFloorCode
 ) {
   const result = await client.query<{ id: string }>(
     `
-      SELECT id FROM catalog.machines
-      WHERE organization_id = $1 AND lower(machine_number) = lower($2)
-        AND active
+      SELECT machine.id FROM catalog.machines machine
+      JOIN manufacturing.production_floors floor
+        ON floor.id = machine.production_floor_id
+      WHERE machine.organization_id = $1
+        AND lower(machine.machine_number) = lower($2)
+        AND floor.code = $3
+        AND machine.active
       FOR UPDATE
     `,
-    [organizationId, requiredText(machineNumber, "Machine")]
+    [
+      organizationId,
+      requiredText(machineNumber, "Machine"),
+      productionFloorCode,
+    ]
   )
   if (!result.rows[0]) throw new Error("Physical machine was not found.")
   return result.rows[0].id
@@ -271,22 +284,31 @@ async function routeFor(
   client: PoolClient,
   organizationId: string,
   itemId: string,
-  routeCode: string
+  routeCode: string,
+  productionFloorCode: ProductionFloorCode
 ) {
   const result = await client.query<{ id: string }>(
     `
-      SELECT id FROM manufacturing.route_options
-      WHERE organization_id = $1 AND item_id = $2
+      SELECT route.id FROM manufacturing.route_options route
+      JOIN manufacturing.production_floors floor
+        ON floor.id = route.production_floor_id
+      WHERE route.organization_id = $1 AND route.item_id = $2
         AND (
-          lower(route_code) = lower($3)
-          OR lower(COALESCE(legacy_option_number, '')) = lower($3)
+          lower(route.route_code) = lower($3)
+          OR lower(COALESCE(route.legacy_option_number, '')) = lower($3)
         )
-        AND active
-      ORDER BY revision DESC
+        AND floor.code = $4
+        AND route.active
+      ORDER BY route.revision DESC
       LIMIT 1
       FOR UPDATE
     `,
-    [organizationId, itemId, requiredText(routeCode, "Route option")]
+    [
+      organizationId,
+      itemId,
+      requiredText(routeCode, "Route option"),
+      productionFloorCode,
+    ]
   )
   if (!result.rows[0]) throw new Error("Route option was not found.")
   return result.rows[0].id
@@ -297,14 +319,16 @@ async function setupFor(
   organizationId: string,
   itemUid: string,
   routeCode: string,
-  setupNumber: number
+  setupNumber: number,
+  productionFloorCode: ProductionFloorCode
 ) {
   const itemId = await itemIdFor(client, organizationId, itemUid)
   const routeOptionId = await routeFor(
     client,
     organizationId,
     itemId,
-    routeCode
+    routeCode,
+    productionFloorCode
   )
   const result = await client.query<{ id: string }>(
     `
@@ -349,6 +373,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       machineNumber: string
       name?: string | null
       organizationId: string
+      productionFloorCode?: string
       sourcePayload?: unknown
     }) {
       return transaction(pool, async (client) => {
@@ -356,14 +381,25 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           input.machineNumber,
           "Machine number"
         )
-        await businessKeyLock(client, "catalog.machine", machineNumber)
+        const productionFloorCode = normalizeProductionFloorCode(
+          input.productionFloorCode
+        )
+        await businessKeyLock(
+          client,
+          "catalog.machine",
+          `${productionFloorCode}:${machineNumber}`
+        )
         const existing = await client.query<{ id: string }>(
           `
-            SELECT id FROM catalog.machines
-            WHERE organization_id = $1 AND lower(machine_number) = lower($2)
+            SELECT machine.id FROM catalog.machines machine
+            JOIN manufacturing.production_floors floor
+              ON floor.id = machine.production_floor_id
+            WHERE machine.organization_id = $1
+              AND lower(machine.machine_number) = lower($2)
+              AND floor.code = $3
             FOR UPDATE
           `,
-          [input.organizationId, machineNumber]
+          [input.organizationId, machineNumber, productionFloorCode]
         )
         const sourcePayload = input.sourcePayload ?? input
         const result = existing.rows[0]
@@ -386,16 +422,20 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           : await client.query<{ id: string }>(
               `
                 INSERT INTO catalog.machines (
-                  organization_id, machine_number, name, created_by_user_id,
-                  updated_by_user_id, source_system, source_table, source_id,
-                  source_payload
+                  organization_id, production_floor_id, machine_number, name,
+                  created_by_user_id, updated_by_user_id, source_system,
+                  source_table, source_id, source_payload
                 )
-                VALUES ($1, $2, $3, $4, $4, 'mrm-dashboard',
-                  'machine_master', $5, $6)
+                VALUES ($1, (
+                  SELECT id FROM manufacturing.production_floors
+                  WHERE organization_id = $1 AND code = $2
+                ), $3, $4, $5, $5, 'mrm-dashboard',
+                  'machine_master', $6, $7)
                 RETURNING id
               `,
               [
                 input.organizationId,
+                productionFloorCode,
                 machineNumber,
                 input.name?.trim() || null,
                 input.actorUserId ?? null,
@@ -492,6 +532,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       actorUserId?: string | null
       itemUid: string
       organizationId: string
+      productionFloorCode?: string
       replaceSetups?: boolean
       routeCode: string
       sourcePayload?: unknown
@@ -505,6 +546,9 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
     }) {
       return transaction(pool, async (client) => {
         const routeCode = requiredText(input.routeCode, "Route code")
+        const productionFloorCode = normalizeProductionFloorCode(
+          input.productionFloorCode
+        )
         const itemId = await itemIdFor(
           client,
           input.organizationId,
@@ -513,20 +557,23 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
         await businessKeyLock(
           client,
           "manufacturing.route",
-          `${itemId}:${routeCode}`
+          `${productionFloorCode}:${itemId}:${routeCode}`
         )
         const existing = await client.query<{ id: string }>(
           `
-            SELECT id FROM manufacturing.route_options
-            WHERE item_id = $1
+            SELECT route.id FROM manufacturing.route_options route
+            JOIN manufacturing.production_floors floor
+              ON floor.id = route.production_floor_id
+            WHERE route.item_id = $1
               AND (
-                lower(route_code) = lower($2)
-                OR lower(COALESCE(legacy_option_number, '')) = lower($2)
+                lower(route.route_code) = lower($2)
+                OR lower(COALESCE(route.legacy_option_number, '')) = lower($2)
               )
-              AND revision = 1
+              AND floor.code = $3
+              AND route.revision = 1
             FOR UPDATE
           `,
-          [itemId, routeCode]
+          [itemId, routeCode, productionFloorCode]
         )
         const sourcePayload = input.sourcePayload ?? input
         const route = existing.rows[0]
@@ -549,16 +596,21 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           : await client.query<{ id: string }>(
               `
                 INSERT INTO manufacturing.route_options (
-                  organization_id, item_id, route_code, legacy_option_number,
-                  revision, active, created_by_user_id, updated_by_user_id,
-                  source_system, source_table, source_id, source_payload
+                  organization_id, production_floor_id, item_id, route_code,
+                  legacy_option_number, revision, active, created_by_user_id,
+                  updated_by_user_id, source_system, source_table, source_id,
+                  source_payload
                 )
-                VALUES ($1, $2, $3, $3, 1, true, $4, $4,
-                  'mrm-dashboard', 'route', $5, $6)
+                VALUES ($1, (
+                  SELECT id FROM manufacturing.production_floors
+                  WHERE organization_id = $1 AND code = $2
+                ), $3, $4, $4, 1, true, $5, $5,
+                  'mrm-dashboard', 'route', $6, $7)
                 RETURNING id
               `,
               [
                 input.organizationId,
+                productionFloorCode,
                 itemId,
                 routeCode,
                 input.actorUserId ?? null,
@@ -654,6 +706,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       itemUid: string
       organizationId: string
       piecesPerCycle?: number
+      productionFloorCode?: string
       routeCode: string
       setupNumber: number
       setupTimeMinutes?: number
@@ -668,7 +721,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           input.organizationId,
           input.itemUid,
           input.routeCode,
-          input.setupNumber
+          input.setupNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         await businessKeyLock(client, "manufacturing.cycle", operationSetupId)
         const existing = await client.query<{ id: string }>(
@@ -730,6 +784,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       description?: string | null
       itemUid: string
       organizationId: string
+      productionFloorCode?: string
       quantity?: number
       routeCode: string
       setupNumber: number
@@ -742,7 +797,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           input.organizationId,
           input.itemUid,
           input.routeCode,
-          input.setupNumber
+          input.setupNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const toolCode = requiredText(input.toolCode, "Tool code")
         const quantity = input.quantity ?? 1
@@ -887,6 +943,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       actorUserId?: string | null
       jobCardNumber: string
       organizationId: string
+      productionFloorCode?: string
       reason?: string | null
       routeCode: string
     }) {
@@ -900,7 +957,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           client,
           input.organizationId,
           workOrder.item_id,
-          input.routeCode
+          input.routeCode,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const current = await client.query<{ id: string }>(
           `
@@ -955,6 +1013,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       organizationId: string
       partCode?: string | null
       priority: string
+      productionFloorCode?: string
       queueBeforeSetups?: QueueBeforeSetupInput[]
       remark?: string | null
     }) {
@@ -1068,6 +1127,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       machineNumber: string
       organizationId: string
       planningMode?: string | null
+      productionFloorCode?: string
       queuePlacements?: QueuePlacementInput[]
       reason: string
       remark?: string | null
@@ -1079,7 +1139,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
         const machineId = await machineFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         await client.query(
           `
@@ -1156,6 +1217,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       interruptedSetups?: InterruptedSetupInput[]
       jobCardNumber: string
       organizationId: string
+      productionFloorCode?: string
       queuePlacements?: QueuePlacementInput[]
       reason: string
       setupNumber?: number | null
@@ -1170,13 +1232,15 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
         const targetMachineId = await machineFor(
           client,
           input.organizationId,
-          input.toMachineNumber
+          input.toMachineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const sourceMachineId = input.fromMachineNumber
           ? await machineFor(
               client,
               input.organizationId,
-              input.fromMachineNumber
+              input.fromMachineNumber,
+              normalizeProductionFloorCode(input.productionFloorCode)
             )
           : null
         const targetLock = await client.query<{ work_order_id: string }>(
@@ -1290,6 +1354,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       jobCardNumber: string
       newRouteCode: string
       organizationId: string
+      productionFloorCode?: string
       remainingSetups?: RemainingSetupInput[]
       reason: string
       wipQuantity?: number | null
@@ -1312,7 +1377,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           client,
           input.organizationId,
           workOrder.item_id,
-          input.newRouteCode
+          input.newRouteCode,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const created = await client.query<{ id: string }>(
           `

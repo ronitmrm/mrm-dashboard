@@ -31,6 +31,7 @@
     "./dashboard-domain": "./src/dashboard-domain.ts",
     "./planning-rules": "./src/planning-rules.ts",
     "./pricing-calculation": "./src/pricing-calculation.ts",
+    "./production-floors": "./src/production-floors.ts",
     "./schema": "./src/schema/index.ts"
   }
 }

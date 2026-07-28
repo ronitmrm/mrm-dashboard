@@ -6,6 +6,12 @@ import {
   dataEntryCorrectionTargetsWithWorkflowCascade,
   type CorrectionTargetRow,
 } from "./dashboard-corrections"
+import {
+  defaultProductionFloorCode,
+  productionFloorCodeForRecord,
+  productionFloors,
+  type ProductionFloorCode,
+} from "./production-floors"
 
 type JsonRecord = Record<string, unknown>
 type DashboardQueryClient = Pick<PoolClient, "query">
@@ -136,6 +142,22 @@ function countRowsByEntryType(rows: JsonRecord[]) {
     counts[row.entryType] = (counts[row.entryType] ?? 0) + 1
   }
   return counts
+}
+
+function floorRows(rows: JsonRecord[], floorCode: ProductionFloorCode) {
+  return rows.filter(
+    (row) => productionFloorCodeForRecord(row) === floorCode
+  )
+}
+
+function jsonRecord(value: unknown): JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : {}
+}
+
+function jsonRows(value: unknown) {
+  return Array.isArray(value) ? value.map(jsonRecord) : []
 }
 
 export async function readCanonicalDashboardSource(
@@ -382,6 +404,134 @@ export async function buildCanonicalDashboardReadModel(
     table: string
   ) => withoutCorrectedRows(rows as Row[], table, correctionTargets)
 
+  const previousModel = await client.query<{ payload: unknown }>(
+    `
+      SELECT payload
+      FROM derived.dashboard_read_models
+      WHERE organization_id = $1
+      ORDER BY version DESC
+      LIMIT 1
+    `,
+    [context.organizationId]
+  )
+  const previousPayload = jsonRecord(previousModel.rows[0]?.payload)
+  const previousFloorSnapshots = jsonRecord(
+    previousPayload.productionFloorSnapshots
+  )
+
+  function previousMachinePlanRows(floorCode: ProductionFloorCode) {
+    const floorPayload =
+      floorCode === defaultProductionFloorCode
+        ? jsonRecord(
+            previousFloorSnapshots[floorCode] ?? previousPayload
+          )
+        : jsonRecord(previousFloorSnapshots[floorCode])
+    return jsonRows(
+      jsonRecord(floorPayload.productionControl).machinePlanDetailRows
+    ).map((row) => ({
+      jcNo: row.jcNo,
+      machine: row.machine,
+      optionNumber: row.optionNumber,
+      partCode: row.partCode,
+      routeMachine: row.routeMachine,
+      setupNo: row.setupNo,
+    }))
+  }
+
+  function buildFloorPayload(floorCode: ProductionFloorCode) {
+    const floorDataEntries = floorRows(dataEntries, floorCode)
+    const floorCorrections = floorRows(source.corrections, floorCode)
+    const floorUpdatedAt = latestCreatedAt(
+      floorRows(source.productionEntries, floorCode),
+      floorRows(source.attendanceRecords, floorCode),
+      floorRows(source.trainingRecords, floorCode),
+      floorRows(source.routeSelections, floorCode),
+      floorRows(source.plannerPriorities, floorCode),
+      floorRows(source.machineConstraints, floorCode),
+      floorRows(source.planOverrides, floorCode),
+      floorRows(source.routeChanges, floorCode),
+      floorRows(source.dispatchApprovals, floorCode),
+      floorRows(source.setupCompletions, floorCode),
+      floorDataEntries,
+      floorCorrections
+    )
+    const snapshot = buildLegacyDashboardSnapshot({
+      attendanceRecords: floorRows(
+        corrected(source.attendanceRecords, "attendanceRecords"),
+        floorCode
+      ) as never,
+      dataEntries: floorDataEntries as never,
+      dispatchApprovals: floorRows(
+        corrected(source.dispatchApprovals, "dispatchApprovals"),
+        floorCode
+      ),
+      filters: {},
+      machineConstraints: floorRows(
+        corrected(source.machineConstraints, "machineConstraints"),
+        floorCode
+      ),
+      planOverrides: floorRows(
+        corrected(source.planOverrides, "planOverrides"),
+        floorCode
+      ),
+      plannerPriorities: floorRows(
+        corrected(source.plannerPriorities, "plannerPriorities"),
+        floorCode
+      ),
+      previousMachinePlanDetailRows: previousMachinePlanRows(floorCode),
+      productionEntries: floorRows(
+        corrected(source.productionEntries, "productionEntries"),
+        floorCode
+      ) as never,
+      routeChanges: floorRows(
+        corrected(source.routeChanges, "routeChanges"),
+        floorCode
+      ),
+      routeSelections: floorRows(
+        corrected(source.routeSelections, "routeSelections"),
+        floorCode
+      ),
+      setupCompletions: floorRows(
+        corrected(source.setupCompletions, "setupCompletions"),
+        floorCode
+      ),
+      trainingRecords: floorRows(
+        corrected(source.trainingRecords, "trainingRecords"),
+        floorCode
+      ) as never,
+      updatedAt: floorUpdatedAt,
+      workbookName: "PostgreSQL",
+    })
+    const liveCounts = countRowsByEntryType(floorDataEntries)
+    return {
+      ...snapshot,
+      cacheStatus: "ready",
+      productionFloorCode: floorCode,
+      dataEntry: {
+        ...snapshot.dataEntry,
+        corrections: floorCorrections,
+        entryTypes: legacyEntryTypes,
+        keySummary: legacyEntryTypes.map((entryType) => ({
+          entryType,
+          rows: liveCounts[entryType] ?? 0,
+        })),
+        templates: legacyEntryTypes.map((entryType) => ({
+          entryType,
+          format: "xlsx",
+        })),
+      },
+    } as JsonRecord
+  }
+
+  const productionFloorSnapshots = Object.fromEntries(
+    productionFloors.map((floor) => [
+      floor.code,
+      buildFloorPayload(floor.code),
+    ])
+  )
+  const defaultSnapshot = productionFloorSnapshots[
+    defaultProductionFloorCode
+  ] as JsonRecord
   const updatedAt = latestCreatedAt(
     source.productionEntries,
     source.attendanceRecords,
@@ -396,83 +546,12 @@ export async function buildCanonicalDashboardReadModel(
     dataEntries,
     source.corrections
   )
-  const previousModel = await client.query<{ machine_plan_rows: unknown }>(
-    `
-      SELECT payload->'productionControl'->'machinePlanDetailRows'
-        AS machine_plan_rows
-      FROM derived.dashboard_read_models
-      WHERE organization_id = $1
-      ORDER BY version DESC
-      LIMIT 1
-    `,
-    [context.organizationId]
-  )
-  const previousMachinePlanDetailRows = Array.isArray(
-    previousModel.rows[0]?.machine_plan_rows
-  )
-    ? previousModel.rows[0].machine_plan_rows.map((value) => {
-        const row =
-          typeof value === "object" && value !== null && !Array.isArray(value)
-            ? (value as JsonRecord)
-            : {}
-        return {
-          jcNo: row.jcNo,
-          machine: row.machine,
-          optionNumber: row.optionNumber,
-          partCode: row.partCode,
-          routeMachine: row.routeMachine,
-          setupNo: row.setupNo,
-        }
-      })
-    : []
-  const snapshot = buildLegacyDashboardSnapshot({
-    attendanceRecords: corrected(
-      source.attendanceRecords,
-      "attendanceRecords"
-    ) as never,
-    dataEntries: dataEntries as never,
-    dispatchApprovals: corrected(source.dispatchApprovals, "dispatchApprovals"),
-    filters: {},
-    machineConstraints: corrected(
-      source.machineConstraints,
-      "machineConstraints"
-    ),
-    planOverrides: corrected(source.planOverrides, "planOverrides"),
-    plannerPriorities: corrected(source.plannerPriorities, "plannerPriorities"),
-    previousMachinePlanDetailRows,
-    productionEntries: corrected(
-      source.productionEntries,
-      "productionEntries"
-    ) as never,
-    routeChanges: corrected(source.routeChanges, "routeChanges"),
-    routeSelections: corrected(source.routeSelections, "routeSelections"),
-    setupCompletions: corrected(source.setupCompletions, "setupCompletions"),
-    trainingRecords: corrected(
-      source.trainingRecords,
-      "trainingRecords"
-    ) as never,
-    updatedAt,
-    workbookName: "PostgreSQL",
-  })
-  const liveCounts = countRowsByEntryType(dataEntries)
 
   return {
     payload: {
-      ...snapshot,
-      cacheStatus: "ready",
-      dataEntry: {
-        ...snapshot.dataEntry,
-        corrections: source.corrections,
-        entryTypes: legacyEntryTypes,
-        keySummary: legacyEntryTypes.map((entryType) => ({
-          entryType,
-          rows: liveCounts[entryType] ?? 0,
-        })),
-        templates: legacyEntryTypes.map((entryType) => ({
-          entryType,
-          format: "xlsx",
-        })),
-      },
+      ...defaultSnapshot,
+      productionFloorSnapshots,
+      productionFloors,
     } as JsonRecord,
     sourceWatermark: { changedAt: updatedAt || null },
   }

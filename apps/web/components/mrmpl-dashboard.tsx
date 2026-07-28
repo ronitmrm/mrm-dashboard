@@ -62,10 +62,15 @@ import {
 } from "@workspace/ui/components/table";
 
 import {
+  dashboardPayloadForProductionFloor,
   dateSortValue,
+  defaultProductionFloorCode,
   formatNumber,
   jobCardScheduleSummary,
+  normalizeProductionFloorCode,
+  productionFloors,
   toDashboardViewModel,
+  type ProductionFloorCode,
 } from "@/lib/dashboard-view-model";
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
 import {
@@ -145,16 +150,22 @@ type MaintenanceChecklistStepDraft = {
   remark: string;
 };
 
-function initialDashboardTabFromLocation(): DashboardTabId {
-  if (typeof window === "undefined") return "productionControlTab";
-  const tab = new URLSearchParams(window.location.search).get("tab") as DashboardTabId | null;
-  return validDashboardTab(tab) ?? "productionControlTab";
+function productionFloorFromLocation(): ProductionFloorCode {
+  if (typeof window === "undefined") return defaultProductionFloorCode;
+  return normalizeProductionFloorCode(
+    new URLSearchParams(window.location.search).get("floor"),
+  );
 }
 
 function dashboardReturnHref(defaultTab: DashboardTabId) {
-  if (typeof window === "undefined") return dashboardTabHref(defaultTab);
+  if (typeof window === "undefined") {
+    return dashboardTabHref(defaultTab, defaultProductionFloorCode);
+  }
   const returnTab = new URLSearchParams(window.location.search).get("returnTab") as DashboardTabId | null;
-  return dashboardTabHref(validDashboardTab(returnTab) ?? defaultTab);
+  return dashboardTabHref(
+    validDashboardTab(returnTab) ?? defaultTab,
+    productionFloorFromLocation(),
+  );
 }
 
 function validDashboardTab(tab: DashboardTabId | null) {
@@ -511,8 +522,13 @@ function usePostgresDashboardPage(url: string | null, pollIntervalMs = 0) {
 }
 
 async function savePostgresDashboardEntry(entryType: string, payload: DashboardPayload) {
+  const productionFloorCode = productionFloorFromLocation();
   const response = await fetch("/api/data-entry", {
-    body: JSON.stringify({ entryType, payload }),
+    body: JSON.stringify({
+      entryType,
+      productionFloorCode,
+      payload: { ...payload, productionFloorCode },
+    }),
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     method: "POST",
@@ -525,22 +541,45 @@ async function savePostgresDashboardEntry(entryType: string, payload: DashboardP
 }
 
 export function MrmplDashboard({
+  initialDashboardTab = "productionControlTab",
+  initialProductionFloor = defaultProductionFloorCode,
   navigationAccess,
   user,
 }: {
+  initialDashboardTab?: DashboardTabId;
+  initialProductionFloor?: ProductionFloorCode;
   navigationAccess: UnifiedNavigationAccess;
   user: { email: string; name: string };
 }) {
-  return <DashboardShell navigationAccess={navigationAccess} user={user} />;
+  return (
+    <DashboardShell
+      initialDashboardTab={initialDashboardTab}
+      initialProductionFloor={initialProductionFloor}
+      navigationAccess={navigationAccess}
+      user={user}
+    />
+  );
 }
 
 
-export function HourlyQualityCheckPage() {
-  return <HourlyQualityCheckShell />;
+export function HourlyQualityCheckPage({
+  productionFloorCode = defaultProductionFloorCode,
+}: {
+  productionFloorCode?: ProductionFloorCode;
+}) {
+  return (
+    <HourlyQualityCheckShell productionFloorCode={productionFloorCode} />
+  );
 }
 
-function HourlyQualityCheckShell() {
-  const hourlyQualityPage = usePostgresDashboardPage("/api/hourly-quality");
+function HourlyQualityCheckShell({
+  productionFloorCode,
+}: {
+  productionFloorCode: ProductionFloorCode;
+}) {
+  const hourlyQualityPage = usePostgresDashboardPage(
+    `/api/hourly-quality?floor=${encodeURIComponent(productionFloorCode)}`,
+  );
   const hourlyQualityPageData = hourlyQualityPage.data;
   const [prodDate, setProdDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [shift, setShift] = useState("Day");
@@ -565,7 +604,9 @@ function HourlyQualityCheckShell() {
   );
   const selectedCheckKey = selectedRow ? hourlyQualityCheckId(selectedRow, prodDate, shift, hourSlot) : "";
   const existingCheckPage = usePostgresDashboardPage(
-    selectedCheckKey ? `/api/hourly-quality?checkKey=${encodeURIComponent(selectedCheckKey)}` : null,
+    selectedCheckKey
+      ? `/api/hourly-quality?checkKey=${encodeURIComponent(selectedCheckKey)}&floor=${encodeURIComponent(productionFloorCode)}`
+      : null,
   );
   const existingCheck = selectedCheckKey
     ? existingCheckPage.data?.existingCheck as DashboardPayload | null | undefined
@@ -732,8 +773,12 @@ function HourlyQualityCheckShell() {
 }
 
 
-export function SetupChecklistPage() {
-  return <SetupChecklistShell />;
+export function SetupChecklistPage({
+  productionFloorCode = defaultProductionFloorCode,
+}: {
+  productionFloorCode?: ProductionFloorCode;
+}) {
+  return <SetupChecklistShell productionFloorCode={productionFloorCode} />;
 }
 
 function setupChecklistQueryFromLocation() {
@@ -756,11 +801,17 @@ function setupChecklistQueryFromLocation() {
   };
 }
 
-function SetupChecklistShell() {
+function SetupChecklistShell({
+  productionFloorCode,
+}: {
+  productionFloorCode: ProductionFloorCode;
+}) {
   const isClientHydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
   const { sessionId, phase, row } = isClientHydrated ? setupChecklistQueryFromLocation() : { sessionId: "", phase: "", row: {} as DashboardPayload };
   const checklistPage = usePostgresDashboardPage(
-    sessionId ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}` : null,
+    sessionId
+      ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}&floor=${encodeURIComponent(productionFloorCode)}`
+      : null,
   );
   const checklistPageData = checklistPage.data;
   const [localChecklistSession, setLocalChecklistSession] = useState<DashboardPayload | undefined>(undefined);
@@ -913,13 +964,20 @@ function SetupChecklistShell() {
 }
 
 function DashboardShell({
+  initialDashboardTab,
+  initialProductionFloor,
   navigationAccess,
   user,
 }: {
+  initialDashboardTab: DashboardTabId;
+  initialProductionFloor: ProductionFloorCode;
   navigationAccess: UnifiedNavigationAccess;
   user: { email: string; name: string };
 }) {
-  const [activeTab, setActiveTab] = useState<DashboardTabId>(() => initialDashboardTabFromLocation());
+  const [activeTab, setActiveTab] = useState<DashboardTabId>(initialDashboardTab);
+  const [activeProductionFloor] = useState<ProductionFloorCode>(
+    initialProductionFloor,
+  );
   const [preferredDataEntryType, setPreferredDataEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
   const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
@@ -1043,14 +1101,34 @@ function DashboardShell({
   }
 
   function openFirstPieceInspection(row: DashboardPayload) {
+    const scopedRow = {
+      ...row,
+      productionFloorCode: activeProductionFloor,
+    };
     setFirstPieceInspectionTasks((openTasks) => {
-      const key = shopFloorPlanKey(row);
+      const key = shopFloorPlanKey(scopedRow);
       if (openTasks.some((task) => shopFloorPlanKey(task) === key)) return openTasks;
-      const nextTasks = [...openTasks, row];
+      const nextTasks = [...openTasks, scopedRow];
       writeStoredFirstPieceInspectionTasks(nextTasks);
       return nextTasks;
     });
     setActiveTab("firstPieceInspectionTab");
+  }
+
+  function selectDashboardDestination(
+    tab: DashboardTabId,
+    productionFloorCode: ProductionFloorCode,
+  ) {
+    if (productionFloorCode !== activeProductionFloor) {
+      window.location.assign(dashboardTabHref(tab, productionFloorCode));
+      return;
+    }
+    setActiveTab(tab);
+    window.history.replaceState(
+      {},
+      "",
+      dashboardTabHref(tab, productionFloorCode),
+    );
   }
 
   function closeFirstPieceInspection(row: DashboardPayload) {
@@ -1064,8 +1142,15 @@ function DashboardShell({
 
   const isDashboardLoading = dashboardPayload === undefined;
   const basePayload = useMemo(
-    () => (isDashboardLoading ? {} : asRecord(dashboardPayload)),
-    [dashboardPayload, isDashboardLoading],
+    () => (
+      isDashboardLoading
+        ? ({} as DashboardPayload)
+        : dashboardPayloadForProductionFloor(
+            dashboardPayload,
+            activeProductionFloor,
+          )
+    ),
+    [activeProductionFloor, dashboardPayload, isDashboardLoading],
   );
   const snapshotUpdatedAt = str(basePayload.updatedAt);
   const planningRecalculatedAt = str(basePayload.snapshotCacheUpdatedAt)
@@ -1083,6 +1168,9 @@ function DashboardShell({
     [basePayload, optimisticShopFloorStatuses, optimisticSetupChecklistSessions, optimisticProductionCards],
   );
   const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
+  const selectedProductionFloor = productionFloors.find(
+    (floor) => floor.code === activeProductionFloor,
+  ) ?? productionFloors[0];
   const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
 
   const view = useMemo(
@@ -1101,7 +1189,10 @@ function DashboardShell({
     >
       <Sidebar variant="inset">
         <SidebarHeader>
-          <Link className="flex items-center px-2 py-2" href="/">
+          <Link
+            className="flex items-center px-2 py-2"
+            href={dashboardTabHref("productionControlTab", activeProductionFloor)}
+          >
             <Image
               src="/mrm-green.svg"
               alt="MRMPL"
@@ -1115,8 +1206,9 @@ function DashboardShell({
         <SidebarContent>
           <UnifiedSidebarNavigation
             activeDashboardTab={activeTab}
+            activeProductionFloor={activeProductionFloor}
             navigationAccess={navigationAccess}
-            onDashboardTabSelect={setActiveTab}
+            onDashboardTabSelect={selectDashboardDestination}
           />
         </SidebarContent>
         <SidebarFooter>
@@ -1132,12 +1224,15 @@ function DashboardShell({
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-5" />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-semibold">{selectedTab.title}</h1>
+           <h1 className="truncate text-base font-semibold">{selectedTab.title}</h1>
             <p className="truncate text-xs text-muted-foreground">
-              <span>{planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live workbook snapshot"}</span>
+              <span>{selectedProductionFloor.label} · {planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live PostgreSQL records"}</span>
               {planningRecalculatedAt && view.updatedAt ? <span> - Workbook updated {formatDate(view.updatedAt)}</span> : null}
             </p>
           </div>
+          <Badge className="hidden sm:inline-flex" variant="outline">
+            {selectedProductionFloor.shortLabel}
+          </Badge>
           <Badge variant="outline">
             {isDashboardLoading ? "Loading" : "Connected"}
           </Badge>
@@ -3831,7 +3926,13 @@ function RoleTaskPanel({
         <CardContent className="grid gap-4">
           {role === "quality" ? (
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => { window.location.assign("/dashboard/hourly-quality-check?returnTab=qualityControlTasksTab"); }}>
+              <Button type="button" variant="outline" size="sm" onClick={() => {
+                const params = new URLSearchParams({
+                  floor: productionFloorFromLocation(),
+                  returnTab: "qualityControlTasksTab",
+                });
+                window.location.assign(`/dashboard/hourly-quality-check?${params.toString()}`);
+              }}>
                 <Gauge className="size-4" />
                 Hourly quality check
               </Button>
@@ -5943,11 +6044,11 @@ function MachineMasterPanel({
   const resultOptions = uniqueValues(machineHistory.map((row) => displayValue(row.result)).filter((value) => value !== "-"));
 
   function openMachine(machineNo: string) {
-    window.location.assign(`${dashboardTabHref("machineMasterTab")}&machine=${encodeURIComponent(machineNo)}`);
+    window.location.assign(`${dashboardTabHref("machineMasterTab", productionFloorFromLocation())}&machine=${encodeURIComponent(machineNo)}`);
   }
 
   function closeMachine() {
-    window.location.assign(dashboardTabHref("machineMasterTab"));
+    window.location.assign(dashboardTabHref("machineMasterTab", productionFloorFromLocation()));
   }
 
   async function saveSchedule(event: FormEvent<HTMLFormElement>) {
@@ -8069,10 +8170,19 @@ function downloadApi(kind: "data-template", entryType: string) {
 }
 
 async function postDashboardApi(path: string, body: Record<string, unknown>): Promise<DashboardApiResult> {
+  const productionFloorCode = productionFloorFromLocation();
+  const bodyPayload = asRecord(body.payload);
+  const scopedBody = {
+    ...body,
+    productionFloorCode,
+    ...(Object.keys(bodyPayload).length
+      ? { payload: { ...bodyPayload, productionFloorCode } }
+      : {}),
+  };
   const response = await fetch(`/api/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(scopedBody),
   });
   const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) {
@@ -10040,12 +10150,27 @@ function storedSetupChecklistSessionKey(sessionId: string) {
 function readStoredFirstPieceInspectionTasks() {
   if (typeof window === "undefined") return [];
   return readFirstPieceInspectionTasksFromStorage(window.localStorage)
-    .filter((task) => Boolean(shopFloorPlanKey(task)));
+    .filter(
+      (task) =>
+        Boolean(shopFloorPlanKey(task)) &&
+        normalizeProductionFloorCode(task.productionFloorCode) ===
+          productionFloorFromLocation(),
+    );
 }
 
 function writeStoredFirstPieceInspectionTasks(tasks: DashboardPayload[]) {
   if (typeof window === "undefined") return;
-  writeFirstPieceInspectionTasksToStorage(window.localStorage, tasks);
+  const activeFloor = productionFloorFromLocation();
+  const otherFloorTasks = readFirstPieceInspectionTasksFromStorage(
+    window.localStorage,
+  ).filter(
+    (task) =>
+      normalizeProductionFloorCode(task.productionFloorCode) !== activeFloor,
+  );
+  writeFirstPieceInspectionTasksToStorage(
+    window.localStorage,
+    [...otherFloorTasks, ...tasks],
+  );
 }
 
 function mergeFirstPieceInspectionTasks(...taskGroups: DashboardPayload[][]) {
@@ -10093,6 +10218,9 @@ function setupChecklistPageHref(row: DashboardPayload, phase: string) {
     setupName: displayValue(row.setupName),
     machine: displayValue(row.machine),
     machineType: displayValue(row.machineType),
+    floor: normalizeProductionFloorCode(
+      row.productionFloorCode ?? productionFloorFromLocation(),
+    ),
     returnTab: "machinistTasksTab",
   });
   return `/dashboard/setup-checklist?${params.toString()}`;

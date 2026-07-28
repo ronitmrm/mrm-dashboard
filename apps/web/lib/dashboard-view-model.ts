@@ -1,4 +1,18 @@
+import {
+  defaultProductionFloorCode,
+  normalizeProductionFloorCode,
+  productionFloors,
+  type ProductionFloorCode,
+} from "@workspace/db/production-floors";
+
 export type DashboardRecord = Record<string, unknown>;
+
+export {
+  defaultProductionFloorCode,
+  normalizeProductionFloorCode,
+  productionFloors,
+  type ProductionFloorCode,
+};
 
 export type DashboardRankedRow = {
   label: string;
@@ -50,6 +64,28 @@ export type DashboardViewModel = {
 const numberFormatter = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 1,
 });
+
+export function dashboardPayloadForProductionFloor(
+  payload: unknown,
+  requestedFloor: unknown,
+): DashboardRecord {
+  const dashboard = isRecord(payload) ? payload : {};
+  const floorCode = normalizeProductionFloorCode(requestedFloor);
+  const snapshots = isRecord(dashboard.productionFloorSnapshots)
+    ? dashboard.productionFloorSnapshots
+    : {};
+  const selected = isRecord(snapshots[floorCode])
+    ? snapshots[floorCode]
+    : floorCode === defaultProductionFloorCode
+      ? dashboard
+      : {};
+  return {
+    ...selected,
+    productionFloorCode: floorCode,
+    productionFloorSnapshots: snapshots,
+    productionFloors,
+  };
+}
 
 export function toDashboardViewModel(payload: unknown): DashboardViewModel {
   const data = isRecord(payload) ? payload : {};

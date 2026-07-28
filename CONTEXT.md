@@ -44,6 +44,10 @@ _Avoid_: Load balancing every recalculation.
 A route-level machine code such as `D5` or `C5` that represents a physical-machine family. Future planning requires at least one active physical machine in machine master for that family, such as `D501`; otherwise the work order is flagged and no unstarted machine plan row is created.
 _Avoid_: Pseudo-machine.
 
+**Production Floor**:
+An independent production operation with its own team, machines, routes, cycle standards, inspection parameters, planning, tasks, and entries. Conventional, CNC, and Forging are separate production floors; records from one floor never participate in another floor's planning or task queues.
+_Avoid_: Department, machine group, production-floor filter.
+
 **Priority Plan Scenario**:
 The setup-by-setup decision flow shown before saving a planner priority change. It opens one setup at a time; downstream setup dates are hidden until the previous setup action is confirmed.
 _Avoid_: Single probable date.

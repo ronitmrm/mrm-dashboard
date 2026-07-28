@@ -76,7 +76,8 @@ async function authorizedActor(request: NextRequest, capability: string) {
 
 export async function readPostgresHourlyQualityPage(
   request: NextRequest,
-  checkKey?: string | null
+  checkKey?: string | null,
+  productionFloorCode?: string | null
 ) {
   const actor = await authorizedActor(request, "operations.dashboard.read")
   return withPostgresRepository(
@@ -86,6 +87,7 @@ export async function readPostgresHourlyQualityPage(
       const page = await repository.readHourlyQualityPage({
         checkKey,
         organizationId,
+        productionFloorCode: productionFloorCode ?? undefined,
       })
       return {
         ...page,
@@ -102,7 +104,8 @@ export async function readPostgresHourlyQualityPage(
 
 export async function readPostgresSetupChecklistPage(
   request: NextRequest,
-  sessionKey?: string | null
+  sessionKey?: string | null,
+  productionFloorCode?: string | null
 ) {
   const actor = await authorizedActor(request, "operations.dashboard.read")
   return withPostgresRepository(
@@ -111,6 +114,7 @@ export async function readPostgresSetupChecklistPage(
       const organizationId = await repository.organizationIdForCode("MRMPL")
       return await repository.readSetupChecklistPage({
         organizationId,
+        productionFloorCode: productionFloorCode ?? undefined,
         sessionKey,
       })
     }

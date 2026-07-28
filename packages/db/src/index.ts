@@ -42,6 +42,13 @@ export {
 } from "./recruitment"
 export { createQualityRepository } from "./quality"
 export { createProductionShopFloorRepository } from "./production-shop-floor"
+export {
+  defaultProductionFloorCode,
+  normalizeProductionFloorCode,
+  productionFloorCodeForRecord,
+  productionFloors,
+  type ProductionFloorCode,
+} from "./production-floors"
 export { createWorkforceRepository } from "./workforce"
 export { createDatabase } from "./database"
 export { createInitialAdministratorProvisioner } from "./initial-administrator"

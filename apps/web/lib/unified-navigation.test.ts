@@ -20,7 +20,10 @@ describe("unified navigation", () => {
     )
     const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
-    expect(nativeLinks).toHaveLength(4)
+    expect(nativeLinks).toHaveLength(3)
+    expect(source).toContain(
+      "<a href={dashboardTabHref(item.id, floor.code)}>"
+    )
     expect(source).not.toContain('from "next/link"')
     expect(source).not.toContain("router.prefetch")
   })
@@ -59,6 +62,9 @@ describe("unified navigation", () => {
 
   it("creates shareable links for operations tabs", () => {
     expect(dashboardTabHref("maintenanceTab")).toBe("/?tab=maintenanceTab")
+    expect(dashboardTabHref("maintenanceTab", "cnc")).toBe(
+      "/?tab=maintenanceTab&floor=cnc"
+    )
   })
 
   it("matches the selected HR panel instead of every HR link", () => {
