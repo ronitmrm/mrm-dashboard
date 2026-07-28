@@ -131,11 +131,13 @@ export function UnifiedSidebarNavigation({
           label="HR Recruitment"
           onOpenChange={(open) => setSectionOpen("hr", open)}
           open={expandedSections.hr}
+          submoduleCount={visibleHrNavigation.length}
         >
           {visibleHrNavigation.map((item) => (
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
+                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary/10 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -158,11 +160,13 @@ export function UnifiedSidebarNavigation({
           label="Costing"
           onOpenChange={(open) => setSectionOpen("costing", open)}
           open={expandedSections.costing}
+          submoduleCount={visibleCommercialNavigation.length}
         >
           {visibleCommercialNavigation.map((item) => (
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
+                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary/10 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -185,11 +189,13 @@ export function UnifiedSidebarNavigation({
           label="Production Floor"
           onOpenChange={(open) => setSectionOpen("production", open)}
           open={expandedSections.production}
+          submoduleCount={dashboardNavigation.length}
         >
           {dashboardNavigation.map((item) => (
             <SidebarMenuSubItem key={item.id}>
               <SidebarMenuSubButton
                 asChild
+                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary/10 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
                 isActive={item.id === activeDashboardTab}
               >
                 {onDashboardTabSelect ? (
@@ -248,35 +254,51 @@ function NavigationSection({
   label,
   onOpenChange,
   open,
+  submoduleCount,
 }: {
   children: React.ReactNode
   icon: typeof Factory
   label: string
   onOpenChange: (open: boolean) => void
   open: boolean
+  submoduleCount: number
 }) {
   return (
     <Collapsible
-      className="group/collapsible"
+      className="group/collapsible px-2 py-1"
       onOpenChange={onOpenChange}
       open={open}
     >
-      <SidebarGroup className="py-1">
+      <SidebarGroup className="p-0">
         <SidebarMenu>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="overflow-hidden rounded-xl border border-sidebar-border/70 bg-sidebar/70 transition-colors group-data-[state=open]/collapsible:bg-sidebar-accent/25">
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
-                className="font-medium"
-                isActive={open}
+                className="h-11 rounded-xl px-2.5 font-semibold hover:bg-sidebar-accent/70 data-[state=open]:bg-transparent"
                 type="button"
               >
-                <Icon />
-                <span>{label}</span>
-                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary/10 text-sidebar-primary ring-1 ring-sidebar-primary/15">
+                  <Icon className="size-4" />
+                </span>
+                <span className="truncate text-[13px]">{label}</span>
+                <span
+                  aria-hidden="true"
+                  className="ml-auto min-w-6 rounded-md border border-sidebar-border/70 bg-background/70 px-1.5 py-0.5 text-center text-[10px] font-semibold tabular-nums text-muted-foreground"
+                >
+                  {submoduleCount}
+                </span>
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90">
+                  <ChevronRight className="size-3.5" />
+                </span>
               </SidebarMenuButton>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <SidebarMenuSub>{children}</SidebarMenuSub>
+              <SidebarMenuSub
+                aria-label={`${label} submodules`}
+                className="mx-3 mb-2 mt-0 gap-0.5 border-sidebar-border/80 px-2 py-1"
+              >
+                {children}
+              </SidebarMenuSub>
             </CollapsibleContent>
           </SidebarMenuItem>
         </SidebarMenu>
