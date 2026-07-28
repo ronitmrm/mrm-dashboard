@@ -11,9 +11,11 @@ import {
   ChevronRight,
   CheckCircle2,
   Download,
+  FileText,
   Gauge,
   GripVertical,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Moon,
   Plus,
@@ -66,6 +68,15 @@ import {
   toDashboardViewModel,
 } from "@/lib/dashboard-view-model";
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
+import {
+  mergeFirstPieceInspectionTasks as mergeStoredFirstPieceInspectionTasks,
+  readFirstPieceInspectionDraft as readFirstPieceInspectionDraftFromStorage,
+  readFirstPieceInspectionTasks as readFirstPieceInspectionTasksFromStorage,
+  removeFirstPieceInspectionDraft as removeFirstPieceInspectionDraftFromStorage,
+  writeFirstPieceInspectionDraft as writeFirstPieceInspectionDraftToStorage,
+  writeFirstPieceInspectionTasks as writeFirstPieceInspectionTasksToStorage,
+  type FirstPieceInspectionDraft,
+} from "@/lib/first-piece-inspection-draft";
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { shopFloorNoPendingActionLabel } from "@/lib/shop-floor-workflow";
@@ -934,6 +945,15 @@ function DashboardShell({
     : false;
 
   useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setFirstPieceInspectionTasks((currentTasks) =>
+        mergeFirstPieceInspectionTasks(readStoredFirstPieceInspectionTasks(), currentTasks)
+      );
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
     const dashboardRecord = asRecord(dashboardPayload);
     if (!shouldRefreshStalePlanningSnapshot(dashboardRecord)) return;
     if (isPlanningRefreshLockActive || dashboardRefreshStatus?.isRefreshing) return;
@@ -1026,14 +1046,20 @@ function DashboardShell({
     setFirstPieceInspectionTasks((openTasks) => {
       const key = shopFloorPlanKey(row);
       if (openTasks.some((task) => shopFloorPlanKey(task) === key)) return openTasks;
-      return [...openTasks, row];
+      const nextTasks = [...openTasks, row];
+      writeStoredFirstPieceInspectionTasks(nextTasks);
+      return nextTasks;
     });
     setActiveTab("firstPieceInspectionTab");
   }
 
   function closeFirstPieceInspection(row: DashboardPayload) {
     const key = shopFloorPlanKey(row);
-    setFirstPieceInspectionTasks((openTasks) => openTasks.filter((task) => shopFloorPlanKey(task) !== key));
+    setFirstPieceInspectionTasks((openTasks) => {
+      const nextTasks = openTasks.filter((task) => shopFloorPlanKey(task) !== key);
+      writeStoredFirstPieceInspectionTasks(nextTasks);
+      return nextTasks;
+    });
   }
 
   const isDashboardLoading = dashboardPayload === undefined;
@@ -3943,6 +3969,8 @@ function FirstPieceInspectionPanel({
   onTaskComplete: (row: DashboardPayload) => void;
 }) {
   const masters = combinedQualityInspectionMasterRows(productionControl);
+  const reportRows = asArray(productionControl.firstPieceInspectionReportRows);
+  const [activeView, setActiveView] = useState<"tasks" | "reports">("tasks");
   const [expandedTaskKey, setExpandedTaskKey] = useState<string | null>(null);
   const defaultExpandedTaskKey = tasks[0] ? shopFloorPlanKey(tasks[0]) : "";
   const activeExpandedTaskKey = expandedTaskKey ?? defaultExpandedTaskKey;
@@ -3993,70 +4021,112 @@ function FirstPieceInspectionPanel({
   }
   return (
     <section className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>First Piece Inspection Report</CardTitle>
-          <CardDescription>Open quality approval reports stay here until they are saved. Saving the report completes the quality approval task.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {tasks.length ? (
-            <div className="overflow-hidden rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12"></TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Job card</TableHead>
-                    <TableHead>Machine</TableHead>
-                    <TableHead>Setup</TableHead>
-                    <TableHead>Option</TableHead>
-                    <TableHead>Task assigned</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tasks.map((task) => {
-                    const taskKey = shopFloorPlanKey(task);
-                    const expanded = activeExpandedTaskKey === taskKey;
-                    return (
-                      <Fragment key={taskKey}>
-                        <TableRow className="cursor-pointer" onClick={() => setExpandedTaskKey(expanded ? "" : taskKey)}>
-                          <TableCell>
-                            <Button type="button" variant="ghost" size="sm" className="size-8 p-0" aria-label={expanded ? "Collapse report" : "Expand report"}>
-                              {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-                            </Button>
-                          </TableCell>
-                          <TableCell className="font-medium">{itemCode(task)}</TableCell>
-                          <TableCell>{jobCardNumber(task)}</TableCell>
-                          <TableCell>{displayValue(task.machine)}</TableCell>
-                          <TableCell>{displayValue(task.setupNo)}</TableCell>
-                          <TableCell>{displayValue(task.optionNumber)}</TableCell>
-                          <TableCell>{displayValue(task.shopFloorUpdatedAt)}</TableCell>
-                        </TableRow>
-                        {expanded ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="bg-muted/15 p-4">
-                              <ShopFloorRowAction
-                                next={task}
-                                onSaveStage={saveStage}
-                                onSaveFirstPieceReport={saveFirstPieceReport}
-                                inspectionMasters={masters}
-                                openDataEntry={openDataEntry}
-                              />
+      <div
+        aria-label="First piece inspection views"
+        className="flex w-fit items-center gap-1 rounded-xl border bg-muted/40 p-1"
+        role="tablist"
+      >
+        <Button
+          aria-controls="first-piece-task-list"
+          aria-selected={activeView === "tasks"}
+          className="gap-2 rounded-lg"
+          onClick={() => setActiveView("tasks")}
+          role="tab"
+          size="sm"
+          type="button"
+          variant={activeView === "tasks" ? "default" : "ghost"}
+        >
+          <ListChecks className="size-4" />
+          Task list
+          <Badge variant="secondary">{tasks.length}</Badge>
+        </Button>
+        <Button
+          aria-controls="first-piece-saved-reports"
+          aria-selected={activeView === "reports"}
+          className="gap-2 rounded-lg"
+          onClick={() => setActiveView("reports")}
+          role="tab"
+          size="sm"
+          type="button"
+          variant={activeView === "reports" ? "default" : "ghost"}
+        >
+          <FileText className="size-4" />
+          Saved reports
+          <Badge variant="secondary">{reportRows.length}</Badge>
+        </Button>
+      </div>
+
+      {activeView === "tasks" ? (
+        <Card aria-labelledby="first-piece-task-list-title" id="first-piece-task-list" role="tabpanel">
+          <CardHeader>
+            <CardTitle id="first-piece-task-list-title">First piece inspection task list</CardTitle>
+            <CardDescription>
+              Open reports stay on this page until they are submitted. Partially completed readings are saved automatically in this browser.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {tasks.length ? (
+              <div className="overflow-hidden rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead>Item</TableHead>
+                      <TableHead>Job card</TableHead>
+                      <TableHead>Machine</TableHead>
+                      <TableHead>Setup</TableHead>
+                      <TableHead>Option</TableHead>
+                      <TableHead>Task assigned</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tasks.map((task) => {
+                      const taskKey = shopFloorPlanKey(task);
+                      const expanded = activeExpandedTaskKey === taskKey;
+                      return (
+                        <Fragment key={taskKey}>
+                          <TableRow className="cursor-pointer" onClick={() => setExpandedTaskKey(expanded ? "" : taskKey)}>
+                            <TableCell>
+                              <Button type="button" variant="ghost" size="sm" className="size-8 p-0" aria-label={expanded ? "Collapse report" : "Expand report"}>
+                                {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                              </Button>
                             </TableCell>
+                            <TableCell className="font-medium">{itemCode(task)}</TableCell>
+                            <TableCell>{jobCardNumber(task)}</TableCell>
+                            <TableCell>{displayValue(task.machine)}</TableCell>
+                            <TableCell>{displayValue(task.setupNo)}</TableCell>
+                            <TableCell>{displayValue(task.optionNumber)}</TableCell>
+                            <TableCell>{displayValue(task.shopFloorUpdatedAt)}</TableCell>
                           </TableRow>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <EmptyRowsMessage>Start a quality approval task from the Quality Control tab to open its first-piece report.</EmptyRowsMessage>
-          )}
-        </CardContent>
-      </Card>
-      <DataRowsCard title="First piece inspection reports" rows={asArray(productionControl.firstPieceInspectionReportRows)} empty="No first-piece reports saved yet" />
+                          {expanded ? (
+                            <TableRow>
+                              <TableCell colSpan={7} className="bg-muted/15 p-4">
+                                <ShopFloorRowAction
+                                  next={task}
+                                  onSaveStage={saveStage}
+                                  onSaveFirstPieceReport={saveFirstPieceReport}
+                                  inspectionMasters={masters}
+                                  openDataEntry={openDataEntry}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <EmptyRowsMessage>Start a quality approval task from the Quality Control tab to open its first-piece report here.</EmptyRowsMessage>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div aria-label="Saved first piece inspection reports" id="first-piece-saved-reports" role="tabpanel">
+          <DataRowsCard title="Saved first piece inspection reports" rows={reportRows} empty="No first-piece reports saved yet" />
+        </div>
+      )}
     </section>
   );
 }
@@ -4156,8 +4226,34 @@ function ShopFloorRowAction({
     ? matchingFirstPieceInspectionMasters(inspectionMasters, next)
     : [], [inspectionMasters, next, nextStage?.id]);
   const needsFirstPieceInspection = nextStage?.id === "quality_approval" && Boolean(onSaveFirstPieceReport);
+  const firstPieceDraftKey = needsFirstPieceInspection && next ? firstPieceReportKey(next) : "";
+  const [loadedFirstPieceDraftKey, setLoadedFirstPieceDraftKey] = useState("");
   const canSubmitInspection = !needsFirstPieceInspection
     || (firstPieceMasters.length > 0 && firstPieceMasters.every((master) => firstPieceReadingsFor(inspectionReadings, master).every(Boolean)));
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (!firstPieceDraftKey) {
+        setLoadedFirstPieceDraftKey("");
+        return;
+      }
+      const draft = readStoredFirstPieceInspectionDraft(firstPieceDraftKey);
+      setDoneBy(draft?.approvedBy ?? "");
+      setRemark(draft?.remark ?? "");
+      setInspectionReadings(draft?.readings ?? {});
+      setLoadedFirstPieceDraftKey(firstPieceDraftKey);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [firstPieceDraftKey]);
+
+  useEffect(() => {
+    if (!firstPieceDraftKey || loadedFirstPieceDraftKey !== firstPieceDraftKey) return;
+    writeStoredFirstPieceInspectionDraft(firstPieceDraftKey, {
+      approvedBy: doneBy,
+      readings: inspectionReadings,
+      remark,
+    });
+  }, [doneBy, firstPieceDraftKey, inspectionReadings, loadedFirstPieceDraftKey, remark]);
 
   function updateInspectionReading(master: DashboardPayload, pieceIndex: number, value: string) {
     const masterKey = firstPieceMasterKey(master);
@@ -4207,6 +4303,7 @@ function ShopFloorRowAction({
         firstPieceInspection,
         setupChecklist,
       });
+      if (firstPieceDraftKey) removeStoredFirstPieceInspectionDraft(firstPieceDraftKey);
       setDoneBy("");
       setWorker("");
       setRemark("");
@@ -4298,6 +4395,7 @@ function ShopFloorRowAction({
               readings={inspectionReadings}
               onReadingChange={updateInspectionReading}
               onAddMaster={openDataEntry}
+              showDraftSaved={loadedFirstPieceDraftKey === firstPieceDraftKey}
             />
           ) : null}
           <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection || !setupChecklistReady || isSubmitting} onClick={() => void submitNextStage()}>
@@ -4969,12 +5067,14 @@ function FirstPieceInspectionForm({
   readings,
   onReadingChange,
   onAddMaster,
+  showDraftSaved = false,
 }: {
   row: DashboardPayload;
   masters: DashboardPayload[];
   readings: Record<string, string[]>;
   onReadingChange: (master: DashboardPayload, pieceIndex: number, value: string) => void;
   onAddMaster?: (entryType: string, defaults?: Record<string, unknown>) => void;
+  showDraftSaved?: boolean;
 }) {
   const defaults = firstPieceMasterDefaults(row);
   if (!masters.length) {
@@ -4997,6 +5097,11 @@ function FirstPieceInspectionForm({
         <div>
           <div className="text-sm font-medium">First piece inspection report</div>
           <div className="text-xs text-muted-foreground">Task assigned: {displayValue(row.shopFloorUpdatedAt)}</div>
+          {showDraftSaved ? (
+            <div className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              Unfinished readings are saved automatically.
+            </div>
+          ) : null}
         </div>
         {onAddMaster ? (
           <Button type="button" size="sm" variant="outline" onClick={() => onAddMaster("quality_parameter_master", defaults)}>
@@ -9858,6 +9963,36 @@ function productionCardRuntimeMinutes(prodDate: string, startTime: string, endTi
 
 function storedSetupChecklistSessionKey(sessionId: string) {
   return `mrmpl:setup-checklist:${sessionId}`;
+}
+
+function readStoredFirstPieceInspectionTasks() {
+  if (typeof window === "undefined") return [];
+  return readFirstPieceInspectionTasksFromStorage(window.localStorage)
+    .filter((task) => Boolean(shopFloorPlanKey(task)));
+}
+
+function writeStoredFirstPieceInspectionTasks(tasks: DashboardPayload[]) {
+  if (typeof window === "undefined") return;
+  writeFirstPieceInspectionTasksToStorage(window.localStorage, tasks);
+}
+
+function mergeFirstPieceInspectionTasks(...taskGroups: DashboardPayload[][]) {
+  return mergeStoredFirstPieceInspectionTasks(shopFloorPlanKey, ...taskGroups);
+}
+
+function readStoredFirstPieceInspectionDraft(reportId: string): FirstPieceInspectionDraft | undefined {
+  if (typeof window === "undefined" || !reportId) return undefined;
+  return readFirstPieceInspectionDraftFromStorage(window.localStorage, reportId);
+}
+
+function writeStoredFirstPieceInspectionDraft(reportId: string, draft: FirstPieceInspectionDraft) {
+  if (typeof window === "undefined" || !reportId) return;
+  writeFirstPieceInspectionDraftToStorage(window.localStorage, reportId, draft);
+}
+
+function removeStoredFirstPieceInspectionDraft(reportId: string) {
+  if (typeof window === "undefined" || !reportId) return;
+  removeFirstPieceInspectionDraftFromStorage(window.localStorage, reportId);
 }
 
 function readStoredSetupChecklistSession(sessionId: string) {
