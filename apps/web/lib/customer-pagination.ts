@@ -1,13 +1,13 @@
-const productPageSize = 25
+const customerPageSize = 15
 
-export function productPageBounds(value: unknown) {
+export function customerPageBounds(value: unknown) {
   const raw = Array.isArray(value) ? value[0] : value
   const parsed = typeof raw === "string" ? Number(raw) : Number.NaN
   const page = Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1
 
   return {
-    limit: productPageSize,
-    offset: (page - 1) * productPageSize,
+    limit: customerPageSize,
+    offset: (page - 1) * customerPageSize,
     page,
   }
 }

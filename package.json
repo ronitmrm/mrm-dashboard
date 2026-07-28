@@ -10,6 +10,7 @@
     "dev:managed": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs",
     "dev:managed:check": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs --check",
     "dev:managed:web": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs --web-only",
+    "start:managed": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs --production",
     "dev:web": "turbo run dev --filter=web --ui=tui",
     "files:backup": "pnpm --filter @workspace/runtime files:backup",
     "files:restore": "pnpm --filter @workspace/runtime files:restore",

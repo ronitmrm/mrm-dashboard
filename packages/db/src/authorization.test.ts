@@ -36,4 +36,22 @@ describe("authorization repository", () => {
     ).resolves.toEqual([])
     expect(query).not.toHaveBeenCalled()
   })
+
+  test("loads every granted capability with one PostgreSQL query", async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [
+        { key: "pricing.products.read" },
+        { key: "pricing.design.read" },
+      ],
+    })
+    const repository = createAuthorizationRepository({
+      pool: { query } as unknown as Pool,
+    })
+
+    await expect(
+      repository.listAllGrantedCapabilities("user-1")
+    ).resolves.toEqual(["pricing.products.read", "pricing.design.read"])
+    expect(query).toHaveBeenCalledTimes(1)
+    expect(query.mock.calls[0]?.[1]).toEqual(["user-1"])
+  })
 })

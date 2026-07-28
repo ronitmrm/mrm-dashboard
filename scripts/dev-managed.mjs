@@ -12,6 +12,7 @@ const launcherArguments = seedAdmin
   : rawArguments
 const argumentsSet = new Set(launcherArguments)
 const checkOnly = argumentsSet.has("--check")
+const production = argumentsSet.has("--production")
 const webOnly = argumentsSet.has("--web-only")
 const workerOnce = argumentsSet.has("--worker-once")
 const workerStatus = argumentsSet.has("--worker-status")
@@ -113,6 +114,7 @@ const managedEnvironment = {
   MRM_MANAGED_RUNTIME: "1",
   NEXT_PUBLIC_APP_URL:
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001",
+  ...(production ? { PORT: "3001" } : {}),
   UPSTASH_REDIS_REST_TOKEN: upstash.token,
   UPSTASH_REDIS_REST_URL: upstash.url,
   WEB_DATABASE_POOL_MAX: process.env.WEB_DATABASE_POOL_MAX ?? "2",
@@ -124,7 +126,9 @@ const managedEnvironment = {
   ...(workerDatabaseUrl ? { WORKER_DATABASE_URL: workerDatabaseUrl } : {}),
 }
 
-console.log("Managed development target resolved (credentials omitted):")
+console.log(
+  `Managed ${production ? "production" : "development"} target resolved (credentials omitted):`
+)
 console.log(`  Neon: ${branch} / ${database}`)
 console.log(`  Upstash: ${upstashDatabase}`)
 if (!workerOnly && !seedAdmin) console.log("  App: http://localhost:3001")
@@ -148,7 +152,7 @@ if (seedAdmin) {
   )
 } else if (!workerOnly) {
   children.push(
-    spawnPnpm(["--filter", "web", "dev"], {
+    spawnPnpm(["--filter", "web", production ? "start" : "dev"], {
       detached: process.platform !== "win32",
       env: managedEnvironment,
       stdio: "inherit",

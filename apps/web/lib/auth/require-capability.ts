@@ -1,15 +1,13 @@
-import { createAuthorizationRepository } from "@workspace/db"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { cache } from "react"
 
-import { getAuth, readAuthEnvironment } from "./auth"
+import { getCachedAuthenticatedSession } from "./authenticated-session-cache"
+import { getAuthorizationGrants } from "./authorization-grants"
 import { safeReturnPath } from "./navigation"
 
 const getAuthenticatedSession = cache(async () =>
-  getAuth().api.getSession({
-    headers: await headers(),
-  })
+  getCachedAuthenticatedSession(await headers())
 )
 
 export async function requireCapability(
@@ -17,21 +15,9 @@ export async function requireCapability(
   returnPath: string
 ) {
   const session = await requireAuthenticatedSession(returnPath)
-
-  const authorization = createAuthorizationRepository({
-    connectionString: readAuthEnvironment().connectionString,
-  })
-
-  try {
-    const allowed = await authorization.hasCapability(
-      session.user.id,
-      capability
-    )
-    if (!allowed) {
-      redirect("/unauthorized")
-    }
-  } finally {
-    await authorization.close()
+  const grantedCapabilities = await getAuthorizationGrants(session.user.id)
+  if (!grantedCapabilities.has(capability)) {
+    redirect("/unauthorized")
   }
 
   return session
@@ -52,13 +38,8 @@ export async function listGrantedCapabilities(
   userId: string,
   capabilities: readonly string[]
 ) {
-  const authorization = createAuthorizationRepository({
-    connectionString: readAuthEnvironment().connectionString,
-  })
-
-  try {
-    return await authorization.listGrantedCapabilities(userId, capabilities)
-  } finally {
-    await authorization.close()
-  }
+  const grantedCapabilities = await getAuthorizationGrants(userId)
+  return capabilities.filter((capability) =>
+    grantedCapabilities.has(capability)
+  )
 }

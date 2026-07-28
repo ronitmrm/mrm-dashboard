@@ -13,19 +13,16 @@ import {
 } from "./unified-navigation"
 
 describe("unified navigation", () => {
-  it("does not prefetch every visible sidebar destination", () => {
+  it("uses native navigation for data-heavy sidebar destinations", () => {
     const source = readFileSync(
       new URL("../components/unified-sidebar-navigation.tsx", import.meta.url),
       "utf8"
     )
-    const links = source.match(/<Link\b[\s\S]*?\n\s*>/g) ?? []
+    const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
-    expect(links.length).toBeGreaterThan(0)
-    links.forEach((link) => {
-      expect(link).toContain("onFocus=")
-      expect(link).toContain("onMouseEnter=")
-      expect(link).toContain("prefetch={false}")
-    })
+    expect(nativeLinks).toHaveLength(4)
+    expect(source).not.toContain('from "next/link"')
+    expect(source).not.toContain("router.prefetch")
   })
 
   it("keeps every commercial destination tied to a permission", () => {

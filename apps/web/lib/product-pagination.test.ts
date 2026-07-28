@@ -5,7 +5,7 @@ import { productPageBounds } from "./product-pagination"
 describe("product pagination", () => {
   it("bounds the initial product register query", () => {
     expect(productPageBounds(undefined)).toEqual({
-      limit: 100,
+      limit: 25,
       offset: 0,
       page: 1,
     })
@@ -13,8 +13,8 @@ describe("product pagination", () => {
 
   it("maps later pages to a bounded offset", () => {
     expect(productPageBounds("3")).toEqual({
-      limit: 100,
-      offset: 200,
+      limit: 25,
+      offset: 50,
       page: 3,
     })
   })

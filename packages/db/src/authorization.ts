@@ -7,17 +7,18 @@ export function createAuthorizationRepository(
 ) {
   const { close, pool } = repositoryPool(options)
 
-  async function listGrantedCapabilities(
+  async function queryGrantedCapabilities(
     userId: string,
-    capabilities: readonly string[]
+    capabilities?: readonly string[]
   ) {
-    if (capabilities.length === 0) return []
-
+    const requestedFilter = capabilities
+      ? "WHERE key = ANY($2::text[])"
+      : ""
     const result = await pool.query<{ key: string }>(
       `WITH requested_permissions AS (
          SELECT id, key
          FROM identity.permissions
-         WHERE key = ANY($2::text[])
+         ${requestedFilter}
        ),
        active_overrides AS (
          SELECT overrides.permission_id,
@@ -53,9 +54,20 @@ export function createAuthorizationRepository(
            COALESCE(active_overrides.allowed, false)
            OR role_grants.permission_id IS NOT NULL
          )`,
-      [userId, capabilities]
+      capabilities ? [userId, capabilities] : [userId]
     )
-    const granted = new Set(result.rows.map(({ key }) => key))
+    return result.rows.map(({ key }) => key)
+  }
+
+  async function listGrantedCapabilities(
+    userId: string,
+    capabilities: readonly string[]
+  ) {
+    if (capabilities.length === 0) return []
+
+    const granted = new Set(
+      await queryGrantedCapabilities(userId, capabilities)
+    )
     return capabilities.filter((capability) => granted.has(capability))
   }
 
@@ -64,6 +76,10 @@ export function createAuthorizationRepository(
 
     async hasCapability(userId: string, capability: string) {
       return (await listGrantedCapabilities(userId, [capability])).length === 1
+    },
+
+    listAllGrantedCapabilities(userId: string) {
+      return queryGrantedCapabilities(userId)
     },
 
     listGrantedCapabilities,

@@ -1,4 +1,5 @@
 import { createCustomerRepository } from "@workspace/db"
+import { redirect } from "next/navigation"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -28,12 +29,18 @@ import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
+import { customerPageBounds } from "@/lib/customer-pagination"
 
 import { createCustomerAction, updateCustomerAction } from "./actions"
 
 export const dynamic = "force-dynamic"
 
-export default async function CustomersPage() {
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string | string[] }>
+}) {
+  const bounds = customerPageBounds((await searchParams).page)
   const session = await requireCapability(
     "pricing.masters.read",
     "/commercial/customers"
@@ -49,6 +56,14 @@ export default async function CustomersPage() {
   const customers = await repository
     .listForOrganization("MRMPL")
     .finally(() => repository.close())
+  const visibleCustomers = customers.slice(
+    bounds.offset,
+    bounds.offset + bounds.limit
+  )
+  if (!visibleCustomers.length && bounds.page > 1) {
+    redirect("/commercial/customers")
+  }
+  const totalPages = Math.max(1, Math.ceil(customers.length / bounds.limit))
 
   return (
     <div className="flex flex-col gap-6">
@@ -113,6 +128,40 @@ export default async function CustomersPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+            <span>
+              Showing {visibleCustomers.length ? bounds.offset + 1 : 0}–
+              {Math.min(bounds.offset + visibleCustomers.length, customers.length)}{" "}
+              of {customers.length} customers
+            </span>
+            <div className="flex items-center gap-2">
+              {bounds.page > 1 ? (
+                <Button asChild size="sm" variant="outline">
+                  <a href={`/commercial/customers?page=${bounds.page - 1}`}>
+                    Previous
+                  </a>
+                </Button>
+              ) : (
+                <Button disabled size="sm" variant="outline">
+                  Previous
+                </Button>
+              )}
+              <span>
+                Page {Math.min(bounds.page, totalPages)} of {totalPages}
+              </span>
+              {bounds.page < totalPages ? (
+                <Button asChild size="sm" variant="outline">
+                  <a href={`/commercial/customers?page=${bounds.page + 1}`}>
+                    Next
+                  </a>
+                </Button>
+              ) : (
+                <Button disabled size="sm" variant="outline">
+                  Next
+                </Button>
+              )}
+            </div>
+          </div>
           <div className="overflow-x-auto rounded-3xl border">
             <Table>
               <TableHeader>
@@ -127,8 +176,8 @@ export default async function CustomersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {customers.length ? (
-                  customers.map((customer) => {
+                {visibleCustomers.length ? (
+                  visibleCustomers.map((customer) => {
                     const formId = `customer-${customer.id}`
                     return (
                       <TableRow key={customer.id}>
