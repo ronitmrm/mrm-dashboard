@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest"
 
+import { deriveRecruitmentPostStatus } from "./recruitment"
 import {
-  deriveRecruitmentPostStatus,
+  nextRecruitmentPostIdentity,
   nextRecruitmentTemplateCode,
-} from "./recruitment"
+} from "./recruitment-codes"
 
 describe("deriveRecruitmentPostStatus", () => {
   test("marks a post occupied when an employee code is assigned", () => {
@@ -46,5 +47,31 @@ describe("nextRecruitmentTemplateCode", () => {
 
   test("starts an empty template register at JRT-0001", () => {
     expect(nextRecruitmentTemplateCode([])).toBe("JRT-0001")
+  })
+})
+
+describe("nextRecruitmentPostIdentity", () => {
+  test("generates the next post identity for a department and designation", () => {
+    expect(
+      nextRecruitmentPostIdentity({
+        departmentCode: "CK",
+        designationCode: "WK",
+        existingPostCodes: ["CK-WK-1", "CK-WK-10", "CK-HD-2", "AF-WK-30"],
+      })
+    ).toEqual({
+      postCode: "CK-WK-11",
+      vacancyCode: "CK-WK-11",
+      vacancyNumber: "11",
+    })
+  })
+
+  test("waits until department and designation are selected", () => {
+    expect(
+      nextRecruitmentPostIdentity({
+        departmentCode: "CK",
+        designationCode: "",
+        existingPostCodes: ["CK-WK-1"],
+      })
+    ).toBeNull()
   })
 })

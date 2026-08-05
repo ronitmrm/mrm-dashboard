@@ -90,10 +90,7 @@ export async function savePostAction(formData: FormData) {
       ...context,
       departmentCode: value(formData, "department_code"),
       designationCode: value(formData, "designation_code"),
-      postCode: value(formData, "post_code"),
       requirementTemplateCode: value(formData, "requirement_template_code"),
-      vacancyCode: value(formData, "vacancy_code"),
-      vacancyNumber: value(formData, "vacancy_number"),
     })
   )
 }

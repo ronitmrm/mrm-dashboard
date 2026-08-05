@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import type { Pool, PoolClient } from "pg"
 
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import { nextRecruitmentPostIdentity } from "./recruitment-codes"
 
 type MutationContext = {
   actorUserId?: string | null
@@ -99,16 +100,6 @@ export function deriveRecruitmentPostStatus(input: {
   return optional(input.employeeName) || optional(input.employeeCode)
     ? "Occupied"
     : "Vacant"
-}
-
-export function nextRecruitmentTemplateCode(templateCodes: Iterable<string>) {
-  let highestSequence = 0
-  for (const templateCode of templateCodes) {
-    const match = /^JRT-(\d+)$/i.exec(templateCode.trim())
-    if (!match?.[1]) continue
-    highestSequence = Math.max(highestSequence, Number(match[1]))
-  }
-  return `JRT-${String(highestSequence + 1).padStart(4, "0")}`
 }
 
 function money(value: unknown) {
@@ -617,13 +608,39 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       input: MutationContext & {
         departmentCode: string
         designationCode: string
-        postCode: string
         requirementTemplateCode?: string | null
-        vacancyCode: string
-        vacancyNumber: string
       }
     ) {
       return transaction(pool, async (client) => {
+        const departmentCode = required(input.departmentCode, "Department")
+        const designationCode = required(input.designationCode, "Designation")
+        await client.query(
+          `
+            SELECT pg_advisory_xact_lock(
+              hashtextextended(lower(concat($1, ':', $2, ':', $3)), 0)
+            )
+          `,
+          [input.organizationId, departmentCode, designationCode]
+        )
+        const existingPosts = await client.query<{ post_code: string }>(
+          `
+            SELECT post.post_code
+            FROM recruitment.posts post
+            JOIN recruitment.departments department
+              ON department.id = post.department_id
+            JOIN recruitment.designations designation
+              ON designation.id = post.designation_id
+            WHERE post.organization_id = $1
+              AND lower(department.code) = lower($2)
+              AND lower(designation.code) = lower($3)
+          `,
+          [input.organizationId, departmentCode, designationCode]
+        )
+        const identity = nextRecruitmentPostIdentity({
+          departmentCode,
+          designationCode,
+          existingPostCodes: existingPosts.rows.map((row) => row.post_code),
+        })!
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.posts (
@@ -654,14 +671,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `,
           [
             input.organizationId,
-            required(input.vacancyNumber, "Vacancy number"),
-            required(input.postCode, "Post code"),
-            required(input.vacancyCode, "Vacancy code"),
+            identity.vacancyNumber,
+            identity.postCode,
+            identity.vacancyCode,
             input.actorUserId ?? null,
             randomUUID(),
-            required(input.designationCode, "Designation"),
+            designationCode,
             optional(input.requirementTemplateCode) ?? "",
-            required(input.departmentCode, "Department"),
+            departmentCode,
           ]
         )
         if (!result.rows[0]) {
@@ -670,6 +687,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         await audit(client, {
           ...input,
           eventType: "recruitment.post.saved",
+          metadata: identity,
           targetId: result.rows[0].id,
           targetTable: "posts",
         })

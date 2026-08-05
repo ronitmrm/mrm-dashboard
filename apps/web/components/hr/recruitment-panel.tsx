@@ -44,6 +44,7 @@ import {
   saveTemplateAction,
   scheduleInterviewAction,
 } from "@/app/hr/actions"
+import { ApprovedPostFields } from "@/components/hr/approved-post-fields"
 
 type RecruitmentPanelProps = {
   canManageEmployees: boolean
@@ -423,60 +424,16 @@ function ApprovedPostPanel({
           panelId="approvedPostPanel"
           title="Approved post form"
         >
-          <TextField label="Post code" name="post_code" required />
-          <TextField label="Vacancy number" name="vacancy_number" required />
-          <TextField label="Vacancy code" name="vacancy_code" required />
-          <Field>
-            <FieldLabel htmlFor="post-department">Department</FieldLabel>
-            <NativeSelect
-              className="w-full"
-              id="post-department"
-              name="department_code"
-              required
-            >
-              <NativeSelectOption value="">
-                Select department
-              </NativeSelectOption>
-              {masters.departments.map((row) => (
-                <NativeSelectOption key={row.id} value={row.code}>
-                  {row.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="post-designation">Designation</FieldLabel>
-            <NativeSelect
-              className="w-full"
-              id="post-designation"
-              name="designation_code"
-              required
-            >
-              <NativeSelectOption value="">
-                Select designation
-              </NativeSelectOption>
-              {masters.designations.map((row) => (
-                <NativeSelectOption key={row.id} value={row.code}>
-                  {row.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="post-template">Job template</FieldLabel>
-            <NativeSelect
-              className="w-full"
-              id="post-template"
-              name="requirement_template_code"
-            >
-              <NativeSelectOption value="">No template</NativeSelectOption>
-              {templates.map((row) => (
-                <NativeSelectOption key={row.id} value={row.templateCode}>
-                  {row.templateCode} · {row.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
+          <ApprovedPostFields
+            departments={masters.departments}
+            designations={masters.designations}
+            existingPostCodes={posts.map((post) => post.postCode)}
+            templates={templates.map(({ id, name, templateCode }) => ({
+              id,
+              name,
+              templateCode,
+            }))}
+          />
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
             Save approved post
           </Button>
