@@ -1,10 +1,11 @@
-import type {
-  RecruitmentCandidateRow,
-  RecruitmentInterviewRow,
-  RecruitmentJobRow,
-  RecruitmentMasterSnapshot,
-  RecruitmentPostRow,
-  RecruitmentTemplateRow,
+import {
+  nextRecruitmentTemplateCode,
+  type RecruitmentCandidateRow,
+  type RecruitmentInterviewRow,
+  type RecruitmentJobRow,
+  type RecruitmentMasterSnapshot,
+  type RecruitmentPostRow,
+  type RecruitmentTemplateRow,
 } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -95,20 +96,31 @@ function PanelForm({
 }
 
 function TextField({
+  defaultValue,
   label,
   name,
+  readOnly,
   required,
   type = "text",
 }: {
+  defaultValue?: string
   label: string
   name: string
+  readOnly?: boolean
   required?: boolean
   type?: React.HTMLInputTypeAttribute
 }) {
   return (
     <Field>
       <FieldLabel htmlFor={name}>{label}</FieldLabel>
-      <Input id={name} name={name} required={required} type={type} />
+      <Input
+        defaultValue={defaultValue}
+        id={name}
+        name={name}
+        readOnly={readOnly}
+        required={required}
+        type={type}
+      />
     </Field>
   )
 }
@@ -209,6 +221,10 @@ function TemplatePanel({
   masters,
   templates,
 }: Pick<RecruitmentPanelProps, "canWrite" | "masters" | "templates">) {
+  const templateCode = nextRecruitmentTemplateCode(
+    templates.map((template) => template.templateCode)
+  )
+
   return (
     <>
       {canWrite ? (
@@ -218,7 +234,13 @@ function TemplatePanel({
           panelId="postMasterPanel"
           title="Job requirement template"
         >
-          <TextField label="Template code" name="template_code" required />
+          <TextField
+            defaultValue={templateCode}
+            label="Template code (auto-generated)"
+            name="template_code"
+            readOnly
+            required
+          />
           <TextField label="Template name" name="name" required />
           <Field>
             <FieldLabel htmlFor="template-department">Department</FieldLabel>

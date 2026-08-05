@@ -33,6 +33,7 @@ export { createDashboardReadModelRepository } from "./dashboard-read-model-repos
 export { createMaintenanceRepository } from "./maintenance"
 export {
   createRecruitmentRepository,
+  nextRecruitmentTemplateCode,
   type RecruitmentCandidateRow,
   type RecruitmentInterviewRow,
   type RecruitmentJobRow,

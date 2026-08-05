@@ -101,6 +101,16 @@ export function deriveRecruitmentPostStatus(input: {
     : "Vacant"
 }
 
+export function nextRecruitmentTemplateCode(templateCodes: Iterable<string>) {
+  let highestSequence = 0
+  for (const templateCode of templateCodes) {
+    const match = /^JRT-(\d+)$/i.exec(templateCode.trim())
+    if (!match?.[1]) continue
+    highestSequence = Math.max(highestSequence, Number(match[1]))
+  }
+  return `JRT-${String(highestSequence + 1).padStart(4, "0")}`
+}
+
 function money(value: unknown) {
   const normalized = String(value ?? "")
     .replaceAll(",", "")

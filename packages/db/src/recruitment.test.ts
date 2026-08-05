@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest"
 
-import { deriveRecruitmentPostStatus } from "./recruitment"
+import {
+  deriveRecruitmentPostStatus,
+  nextRecruitmentTemplateCode,
+} from "./recruitment"
 
 describe("deriveRecruitmentPostStatus", () => {
   test("marks a post occupied when an employee code is assigned", () => {
@@ -31,5 +34,17 @@ describe("deriveRecruitmentPostStatus", () => {
         storedStatus: "Inactive",
       })
     ).toBe("Inactive")
+  })
+})
+
+describe("nextRecruitmentTemplateCode", () => {
+  test("shows the next sequential JRT code", () => {
+    expect(
+      nextRecruitmentTemplateCode(["JRT-0001", "JRT-0012", "LEGACY-CODE"])
+    ).toBe("JRT-0013")
+  })
+
+  test("starts an empty template register at JRT-0001", () => {
+    expect(nextRecruitmentTemplateCode([])).toBe("JRT-0001")
   })
 })
