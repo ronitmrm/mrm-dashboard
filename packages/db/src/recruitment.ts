@@ -109,9 +109,45 @@ export function deriveRecruitmentPostStatus(input: {
   storedStatus?: string | null
 }) {
   if (input.storedStatus === "Inactive") return "Inactive"
-  return optional(input.employeeName) || optional(input.employeeCode)
-    ? "Occupied"
-    : "Vacant"
+  if (!optional(input.employeeName) && !optional(input.employeeCode)) {
+    return "Vacant"
+  }
+  if (
+    input.storedStatus === "Appointed" ||
+    input.storedStatus === "Occupied" ||
+    input.storedStatus === "Resigned"
+  ) {
+    return input.storedStatus
+  }
+  return "Occupied"
+}
+
+export function deriveRecruitmentEmployeeAssignment(input: {
+  currentEmployeeCode?: string | null
+  currentEmployeeName?: string | null
+  employeeCode?: string | null
+  employeeEvent?: string | null
+  employeeName?: string | null
+}) {
+  const event = required(input.employeeEvent, "Employee event")
+  if (event === "Removed") {
+    return { employeeCode: null, employeeName: null, status: "Vacant" }
+  }
+  const employeeCode =
+    optional(input.employeeCode) ?? optional(input.currentEmployeeCode)
+  const employeeName =
+    optional(input.employeeName) ?? optional(input.currentEmployeeName)
+  if (!employeeCode && !employeeName) {
+    throw new Error("Employee name or employee code is required.")
+  }
+  const statuses = {
+    Appointed: "Appointed",
+    Joined: "Occupied",
+    Resigned: "Resigned",
+  } as const
+  const status = statuses[event as keyof typeof statuses]
+  if (!status) throw new Error("Employee event is invalid.")
+  return { employeeCode, employeeName, status }
 }
 
 function money(value: unknown) {
@@ -214,9 +250,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               WHERE organization_id = $1 AND active) AS templates,
             (SELECT count(*)::int FROM recruitment.posts
               WHERE organization_id = $1
-                AND status <> 'Inactive'
-                AND NULLIF(BTRIM(employee_name), '') IS NULL
-                AND NULLIF(BTRIM(employee_code), '') IS NULL) AS vacant_posts
+                AND (
+                  status = 'Resigned'
+                  OR (
+                    status <> 'Inactive'
+                    AND NULLIF(BTRIM(employee_name), '') IS NULL
+                    AND NULLIF(BTRIM(employee_code), '') IS NULL
+                  )
+                )) AS vacant_posts
         `,
         [organizationId]
       )
@@ -890,16 +931,32 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     async assignEmployee(
       input: MutationContext & {
         employeeCode?: string | null
+        employeeEvent?: string | null
         employeeName?: string | null
         postId: string
       }
     ) {
       return transaction(pool, async (client) => {
-        const employeeName = optional(input.employeeName)
-        const employeeCode = optional(input.employeeCode)
-        const status = deriveRecruitmentPostStatus({
-          employeeCode,
-          employeeName,
+        const current = await client.query<{
+          employee_code: string | null
+          employee_name: string | null
+          id: string
+        }>(
+          `
+            SELECT id, employee_name, employee_code
+            FROM recruitment.posts
+            WHERE id = $1 AND organization_id = $2 AND status <> 'Inactive'
+            FOR UPDATE
+          `,
+          [required(input.postId, "Approved post"), input.organizationId]
+        )
+        if (!current.rows[0]) throw new Error("Approved post was not found.")
+        const assignment = deriveRecruitmentEmployeeAssignment({
+          currentEmployeeCode: current.rows[0].employee_code,
+          currentEmployeeName: current.rows[0].employee_name,
+          employeeCode: input.employeeCode,
+          employeeEvent: input.employeeEvent,
+          employeeName: input.employeeName,
         })
         const result = await client.query<{ id: string }>(
           `
@@ -912,24 +969,24 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             RETURNING id
           `,
           [
-            employeeName,
-            employeeCode,
-            status,
+            assignment.employeeName,
+            assignment.employeeCode,
+            assignment.status,
             input.actorUserId ?? null,
-            required(input.postId, "Approved post"),
+            current.rows[0].id,
             input.organizationId,
           ]
         )
-        if (!result.rows[0]) throw new Error("Approved post was not found.")
+        const updated = result.rows[0]
+        if (!updated) throw new Error("Approved post was not found.")
         await audit(client, {
           ...input,
-          eventType: status === "Occupied"
-            ? "recruitment.employee.assigned"
-            : "recruitment.employee.removed",
-          targetId: result.rows[0].id,
+          eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
+          metadata: { status: assignment.status },
+          targetId: updated.id,
           targetTable: "posts",
         })
-        return result.rows[0]
+        return updated
       })
     },
 
@@ -972,6 +1029,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             LEFT JOIN recruitment.requirement_templates template
               ON template.id = post.requirement_template_id
             WHERE post.id = $4 AND post.organization_id = $5
+              AND (
+                post.status = 'Resigned'
+                OR (
+                  post.status <> 'Inactive'
+                  AND NULLIF(BTRIM(post.employee_name), '') IS NULL
+                  AND NULLIF(BTRIM(post.employee_code), '') IS NULL
+                )
+              )
             RETURNING id
           `,
           [

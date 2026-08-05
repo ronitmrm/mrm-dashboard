@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest"
 
-import { deriveRecruitmentPostStatus } from "./recruitment"
+import {
+  deriveRecruitmentEmployeeAssignment,
+  deriveRecruitmentPostStatus,
+} from "./recruitment"
 import {
   nextRecruitmentCombinedRoleIdentity,
   nextRecruitmentPostIdentity,
@@ -36,6 +39,73 @@ describe("deriveRecruitmentPostStatus", () => {
         storedStatus: "Inactive",
       })
     ).toBe("Inactive")
+  })
+
+  test.each(["Appointed", "Occupied", "Resigned"])(
+    "keeps the software-driven %s status when a person is assigned",
+    (storedStatus) => {
+      expect(
+        deriveRecruitmentPostStatus({
+          employeeCode: "EMP-104",
+          employeeName: "Assigned employee",
+          storedStatus,
+        })
+      ).toBe(storedStatus)
+    }
+  )
+})
+
+describe("deriveRecruitmentEmployeeAssignment", () => {
+  test("records an appointment before the person joins", () => {
+    expect(
+      deriveRecruitmentEmployeeAssignment({
+        employeeCode: "EMP-104",
+        employeeEvent: "Appointed",
+        employeeName: "New employee",
+      })
+    ).toEqual({
+      employeeCode: "EMP-104",
+      employeeName: "New employee",
+      status: "Appointed",
+    })
+  })
+
+  test("changes an existing appointment to occupied when the person joins", () => {
+    expect(
+      deriveRecruitmentEmployeeAssignment({
+        currentEmployeeCode: "EMP-104",
+        currentEmployeeName: "New employee",
+        employeeEvent: "Joined",
+      })
+    ).toEqual({
+      employeeCode: "EMP-104",
+      employeeName: "New employee",
+      status: "Occupied",
+    })
+  })
+
+  test("retains the employee identity when they resign", () => {
+    expect(
+      deriveRecruitmentEmployeeAssignment({
+        currentEmployeeCode: "EMP-104",
+        currentEmployeeName: "New employee",
+        employeeEvent: "Resigned",
+      })
+    ).toEqual({
+      employeeCode: "EMP-104",
+      employeeName: "New employee",
+      status: "Resigned",
+    })
+  })
+
+  test("clears the assignment and returns the post to vacant", () => {
+    expect(
+      deriveRecruitmentEmployeeAssignment({
+        currentEmployeeCode: "EMP-104",
+        currentEmployeeName: "New employee",
+        employeeEvent: "Removed",
+      })
+    ).toEqual({ employeeCode: null, employeeName: null, status: "Vacant" })
   })
 })
 

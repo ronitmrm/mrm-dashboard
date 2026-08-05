@@ -118,6 +118,7 @@ export async function assignEmployeeAction(formData: FormData) {
     repository.assignEmployee({
       ...context,
       employeeCode: value(formData, "employee_code"),
+      employeeEvent: value(formData, "employee_event"),
       employeeName: value(formData, "employee_name"),
       postId: value(formData, "post_id"),
     })

@@ -143,12 +143,16 @@ function EmptyRow({ columns, label }: { columns: number; label: string }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const variant =
+    status === "Open" || status === "Vacant" || status === "Occupied"
+      ? "default"
+      : status === "Resigned"
+        ? "destructive"
+        : status === "Appointed"
+          ? "secondary"
+          : "outline"
   return (
-    <Badge
-      variant={status === "Open" || status === "Vacant" ? "default" : "outline"}
-    >
-      {status}
-    </Badge>
+    <Badge variant={variant}>{status}</Badge>
   )
 }
 
@@ -538,9 +542,9 @@ function EmployeePanel({
       {canManageEmployees ? (
         <PanelForm
           action={assignEmployeeAction}
-          description="Enter an employee to occupy a post, or leave both employee fields blank to return it to Vacant."
+          description="Record the employment event. Appointed becomes Occupied only when Joined is selected; Resigned posts can be recruited again."
           panelId="employeeMasterPanel"
-          title="Employee assignment"
+          title="Employee assignment and status"
         >
           <Field>
             <FieldLabel htmlFor="employee-post">Approved post</FieldLabel>
@@ -560,8 +564,29 @@ function EmployeePanel({
           </Field>
           <TextField label="Employee name" name="employee_name" />
           <TextField label="Employee code" name="employee_code" />
+          <Field>
+            <FieldLabel htmlFor="employee-event">Employment event</FieldLabel>
+            <NativeSelect
+              className="w-full"
+              defaultValue="Appointed"
+              id="employee-event"
+              name="employee_event"
+              required
+            >
+              <NativeSelectOption value="Appointed">
+                Appointed — not joined
+              </NativeSelectOption>
+              <NativeSelectOption value="Joined">
+                Joined — becomes Occupied
+              </NativeSelectOption>
+              <NativeSelectOption value="Resigned">Resigned</NativeSelectOption>
+              <NativeSelectOption value="Removed">
+                Remove assignment — becomes Vacant
+              </NativeSelectOption>
+            </NativeSelect>
+          </Field>
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
-            Update employee assignment
+            Update employee status
           </Button>
         </PanelForm>
       ) : null}
@@ -585,7 +610,7 @@ function JobsPanel({
           title="Create job post"
         >
           <Field>
-            <FieldLabel htmlFor="job-post">Vacant post</FieldLabel>
+            <FieldLabel htmlFor="job-post">Recruitable approved post</FieldLabel>
             <NativeSelect
               className="w-full"
               id="job-post"
@@ -594,7 +619,9 @@ function JobsPanel({
             >
               <NativeSelectOption value="">Select post</NativeSelectOption>
               {posts
-                .filter((row) => row.status === "Vacant")
+                .filter(
+                  (row) => row.status === "Vacant" || row.status === "Resigned"
+                )
                 .map((row) => (
                   <NativeSelectOption key={row.id} value={row.id}>
                     {row.postCode} · {row.designation}

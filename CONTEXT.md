@@ -62,8 +62,14 @@ _Avoid_: Separate defect code, separate downtime code.
 
 **Approved Post**:
 One sanctioned staffing position identified by a post code. It is vacant,
-occupied, or inactive and may participate in one combined role.
+appointed, occupied, resigned, or inactive and may participate in one combined role.
 _Avoid_: Job post.
+
+**Approved Post Status**:
+The staffing state of an approved post: vacant has no appointee, appointed has a
+selected person who has not joined, occupied has a person who joined, and resigned
+retains the departing person's last assignment while reopening the post for recruitment.
+_Avoid_: Candidate status, recruitment opening status.
 
 **Job Requirement Template**:
 The reusable qualification, salary, and responsibility profile attached to an
