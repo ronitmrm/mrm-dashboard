@@ -17,6 +17,10 @@ const webOnly = argumentsSet.has("--web-only")
 const workerOnce = argumentsSet.has("--worker-once")
 const workerStatus = argumentsSet.has("--worker-status")
 const workerOnly = workerOnce || workerStatus
+const productionModuleEnabled = ["1", "true", "yes"].includes(
+  (process.env.PRODUCTION_MODULE_ENABLED ?? "").trim().toLowerCase()
+)
+const workerEnabled = productionModuleEnabled || workerOnly
 function managedResourceName(value, label) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(value)) {
     throw new Error(`${label} contains unsupported characters`)
@@ -99,7 +103,7 @@ function spawnPnpm(args, options) {
 
 const webDatabaseUrl = neonConnectionString("mrmpl_staging_web")
 const workerDatabaseUrl =
-  webOnly || seedAdmin
+  webOnly || seedAdmin || !workerEnabled
     ? undefined
     : neonConnectionString("mrmpl_staging_worker")
 const migrationDatabaseUrl = seedAdmin
@@ -132,6 +136,9 @@ console.log(
 console.log(`  Neon: ${branch} / ${database}`)
 console.log(`  Upstash: ${upstashDatabase}`)
 if (!workerOnly && !seedAdmin) console.log("  App: http://localhost:3001")
+console.log(
+  `  Production module: ${productionModuleEnabled ? "enabled" : "disabled"}`
+)
 
 if (checkOnly) {
   process.exit(0)
@@ -160,7 +167,7 @@ if (seedAdmin) {
   )
 }
 
-if (!webOnly && !seedAdmin) {
+if (!webOnly && !seedAdmin && workerEnabled) {
   const workerCommand = workerOnce
     ? "worker:once"
     : workerStatus

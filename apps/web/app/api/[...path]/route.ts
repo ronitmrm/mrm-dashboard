@@ -19,6 +19,7 @@ import {
   planningSetupNumber,
 } from "@/lib/dashboard-planning-input"
 import { shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy"
+import { productionModuleIsEnabled } from "@/lib/production-module"
 import {
   DashboardReadError,
   readPostgresCorrectionCandidates,
@@ -519,6 +520,10 @@ async function savePlanningMasterEntry(
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
+  if (!productionModuleIsEnabled()) {
+    return json({ error: "Production module is temporarily disabled" }, 404)
+  }
+
   const path = (await context.params).path.join("/")
   const search = request.nextUrl.searchParams
 
@@ -611,6 +616,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  if (!productionModuleIsEnabled()) {
+    return json({ error: "Production module is temporarily disabled" }, 404)
+  }
+
   const path = (await context.params).path.join("/")
   const body = await request.json().catch(() => ({}))
 

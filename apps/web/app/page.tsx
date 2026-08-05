@@ -2,10 +2,11 @@ import {
   defaultProductionFloorCode,
   normalizeProductionFloorCode,
 } from "@workspace/db/production-floors"
+import { redirect } from "next/navigation"
 
-import { MrmplDashboard } from "@/components/mrmpl-dashboard"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
+import { productionModuleIsEnabled } from "@/lib/production-module"
 import {
   dashboardNavigation,
   type DashboardTabId,
@@ -19,6 +20,9 @@ export default async function Page({
     tab?: string | string[]
   }>
 }) {
+  if (!productionModuleIsEnabled()) redirect("/commercial")
+
+  const { MrmplDashboard } = await import("@/components/mrmpl-dashboard")
   const query = await searchParams
   const session = await requireCapability("operations.dashboard.read", "/")
   const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
