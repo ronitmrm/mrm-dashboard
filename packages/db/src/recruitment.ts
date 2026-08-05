@@ -90,6 +90,17 @@ function optional(value: unknown) {
   return normalized || null
 }
 
+export function deriveRecruitmentPostStatus(input: {
+  employeeCode?: string | null
+  employeeName?: string | null
+  storedStatus?: string | null
+}) {
+  if (input.storedStatus === "Inactive") return "Inactive"
+  return optional(input.employeeName) || optional(input.employeeCode)
+    ? "Occupied"
+    : "Vacant"
+}
+
 function money(value: unknown) {
   const normalized = String(value ?? "")
     .replaceAll(",", "")
@@ -189,7 +200,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             (SELECT count(*)::int FROM recruitment.requirement_templates
               WHERE organization_id = $1 AND active) AS templates,
             (SELECT count(*)::int FROM recruitment.posts
-              WHERE organization_id = $1 AND status = 'Vacant') AS vacant_posts
+              WHERE organization_id = $1
+                AND status <> 'Inactive'
+                AND NULLIF(BTRIM(employee_name), '') IS NULL
+                AND NULLIF(BTRIM(employee_code), '') IS NULL) AS vacant_posts
         `,
         [organizationId]
       )
@@ -317,7 +331,11 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         id: row.id,
         postCode: row.post_code,
         requirementTemplateCode: row.requirement_template_code,
-        status: row.status,
+        status: deriveRecruitmentPostStatus({
+          employeeCode: row.employee_code,
+          employeeName: row.employee_name,
+          storedStatus: row.status,
+        }),
         vacancyCode: row.vacancy_code,
         vacancyNumber: row.vacancy_number,
       }))
@@ -658,19 +676,25 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     ) {
       return transaction(pool, async (client) => {
         const employeeName = optional(input.employeeName)
+        const employeeCode = optional(input.employeeCode)
+        const status = deriveRecruitmentPostStatus({
+          employeeCode,
+          employeeName,
+        })
         const result = await client.query<{ id: string }>(
           `
             UPDATE recruitment.posts
             SET employee_name = $1, employee_code = $2,
-              status = CASE WHEN $1 IS NULL THEN 'Vacant' ELSE 'Occupied' END,
-              updated_by_user_id = $3, updated_at = now(),
+              status = $3,
+              updated_by_user_id = $4, updated_at = now(),
               row_version = row_version + 1
-            WHERE id = $4 AND organization_id = $5
+            WHERE id = $5 AND organization_id = $6
             RETURNING id
           `,
           [
             employeeName,
-            employeeName ? optional(input.employeeCode) : null,
+            employeeCode,
+            status,
             input.actorUserId ?? null,
             required(input.postId, "Approved post"),
             input.organizationId,
@@ -679,7 +703,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         if (!result.rows[0]) throw new Error("Approved post was not found.")
         await audit(client, {
           ...input,
-          eventType: employeeName
+          eventType: status === "Occupied"
             ? "recruitment.employee.assigned"
             : "recruitment.employee.removed",
           targetId: result.rows[0].id,
