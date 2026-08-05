@@ -1,6 +1,7 @@
 import {
   nextRecruitmentTemplateCode,
   type RecruitmentCandidateRow,
+  type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
   type RecruitmentJobRow,
   type RecruitmentMasterSnapshot,
@@ -45,11 +46,13 @@ import {
   scheduleInterviewAction,
 } from "@/app/hr/actions"
 import { ApprovedPostFields } from "@/components/hr/approved-post-fields"
+import { CombinedRoleForm } from "@/components/hr/combined-role-form"
 
 type RecruitmentPanelProps = {
   canManageEmployees: boolean
   canWrite: boolean
   candidates: RecruitmentCandidateRow[]
+  combinedRoles: RecruitmentCombinedRoleRow[]
   interviews: RecruitmentInterviewRow[]
   jobs: RecruitmentJobRow[]
   masters: RecruitmentMasterSnapshot
@@ -406,15 +409,80 @@ function PostsTable({ posts }: { posts: RecruitmentPostRow[] }) {
   )
 }
 
+function CombinedRolesTable({
+  combinedRoles,
+}: {
+  combinedRoles: RecruitmentCombinedRoleRow[]
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Combined roles</CardTitle>
+        <CardDescription>
+          {combinedRoles.filter((role) => role.status === "Active").length}{" "}
+          active groups
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Combined code</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Post Codes</TableHead>
+              <TableHead>Primary Post</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {combinedRoles.length ? (
+              combinedRoles.map((role) => (
+                <TableRow key={role.id}>
+                  <TableCell className="font-mono">
+                    {role.vacancyCode ?? "—"}
+                  </TableCell>
+                  <TableCell>{role.name}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {role.postCodes.join(", ") || "—"}
+                  </TableCell>
+                  <TableCell className="font-mono">
+                    {role.primaryPostCode ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={role.status} />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <EmptyRow columns={5} label="No combined roles found." />
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
+}
+
 function ApprovedPostPanel({
   canWrite,
+  combinedRoles,
   masters,
   posts,
   templates,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "masters" | "posts" | "templates"
+  "canWrite" | "combinedRoles" | "masters" | "posts" | "templates"
 >) {
+  const activeCombinedPostCodes = new Set(
+    combinedRoles
+      .filter((role) => role.status === "Active")
+      .flatMap((role) => role.postCodes)
+  )
+  const availableCombinedPosts = posts.filter(
+    (post) =>
+      post.status !== "Inactive" && !activeCombinedPostCodes.has(post.postCode)
+  )
+
   return (
     <>
       {canWrite ? (
@@ -439,6 +507,23 @@ function ApprovedPostPanel({
           </Button>
         </PanelForm>
       ) : null}
+      {canWrite ? (
+        <CombinedRoleForm
+          existingVacancyCodes={combinedRoles.flatMap((role) =>
+            role.vacancyCode ? [role.vacancyCode] : []
+          )}
+          posts={availableCombinedPosts.map(
+            ({ department, designation, id, postCode, status }) => ({
+              department,
+              designation,
+              id,
+              postCode,
+              status,
+            })
+          )}
+        />
+      ) : null}
+      <CombinedRolesTable combinedRoles={combinedRoles} />
       <PostsTable posts={posts} />
     </>
   )
@@ -982,6 +1067,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
       return (
         <ApprovedPostPanel
           canWrite={props.canWrite}
+          combinedRoles={props.combinedRoles}
           masters={props.masters}
           posts={props.posts}
           templates={props.templates}

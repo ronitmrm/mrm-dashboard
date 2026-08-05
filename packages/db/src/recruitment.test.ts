@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 
 import { deriveRecruitmentPostStatus } from "./recruitment"
 import {
+  nextRecruitmentCombinedRoleIdentity,
   nextRecruitmentPostIdentity,
   nextRecruitmentTemplateCode,
 } from "./recruitment-codes"
@@ -73,5 +74,23 @@ describe("nextRecruitmentPostIdentity", () => {
         existingPostCodes: ["CK-WK-1"],
       })
     ).toBeNull()
+  })
+})
+
+describe("nextRecruitmentCombinedRoleIdentity", () => {
+  test("generates the next combined-role identity", () => {
+    expect(
+      nextRecruitmentCombinedRoleIdentity(["CMB-1", "CMB-8", "LEGACY"])
+    ).toEqual({
+      defaultName: "Combined 9",
+      vacancyCode: "CMB-9",
+    })
+  })
+
+  test("starts an empty combined-role register at CMB-1", () => {
+    expect(nextRecruitmentCombinedRoleIdentity([])).toEqual({
+      defaultName: "Combined 1",
+      vacancyCode: "CMB-1",
+    })
   })
 })

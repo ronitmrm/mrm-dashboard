@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto"
 import type { Pool, PoolClient } from "pg"
 
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
-import { nextRecruitmentPostIdentity } from "./recruitment-codes"
+import {
+  nextRecruitmentCombinedRoleIdentity,
+  nextRecruitmentPostIdentity,
+} from "./recruitment-codes"
 
 type MutationContext = {
   actorUserId?: string | null
@@ -27,6 +30,15 @@ export type RecruitmentTemplateRow = {
   name: string
   roleResponsibilities: string | null
   templateCode: string
+}
+
+export type RecruitmentCombinedRoleRow = {
+  id: string
+  name: string
+  postCodes: string[]
+  primaryPostCode: string | null
+  status: string
+  vacancyCode: string | null
 }
 
 export type RecruitmentPostRow = {
@@ -339,6 +351,48 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         }),
         vacancyCode: row.vacancy_code,
         vacancyNumber: row.vacancy_number,
+      }))
+    },
+
+    async listCombinedRoles(
+      organizationId: string
+    ): Promise<RecruitmentCombinedRoleRow[]> {
+      const result = await pool.query<{
+        id: string
+        name: string
+        post_codes: string[] | null
+        primary_post_code: string | null
+        status: string
+        vacancy_code: string | null
+      }>(
+        `
+          SELECT combined.id, combined.name, combined.vacancy_code,
+            combined.status,
+            COALESCE(
+              array_agg(post.post_code ORDER BY post.post_code)
+                FILTER (WHERE post.id IS NOT NULL),
+              '{}'
+            ) AS post_codes,
+            max(post.post_code) FILTER (WHERE link.is_primary)
+              AS primary_post_code
+          FROM recruitment.combined_roles combined
+          LEFT JOIN recruitment.combined_role_posts link
+            ON link.combined_role_id = combined.id
+          LEFT JOIN recruitment.posts post ON post.id = link.post_id
+          WHERE combined.organization_id = $1
+          GROUP BY combined.id
+          ORDER BY (combined.status = 'Active') DESC,
+            combined.vacancy_code, combined.name
+        `,
+        [organizationId]
+      )
+      return result.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        postCodes: row.post_codes ?? [],
+        primaryPostCode: row.primary_post_code,
+        status: row.status,
+        vacancyCode: row.vacancy_code,
       }))
     },
 
@@ -692,6 +746,144 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           targetTable: "posts",
         })
         return result.rows[0]
+      })
+    },
+
+    async createCombinedRole(
+      input: MutationContext & {
+        name?: string | null
+        postIds: string[]
+        primaryPostId: string
+      }
+    ) {
+      return transaction(pool, async (client) => {
+        const postIds = [
+          ...new Set(input.postIds.map((postId) => postId.trim()).filter(Boolean)),
+        ]
+        if (postIds.length < 2) {
+          throw new Error("Select at least two approved posts to combine.")
+        }
+        const primaryPostId = required(input.primaryPostId, "Primary post")
+        if (!postIds.includes(primaryPostId)) {
+          throw new Error("The primary post must be one of the selected posts.")
+        }
+
+        await client.query(
+          `
+            SELECT pg_advisory_xact_lock(
+              hashtextextended(lower(concat($1, ':combined-roles')), 0)
+            )
+          `,
+          [input.organizationId]
+        )
+        const selectedPosts = await client.query<{
+          belongs_to_active_combined_role: boolean
+          id: string
+          post_code: string
+        }>(
+          `
+            SELECT post.id, post.post_code,
+              EXISTS (
+                SELECT 1
+                FROM recruitment.combined_role_posts active_link
+                JOIN recruitment.combined_roles active_combined
+                  ON active_combined.id = active_link.combined_role_id
+                 AND active_combined.status = 'Active'
+                WHERE active_link.post_id = post.id
+              ) AS belongs_to_active_combined_role
+            FROM recruitment.posts post
+            WHERE post.organization_id = $1
+              AND post.id = ANY($2::uuid[])
+              AND post.status <> 'Inactive'
+            FOR UPDATE OF post
+          `,
+          [input.organizationId, postIds]
+        )
+        if (selectedPosts.rows.length !== postIds.length) {
+          throw new Error("One or more selected approved posts were not found.")
+        }
+        if (
+          selectedPosts.rows.some(
+            (post) => post.belongs_to_active_combined_role
+          )
+        ) {
+          throw new Error("One or more selected posts already belong to an active combined role.")
+        }
+
+        const existingCodes = await client.query<{
+          vacancy_code: string | null
+        }>(
+          `
+            SELECT vacancy_code FROM recruitment.combined_roles
+            WHERE organization_id = $1
+          `,
+          [input.organizationId]
+        )
+        const identity = nextRecruitmentCombinedRoleIdentity(
+          existingCodes.rows.flatMap((row) =>
+            row.vacancy_code ? [row.vacancy_code] : []
+          )
+        )
+        const combinedRole = await client.query<{ id: string }>(
+          `
+            INSERT INTO recruitment.combined_roles (
+              organization_id, name, vacancy_code, status,
+              created_by_user_id, updated_by_user_id,
+              source_system, source_table, source_id
+            )
+            VALUES ($1, $2, $3, 'Active', $4, $4,
+              'mrm-dashboard', 'combined_roles', $5)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            optional(input.name) ?? identity.defaultName,
+            identity.vacancyCode,
+            input.actorUserId ?? null,
+            randomUUID(),
+          ]
+        )
+        const combinedRoleId = combinedRole.rows[0]!.id
+        await client.query(
+          `
+            INSERT INTO recruitment.combined_role_posts (
+              combined_role_id, post_id, is_primary
+            )
+            SELECT $1, selected.post_id, selected.post_id = $3::uuid
+            FROM unnest($2::uuid[]) AS selected(post_id)
+          `,
+          [combinedRoleId, postIds, primaryPostId]
+        )
+        await client.query(
+          `
+            UPDATE recruitment.posts
+            SET combined_role_id = $1, vacancy_code = $2,
+              updated_by_user_id = $3, updated_at = now(),
+              row_version = row_version + 1
+            WHERE organization_id = $4 AND id = ANY($5::uuid[])
+          `,
+          [
+            combinedRoleId,
+            identity.vacancyCode,
+            input.actorUserId ?? null,
+            input.organizationId,
+            postIds,
+          ]
+        )
+        await audit(client, {
+          ...input,
+          eventType: "recruitment.combined_role.created",
+          metadata: {
+            postCodes: selectedPosts.rows.map((post) => post.post_code),
+            primaryPostCode: selectedPosts.rows.find(
+              (post) => post.id === primaryPostId
+            )?.post_code,
+            vacancyCode: identity.vacancyCode,
+          },
+          targetId: combinedRoleId,
+          targetTable: "combined_roles",
+        })
+        return { id: combinedRoleId }
       })
     },
 

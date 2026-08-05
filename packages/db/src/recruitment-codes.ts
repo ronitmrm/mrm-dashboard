@@ -8,6 +8,22 @@ export function nextRecruitmentTemplateCode(templateCodes: Iterable<string>) {
   return `JRT-${String(highestSequence + 1).padStart(4, "0")}`
 }
 
+export function nextRecruitmentCombinedRoleIdentity(
+  vacancyCodes: Iterable<string>
+) {
+  let highestSequence = 0
+  for (const vacancyCode of vacancyCodes) {
+    const match = /^CMB-(\d+)$/i.exec(vacancyCode.trim())
+    if (!match?.[1]) continue
+    highestSequence = Math.max(highestSequence, Number(match[1]))
+  }
+  const sequence = highestSequence + 1
+  return {
+    defaultName: `Combined ${sequence}`,
+    vacancyCode: `CMB-${sequence}`,
+  }
+}
+
 export function nextRecruitmentPostIdentity(input: {
   departmentCode: string
   designationCode: string

@@ -1,6 +1,7 @@
 import {
   createRecruitmentRepository,
   type RecruitmentCandidateRow,
+  type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
   type RecruitmentJobRow,
   type RecruitmentMasterSnapshot,
@@ -59,6 +60,7 @@ export default async function HrRecruitmentPage({
     connectionString: readAuthEnvironment().connectionString,
   })
   let candidates: RecruitmentCandidateRow[] = []
+  let combinedRoles: RecruitmentCombinedRoleRow[] = []
   let interviews: RecruitmentInterviewRow[] = []
   let jobs: RecruitmentJobRow[] = []
   let posts: RecruitmentPostRow[] = []
@@ -96,6 +98,7 @@ export default async function HrRecruitmentPage({
       loadedMasters,
       loadedTemplates,
       loadedPosts,
+      loadedCombinedRoles,
       loadedCandidates,
       loadedJobs,
       loadedInterviews,
@@ -110,6 +113,9 @@ export default async function HrRecruitmentPage({
       needsPosts
         ? repository.listPosts(organizationId)
         : Promise.resolve(posts),
+      panelId === "approvedPostPanel"
+        ? repository.listCombinedRoles(organizationId)
+        : Promise.resolve(combinedRoles),
       needsCandidates
         ? repository.listCandidates(organizationId)
         : Promise.resolve(candidates),
@@ -122,6 +128,7 @@ export default async function HrRecruitmentPage({
     masters = loadedMasters
     templates = loadedTemplates
     posts = loadedPosts
+    combinedRoles = loadedCombinedRoles
     candidates = loadedCandidates
     jobs = loadedJobs
     interviews = loadedInterviews
@@ -179,6 +186,7 @@ export default async function HrRecruitmentPage({
         canManageEmployees={canManageEmployees}
         canWrite={canWrite}
         candidates={candidates}
+        combinedRoles={combinedRoles}
         interviews={interviews}
         jobs={jobs}
         masters={masters}

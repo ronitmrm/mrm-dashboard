@@ -13,6 +13,13 @@ function value(formData: FormData, key: string) {
   return formData.get(key)?.toString().trim() ?? ""
 }
 
+function values(formData: FormData, key: string) {
+  return formData
+    .getAll(key)
+    .map((entry) => entry.toString().trim())
+    .filter(Boolean)
+}
+
 function returnPath(formData: FormData) {
   const panel = value(formData, "panel")
   return `${hrPath}?panel=${encodeURIComponent(panel || "mastersPanel")}`
@@ -91,6 +98,17 @@ export async function savePostAction(formData: FormData) {
       departmentCode: value(formData, "department_code"),
       designationCode: value(formData, "designation_code"),
       requirementTemplateCode: value(formData, "requirement_template_code"),
+    })
+  )
+}
+
+export async function createCombinedRoleAction(formData: FormData) {
+  await mutate(formData, "hr.recruitment.write", (repository, context) =>
+    repository.createCombinedRole({
+      ...context,
+      name: value(formData, "name"),
+      postIds: values(formData, "post_ids"),
+      primaryPostId: value(formData, "primary_post_id"),
     })
   )
 }
