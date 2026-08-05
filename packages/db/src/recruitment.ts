@@ -6,6 +6,7 @@ import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 import {
   nextRecruitmentCombinedRoleIdentity,
   nextRecruitmentPostIdentity,
+  recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
 
 type MutationContext = {
@@ -712,10 +713,16 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         await client.query(
           `
             SELECT pg_advisory_xact_lock(
-              hashtextextended(lower(concat($1, ':', $2, ':', $3)), 0)
+              hashtextextended($1::text, 0)
             )
           `,
-          [input.organizationId, departmentCode, designationCode]
+          [
+            recruitmentAdvisoryLockKey([
+              input.organizationId,
+              departmentCode,
+              designationCode,
+            ]),
+          ]
         )
         const existingPosts = await client.query<{ post_code: string }>(
           `
@@ -812,10 +819,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         await client.query(
           `
             SELECT pg_advisory_xact_lock(
-              hashtextextended(lower(concat($1, ':combined-roles')), 0)
+              hashtextextended($1::text, 0)
             )
           `,
-          [input.organizationId]
+          [recruitmentAdvisoryLockKey([input.organizationId, "combined-roles"])]
         )
         const selectedPosts = await client.query<{
           belongs_to_active_combined_role: boolean

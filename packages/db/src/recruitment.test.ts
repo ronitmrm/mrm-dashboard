@@ -8,6 +8,7 @@ import {
   nextRecruitmentCombinedRoleIdentity,
   nextRecruitmentPostIdentity,
   nextRecruitmentTemplateCode,
+  recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
 
 describe("deriveRecruitmentPostStatus", () => {
@@ -162,5 +163,13 @@ describe("nextRecruitmentCombinedRoleIdentity", () => {
       defaultName: "Combined 1",
       vacancyCode: "CMB-1",
     })
+  })
+})
+
+describe("recruitmentAdvisoryLockKey", () => {
+  test("builds one normalized text key for PostgreSQL advisory locks", () => {
+    expect(
+      recruitmentAdvisoryLockKey([" ORG-ID ", "AF", "Hd"])
+    ).toBe("org-id:af:hd")
   })
 })

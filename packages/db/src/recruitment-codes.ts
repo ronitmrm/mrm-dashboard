@@ -8,6 +8,10 @@ export function nextRecruitmentTemplateCode(templateCodes: Iterable<string>) {
   return `JRT-${String(highestSequence + 1).padStart(4, "0")}`
 }
 
+export function recruitmentAdvisoryLockKey(parts: Iterable<string>) {
+  return [...parts].map((part) => part.trim().toLowerCase()).join(":")
+}
+
 export function nextRecruitmentCombinedRoleIdentity(
   vacancyCodes: Iterable<string>
 ) {
