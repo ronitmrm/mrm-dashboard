@@ -31,7 +31,8 @@ async function mutate(
   operation: (
     repository: ReturnType<typeof createRecruitmentRepository>,
     context: { actorUserId: string; organizationId: string }
-  ) => Promise<unknown>
+  ) => Promise<unknown>,
+  successMessage = "Saved successfully."
 ) {
   const path = returnPath(formData)
   const session = await requireCapability(capability, path)
@@ -45,7 +46,7 @@ async function mutate(
       actorUserId: session.user.id,
       organizationId,
     })
-    outcome = { success: "Saved successfully." }
+    outcome = { success: successMessage }
   } catch (error) {
     outcome = {
       error:
@@ -102,6 +103,33 @@ export async function savePostAction(formData: FormData) {
   )
 }
 
+export async function updatePostAction(formData: FormData) {
+  await mutate(
+    formData,
+    "hr.recruitment.write",
+    (repository, context) =>
+      repository.updatePost({
+        ...context,
+        postId: value(formData, "post_id"),
+        requirementTemplateCode: value(formData, "requirement_template_code"),
+      }),
+    "Approved post updated."
+  )
+}
+
+export async function deletePostAction(formData: FormData) {
+  await mutate(
+    formData,
+    "hr.recruitment.write",
+    (repository, context) =>
+      repository.deletePost({
+        ...context,
+        postId: value(formData, "post_id"),
+      }),
+    "Approved post deleted."
+  )
+}
+
 export async function createCombinedRoleAction(formData: FormData) {
   await mutate(formData, "hr.recruitment.write", (repository, context) =>
     repository.createCombinedRole({
@@ -110,6 +138,22 @@ export async function createCombinedRoleAction(formData: FormData) {
       postIds: values(formData, "post_ids"),
       primaryPostId: value(formData, "primary_post_id"),
     })
+  )
+}
+
+export async function updateCombinedRoleAction(formData: FormData) {
+  await mutate(
+    formData,
+    "hr.recruitment.write",
+    (repository, context) =>
+      repository.updateCombinedRole({
+        ...context,
+        combinedRoleId: value(formData, "combined_role_id"),
+        name: value(formData, "name"),
+        postIds: values(formData, "post_ids"),
+        primaryPostId: value(formData, "primary_post_id"),
+      }),
+    "Combined role updated."
   )
 }
 

@@ -123,6 +123,24 @@ export function deriveRecruitmentPostStatus(input: {
   return "Occupied"
 }
 
+export function recruitmentPostDeletionBlocker(input: {
+  combinedRoleLinks: number
+  employeeCode?: string | null
+  employeeName?: string | null
+  jobPostLinks: number
+}) {
+  if (optional(input.employeeName) || optional(input.employeeCode)) {
+    return "Remove the employee assignment before deleting this approved post."
+  }
+  if (input.combinedRoleLinks > 0) {
+    return "Edit the combined role and remove this post from it before deleting the approved post."
+  }
+  if (input.jobPostLinks > 0) {
+    return "This approved post cannot be deleted because a job post is linked to it."
+  }
+  return null
+}
+
 export function deriveRecruitmentEmployeeAssignment(input: {
   currentEmployeeCode?: string | null
   currentEmployeeName?: string | null
@@ -184,8 +202,11 @@ async function transaction<T>(
 async function audit(
   client: PoolClient,
   input: MutationContext & {
+    afterState?: Record<string, unknown> | null
+    beforeState?: Record<string, unknown> | null
     eventType: string
     metadata?: Record<string, unknown>
+    reason?: string | null
     targetId: string
     targetTable: string
   }
@@ -194,10 +215,11 @@ async function audit(
     `
       INSERT INTO audit.events (
         organization_id, event_type, target_schema, target_table, target_id,
-        actor_user_id, metadata, source_system, source_table, source_id
+        actor_user_id, reason, before_state, after_state, metadata,
+        source_system, source_table, source_id
       )
-      VALUES ($1, $2, 'recruitment', $3, $4, $5, $6,
-        'mrm-dashboard', 'recruitment_events', $7)
+      VALUES ($1, $2, 'recruitment', $3, $4, $5, $6, $7, $8, $9,
+        'mrm-dashboard', 'recruitment_events', $10)
     `,
     [
       input.organizationId,
@@ -205,6 +227,9 @@ async function audit(
       input.targetTable,
       input.targetId,
       input.actorUserId ?? null,
+      input.reason ?? null,
+      input.beforeState ?? null,
+      input.afterState ?? null,
       input.metadata ?? {},
       randomUUID(),
     ]
@@ -797,6 +822,316 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    async updatePost(
+      input: MutationContext & {
+        postId: string
+        requirementTemplateCode?: string | null
+      }
+    ) {
+      return transaction(pool, async (client) => {
+        const postId = required(input.postId, "Approved post")
+        const templateCode = optional(input.requirementTemplateCode)
+        const existing = await client.query<Record<string, unknown>>(
+          `
+            SELECT post.*
+            FROM recruitment.posts post
+            WHERE post.id = $1 AND post.organization_id = $2
+            FOR UPDATE
+          `,
+          [postId, input.organizationId]
+        )
+        if (!existing.rows[0]) throw new Error("Approved post was not found.")
+
+        let templateId: string | null = null
+        if (templateCode) {
+          const template = await client.query<{ id: string }>(
+            `
+              SELECT id
+              FROM recruitment.requirement_templates
+              WHERE organization_id = $1 AND active
+                AND lower(template_code) = lower($2)
+            `,
+            [input.organizationId, templateCode]
+          )
+          if (!template.rows[0]) throw new Error("Job template was not found.")
+          templateId = template.rows[0].id
+        }
+
+        const updated = await client.query<
+          Record<string, unknown> & { id: string }
+        >(
+          `
+            UPDATE recruitment.posts
+            SET requirement_template_id = $1, updated_by_user_id = $2,
+              updated_at = now(), row_version = row_version + 1
+            WHERE id = $3 AND organization_id = $4
+            RETURNING *
+          `,
+          [templateId, input.actorUserId ?? null, postId, input.organizationId]
+        )
+        await audit(client, {
+          ...input,
+          afterState: updated.rows[0],
+          beforeState: existing.rows[0],
+          eventType: "recruitment.post.updated",
+          metadata: { requirementTemplateCode: templateCode },
+          targetId: postId,
+          targetTable: "posts",
+        })
+        return updated.rows[0]!
+      })
+    },
+
+    async deletePost(input: MutationContext & { postId: string }) {
+      return transaction(pool, async (client) => {
+        const postId = required(input.postId, "Approved post")
+        const existing = await client.query<
+          Record<string, unknown> & {
+            combined_role_links: number
+            employee_code: string | null
+            employee_name: string | null
+            id: string
+            job_post_links: number
+            post_code: string
+          }
+        >(
+          `
+            SELECT post.*,
+              (SELECT count(*)::int
+                FROM recruitment.combined_role_posts link
+                WHERE link.post_id = post.id) AS combined_role_links,
+              (SELECT count(*)::int
+                FROM recruitment.job_posts job
+                WHERE job.post_id = post.id) AS job_post_links
+            FROM recruitment.posts post
+            WHERE post.id = $1 AND post.organization_id = $2
+            FOR UPDATE OF post
+          `,
+          [postId, input.organizationId]
+        )
+        const post = existing.rows[0]
+        if (!post) throw new Error("Approved post was not found.")
+        const blocker = recruitmentPostDeletionBlocker({
+          combinedRoleLinks: post.combined_role_links,
+          employeeCode: post.employee_code,
+          employeeName: post.employee_name,
+          jobPostLinks: post.job_post_links,
+        })
+        if (blocker) throw new Error(blocker)
+
+        await client.query(
+          `SELECT recruitment.delete_approved_post($1, $2, $3)`,
+          [input.organizationId, postId, input.actorUserId ?? null]
+        )
+        return { id: post.id, postCode: post.post_code }
+      })
+    },
+
+    async updateCombinedRole(
+      input: MutationContext & {
+        combinedRoleId: string
+        name?: string | null
+        postIds: string[]
+        primaryPostId: string
+      }
+    ) {
+      return transaction(pool, async (client) => {
+        const combinedRoleId = required(input.combinedRoleId, "Combined role")
+        const postIds = [
+          ...new Set(
+            input.postIds.map((postId) => postId.trim()).filter(Boolean)
+          ),
+        ]
+        if (postIds.length < 2) {
+          throw new Error("Select at least two approved posts to combine.")
+        }
+        const primaryPostId = required(input.primaryPostId, "Primary post")
+        if (!postIds.includes(primaryPostId)) {
+          throw new Error("The primary post must be one of the selected posts.")
+        }
+
+        await client.query(
+          `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
+          [recruitmentAdvisoryLockKey([input.organizationId, "combined-roles"])]
+        )
+        const roleResult = await client.query<
+          Record<string, unknown> & {
+            id: string
+            name: string
+            status: string
+            vacancy_code: string | null
+          }
+        >(
+          `
+            SELECT * FROM recruitment.combined_roles
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [combinedRoleId, input.organizationId]
+        )
+        const role = roleResult.rows[0]
+        if (!role) throw new Error("Combined role was not found.")
+        if (role.status !== "Active") {
+          throw new Error("Only an active combined role can be edited.")
+        }
+        const vacancyCode = required(role.vacancy_code, "Combined vacancy code")
+
+        const selectedPosts = await client.query<{
+          id: string
+          post_code: string
+          status: string
+        }>(
+          `
+            SELECT id, post_code, status
+            FROM recruitment.posts
+            WHERE organization_id = $1 AND id = ANY($2::uuid[])
+            ORDER BY post_code
+            FOR UPDATE
+          `,
+          [input.organizationId, postIds]
+        )
+        if (selectedPosts.rows.length !== postIds.length) {
+          throw new Error("One or more selected approved posts were not found.")
+        }
+        if (selectedPosts.rows.some((post) => post.status === "Inactive")) {
+          throw new Error("Inactive approved posts cannot be combined.")
+        }
+
+        const conflictingMembership = await client.query<{ post_code: string }>(
+          `
+            SELECT DISTINCT post.post_code
+            FROM recruitment.combined_role_posts link
+            JOIN recruitment.combined_roles combined
+              ON combined.id = link.combined_role_id
+            JOIN recruitment.posts post ON post.id = link.post_id
+            WHERE link.post_id = ANY($1::uuid[])
+              AND combined.id <> $2
+              AND combined.status = 'Active'
+          `,
+          [postIds, combinedRoleId]
+        )
+        if (conflictingMembership.rows[0]) {
+          throw new Error(
+            `${conflictingMembership.rows[0].post_code} already belongs to another active combined role.`
+          )
+        }
+
+        const existingMembers = await client.query<{ post_id: string }>(
+          `SELECT post_id FROM recruitment.combined_role_posts WHERE combined_role_id = $1`,
+          [combinedRoleId]
+        )
+        const existingPostIds = new Set(
+          existingMembers.rows.map((member) => member.post_id)
+        )
+        const changedPostIds = [
+          ...postIds.filter((postId) => !existingPostIds.has(postId)),
+          ...[...existingPostIds].filter((postId) => !postIds.includes(postId)),
+        ]
+        if (changedPostIds.length > 0) {
+          const linkedJobs = await client.query<{ post_code: string }>(
+            `
+              SELECT DISTINCT post.post_code
+              FROM recruitment.job_posts job
+              JOIN recruitment.posts post ON post.id = job.post_id
+              WHERE job.post_id = ANY($1::uuid[])
+            `,
+            [changedPostIds]
+          )
+          if (linkedJobs.rows[0]) {
+            throw new Error(
+              `Combined-role membership cannot change because ${linkedJobs.rows[0].post_code} has a linked job post.`
+            )
+          }
+        }
+
+        const removedPostIds = [...existingPostIds].filter(
+          (postId) => !postIds.includes(postId)
+        )
+        if (removedPostIds.length > 0) {
+          await client.query(
+            `
+              UPDATE recruitment.posts
+              SET combined_role_id = NULL, vacancy_code = post_code,
+                updated_by_user_id = $1, updated_at = now(),
+                row_version = row_version + 1
+              WHERE organization_id = $2
+                AND combined_role_id = $3
+                AND id = ANY($4::uuid[])
+            `,
+            [
+              input.actorUserId ?? null,
+              input.organizationId,
+              combinedRoleId,
+              removedPostIds,
+            ]
+          )
+        }
+
+        await client.query(
+          `SELECT recruitment.clear_combined_role_members($1, $2)`,
+          [input.organizationId, combinedRoleId]
+        )
+        await client.query(
+          `
+            INSERT INTO recruitment.combined_role_posts (
+              combined_role_id, post_id, is_primary
+            )
+            SELECT $1, selected.id, selected.id = $3
+            FROM unnest($2::uuid[]) AS selected(id)
+          `,
+          [combinedRoleId, postIds, primaryPostId]
+        )
+        await client.query(
+          `
+            UPDATE recruitment.posts
+            SET combined_role_id = $1, vacancy_code = $2,
+              updated_by_user_id = $3, updated_at = now(),
+              row_version = row_version + 1
+            WHERE organization_id = $4 AND id = ANY($5::uuid[])
+          `,
+          [
+            combinedRoleId,
+            vacancyCode,
+            input.actorUserId ?? null,
+            input.organizationId,
+            postIds,
+          ]
+        )
+        const updatedRole = await client.query<
+          Record<string, unknown> & { id: string }
+        >(
+          `
+            UPDATE recruitment.combined_roles
+            SET name = $1, updated_by_user_id = $2, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $3 AND organization_id = $4
+            RETURNING *
+          `,
+          [
+            optional(input.name) ?? role.name,
+            input.actorUserId ?? null,
+            combinedRoleId,
+            input.organizationId,
+          ]
+        )
+        await audit(client, {
+          ...input,
+          afterState: updatedRole.rows[0],
+          beforeState: role,
+          eventType: "recruitment.combined_role.updated",
+          metadata: {
+            postCodes: selectedPosts.rows.map((post) => post.post_code),
+            primaryPostCode: selectedPosts.rows.find(
+              (post) => post.id === primaryPostId
+            )?.post_code,
+          },
+          targetId: combinedRoleId,
+          targetTable: "combined_roles",
+        })
+        return updatedRole.rows[0]!
+      })
+    },
+
     async createCombinedRole(
       input: MutationContext & {
         name?: string | null
@@ -806,7 +1141,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     ) {
       return transaction(pool, async (client) => {
         const postIds = [
-          ...new Set(input.postIds.map((postId) => postId.trim()).filter(Boolean)),
+          ...new Set(
+            input.postIds.map((postId) => postId.trim()).filter(Boolean)
+          ),
         ]
         if (postIds.length < 2) {
           throw new Error("Select at least two approved posts to combine.")
@@ -855,7 +1192,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             (post) => post.belongs_to_active_combined_role
           )
         ) {
-          throw new Error("One or more selected posts already belong to an active combined role.")
+          throw new Error(
+            "One or more selected posts already belong to an active combined role."
+          )
         }
 
         const existingCodes = await client.query<{

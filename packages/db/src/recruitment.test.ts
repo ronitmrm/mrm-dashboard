@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest"
 import {
   deriveRecruitmentEmployeeAssignment,
   deriveRecruitmentPostStatus,
+  recruitmentPostDeletionBlocker,
 } from "./recruitment"
 import {
   nextRecruitmentCombinedRoleIdentity,
@@ -110,6 +111,45 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
   })
 })
 
+describe("recruitmentPostDeletionBlocker", () => {
+  test("allows an unassigned post with no linked records to be deleted", () => {
+    expect(
+      recruitmentPostDeletionBlocker({
+        combinedRoleLinks: 0,
+        employeeCode: null,
+        employeeName: null,
+        jobPostLinks: 0,
+      })
+    ).toBeNull()
+  })
+
+  test("protects an assigned post", () => {
+    expect(
+      recruitmentPostDeletionBlocker({
+        combinedRoleLinks: 0,
+        employeeCode: "EMP-104",
+        employeeName: "Assigned employee",
+        jobPostLinks: 0,
+      })
+    ).toContain("employee assignment")
+  })
+
+  test("protects posts used by combined roles or job posts", () => {
+    expect(
+      recruitmentPostDeletionBlocker({
+        combinedRoleLinks: 1,
+        jobPostLinks: 0,
+      })
+    ).toContain("combined role")
+    expect(
+      recruitmentPostDeletionBlocker({
+        combinedRoleLinks: 0,
+        jobPostLinks: 1,
+      })
+    ).toContain("job post")
+  })
+})
+
 describe("nextRecruitmentTemplateCode", () => {
   test("shows the next sequential JRT code", () => {
     expect(
@@ -168,8 +208,8 @@ describe("nextRecruitmentCombinedRoleIdentity", () => {
 
 describe("recruitmentAdvisoryLockKey", () => {
   test("builds one normalized text key for PostgreSQL advisory locks", () => {
-    expect(
-      recruitmentAdvisoryLockKey([" ORG-ID ", "AF", "Hd"])
-    ).toBe("org-id:af:hd")
+    expect(recruitmentAdvisoryLockKey([" ORG-ID ", "AF", "Hd"])).toBe(
+      "org-id:af:hd"
+    )
   })
 })

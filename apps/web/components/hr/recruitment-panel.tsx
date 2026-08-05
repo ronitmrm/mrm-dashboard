@@ -46,7 +46,9 @@ import {
   scheduleInterviewAction,
 } from "@/app/hr/actions"
 import { ApprovedPostFields } from "@/components/hr/approved-post-fields"
+import { ApprovedPostsTable } from "@/components/hr/approved-posts-table"
 import { CombinedRoleForm } from "@/components/hr/combined-role-form"
+import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/hr/combined-roles-table"
 
 type RecruitmentPanelProps = {
   canManageEmployees: boolean
@@ -151,9 +153,7 @@ function StatusBadge({ status }: { status: string }) {
         : status === "Appointed"
           ? "secondary"
           : "outline"
-  return (
-    <Badge variant={variant}>{status}</Badge>
-  )
+  return <Badge variant={variant}>{status}</Badge>
 }
 
 function MastersPanel({
@@ -360,113 +360,6 @@ function TemplatePanel({
   )
 }
 
-function PostsTable({ posts }: { posts: RecruitmentPostRow[] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Approved posts</CardTitle>
-        <CardDescription>
-          {posts.length} sanctioned staffing positions
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Post code</TableHead>
-              <TableHead>Vacancy code</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Designation</TableHead>
-              <TableHead>Template</TableHead>
-              <TableHead>Employee</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {posts.length ? (
-              posts.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="font-mono">{row.postCode}</TableCell>
-                  <TableCell className="font-mono">{row.vacancyCode}</TableCell>
-                  <TableCell>{row.department}</TableCell>
-                  <TableCell>{row.designation}</TableCell>
-                  <TableCell className="font-mono">
-                    {row.requirementTemplateCode ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    {row.employeeName
-                      ? `${row.employeeName}${row.employeeCode ? ` (${row.employeeCode})` : ""}`
-                      : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={row.status} />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <EmptyRow columns={7} label="No approved posts found." />
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  )
-}
-
-function CombinedRolesTable({
-  combinedRoles,
-}: {
-  combinedRoles: RecruitmentCombinedRoleRow[]
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Combined roles</CardTitle>
-        <CardDescription>
-          {combinedRoles.filter((role) => role.status === "Active").length}{" "}
-          active groups
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Combined code</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Post Codes</TableHead>
-              <TableHead>Primary Post</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {combinedRoles.length ? (
-              combinedRoles.map((role) => (
-                <TableRow key={role.id}>
-                  <TableCell className="font-mono">
-                    {role.vacancyCode ?? "—"}
-                  </TableCell>
-                  <TableCell>{role.name}</TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {role.postCodes.join(", ") || "—"}
-                  </TableCell>
-                  <TableCell className="font-mono">
-                    {role.primaryPostCode ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={role.status} />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <EmptyRow columns={5} label="No combined roles found." />
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  )
-}
-
 function ApprovedPostPanel({
   canWrite,
   combinedRoles,
@@ -527,8 +420,16 @@ function ApprovedPostPanel({
           )}
         />
       ) : null}
-      <CombinedRolesTable combinedRoles={combinedRoles} />
-      <PostsTable posts={posts} />
+      <EditableCombinedRolesTable
+        canWrite={canWrite}
+        combinedRoles={combinedRoles}
+        posts={posts}
+      />
+      <ApprovedPostsTable
+        canWrite={canWrite}
+        posts={posts}
+        templates={templates}
+      />
     </>
   )
 }
@@ -590,7 +491,7 @@ function EmployeePanel({
           </Button>
         </PanelForm>
       ) : null}
-      <PostsTable posts={posts} />
+      <ApprovedPostsTable posts={posts} />
     </>
   )
 }
@@ -610,7 +511,9 @@ function JobsPanel({
           title="Create job post"
         >
           <Field>
-            <FieldLabel htmlFor="job-post">Recruitable approved post</FieldLabel>
+            <FieldLabel htmlFor="job-post">
+              Recruitable approved post
+            </FieldLabel>
             <NativeSelect
               className="w-full"
               id="job-post"
