@@ -381,16 +381,50 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               WHERE organization_id = $1) AS posts,
             (SELECT count(*)::int FROM recruitment.requirement_templates
               WHERE organization_id = $1 AND active) AS templates,
-            (SELECT count(*)::int FROM recruitment.posts
-              WHERE organization_id = $1
-                AND (
-                  status = 'Resigned'
-                  OR (
-                    status <> 'Inactive'
-                    AND NULLIF(BTRIM(employee_name), '') IS NULL
-                    AND NULLIF(BTRIM(employee_code), '') IS NULL
+            (
+              SELECT count(*)::int
+              FROM (
+                SELECT post.id
+                FROM recruitment.posts post
+                WHERE post.organization_id = $1
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM recruitment.combined_roles combined
+                    WHERE combined.id = post.combined_role_id
+                      AND combined.organization_id = $1
+                      AND combined.status = 'Active'
                   )
-                )) AS vacant_posts
+                  AND (
+                    post.status = 'Resigned'
+                    OR (
+                      post.status <> 'Inactive'
+                      AND NULLIF(BTRIM(post.employee_name), '') IS NULL
+                      AND NULLIF(BTRIM(post.employee_code), '') IS NULL
+                    )
+                  )
+                UNION ALL
+                SELECT combined.id
+                FROM recruitment.combined_roles combined
+                JOIN recruitment.combined_role_posts link
+                  ON link.combined_role_id = combined.id
+                JOIN recruitment.posts post ON post.id = link.post_id
+                WHERE combined.organization_id = $1
+                  AND combined.status = 'Active'
+                  AND post.organization_id = $1
+                GROUP BY combined.id
+                HAVING count(*) FILTER (
+                    WHERE post.status <> 'Inactive'
+                  ) > 0
+                  AND count(*) FILTER (
+                    WHERE post.status <> 'Inactive'
+                      AND post.status <> 'Resigned'
+                      AND (
+                        NULLIF(BTRIM(post.employee_name), '') IS NOT NULL
+                        OR NULLIF(BTRIM(post.employee_code), '') IS NOT NULL
+                      )
+                  ) = 0
+              ) vacancy
+            ) AS vacant_posts
         `,
         [organizationId]
       )
