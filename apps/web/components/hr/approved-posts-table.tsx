@@ -48,7 +48,8 @@ type ApprovedPostFilterKey =
   | "department"
   | "designation"
   | "template"
-  | "employee"
+  | "employeeName"
+  | "employeeCode"
   | "status"
 
 type ApprovedPostFilters = Record<ApprovedPostFilterKey, string>
@@ -59,13 +60,9 @@ const EMPTY_FILTERS: ApprovedPostFilters = {
   department: "",
   designation: "",
   template: "",
-  employee: "",
+  employeeName: "",
+  employeeCode: "",
   status: "",
-}
-
-function employeeLabel(row: RecruitmentPostRow) {
-  if (!row.employeeName) return "Unassigned"
-  return `${row.employeeName}${row.employeeCode ? ` (${row.employeeCode})` : ""}`
 }
 
 function uniqueOptions(values: string[]) {
@@ -139,7 +136,7 @@ export function ApprovedPostsTable({
   const [filters, setFilters] = useState<ApprovedPostFilters>(() => ({
     ...EMPTY_FILTERS,
   }))
-  const columnCount = canWrite ? 8 : 7
+  const columnCount = canWrite ? 9 : 8
   const hasFilters = Object.values(filters).some((filter) => filter.trim())
   const filterOptions = useMemo(
     () => ({
@@ -150,7 +147,12 @@ export function ApprovedPostsTable({
       template: uniqueOptions(
         posts.map((row) => row.requirementTemplateCode ?? "No template")
       ),
-      employee: uniqueOptions(posts.map(employeeLabel)),
+      employeeName: uniqueOptions(
+        posts.map((row) => row.employeeName ?? "Unassigned")
+      ),
+      employeeCode: uniqueOptions(
+        posts.map((row) => row.employeeCode ?? "Unassigned")
+      ),
       status: uniqueOptions(posts.map((row) => row.status)),
     }),
     [posts]
@@ -167,7 +169,14 @@ export function ApprovedPostsTable({
             row.requirementTemplateCode ?? "No template",
             filters.template
           ) &&
-          matchesFilter(employeeLabel(row), filters.employee) &&
+          matchesFilter(
+            row.employeeName ?? "Unassigned",
+            filters.employeeName
+          ) &&
+          matchesFilter(
+            row.employeeCode ?? "Unassigned",
+            filters.employeeCode
+          ) &&
           matchesFilter(row.status, filters.status)
       ),
     [filters, posts]
@@ -220,7 +229,8 @@ export function ApprovedPostsTable({
                   <TableHead>Department</TableHead>
                   <TableHead>Designation</TableHead>
                   <TableHead>Template</TableHead>
-                  <TableHead>Employee</TableHead>
+                  <TableHead>Employee name</TableHead>
+                  <TableHead>Employee code</TableHead>
                   <TableHead>Status</TableHead>
                   {canWrite ? (
                     <TableHead className="text-right">Actions</TableHead>
@@ -274,11 +284,20 @@ export function ApprovedPostsTable({
                   </TableHead>
                   <TableHead>
                     <ApprovedPostColumnFilter
-                      filterKey="employee"
-                      label="Employee"
-                      onChange={(value) => updateFilter("employee", value)}
-                      options={filterOptions.employee}
-                      value={filters.employee}
+                      filterKey="employeeName"
+                      label="Employee name"
+                      onChange={(value) => updateFilter("employeeName", value)}
+                      options={filterOptions.employeeName}
+                      value={filters.employeeName}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ApprovedPostColumnFilter
+                      filterKey="employeeCode"
+                      label="Employee code"
+                      onChange={(value) => updateFilter("employeeCode", value)}
+                      options={filterOptions.employeeCode}
+                      value={filters.employeeCode}
                     />
                   </TableHead>
                   <TableHead>
@@ -308,10 +327,9 @@ export function ApprovedPostsTable({
                       <TableCell className="font-mono">
                         {row.requirementTemplateCode ?? "—"}
                       </TableCell>
-                      <TableCell>
-                        {row.employeeName
-                          ? `${row.employeeName}${row.employeeCode ? ` (${row.employeeCode})` : ""}`
-                          : "—"}
+                      <TableCell>{row.employeeName ?? "—"}</TableCell>
+                      <TableCell className="font-mono">
+                        {row.employeeCode ?? "—"}
                       </TableCell>
                       <TableCell>
                         <PostStatusBadge status={row.status} />

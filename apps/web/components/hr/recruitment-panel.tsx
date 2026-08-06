@@ -37,7 +37,6 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import {
   assignCandidateAction,
   assignEmployeeAction,
-  bulkAssignEmployeesAction,
   createJobAction,
   logCandidateEventAction,
   recordInterviewAction,
@@ -51,6 +50,7 @@ import { ApprovedPostFields } from "@/components/hr/approved-post-fields"
 import { ApprovedPostsTable } from "@/components/hr/approved-posts-table"
 import { CombinedRoleForm } from "@/components/hr/combined-role-form"
 import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/hr/combined-roles-table"
+import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
 
 type RecruitmentPanelProps = {
   canManageEmployees: boolean
@@ -486,26 +486,7 @@ function EmployeePanel({
                   Download Excel template
                 </a>
               </Button>
-              <form
-                action={bulkAssignEmployeesAction}
-                className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end"
-                encType="multipart/form-data"
-              >
-                <input name="panel" type="hidden" value="employeeMasterPanel" />
-                <Field>
-                  <FieldLabel htmlFor="employee-assignments-file">
-                    Completed Excel workbook
-                  </FieldLabel>
-                  <Input
-                    accept=".xlsx,.xls"
-                    id="employee-assignments-file"
-                    name="employee_assignments_file"
-                    required
-                    type="file"
-                  />
-                </Field>
-                <Button type="submit">Upload assignments</Button>
-              </form>
+              <EmployeeAssignmentUpload />
             </CardContent>
           </Card>
           <PanelForm
