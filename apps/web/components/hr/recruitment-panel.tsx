@@ -21,6 +21,7 @@ import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
   NativeSelect,
+  NativeSelectOptGroup,
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
@@ -436,31 +437,79 @@ function ApprovedPostPanel({
 
 function EmployeePanel({
   canManageEmployees,
+  combinedRoles,
   posts,
-}: Pick<RecruitmentPanelProps, "canManageEmployees" | "posts">) {
+}: Pick<
+  RecruitmentPanelProps,
+  "canManageEmployees" | "combinedRoles" | "posts"
+>) {
+  const activeCombinedRoles = combinedRoles.filter(
+    (combinedRole) => combinedRole.status === "Active"
+  )
+  const postByCode = new Map(posts.map((post) => [post.postCode, post]))
+  const combinedAssignmentTargets = activeCombinedRoles.flatMap(
+    (combinedRole) => {
+      const targetPost = postByCode.get(
+        combinedRole.primaryPostCode ?? combinedRole.postCodes[0] ?? ""
+      )
+      return targetPost ? [{ combinedRole, targetPost }] : []
+    }
+  )
+  const combinedPostCodes = new Set(
+    combinedAssignmentTargets.flatMap(
+      ({ combinedRole }) => combinedRole.postCodes
+    )
+  )
+  const standalonePosts = posts.filter(
+    (post) => !combinedPostCodes.has(post.postCode)
+  )
+
   return (
     <>
       {canManageEmployees ? (
         <PanelForm
           action={assignEmployeeAction}
-          description="Record the employment event. Appointed becomes Occupied only when Joined is selected; Resigned posts can be recruited again."
+          description="Assign one employee to an individual post or to every Approved Post in a combined job. Appointed becomes Occupied only when Joined is selected."
           panelId="employeeMasterPanel"
           title="Employee assignment and status"
         >
           <Field>
-            <FieldLabel htmlFor="employee-post">Approved post</FieldLabel>
+            <FieldLabel htmlFor="employee-post">
+              Approved post or combined job
+            </FieldLabel>
             <NativeSelect
               className="w-full"
               id="employee-post"
               name="post_id"
               required
             >
-              <NativeSelectOption value="">Select post</NativeSelectOption>
-              {posts.map((row) => (
-                <NativeSelectOption key={row.id} value={row.id}>
-                  {row.postCode} · {row.designation}
-                </NativeSelectOption>
-              ))}
+              <NativeSelectOption value="">
+                Select post or combined job
+              </NativeSelectOption>
+              {combinedAssignmentTargets.length ? (
+                <NativeSelectOptGroup label="Combined jobs">
+                  {combinedAssignmentTargets.map(
+                    ({ combinedRole, targetPost }) => (
+                      <NativeSelectOption
+                        key={combinedRole.id}
+                        value={targetPost.id}
+                      >
+                        {combinedRole.vacancyCode} · {combinedRole.name} ·{" "}
+                        {combinedRole.postCodes.length} posts
+                      </NativeSelectOption>
+                    )
+                  )}
+                </NativeSelectOptGroup>
+              ) : null}
+              {standalonePosts.length ? (
+                <NativeSelectOptGroup label="Individual approved posts">
+                  {standalonePosts.map((row) => (
+                    <NativeSelectOption key={row.id} value={row.id}>
+                      {row.postCode} · {row.designation}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelectOptGroup>
+              ) : null}
             </NativeSelect>
           </Field>
           <TextField label="Employee name" name="employee_name" />
@@ -1007,6 +1056,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
       return (
         <EmployeePanel
           canManageEmployees={props.canManageEmployees}
+          combinedRoles={props.combinedRoles}
           posts={props.posts}
         />
       )

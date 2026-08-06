@@ -1284,12 +1284,13 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     ) {
       return transaction(pool, async (client) => {
         const current = await client.query<{
+          combined_role_id: string | null
           employee_code: string | null
           employee_name: string | null
           id: string
         }>(
           `
-            SELECT id, employee_name, employee_code
+            SELECT id, employee_name, employee_code, combined_role_id
             FROM recruitment.posts
             WHERE id = $1 AND organization_id = $2 AND status <> 'Inactive'
             FOR UPDATE
@@ -1297,13 +1298,46 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           [required(input.postId, "Approved post"), input.organizationId]
         )
         if (!current.rows[0]) throw new Error("Approved post was not found.")
+        const currentPost = current.rows[0]
+        const targets = currentPost.combined_role_id
+          ? await client.query<{
+              employee_code: string | null
+              employee_name: string | null
+              id: string
+            }>(
+              `
+                SELECT post.id, post.employee_name, post.employee_code
+                FROM recruitment.combined_role_posts link
+                JOIN recruitment.combined_roles combined
+                  ON combined.id = link.combined_role_id
+                JOIN recruitment.posts post ON post.id = link.post_id
+                WHERE link.combined_role_id = $1
+                  AND combined.organization_id = $2
+                  AND combined.status = 'Active'
+                  AND post.organization_id = $2
+                  AND post.status <> 'Inactive'
+                ORDER BY link.is_primary DESC, post.post_code
+                FOR UPDATE OF post
+              `,
+              [currentPost.combined_role_id, input.organizationId]
+            )
+          : current
+        if (!targets.rows.length) {
+          throw new Error("The combined role has no active approved posts.")
+        }
+        const existingAssignment =
+          targets.rows.find(
+            (post) =>
+              optional(post.employee_name) || optional(post.employee_code)
+          ) ?? currentPost
         const assignment = deriveRecruitmentEmployeeAssignment({
-          currentEmployeeCode: current.rows[0].employee_code,
-          currentEmployeeName: current.rows[0].employee_name,
+          currentEmployeeCode: existingAssignment.employee_code,
+          currentEmployeeName: existingAssignment.employee_name,
           employeeCode: input.employeeCode,
           employeeEvent: input.employeeEvent,
           employeeName: input.employeeName,
         })
+        const targetIds = targets.rows.map((post) => post.id)
         const result = await client.query<{ id: string }>(
           `
             UPDATE recruitment.posts
@@ -1311,7 +1345,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               status = $3,
               updated_by_user_id = $4, updated_at = now(),
               row_version = row_version + 1
-            WHERE id = $5 AND organization_id = $6
+            WHERE id = ANY($5::uuid[]) AND organization_id = $6
             RETURNING id
           `,
           [
@@ -1319,20 +1353,35 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             assignment.employeeCode,
             assignment.status,
             input.actorUserId ?? null,
-            current.rows[0].id,
+            targetIds,
             input.organizationId,
           ]
         )
-        const updated = result.rows[0]
-        if (!updated) throw new Error("Approved post was not found.")
-        await audit(client, {
-          ...input,
-          eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
-          metadata: { status: assignment.status },
-          targetId: updated.id,
-          targetTable: "posts",
-        })
-        return updated
+        if (result.rows.length !== targetIds.length) {
+          throw new Error(
+            "Not every approved post in the assignment was updated."
+          )
+        }
+        for (const updated of result.rows) {
+          await audit(client, {
+            ...input,
+            eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
+            metadata: {
+              assignmentScope: currentPost.combined_role_id
+                ? "combined-role"
+                : "approved-post",
+              combinedRoleId: currentPost.combined_role_id,
+              status: assignment.status,
+            },
+            targetId: updated.id,
+            targetTable: "posts",
+          })
+        }
+        const selectedPost = result.rows.find(
+          (post) => post.id === currentPost.id
+        )
+        if (!selectedPost) throw new Error("Approved post was not found.")
+        return selectedPost
       })
     },
 

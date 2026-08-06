@@ -87,6 +87,10 @@ export default async function HrRecruitmentPage({
       "employeeMasterPanel",
       "jobsPanel",
     ].includes(panelId)
+    const needsCombinedRoles = [
+      "approvedPostPanel",
+      "employeeMasterPanel",
+    ].includes(panelId)
     const needsCandidates = [
       "candidatesPanel",
       "candidateSearchPanel",
@@ -113,7 +117,7 @@ export default async function HrRecruitmentPage({
       needsPosts
         ? repository.listPosts(organizationId)
         : Promise.resolve(posts),
-      panelId === "approvedPostPanel"
+      needsCombinedRoles
         ? repository.listCombinedRoles(organizationId)
         : Promise.resolve(combinedRoles),
       needsCandidates

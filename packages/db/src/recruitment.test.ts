@@ -1,6 +1,8 @@
-import { describe, expect, test } from "vitest"
+import type { Pool, PoolClient } from "pg"
+import { describe, expect, test, vi } from "vitest"
 
 import {
+  createRecruitmentRepository,
   deriveRecruitmentEmployeeAssignment,
   deriveRecruitmentPostStatus,
   recruitmentPostDeletionBlocker,
@@ -11,6 +13,75 @@ import {
   nextRecruitmentTemplateCode,
   recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
+
+describe("assignEmployee", () => {
+  test("assigns the employee to every post in a combined role", async () => {
+    const selectedPostId = "00000000-0000-4000-8000-000000000001"
+    const relatedPostId = "00000000-0000-4000-8000-000000000002"
+    const query = vi.fn(
+      async (statement: string, parameters?: readonly unknown[]) => {
+        if (statement.includes("FROM recruitment.combined_role_posts")) {
+          return {
+            rowCount: 2,
+            rows: [
+              {
+                employee_code: null,
+                employee_name: null,
+                id: selectedPostId,
+              },
+              {
+                employee_code: null,
+                employee_name: null,
+                id: relatedPostId,
+              },
+            ],
+          }
+        }
+        if (statement.includes("SELECT id, employee_name, employee_code")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                combined_role_id: "00000000-0000-4000-8000-000000000003",
+                employee_code: null,
+                employee_name: null,
+                id: selectedPostId,
+              },
+            ],
+          }
+        }
+        if (statement.includes("UPDATE recruitment.posts")) {
+          return {
+            rowCount: 2,
+            rows: [{ id: selectedPostId }, { id: relatedPostId }],
+          }
+        }
+        return { rowCount: 0, rows: [], parameters }
+      }
+    )
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const pool = {
+      connect: vi.fn(async () => client),
+    } as unknown as Pool
+    const repository = createRecruitmentRepository({ pool })
+
+    await repository.assignEmployee({
+      employeeCode: "EMP-104",
+      employeeEvent: "Appointed",
+      employeeName: "Combined employee",
+      organizationId: "00000000-0000-4000-8000-000000000010",
+      postId: selectedPostId,
+    })
+
+    const updateCall = query.mock.calls.find(([statement]) =>
+      statement.includes("UPDATE recruitment.posts")
+    )
+    expect(updateCall?.[1]?.[4]).toEqual([selectedPostId, relatedPostId])
+  })
+})
 
 describe("deriveRecruitmentPostStatus", () => {
   test("marks a post occupied when an employee code is assigned", () => {
