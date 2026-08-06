@@ -33,7 +33,7 @@ import {
   recordInterviewAction,
   scheduleInterviewAction,
 } from "@/app/hr/actions"
-import { JobCandidateSearch } from "@/components/hr/job-candidate-search"
+import { CandidateAssignmentPanel } from "@/components/hr/candidate-assignment-panel"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   listGrantedCapabilities,
@@ -115,16 +115,6 @@ export default async function JobWorkspacePage({
   if (!loaded.workspace) notFound()
 
   const { applications, interviews, job } = loaded.workspace
-  const candidateOptions = loaded.candidates.map((candidate) => ({
-    currentCompany: candidate.currentCompany,
-    departments: candidate.departments,
-    email: candidate.email,
-    id: candidate.id,
-    name: candidate.name,
-    phone: candidate.phone,
-    status: candidate.status,
-  }))
-
   return (
     <div className="grid gap-6">
       <section className="grid gap-3">
@@ -180,26 +170,11 @@ export default async function JobWorkspacePage({
         ))}
       </section>
 
-      {canWrite ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Search and assign candidates</CardTitle>
-            <CardDescription>
-              Search the candidate register and assign the selected person only
-              to this recruitment opening.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <JobCandidateSearch
-              assignedCandidateIds={applications.map(
-                (application) => application.candidateId
-              )}
-              candidates={candidateOptions}
-              jobId={job.id}
-            />
-          </CardContent>
-        </Card>
-      ) : null}
+      <CandidateAssignmentPanel
+        canWrite={canWrite}
+        candidates={loaded.candidates}
+        fixedJob={job}
+      />
 
       {canWrite ? (
         <section className="grid gap-6 xl:grid-cols-2">

@@ -37,7 +37,6 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import {
-  assignCandidateAction,
   assignEmployeeAction,
   createJobAction,
   logCandidateEventAction,
@@ -50,6 +49,10 @@ import {
 } from "@/app/hr/actions"
 import { ApprovedPostFields } from "@/components/hr/approved-post-fields"
 import { ApprovedPostsTable } from "@/components/hr/approved-posts-table"
+import {
+  CandidateAssignmentPanel,
+  CandidatesTable,
+} from "@/components/hr/candidate-assignment-panel"
 import { CombinedRoleForm } from "@/components/hr/combined-role-form"
 import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/hr/combined-roles-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
@@ -664,62 +667,6 @@ function JobsPanel({
   )
 }
 
-function CandidatesTable({
-  candidates,
-}: {
-  candidates: RecruitmentCandidateRow[]
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Candidates</CardTitle>
-        <CardDescription>
-          {candidates.length} candidate profiles
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Departments</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead>Applications</TableHead>
-              <TableHead>Logs</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {candidates.length ? (
-              candidates.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell>
-                    {row.name}
-                    <div className="text-xs text-muted-foreground">
-                      {row.email ?? "No email"}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono">{row.phone}</TableCell>
-                  <TableCell>{row.departments.join(", ") || "—"}</TableCell>
-                  <TableCell>{row.currentCompany ?? "—"}</TableCell>
-                  <TableCell>{row.applicationCount}</TableCell>
-                  <TableCell>{row.eventCount}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={row.status} />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <EmptyRow columns={7} label="No candidates found." />
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  )
-}
-
 function LogCandidatePanel({
   canWrite,
   candidates,
@@ -813,55 +760,11 @@ function CandidateSearchPanel({
   jobs,
 }: Pick<RecruitmentPanelProps, "canWrite" | "candidates" | "jobs">) {
   return (
-    <>
-      {canWrite ? (
-        <PanelForm
-          action={assignCandidateAction}
-          description="Create one candidate application for an open recruitment job."
-          panelId="candidateSearchPanel"
-          title="Assign candidate"
-        >
-          <Field>
-            <FieldLabel htmlFor="assign-candidate">Candidate</FieldLabel>
-            <NativeSelect
-              className="w-full"
-              id="assign-candidate"
-              name="candidate_id"
-              required
-            >
-              <NativeSelectOption value="">Select candidate</NativeSelectOption>
-              {candidates.map((row) => (
-                <NativeSelectOption key={row.id} value={row.id}>
-                  {row.name} · {row.phone}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="assign-job">Open job</FieldLabel>
-            <NativeSelect
-              className="w-full"
-              id="assign-job"
-              name="job_id"
-              required
-            >
-              <NativeSelectOption value="">Select job</NativeSelectOption>
-              {jobs
-                .filter((row) => row.status === "Open")
-                .map((row) => (
-                  <NativeSelectOption key={row.id} value={row.id}>
-                    {row.vacancyCode} · {row.title}
-                  </NativeSelectOption>
-                ))}
-            </NativeSelect>
-          </Field>
-          <Button className="md:col-span-2 xl:col-span-3" type="submit">
-            Assign to job
-          </Button>
-        </PanelForm>
-      ) : null}
-      <CandidatesTable candidates={candidates} />
-    </>
+    <CandidateAssignmentPanel
+      canWrite={canWrite}
+      candidates={candidates}
+      jobs={jobs}
+    />
   )
 }
 
