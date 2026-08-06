@@ -38,7 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { FilterX, ListFilter, Pencil, Trash2 } from "lucide-react"
+import { Download, FilterX, ListFilter, Pencil, Trash2 } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { deletePostAction, updatePostAction } from "@/app/hr/actions"
@@ -321,13 +321,21 @@ export function ApprovedPostsTable({
       open={editingPost !== null}
     >
       <Card>
-        <CardHeader>
-          <CardTitle>Approved posts</CardTitle>
-          <CardDescription>
-            {hasFilters
-              ? `Showing ${filteredPosts.length} of ${posts.length} sanctioned staffing positions`
-              : `${posts.length} sanctioned staffing positions`}
-          </CardDescription>
+        <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1.5">
+            <CardTitle>Approved posts</CardTitle>
+            <CardDescription>
+              {hasFilters
+                ? `Showing ${filteredPosts.length} of ${posts.length} sanctioned staffing positions`
+                : `${posts.length} sanctioned staffing positions`}
+            </CardDescription>
+          </div>
+          <Button asChild size="sm" variant="outline">
+            <a href="/hr/approved-posts/export">
+              <Download data-icon="inline-start" />
+              Download Excel
+            </a>
+          </Button>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex min-h-8 items-center justify-between gap-3">
