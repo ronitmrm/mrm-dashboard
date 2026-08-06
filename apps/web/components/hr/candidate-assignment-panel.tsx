@@ -105,13 +105,15 @@ export function CandidateAssignmentPanel({
           <CardHeader>
             <CardTitle>Assign candidate</CardTitle>
             <CardDescription>
-              Create one candidate application for an open recruitment job.
+              Select one job and assign one or more candidates together.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <CandidateAssignmentForm
               candidates={candidates.map((candidate) => ({
                 activeApplicationJobIds: candidate.activeApplicationJobIds,
+                departments: candidate.departments,
+                email: candidate.email,
                 id: candidate.id,
                 name: candidate.name,
                 phone: candidate.phone,

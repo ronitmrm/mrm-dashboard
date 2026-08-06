@@ -430,14 +430,11 @@ describe("candidate application cycles", () => {
 
   test("rejects a second active application for the same candidate and job", async () => {
     const query = vi.fn(async (statement: string) => {
-      if (statement.includes("INSERT INTO recruitment.applications")) {
-        return { rows: [] }
-      }
       if (
-        statement.includes("FROM recruitment.applications") &&
+        statement.includes("SELECT candidate.name AS candidate_name") &&
         statement.includes("status IN ('Assigned', 'Interview', 'Hold')")
       ) {
-        return { rows: [{ id: "application-1" }] }
+        return { rows: [{ candidate_name: "Candidate One" }] }
       }
       return { rows: [] }
     })
@@ -457,15 +454,23 @@ describe("candidate application cycles", () => {
         jobId: "job-1",
         organizationId: "organization-1",
       })
-    ).rejects.toThrow(
-      "This candidate already has an active application for this job."
-    )
+    ).rejects.toThrow("Candidate One already has an active application")
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("INSERT INTO recruitment.applications")
+      )
+    ).toBe(false)
   })
 
   test("creates a new application cycle without overwriting closed history", async () => {
     const query = vi.fn(async (statement: string) => {
+      if (statement.includes("SELECT candidate.name AS candidate_name")) {
+        return { rows: [] }
+      }
       if (statement.includes("INSERT INTO recruitment.applications")) {
-        return { rows: [{ id: "application-2" }] }
+        return {
+          rows: [{ candidate_id: "candidate-1", id: "application-2" }],
+        }
       }
       return { rows: [] }
     })
@@ -495,6 +500,90 @@ describe("candidate application cycles", () => {
     )
     expect(insertStatement).toContain("DO NOTHING")
     expect(insertStatement).not.toContain("DO UPDATE")
+  })
+
+  test("assigns multiple selected candidates to one job atomically", async () => {
+    const query = vi.fn(
+      async (statement: string, _parameters?: readonly unknown[]) => {
+        void _parameters
+        if (statement.includes("SELECT candidate.name AS candidate_name")) {
+          return { rows: [] }
+        }
+        if (statement.includes("INSERT INTO recruitment.applications")) {
+          return {
+            rows: [
+              { candidate_id: "candidate-1", id: "application-1" },
+              { candidate_id: "candidate-2", id: "application-2" },
+            ],
+          }
+        }
+        return { rows: [] }
+      }
+    )
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: {
+        connect: vi.fn(async () => client),
+      } as unknown as Pool,
+    })
+
+    await expect(
+      repository.assignCandidates({
+        candidateIds: ["candidate-1", "candidate-2"],
+        jobId: "job-1",
+        organizationId: "organization-1",
+      })
+    ).resolves.toHaveLength(2)
+
+    const insertCall = query.mock.calls.find(([statement]) =>
+      statement.includes("INSERT INTO recruitment.applications")
+    )
+    expect(insertCall?.[1]?.[4]).toEqual(["candidate-1", "candidate-2"])
+    expect(
+      query.mock.calls.filter(([statement]) =>
+        statement.includes("INSERT INTO audit.events")
+      )
+    ).toHaveLength(2)
+  })
+
+  test("rolls back the complete selection when one candidate becomes unavailable", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("SELECT candidate.name AS candidate_name")) {
+        return { rows: [] }
+      }
+      if (statement.includes("INSERT INTO recruitment.applications")) {
+        return {
+          rows: [{ candidate_id: "candidate-1", id: "application-1" }],
+        }
+      }
+      return { rows: [] }
+    })
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: {
+        connect: vi.fn(async () => client),
+      } as unknown as Pool,
+    })
+
+    await expect(
+      repository.assignCandidates({
+        candidateIds: ["candidate-1", "candidate-2"],
+        jobId: "job-1",
+        organizationId: "organization-1",
+      })
+    ).rejects.toThrow("One or more selected candidates could not be assigned")
+    expect(query).toHaveBeenCalledWith("ROLLBACK")
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("INSERT INTO audit.events")
+      )
+    ).toBe(false)
   })
 
   test("lists the jobs where each candidate has an active application", async () => {

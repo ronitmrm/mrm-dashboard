@@ -1,8 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useId, useMemo, useState } from "react"
+import { useFormStatus } from "react-dom"
 
 import { Button } from "@workspace/ui/components/button"
+import { Checkbox } from "@workspace/ui/components/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
@@ -14,6 +16,8 @@ import { assignCandidateAction } from "@/app/hr/actions"
 
 type CandidateOption = {
   activeApplicationJobIds: string[]
+  departments: string[]
+  email: string | null
   id: string
   name: string
   phone: string
@@ -25,6 +29,27 @@ type JobOption = {
   vacancyCode: string
 }
 
+function AssignmentSubmitButton({
+  disabled,
+  selectedCount,
+}: {
+  disabled: boolean
+  selectedCount: number
+}) {
+  const { pending } = useFormStatus()
+  return (
+    <Button
+      className="md:col-span-2 xl:col-span-3"
+      disabled={disabled || pending}
+      type="submit"
+    >
+      {pending
+        ? "Assigning candidates…"
+        : `Assign ${selectedCount || "selected"} candidate${selectedCount === 1 ? "" : "s"} to job`}
+    </Button>
+  )
+}
+
 export function CandidateAssignmentForm({
   candidates,
   fixedJob,
@@ -34,14 +59,54 @@ export function CandidateAssignmentForm({
   fixedJob?: JobOption
   jobs: JobOption[]
 }) {
-  const [candidateId, setCandidateId] = useState("")
+  const fieldId = useId()
+  const [candidateSearch, setCandidateSearch] = useState("")
   const [jobId, setJobId] = useState(fixedJob?.id ?? "")
-  const selectedCandidate = candidates.find(
-    (candidate) => candidate.id === candidateId
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([])
+  const selectedCandidateSet = useMemo(
+    () => new Set(selectedCandidateIds),
+    [selectedCandidateIds]
   )
-  const hasActiveApplication = Boolean(
-    selectedCandidate?.activeApplicationJobIds.includes(jobId)
-  )
+  const normalizedSearch = candidateSearch.trim().toLocaleLowerCase("en-IN")
+  const visibleCandidates = useMemo(() => {
+    if (!normalizedSearch) return candidates
+    return candidates.filter((candidate) =>
+      [
+        candidate.name,
+        candidate.phone,
+        candidate.email ?? "",
+        candidate.departments.join(" "),
+      ].some((value) =>
+        value.toLocaleLowerCase("en-IN").includes(normalizedSearch)
+      )
+    )
+  }, [candidates, normalizedSearch])
+  const eligibleVisibleCandidateIds = visibleCandidates
+    .filter(
+      (candidate) => jobId && !candidate.activeApplicationJobIds.includes(jobId)
+    )
+    .map((candidate) => candidate.id)
+
+  function changeJob(nextJobId: string) {
+    setJobId(nextJobId)
+    setSelectedCandidateIds([])
+  }
+
+  function changeCandidate(candidateId: string, checked: boolean) {
+    setSelectedCandidateIds((current) =>
+      checked
+        ? current.includes(candidateId)
+          ? current
+          : [...current, candidateId]
+        : current.filter((id) => id !== candidateId)
+    )
+  }
+
+  function selectAllVisible() {
+    setSelectedCandidateIds((current) => [
+      ...new Set([...current, ...eligibleVisibleCandidateIds]),
+    ])
+  }
 
   return (
     <form action={assignCandidateAction}>
@@ -50,97 +115,152 @@ export function CandidateAssignmentForm({
       ) : (
         <input name="panel" type="hidden" value="candidateSearchPanel" />
       )}
+      <input name="job_id" type="hidden" value={jobId} />
+      {selectedCandidateIds.map((candidateId) => (
+        <input
+          key={candidateId}
+          name="candidate_ids"
+          type="hidden"
+          value={candidateId}
+        />
+      ))}
+
       <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Field>
-          <FieldLabel htmlFor="assign-candidate">Candidate</FieldLabel>
-          <NativeSelect
-            aria-describedby="active-application-help"
-            className="w-full"
-            id="assign-candidate"
-            name="candidate_id"
-            onChange={(event) => setCandidateId(event.target.value)}
-            required
-            value={candidateId}
-          >
-            <NativeSelectOption value="">Select candidate</NativeSelectOption>
-            {candidates.map((candidate) => {
-              const blockedForFixedJob = Boolean(
-                fixedJob &&
-                candidate.activeApplicationJobIds.includes(fixedJob.id)
-              )
-              return (
-                <NativeSelectOption
-                  disabled={blockedForFixedJob}
-                  key={candidate.id}
-                  value={candidate.id}
-                >
-                  {candidate.name} · {candidate.phone}
-                  {blockedForFixedJob ? " · Active application" : ""}
-                </NativeSelectOption>
-              )
-            })}
-          </NativeSelect>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="assign-job">Open job</FieldLabel>
+        <Field className="md:col-span-2 xl:col-span-3">
+          <FieldLabel htmlFor={`${fieldId}-job`}>Open job</FieldLabel>
           {fixedJob ? (
-            <>
-              <input name="job_id" type="hidden" value={fixedJob.id} />
-              <Input
-                id="assign-job"
-                readOnly
-                value={`${fixedJob.vacancyCode} · ${fixedJob.title}`}
-              />
-            </>
+            <Input
+              id={`${fieldId}-job`}
+              readOnly
+              value={`${fixedJob.vacancyCode} · ${fixedJob.title}`}
+            />
           ) : (
             <NativeSelect
-              aria-describedby="active-application-help"
               className="w-full"
-              id="assign-job"
-              name="job_id"
-              onChange={(event) => setJobId(event.target.value)}
+              id={`${fieldId}-job`}
+              onChange={(event) => changeJob(event.target.value)}
               required
               value={jobId}
             >
               <NativeSelectOption value="">Select job</NativeSelectOption>
-              {jobs.map((job) => {
-                const blockedForCandidate = Boolean(
-                  selectedCandidate?.activeApplicationJobIds.includes(job.id)
-                )
-                return (
-                  <NativeSelectOption
-                    disabled={blockedForCandidate}
-                    key={job.id}
-                    value={job.id}
-                  >
-                    {job.vacancyCode} · {job.title}
-                    {blockedForCandidate ? " · Active application" : ""}
-                  </NativeSelectOption>
-                )
-              })}
+              {jobs.map((job) => (
+                <NativeSelectOption key={job.id} value={job.id}>
+                  {job.vacancyCode} · {job.title}
+                </NativeSelectOption>
+              ))}
             </NativeSelect>
           )}
         </Field>
+
+        <Field className="md:col-span-2 xl:col-span-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <FieldLabel htmlFor={`${fieldId}-candidate-search`}>
+                Search and select candidates
+              </FieldLabel>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Search by name, phone, email, or department.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                disabled={!eligibleVisibleCandidateIds.length}
+                onClick={selectAllVisible}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Select all shown
+              </Button>
+              <Button
+                disabled={!selectedCandidateIds.length}
+                onClick={() => setSelectedCandidateIds([])}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
+          <Input
+            className="mt-3"
+            id={`${fieldId}-candidate-search`}
+            onChange={(event) => setCandidateSearch(event.target.value)}
+            placeholder="Type a candidate name, phone, email, or department"
+            type="search"
+            value={candidateSearch}
+          />
+        </Field>
+
+        <div
+          aria-label="Candidates for assignment"
+          className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-border bg-muted/20 p-2 md:col-span-2 xl:col-span-3"
+          role="group"
+        >
+          {!jobId ? (
+            <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+              Select an open job to choose candidates.
+            </p>
+          ) : visibleCandidates.length ? (
+            visibleCandidates.map((candidate) => {
+              const hasActiveApplication =
+                candidate.activeApplicationJobIds.includes(jobId)
+              const checked = selectedCandidateSet.has(candidate.id)
+              return (
+                <label
+                  className={
+                    hasActiveApplication
+                      ? "flex cursor-not-allowed items-start gap-3 rounded-lg border border-border/60 bg-muted/50 p-3 opacity-70"
+                      : "flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 transition-colors hover:border-primary/55 hover:bg-primary/5"
+                  }
+                  key={candidate.id}
+                >
+                  <Checkbox
+                    aria-label={`Select ${candidate.name}`}
+                    checked={checked}
+                    disabled={hasActiveApplication}
+                    onCheckedChange={(value) =>
+                      changeCandidate(candidate.id, value === true)
+                    }
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">{candidate.name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {candidate.phone}
+                      {candidate.email ? ` · ${candidate.email}` : ""}
+                      {candidate.departments.length
+                        ? ` · ${candidate.departments.join(", ")}`
+                        : ""}
+                    </span>
+                  </span>
+                  {hasActiveApplication ? (
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                      Already assigned
+                    </span>
+                  ) : null}
+                </label>
+              )
+            })
+          ) : (
+            <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+              No candidates match this search.
+            </p>
+          )}
+        </div>
+
         <p
           aria-live="polite"
-          className={
-            hasActiveApplication
-              ? "text-sm font-medium text-destructive md:col-span-2 xl:col-span-3"
-              : "text-sm text-muted-foreground md:col-span-2 xl:col-span-3"
-          }
-          id="active-application-help"
+          className="text-sm text-muted-foreground md:col-span-2 xl:col-span-3"
         >
-          {hasActiveApplication
-            ? "This candidate already has an active application for this job. Complete or close it before applying again."
-            : "A candidate can reapply to the same job after the earlier application is approved, rejected, or withdrawn."}
+          {selectedCandidateIds.length} candidate
+          {selectedCandidateIds.length === 1 ? "" : "s"} selected. Interviews
+          are scheduled individually after assignment.
         </p>
-        <Button
-          className="md:col-span-2 xl:col-span-3"
-          disabled={hasActiveApplication}
-          type="submit"
-        >
-          Assign to job
-        </Button>
+        <AssignmentSubmitButton
+          disabled={!jobId || !selectedCandidateIds.length}
+          selectedCount={selectedCandidateIds.length}
+        />
       </FieldGroup>
     </form>
   )

@@ -261,12 +261,19 @@ export async function saveCandidateAction(formData: FormData) {
 }
 
 export async function assignCandidateAction(formData: FormData) {
-  await mutate(formData, "hr.recruitment.write", (repository, context) =>
-    repository.assignCandidate({
-      ...context,
-      candidateId: value(formData, "candidate_id"),
-      jobId: value(formData, "job_id"),
-    })
+  await mutate(
+    formData,
+    "hr.recruitment.write",
+    (repository, context) =>
+      repository.assignCandidates({
+        ...context,
+        candidateIds: [
+          ...values(formData, "candidate_ids"),
+          ...values(formData, "candidate_id"),
+        ],
+        jobId: value(formData, "job_id"),
+      }),
+    "Selected candidates assigned to the job."
   )
 }
 

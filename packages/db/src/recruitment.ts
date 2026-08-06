@@ -300,6 +300,91 @@ async function audit(
   )
 }
 
+type CandidateAssignmentInput = MutationContext & {
+  candidateIds: string[]
+  jobId: string
+}
+
+async function assignCandidatesInTransaction(
+  client: PoolClient,
+  input: CandidateAssignmentInput
+) {
+  const candidateIds = [
+    ...new Set(input.candidateIds.map((candidateId) => candidateId.trim())),
+  ].filter(Boolean)
+  if (!candidateIds.length) throw new Error("Select at least one candidate.")
+  const jobId = required(input.jobId, "Recruitment opening")
+
+  const activeApplications = await client.query<{
+    candidate_name: string
+  }>(
+    `
+      SELECT candidate.name AS candidate_name
+      FROM recruitment.applications application
+      JOIN recruitment.candidates candidate
+        ON candidate.id = application.candidate_id
+      WHERE application.organization_id = $1
+        AND application.job_post_id = $2
+        AND application.candidate_id = ANY($3::uuid[])
+        AND application.status IN ('Assigned', 'Interview', 'Hold')
+      ORDER BY candidate.name
+    `,
+    [input.organizationId, jobId, candidateIds]
+  )
+  if (activeApplications.rows.length) {
+    const candidateNames = activeApplications.rows
+      .map((row) => row.candidate_name)
+      .join(", ")
+    throw new Error(
+      `${candidateNames} ${activeApplications.rows.length === 1 ? "already has" : "already have"} an active application for this job. Complete or close it before assigning again.`
+    )
+  }
+
+  const result = await client.query<{ candidate_id: string; id: string }>(
+    `
+      INSERT INTO recruitment.applications (
+        organization_id, candidate_id, job_post_id, status,
+        created_by_user_id, updated_by_user_id, source_system,
+        source_table, source_id
+      )
+      SELECT $1, candidate.id, job.id, 'Assigned', $2, $2,
+        'mrm-dashboard', 'assignments', $3 || ':' || candidate.id::text
+      FROM recruitment.candidates candidate
+      JOIN recruitment.job_posts job
+        ON job.id = $4 AND job.organization_id = $1
+       AND job.status = 'Open'
+      WHERE candidate.id = ANY($5::uuid[])
+        AND candidate.organization_id = $1
+      ON CONFLICT (candidate_id, job_post_id)
+        WHERE status IN ('Assigned', 'Interview', 'Hold')
+        DO NOTHING
+      RETURNING id, candidate_id
+    `,
+    [
+      input.organizationId,
+      input.actorUserId ?? null,
+      randomUUID(),
+      jobId,
+      candidateIds,
+    ]
+  )
+  if (result.rows.length !== candidateIds.length) {
+    throw new Error(
+      "One or more selected candidates could not be assigned. Refresh the candidate list and try again."
+    )
+  }
+  for (const application of result.rows) {
+    await audit(client, {
+      ...input,
+      eventType: "recruitment.application.assigned",
+      metadata: { candidateId: application.candidate_id },
+      targetId: application.id,
+      targetTable: "applications",
+    })
+  }
+  return result.rows
+}
+
 type EmployeeAssignmentInput = MutationContext & {
   employeeCode?: string | null
   employeeEvent?: string | null
@@ -1942,61 +2027,19 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     async assignCandidate(
       input: MutationContext & { candidateId: string; jobId: string }
     ) {
-      return transaction(pool, async (client) => {
-        const result = await client.query<{ id: string }>(
-          `
-            INSERT INTO recruitment.applications (
-              organization_id, candidate_id, job_post_id, status,
-              created_by_user_id, updated_by_user_id, source_system,
-              source_table, source_id
-            )
-            SELECT $1, candidate.id, job.id, 'Assigned', $2, $2, 'mrm-dashboard',
-              'assignments', $3
-            FROM recruitment.candidates candidate
-            JOIN recruitment.job_posts job
-              ON job.id = $4 AND job.organization_id = $1
-             AND job.status = 'Open'
-            WHERE candidate.id = $5 AND candidate.organization_id = $1
-            ON CONFLICT (candidate_id, job_post_id)
-              WHERE status IN ('Assigned', 'Interview', 'Hold')
-              DO NOTHING
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            input.actorUserId ?? null,
-            randomUUID(),
-            required(input.jobId, "Recruitment opening"),
-            required(input.candidateId, "Candidate"),
-          ]
-        )
-        if (!result.rows[0]) {
-          const activeApplication = await client.query<{ id: string }>(
-            `
-              SELECT id
-              FROM recruitment.applications
-              WHERE organization_id = $1 AND candidate_id = $2
-                AND job_post_id = $3
-                AND status IN ('Assigned', 'Interview', 'Hold')
-              LIMIT 1
-            `,
-            [input.organizationId, input.candidateId, input.jobId]
-          )
-          if (activeApplication.rows[0]) {
-            throw new Error(
-              "This candidate already has an active application for this job. Close its interview process before applying again."
-            )
-          }
-          throw new Error("Candidate or open recruitment job was not found.")
-        }
-        await audit(client, {
+      const applications = await transaction(pool, (client) =>
+        assignCandidatesInTransaction(client, {
           ...input,
-          eventType: "recruitment.application.assigned",
-          targetId: result.rows[0].id,
-          targetTable: "applications",
+          candidateIds: [required(input.candidateId, "Candidate")],
         })
-        return result.rows[0]
-      })
+      )
+      return { id: applications[0]!.id }
+    },
+
+    async assignCandidates(input: CandidateAssignmentInput) {
+      return transaction(pool, (client) =>
+        assignCandidatesInTransaction(client, input)
+      )
     },
 
     async logCandidateEvent(
