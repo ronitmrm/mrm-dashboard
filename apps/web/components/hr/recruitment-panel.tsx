@@ -51,6 +51,8 @@ import { ApprovedPostsTable } from "@/components/hr/approved-posts-table"
 import { CombinedRoleForm } from "@/components/hr/combined-role-form"
 import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/hr/combined-roles-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
+import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
+import { listRecruitableApprovedPosts } from "@/lib/hr-recruitable-posts"
 
 type RecruitmentPanelProps = {
   canManageEmployees: boolean
@@ -575,37 +577,26 @@ function JobsPanel({
   jobs,
   posts,
 }: Pick<RecruitmentPanelProps, "canWrite" | "jobs" | "posts">) {
+  const recruitablePosts = listRecruitableApprovedPosts(posts, jobs)
+  const recruitablePostOptions = recruitablePosts.map((post) => ({
+    department: post.department,
+    designation: post.designation,
+    id: post.id,
+    postCode: post.postCode,
+    status: post.status,
+    vacancyCode: post.vacancyCode,
+  }))
+
   return (
     <>
       {canWrite ? (
         <PanelForm
           action={createJobAction}
-          description="Create one active recruitment opening from a vacant approved post."
+          description="Create one active recruitment opening from a vacant or resigned approved post."
           panelId="jobsPanel"
           title="Create job post"
         >
-          <Field>
-            <FieldLabel htmlFor="job-post">
-              Recruitable approved post
-            </FieldLabel>
-            <NativeSelect
-              className="w-full"
-              id="job-post"
-              name="post_id"
-              required
-            >
-              <NativeSelectOption value="">Select post</NativeSelectOption>
-              {posts
-                .filter(
-                  (row) => row.status === "Vacant" || row.status === "Resigned"
-                )
-                .map((row) => (
-                  <NativeSelectOption key={row.id} value={row.id}>
-                    {row.postCode} · {row.designation}
-                  </NativeSelectOption>
-                ))}
-            </NativeSelect>
-          </Field>
+          <RecruitablePostFields posts={recruitablePostOptions} />
           <TextField label="Target date" name="target_date" type="date" />
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
             Create recruitment opening
