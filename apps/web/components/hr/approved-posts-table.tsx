@@ -32,8 +32,8 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { Pencil, Trash2 } from "lucide-react"
-import { useState } from "react"
+import { FilterX, Pencil, Trash2 } from "lucide-react"
+import { useMemo, useState } from "react"
 
 import { deletePostAction, updatePostAction } from "@/app/hr/actions"
 
@@ -41,6 +41,76 @@ type TemplateOption = Pick<
   RecruitmentTemplateRow,
   "id" | "name" | "templateCode"
 >
+
+type ApprovedPostFilterKey =
+  | "postCode"
+  | "vacancyCode"
+  | "department"
+  | "designation"
+  | "template"
+  | "employee"
+  | "status"
+
+type ApprovedPostFilters = Record<ApprovedPostFilterKey, string>
+
+const EMPTY_FILTERS: ApprovedPostFilters = {
+  postCode: "",
+  vacancyCode: "",
+  department: "",
+  designation: "",
+  template: "",
+  employee: "",
+  status: "",
+}
+
+function employeeLabel(row: RecruitmentPostRow) {
+  if (!row.employeeName) return "Unassigned"
+  return `${row.employeeName}${row.employeeCode ? ` (${row.employeeCode})` : ""}`
+}
+
+function uniqueOptions(values: string[]) {
+  return Array.from(new Set(values)).sort((left, right) =>
+    left.localeCompare(right, undefined, { numeric: true })
+  )
+}
+
+function matchesFilter(value: string, filter: string) {
+  return value.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase())
+}
+
+function ApprovedPostColumnFilter({
+  filterKey,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  filterKey: ApprovedPostFilterKey
+  label: string
+  onChange: (value: string) => void
+  options: string[]
+  value: string
+}) {
+  const listId = `approved-post-${filterKey}-options`
+
+  return (
+    <>
+      <Input
+        aria-label={`Filter ${label}`}
+        className="h-8 min-w-28 rounded-md px-2 text-xs font-normal"
+        list={listId}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Search..."
+        value={value}
+      />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
+    </>
+  )
+}
 
 function PostStatusBadge({ status }: { status: string }) {
   const variant =
@@ -66,7 +136,46 @@ export function ApprovedPostsTable({
   const [editingPost, setEditingPost] = useState<RecruitmentPostRow | null>(
     null
   )
+  const [filters, setFilters] = useState<ApprovedPostFilters>(() => ({
+    ...EMPTY_FILTERS,
+  }))
   const columnCount = canWrite ? 8 : 7
+  const hasFilters = Object.values(filters).some((filter) => filter.trim())
+  const filterOptions = useMemo(
+    () => ({
+      postCode: uniqueOptions(posts.map((row) => row.postCode)),
+      vacancyCode: uniqueOptions(posts.map((row) => row.vacancyCode)),
+      department: uniqueOptions(posts.map((row) => row.department)),
+      designation: uniqueOptions(posts.map((row) => row.designation)),
+      template: uniqueOptions(
+        posts.map((row) => row.requirementTemplateCode ?? "No template")
+      ),
+      employee: uniqueOptions(posts.map(employeeLabel)),
+      status: uniqueOptions(posts.map((row) => row.status)),
+    }),
+    [posts]
+  )
+  const filteredPosts = useMemo(
+    () =>
+      posts.filter(
+        (row) =>
+          matchesFilter(row.postCode, filters.postCode) &&
+          matchesFilter(row.vacancyCode, filters.vacancyCode) &&
+          matchesFilter(row.department, filters.department) &&
+          matchesFilter(row.designation, filters.designation) &&
+          matchesFilter(
+            row.requirementTemplateCode ?? "No template",
+            filters.template
+          ) &&
+          matchesFilter(employeeLabel(row), filters.employee) &&
+          matchesFilter(row.status, filters.status)
+      ),
+    [filters, posts]
+  )
+
+  function updateFilter(key: ApprovedPostFilterKey, value: string) {
+    setFilters((current) => ({ ...current, [key]: value }))
+  }
 
   return (
     <Sheet
@@ -79,107 +188,198 @@ export function ApprovedPostsTable({
         <CardHeader>
           <CardTitle>Approved posts</CardTitle>
           <CardDescription>
-            {posts.length} sanctioned staffing positions
+            {hasFilters
+              ? `Showing ${filteredPosts.length} of ${posts.length} sanctioned staffing positions`
+              : `${posts.length} sanctioned staffing positions`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Post code</TableHead>
-                <TableHead>Vacancy code</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Designation</TableHead>
-                <TableHead>Template</TableHead>
-                <TableHead>Employee</TableHead>
-                <TableHead>Status</TableHead>
-                {canWrite ? (
-                  <TableHead className="text-right">Actions</TableHead>
-                ) : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {posts.length ? (
-                posts.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="font-mono">{row.postCode}</TableCell>
-                    <TableCell className="font-mono">
-                      {row.vacancyCode}
-                    </TableCell>
-                    <TableCell>{row.department}</TableCell>
-                    <TableCell>{row.designation}</TableCell>
-                    <TableCell className="font-mono">
-                      {row.requirementTemplateCode ?? "—"}
-                    </TableCell>
-                    <TableCell>
-                      {row.employeeName
-                        ? `${row.employeeName}${row.employeeCode ? ` (${row.employeeCode})` : ""}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <PostStatusBadge status={row.status} />
-                    </TableCell>
-                    {canWrite ? (
-                      <TableCell>
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            aria-label={`Edit ${row.postCode}`}
-                            onClick={() => setEditingPost(row)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            <Pencil data-icon="inline-start" />
-                            Edit
-                          </Button>
-                          <form
-                            action={deletePostAction}
-                            onSubmit={(event) => {
-                              if (
-                                !window.confirm(
-                                  `Delete approved post ${row.postCode}? This cannot be undone.`
-                                )
-                              ) {
-                                event.preventDefault()
-                              }
-                            }}
-                          >
-                            <input
-                              name="panel"
-                              type="hidden"
-                              value="approvedPostPanel"
-                            />
-                            <input
-                              name="post_id"
-                              type="hidden"
-                              value={row.id}
-                            />
-                            <Button
-                              size="sm"
-                              type="submit"
-                              variant="destructive"
-                            >
-                              <Trash2 data-icon="inline-start" />
-                              Delete
-                            </Button>
-                          </form>
-                        </div>
-                      </TableCell>
-                    ) : null}
-                  </TableRow>
-                ))
-              ) : (
+        <CardContent className="space-y-3">
+          <div className="flex min-h-8 items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              Search in one or more columns. Suggested values open from each
+              field.
+            </p>
+            {hasFilters ? (
+              <Button
+                onClick={() => setFilters({ ...EMPTY_FILTERS })}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <FilterX data-icon="inline-start" />
+                Clear filters
+              </Button>
+            ) : null}
+          </div>
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    className="py-10 text-center text-muted-foreground"
-                    colSpan={columnCount}
-                  >
-                    No approved posts found.
-                  </TableCell>
+                  <TableHead>Post code</TableHead>
+                  <TableHead>Vacancy code</TableHead>
+                  <TableHead>Department</TableHead>
+                  <TableHead>Designation</TableHead>
+                  <TableHead>Template</TableHead>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Status</TableHead>
+                  {canWrite ? (
+                    <TableHead className="text-right">Actions</TableHead>
+                  ) : null}
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableHead>
+                    <ApprovedPostColumnFilter
+                      filterKey="postCode"
+                      label="Post code"
+                      onChange={(value) => updateFilter("postCode", value)}
+                      options={filterOptions.postCode}
+                      value={filters.postCode}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ApprovedPostColumnFilter
+                      filterKey="vacancyCode"
+                      label="Vacancy code"
+                      onChange={(value) => updateFilter("vacancyCode", value)}
+                      options={filterOptions.vacancyCode}
+                      value={filters.vacancyCode}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ApprovedPostColumnFilter
+                      filterKey="department"
+                      label="Department"
+                      onChange={(value) => updateFilter("department", value)}
+                      options={filterOptions.department}
+                      value={filters.department}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ApprovedPostColumnFilter
+                      filterKey="designation"
+                      label="Designation"
+                      onChange={(value) => updateFilter("designation", value)}
+                      options={filterOptions.designation}
+                      value={filters.designation}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ApprovedPostColumnFilter
+                      filterKey="template"
+                      label="Template"
+                      onChange={(value) => updateFilter("template", value)}
+                      options={filterOptions.template}
+                      value={filters.template}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ApprovedPostColumnFilter
+                      filterKey="employee"
+                      label="Employee"
+                      onChange={(value) => updateFilter("employee", value)}
+                      options={filterOptions.employee}
+                      value={filters.employee}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ApprovedPostColumnFilter
+                      filterKey="status"
+                      label="Status"
+                      onChange={(value) => updateFilter("status", value)}
+                      options={filterOptions.status}
+                      value={filters.status}
+                    />
+                  </TableHead>
+                  {canWrite ? <TableHead /> : null}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredPosts.length ? (
+                  filteredPosts.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="font-mono">
+                        {row.postCode}
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        {row.vacancyCode}
+                      </TableCell>
+                      <TableCell>{row.department}</TableCell>
+                      <TableCell>{row.designation}</TableCell>
+                      <TableCell className="font-mono">
+                        {row.requirementTemplateCode ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        {row.employeeName
+                          ? `${row.employeeName}${row.employeeCode ? ` (${row.employeeCode})` : ""}`
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <PostStatusBadge status={row.status} />
+                      </TableCell>
+                      {canWrite ? (
+                        <TableCell>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              aria-label={`Edit ${row.postCode}`}
+                              onClick={() => setEditingPost(row)}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              <Pencil data-icon="inline-start" />
+                              Edit
+                            </Button>
+                            <form
+                              action={deletePostAction}
+                              onSubmit={(event) => {
+                                if (
+                                  !window.confirm(
+                                    `Delete approved post ${row.postCode}? This cannot be undone.`
+                                  )
+                                ) {
+                                  event.preventDefault()
+                                }
+                              }}
+                            >
+                              <input
+                                name="panel"
+                                type="hidden"
+                                value="approvedPostPanel"
+                              />
+                              <input
+                                name="post_id"
+                                type="hidden"
+                                value={row.id}
+                              />
+                              <Button
+                                size="sm"
+                                type="submit"
+                                variant="destructive"
+                              >
+                                <Trash2 data-icon="inline-start" />
+                                Delete
+                              </Button>
+                            </form>
+                          </div>
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      className="py-10 text-center text-muted-foreground"
+                      colSpan={columnCount}
+                    >
+                      {posts.length
+                        ? "No approved posts match the selected filters."
+                        : "No approved posts found."}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
