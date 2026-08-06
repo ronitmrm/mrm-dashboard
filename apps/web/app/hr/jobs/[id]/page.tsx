@@ -27,10 +27,9 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { ArrowLeft, BriefcaseBusiness } from "lucide-react"
+import { ArrowLeft, BriefcaseBusiness, UserPlus } from "lucide-react"
 
 import { scheduleInterviewAction } from "@/app/hr/actions"
-import { CandidateAssignmentPanel } from "@/components/hr/candidate-assignment-panel"
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
@@ -129,21 +128,17 @@ export default async function JobWorkspacePage({
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const loaded = await (async () => {
+  const workspace = await (async () => {
     try {
       const organizationId = await repository.organizationIdForCode("MRMPL")
-      const [workspace, candidates] = await Promise.all([
-        repository.getJobWorkspace(organizationId, id),
-        repository.listCandidates(organizationId),
-      ])
-      return { candidates, workspace }
+      return repository.getJobWorkspace(organizationId, id)
     } finally {
       await repository.close()
     }
   })()
-  if (!loaded.workspace) notFound()
+  if (!workspace) notFound()
 
-  const { applications, interviews, job } = loaded.workspace
+  const { applications, interviews, job } = workspace
   return (
     <div className="grid gap-6">
       <section className="grid gap-3">
@@ -167,6 +162,16 @@ export default async function JobWorkspacePage({
               {job.postCode ?? "—"}
             </p>
           </div>
+          {canWrite ? (
+            <Button asChild className="shrink-0" size="sm">
+              <Link
+                href={`/hr?panel=candidateSearchPanel&job=${encodeURIComponent(job.id)}`}
+              >
+                <UserPlus data-icon="inline-start" />
+                Assign candidates
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </section>
 
@@ -198,12 +203,6 @@ export default async function JobWorkspacePage({
           </Card>
         ))}
       </section>
-
-      <CandidateAssignmentPanel
-        canWrite={canWrite}
-        candidates={loaded.candidates}
-        fixedJob={job}
-      />
 
       {canWrite ? (
         <section className="grid gap-6 xl:grid-cols-2">

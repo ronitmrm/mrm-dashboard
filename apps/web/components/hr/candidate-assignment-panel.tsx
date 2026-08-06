@@ -91,11 +91,13 @@ export function CandidateAssignmentPanel({
   canWrite,
   candidates,
   fixedJob,
+  initialJobId,
   jobs = [],
 }: {
   canWrite: boolean
   candidates: RecruitmentCandidateRow[]
   fixedJob?: Pick<RecruitmentJobRow, "id" | "title" | "vacancyCode">
+  initialJobId?: string
   jobs?: RecruitmentJobRow[]
 }) {
   return (
@@ -119,6 +121,7 @@ export function CandidateAssignmentPanel({
                 phone: candidate.phone,
               }))}
               fixedJob={fixedJob}
+              initialJobId={initialJobId}
               jobs={jobs
                 .filter((job) => job.status === "Open")
                 .map((job) => ({

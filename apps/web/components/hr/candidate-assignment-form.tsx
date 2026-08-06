@@ -53,15 +53,23 @@ function AssignmentSubmitButton({
 export function CandidateAssignmentForm({
   candidates,
   fixedJob,
+  initialJobId,
   jobs,
 }: {
   candidates: CandidateOption[]
   fixedJob?: JobOption
+  initialJobId?: string
   jobs: JobOption[]
 }) {
   const fieldId = useId()
   const [candidateSearch, setCandidateSearch] = useState("")
-  const [jobId, setJobId] = useState(fixedJob?.id ?? "")
+  const [jobId, setJobId] = useState(() =>
+    fixedJob
+      ? fixedJob.id
+      : jobs.some((job) => job.id === initialJobId)
+        ? (initialJobId ?? "")
+        : ""
+  )
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([])
   const selectedCandidateSet = useMemo(
     () => new Set(selectedCandidateIds),

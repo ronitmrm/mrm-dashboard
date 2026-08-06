@@ -35,7 +35,17 @@ function returnPath(formData: FormData) {
     return `${hrPath}/jobs/${returnJobId}`
   }
   const panel = value(formData, "panel")
-  return `${hrPath}?panel=${encodeURIComponent(panel || "mastersPanel")}`
+  const params = new URLSearchParams({ panel: panel || "mastersPanel" })
+  const selectedJobId = value(formData, "job_id")
+  if (
+    panel === "candidateSearchPanel" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      selectedJobId
+    )
+  ) {
+    params.set("job", selectedJobId)
+  }
+  return `${hrPath}?${params}`
 }
 
 async function mutate(
