@@ -3,6 +3,7 @@
 import type { RecruitmentPostRow, RecruitmentTemplateRow } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
+import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
   Card,
   CardContent,
@@ -12,6 +13,11 @@ import {
 } from "@workspace/ui/components/card"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@workspace/ui/components/popover"
 import {
   NativeSelect,
   NativeSelectOption,
@@ -32,7 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { FilterX, Pencil, Trash2 } from "lucide-react"
+import { FilterX, ListFilter, Pencil, Trash2 } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { deletePostAction, updatePostAction } from "@/app/hr/actions"
@@ -52,17 +58,17 @@ type ApprovedPostFilterKey =
   | "employeeCode"
   | "status"
 
-type ApprovedPostFilters = Record<ApprovedPostFilterKey, string>
+type ApprovedPostFilters = Record<ApprovedPostFilterKey, string[] | null>
 
 const EMPTY_FILTERS: ApprovedPostFilters = {
-  postCode: "",
-  vacancyCode: "",
-  department: "",
-  designation: "",
-  template: "",
-  employeeName: "",
-  employeeCode: "",
-  status: "",
+  postCode: null,
+  vacancyCode: null,
+  department: null,
+  designation: null,
+  template: null,
+  employeeName: null,
+  employeeCode: null,
+  status: null,
 }
 
 function uniqueOptions(values: string[]) {
@@ -71,41 +77,162 @@ function uniqueOptions(values: string[]) {
   )
 }
 
-function matchesFilter(value: string, filter: string) {
-  return value.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase())
+function matchesFilter(value: string, filter: string[] | null) {
+  return filter === null || filter.includes(value)
 }
 
 function ApprovedPostColumnFilter({
   filterKey,
   label,
-  onChange,
+  onApply,
   options,
-  value,
+  selected,
 }: {
   filterKey: ApprovedPostFilterKey
   label: string
-  onChange: (value: string) => void
+  onApply: (value: string[] | null) => void
   options: string[]
-  value: string
+  selected: string[] | null
 }) {
-  const listId = `approved-post-${filterKey}-options`
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const [draftSelected, setDraftSelected] = useState<string[]>(
+    () => selected ?? options
+  )
+  const visibleOptions = options.filter((option) =>
+    option.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+  )
+  const allVisibleSelected =
+    visibleOptions.length > 0 &&
+    visibleOptions.every((option) => draftSelected.includes(option))
+  const someVisibleSelected = visibleOptions.some((option) =>
+    draftSelected.includes(option)
+  )
+  const active = selected !== null
+  const titleId = `approved-post-${filterKey}-filter-title`
+
+  function changeOpen(nextOpen: boolean) {
+    if (nextOpen) {
+      setDraftSelected(selected ?? options)
+      setQuery("")
+    }
+    setOpen(nextOpen)
+  }
+
+  function toggleOption(option: string, checked: boolean) {
+    setDraftSelected((current) =>
+      checked
+        ? current.includes(option)
+          ? current
+          : [...current, option]
+        : current.filter((value) => value !== option)
+    )
+  }
+
+  function toggleVisibleOptions(checked: boolean) {
+    setDraftSelected((current) => {
+      const visible = new Set(visibleOptions)
+      return checked
+        ? Array.from(new Set([...current, ...visibleOptions]))
+        : current.filter((value) => !visible.has(value))
+    })
+  }
 
   return (
-    <>
-      <Input
-        aria-label={`Filter ${label}`}
-        className="h-8 min-w-28 rounded-md px-2 text-xs font-normal"
-        list={listId}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Search..."
-        value={value}
-      />
-      <datalist id={listId}>
-        {options.map((option) => (
-          <option key={option} value={option} />
-        ))}
-      </datalist>
-    </>
+    <Popover onOpenChange={changeOpen} open={open}>
+      <PopoverTrigger asChild>
+        <Button
+          aria-label={`Filter ${label}`}
+          className="h-8 min-w-24 justify-between gap-2 px-2 text-xs font-normal"
+          size="sm"
+          type="button"
+          variant={active ? "default" : "outline"}
+        >
+          <span>{active ? `${selected.length} selected` : "All"}</span>
+          <ListFilter className="size-3.5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        aria-labelledby={titleId}
+        className="max-h-[var(--radix-popover-content-available-height)] w-64 gap-3 overflow-hidden rounded-xl p-3"
+      >
+        <p className="font-medium" id={titleId}>
+          Filter {label}
+        </p>
+        <Input
+          aria-label={`Search ${label} values`}
+          className="h-8 text-xs"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search values..."
+          value={query}
+        />
+        <label className="flex cursor-pointer items-center gap-2 rounded-md border-b px-1 pb-2 text-xs font-medium">
+          <Checkbox
+            checked={
+              allVisibleSelected
+                ? true
+                : someVisibleSelected
+                  ? "indeterminate"
+                  : false
+            }
+            onCheckedChange={(checked) =>
+              toggleVisibleOptions(checked === true)
+            }
+          />
+          Select all{query ? " matching" : ""}
+        </label>
+        <div className="min-h-20 flex-1 space-y-1 overflow-y-auto pr-1">
+          {visibleOptions.length ? (
+            visibleOptions.map((option) => (
+              <label
+                className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1.5 text-xs hover:bg-muted"
+                key={option}
+              >
+                <Checkbox
+                  checked={draftSelected.includes(option)}
+                  onCheckedChange={(checked) =>
+                    toggleOption(option, checked === true)
+                  }
+                />
+                <span className="min-w-0 truncate" title={option}>
+                  {option}
+                </span>
+              </label>
+            ))
+          ) : (
+            <p className="py-4 text-center text-xs text-muted-foreground">
+              No values found.
+            </p>
+          )}
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t pt-2">
+          <Button
+            onClick={() => {
+              onApply(null)
+              setOpen(false)
+            }}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            Clear filter
+          </Button>
+          <Button
+            onClick={() => {
+              onApply(
+                draftSelected.length === options.length ? null : draftSelected
+              )
+              setOpen(false)
+            }}
+            size="sm"
+            type="button"
+          >
+            Apply
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -137,7 +264,7 @@ export function ApprovedPostsTable({
     ...EMPTY_FILTERS,
   }))
   const columnCount = canWrite ? 9 : 8
-  const hasFilters = Object.values(filters).some((filter) => filter.trim())
+  const hasFilters = Object.values(filters).some((filter) => filter !== null)
   const filterOptions = useMemo(
     () => ({
       postCode: uniqueOptions(posts.map((row) => row.postCode)),
@@ -182,7 +309,7 @@ export function ApprovedPostsTable({
     [filters, posts]
   )
 
-  function updateFilter(key: ApprovedPostFilterKey, value: string) {
+  function updateFilter(key: ApprovedPostFilterKey, value: string[] | null) {
     setFilters((current) => ({ ...current, [key]: value }))
   }
 
@@ -205,8 +332,8 @@ export function ApprovedPostsTable({
         <CardContent className="space-y-3">
           <div className="flex min-h-8 items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
-              Search in one or more columns. Suggested values open from each
-              field.
+              Open a column filter, tick one or more values, then Apply. Filters
+              from different columns work together.
             </p>
             {hasFilters ? (
               <Button
@@ -241,72 +368,72 @@ export function ApprovedPostsTable({
                     <ApprovedPostColumnFilter
                       filterKey="postCode"
                       label="Post code"
-                      onChange={(value) => updateFilter("postCode", value)}
+                      onApply={(value) => updateFilter("postCode", value)}
                       options={filterOptions.postCode}
-                      value={filters.postCode}
+                      selected={filters.postCode}
                     />
                   </TableHead>
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="vacancyCode"
                       label="Vacancy code"
-                      onChange={(value) => updateFilter("vacancyCode", value)}
+                      onApply={(value) => updateFilter("vacancyCode", value)}
                       options={filterOptions.vacancyCode}
-                      value={filters.vacancyCode}
+                      selected={filters.vacancyCode}
                     />
                   </TableHead>
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="department"
                       label="Department"
-                      onChange={(value) => updateFilter("department", value)}
+                      onApply={(value) => updateFilter("department", value)}
                       options={filterOptions.department}
-                      value={filters.department}
+                      selected={filters.department}
                     />
                   </TableHead>
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="designation"
                       label="Designation"
-                      onChange={(value) => updateFilter("designation", value)}
+                      onApply={(value) => updateFilter("designation", value)}
                       options={filterOptions.designation}
-                      value={filters.designation}
+                      selected={filters.designation}
                     />
                   </TableHead>
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="template"
                       label="Template"
-                      onChange={(value) => updateFilter("template", value)}
+                      onApply={(value) => updateFilter("template", value)}
                       options={filterOptions.template}
-                      value={filters.template}
+                      selected={filters.template}
                     />
                   </TableHead>
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="employeeName"
                       label="Employee name"
-                      onChange={(value) => updateFilter("employeeName", value)}
+                      onApply={(value) => updateFilter("employeeName", value)}
                       options={filterOptions.employeeName}
-                      value={filters.employeeName}
+                      selected={filters.employeeName}
                     />
                   </TableHead>
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="employeeCode"
                       label="Employee code"
-                      onChange={(value) => updateFilter("employeeCode", value)}
+                      onApply={(value) => updateFilter("employeeCode", value)}
                       options={filterOptions.employeeCode}
-                      value={filters.employeeCode}
+                      selected={filters.employeeCode}
                     />
                   </TableHead>
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="status"
                       label="Status"
-                      onChange={(value) => updateFilter("status", value)}
+                      onApply={(value) => updateFilter("status", value)}
                       options={filterOptions.status}
-                      value={filters.status}
+                      selected={filters.status}
                     />
                   </TableHead>
                   {canWrite ? <TableHead /> : null}
