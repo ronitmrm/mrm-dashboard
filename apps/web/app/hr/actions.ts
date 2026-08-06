@@ -1,6 +1,9 @@
 "use server"
 
-import { createRecruitmentRepository } from "@workspace/db"
+import {
+  createRecruitmentRepository,
+  recruitmentInterviewRound,
+} from "@workspace/db"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import * as XLSX from "xlsx"
@@ -285,12 +288,19 @@ export async function scheduleInterviewAction(formData: FormData) {
       ...context,
       applicationId: value(formData, "application_id"),
       interviewAt: value(formData, "interview_at"),
-      plannedRound: value(formData, "planned_round"),
     })
   )
 }
 
 export async function recordInterviewAction(formData: FormData) {
+  const roundName = value(formData, "round_name")
+  const round = recruitmentInterviewRound(roundName)
+  const questionScores = Object.fromEntries(
+    (round?.questions ?? []).map((question) => [
+      question.id,
+      value(formData, `question_${question.id}`),
+    ])
+  )
   const selectedStatus = value(formData, "status")
   const status =
     selectedStatus === "Rejected" || selectedStatus === "Hold"
@@ -303,8 +313,8 @@ export async function recordInterviewAction(formData: FormData) {
       comments: value(formData, "comments"),
       interviewerName: value(formData, "interviewer_name"),
       joiningDate: value(formData, "joining_date"),
-      roundName: value(formData, "round_name"),
-      score: value(formData, "score"),
+      questionScores,
+      roundName,
       status,
     })
   )

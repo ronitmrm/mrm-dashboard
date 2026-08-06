@@ -86,3 +86,14 @@ The relationship between one candidate and one recruitment opening. Interview
 planning, round outcomes, and a possible joining date belong to this
 relationship.
 _Avoid_: Candidate, interview.
+
+**Recruitment Interview Round**:
+One sequential standardized assessment within a candidate application:
+Screening, Technical, then HR. A later round cannot begin until the preceding
+round is approved.
+_Avoid_: Freely selected interview stage.
+
+**Interview Assessment**:
+The preset question scores, interviewer, decision, and comments recorded for
+one recruitment interview round.
+_Avoid_: Overall score without question-level marks.

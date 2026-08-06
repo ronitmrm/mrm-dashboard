@@ -40,7 +40,6 @@ import {
   assignEmployeeAction,
   createJobAction,
   logCandidateEventAction,
-  recordInterviewAction,
   saveCandidateAction,
   saveMasterAction,
   savePostAction,
@@ -56,6 +55,7 @@ import {
 import { CombinedRoleForm } from "@/components/hr/combined-role-form"
 import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/hr/combined-roles-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
+import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
 import { listRecruitableApprovedPosts } from "@/lib/hr-recruitable-posts"
 
@@ -71,13 +71,6 @@ type RecruitmentPanelProps = {
   posts: RecruitmentPostRow[]
   templates: RecruitmentTemplateRow[]
 }
-
-const rounds = [
-  "Screening Round",
-  "Department Round",
-  "Management Round",
-  "Final HR Round",
-] as const
 
 function PanelForm({
   action,
@@ -795,14 +788,16 @@ function InterviewsPanel({
                 <NativeSelectOption value="">
                   Select application
                 </NativeSelectOption>
-                {interviews.map((row) => (
-                  <NativeSelectOption
-                    key={row.applicationId}
-                    value={row.applicationId}
-                  >
-                    {row.candidateName} · {row.jobTitle}
-                  </NativeSelectOption>
-                ))}
+                {interviews
+                  .filter((row) => row.nextRound !== null)
+                  .map((row) => (
+                    <NativeSelectOption
+                      key={row.applicationId}
+                      value={row.applicationId}
+                    >
+                      {row.candidateName} · {row.jobTitle} · {row.nextRound}
+                    </NativeSelectOption>
+                  ))}
               </NativeSelect>
             </Field>
             <TextField
@@ -811,95 +806,33 @@ function InterviewsPanel({
               required
               type="datetime-local"
             />
-            <Field>
-              <FieldLabel htmlFor="schedule-round">Round</FieldLabel>
-              <NativeSelect
-                className="w-full"
-                id="schedule-round"
-                name="planned_round"
-                required
-              >
-                {rounds.map((round) => (
-                  <NativeSelectOption key={round} value={round}>
-                    {round}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Button className="md:col-span-2 xl:col-span-3" type="submit">
+            <Button
+              className="md:col-span-2 xl:col-span-3"
+              disabled={!interviews.some((row) => row.nextRound !== null)}
+              type="submit"
+            >
               Schedule interview
             </Button>
           </PanelForm>
-          <PanelForm
-            action={recordInterviewAction}
-            description="Record the round decision. Final approval requires a joining date."
-            panelId="interviewsPanel"
-            title="Interview outcome"
-          >
-            <Field>
-              <FieldLabel htmlFor="outcome-application">Application</FieldLabel>
-              <NativeSelect
-                className="w-full"
-                id="outcome-application"
-                name="application_id"
-                required
-              >
-                <NativeSelectOption value="">
-                  Select application
-                </NativeSelectOption>
-                {interviews.map((row) => (
-                  <NativeSelectOption
-                    key={row.applicationId}
-                    value={row.applicationId}
-                  >
-                    {row.candidateName} · {row.jobTitle}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="outcome-round">Round</FieldLabel>
-              <NativeSelect
-                className="w-full"
-                id="outcome-round"
-                name="round_name"
-                required
-              >
-                {rounds.map((round) => (
-                  <NativeSelectOption key={round} value={round}>
-                    {round}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="outcome-status">Decision</FieldLabel>
-              <NativeSelect
-                className="w-full"
-                id="outcome-status"
-                name="status"
-                required
-              >
-                <NativeSelectOption value="Approved">
-                  Approved
-                </NativeSelectOption>
-                <NativeSelectOption value="Rejected">
-                  Rejected
-                </NativeSelectOption>
-                <NativeSelectOption value="Hold">Hold</NativeSelectOption>
-              </NativeSelect>
-            </Field>
-            <TextField label="Interviewer" name="interviewer_name" />
-            <TextField label="Overall score / 10" name="score" type="number" />
-            <TextField label="Joining date" name="joining_date" type="date" />
-            <Field className="md:col-span-2 xl:col-span-3">
-              <FieldLabel htmlFor="outcome-comments">Comments</FieldLabel>
-              <Textarea id="outcome-comments" name="comments" />
-            </Field>
-            <Button className="md:col-span-2 xl:col-span-3" type="submit">
-              Save outcome
-            </Button>
-          </PanelForm>
+          <Card>
+            <CardHeader>
+              <CardTitle>Interview outcome</CardTitle>
+              <CardDescription>
+                The required round is locked. Complete every preset question to
+                save a unified assessment.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <InterviewOutcomeForm
+                applications={interviews.map((row) => ({
+                  candidateName: `${row.candidateName} · ${row.jobTitle}`,
+                  id: row.applicationId,
+                  nextRound: row.nextRound,
+                }))}
+                panelId="interviewsPanel"
+              />
+            </CardContent>
+          </Card>
         </div>
       ) : null}
       <Card>
@@ -916,7 +849,7 @@ function InterviewsPanel({
                 <TableHead>Candidate</TableHead>
                 <TableHead>Job</TableHead>
                 <TableHead>Scheduled</TableHead>
-                <TableHead>Planned round</TableHead>
+                <TableHead>Required round</TableHead>
                 <TableHead>Latest outcome</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Joining</TableHead>
@@ -933,7 +866,9 @@ function InterviewsPanel({
                         ? new Date(row.interviewAt).toLocaleString("en-IN")
                         : "Not scheduled"}
                     </TableCell>
-                    <TableCell>{row.plannedRound ?? "—"}</TableCell>
+                    <TableCell>
+                      {row.nextRound ?? "All rounds approved"}
+                    </TableCell>
                     <TableCell>
                       {row.latestRound
                         ? `${row.latestRound} · ${row.latestStatus}`

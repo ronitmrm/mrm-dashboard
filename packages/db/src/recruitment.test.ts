@@ -84,7 +84,8 @@ describe("assignEmployee", () => {
 
   test("rejects a bulk workbook before updating when any target is invalid", async () => {
     const combinedPostId = "00000000-0000-4000-8000-000000000001"
-    const query = vi.fn(async (statement: string) => {
+    const query = vi.fn(async (statement: string, _parameters?: unknown[]) => {
+      void _parameters
       if (statement.includes("lower(combined.vacancy_code)")) {
         return {
           rowCount: 1,
@@ -228,6 +229,7 @@ describe("job workspace", () => {
       expect.objectContaining({
         candidateName: "Candidate One",
         interviewCount: 2,
+        nextRound: "Technical Round",
       })
     )
     expect(workspace?.interviews).toEqual([
@@ -240,7 +242,17 @@ describe("job workspace", () => {
   })
 
   test("stores a schedule on the interview round as well as the application", async () => {
-    const query = vi.fn(async (statement: string) => {
+    const query = vi.fn(async (statement: string, _parameters?: unknown[]) => {
+      void _parameters
+      if (
+        statement.includes("SELECT id") &&
+        statement.includes("FROM recruitment.applications")
+      ) {
+        return { rows: [{ id: "application-1" }] }
+      }
+      if (statement.includes("SELECT round_name, status")) {
+        return { rows: [] }
+      }
       if (statement.includes("UPDATE recruitment.applications")) {
         return { rows: [{ id: "application-1" }] }
       }
@@ -259,7 +271,6 @@ describe("job workspace", () => {
       applicationId: "application-1",
       interviewAt: "2026-08-08T10:00",
       organizationId: "organization-1",
-      plannedRound: "Department Round",
     })
 
     expect(
@@ -270,6 +281,100 @@ describe("job workspace", () => {
           statement.includes("scheduled_at")
       )
     ).toBe(true)
+    expect(
+      query.mock.calls.some(
+        ([statement, parameters]) =>
+          statement.includes("INSERT INTO recruitment.interviews") &&
+          parameters?.[2] === "Screening Round"
+      )
+    ).toBe(true)
+  })
+
+  test("rejects a manually supplied later outcome round", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (
+        statement.includes("SELECT id") &&
+        statement.includes("FROM recruitment.applications")
+      ) {
+        return { rows: [{ id: "application-1" }] }
+      }
+      if (statement.includes("SELECT round_name, status")) {
+        return { rows: [] }
+      }
+      return { rows: [] }
+    })
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const pool = {
+      connect: vi.fn(async () => client),
+    } as unknown as Pool
+    const repository = createRecruitmentRepository({ pool })
+
+    await expect(
+      repository.recordInterview({
+        applicationId: "application-1",
+        organizationId: "organization-1",
+        questionScores: {},
+        roundName: "Technical Round",
+        status: "Approved",
+      })
+    ).rejects.toThrow("The next required round is Screening Round.")
+  })
+
+  test("stores every preset question score with the interview", async () => {
+    const query = vi.fn(async (statement: string, _parameters?: unknown[]) => {
+      void _parameters
+      if (
+        statement.includes("SELECT id") &&
+        statement.includes("FROM recruitment.applications")
+      ) {
+        return { rows: [{ id: "application-1" }] }
+      }
+      if (statement.includes("SELECT round_name, status")) {
+        return { rows: [] }
+      }
+      if (statement.includes("INSERT INTO recruitment.interviews")) {
+        return { rows: [{ id: "interview-1" }] }
+      }
+      return { rows: [] }
+    })
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const pool = {
+      connect: vi.fn(async () => client),
+    } as unknown as Pool
+    const repository = createRecruitmentRepository({ pool })
+
+    await repository.recordInterview({
+      applicationId: "application-1",
+      interviewerName: "HR Manager",
+      organizationId: "organization-1",
+      questionScores: {
+        availability_suitability: 3,
+        communication_clarity: 4,
+        relevant_experience: 5,
+        role_understanding: 4,
+        screening_recommendation: 5,
+      },
+      roundName: "Screening Round",
+      status: "Approved",
+    })
+
+    const insertCall = query.mock.calls.find(([statement]) =>
+      statement.includes("INSERT INTO recruitment.interviews")
+    )
+    const storedScores = JSON.parse(String(insertCall?.[1]?.[5]))
+    expect(storedScores.overall).toBe(4.2)
+    expect(storedScores.questions).toEqual(
+      expect.objectContaining({
+        communication_clarity: 4,
+        relevant_experience: 5,
+      })
+    )
   })
 })
 

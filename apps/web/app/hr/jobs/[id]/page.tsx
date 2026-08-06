@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { createRecruitmentRepository } from "@workspace/db"
+import { recruitmentInterviewRound } from "@workspace/db/recruitment-interview-workflow"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -26,14 +27,11 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { Textarea } from "@workspace/ui/components/textarea"
 import { ArrowLeft, BriefcaseBusiness } from "lucide-react"
 
-import {
-  recordInterviewAction,
-  scheduleInterviewAction,
-} from "@/app/hr/actions"
+import { scheduleInterviewAction } from "@/app/hr/actions"
 import { CandidateAssignmentPanel } from "@/components/hr/candidate-assignment-panel"
+import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   listGrantedCapabilities,
@@ -41,13 +39,6 @@ import {
 } from "@/lib/auth/require-capability"
 
 export const dynamic = "force-dynamic"
-
-const rounds = [
-  "Screening Round",
-  "Department Round",
-  "Management Round",
-  "Final HR Round",
-] as const
 
 function StatusBadge({ status }: { status: string }) {
   const variant =
@@ -68,17 +59,55 @@ function formatDateTime(value: string | null) {
 function ApplicationOptions({
   applications,
 }: {
-  applications: Array<{ candidateName: string; id: string }>
+  applications: Array<{
+    candidateName: string
+    id: string
+    nextRound: string | null
+  }>
 }) {
   return (
     <>
       <NativeSelectOption value="">Select applicant</NativeSelectOption>
-      {applications.map((application) => (
-        <NativeSelectOption key={application.id} value={application.id}>
-          {application.candidateName}
-        </NativeSelectOption>
-      ))}
+      {applications
+        .filter((application) => application.nextRound !== null)
+        .map((application) => (
+          <NativeSelectOption key={application.id} value={application.id}>
+            {application.candidateName} · {application.nextRound}
+          </NativeSelectOption>
+        ))}
     </>
+  )
+}
+
+function formatInterviewScore(score: number | null) {
+  if (score === null) return "—"
+  return score > 5 ? `${score}/10 (legacy)` : `${score}/5`
+}
+
+function InterviewAssessment({
+  questionScores,
+  roundName,
+}: {
+  questionScores: Record<string, number>
+  roundName: string
+}) {
+  const round = recruitmentInterviewRound(roundName)
+  const scoredQuestions =
+    round?.questions.filter(
+      (question) => questionScores[question.id] !== undefined
+    ) ?? []
+  if (!scoredQuestions.length) return <span>—</span>
+  return (
+    <div className="grid min-w-72 gap-1 text-xs">
+      {scoredQuestions.map((question) => (
+        <div className="flex justify-between gap-4" key={question.id}>
+          <span className="text-muted-foreground">{question.prompt}</span>
+          <span className="font-medium tabular-nums">
+            {questionScores[question.id]}/5
+          </span>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -182,8 +211,8 @@ export default async function JobWorkspacePage({
             <CardHeader>
               <CardTitle>Schedule interview</CardTitle>
               <CardDescription>
-                Every scheduled round is retained in this job’s interview
-                history.
+                The next required round is selected automatically and retained
+                in this job’s interview history.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -214,22 +243,14 @@ export default async function JobWorkspacePage({
                       type="datetime-local"
                     />
                   </Field>
-                  <Field>
-                    <FieldLabel htmlFor="job-schedule-round">Round</FieldLabel>
-                    <NativeSelect
-                      className="w-full"
-                      id="job-schedule-round"
-                      name="planned_round"
-                      required
-                    >
-                      {rounds.map((round) => (
-                        <NativeSelectOption key={round} value={round}>
-                          {round}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </Field>
-                  <Button disabled={!applications.length} type="submit">
+                  <Button
+                    disabled={
+                      !applications.some(
+                        (application) => application.nextRound !== null
+                      )
+                    }
+                    type="submit"
+                  >
                     Schedule interview
                   </Button>
                 </FieldGroup>
@@ -241,105 +262,19 @@ export default async function JobWorkspacePage({
             <CardHeader>
               <CardTitle>Record interview outcome</CardTitle>
               <CardDescription>
-                Save the decision, interviewer, score, comments, and joining
-                date against the applicant’s round.
+                The required round is locked. Complete every preset question to
+                save a unified assessment.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form action={recordInterviewAction}>
-                <input name="return_job_id" type="hidden" value={job.id} />
-                <FieldGroup>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field>
-                      <FieldLabel htmlFor="job-outcome-application">
-                        Applicant
-                      </FieldLabel>
-                      <NativeSelect
-                        className="w-full"
-                        id="job-outcome-application"
-                        name="application_id"
-                        required
-                      >
-                        <ApplicationOptions applications={applications} />
-                      </NativeSelect>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="job-outcome-round">Round</FieldLabel>
-                      <NativeSelect
-                        className="w-full"
-                        id="job-outcome-round"
-                        name="round_name"
-                        required
-                      >
-                        {rounds.map((round) => (
-                          <NativeSelectOption key={round} value={round}>
-                            {round}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="job-outcome-status">
-                        Decision
-                      </FieldLabel>
-                      <NativeSelect
-                        className="w-full"
-                        id="job-outcome-status"
-                        name="status"
-                        required
-                      >
-                        <NativeSelectOption value="Approved">
-                          Approved
-                        </NativeSelectOption>
-                        <NativeSelectOption value="Rejected">
-                          Rejected
-                        </NativeSelectOption>
-                        <NativeSelectOption value="Hold">
-                          Hold
-                        </NativeSelectOption>
-                      </NativeSelect>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="job-interviewer">
-                        Interviewer
-                      </FieldLabel>
-                      <Input id="job-interviewer" name="interviewer_name" />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="job-score">
-                        Overall score / 10
-                      </FieldLabel>
-                      <Input
-                        id="job-score"
-                        max="10"
-                        min="0"
-                        name="score"
-                        step="0.1"
-                        type="number"
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="job-joining-date">
-                        Joining date
-                      </FieldLabel>
-                      <Input
-                        id="job-joining-date"
-                        name="joining_date"
-                        type="date"
-                      />
-                    </Field>
-                  </div>
-                  <Field>
-                    <FieldLabel htmlFor="job-outcome-comments">
-                      Comments
-                    </FieldLabel>
-                    <Textarea id="job-outcome-comments" name="comments" />
-                  </Field>
-                  <Button disabled={!applications.length} type="submit">
-                    Save interview outcome
-                  </Button>
-                </FieldGroup>
-              </form>
+              <InterviewOutcomeForm
+                applications={applications.map((application) => ({
+                  candidateName: application.candidateName,
+                  id: application.id,
+                  nextRound: application.nextRound,
+                }))}
+                returnJobId={job.id}
+              />
             </CardContent>
           </Card>
         </section>
@@ -362,7 +297,7 @@ export default async function JobWorkspacePage({
                   <TableHead>Contact</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Next interview</TableHead>
-                  <TableHead>Planned round</TableHead>
+                  <TableHead>Required round</TableHead>
                   <TableHead className="text-right">Rounds</TableHead>
                 </TableRow>
               </TableHeader>
@@ -390,7 +325,9 @@ export default async function JobWorkspacePage({
                       <TableCell>
                         {formatDateTime(application.interviewAt)}
                       </TableCell>
-                      <TableCell>{application.plannedRound ?? "—"}</TableCell>
+                      <TableCell>
+                        {application.nextRound ?? "All rounds approved"}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {application.interviewCount}
                       </TableCell>
@@ -431,6 +368,7 @@ export default async function JobWorkspacePage({
                   <TableHead>Outcome</TableHead>
                   <TableHead>Interviewer</TableHead>
                   <TableHead>Score</TableHead>
+                  <TableHead>Assessment</TableHead>
                   <TableHead>Comments</TableHead>
                   <TableHead>Joining</TableHead>
                 </TableRow>
@@ -451,9 +389,13 @@ export default async function JobWorkspacePage({
                       </TableCell>
                       <TableCell>{interview.interviewerName ?? "—"}</TableCell>
                       <TableCell>
-                        {interview.score === null
-                          ? "—"
-                          : `${interview.score}/10`}
+                        {formatInterviewScore(interview.score)}
+                      </TableCell>
+                      <TableCell className="align-top whitespace-normal">
+                        <InterviewAssessment
+                          questionScores={interview.questionScores}
+                          roundName={interview.roundName}
+                        />
                       </TableCell>
                       <TableCell className="min-w-56 whitespace-normal">
                         {interview.comments ?? "—"}
@@ -465,7 +407,7 @@ export default async function JobWorkspacePage({
                   <TableRow>
                     <TableCell
                       className="py-10 text-center text-muted-foreground"
-                      colSpan={8}
+                      colSpan={9}
                     >
                       No interviews have been scheduled for this job.
                     </TableCell>

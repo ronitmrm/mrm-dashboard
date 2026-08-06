@@ -8,6 +8,11 @@ import {
   nextRecruitmentPostIdentity,
   recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
+import {
+  nextRecruitmentInterviewRound,
+  scoreRecruitmentInterview,
+  type RecruitmentInterviewRoundName,
+} from "./recruitment-interview-workflow"
 
 type MutationContext = {
   actorUserId?: string | null
@@ -89,6 +94,7 @@ export type RecruitmentInterviewRow = {
   jobTitle: string
   latestRound: string | null
   latestStatus: string | null
+  nextRound: RecruitmentInterviewRoundName | null
   plannedRound: string | null
   status: string
 }
@@ -104,6 +110,7 @@ export type RecruitmentJobApplicationRow = {
   interviewAt: string | null
   interviewCount: number
   joiningDate: string | null
+  nextRound: RecruitmentInterviewRoundName | null
   plannedRound: string | null
   status: string
 }
@@ -116,6 +123,7 @@ export type RecruitmentJobInterviewRow = {
   id: string
   interviewerName: string | null
   joiningDate: string | null
+  questionScores: Record<string, number>
   roundName: string
   scheduledAt: string | null
   score: number | null
@@ -138,6 +146,15 @@ function required(value: unknown, label: string) {
 function optional(value: unknown) {
   const normalized = String(value ?? "").trim()
   return normalized || null
+}
+
+function normalizedQuestionScores(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, score]) => [key, Number(score)] as const)
+      .filter(([, score]) => Number.isFinite(score))
+  )
 }
 
 export function deriveRecruitmentPostStatus(input: {
@@ -808,6 +825,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             id: string
             interviewer_name: string | null
             joining_date: string | null
+            question_scores: unknown
             round_name: string
             scheduled_at: string | null
             score: string | null
@@ -820,6 +838,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                 interview.status, interview.scheduled_at::text,
                 interview.interviewer_name,
                 interview.scores ->> 'overall' AS score,
+                interview.scores -> 'questions' AS question_scores,
                 interview.comments, interview.joining_date::text,
                 interview.created_at::text, interview.updated_at::text
               FROM recruitment.interviews interview
@@ -840,6 +859,15 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
       const job = jobResult.rows[0]
       if (!job) return null
+      const interviewProgress = new Map<
+        string,
+        Array<{ roundName: string; status: string }>
+      >()
+      for (const interview of interviewResult.rows) {
+        const rows = interviewProgress.get(interview.application_id) ?? []
+        rows.push({ roundName: interview.round_name, status: interview.status })
+        interviewProgress.set(interview.application_id, rows)
+      }
       return {
         applications: applicationResult.rows.map((row) => ({
           candidateEmail: row.candidate_email,
@@ -852,6 +880,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           interviewAt: row.interview_at,
           interviewCount: row.interview_count,
           joiningDate: row.joining_date,
+          nextRound:
+            nextRecruitmentInterviewRound(interviewProgress.get(row.id) ?? [])
+              ?.name ?? null,
           plannedRound: row.planned_round,
           status: row.status,
         })),
@@ -863,6 +894,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           id: row.id,
           interviewerName: row.interviewer_name,
           joiningDate: row.joining_date,
+          questionScores: normalizedQuestionScores(row.question_scores),
           roundName: row.round_name,
           scheduledAt: row.scheduled_at,
           score: row.score === null ? null : Number(row.score),
@@ -888,6 +920,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     ): Promise<RecruitmentInterviewRow[]> {
       const result = await pool.query<{
         application_id: string
+        approved_rounds: string[]
         candidate_name: string
         interview_at: string | null
         job_title: string
@@ -902,7 +935,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             candidate.name AS candidate_name, job.title AS job_title,
             application.status, application.interview_at::text,
             application.planned_round, application.joining_date::text,
-            latest.round_name AS latest_round, latest.status AS latest_status
+            latest.round_name AS latest_round, latest.status AS latest_status,
+            progress.approved_rounds
           FROM recruitment.applications application
           JOIN recruitment.candidates candidate ON candidate.id = application.candidate_id
           JOIN recruitment.job_posts job ON job.id = application.job_post_id
@@ -913,6 +947,15 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             ORDER BY interview.updated_at DESC
             LIMIT 1
           ) latest ON true
+          LEFT JOIN LATERAL (
+            SELECT coalesce(
+              array_agg(interview.round_name)
+                FILTER (WHERE interview.status = 'Approved'),
+              ARRAY[]::text[]
+            ) AS approved_rounds
+            FROM recruitment.interviews interview
+            WHERE interview.application_id = application.id
+          ) progress ON true
           WHERE application.organization_id = $1
           ORDER BY application.interview_at NULLS LAST, application.updated_at DESC
           LIMIT 500
@@ -927,6 +970,13 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         jobTitle: row.job_title,
         latestRound: row.latest_round,
         latestStatus: row.latest_status,
+        nextRound:
+          nextRecruitmentInterviewRound(
+            (row.approved_rounds ?? []).map((roundName) => ({
+              roundName,
+              status: "Approved",
+            }))
+          )?.name ?? null,
         plannedRound: row.planned_round,
         status: row.status,
       }))
@@ -1960,10 +2010,50 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       input: MutationContext & {
         applicationId: string
         interviewAt: string
-        plannedRound: string
       }
     ) {
       return transaction(pool, async (client) => {
+        const applicationResult = await client.query<{ id: string }>(
+          `
+            SELECT id
+            FROM recruitment.applications
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [
+            required(input.applicationId, "Candidate application"),
+            input.organizationId,
+          ]
+        )
+        const application = applicationResult.rows[0]
+        if (!application) {
+          throw new Error("Candidate application was not found.")
+        }
+        const historyResult = await client.query<{
+          round_name: string
+          status: string
+        }>(
+          `
+            SELECT round_name, status
+            FROM recruitment.interviews
+            WHERE application_id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [application.id, input.organizationId]
+        )
+        const nextRound = nextRecruitmentInterviewRound(
+          historyResult.rows.map((row) => ({
+            roundName: row.round_name,
+            status: row.status,
+          }))
+        )
+        if (!nextRound) {
+          throw new Error("All three interview rounds are already approved.")
+        }
+        const interviewAt = required(
+          input.interviewAt,
+          "Interview date and time"
+        )
         const result = await client.query<{ id: string }>(
           `
             UPDATE recruitment.applications
@@ -1974,16 +2064,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             RETURNING id
           `,
           [
-            required(input.interviewAt, "Interview date and time"),
-            required(input.plannedRound, "Interview round"),
+            interviewAt,
+            nextRound.name,
             input.actorUserId ?? null,
-            required(input.applicationId, "Candidate application"),
+            application.id,
             input.organizationId,
           ]
         )
-        if (!result.rows[0]) {
-          throw new Error("Candidate application was not found.")
-        }
+        const updatedApplication = result.rows[0]!
         await client.query(
           `
             INSERT INTO recruitment.interviews (
@@ -2006,9 +2094,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `,
           [
             input.organizationId,
-            result.rows[0].id,
-            required(input.plannedRound, "Interview round"),
-            required(input.interviewAt, "Interview date and time"),
+            updatedApplication.id,
+            nextRound.name,
+            interviewAt,
             input.actorUserId ?? null,
             randomUUID(),
           ]
@@ -2016,10 +2104,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         await audit(client, {
           ...input,
           eventType: "recruitment.interview.scheduled",
-          targetId: result.rows[0].id,
+          targetId: updatedApplication.id,
           targetTable: "applications",
         })
-        return result.rows[0]
+        return updatedApplication
       })
     },
 
@@ -2029,15 +2117,59 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         comments?: string | null
         interviewerName?: string | null
         joiningDate?: string | null
+        questionScores: Record<string, unknown>
         roundName: string
-        score?: string | number | null
         status: "Approved" | "Hold" | "Rejected"
       }
     ) {
       return transaction(pool, async (client) => {
+        const applicationResult = await client.query<{ id: string }>(
+          `
+            SELECT id
+            FROM recruitment.applications
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [
+            required(input.applicationId, "Candidate application"),
+            input.organizationId,
+          ]
+        )
+        const application = applicationResult.rows[0]
+        if (!application) {
+          throw new Error("Candidate application was not found.")
+        }
+        const historyResult = await client.query<{
+          round_name: string
+          status: string
+        }>(
+          `
+            SELECT round_name, status
+            FROM recruitment.interviews
+            WHERE application_id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [application.id, input.organizationId]
+        )
+        const nextRound = nextRecruitmentInterviewRound(
+          historyResult.rows.map((row) => ({
+            roundName: row.round_name,
+            status: row.status,
+          }))
+        )
+        if (!nextRound) {
+          throw new Error("All three interview rounds are already approved.")
+        }
+        if (required(input.roundName, "Interview round") !== nextRound.name) {
+          throw new Error(`The next required round is ${nextRound.name}.`)
+        }
+        const assessment = scoreRecruitmentInterview(
+          nextRound.name,
+          input.questionScores
+        )
         if (
           input.status === "Approved" &&
-          input.roundName === "Final HR Round" &&
+          nextRound.name === "HR Round" &&
           !optional(input.joiningDate)
         ) {
           throw new Error("Joining date is required for final approval.")
@@ -2050,12 +2182,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               created_by_user_id, updated_by_user_id, source_system,
               source_table, source_id
             )
-            SELECT $1, application.id, $2, $3, $4,
-              jsonb_build_object('overall', $5::numeric), $6,
-              migration.try_date($7), $8, $8, 'mrm-dashboard',
-              'interviews', $9
-            FROM recruitment.applications application
-            WHERE application.id = $10 AND application.organization_id = $1
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7,
+              migration.try_date($8), $9, $9, 'mrm-dashboard',
+              'interviews', $10)
             ON CONFLICT (application_id, round_name) DO UPDATE SET
               status = EXCLUDED.status,
               interviewer_name = EXCLUDED.interviewer_name,
@@ -2068,22 +2197,23 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `,
           [
             input.organizationId,
-            required(input.roundName, "Interview round"),
+            application.id,
+            nextRound.name,
             input.status,
             optional(input.interviewerName),
-            money(input.score) ?? 0,
+            JSON.stringify({
+              overall: assessment.overall,
+              questions: assessment.questionScores,
+            }),
             optional(input.comments),
             optional(input.joiningDate),
             input.actorUserId ?? null,
             randomUUID(),
-            required(input.applicationId, "Candidate application"),
           ]
         )
-        if (!result.rows[0]) {
-          throw new Error("Candidate application was not found.")
-        }
         const finalApproval =
-          input.status === "Approved" && input.roundName === "Final HR Round"
+          input.status === "Approved" && nextRound.name === "HR Round"
+        const recordedInterview = result.rows[0]!
         await client.query(
           `
             UPDATE recruitment.applications
@@ -2107,10 +2237,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         await audit(client, {
           ...input,
           eventType: "recruitment.interview.recorded",
-          targetId: result.rows[0].id,
+          targetId: recordedInterview.id,
           targetTable: "interviews",
         })
-        return result.rows[0]
+        return recordedInterview
       })
     },
   }
