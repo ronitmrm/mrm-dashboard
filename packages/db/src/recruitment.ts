@@ -93,6 +93,42 @@ export type RecruitmentInterviewRow = {
   status: string
 }
 
+export type RecruitmentJobApplicationRow = {
+  candidateEmail: string | null
+  candidateId: string
+  candidateName: string
+  candidatePhone: string
+  currentCompany: string | null
+  experience: string | null
+  id: string
+  interviewAt: string | null
+  interviewCount: number
+  joiningDate: string | null
+  plannedRound: string | null
+  status: string
+}
+
+export type RecruitmentJobInterviewRow = {
+  applicationId: string
+  candidateName: string
+  comments: string | null
+  createdAt: string
+  id: string
+  interviewerName: string | null
+  joiningDate: string | null
+  roundName: string
+  scheduledAt: string | null
+  score: number | null
+  status: string
+  updatedAt: string
+}
+
+export type RecruitmentJobWorkspace = {
+  applications: RecruitmentJobApplicationRow[]
+  interviews: RecruitmentJobInterviewRow[]
+  job: RecruitmentJobRow
+}
+
 function required(value: unknown, label: string) {
   const normalized = String(value ?? "").trim()
   if (!normalized) throw new Error(`${label} is required.`)
@@ -696,6 +732,155 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         title: row.title,
         vacancyCode: row.vacancy_code,
       }))
+    },
+
+    async getJobWorkspace(
+      organizationId: string,
+      jobId: string
+    ): Promise<RecruitmentJobWorkspace | null> {
+      const [jobResult, applicationResult, interviewResult] = await Promise.all(
+        [
+          pool.query<{
+            applicant_count: number
+            id: string
+            job_number: string
+            post_code: string | null
+            post_date: string
+            status: string
+            target_date: string | null
+            title: string
+            vacancy_code: string
+          }>(
+            `
+              SELECT job.id, job.job_number, job.vacancy_code, job.title,
+                job.post_date::text, job.target_date::text, job.status,
+                post.post_code, count(application.id)::int AS applicant_count
+              FROM recruitment.job_posts job
+              LEFT JOIN recruitment.posts post ON post.id = job.post_id
+              LEFT JOIN recruitment.applications application
+                ON application.job_post_id = job.id
+              WHERE job.organization_id = $1 AND job.id = $2
+              GROUP BY job.id, post.post_code
+            `,
+            [organizationId, jobId]
+          ),
+          pool.query<{
+            candidate_email: string | null
+            candidate_id: string
+            candidate_name: string
+            candidate_phone: string
+            current_company: string | null
+            experience: string | null
+            id: string
+            interview_at: string | null
+            interview_count: number
+            joining_date: string | null
+            planned_round: string | null
+            status: string
+          }>(
+            `
+              SELECT application.id, application.candidate_id,
+                candidate.name AS candidate_name,
+                candidate.phone AS candidate_phone,
+                candidate.email AS candidate_email,
+                candidate.current_company, candidate.experience,
+                application.status, application.interview_at::text,
+                application.planned_round, application.joining_date::text,
+                count(interview.id)::int AS interview_count
+              FROM recruitment.applications application
+              JOIN recruitment.candidates candidate
+                ON candidate.id = application.candidate_id
+              LEFT JOIN recruitment.interviews interview
+                ON interview.application_id = application.id
+              WHERE application.organization_id = $1
+                AND application.job_post_id = $2
+              GROUP BY application.id, candidate.id
+              ORDER BY application.updated_at DESC, candidate.name
+              LIMIT 500
+            `,
+            [organizationId, jobId]
+          ),
+          pool.query<{
+            application_id: string
+            candidate_name: string
+            comments: string | null
+            created_at: string
+            id: string
+            interviewer_name: string | null
+            joining_date: string | null
+            round_name: string
+            scheduled_at: string | null
+            score: string | null
+            status: string
+            updated_at: string
+          }>(
+            `
+              SELECT interview.id, interview.application_id,
+                candidate.name AS candidate_name, interview.round_name,
+                interview.status, interview.scheduled_at::text,
+                interview.interviewer_name,
+                interview.scores ->> 'overall' AS score,
+                interview.comments, interview.joining_date::text,
+                interview.created_at::text, interview.updated_at::text
+              FROM recruitment.interviews interview
+              JOIN recruitment.applications application
+                ON application.id = interview.application_id
+              JOIN recruitment.candidates candidate
+                ON candidate.id = application.candidate_id
+              WHERE interview.organization_id = $1
+                AND application.job_post_id = $2
+              ORDER BY interview.scheduled_at DESC NULLS LAST,
+                interview.updated_at DESC, candidate.name
+              LIMIT 1000
+            `,
+            [organizationId, jobId]
+          ),
+        ]
+      )
+
+      const job = jobResult.rows[0]
+      if (!job) return null
+      return {
+        applications: applicationResult.rows.map((row) => ({
+          candidateEmail: row.candidate_email,
+          candidateId: row.candidate_id,
+          candidateName: row.candidate_name,
+          candidatePhone: row.candidate_phone,
+          currentCompany: row.current_company,
+          experience: row.experience,
+          id: row.id,
+          interviewAt: row.interview_at,
+          interviewCount: row.interview_count,
+          joiningDate: row.joining_date,
+          plannedRound: row.planned_round,
+          status: row.status,
+        })),
+        interviews: interviewResult.rows.map((row) => ({
+          applicationId: row.application_id,
+          candidateName: row.candidate_name,
+          comments: row.comments,
+          createdAt: row.created_at,
+          id: row.id,
+          interviewerName: row.interviewer_name,
+          joiningDate: row.joining_date,
+          roundName: row.round_name,
+          scheduledAt: row.scheduled_at,
+          score: row.score === null ? null : Number(row.score),
+          status: row.status,
+          updatedAt: row.updated_at,
+        })),
+        job: {
+          applicantCount: job.applicant_count,
+          id: job.id,
+          jobNumber: job.job_number,
+          postCode: job.post_code,
+          postDate: job.post_date,
+          status: job.status,
+          targetDate: job.target_date,
+          title: job.title,
+          vacancyCode: job.vacancy_code,
+        },
+      }
     },
 
     async listInterviews(
@@ -1799,6 +1984,35 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         if (!result.rows[0]) {
           throw new Error("Candidate application was not found.")
         }
+        await client.query(
+          `
+            INSERT INTO recruitment.interviews (
+              organization_id, application_id, round_name, status,
+              scheduled_at, created_by_user_id, updated_by_user_id,
+              source_system, source_table, source_id
+            )
+            VALUES ($1, $2, $3, 'Scheduled', $4::timestamptz, $5, $5,
+              'mrm-dashboard', 'interview-schedules', $6)
+            ON CONFLICT (application_id, round_name) DO UPDATE SET
+              scheduled_at = EXCLUDED.scheduled_at,
+              status = CASE
+                WHEN recruitment.interviews.status = 'Scheduled'
+                  THEN 'Scheduled'
+                ELSE recruitment.interviews.status
+              END,
+              updated_by_user_id = EXCLUDED.updated_by_user_id,
+              updated_at = now(),
+              row_version = recruitment.interviews.row_version + 1
+          `,
+          [
+            input.organizationId,
+            result.rows[0].id,
+            required(input.plannedRound, "Interview round"),
+            required(input.interviewAt, "Interview date and time"),
+            input.actorUserId ?? null,
+            randomUUID(),
+          ]
+        )
         await audit(client, {
           ...input,
           eventType: "recruitment.interview.scheduled",

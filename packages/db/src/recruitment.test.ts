@@ -138,6 +138,141 @@ describe("assignEmployee", () => {
   })
 })
 
+describe("job workspace", () => {
+  test("returns one job with its applications and every interview round", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("count(application.id)::int AS applicant_count")) {
+        return {
+          rows: [
+            {
+              applicant_count: 1,
+              id: "job-1",
+              job_number: "JOB-1",
+              post_code: "QC-IN-1",
+              post_date: "2026-08-06",
+              status: "Open",
+              target_date: "2026-08-20",
+              title: "Inspector / Quality Control",
+              vacancy_code: "QC-IN-1",
+            },
+          ],
+        }
+      }
+      if (statement.includes("count(interview.id)::int AS interview_count")) {
+        return {
+          rows: [
+            {
+              candidate_email: "candidate@example.com",
+              candidate_id: "candidate-1",
+              candidate_name: "Candidate One",
+              candidate_phone: "9999999999",
+              current_company: null,
+              experience: "4 years",
+              id: "application-1",
+              interview_at: "2026-08-08 10:00:00+00",
+              interview_count: 2,
+              joining_date: null,
+              planned_round: "Department Round",
+              status: "Interview",
+            },
+          ],
+        }
+      }
+      if (statement.includes("FROM recruitment.interviews interview")) {
+        return {
+          rows: [
+            {
+              application_id: "application-1",
+              candidate_name: "Candidate One",
+              comments: "Strong fundamentals",
+              created_at: "2026-08-06 09:00:00+00",
+              id: "interview-1",
+              interviewer_name: "Manager",
+              joining_date: null,
+              round_name: "Screening Round",
+              scheduled_at: "2026-08-07 10:00:00+00",
+              score: "8",
+              status: "Approved",
+              updated_at: "2026-08-07 11:00:00+00",
+            },
+            {
+              application_id: "application-1",
+              candidate_name: "Candidate One",
+              comments: null,
+              created_at: "2026-08-07 11:05:00+00",
+              id: "interview-2",
+              interviewer_name: null,
+              joining_date: null,
+              round_name: "Department Round",
+              scheduled_at: "2026-08-08 10:00:00+00",
+              score: null,
+              status: "Scheduled",
+              updated_at: "2026-08-07 11:05:00+00",
+            },
+          ],
+        }
+      }
+      return { rows: [] }
+    })
+    const repository = createRecruitmentRepository({
+      pool: { query } as unknown as Pool,
+    })
+
+    const workspace = await repository.getJobWorkspace(
+      "organization-1",
+      "job-1"
+    )
+
+    expect(workspace?.job.jobNumber).toBe("JOB-1")
+    expect(workspace?.applications[0]).toEqual(
+      expect.objectContaining({
+        candidateName: "Candidate One",
+        interviewCount: 2,
+      })
+    )
+    expect(workspace?.interviews).toEqual([
+      expect.objectContaining({ roundName: "Screening Round", score: 8 }),
+      expect.objectContaining({
+        roundName: "Department Round",
+        status: "Scheduled",
+      }),
+    ])
+  })
+
+  test("stores a schedule on the interview round as well as the application", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("UPDATE recruitment.applications")) {
+        return { rows: [{ id: "application-1" }] }
+      }
+      return { rows: [] }
+    })
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const pool = {
+      connect: vi.fn(async () => client),
+    } as unknown as Pool
+    const repository = createRecruitmentRepository({ pool })
+
+    await repository.scheduleInterview({
+      applicationId: "application-1",
+      interviewAt: "2026-08-08T10:00",
+      organizationId: "organization-1",
+      plannedRound: "Department Round",
+    })
+
+    expect(
+      query.mock.calls.some(
+        ([statement]) =>
+          statement.includes("INSERT INTO recruitment.interviews") &&
+          statement.includes("'Scheduled'") &&
+          statement.includes("scheduled_at")
+      )
+    ).toBe(true)
+  })
+})
+
 describe("deriveRecruitmentPostStatus", () => {
   test("marks a post occupied when an employee code is assigned", () => {
     expect(

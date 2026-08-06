@@ -21,9 +21,7 @@ describe("unified navigation", () => {
     const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
     expect(nativeLinks).toHaveLength(3)
-    expect(source).toContain(
-      "<a href={dashboardTabHref(item.id, floor.code)}>"
-    )
+    expect(source).toContain("<a href={dashboardTabHref(item.id, floor.code)}>")
     expect(source).not.toContain('from "next/link"')
     expect(source).not.toContain("router.prefetch")
   })
@@ -79,6 +77,25 @@ describe("unified navigation", () => {
     ).toBe(true)
     expect(
       navigationHrefMatches("/hr", searchParams, "/hr?panel=mastersPanel")
+    ).toBe(false)
+  })
+
+  it("keeps Job Posts selected inside a job recruitment workspace", () => {
+    const searchParams = new URLSearchParams()
+
+    expect(
+      navigationHrefMatches(
+        "/hr/jobs/9824b9a7-b917-4dea-a8b2-9eb9d2935dc7",
+        searchParams,
+        "/hr?panel=jobsPanel"
+      )
+    ).toBe(true)
+    expect(
+      navigationHrefMatches(
+        "/hr/jobs/9824b9a7-b917-4dea-a8b2-9eb9d2935dc7",
+        searchParams,
+        "/hr?panel=interviewsPanel"
+      )
     ).toBe(false)
   })
 })

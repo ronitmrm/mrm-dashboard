@@ -23,6 +23,14 @@ function values(formData: FormData, key: string) {
 }
 
 function returnPath(formData: FormData) {
+  const returnJobId = value(formData, "return_job_id")
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      returnJobId
+    )
+  ) {
+    return `${hrPath}/jobs/${returnJobId}`
+  }
   const panel = value(formData, "panel")
   return `${hrPath}?panel=${encodeURIComponent(panel || "mastersPanel")}`
 }
@@ -58,8 +66,9 @@ async function mutate(
     await repository.close()
   }
   revalidatePath(hrPath)
+  if (path !== hrPath) revalidatePath(path)
   const feedback = new URLSearchParams(outcome)
-  redirect(`${path}&${feedback}`)
+  redirect(`${path}${path.includes("?") ? "&" : "?"}${feedback}`)
 }
 
 export async function saveMasterAction(formData: FormData) {

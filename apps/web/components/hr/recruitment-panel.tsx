@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import {
   nextRecruitmentTemplateCode,
   type RecruitmentCandidateRow,
@@ -619,6 +621,7 @@ function JobsPanel({
                 <TableHead>Target</TableHead>
                 <TableHead>Applicants</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Workspace</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -643,10 +646,15 @@ function JobsPanel({
                     <TableCell>
                       <StatusBadge status={row.status} />
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/hr/jobs/${row.id}`}>Open job</Link>
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))
               ) : (
-                <EmptyRow columns={7} label="No job posts found." />
+                <EmptyRow columns={8} label="No job posts found." />
               )}
             </TableBody>
           </Table>

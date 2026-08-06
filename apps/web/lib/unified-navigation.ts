@@ -70,6 +70,13 @@ export function navigationHrefMatches(
   href: string
 ) {
   const destination = new URL(href, "http://mrmpl.local")
+  if (
+    pathname.startsWith("/hr/jobs/") &&
+    destination.pathname === "/hr" &&
+    destination.searchParams.get("panel") === "jobsPanel"
+  ) {
+    return true
+  }
   const pathMatches =
     destination.pathname === "/" || destination.pathname === "/commercial"
       ? pathname === destination.pathname
