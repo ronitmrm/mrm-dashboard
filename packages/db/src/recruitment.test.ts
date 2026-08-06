@@ -81,6 +81,61 @@ describe("assignEmployee", () => {
     )
     expect(updateCall?.[1]?.[4]).toEqual([selectedPostId, relatedPostId])
   })
+
+  test("rejects a bulk workbook before updating when any target is invalid", async () => {
+    const combinedPostId = "00000000-0000-4000-8000-000000000001"
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("lower(combined.vacancy_code)")) {
+        return {
+          rowCount: 1,
+          rows: [{ post_id: combinedPostId, target_code: "cmb-1" }],
+        }
+      }
+      if (statement.includes("lower(post_code) AS target_code")) {
+        return { rowCount: 0, rows: [] }
+      }
+      return { rowCount: 0, rows: [] }
+    })
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const pool = {
+      connect: vi.fn(async () => client),
+    } as unknown as Pool
+    const repository = createRecruitmentRepository({ pool })
+
+    await expect(
+      repository.bulkAssignEmployees({
+        assignments: [
+          {
+            employeeCode: "EMP-1",
+            employeeEvent: "Joined",
+            employeeName: "Combined employee",
+            rowNumber: 2,
+            targetCode: "CMB-1",
+            targetType: "combined",
+          },
+          {
+            employeeCode: "EMP-2",
+            employeeEvent: "Joined",
+            employeeName: "Individual employee",
+            rowNumber: 8,
+            targetCode: "BAD-POST",
+            targetType: "individual",
+          },
+        ],
+        organizationId: "00000000-0000-4000-8000-000000000010",
+      })
+    ).rejects.toThrow(
+      "Individual Posts row 8: BAD-POST is not an available individual post."
+    )
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("UPDATE recruitment.posts")
+      )
+    ).toBe(false)
+  })
 })
 
 describe("deriveRecruitmentPostStatus", () => {

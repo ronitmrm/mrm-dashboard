@@ -3,7 +3,9 @@
 import { createRecruitmentRepository } from "@workspace/db"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import * as XLSX from "xlsx"
 
+import { parseEmployeeAssignmentWorkbook } from "@/app/hr/employee-assignment-workbook"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 
@@ -167,6 +169,57 @@ export async function assignEmployeeAction(formData: FormData) {
       postId: value(formData, "post_id"),
     })
   )
+}
+
+export async function bulkAssignEmployeesAction(formData: FormData) {
+  const path = returnPath(formData)
+  const session = await requireCapability("hr.employees.write", path)
+  const file = formData.get("employee_assignments_file")
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(
+      `${path}&error=${encodeURIComponent("Select an employee assignment workbook.")}`
+    )
+  }
+  if (!/\.(xlsx|xls)$/i.test(file.name)) {
+    redirect(
+      `${path}&error=${encodeURIComponent("Only XLSX or XLS files are accepted.")}`
+    )
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    redirect(
+      `${path}&error=${encodeURIComponent("The workbook must be 5 MB or smaller.")}`
+    )
+  }
+
+  const repository = createRecruitmentRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  let outcome: { error?: string; success?: string }
+  try {
+    const organizationId = await repository.organizationIdForCode("MRMPL")
+    const workbook = XLSX.read(Buffer.from(await file.arrayBuffer()), {
+      type: "buffer",
+    })
+    const result = await repository.bulkAssignEmployees({
+      actorUserId: session.user.id,
+      assignments: parseEmployeeAssignmentWorkbook(workbook),
+      organizationId,
+    })
+    outcome = {
+      success: `Uploaded ${result.assignmentCount} assignments across ${result.updatedPostCount} approved posts.`,
+    }
+  } catch (error) {
+    outcome = {
+      error:
+        error instanceof Error
+          ? error.message
+          : "The employee assignment workbook was not uploaded.",
+    }
+  } finally {
+    await repository.close()
+  }
+  revalidatePath(hrPath)
+  redirect(`${path}&${new URLSearchParams(outcome)}`)
 }
 
 export async function createJobAction(formData: FormData) {

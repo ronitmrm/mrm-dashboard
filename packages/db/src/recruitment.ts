@@ -236,6 +236,113 @@ async function audit(
   )
 }
 
+type EmployeeAssignmentInput = MutationContext & {
+  employeeCode?: string | null
+  employeeEvent?: string | null
+  employeeName?: string | null
+  postId: string
+}
+
+async function assignEmployeeInTransaction(
+  client: PoolClient,
+  input: EmployeeAssignmentInput
+) {
+  const current = await client.query<{
+    combined_role_id: string | null
+    employee_code: string | null
+    employee_name: string | null
+    id: string
+  }>(
+    `
+      SELECT id, employee_name, employee_code, combined_role_id
+      FROM recruitment.posts
+      WHERE id = $1 AND organization_id = $2 AND status <> 'Inactive'
+      FOR UPDATE
+    `,
+    [required(input.postId, "Approved post"), input.organizationId]
+  )
+  if (!current.rows[0]) throw new Error("Approved post was not found.")
+  const currentPost = current.rows[0]
+  const targets = currentPost.combined_role_id
+    ? await client.query<{
+        employee_code: string | null
+        employee_name: string | null
+        id: string
+      }>(
+        `
+          SELECT post.id, post.employee_name, post.employee_code
+          FROM recruitment.combined_role_posts link
+          JOIN recruitment.combined_roles combined
+            ON combined.id = link.combined_role_id
+          JOIN recruitment.posts post ON post.id = link.post_id
+          WHERE link.combined_role_id = $1
+            AND combined.organization_id = $2
+            AND combined.status = 'Active'
+            AND post.organization_id = $2
+            AND post.status <> 'Inactive'
+          ORDER BY link.is_primary DESC, post.post_code
+          FOR UPDATE OF post
+        `,
+        [currentPost.combined_role_id, input.organizationId]
+      )
+    : current
+  if (!targets.rows.length) {
+    throw new Error("The combined role has no active approved posts.")
+  }
+  const existingAssignment =
+    targets.rows.find(
+      (post) => optional(post.employee_name) || optional(post.employee_code)
+    ) ?? currentPost
+  const assignment = deriveRecruitmentEmployeeAssignment({
+    currentEmployeeCode: existingAssignment.employee_code,
+    currentEmployeeName: existingAssignment.employee_name,
+    employeeCode: input.employeeCode,
+    employeeEvent: input.employeeEvent,
+    employeeName: input.employeeName,
+  })
+  const targetIds = targets.rows.map((post) => post.id)
+  const result = await client.query<{ id: string }>(
+    `
+      UPDATE recruitment.posts
+      SET employee_name = $1, employee_code = $2,
+        status = $3,
+        updated_by_user_id = $4, updated_at = now(),
+        row_version = row_version + 1
+      WHERE id = ANY($5::uuid[]) AND organization_id = $6
+      RETURNING id
+    `,
+    [
+      assignment.employeeName,
+      assignment.employeeCode,
+      assignment.status,
+      input.actorUserId ?? null,
+      targetIds,
+      input.organizationId,
+    ]
+  )
+  if (result.rows.length !== targetIds.length) {
+    throw new Error("Not every approved post in the assignment was updated.")
+  }
+  for (const updated of result.rows) {
+    await audit(client, {
+      ...input,
+      eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
+      metadata: {
+        assignmentScope: currentPost.combined_role_id
+          ? "combined-role"
+          : "approved-post",
+        combinedRoleId: currentPost.combined_role_id,
+        status: assignment.status,
+      },
+      targetId: updated.id,
+      targetTable: "posts",
+    })
+  }
+  const selectedPost = result.rows.find((post) => post.id === currentPost.id)
+  if (!selectedPost) throw new Error("Approved post was not found.")
+  return { selectedPost, updatedPostCount: result.rows.length }
+}
+
 async function organizationIdForCode(pool: Pool, code: string) {
   const result = await pool.query<{ id: string }>(
     "SELECT id FROM core.organizations WHERE lower(code) = lower($1)",
@@ -1274,114 +1381,112 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       })
     },
 
-    async assignEmployee(
+    async assignEmployee(input: EmployeeAssignmentInput) {
+      return transaction(pool, async (client) => {
+        const result = await assignEmployeeInTransaction(client, input)
+        return result.selectedPost
+      })
+    },
+
+    async bulkAssignEmployees(
       input: MutationContext & {
-        employeeCode?: string | null
-        employeeEvent?: string | null
-        employeeName?: string | null
-        postId: string
+        assignments: Array<{
+          employeeCode?: string | null
+          employeeEvent: string
+          employeeName?: string | null
+          rowNumber: number
+          targetCode: string
+          targetType: "combined" | "individual"
+        }>
       }
     ) {
+      if (!input.assignments.length) {
+        throw new Error("At least one employee assignment is required.")
+      }
       return transaction(pool, async (client) => {
-        const current = await client.query<{
-          combined_role_id: string | null
-          employee_code: string | null
-          employee_name: string | null
-          id: string
-        }>(
-          `
-            SELECT id, employee_name, employee_code, combined_role_id
-            FROM recruitment.posts
-            WHERE id = $1 AND organization_id = $2 AND status <> 'Inactive'
-            FOR UPDATE
-          `,
-          [required(input.postId, "Approved post"), input.organizationId]
-        )
-        if (!current.rows[0]) throw new Error("Approved post was not found.")
-        const currentPost = current.rows[0]
-        const targets = currentPost.combined_role_id
-          ? await client.query<{
-              employee_code: string | null
-              employee_name: string | null
-              id: string
-            }>(
+        const combinedCodes = input.assignments
+          .filter((row) => row.targetType === "combined")
+          .map((row) => row.targetCode.toLowerCase())
+        const individualCodes = input.assignments
+          .filter((row) => row.targetType === "individual")
+          .map((row) => row.targetCode.toLowerCase())
+        const combinedTargets = combinedCodes.length
+          ? await client.query<{ post_id: string; target_code: string }>(
               `
-                SELECT post.id, post.employee_name, post.employee_code
-                FROM recruitment.combined_role_posts link
-                JOIN recruitment.combined_roles combined
-                  ON combined.id = link.combined_role_id
+                SELECT lower(combined.vacancy_code) AS target_code,
+                  max(post.id::text) FILTER (WHERE link.is_primary)::uuid AS post_id
+                FROM recruitment.combined_roles combined
+                JOIN recruitment.combined_role_posts link
+                  ON link.combined_role_id = combined.id
                 JOIN recruitment.posts post ON post.id = link.post_id
-                WHERE link.combined_role_id = $1
-                  AND combined.organization_id = $2
+                WHERE combined.organization_id = $1
                   AND combined.status = 'Active'
-                  AND post.organization_id = $2
+                  AND lower(combined.vacancy_code) = ANY($2::text[])
                   AND post.status <> 'Inactive'
-                ORDER BY link.is_primary DESC, post.post_code
-                FOR UPDATE OF post
+                GROUP BY combined.id
               `,
-              [currentPost.combined_role_id, input.organizationId]
+              [input.organizationId, combinedCodes]
             )
-          : current
-        if (!targets.rows.length) {
-          throw new Error("The combined role has no active approved posts.")
-        }
-        const existingAssignment =
-          targets.rows.find(
-            (post) =>
-              optional(post.employee_name) || optional(post.employee_code)
-          ) ?? currentPost
-        const assignment = deriveRecruitmentEmployeeAssignment({
-          currentEmployeeCode: existingAssignment.employee_code,
-          currentEmployeeName: existingAssignment.employee_name,
-          employeeCode: input.employeeCode,
-          employeeEvent: input.employeeEvent,
-          employeeName: input.employeeName,
-        })
-        const targetIds = targets.rows.map((post) => post.id)
-        const result = await client.query<{ id: string }>(
-          `
-            UPDATE recruitment.posts
-            SET employee_name = $1, employee_code = $2,
-              status = $3,
-              updated_by_user_id = $4, updated_at = now(),
-              row_version = row_version + 1
-            WHERE id = ANY($5::uuid[]) AND organization_id = $6
-            RETURNING id
-          `,
-          [
-            assignment.employeeName,
-            assignment.employeeCode,
-            assignment.status,
-            input.actorUserId ?? null,
-            targetIds,
-            input.organizationId,
-          ]
+          : { rows: [] }
+        const individualTargets = individualCodes.length
+          ? await client.query<{ post_id: string; target_code: string }>(
+              `
+                SELECT id AS post_id, lower(post_code) AS target_code
+                FROM recruitment.posts
+                WHERE organization_id = $1
+                  AND status <> 'Inactive'
+                  AND combined_role_id IS NULL
+                  AND lower(post_code) = ANY($2::text[])
+              `,
+              [input.organizationId, individualCodes]
+            )
+          : { rows: [] }
+        const combinedByCode = new Map(
+          combinedTargets.rows.map((row) => [row.target_code, row.post_id])
         )
-        if (result.rows.length !== targetIds.length) {
-          throw new Error(
-            "Not every approved post in the assignment was updated."
-          )
+        const individualByCode = new Map(
+          individualTargets.rows.map((row) => [row.target_code, row.post_id])
+        )
+        for (const row of input.assignments) {
+          const target =
+            row.targetType === "combined"
+              ? combinedByCode.get(row.targetCode.toLowerCase())
+              : individualByCode.get(row.targetCode.toLowerCase())
+          if (!target) {
+            const sheet =
+              row.targetType === "combined"
+                ? "Combined Jobs"
+                : "Individual Posts"
+            throw new Error(
+              `${sheet} row ${row.rowNumber}: ${row.targetCode} is not an available ${
+                row.targetType === "combined"
+                  ? "combined job"
+                  : "individual post"
+              }.`
+            )
+          }
         }
-        for (const updated of result.rows) {
-          await audit(client, {
-            ...input,
-            eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
-            metadata: {
-              assignmentScope: currentPost.combined_role_id
-                ? "combined-role"
-                : "approved-post",
-              combinedRoleId: currentPost.combined_role_id,
-              status: assignment.status,
-            },
-            targetId: updated.id,
-            targetTable: "posts",
+
+        let updatedPostCount = 0
+        for (const row of input.assignments) {
+          const postId =
+            row.targetType === "combined"
+              ? combinedByCode.get(row.targetCode.toLowerCase())!
+              : individualByCode.get(row.targetCode.toLowerCase())!
+          const result = await assignEmployeeInTransaction(client, {
+            actorUserId: input.actorUserId,
+            employeeCode: row.employeeCode,
+            employeeEvent: row.employeeEvent,
+            employeeName: row.employeeName,
+            organizationId: input.organizationId,
+            postId,
           })
+          updatedPostCount += result.updatedPostCount
         }
-        const selectedPost = result.rows.find(
-          (post) => post.id === currentPost.id
-        )
-        if (!selectedPost) throw new Error("Approved post was not found.")
-        return selectedPost
+        return {
+          assignmentCount: input.assignments.length,
+          updatedPostCount,
+        }
       })
     },
 

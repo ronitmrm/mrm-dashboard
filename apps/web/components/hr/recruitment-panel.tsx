@@ -37,6 +37,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import {
   assignCandidateAction,
   assignEmployeeAction,
+  bulkAssignEmployeesAction,
   createJobAction,
   logCandidateEventAction,
   recordInterviewAction,
@@ -467,78 +468,121 @@ function EmployeePanel({
   return (
     <>
       {canManageEmployees ? (
-        <PanelForm
-          action={assignEmployeeAction}
-          description="Assign one employee to an individual post or to every Approved Post in a combined job. Appointed becomes Occupied only when Joined is selected."
-          panelId="employeeMasterPanel"
-          title="Employee assignment and status"
-        >
-          <Field>
-            <FieldLabel htmlFor="employee-post">
-              Approved post or combined job
-            </FieldLabel>
-            <NativeSelect
-              className="w-full"
-              id="employee-post"
-              name="post_id"
-              required
-            >
-              <NativeSelectOption value="">
-                Select post or combined job
-              </NativeSelectOption>
-              {combinedAssignmentTargets.length ? (
-                <NativeSelectOptGroup label="Combined jobs">
-                  {combinedAssignmentTargets.map(
-                    ({ combinedRole, targetPost }) => (
-                      <NativeSelectOption
-                        key={combinedRole.id}
-                        value={targetPost.id}
-                      >
-                        {combinedRole.vacancyCode} · {combinedRole.name} ·{" "}
-                        {combinedRole.postCodes.length} posts
+        <div className="grid gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Bulk employee assignment</CardTitle>
+              <CardDescription>
+                Start with the Combined Jobs sheet and upload it. Then download
+                a fresh template and complete Individual Posts. Empty rows are
+                ignored, and each complete file is checked before any post is
+                changed. Use Appointed, Joined, Resigned, or Removed in the
+                Employment Event column.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 lg:grid-cols-[auto_1fr] lg:items-end">
+              <Button asChild variant="outline">
+                <a href="/hr/employee-assignments/template">
+                  Download Excel template
+                </a>
+              </Button>
+              <form
+                action={bulkAssignEmployeesAction}
+                className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end"
+                encType="multipart/form-data"
+              >
+                <input name="panel" type="hidden" value="employeeMasterPanel" />
+                <Field>
+                  <FieldLabel htmlFor="employee-assignments-file">
+                    Completed Excel workbook
+                  </FieldLabel>
+                  <Input
+                    accept=".xlsx,.xls"
+                    id="employee-assignments-file"
+                    name="employee_assignments_file"
+                    required
+                    type="file"
+                  />
+                </Field>
+                <Button type="submit">Upload assignments</Button>
+              </form>
+            </CardContent>
+          </Card>
+          <PanelForm
+            action={assignEmployeeAction}
+            description="Assign one employee to an individual post or to every Approved Post in a combined job. Appointed becomes Occupied only when Joined is selected."
+            panelId="employeeMasterPanel"
+            title="Single employee assignment and status"
+          >
+            <Field>
+              <FieldLabel htmlFor="employee-post">
+                Approved post or combined job
+              </FieldLabel>
+              <NativeSelect
+                className="w-full"
+                id="employee-post"
+                name="post_id"
+                required
+              >
+                <NativeSelectOption value="">
+                  Select post or combined job
+                </NativeSelectOption>
+                {combinedAssignmentTargets.length ? (
+                  <NativeSelectOptGroup label="Combined jobs">
+                    {combinedAssignmentTargets.map(
+                      ({ combinedRole, targetPost }) => (
+                        <NativeSelectOption
+                          key={combinedRole.id}
+                          value={targetPost.id}
+                        >
+                          {combinedRole.vacancyCode} · {combinedRole.name} ·{" "}
+                          {combinedRole.postCodes.length} posts
+                        </NativeSelectOption>
+                      )
+                    )}
+                  </NativeSelectOptGroup>
+                ) : null}
+                {standalonePosts.length ? (
+                  <NativeSelectOptGroup label="Individual approved posts">
+                    {standalonePosts.map((row) => (
+                      <NativeSelectOption key={row.id} value={row.id}>
+                        {row.postCode} · {row.designation}
                       </NativeSelectOption>
-                    )
-                  )}
-                </NativeSelectOptGroup>
-              ) : null}
-              {standalonePosts.length ? (
-                <NativeSelectOptGroup label="Individual approved posts">
-                  {standalonePosts.map((row) => (
-                    <NativeSelectOption key={row.id} value={row.id}>
-                      {row.postCode} · {row.designation}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelectOptGroup>
-              ) : null}
-            </NativeSelect>
-          </Field>
-          <TextField label="Employee name" name="employee_name" />
-          <TextField label="Employee code" name="employee_code" />
-          <Field>
-            <FieldLabel htmlFor="employee-event">Employment event</FieldLabel>
-            <NativeSelect
-              className="w-full"
-              defaultValue="Appointed"
-              id="employee-event"
-              name="employee_event"
-              required
-            >
-              <NativeSelectOption value="Appointed">
-                Appointed — not joined
-              </NativeSelectOption>
-              <NativeSelectOption value="Joined">
-                Joined — becomes Occupied
-              </NativeSelectOption>
-              <NativeSelectOption value="Resigned">Resigned</NativeSelectOption>
-              <NativeSelectOption value="Removed">
-                Remove assignment — becomes Vacant
-              </NativeSelectOption>
-            </NativeSelect>
-          </Field>
-          <Button className="md:col-span-2 xl:col-span-3" type="submit">
-            Update employee status
-          </Button>
-        </PanelForm>
+                    ))}
+                  </NativeSelectOptGroup>
+                ) : null}
+              </NativeSelect>
+            </Field>
+            <TextField label="Employee name" name="employee_name" />
+            <TextField label="Employee code" name="employee_code" />
+            <Field>
+              <FieldLabel htmlFor="employee-event">Employment event</FieldLabel>
+              <NativeSelect
+                className="w-full"
+                defaultValue="Appointed"
+                id="employee-event"
+                name="employee_event"
+                required
+              >
+                <NativeSelectOption value="Appointed">
+                  Appointed — not joined
+                </NativeSelectOption>
+                <NativeSelectOption value="Joined">
+                  Joined — becomes Occupied
+                </NativeSelectOption>
+                <NativeSelectOption value="Resigned">
+                  Resigned
+                </NativeSelectOption>
+                <NativeSelectOption value="Removed">
+                  Remove assignment — becomes Vacant
+                </NativeSelectOption>
+              </NativeSelect>
+            </Field>
+            <Button className="md:col-span-2 xl:col-span-3" type="submit">
+              Update employee status
+            </Button>
+          </PanelForm>
+        </div>
       ) : null}
       <ApprovedPostsTable posts={posts} />
     </>
