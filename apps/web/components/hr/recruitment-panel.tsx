@@ -867,7 +867,10 @@ function InterviewsPanel({
                         : "Not scheduled"}
                     </TableCell>
                     <TableCell>
-                      {row.nextRound ?? "All rounds approved"}
+                      {row.nextRound ??
+                        (row.status === "Approved"
+                          ? "All rounds approved"
+                          : "Application closed")}
                     </TableCell>
                     <TableCell>
                       {row.latestRound

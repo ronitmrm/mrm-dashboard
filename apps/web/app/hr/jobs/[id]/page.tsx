@@ -326,7 +326,10 @@ export default async function JobWorkspacePage({
                         {formatDateTime(application.interviewAt)}
                       </TableCell>
                       <TableCell>
-                        {application.nextRound ?? "All rounds approved"}
+                        {application.nextRound ??
+                          (application.status === "Approved"
+                            ? "All rounds approved"
+                            : "Application closed")}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {application.interviewCount}

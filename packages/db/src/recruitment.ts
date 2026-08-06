@@ -61,6 +61,7 @@ export type RecruitmentPostRow = {
 }
 
 export type RecruitmentCandidateRow = {
+  activeApplicationJobIds: string[]
   applicationCount: number
   currentCompany: string | null
   departments: string[]
@@ -146,6 +147,16 @@ function required(value: unknown, label: string) {
 function optional(value: unknown) {
   const normalized = String(value ?? "").trim()
   return normalized || null
+}
+
+const activeRecruitmentApplicationStatuses = new Set([
+  "Assigned",
+  "Hold",
+  "Interview",
+])
+
+export function isActiveRecruitmentApplicationStatus(status: string) {
+  return activeRecruitmentApplicationStatuses.has(status)
 }
 
 function normalizedQuestionScores(value: unknown) {
@@ -661,6 +672,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       organizationId: string
     ): Promise<RecruitmentCandidateRow[]> {
       const result = await pool.query<{
+        active_application_job_ids: string[] | null
         application_count: number
         current_company: string | null
         departments: string[] | null
@@ -679,6 +691,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             candidate.status,
             COALESCE(array_agg(DISTINCT department.name)
               FILTER (WHERE department.id IS NOT NULL), '{}') AS departments,
+            COALESCE(array_agg(DISTINCT application.job_post_id)
+              FILTER (WHERE application.status IN ('Assigned', 'Interview', 'Hold')),
+              ARRAY[]::uuid[]) AS active_application_job_ids,
             count(DISTINCT application.id)::int AS application_count,
             count(DISTINCT event.id)::int AS event_count
           FROM recruitment.candidates candidate
@@ -698,6 +713,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         [organizationId]
       )
       return result.rows.map((row) => ({
+        activeApplicationJobIds: row.active_application_job_ids ?? [],
         applicationCount: row.application_count,
         currentCompany: row.current_company,
         departments: row.departments ?? [],
@@ -880,9 +896,11 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           interviewAt: row.interview_at,
           interviewCount: row.interview_count,
           joiningDate: row.joining_date,
-          nextRound:
-            nextRecruitmentInterviewRound(interviewProgress.get(row.id) ?? [])
-              ?.name ?? null,
+          nextRound: isActiveRecruitmentApplicationStatus(row.status)
+            ? (nextRecruitmentInterviewRound(
+                interviewProgress.get(row.id) ?? []
+              )?.name ?? null)
+            : null,
           plannedRound: row.planned_round,
           status: row.status,
         })),
@@ -970,13 +988,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         jobTitle: row.job_title,
         latestRound: row.latest_round,
         latestStatus: row.latest_status,
-        nextRound:
-          nextRecruitmentInterviewRound(
-            (row.approved_rounds ?? []).map((roundName) => ({
-              roundName,
-              status: "Approved",
-            }))
-          )?.name ?? null,
+        nextRound: isActiveRecruitmentApplicationStatus(row.status)
+          ? (nextRecruitmentInterviewRound(
+              (row.approved_rounds ?? []).map((roundName) => ({
+                roundName,
+                status: "Approved",
+              }))
+            )?.name ?? null)
+          : null,
         plannedRound: row.planned_round,
         status: row.status,
       }))
@@ -1927,20 +1946,20 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.applications (
-              organization_id, candidate_id, job_post_id,
+              organization_id, candidate_id, job_post_id, status,
               created_by_user_id, updated_by_user_id, source_system,
               source_table, source_id
             )
-            SELECT $1, candidate.id, job.id, $2, $2, 'mrm-dashboard',
+            SELECT $1, candidate.id, job.id, 'Assigned', $2, $2, 'mrm-dashboard',
               'assignments', $3
             FROM recruitment.candidates candidate
             JOIN recruitment.job_posts job
               ON job.id = $4 AND job.organization_id = $1
              AND job.status = 'Open'
             WHERE candidate.id = $5 AND candidate.organization_id = $1
-            ON CONFLICT (candidate_id, job_post_id) DO UPDATE SET
-              updated_at = now(),
-              updated_by_user_id = EXCLUDED.updated_by_user_id
+            ON CONFLICT (candidate_id, job_post_id)
+              WHERE status IN ('Assigned', 'Interview', 'Hold')
+              DO NOTHING
             RETURNING id
           `,
           [
@@ -1952,6 +1971,22 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           ]
         )
         if (!result.rows[0]) {
+          const activeApplication = await client.query<{ id: string }>(
+            `
+              SELECT id
+              FROM recruitment.applications
+              WHERE organization_id = $1 AND candidate_id = $2
+                AND job_post_id = $3
+                AND status IN ('Assigned', 'Interview', 'Hold')
+              LIMIT 1
+            `,
+            [input.organizationId, input.candidateId, input.jobId]
+          )
+          if (activeApplication.rows[0]) {
+            throw new Error(
+              "This candidate already has an active application for this job. Close its interview process before applying again."
+            )
+          }
           throw new Error("Candidate or open recruitment job was not found.")
         }
         await audit(client, {
@@ -2013,9 +2048,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }
     ) {
       return transaction(pool, async (client) => {
-        const applicationResult = await client.query<{ id: string }>(
+        const applicationResult = await client.query<{
+          id: string
+          status: string
+        }>(
           `
-            SELECT id
+            SELECT id, status
             FROM recruitment.applications
             WHERE id = $1 AND organization_id = $2
             FOR UPDATE
@@ -2028,6 +2066,11 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         const application = applicationResult.rows[0]
         if (!application) {
           throw new Error("Candidate application was not found.")
+        }
+        if (!isActiveRecruitmentApplicationStatus(application.status)) {
+          throw new Error(
+            "This candidate application is closed. Create a new application before scheduling another interview."
+          )
         }
         const historyResult = await client.query<{
           round_name: string
@@ -2123,9 +2166,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }
     ) {
       return transaction(pool, async (client) => {
-        const applicationResult = await client.query<{ id: string }>(
+        const applicationResult = await client.query<{
+          id: string
+          status: string
+        }>(
           `
-            SELECT id
+            SELECT id, status
             FROM recruitment.applications
             WHERE id = $1 AND organization_id = $2
             FOR UPDATE
@@ -2138,6 +2184,11 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         const application = applicationResult.rows[0]
         if (!application) {
           throw new Error("Candidate application was not found.")
+        }
+        if (!isActiveRecruitmentApplicationStatus(application.status)) {
+          throw new Error(
+            "This candidate application is closed. Create a new application before recording another interview."
+          )
         }
         const historyResult = await client.query<{
           round_name: string

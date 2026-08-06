@@ -5,6 +5,7 @@ import {
   createRecruitmentRepository,
   deriveRecruitmentEmployeeAssignment,
   deriveRecruitmentPostStatus,
+  isActiveRecruitmentApplicationStatus,
   recruitmentPostDeletionBlocker,
 } from "./recruitment"
 import {
@@ -248,13 +249,13 @@ describe("job workspace", () => {
         statement.includes("SELECT id") &&
         statement.includes("FROM recruitment.applications")
       ) {
-        return { rows: [{ id: "application-1" }] }
+        return { rows: [{ id: "application-1", status: "Assigned" }] }
       }
       if (statement.includes("SELECT round_name, status")) {
         return { rows: [] }
       }
       if (statement.includes("UPDATE recruitment.applications")) {
-        return { rows: [{ id: "application-1" }] }
+        return { rows: [{ id: "application-1", status: "Interview" }] }
       }
       return { rows: [] }
     })
@@ -296,7 +297,7 @@ describe("job workspace", () => {
         statement.includes("SELECT id") &&
         statement.includes("FROM recruitment.applications")
       ) {
-        return { rows: [{ id: "application-1" }] }
+        return { rows: [{ id: "application-1", status: "Interview" }] }
       }
       if (statement.includes("SELECT round_name, status")) {
         return { rows: [] }
@@ -330,7 +331,7 @@ describe("job workspace", () => {
         statement.includes("SELECT id") &&
         statement.includes("FROM recruitment.applications")
       ) {
-        return { rows: [{ id: "application-1" }] }
+        return { rows: [{ id: "application-1", status: "Interview" }] }
       }
       if (statement.includes("SELECT round_name, status")) {
         return { rows: [] }
@@ -375,6 +376,157 @@ describe("job workspace", () => {
         relevant_experience: 5,
       })
     )
+  })
+})
+
+describe("candidate application cycles", () => {
+  test.each(["Assigned", "Interview", "Hold"])(
+    "treats %s as an active application",
+    (status) => {
+      expect(isActiveRecruitmentApplicationStatus(status)).toBe(true)
+    }
+  )
+
+  test.each(["Approved", "Rejected", "Withdrawn"])(
+    "treats %s as a closed application",
+    (status) => {
+      expect(isActiveRecruitmentApplicationStatus(status)).toBe(false)
+    }
+  )
+
+  test("does not reopen a closed application for another interview", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (
+        statement.includes("SELECT id, status") &&
+        statement.includes("FROM recruitment.applications")
+      ) {
+        return { rows: [{ id: "application-1", status: "Rejected" }] }
+      }
+      return { rows: [] }
+    })
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: {
+        connect: vi.fn(async () => client),
+      } as unknown as Pool,
+    })
+
+    await expect(
+      repository.scheduleInterview({
+        applicationId: "application-1",
+        interviewAt: "2026-08-10T10:00",
+        organizationId: "organization-1",
+      })
+    ).rejects.toThrow("This candidate application is closed.")
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("SELECT round_name, status")
+      )
+    ).toBe(false)
+  })
+
+  test("rejects a second active application for the same candidate and job", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("INSERT INTO recruitment.applications")) {
+        return { rows: [] }
+      }
+      if (
+        statement.includes("FROM recruitment.applications") &&
+        statement.includes("status IN ('Assigned', 'Interview', 'Hold')")
+      ) {
+        return { rows: [{ id: "application-1" }] }
+      }
+      return { rows: [] }
+    })
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: {
+        connect: vi.fn(async () => client),
+      } as unknown as Pool,
+    })
+
+    await expect(
+      repository.assignCandidate({
+        candidateId: "candidate-1",
+        jobId: "job-1",
+        organizationId: "organization-1",
+      })
+    ).rejects.toThrow(
+      "This candidate already has an active application for this job."
+    )
+  })
+
+  test("creates a new application cycle without overwriting closed history", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("INSERT INTO recruitment.applications")) {
+        return { rows: [{ id: "application-2" }] }
+      }
+      return { rows: [] }
+    })
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: {
+        connect: vi.fn(async () => client),
+      } as unknown as Pool,
+    })
+
+    await expect(
+      repository.assignCandidate({
+        candidateId: "candidate-1",
+        jobId: "job-1",
+        organizationId: "organization-1",
+      })
+    ).resolves.toEqual({ id: "application-2" })
+
+    const insertStatement = query.mock.calls.find(([statement]) =>
+      statement.includes("INSERT INTO recruitment.applications")
+    )?.[0]
+    expect(insertStatement).toContain(
+      "WHERE status IN ('Assigned', 'Interview', 'Hold')"
+    )
+    expect(insertStatement).toContain("DO NOTHING")
+    expect(insertStatement).not.toContain("DO UPDATE")
+  })
+
+  test("lists the jobs where each candidate has an active application", async () => {
+    const query = vi.fn(async () => ({
+      rows: [
+        {
+          active_application_job_ids: ["job-1", "job-2"],
+          application_count: 3,
+          current_company: null,
+          departments: ["Quality Control"],
+          email: "candidate@example.com",
+          event_count: 1,
+          experience: "4 years",
+          id: "candidate-1",
+          name: "Candidate One",
+          phone: "9999999999",
+          source: "Referral",
+          status: "Active",
+        },
+      ],
+    }))
+    const repository = createRecruitmentRepository({
+      pool: { query } as unknown as Pool,
+    })
+
+    await expect(repository.listCandidates("organization-1")).resolves.toEqual([
+      expect.objectContaining({
+        activeApplicationJobIds: ["job-1", "job-2"],
+        applicationCount: 3,
+        id: "candidate-1",
+      }),
+    ])
   })
 })
 

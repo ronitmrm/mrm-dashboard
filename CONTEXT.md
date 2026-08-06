@@ -82,10 +82,19 @@ a vacancy code.
 _Avoid_: Approved post, vacancy master.
 
 **Candidate Application**:
-The relationship between one candidate and one recruitment opening. Interview
-planning, round outcomes, and a possible joining date belong to this
-relationship.
+One attempt by a candidate to fill a recruitment opening. Interview planning,
+round outcomes, and a possible joining date belong to this application cycle.
 _Avoid_: Candidate, interview.
+
+**Active Candidate Application**:
+A candidate application that is assigned, in interview, or on hold. A candidate
+can have only one active application for the same recruitment opening.
+_Avoid_: Open round, current entry.
+
+**Closed Candidate Application**:
+A candidate application that was finally approved, rejected, or withdrawn. It
+remains part of recruitment history and does not prevent a later application.
+_Avoid_: Deleted application, old entry.
 
 **Recruitment Interview Round**:
 One sequential standardized assessment within a candidate application:
