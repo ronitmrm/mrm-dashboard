@@ -690,6 +690,44 @@ test("dashboard source projection indexes every bounded source category", async 
   ])
 })
 
+test("commercial contains-search and operational filters are indexed", async () => {
+  await migrateDatabase({ connectionString })
+
+  const extension = await pool.query<{ installed: boolean }>(`
+    SELECT EXISTS (
+      SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'
+    ) AS installed
+  `)
+  const indexes = await pool.query<{ indexname: string }>(`
+    SELECT indexname
+    FROM pg_indexes
+    WHERE indexname = ANY(
+      ARRAY[
+        'drawings_commercial_search_trgm_idx',
+        'drawings_operational_filter_idx',
+        'items_commercial_search_trgm_idx',
+        'website_profiles_commercial_search_trgm_idx',
+        'website_profiles_operational_filter_idx'
+      ]
+    )
+    ORDER BY indexname
+  `)
+
+  expect({
+    indexes: indexes.rows.map((row) => row.indexname),
+    trigrams: extension.rows[0]?.installed,
+  }).toEqual({
+    indexes: [
+      "drawings_commercial_search_trgm_idx",
+      "drawings_operational_filter_idx",
+      "items_commercial_search_trgm_idx",
+      "website_profiles_commercial_search_trgm_idx",
+      "website_profiles_operational_filter_idx",
+    ],
+    trigrams: true,
+  })
+})
+
 test("database roles enforce least privilege across migration, web, worker, and reporting", async () => {
   await migrateDatabase({ connectionString })
 
