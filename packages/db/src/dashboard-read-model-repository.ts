@@ -142,6 +142,109 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
       }
     },
 
+    async state(
+      organizationId: string,
+      filters: JsonRecord = {},
+      productionFloorCode = "conventional",
+      knownVersion?: number
+    ) {
+      const result = await pool.query<{
+        attempts: number | null
+        completed_at: Date | null
+        job_status: string | null
+        last_error: string | null
+        model_created_at: Date | null
+        model_payload: JsonRecord | null
+        model_source_watermark: JsonRecord | null
+        model_version: string | null
+        requested_at: Date | null
+        started_at: Date | null
+      }>(
+        `
+          SELECT model.version::text AS model_version,
+            model.payload AS model_payload,
+            model.source_watermark AS model_source_watermark,
+            model.created_at AS model_created_at,
+            job.status AS job_status, job.attempts,
+            job.created_at AS requested_at, job.started_at,
+            job.completed_at, job.last_error
+          FROM (SELECT $1::uuid AS organization_id) requested
+          LEFT JOIN LATERAL (
+            SELECT version,
+              CASE
+                WHEN $3::bigint IS NOT NULL AND version = $3::bigint
+                  THEN NULL
+                ELSE COALESCE(
+                  jsonb_extract_path(
+                    payload,
+                    'productionFloorSnapshots',
+                    $2::text
+                  ),
+                  CASE
+                    WHEN $2 = 'conventional'
+                      THEN payload - 'productionFloorSnapshots'
+                    ELSE '{}'::jsonb
+                  END
+                )
+              END AS payload,
+              source_watermark, created_at
+            FROM derived.dashboard_read_models
+            WHERE organization_id = requested.organization_id
+            ORDER BY version DESC
+            LIMIT 1
+          ) model ON true
+          LEFT JOIN LATERAL (
+            SELECT status, attempts, created_at, started_at,
+              completed_at, last_error
+            FROM derived.refresh_jobs
+            WHERE organization_id = requested.organization_id
+              AND queue_key = 'dashboard'
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT 1
+          ) job ON true
+        `,
+        [organizationId, productionFloorCode, knownVersion ?? null]
+      )
+      const row = result.rows[0]!
+      return {
+        dashboard:
+          row.model_version && row.model_payload && row.model_created_at
+            ? {
+                ...row.model_payload,
+                filters,
+                productionFloorCode,
+                readModelVersion: Number(row.model_version),
+                snapshotCacheUpdatedAt: row.model_created_at.toISOString(),
+                sourceWatermark: row.model_source_watermark ?? {},
+              }
+            : null,
+        notModified:
+          knownVersion !== undefined &&
+          row.model_version === String(knownVersion) &&
+          row.model_payload === null,
+        status: row.job_status
+          ? {
+              attempts: row.attempts ?? 0,
+              completedAtMs: row.completed_at?.getTime(),
+              isRefreshing:
+                row.job_status === "pending" || row.job_status === "running",
+              lastError: row.last_error ?? undefined,
+              requestedAtMs: row.requested_at?.getTime(),
+              startedAtMs: row.started_at?.getTime(),
+              status: row.job_status,
+            }
+          : {
+              attempts: 0,
+              completedAtMs: undefined,
+              isRefreshing: false,
+              lastError: undefined,
+              requestedAtMs: undefined,
+              startedAtMs: undefined,
+              status: "idle",
+            },
+      }
+    },
+
     async requestRefresh(organizationId: string) {
       return transaction(pool, async (client) => {
         const result = await client.query<{ id: string; status: string }>(

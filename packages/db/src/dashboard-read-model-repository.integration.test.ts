@@ -75,7 +75,10 @@ describe("PostgreSQL dashboard corrections", () => {
   it("records a reversal and removes the source row from later candidates", async () => {
     const before = await repository.correctionCandidates(organizationId)
     expect(before).toContainEqual(
-      expect.objectContaining({ targetId: sourceId, targetTable: "dataEntries" })
+      expect.objectContaining({
+        targetId: sourceId,
+        targetTable: "dataEntries",
+      })
     )
 
     const result = await repository.reverseEntry({
@@ -91,9 +94,14 @@ describe("PostgreSQL dashboard corrections", () => {
     expect(result).toEqual({ reversed: true })
     const after = await repository.correctionCandidates(organizationId)
     expect(after).not.toContainEqual(
-      expect.objectContaining({ targetId: sourceId, targetTable: "dataEntries" })
+      expect.objectContaining({
+        targetId: sourceId,
+        targetTable: "dataEntries",
+      })
     )
-    const stored = await pool.query<{ source_payload: Record<string, unknown> }>(
+    const stored = await pool.query<{
+      source_payload: Record<string, unknown>
+    }>(
       `
         SELECT source_payload
         FROM audit.legacy_convex_corrections
@@ -108,5 +116,83 @@ describe("PostgreSQL dashboard corrections", () => {
       targetId: sourceId,
       targetTable: "dataEntries",
     })
+  })
+
+  it("returns one floor and omits an unchanged dashboard payload", async () => {
+    await pool.query(
+      `
+        INSERT INTO derived.dashboard_read_models (
+          organization_id, version, payload, source_watermark
+        ) VALUES ($1, 7, $2, $3)
+      `,
+      [
+        organizationId,
+        {
+          cacheStatus: "ready",
+          productionFloorSnapshots: {
+            cnc: { cacheStatus: "ready", marker: "cnc-only" },
+            conventional: {
+              cacheStatus: "ready",
+              marker: "conventional-only",
+            },
+          },
+        },
+        { changedAt: "2026-07-21T12:00:00.000Z" },
+      ]
+    )
+
+    const countedPool = new Pool({ connectionString })
+    const originalQuery = countedPool.query.bind(countedPool)
+    const packetBytes: number[] = []
+    let statements = 0
+    countedPool.query = (async (...args: unknown[]) => {
+      statements += 1
+      const result = await (
+        originalQuery as (
+          ...parameters: unknown[]
+        ) => Promise<{ rows: unknown[] }>
+      )(...args)
+      packetBytes.push(Buffer.byteLength(JSON.stringify(result.rows)))
+      return result
+    }) as typeof countedPool.query
+    const countedRepository = createDashboardReadModelRepository({
+      pool: countedPool,
+    })
+
+    try {
+      const changed = await countedRepository.state(
+        organizationId,
+        { month: "2026-07" },
+        "cnc"
+      )
+      expect(statements).toBe(1)
+      expect(changed).toMatchObject({
+        dashboard: {
+          filters: { month: "2026-07" },
+          marker: "cnc-only",
+          productionFloorCode: "cnc",
+          readModelVersion: 7,
+        },
+        notModified: false,
+        status: { isRefreshing: false, status: "idle" },
+      })
+      expect(changed.dashboard).not.toHaveProperty("productionFloorSnapshots")
+
+      const unchanged = await countedRepository.state(
+        organizationId,
+        { month: "2026-07" },
+        "cnc",
+        7
+      )
+      expect(statements).toBe(2)
+      expect(unchanged).toMatchObject({
+        dashboard: null,
+        notModified: true,
+        status: { isRefreshing: false, status: "idle" },
+      })
+      expect(packetBytes[1]).toBeLessThanOrEqual(1024)
+    } finally {
+      await countedPool.end()
+    }
   })
 })
