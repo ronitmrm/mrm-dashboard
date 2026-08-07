@@ -670,6 +670,26 @@ test("dashboard source projection preserves floor-specific payloads transactiona
   })
 })
 
+test("dashboard source projection indexes every bounded source category", async () => {
+  await migrateDatabase({ connectionString })
+
+  const indexes = await pool.query<{ indexname: string }>(`
+    SELECT indexname
+    FROM pg_indexes
+    WHERE schemaname = 'derived'
+      AND indexname IN (
+        'dashboard_source_records_entry_type_read_idx',
+        'dashboard_source_records_physical_group_read_idx'
+      )
+    ORDER BY indexname
+  `)
+
+  expect(indexes.rows.map((row) => row.indexname)).toEqual([
+    "dashboard_source_records_entry_type_read_idx",
+    "dashboard_source_records_physical_group_read_idx",
+  ])
+})
+
 test("database roles enforce least privilege across migration, web, worker, and reporting", async () => {
   await migrateDatabase({ connectionString })
 
