@@ -116,6 +116,12 @@ export async function readPostgresDashboardState(
   )
 }
 
+export async function authorizePostgresDashboardEvents(request: NextRequest) {
+  return withDashboardReadRepository(request, async ({ organizationId }) => ({
+    organizationId,
+  }))
+}
+
 export async function readPostgresDashboardStatus(request: NextRequest) {
   return withDashboardReadRepository(
     request,
