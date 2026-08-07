@@ -27,7 +27,27 @@ type DataEntrySourceRow = SourceRow & {
 }
 
 type GroupedSourceRow = SourceRow & {
+  entry_type: string | null
+  source_kind: "correction" | "data_entry" | "physical"
   source_group: string
+}
+
+type SourceCoverage = {
+  corrections: {
+    limit: number
+    truncated: boolean
+    truncatedGroups: string[]
+  }
+  dataEntries: {
+    limit: number
+    truncated: boolean
+    truncatedGroups: string[]
+  }
+  physicalRows: {
+    limit: number
+    truncated: boolean
+    truncatedGroups: string[]
+  }
 }
 
 export type CanonicalDashboardSource = {
@@ -42,6 +62,7 @@ export type CanonicalDashboardSource = {
   routeChanges: JsonRecord[]
   routeSelections: JsonRecord[]
   setupCompletions: JsonRecord[]
+  sourceCoverage: SourceCoverage
   trainingRecords: JsonRecord[]
 }
 
@@ -76,6 +97,44 @@ const legacyEntryTypes = [
 ] as const
 
 const snapshotEntryTypes = new Set([...legacyEntryTypes, "shop_floor_status"])
+
+const dataEntrySourceBudgets: Record<string, number> = {
+  cycle: 2500,
+  employee: 1000,
+  first_piece_inspection_report: 2500,
+  hourly_quality_check: 5000,
+  machine_master: 1000,
+  maintenance_checklist_master: 2000,
+  maintenance_master: 1000,
+  maintenance_schedule: 2500,
+  maintenance_task: 5000,
+  planning_holiday: 1000,
+  production_card: 5000,
+  quality_parameter_master: 2000,
+  rejection_reason_master: 500,
+  rejection_remark_master: 500,
+  rejection_type_master: 500,
+  rm_inward: 2000,
+  route: 2500,
+  setup_checklist_master: 2000,
+  setup_checklist_session: 5000,
+  shop_floor_status: 5000,
+  tooling: 2500,
+  work_order: 5000,
+}
+
+const physicalSourceBudgets: Record<string, number> = {
+  attendanceRecords: 5000,
+  dispatchApprovals: 2000,
+  machineConstraints: 2000,
+  planOverrides: 2000,
+  plannerPriorities: 2000,
+  productionEntries: 10000,
+  routeChanges: 2000,
+  routeSelections: 2500,
+  setupCompletions: 5000,
+  trainingRecords: 2500,
+}
 
 function timestamp(value: Date | string) {
   return value instanceof Date ? value.toISOString() : value
@@ -144,10 +203,36 @@ function countRowsByEntryType(rows: JsonRecord[]) {
   return counts
 }
 
+function applySourceBudgets(
+  rows: GroupedSourceRow[],
+  groupFor: (row: GroupedSourceRow) => string,
+  budgets: Record<string, number>
+) {
+  const grouped = new Map<string, GroupedSourceRow[]>()
+  for (const row of rows) {
+    const group = groupFor(row)
+    const groupRows = grouped.get(group)
+    if (groupRows) groupRows.push(row)
+    else grouped.set(group, [row])
+  }
+  const kept: GroupedSourceRow[] = []
+  const truncatedGroups: string[] = []
+  for (const [group, limit] of Object.entries(budgets)) {
+    const groupRows = grouped.get(group) ?? []
+    if (groupRows.length > limit) truncatedGroups.push(group)
+    kept.push(...groupRows.slice(-limit))
+  }
+  kept.sort((left, right) => {
+    const time = timestamp(left.changed_at).localeCompare(
+      timestamp(right.changed_at)
+    )
+    return time || left.source_id.localeCompare(right.source_id)
+  })
+  return { rows: kept, truncatedGroups }
+}
+
 function floorRows(rows: JsonRecord[], floorCode: ProductionFloorCode) {
-  return rows.filter(
-    (row) => productionFloorCodeForRecord(row) === floorCode
-  )
+  return rows.filter((row) => productionFloorCodeForRecord(row) === floorCode)
 }
 
 function jsonRecord(value: unknown): JsonRecord {
@@ -164,195 +249,98 @@ export async function readCanonicalDashboardSource(
   client: DashboardQueryClient,
   organizationId: string
 ): Promise<CanonicalDashboardSource> {
-  const dataEntries = await client.query<DataEntrySourceRow>(
+  const result = await client.query<GroupedSourceRow>(
     `
-      SELECT * FROM (
-        SELECT source_id, source_payload, updated_at AS changed_at,
-          'machine_master' AS inferred_entry_type
-        FROM catalog.machines
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'route'
-        FROM manufacturing.operation_setups
-        WHERE organization_id = $1 AND source_table = 'dataEntries'
-          AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'cycle'
-        FROM manufacturing.operation_cycle_standards
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'tooling'
-        FROM manufacturing.operation_tooling
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'work_order'
-        FROM manufacturing.work_orders
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'rm_inward'
-        FROM manufacturing.raw_material_receipts
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'employee'
-        FROM workforce.employees
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'planning_holiday'
-        FROM manufacturing.planning_calendar_exceptions
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at,
-          'quality_parameter_master'
-        FROM quality.parameter_definitions
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'rejection_type_master'
-        FROM quality.rejection_types
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'rejection_reason_master'
-        FROM quality.rejection_reasons
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'rejection_remark_master'
-        FROM quality.rejection_remarks
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, inspected_at,
-          'first_piece_inspection_report'
-        FROM quality.first_piece_inspections
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, checked_at, 'hourly_quality_check'
-        FROM quality.hourly_checks
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'setup_checklist_master'
-        FROM quality.setup_checklist_template_items
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, COALESCE(completed_at, started_at),
-          'setup_checklist_session'
-        FROM quality.setup_checklist_sessions
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'production_card'
-        FROM manufacturing.production_cards
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'maintenance_master'
-        FROM maintenance.definitions
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND source_table = 'dataEntries'
-        UNION ALL
-        SELECT source_id, source_payload, updated_at,
-          'maintenance_checklist_master'
-        FROM maintenance.checklist_items
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'maintenance_schedule'
-        FROM maintenance.machine_schedules
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'maintenance_task'
-        FROM maintenance.tasks
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'shop_floor_status'
-        FROM manufacturing.shop_floor_stage_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-      ) entries
-      ORDER BY changed_at, source_id
-      LIMIT 25000
+      WITH data_entries AS (
+        SELECT source.source_id, source.source_payload, source.changed_at,
+          source.source_kind, source.source_group, source.entry_type
+        FROM jsonb_each_text($2::jsonb) budget
+        CROSS JOIN LATERAL (
+          SELECT source_id, source_payload, changed_at, source_kind,
+            source_group, entry_type
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'data_entry'
+            AND entry_type = budget.key
+          ORDER BY changed_at DESC, source_id DESC
+          LIMIT budget.value::integer + 1
+        ) source
+      ), physical_rows AS (
+        SELECT source.source_id, source.source_payload, source.changed_at,
+          source.source_kind, source.source_group, source.entry_type
+        FROM jsonb_each_text($3::jsonb) budget
+        CROSS JOIN LATERAL (
+          SELECT source_id, source_payload, changed_at, source_kind,
+            source_group, entry_type
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'physical'
+            AND source_group = budget.key
+          ORDER BY changed_at DESC, source_id DESC
+          LIMIT budget.value::integer + 1
+        ) source
+      ), correction_rows AS (
+        SELECT source_id, source_payload, changed_at, source_kind,
+          source_group, entry_type
+        FROM derived.dashboard_source_records
+        WHERE organization_id = $1 AND source_kind = 'correction'
+        ORDER BY changed_at DESC, source_id DESC
+        LIMIT 5001
+      )
+      SELECT * FROM data_entries
+      UNION ALL SELECT * FROM physical_rows
+      UNION ALL SELECT * FROM correction_rows
     `,
-    [organizationId]
+    [organizationId, dataEntrySourceBudgets, physicalSourceBudgets]
   )
 
-  const physicalRows = await client.query<GroupedSourceRow>(
-    `
-      SELECT * FROM (
-        SELECT source_id, source_payload, recorded_at AS changed_at,
-          'productionEntries' AS source_group
-        FROM manufacturing.production_entries
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND reversed_at IS NULL
-        UNION ALL
-        SELECT source_id, source_payload, recorded_at, 'attendanceRecords'
-        FROM workforce.attendance_records
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, recorded_at, 'trainingRecords'
-        FROM workforce.training_records
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, selected_at, 'routeSelections'
-        FROM manufacturing.route_selections
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'plannerPriorities'
-        FROM manufacturing.planner_priority_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'machineConstraints'
-        FROM manufacturing.machine_constraint_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'planOverrides'
-        FROM manufacturing.plan_override_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'routeChanges'
-        FROM manufacturing.route_change_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'dispatchApprovals'
-        FROM manufacturing.dispatch_approval_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, completed_at, 'setupCompletions'
-        FROM manufacturing.setup_completion_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-      ) source_rows
-      ORDER BY changed_at, source_id
-      LIMIT 10000
-    `,
-    [organizationId]
+  const byKind = <Kind extends GroupedSourceRow["source_kind"]>(kind: Kind) =>
+    result.rows
+      .filter((row) => row.source_kind === kind)
+      .sort((left, right) => {
+        const time = timestamp(left.changed_at).localeCompare(
+          timestamp(right.changed_at)
+        )
+        return time || left.source_id.localeCompare(right.source_id)
+      })
+  const boundedDataEntries = applySourceBudgets(
+    byKind("data_entry"),
+    (row) => row.entry_type ?? "",
+    dataEntrySourceBudgets
   )
-
-  const correctionRows = await client.query<SourceRow>(
-    `
-      SELECT source_id, source_payload,
-        COALESCE(original_timestamp, imported_at) AS changed_at
-      FROM audit.legacy_convex_corrections
-      WHERE organization_id = $1
-      ORDER BY changed_at, source_id
-      LIMIT 5000
-    `,
-    [organizationId]
+  const boundedPhysicalRows = applySourceBudgets(
+    byKind("physical"),
+    (row) => row.source_group,
+    physicalSourceBudgets
   )
+  const dataEntryRows = boundedDataEntries.rows
+  const physicalRows = boundedPhysicalRows.rows
+  const correctionRows = byKind("correction")
+  const sourceCoverage: SourceCoverage = {
+    corrections: {
+      limit: 5000,
+      truncated: correctionRows.length > 5000,
+      truncatedGroups: correctionRows.length > 5000 ? ["corrections"] : [],
+    },
+    dataEntries: {
+      limit: Object.values(dataEntrySourceBudgets).reduce(
+        (total, limit) => total + limit,
+        0
+      ),
+      truncated: boundedDataEntries.truncatedGroups.length > 0,
+      truncatedGroups: boundedDataEntries.truncatedGroups,
+    },
+    physicalRows: {
+      limit: Object.values(physicalSourceBudgets).reduce(
+        (total, limit) => total + limit,
+        0
+      ),
+      truncated: boundedPhysicalRows.truncatedGroups.length > 0,
+      truncatedGroups: boundedPhysicalRows.truncatedGroups,
+    },
+  }
+  correctionRows.splice(0, Math.max(0, correctionRows.length - 5000))
 
   const grouped = new Map<string, JsonRecord[]>()
-  for (const row of physicalRows.rows) {
+  for (const row of physicalRows) {
     const rows = grouped.get(row.source_group) ?? []
     rows.push(sourceRecord(row))
     grouped.set(row.source_group, rows)
@@ -360,15 +348,20 @@ export async function readCanonicalDashboardSource(
 
   const group = (name: string) => grouped.get(name) ?? []
   return {
-    allDataEntries: dataEntries.rows
-      .map(dataEntryRecord)
+    allDataEntries: dataEntryRows
+      .map((row) =>
+        dataEntryRecord({
+          ...row,
+          inferred_entry_type: row.entry_type ?? "",
+        })
+      )
       .filter(
         (row) =>
           typeof row.entryType === "string" &&
           snapshotEntryTypes.has(row.entryType)
       ),
     attendanceRecords: group("attendanceRecords"),
-    corrections: correctionRows.rows.map(sourceRecord),
+    corrections: correctionRows.map(sourceRecord),
     dispatchApprovals: group("dispatchApprovals"),
     machineConstraints: group("machineConstraints"),
     planOverrides: group("planOverrides"),
@@ -377,6 +370,7 @@ export async function readCanonicalDashboardSource(
     routeChanges: group("routeChanges"),
     routeSelections: group("routeSelections"),
     setupCompletions: group("setupCompletions"),
+    sourceCoverage,
     trainingRecords: group("trainingRecords"),
   }
 }
@@ -422,9 +416,7 @@ export async function buildCanonicalDashboardReadModel(
   function previousMachinePlanRows(floorCode: ProductionFloorCode) {
     const floorPayload =
       floorCode === defaultProductionFloorCode
-        ? jsonRecord(
-            previousFloorSnapshots[floorCode] ?? previousPayload
-          )
+        ? jsonRecord(previousFloorSnapshots[floorCode] ?? previousPayload)
         : jsonRecord(previousFloorSnapshots[floorCode])
     return jsonRows(
       jsonRecord(floorPayload.productionControl).machinePlanDetailRows
@@ -507,6 +499,7 @@ export async function buildCanonicalDashboardReadModel(
       ...snapshot,
       cacheStatus: "ready",
       productionFloorCode: floorCode,
+      sourceCoverage: source.sourceCoverage,
       dataEntry: {
         ...snapshot.dataEntry,
         corrections: floorCorrections,
@@ -524,10 +517,7 @@ export async function buildCanonicalDashboardReadModel(
   }
 
   const productionFloorSnapshots = Object.fromEntries(
-    productionFloors.map((floor) => [
-      floor.code,
-      buildFloorPayload(floor.code),
-    ])
+    productionFloors.map((floor) => [floor.code, buildFloorPayload(floor.code)])
   )
   const defaultSnapshot = productionFloorSnapshots[
     defaultProductionFloorCode
@@ -553,6 +543,9 @@ export async function buildCanonicalDashboardReadModel(
       productionFloorSnapshots,
       productionFloors,
     } as JsonRecord,
-    sourceWatermark: { changedAt: updatedAt || null },
+    sourceWatermark: {
+      changedAt: updatedAt || null,
+      sourceCoverage: source.sourceCoverage,
+    },
   }
 }
