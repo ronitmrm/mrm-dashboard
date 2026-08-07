@@ -436,6 +436,75 @@ test("critical lineage, machine-lock, and quality-scope invariants are indexed",
   ])
 })
 
+test("the first performance foundation follows immutable staging history", async () => {
+  await migrateDatabase({ connectionString })
+
+  const migrations = await pool.query<{ name: string }>(`
+    SELECT name
+    FROM migration.schema_migrations
+    WHERE name >= '0032_'
+      AND name <= '0039_query_performance_foundation.sql'
+    ORDER BY name
+  `)
+
+  expect(migrations.rows.map((row) => row.name)).toEqual([
+    "0032_runtime_parser_permissions.sql",
+    "0033_production_floor_isolation.sql",
+    "0034_quality_floor_isolation.sql",
+    "0035_recruitment_appointment_statuses.sql",
+    "0036_recruitment_post_actions.sql",
+    "0037_recruitment_interview_schedule_history.sql",
+    "0038_recruitment_application_cycles.sql",
+    "0039_query_performance_foundation.sql",
+  ])
+
+  const indexes = await pool.query<{ indexname: string }>(`
+    SELECT indexname
+    FROM pg_indexes
+    WHERE indexname = ANY(
+      ARRAY[
+        'refresh_jobs_pending_claim_idx',
+        'production_entries_dashboard_source_idx',
+        'shop_floor_events_dashboard_source_idx',
+        'hourly_checks_dashboard_source_idx',
+        'planner_priority_dashboard_source_idx',
+        'plan_override_dashboard_source_idx',
+        'route_change_dashboard_source_idx',
+        'dispatch_approval_dashboard_source_idx',
+        'file_links_batched_target_idx',
+        'clarification_tasks_open_queue_idx',
+        'quote_items_match_candidates_idx',
+        'purchase_orders_timeline_idx',
+        'engineering_change_notes_queue_idx',
+        'engineering_change_decisions_source_idx',
+        'enquiries_timeline_idx',
+        'followups_open_queue_idx'
+      ]
+    )
+  `)
+
+  expect(new Set(indexes.rows.map((row) => row.indexname))).toEqual(
+    new Set([
+      "refresh_jobs_pending_claim_idx",
+      "production_entries_dashboard_source_idx",
+      "shop_floor_events_dashboard_source_idx",
+      "hourly_checks_dashboard_source_idx",
+      "planner_priority_dashboard_source_idx",
+      "plan_override_dashboard_source_idx",
+      "route_change_dashboard_source_idx",
+      "dispatch_approval_dashboard_source_idx",
+      "file_links_batched_target_idx",
+      "clarification_tasks_open_queue_idx",
+      "quote_items_match_candidates_idx",
+      "purchase_orders_timeline_idx",
+      "engineering_change_notes_queue_idx",
+      "engineering_change_decisions_source_idx",
+      "enquiries_timeline_idx",
+      "followups_open_queue_idx",
+    ])
+  )
+})
+
 test("database roles enforce least privilege across migration, web, worker, and reporting", async () => {
   await migrateDatabase({ connectionString })
 
