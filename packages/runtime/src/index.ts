@@ -26,3 +26,4 @@ export {
   type RedisAcceleration,
   type RedisAccelerationOptions,
 } from "./redis-acceleration"
+export { subscribeRedisInvalidations } from "./redis-invalidation-subscriber"
