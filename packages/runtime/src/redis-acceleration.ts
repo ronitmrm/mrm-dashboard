@@ -65,7 +65,7 @@ function numericPair(value: unknown) {
   return { count, ttl }
 }
 
-function invalidationPayload(invalidation: Invalidation) {
+export function serializeInvalidation(invalidation: Invalidation) {
   return JSON.stringify({
     aggregateId: invalidation.aggregateId,
     aggregateType: invalidation.aggregateType,
@@ -73,6 +73,7 @@ function invalidationPayload(invalidation: Invalidation) {
     organizationId: invalidation.organizationId,
     payload: invalidation.payload,
     topic: invalidation.topic,
+    version: invalidation.version,
   })
 }
 
@@ -126,7 +127,7 @@ function createNodeRedisAcceleration(redisUrl: string): RedisAcceleration {
       }
       await redis.publish(
         "mrm:invalidations",
-        invalidationPayload(invalidation)
+        serializeInvalidation(invalidation)
       )
     },
   }
@@ -166,7 +167,7 @@ function createUpstashAcceleration({
       }
       await redis.publish(
         "mrm:invalidations",
-        invalidationPayload(invalidation)
+        serializeInvalidation(invalidation)
       )
     },
   }

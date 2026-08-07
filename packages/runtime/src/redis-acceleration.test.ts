@@ -8,10 +8,27 @@ import {
 } from "./managed-telemetry"
 import {
   readRedisAccelerationEnvironment,
+  serializeInvalidation,
   type RedisAcceleration,
 } from "./redis-acceleration"
 
 describe("Redis acceleration environment", () => {
+  it("publishes the monotonic dashboard version to subscribers", () => {
+    expect(
+      JSON.parse(
+        serializeInvalidation({
+          aggregateId: "aggregate-1",
+          aggregateType: "dashboard",
+          idempotencyKey: "event-1",
+          organizationId: "org-1",
+          payload: {},
+          topic: "dashboard.updated",
+          version: 42,
+        })
+      )
+    ).toMatchObject({ organizationId: "org-1", version: 42 })
+  })
+
   it("keeps the Docker Redis URL as the local development default", () => {
     expect(readRedisAccelerationEnvironment({})).toEqual({
       hosted: false,
