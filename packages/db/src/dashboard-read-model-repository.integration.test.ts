@@ -14,6 +14,7 @@ const repository = createDashboardReadModelRepository({ connectionString })
 const suffix = randomUUID().slice(0, 8)
 const sourceId = `machine-correction-${suffix}`
 let organizationId: string
+let productionFloorId: string
 
 beforeAll(async () => {
   await migrateDatabase({ connectionString })
@@ -22,6 +23,16 @@ beforeAll(async () => {
     [`CORRECTION-${suffix}`, `Correction ${suffix}`]
   )
   organizationId = organization.rows[0]!.id
+  const productionFloor = await pool.query<{ id: string }>(
+    `
+      INSERT INTO manufacturing.production_floors (
+        organization_id, code, name
+      ) VALUES ($1, 'conventional', 'Conventional Production Floor')
+      RETURNING id
+    `,
+    [organizationId]
+  )
+  productionFloorId = productionFloor.rows[0]!.id
   const machineType = await pool.query<{ id: string }>(
     `
       INSERT INTO catalog.machine_types (
@@ -34,13 +45,15 @@ beforeAll(async () => {
   await pool.query(
     `
       INSERT INTO catalog.machines (
-        organization_id, machine_number, machine_type_id,
+        organization_id, machine_number, machine_type_id, production_floor_id,
         source_system, source_table, source_id, source_payload
-      ) VALUES ($1, 'CORRECTION-01', $2, 'mrm-dashboard', 'dataEntries', $3, $4)
+      ) VALUES ($1, 'CORRECTION-01', $2, $3,
+        'mrm-dashboard', 'dataEntries', $4, $5)
     `,
     [
       organizationId,
       machineType.rows[0]!.id,
+      productionFloorId,
       sourceId,
       {
         _id: sourceId,
