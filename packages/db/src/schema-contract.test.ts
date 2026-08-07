@@ -545,6 +545,131 @@ test("local PostgreSQL exposes query and IO observability", async () => {
   expect(Number(statements.rows[0]?.statements)).toBeGreaterThanOrEqual(0)
 })
 
+test("dashboard source projection preserves floor-specific payloads transactionally", async () => {
+  await migrateDatabase({ connectionString })
+
+  const organization = await pool.query<{ id: string }>(`
+    INSERT INTO core.organizations (code, name)
+    VALUES ('PERF-CONTRACT', 'Performance Contract')
+    ON CONFLICT (lower(code)) DO UPDATE SET name = EXCLUDED.name
+    RETURNING id
+  `)
+  const organizationId = organization.rows[0]!.id
+  const floor = await pool.query<{ id: string }>(
+    `
+      INSERT INTO manufacturing.production_floors (
+        organization_id, code, name
+      ) VALUES ($1, 'cnc', 'CNC Production Floor')
+      ON CONFLICT (organization_id, code) DO UPDATE SET name = EXCLUDED.name
+      RETURNING id
+    `,
+    [organizationId]
+  )
+  const initialPayload = {
+    _id: "projection-machine",
+    entryType: "machine_master",
+    payload: { machineNumber: "CNC-900", productionFloorCode: "cnc" },
+    productionFloorCode: "cnc",
+  }
+
+  await pool.query(
+    `
+      INSERT INTO catalog.machines (
+        organization_id, machine_number, name, production_floor_id,
+        source_system, source_table, source_id, source_payload
+      ) VALUES ($1, 'CNC-900', 'Projection machine', $2,
+        'mrm-dashboard', 'dataEntries', 'projection-machine', $3::jsonb)
+    `,
+    [organizationId, floor.rows[0]!.id, JSON.stringify(initialPayload)]
+  )
+
+  const inserted = await pool.query<{
+    entry_type: string
+    source_group: string
+    source_kind: string
+    source_payload: typeof initialPayload
+  }>(
+    `
+      SELECT source_kind, source_group, entry_type, source_payload
+      FROM derived.dashboard_source_records
+      WHERE organization_id = $1 AND source_id = 'projection-machine'
+    `,
+    [organizationId]
+  )
+
+  const updatedPayload = {
+    ...initialPayload,
+    payload: { machineNumber: "CNC-901", productionFloorCode: "cnc" },
+  }
+  await pool.query(
+    `
+      UPDATE catalog.machines
+      SET machine_number = 'CNC-901', source_payload = $2::jsonb
+      WHERE organization_id = $1 AND source_id = 'projection-machine'
+    `,
+    [organizationId, JSON.stringify(updatedPayload)]
+  )
+  const updated = await pool.query<{ source_payload: typeof updatedPayload }>(
+    `
+      SELECT source_payload
+      FROM derived.dashboard_source_records
+      WHERE organization_id = $1 AND source_id = 'projection-machine'
+    `,
+    [organizationId]
+  )
+
+  await pool.query(
+    `
+      DELETE FROM catalog.machines
+      WHERE organization_id = $1 AND source_id = 'projection-machine'
+    `,
+    [organizationId]
+  )
+  const remaining = await pool.query<{ rows: string }>(
+    `
+      SELECT count(*)::text AS rows
+      FROM derived.dashboard_source_records
+      WHERE organization_id = $1 AND source_id = 'projection-machine'
+    `,
+    [organizationId]
+  )
+  const topology = await pool.query<{ indexes: string; triggers: string }>(`
+    SELECT
+      (
+        SELECT count(*)::text
+        FROM pg_indexes
+        WHERE schemaname = 'derived'
+          AND indexname IN (
+            'dashboard_source_records_bounded_read_idx',
+            'dashboard_source_records_group_read_idx'
+          )
+      ) AS indexes,
+      (
+        SELECT count(*)::text
+        FROM pg_trigger
+        WHERE NOT tgisinternal
+          AND tgname LIKE 'sync_dashboard_source_%'
+      ) AS triggers
+  `)
+
+  expect({
+    inserted: inserted.rows[0],
+    remaining: remaining.rows[0]?.rows,
+    topology: topology.rows[0],
+    updated: updated.rows[0]?.source_payload,
+  }).toEqual({
+    inserted: {
+      entry_type: "machine_master",
+      source_group: "dataEntries",
+      source_kind: "data_entry",
+      source_payload: initialPayload,
+    },
+    remaining: "0",
+    topology: { indexes: "2", triggers: "33" },
+    updated: updatedPayload,
+  })
+})
+
 test("database roles enforce least privilege across migration, web, worker, and reporting", async () => {
   await migrateDatabase({ connectionString })
 
@@ -728,6 +853,7 @@ test("foundation includes provenance, conflict review, and durable work tables",
     result.rows.map((row) => `${row.table_schema}.${row.table_name}`)
   ).toEqual([
     "derived.dashboard_read_models",
+    "derived.dashboard_source_records",
     "derived.outbox_events",
     "derived.refresh_job_attempts",
     "derived.refresh_jobs",
