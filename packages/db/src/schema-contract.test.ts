@@ -505,6 +505,46 @@ test("the first performance foundation follows immutable staging history", async
   )
 })
 
+test("local PostgreSQL exposes query and IO observability", async () => {
+  await migrateDatabase({ connectionString })
+
+  const migration = await pool.query<{ applied: boolean }>(`
+    SELECT EXISTS (
+      SELECT 1
+      FROM migration.schema_migrations
+      WHERE name = '0040_query_observability.sql'
+    ) AS applied
+  `)
+  expect(migration.rows[0]?.applied).toBe(true)
+
+  const observability = await pool.query<{
+    extension_installed: boolean
+    io_timing: string
+    preload_libraries: string
+    statement_tracking: string | null
+  }>(`
+    SELECT
+      EXISTS (
+        SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements'
+      ) AS extension_installed,
+      current_setting('track_io_timing') AS io_timing,
+      current_setting('shared_preload_libraries') AS preload_libraries,
+      current_setting('pg_stat_statements.track', true) AS statement_tracking
+  `)
+
+  expect(observability.rows[0]).toEqual({
+    extension_installed: true,
+    io_timing: "on",
+    preload_libraries: "pg_stat_statements",
+    statement_tracking: "all",
+  })
+
+  const statements = await pool.query<{ statements: string }>(
+    "SELECT count(*)::text AS statements FROM pg_stat_statements"
+  )
+  expect(Number(statements.rows[0]?.statements)).toBeGreaterThanOrEqual(0)
+})
+
 test("database roles enforce least privilege across migration, web, worker, and reporting", async () => {
   await migrateDatabase({ connectionString })
 
