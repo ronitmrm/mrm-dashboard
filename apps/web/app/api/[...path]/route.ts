@@ -24,6 +24,7 @@ import {
   DashboardReadError,
   readPostgresCorrectionCandidates,
   readPostgresDashboard,
+  readPostgresDashboardState,
   readPostgresDashboardStatus,
   requestPostgresDashboardCorrection,
   requestPostgresDashboardRefresh,
@@ -199,10 +200,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
   ],
 }
 
-async function dataTemplateResponse(
-  entryType: string,
-  request: NextRequest
-) {
+async function dataTemplateResponse(entryType: string, request: NextRequest) {
   const fields = dataEntryTemplateFields[entryType]
   if (!fields) {
     throw new RouteError(400, `Unknown data template entry type: ${entryType}`)
@@ -565,6 +563,27 @@ export async function GET(request: NextRequest, context: RouteContext) {
       )
     }
 
+    if (path === "dashboard-state") {
+      return json(
+        await readPostgresDashboardState(
+          request,
+          {
+            endDate: search.get("endDate") || undefined,
+            machine: search.get("machine") || undefined,
+            machineType: search.get("machineType") || undefined,
+            month: search.get("month") || undefined,
+            operatorId: search.get("operatorId") || undefined,
+            startDate: search.get("startDate") || undefined,
+          },
+          search.get("floor"),
+          (() => {
+            const value = Number(search.get("knownVersion"))
+            return Number.isSafeInteger(value) && value > 0 ? value : undefined
+          })()
+        )
+      )
+    }
+
     if (path === "dashboard-refresh-status") {
       return json(await readPostgresDashboardStatus(request))
     }
@@ -607,8 +626,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return json(
       { error: err instanceof Error ? err.message : "Request failed" },
       err instanceof RouteError ||
-      err instanceof OperationalEntryError ||
-      err instanceof DashboardReadError
+        err instanceof OperationalEntryError ||
+        err instanceof DashboardReadError
         ? err.status
         : 500
     )
@@ -1153,10 +1172,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     if (path === "reschedule") {
-      throw new RouteError(
-        501,
-        "Reschedule is not implemented."
-      )
+      throw new RouteError(501, "Reschedule is not implemented.")
     }
 
     if (path === "data-entry" || path === "data-import") {
@@ -1171,8 +1187,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return json(
       { error: err instanceof Error ? err.message : "Request failed" },
       err instanceof RouteError ||
-      err instanceof OperationalEntryError ||
-      err instanceof DashboardReadError
+        err instanceof OperationalEntryError ||
+        err instanceof DashboardReadError
         ? err.status
         : 400
     )

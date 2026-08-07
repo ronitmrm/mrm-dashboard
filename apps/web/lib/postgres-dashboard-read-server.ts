@@ -83,6 +83,39 @@ export async function readPostgresDashboard(
   )
 }
 
+export async function readPostgresDashboardState(
+  request: NextRequest,
+  filters: Record<string, string | undefined>,
+  requestedProductionFloor?: string | null,
+  knownVersion?: number
+) {
+  return withDashboardReadRepository(
+    request,
+    async ({ organizationId, repository }) => {
+      const productionFloorCode = normalizeProductionFloorCode(
+        requestedProductionFloor
+      )
+      const { dashboard, notModified, status } = await repository.state(
+        organizationId,
+        filters,
+        productionFloorCode,
+        knownVersion
+      )
+      if (notModified) return { dashboard: null, notModified: true, status }
+      if (dashboard) return { dashboard, status }
+      await repository.requestRefresh(organizationId)
+      return {
+        dashboard: {
+          cacheStatus: "missing",
+          filters,
+          productionFloorCode,
+        },
+        status: { ...status, isRefreshing: true },
+      }
+    }
+  )
+}
+
 export async function readPostgresDashboardStatus(request: NextRequest) {
   return withDashboardReadRepository(
     request,
