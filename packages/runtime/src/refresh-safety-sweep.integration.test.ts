@@ -101,7 +101,7 @@ describe("durable refresh safety sweep", () => {
       expect(query).toHaveBeenCalledTimes(4)
       expect(
         events
-          .filter(({ event }) => event === "performance.operation")
+          .filter((event) => event.event === "performance.operation")
           .map((event) => event.poolWaiters)
       ).toEqual([0, 0])
       expect(events.filter(({ event }) => event === "worker.sweep")).toEqual([
