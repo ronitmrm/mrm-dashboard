@@ -108,18 +108,20 @@ export default async function DesignPage() {
       )
         ? await workflow.listDesignPortfolioProducts("MRMPL")
         : []
-      const withFiles = await Promise.all(
-        queue.map(async (item) => ({
-          ...item,
-          attachments: item.designId
-            ? await workflow.listAttachments({
-                organizationId: item.organizationId,
-                targetId: item.designId,
-                targetTable: "design_tasks",
-              })
-            : [],
-        }))
+      const designIds = queue.flatMap((item) =>
+        item.designId ? [item.designId] : []
       )
+      const attachmentsByTarget = await workflow.listAttachmentsForTargets({
+        organizationId: queue[0]?.organizationId ?? "",
+        targetIds: designIds,
+        targetTable: "design_tasks",
+      })
+      const withFiles = queue.map((item) => ({
+        ...item,
+        attachments: item.designId
+          ? (attachmentsByTarget.get(item.designId) ?? [])
+          : [],
+      }))
       return { items: withFiles, products: portfolioProducts }
     } finally {
       await workflow.close()

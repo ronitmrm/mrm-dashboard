@@ -63,6 +63,72 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL enquiry-to-design workflow", () => {
+  test("loads attachments for many targets in one statement", async () => {
+    const enquiry = await repository.createEnquiry({
+      customerId,
+      organizationId,
+      receivedOn: "2026-08-08",
+      source: "Email",
+    })
+    const targets = await Promise.all(
+      [0, 1].map((index) =>
+        repository.addEnquiryItem({
+          customerPartCode: `BATCH-${randomUUID()}`,
+          description: `Batch attachment target ${index}`,
+          enquiryId: enquiry.id,
+          organizationId,
+          quantity: 1,
+        })
+      )
+    )
+    const targetIds = targets.map(({ id }) => id)
+    await Promise.all(
+      targetIds.map((targetId, index) =>
+        repository.recordAttachment({
+          byteSize: 100 + index,
+          fileName: `batch-design-${index}.pdf`,
+          mediaType: "application/pdf",
+          organizationId,
+          purpose: "internal_drawing",
+          sourceId: `batch-design-${targetId}`,
+          storageKey: `attachments/batch-design-${targetId}.pdf`,
+          targetId,
+          targetTable: "enquiry_items",
+        })
+      )
+    )
+
+    const trackedPool = new Pool({ connectionString })
+    const originalQuery = trackedPool.query.bind(trackedPool)
+    let statementCount = 0
+    trackedPool.query = ((...args: Parameters<typeof trackedPool.query>) => {
+      statementCount += 1
+      return originalQuery(...args)
+    }) as typeof trackedPool.query
+    const trackedRepository = createCommercialWorkflowRepository({
+      pool: trackedPool,
+    })
+
+    try {
+      const grouped = await trackedRepository.listAttachmentsForTargets({
+        organizationId,
+        targetIds,
+        targetTable: "enquiry_items",
+      })
+
+      expect(statementCount).toBe(1)
+      expect(grouped.get(targetIds[0]!)).toEqual([
+        expect.objectContaining({ fileName: "batch-design-0.pdf" }),
+      ])
+      expect(grouped.get(targetIds[1]!)).toEqual([
+        expect.objectContaining({ fileName: "batch-design-1.pdf" }),
+      ])
+    } finally {
+      await trackedRepository.close()
+      await trackedPool.end()
+    }
+  })
+
   test("classifies imported rows with the executable Pricing match order", async () => {
     const suffix = Date.now().toString(36)
     const exactCode = `MATCH-${suffix}`

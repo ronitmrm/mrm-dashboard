@@ -3487,6 +3487,66 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
       }))
     },
 
+    async listAttachmentsForTargets(input: {
+      organizationId: string
+      purpose?: "cad" | "customer_marked" | "drawing" | "internal_drawing"
+      targetIds: string[]
+      targetTable: "design_tasks" | "enquiry_items"
+    }) {
+      if (input.targetIds.length === 0) {
+        return new Map<string, Awaited<ReturnType<typeof this.listAttachments>>>()
+      }
+
+      const files = await pool.query<{
+        byte_size: string
+        created_at: Date
+        file_name: string
+        id: string
+        media_type: string | null
+        purpose: string
+        storage_key: string
+        target_id: string
+      }>(
+        `
+          SELECT file_link.target_id, file.id, file.file_name, file.media_type,
+            file.byte_size::text, file.storage_key, file.created_at,
+            file_link.purpose
+          FROM core.file_links file_link
+          JOIN core.files file ON file.id = file_link.file_id
+          WHERE file_link.organization_id = $1
+            AND file_link.target_schema = 'sales'
+            AND file_link.target_table = $2
+            AND file_link.target_id = ANY($3::uuid[])
+            AND ($4::text IS NULL OR file_link.purpose = $4)
+          ORDER BY file_link.target_id, file.created_at DESC, file.id DESC
+        `,
+        [
+          input.organizationId,
+          input.targetTable,
+          input.targetIds,
+          input.purpose ?? null,
+        ]
+      )
+      const attachmentsByTarget = new Map<
+        string,
+        Awaited<ReturnType<typeof this.listAttachments>>
+      >()
+      for (const row of files.rows) {
+        const attachments = attachmentsByTarget.get(row.target_id) ?? []
+        attachments.push({
+          byteSize: Number(row.byte_size),
+          createdAt: row.created_at,
+          fileName: row.file_name,
+          id: row.id,
+          mediaType: row.media_type,
+          purpose: row.purpose,
+          storageKey: row.storage_key,
+        })
+        attachmentsByTarget.set(row.target_id, attachments)
+      }
+      return attachmentsByTarget
+    },
+
     async listDrawingHistory(input: {
       enquiryItemId: string
       organizationId: string
