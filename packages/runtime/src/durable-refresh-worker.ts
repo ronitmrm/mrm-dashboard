@@ -121,6 +121,50 @@ export function createDurableRefreshWorker({
       await acceleration.close()
     },
 
+    async probeWork() {
+      return withPerformanceOperation(
+        {
+          commandId: workerId,
+          operation: "worker.safety.probe",
+          runtime: telemetryRuntime,
+          sink: telemetrySink,
+          subsystem: "worker",
+        },
+        async () => {
+          const refresh = await pool.query<{ eligible: boolean }>(
+            `
+              SELECT EXISTS (
+                SELECT 1
+                FROM derived.refresh_jobs
+                WHERE status = 'pending' AND run_after <= now()
+                  AND ($1::uuid IS NULL OR organization_id = $1)
+              ) AS eligible
+            `,
+            [organizationId ?? null]
+          )
+          const outbox = await pool.query<{ publishable: boolean }>(
+            `
+              SELECT EXISTS (
+                SELECT 1
+                FROM derived.outbox_events
+                WHERE published_at IS NULL AND available_at <= now()
+                  AND ($1::uuid IS NULL OR organization_id = $1)
+                  AND (
+                    locked_at IS NULL
+                    OR locked_at < now() - interval '5 minutes'
+                  )
+              ) AS publishable
+            `,
+            [organizationId ?? null]
+          )
+          return {
+            eligibleRefresh: refresh.rows[0]!.eligible,
+            publishableOutbox: outbox.rows[0]!.publishable,
+          }
+        }
+      )
+    },
+
     async runRefreshOnce() {
       return withPerformanceOperation(
         {

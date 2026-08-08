@@ -1,20 +1,71 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { runContinuousWorkerCycle } from "./worker-loop"
+import { advanceSweepDeadline, runSafetySweepCycle } from "./worker-loop"
 
-describe("continuous worker resilience", () => {
-  it("turns a transient PostgreSQL timeout into a redacted retry event", async () => {
+const idleBatch = {
+  failed: 0,
+  outbox: { published: 0, retrying: 0 },
+  processed: 0,
+  retrying: 0,
+}
+
+describe("worker safety sweep", () => {
+  it("uses probes without opening a full drain while idle", async () => {
+    const runBatch = vi.fn().mockResolvedValue(idleBatch)
+
+    const result = await runSafetySweepCycle({
+      consecutiveFailures: 3,
+      maxRetryDelayMs: 30_000,
+      probeWork: vi.fn().mockResolvedValue({
+        eligibleRefresh: false,
+        publishableOutbox: false,
+      }),
+      runBatch,
+      workerId: "test-worker",
+    })
+
+    expect(result).toEqual({
+      consecutiveFailures: 0,
+      probe: { eligibleRefresh: false, publishableOutbox: false },
+    })
+    expect(runBatch).not.toHaveBeenCalled()
+  })
+
+  it("enters one serialized drain after either probe is positive", async () => {
+    const batch = { ...idleBatch, processed: 1 }
+    const runBatch = vi.fn().mockResolvedValue(batch)
+
+    const result = await runSafetySweepCycle({
+      consecutiveFailures: 0,
+      maxRetryDelayMs: 30_000,
+      probeWork: vi.fn().mockResolvedValue({
+        eligibleRefresh: true,
+        publishableOutbox: false,
+      }),
+      runBatch,
+      workerId: "test-worker",
+    })
+
+    expect(result).toEqual({
+      batch,
+      consecutiveFailures: 0,
+      event: { batch, event: "batch", workerId: "test-worker" },
+      probe: { eligibleRefresh: true, publishableOutbox: false },
+    })
+    expect(runBatch).toHaveBeenCalledTimes(1)
+  })
+
+  it("turns a transient probe timeout into a bounded redacted retry", async () => {
     const timeout = new AggregateError(
       [Object.assign(new Error("connect failed"), { code: "ETIMEDOUT" })],
       ""
     )
-    const runBatch = vi.fn().mockRejectedValue(timeout)
 
-    const result = await runContinuousWorkerCycle({
+    const result = await runSafetySweepCycle({
       consecutiveFailures: 0,
       maxRetryDelayMs: 30_000,
-      pollIntervalMs: 1_000,
-      runBatch,
+      probeWork: vi.fn().mockRejectedValue(timeout),
+      runBatch: vi.fn().mockResolvedValue(idleBatch),
       workerId: "test-worker",
     })
 
@@ -22,35 +73,29 @@ describe("continuous worker resilience", () => {
       consecutiveFailures: 1,
       event: {
         category: "timeout",
-        event: "poll-error",
-        retryDelayMs: 1_000,
+        event: "sweep-error",
+        retryDelayMs: 250,
         workerId: "test-worker",
       },
-      waitMs: 1_000,
+      retryDelayMs: 250,
     })
     expect(JSON.stringify(result)).not.toContain("connect failed")
   })
 
-  it("resets backoff after the next successful batch", async () => {
-    const batch = {
-      failed: 0,
-      outbox: { published: 0, retrying: 0 },
-      processed: 0,
-      retrying: 0,
-    }
-
-    const result = await runContinuousWorkerCycle({
-      consecutiveFailures: 4,
-      maxRetryDelayMs: 30_000,
-      pollIntervalMs: 1_000,
-      runBatch: vi.fn().mockResolvedValue(batch),
-      workerId: "test-worker",
-    })
-
-    expect(result).toEqual({
-      batch,
-      consecutiveFailures: 0,
-      waitMs: 1_000,
-    })
+  it("keeps the 30-second cadence anchored when a sweep finishes late", () => {
+    expect(
+      advanceSweepDeadline({
+        intervalMs: 30_000,
+        nowMs: 30_100,
+        previousDeadlineMs: 30_000,
+      })
+    ).toBe(60_000)
+    expect(
+      advanceSweepDeadline({
+        intervalMs: 30_000,
+        nowMs: 95_000,
+        previousDeadlineMs: 60_000,
+      })
+    ).toBe(120_000)
   })
 })

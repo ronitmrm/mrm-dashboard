@@ -106,6 +106,9 @@ describe("PostgreSQL refresh listener", () => {
     await eventually(() =>
       expect(listener.snapshot()).toMatchObject({ session: 2, state: "ready" })
     )
+    expect(secondClient.query).toHaveBeenCalledTimes(1)
+    expect(listener.snapshot()).toEqual({ session: 2, state: "ready" })
+    expect(secondClient.query).toHaveBeenCalledTimes(1)
 
     await listener.stop()
     expect(firstClient.end).toHaveBeenCalledTimes(1)
