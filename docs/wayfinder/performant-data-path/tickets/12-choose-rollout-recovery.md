@@ -1,8 +1,8 @@
 ---
 title: Choose the Rollout and Recovery Contract
 label: wayfinder:grilling
-status: open
-claim: unassigned
+status: resolved
+claim: codex
 blocked_by:
   - Choose the Schema Cutover Contract
   - Define the Dashboard Delivery Contract
@@ -14,3 +14,16 @@ blocked_by:
 ## Question
 
 What shadowing, canary, observability, rollback, listener-loss, Redis-loss, and mixed-version deployment strategy makes rollout safe?
+
+## Resolution
+
+Adopt the [staged rollout and recovery contract](../rollout-recovery-contract.md): schema-first additive migrations, isolated shadow databases, one tested artifact per subsystem, preview-then-promote staging canaries, independent web/worker promotion, and explicit observation windows.
+
+Application rollback leaves additive migrations in place and separately verifies environment variables because Vercel rollback does not restore them. Canonical-write failures freeze writes and use the existing Neon PITR/custom-dump runbook. Redis loss never triggers database rollback. Listener loss falls back to the durable queue and 30-second sweep; notification rollout remains gated on a continuously running worker with a direct TLS PostgreSQL session.
+
+## Evidence
+
+- Existing recovery drills prove preserved-branch PITR reversal and empty-Redis recovery.
+- Runtime tests pass 16/16 for worker retry, durable queue/outbox behavior, Redis fail-open behavior, and managed worker identity.
+- Ticket 11's 43-test recruitment seam and the existing commercial, dashboard, authorization, migration, and production-like fingerprint gates run before their corresponding promotion unit.
+- Current provider constraints were rechecked against Neon instant-restore and Vercel instant-rollback documentation on 2026-08-08.

@@ -34,11 +34,11 @@ Relevant skills: `code-review`, `codebase-design`, `research`, `prototype`, `gri
 
 ## Decisions so far
 
-None. Existing constraints are inputs to the map, not resolutions produced by it.
+- Recruitment bulk commands use bounded set-based reads, writes, and audits behind one exported domain-policy interface while preserving transaction and lifecycle behavior.
+- Rollout proceeds schema-first by independently promotable subsystem, with isolated shadows, tested-artifact promotion, durable-queue recovery, and no automatic code-only rollback after incorrect canonical writes.
 
 ## Not yet specified
 
-- Whether recruitment needs decomposition beyond its present domain boundaries.
 - Exact telemetry surfaces, exposed after performance and rollout contracts are chosen.
 
 ## Out of scope
