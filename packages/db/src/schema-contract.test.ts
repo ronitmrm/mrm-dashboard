@@ -1,10 +1,13 @@
-import { Pool } from "pg"
+import { randomUUID } from "node:crypto"
+
+import { Client, Pool, type Notification } from "pg"
 import { afterAll, beforeAll, expect, test } from "vitest"
 
 import publishedChecksums from "../migrations/published-checksums.json"
 
 import { createCatalogMasterRepository } from "./catalog-masters"
 import { createCustomerRepository } from "./customers"
+import { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 import { migrateDatabase } from "./migrate"
 import { createProductRepository } from "./products"
 
@@ -161,6 +164,69 @@ const expectedCanonicalTables = [
 
 const pool = new Pool({ connectionString })
 const representativeOrganizationId = "00000000-0000-4000-8000-000000000038"
+const dashboardRefreshChannel = "mrm_dashboard_refresh"
+
+async function captureNotificationsBeforeSentinel(
+  listener: Client,
+  writer: Client,
+  operation: () => Promise<void>
+) {
+  const sentinel = JSON.stringify({ sentinel: randomUUID() })
+  const payloads: string[] = []
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  let finish: ((value: void | PromiseLike<void>) => void) | undefined
+  let fail: ((reason?: unknown) => void) | undefined
+  const completed = new Promise<void>((resolve, reject) => {
+    finish = resolve
+    fail = reject
+  })
+  const onNotification = (notification: Notification) => {
+    if (notification.channel !== dashboardRefreshChannel) return
+    if (notification.payload === sentinel) {
+      finish?.()
+      return
+    }
+    if (notification.payload) payloads.push(notification.payload)
+  }
+
+  listener.on("notification", onNotification)
+  try {
+    await operation()
+    await writer.query("SELECT pg_notify($1, $2)", [
+      dashboardRefreshChannel,
+      sentinel,
+    ])
+    timeout = setTimeout(
+      () => fail?.(new Error("Timed out waiting for notification sentinel")),
+      2_000
+    )
+    await completed
+    return payloads
+  } finally {
+    if (timeout) clearTimeout(timeout)
+    listener.off("notification", onNotification)
+  }
+}
+
+async function queueDashboardRefreshRow(
+  writer: Client,
+  organizationId: string,
+  idempotencyKey: string
+) {
+  await writer.query(
+    `
+      INSERT INTO derived.refresh_jobs (
+        organization_id, queue_key, idempotency_key, status, run_after
+      )
+      VALUES ($1, 'dashboard', $2, 'pending', now())
+      ON CONFLICT (organization_id, queue_key)
+        WHERE status IN ('pending', 'running')
+      DO UPDATE SET run_after = LEAST(derived.refresh_jobs.run_after, now()),
+        updated_at = now(), last_error = NULL
+    `,
+    [organizationId, idempotencyKey]
+  )
+}
 
 async function representativeUpgradeFingerprint() {
   const result = await pool.query<{ fingerprint: Record<string, unknown> }>(
@@ -198,11 +264,15 @@ async function representativeUpgradeFingerprint() {
   return result.rows[0]!.fingerprint
 }
 
-beforeAll(async () => {
-  assertDisposableLocalDatabase(connectionString)
+async function resetDisposableDatabase() {
   for (const schema of expectedSchemas) {
     await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
   }
+}
+
+beforeAll(async () => {
+  assertDisposableLocalDatabase(connectionString)
+  await resetDisposableDatabase()
 })
 
 afterAll(async () => {
@@ -339,6 +409,7 @@ test("a representative 0038 database upgrades without changing canonical rows", 
 })
 
 test("an empty database migrates into the MRMPL bounded contexts", async () => {
+  await resetDisposableDatabase()
   await migrateDatabase({ connectionString })
 
   const result = await pool.query<{ schema_name: string }>(
@@ -671,6 +742,195 @@ test("the first performance foundation follows immutable staging history", async
       "followups_open_queue_idx",
     ])
   )
+
+  const notificationContract = await pool.query<{
+    function_exists: boolean
+    trigger_exists: boolean
+  }>(`
+    SELECT
+      to_regprocedure(
+        'derived.notify_dashboard_refresh_job()'
+      ) IS NOT NULL AS function_exists,
+      EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'refresh_jobs_notify_dashboard'
+          AND tgrelid = 'derived.refresh_jobs'::regclass
+          AND NOT tgisinternal
+      ) AS trigger_exists
+  `)
+
+  expect(notificationContract.rows).toEqual([
+    {
+      function_exists: true,
+      trigger_exists: true,
+    },
+  ])
+})
+
+test("refresh-job hints are commit-scoped, coalesced, and bounded", async () => {
+  await migrateDatabase({ connectionString })
+  const listener = new Client({ connectionString })
+  const writer = new Client({ connectionString })
+  const repository = createDashboardReadModelRepository({ connectionString })
+  const suffix = randomUUID().slice(0, 8)
+  const committedOrganizationId = randomUUID()
+  const rolledBackOrganizationId = randomUUID()
+  const expectedPayload = {
+    organizationId: committedOrganizationId,
+    queueKey: "dashboard",
+    v: 1,
+  }
+  let listenerConnected = false
+  let writerConnected = false
+
+  try {
+    await listener.connect()
+    listenerConnected = true
+    await writer.connect()
+    writerConnected = true
+    await listener.query(`LISTEN ${dashboardRefreshChannel}`)
+    await writer.query(
+      `
+        INSERT INTO core.organizations (id, code, name)
+        VALUES ($1, $2, 'Committed notification fixture'),
+          ($3, $4, 'Rolled-back notification fixture')
+      `,
+      [
+        committedOrganizationId,
+        `NOTIFY-COMMIT-${suffix}`,
+        rolledBackOrganizationId,
+        `NOTIFY-ROLLBACK-${suffix}`,
+      ]
+    )
+
+    const committed = await captureNotificationsBeforeSentinel(
+      listener,
+      writer,
+      async () => {
+        await repository.requestRefresh(committedOrganizationId)
+      }
+    )
+    const committedEffects = await writer.query<{
+      jobs: string
+      outbox_events: string
+    }>(
+      `
+        SELECT
+          (SELECT count(*)::text FROM derived.refresh_jobs
+            WHERE organization_id = $1 AND queue_key = 'dashboard') AS jobs,
+          (SELECT count(*)::text FROM derived.outbox_events
+            WHERE organization_id = $1
+              AND topic = 'dashboard.refresh.requested') AS outbox_events
+      `,
+      [committedOrganizationId]
+    )
+
+    expect(committed).toHaveLength(1)
+    expect(JSON.parse(committed[0]!)).toEqual(expectedPayload)
+    expect(Buffer.byteLength(committed[0]!, "utf8")).toBeLessThan(1_024)
+    expect(committedEffects.rows).toEqual([{ jobs: "1", outbox_events: "1" }])
+
+    const rollbackConstraint = "refresh_notification_test_reject_outbox"
+    await writer.query(`
+      ALTER TABLE derived.outbox_events
+      ADD CONSTRAINT ${rollbackConstraint}
+      CHECK (
+        organization_id <> '${rolledBackOrganizationId}'::uuid
+      ) NOT VALID
+    `)
+
+    let rolledBack: string[]
+    try {
+      rolledBack = await captureNotificationsBeforeSentinel(
+        listener,
+        writer,
+        async () => {
+          await expect(
+            repository.requestRefresh(rolledBackOrganizationId)
+          ).rejects.toThrow(rollbackConstraint)
+        }
+      )
+    } finally {
+      await writer.query(`
+        ALTER TABLE derived.outbox_events
+        DROP CONSTRAINT ${rollbackConstraint}
+      `)
+    }
+
+    expect(rolledBack).toEqual([])
+    const rolledBackEffects = await writer.query<{
+      jobs: string
+      outbox_events: string
+    }>(
+      `
+        SELECT
+          (SELECT count(*)::text FROM derived.refresh_jobs
+            WHERE organization_id = $1) AS jobs,
+          (SELECT count(*)::text FROM derived.outbox_events
+            WHERE organization_id = $1) AS outbox_events
+      `,
+      [rolledBackOrganizationId]
+    )
+    expect(rolledBackEffects.rows).toEqual([{ jobs: "0", outbox_events: "0" }])
+
+    const coalesced = await captureNotificationsBeforeSentinel(
+      listener,
+      writer,
+      async () => {
+        await writer.query("BEGIN")
+        await queueDashboardRefreshRow(
+          writer,
+          committedOrganizationId,
+          `notify-coalesced-one-${suffix}`
+        )
+        await queueDashboardRefreshRow(
+          writer,
+          committedOrganizationId,
+          `notify-coalesced-two-${suffix}`
+        )
+        await writer.query("COMMIT")
+      }
+    )
+
+    expect(coalesced).toHaveLength(1)
+    expect(JSON.parse(coalesced[0]!)).toEqual(expectedPayload)
+
+    const duplicate = await captureNotificationsBeforeSentinel(
+      listener,
+      writer,
+      async () => {
+        await repository.requestRefresh(committedOrganizationId)
+      }
+    )
+    const duplicateEffects = await writer.query<{
+      jobs: string
+      outbox_events: string
+    }>(
+      `
+        SELECT
+          (SELECT count(*)::text FROM derived.refresh_jobs
+            WHERE organization_id = $1 AND queue_key = 'dashboard') AS jobs,
+          (SELECT count(*)::text FROM derived.outbox_events
+            WHERE organization_id = $1
+              AND topic = 'dashboard.refresh.requested') AS outbox_events
+      `,
+      [committedOrganizationId]
+    )
+
+    expect(duplicate).toHaveLength(1)
+    expect(JSON.parse(duplicate[0]!)).toEqual(expectedPayload)
+    expect(duplicateEffects.rows).toEqual([{ jobs: "1", outbox_events: "2" }])
+  } finally {
+    if (listenerConnected) {
+      await listener
+        .query(`UNLISTEN ${dashboardRefreshChannel}`)
+        .catch(() => {})
+      await listener.end()
+    }
+    if (writerConnected) await writer.end()
+    await repository.close()
+  }
 })
 
 test("local PostgreSQL exposes query and IO observability", async () => {

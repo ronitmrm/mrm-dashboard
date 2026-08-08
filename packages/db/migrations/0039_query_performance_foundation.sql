@@ -6,6 +6,34 @@ CREATE INDEX IF NOT EXISTS refresh_jobs_pending_claim_idx
   ON derived.refresh_jobs (run_after, queue_key, created_at, id)
   WHERE status = 'pending';
 
+-- Wake workers after durable dashboard work commits. The notification carries
+-- routing data only; derived.refresh_jobs remains the work authority.
+CREATE FUNCTION derived.notify_dashboard_refresh_job()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.queue_key = 'dashboard'
+    AND NEW.status IN ('pending', 'running') THEN
+    PERFORM pg_notify(
+      'mrm_dashboard_refresh',
+      json_build_object(
+        'v', 1,
+        'organizationId', NEW.organization_id::text,
+        'queueKey', NEW.queue_key
+      )::text
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER refresh_jobs_notify_dashboard
+AFTER INSERT OR UPDATE OF run_after ON derived.refresh_jobs
+FOR EACH ROW
+EXECUTE FUNCTION derived.notify_dashboard_refresh_job();
+
 CREATE INDEX IF NOT EXISTS production_entries_dashboard_source_idx
   ON manufacturing.production_entries (
     organization_id, recorded_at DESC, source_id DESC
