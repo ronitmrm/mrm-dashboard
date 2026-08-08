@@ -1,7 +1,11 @@
 import { hostname } from "node:os"
 
 import { createDurableRefreshWorker } from "../durable-refresh-worker"
-import { readWorkerPostgresEnvironment } from "../managed-runtime"
+import {
+  readWorkerListenerPostgresEnvironment,
+  readWorkerPostgresEnvironment,
+} from "../managed-runtime"
+import { createPostgresRefreshListener } from "../postgres-refresh-listener"
 import { readRedisAccelerationEnvironment } from "../redis-acceleration"
 import { runContinuousWorkerCycle } from "../worker-loop"
 
@@ -31,8 +35,13 @@ const worker = createDurableRefreshWorker({
 })
 
 let stopping = false
+let listener: ReturnType<typeof createPostgresRefreshListener> | undefined
 const stop = () => {
   stopping = true
+  const listenerState = listener?.snapshot().state
+  if (listenerState === "connecting" || listenerState === "disconnected") {
+    void listener?.stop().catch(() => undefined)
+  }
 }
 process.once("SIGINT", stop)
 process.once("SIGTERM", stop)
@@ -57,6 +66,16 @@ async function runBatch() {
   return { failed, outbox, processed, retrying }
 }
 
+let activeBatch: ReturnType<typeof runBatch> | undefined
+function reconcileBatch() {
+  if (!activeBatch) {
+    activeBatch = runBatch().finally(() => {
+      activeBatch = undefined
+    })
+  }
+  return activeBatch
+}
+
 try {
   if (statusOnly) {
     process.stdout.write(`${JSON.stringify(await worker.status())}\n`)
@@ -65,14 +84,28 @@ try {
     const status = await worker.status()
     process.stdout.write(`${JSON.stringify({ batch, status, workerId })}\n`)
   } else {
-    process.stdout.write(`${JSON.stringify({ event: "started", workerId })}\n`)
+    const listenerPostgres = readWorkerListenerPostgresEnvironment()
+    listener = createPostgresRefreshListener({
+      connectionString: listenerPostgres.connectionString,
+      reconcile: async () => {
+        await reconcileBatch()
+      },
+    })
+    try {
+      await listener.start()
+    } catch (error) {
+      if (!stopping) throw error
+    }
+    if (!stopping) {
+      process.stdout.write(`${JSON.stringify({ event: "started", workerId })}\n`)
+    }
     let consecutiveFailures = 0
     while (!stopping) {
       const cycle = await runContinuousWorkerCycle({
         consecutiveFailures,
         maxRetryDelayMs,
         pollIntervalMs,
-        runBatch,
+        runBatch: reconcileBatch,
         workerId,
       })
       consecutiveFailures = cycle.consecutiveFailures
@@ -86,5 +119,6 @@ try {
     process.stdout.write(`${JSON.stringify({ event: "stopped", workerId })}\n`)
   }
 } finally {
+  await listener?.stop()
   await worker.close()
 }

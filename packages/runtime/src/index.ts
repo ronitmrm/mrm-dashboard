@@ -12,7 +12,17 @@ export {
   type ReadModelBuilder,
   type RefreshBuildContext,
 } from "./durable-refresh-worker"
-export { readWorkerPostgresEnvironment } from "./managed-runtime"
+export {
+  readWorkerListenerPostgresEnvironment,
+  readWorkerPostgresEnvironment,
+} from "./managed-runtime"
+export {
+  createPostgresRefreshListener,
+  dashboardRefreshChannel,
+  type RefreshListenerClient,
+  type RefreshListenerState,
+  type RefreshReconciliationRequest,
+} from "./postgres-refresh-listener"
 export {
   configureManagedRuntimeTelemetry,
   managedRuntimeTelemetrySnapshot,
