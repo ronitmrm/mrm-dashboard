@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 
 import {
   dashboardStateRequestUrl,
-  mergeDashboardStateResponse,
   refreshLockHasSettled,
 } from "./dashboard-live-state"
 
@@ -21,24 +20,6 @@ describe("dashboard live state", () => {
         dashboard: { productionFloorCode: "cnc", readModelVersion: 42 },
       })
     ).toBe("/api/dashboard-state?floor=forging")
-  })
-
-  it("retains the floor payload when only refresh status changed", () => {
-    const current = {
-      dashboard: { marker: "cnc-only", readModelVersion: 42 },
-      status: { isRefreshing: true },
-    }
-
-    expect(
-      mergeDashboardStateResponse(current, {
-        dashboard: null,
-        notModified: true,
-        status: { isRefreshing: false },
-      })
-    ).toEqual({
-      dashboard: { marker: "cnc-only", readModelVersion: 42 },
-      status: { isRefreshing: false },
-    })
   })
 
   it("releases the refresh lock after the durable worker completes", () => {

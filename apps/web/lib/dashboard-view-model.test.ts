@@ -1,10 +1,37 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  dashboardPayloadFromState,
   dashboardPayloadForProductionFloor,
+  dashboardRefreshStatusFromState,
   jobCardScheduleSummary,
+  mergeDashboardStateResponse,
   toDashboardViewModel,
 } from "./dashboard-view-model";
+
+describe("dashboard state normalization", () => {
+  it("retains the floor payload when only refresh status changed", () => {
+    const merged = mergeDashboardStateResponse(
+      {
+        dashboard: { marker: "cnc-only", readModelVersion: 42 },
+        status: { isRefreshing: true },
+      },
+      {
+        dashboard: null,
+        notModified: true,
+        status: { isRefreshing: false },
+      },
+    );
+
+    expect(dashboardPayloadFromState(merged)).toEqual({
+      marker: "cnc-only",
+      readModelVersion: 42,
+    });
+    expect(dashboardRefreshStatusFromState(merged)).toEqual({
+      isRefreshing: false,
+    });
+  });
+});
 
 describe("toDashboardViewModel", () => {
   it("normalizes the legacy dashboard payload for the shadcn dashboard", () => {

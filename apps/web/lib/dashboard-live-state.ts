@@ -39,15 +39,6 @@ export function dashboardStateRequestUrl(
   return `${requestUrl.pathname}${requestUrl.search}`
 }
 
-export function mergeDashboardStateResponse(
-  currentState: JsonRecord | undefined,
-  nextState: JsonRecord
-) {
-  return nextState.notModified === true && currentState
-    ? { ...currentState, status: nextState.status }
-    : nextState
-}
-
 function numberOrNull(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null
 }

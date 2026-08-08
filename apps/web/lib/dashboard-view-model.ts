@@ -14,6 +14,23 @@ export {
   type ProductionFloorCode,
 };
 
+export function mergeDashboardStateResponse(
+  currentState: DashboardRecord | undefined,
+  nextState: DashboardRecord,
+) {
+  return nextState.notModified === true && currentState
+    ? { ...currentState, status: nextState.status }
+    : nextState;
+}
+
+export function dashboardPayloadFromState(state: unknown) {
+  return isRecord(state) ? isRecord(state.dashboard) ? state.dashboard : {} : undefined;
+}
+
+export function dashboardRefreshStatusFromState(state: unknown) {
+  return isRecord(state) ? isRecord(state.status) ? state.status : {} : undefined;
+}
+
 export type DashboardRankedRow = {
   label: string;
   detail: string;

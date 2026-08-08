@@ -62,11 +62,14 @@ import {
 } from "@workspace/ui/components/table";
 
 import {
+  dashboardPayloadFromState,
   dashboardPayloadForProductionFloor,
+  dashboardRefreshStatusFromState,
   dateSortValue,
   defaultProductionFloorCode,
   formatNumber,
   jobCardScheduleSummary,
+  mergeDashboardStateResponse,
   normalizeProductionFloorCode,
   productionFloors,
   toDashboardViewModel,
@@ -75,7 +78,6 @@ import {
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
 import {
   dashboardStateRequestUrl,
-  mergeDashboardStateResponse,
   refreshLockFromStatus,
   refreshLockHasSettled,
   type PlanningRefreshLock,
@@ -1032,12 +1034,10 @@ function DashboardShell({
     5_000,
     dashboardReloadKey,
   );
-  const dashboardPayload = dashboardStatePage.data
-    ? asRecord(dashboardStatePage.data.dashboard)
-    : undefined;
-  const dashboardRefreshStatus = dashboardStatePage.data
-    ? asRecord(dashboardStatePage.data.status)
-    : undefined;
+  const dashboardPayload = dashboardPayloadFromState(dashboardStatePage.data);
+  const dashboardRefreshStatus = dashboardRefreshStatusFromState(
+    dashboardStatePage.data,
+  );
 
   useEffect(() => {
     const events = new EventSource("/api/dashboard-events");
