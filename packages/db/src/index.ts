@@ -33,8 +33,6 @@ export { createDashboardReadModelRepository } from "./dashboard-read-model-repos
 export { createMaintenanceRepository } from "./maintenance"
 export {
   createRecruitmentRepository,
-  deriveRecruitmentEmployeeAssignment,
-  isActiveRecruitmentApplicationStatus,
   type RecruitmentCandidateRow,
   type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
@@ -46,6 +44,13 @@ export {
   type RecruitmentPostRow,
   type RecruitmentTemplateRow,
 } from "./recruitment"
+export {
+  deriveRecruitmentEmployeeAssignment,
+  deriveRecruitmentPostStatus,
+  isActiveRecruitmentApplicationStatus,
+  listRecruitableApprovedPosts,
+  recruitmentPostDeletionBlocker,
+} from "./recruitment-domain"
 export {
   nextRecruitmentPostIdentity,
   nextRecruitmentTemplateCode,

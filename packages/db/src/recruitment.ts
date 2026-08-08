@@ -9,10 +9,23 @@ import {
   recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
 import {
+  deriveRecruitmentEmployeeAssignment,
+  deriveRecruitmentPostStatus,
+  isActiveRecruitmentApplicationStatus,
+  recruitmentPostDeletionBlocker,
+} from "./recruitment-domain"
+import {
   nextRecruitmentInterviewRound,
   scoreRecruitmentInterview,
   type RecruitmentInterviewRoundName,
 } from "./recruitment-interview-workflow"
+
+export {
+  deriveRecruitmentEmployeeAssignment,
+  deriveRecruitmentPostStatus,
+  isActiveRecruitmentApplicationStatus,
+  recruitmentPostDeletionBlocker,
+} from "./recruitment-domain"
 
 type MutationContext = {
   actorUserId?: string | null
@@ -149,16 +162,6 @@ function optional(value: unknown) {
   return normalized || null
 }
 
-const activeRecruitmentApplicationStatuses = new Set([
-  "Assigned",
-  "Hold",
-  "Interview",
-])
-
-export function isActiveRecruitmentApplicationStatus(status: string) {
-  return activeRecruitmentApplicationStatuses.has(status)
-}
-
 function normalizedQuestionScores(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {}
   return Object.fromEntries(
@@ -166,71 +169,6 @@ function normalizedQuestionScores(value: unknown) {
       .map(([key, score]) => [key, Number(score)] as const)
       .filter(([, score]) => Number.isFinite(score))
   )
-}
-
-export function deriveRecruitmentPostStatus(input: {
-  employeeCode?: string | null
-  employeeName?: string | null
-  storedStatus?: string | null
-}) {
-  if (input.storedStatus === "Inactive") return "Inactive"
-  if (!optional(input.employeeName) && !optional(input.employeeCode)) {
-    return "Vacant"
-  }
-  if (
-    input.storedStatus === "Appointed" ||
-    input.storedStatus === "Occupied" ||
-    input.storedStatus === "Resigned"
-  ) {
-    return input.storedStatus
-  }
-  return "Occupied"
-}
-
-export function recruitmentPostDeletionBlocker(input: {
-  combinedRoleLinks: number
-  employeeCode?: string | null
-  employeeName?: string | null
-  jobPostLinks: number
-}) {
-  if (optional(input.employeeName) || optional(input.employeeCode)) {
-    return "Remove the employee assignment before deleting this approved post."
-  }
-  if (input.combinedRoleLinks > 0) {
-    return "Edit the combined role and remove this post from it before deleting the approved post."
-  }
-  if (input.jobPostLinks > 0) {
-    return "This approved post cannot be deleted because a job post is linked to it."
-  }
-  return null
-}
-
-export function deriveRecruitmentEmployeeAssignment(input: {
-  currentEmployeeCode?: string | null
-  currentEmployeeName?: string | null
-  employeeCode?: string | null
-  employeeEvent?: string | null
-  employeeName?: string | null
-}) {
-  const event = required(input.employeeEvent, "Employee event")
-  if (event === "Removed") {
-    return { employeeCode: null, employeeName: null, status: "Vacant" }
-  }
-  const employeeCode =
-    optional(input.employeeCode) ?? optional(input.currentEmployeeCode)
-  const employeeName =
-    optional(input.employeeName) ?? optional(input.currentEmployeeName)
-  if (!employeeCode && !employeeName) {
-    throw new Error("Employee name or employee code is required.")
-  }
-  const statuses = {
-    Appointed: "Appointed",
-    Joined: "Occupied",
-    Resigned: "Resigned",
-  } as const
-  const status = statuses[event as keyof typeof statuses]
-  if (!status) throw new Error("Employee event is invalid.")
-  return { employeeCode, employeeName, status }
 }
 
 function money(value: unknown) {

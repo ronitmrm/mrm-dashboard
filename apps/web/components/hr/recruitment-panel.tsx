@@ -10,6 +10,7 @@ import {
   type RecruitmentPostRow,
   type RecruitmentTemplateRow,
 } from "@workspace/db"
+import { listRecruitableApprovedPosts } from "@workspace/db/recruitment-domain"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -57,7 +58,6 @@ import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/h
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
-import { listRecruitableApprovedPosts } from "@/lib/hr-recruitable-posts"
 
 type RecruitmentPanelProps = {
   canManageEmployees: boolean

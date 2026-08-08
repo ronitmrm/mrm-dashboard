@@ -33,6 +33,7 @@
     "./pricing-calculation": "./src/pricing-calculation.ts",
     "./production-floors": "./src/production-floors.ts",
     "./recruitment-codes": "./src/recruitment-codes.ts",
+    "./recruitment-domain": "./src/recruitment-domain.ts",
     "./recruitment-interview-workflow": "./src/recruitment-interview-workflow.ts",
     "./schema": "./src/schema/index.ts"
   }
