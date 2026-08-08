@@ -74,12 +74,33 @@ function sourceCoverage(payload: Record<string, unknown>) {
   return Object.fromEntries(
     ["corrections", "dataEntries", "physicalRows"].map((category) => {
       const details = record(coverage[category])
+      const groups = record(details.groups)
       return [
         category,
         {
+          available: Number(details.available),
           limit: Number(details.limit),
+          returned: Number(details.returned),
           truncated: details.truncated === true,
           truncatedGroups: stringArray(details.truncatedGroups),
+          ...(Object.keys(groups).length
+            ? {
+                groups: Object.fromEntries(
+                  Object.entries(groups).map(([group, value]) => {
+                    const facts = record(value)
+                    return [
+                      group,
+                      {
+                        available: Number(facts.available),
+                        limit: Number(facts.limit),
+                        returned: Number(facts.returned),
+                        truncated: facts.truncated === true,
+                      },
+                    ]
+                  })
+                ),
+              }
+            : {}),
         },
       ]
     })

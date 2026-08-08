@@ -1013,12 +1013,14 @@ test("dashboard source projection preserves floor-specific payloads transactiona
 
   const inserted = await pool.query<{
     entry_type: string
+    production_floor_code: string
     source_group: string
     source_kind: string
     source_payload: typeof initialPayload
   }>(
     `
-      SELECT source_kind, source_group, entry_type, source_payload
+      SELECT source_kind, source_group, entry_type, production_floor_code,
+        source_payload
       FROM derived.dashboard_source_records
       WHERE organization_id = $1 AND source_id = 'projection-machine'
     `,
@@ -1027,7 +1029,8 @@ test("dashboard source projection preserves floor-specific payloads transactiona
 
   const updatedPayload = {
     ...initialPayload,
-    payload: { machineNumber: "CNC-901", productionFloorCode: "cnc" },
+    productionFloorCode: "forging",
+    payload: { machineNumber: "CNC-901", productionFloorCode: "forging" },
   }
   await pool.query(
     `
@@ -1037,9 +1040,12 @@ test("dashboard source projection preserves floor-specific payloads transactiona
     `,
     [organizationId, JSON.stringify(updatedPayload)]
   )
-  const updated = await pool.query<{ source_payload: typeof updatedPayload }>(
+  const updated = await pool.query<{
+    production_floor_code: string
+    source_payload: typeof updatedPayload
+  }>(
     `
-      SELECT source_payload
+      SELECT production_floor_code, source_payload
       FROM derived.dashboard_source_records
       WHERE organization_id = $1 AND source_id = 'projection-machine'
     `,
@@ -1061,17 +1067,28 @@ test("dashboard source projection preserves floor-specific payloads transactiona
     `,
     [organizationId]
   )
-  const topology = await pool.query<{ indexes: string; triggers: string }>(`
+  const topology = await pool.query<{
+    indexes: string
+    projection_trigger: string
+    triggers: string
+  }>(`
     SELECT
       (
         SELECT count(*)::text
         FROM pg_indexes
         WHERE schemaname = 'derived'
           AND indexname IN (
-            'dashboard_source_records_bounded_read_idx',
-            'dashboard_source_records_group_read_idx'
+            'dashboard_source_records_entry_floor_read_idx',
+            'dashboard_source_records_group_floor_read_idx',
+            'dashboard_source_records_correction_floor_read_idx'
           )
       ) AS indexes,
+      (
+        SELECT count(*)::text
+        FROM pg_trigger
+        WHERE NOT tgisinternal
+          AND tgname = 'set_dashboard_source_floor_code'
+      ) AS projection_trigger,
       (
         SELECT count(*)::text
         FROM pg_trigger
@@ -1084,21 +1101,25 @@ test("dashboard source projection preserves floor-specific payloads transactiona
     inserted: inserted.rows[0],
     remaining: remaining.rows[0]?.rows,
     topology: topology.rows[0],
-    updated: updated.rows[0]?.source_payload,
+    updated: updated.rows[0],
   }).toEqual({
     inserted: {
       entry_type: "machine_master",
+      production_floor_code: "cnc",
       source_group: "dataEntries",
       source_kind: "data_entry",
       source_payload: initialPayload,
     },
     remaining: "0",
-    topology: { indexes: "2", triggers: "33" },
-    updated: updatedPayload,
+    topology: { indexes: "3", projection_trigger: "1", triggers: "33" },
+    updated: {
+      production_floor_code: "forging",
+      source_payload: updatedPayload,
+    },
   })
 })
 
-test("dashboard source projection indexes every bounded source category", async () => {
+test("dashboard source projection indexes every bounded category and floor", async () => {
   await migrateDatabase({ connectionString })
 
   const indexes = await pool.query<{ indexname: string }>(`
@@ -1106,15 +1127,17 @@ test("dashboard source projection indexes every bounded source category", async 
     FROM pg_indexes
     WHERE schemaname = 'derived'
       AND indexname IN (
-        'dashboard_source_records_entry_type_read_idx',
-        'dashboard_source_records_physical_group_read_idx'
+        'dashboard_source_records_correction_floor_read_idx',
+        'dashboard_source_records_entry_floor_read_idx',
+        'dashboard_source_records_group_floor_read_idx'
       )
     ORDER BY indexname
   `)
 
   expect(indexes.rows.map((row) => row.indexname)).toEqual([
-    "dashboard_source_records_entry_type_read_idx",
-    "dashboard_source_records_physical_group_read_idx",
+    "dashboard_source_records_correction_floor_read_idx",
+    "dashboard_source_records_entry_floor_read_idx",
+    "dashboard_source_records_group_floor_read_idx",
   ])
 })
 

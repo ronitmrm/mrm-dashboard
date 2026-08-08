@@ -58,6 +58,16 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
         ],
         sourceCoverage: {
           dataEntries: {
+            available: 1002,
+            groups: {
+              machine_master: {
+                available: 1002,
+                limit: 1000,
+                returned: 1000,
+                truncated: true,
+              },
+            },
+            returned: 1000,
             truncated: true,
             truncatedGroups: ["machine_master"],
           },
@@ -185,7 +195,7 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
         (total, floor) => total + floor.machineMasterRows,
         0
       )
-    ).toBe(1000)
+    ).toBe(1003)
     expect(
       dashboard.floorIsolation.map((floor) => ({
         requested: floor.requested,

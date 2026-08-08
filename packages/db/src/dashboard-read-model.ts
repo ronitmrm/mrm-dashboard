@@ -27,28 +27,34 @@ type DataEntrySourceRow = SourceRow & {
 }
 
 type GroupedSourceRow = SourceRow & {
+  available: number
   entry_type: string | null
+  production_floor_code: ProductionFloorCode
   source_kind: "correction" | "data_entry" | "physical"
   source_group: string
 }
 
-type SourceCoverage = {
-  corrections: {
-    limit: number
-    truncated: boolean
-    truncatedGroups: string[]
-  }
-  dataEntries: {
-    limit: number
-    truncated: boolean
-    truncatedGroups: string[]
-  }
-  physicalRows: {
-    limit: number
-    truncated: boolean
-    truncatedGroups: string[]
-  }
+type CoverageFacts = {
+  available: number
+  limit: number
+  returned: number
+  truncated: boolean
 }
+
+type GroupedSourceCoverage = CoverageFacts & {
+  groups: Record<string, CoverageFacts>
+  truncatedGroups: string[]
+}
+
+type SourceCoverage = {
+  corrections: CoverageFacts & {
+    truncatedGroups: string[]
+  }
+  dataEntries: GroupedSourceCoverage
+  physicalRows: GroupedSourceCoverage
+}
+
+type SourceCoverageByFloor = Record<ProductionFloorCode, SourceCoverage>
 
 export type CanonicalDashboardSource = {
   allDataEntries: JsonRecord[]
@@ -63,6 +69,7 @@ export type CanonicalDashboardSource = {
   routeSelections: JsonRecord[]
   setupCompletions: JsonRecord[]
   sourceCoverage: SourceCoverage
+  sourceCoverageByFloor: SourceCoverageByFloor
   trainingRecords: JsonRecord[]
 }
 
@@ -136,6 +143,16 @@ const physicalSourceBudgets: Record<string, number> = {
   trainingRecords: 2500,
 }
 
+function floorSourceBudgets(budgets: Record<string, number>) {
+  return productionFloors.flatMap((floor) =>
+    Object.entries(budgets).map(([category, limit]) => ({
+      category,
+      floor_code: floor.code,
+      row_limit: limit,
+    }))
+  )
+}
+
 function timestamp(value: Date | string) {
   return value instanceof Date ? value.toISOString() : value
 }
@@ -203,32 +220,84 @@ function countRowsByEntryType(rows: JsonRecord[]) {
   return counts
 }
 
-function applySourceBudgets(
-  rows: GroupedSourceRow[],
-  groupFor: (row: GroupedSourceRow) => string,
+function emptyCoverageFacts(limit: number): CoverageFacts {
+  return { available: 0, limit, returned: 0, truncated: false }
+}
+
+function emptyGroupedCoverage(
   budgets: Record<string, number>
-) {
-  const grouped = new Map<string, GroupedSourceRow[]>()
+): GroupedSourceCoverage {
+  return {
+    ...emptyCoverageFacts(
+      Object.values(budgets).reduce((total, limit) => total + limit, 0)
+    ),
+    groups: Object.fromEntries(
+      Object.entries(budgets).map(([group, limit]) => [
+        group,
+        emptyCoverageFacts(limit),
+      ])
+    ),
+    truncatedGroups: [],
+  }
+}
+
+function emptySourceCoverage(): SourceCoverage {
+  return {
+    corrections: {
+      ...emptyCoverageFacts(5000),
+      truncatedGroups: [],
+    },
+    dataEntries: emptyGroupedCoverage(dataEntrySourceBudgets),
+    physicalRows: emptyGroupedCoverage(physicalSourceBudgets),
+  }
+}
+
+function sourceCoverageByFloor(
+  rows: GroupedSourceRow[]
+): SourceCoverageByFloor {
+  const coverage = Object.fromEntries(
+    productionFloors.map((floor) => [floor.code, emptySourceCoverage()])
+  ) as SourceCoverageByFloor
+
   for (const row of rows) {
-    const group = groupFor(row)
-    const groupRows = grouped.get(group)
-    if (groupRows) groupRows.push(row)
-    else grouped.set(group, [row])
+    const floorCoverage = coverage[row.production_floor_code]
+    const facts =
+      row.source_kind === "correction"
+        ? floorCoverage.corrections
+        : row.source_kind === "data_entry"
+          ? floorCoverage.dataEntries.groups[row.entry_type ?? ""]
+          : floorCoverage.physicalRows.groups[row.source_group]
+    if (!facts) continue
+    facts.available = Number(row.available)
+    facts.returned += 1
   }
-  const kept: GroupedSourceRow[] = []
-  const truncatedGroups: string[] = []
-  for (const [group, limit] of Object.entries(budgets)) {
-    const groupRows = grouped.get(group) ?? []
-    if (groupRows.length > limit) truncatedGroups.push(group)
-    kept.push(...groupRows.slice(-limit))
+
+  for (const floorCoverage of Object.values(coverage)) {
+    floorCoverage.corrections.truncated =
+      floorCoverage.corrections.available > floorCoverage.corrections.returned
+    floorCoverage.corrections.truncatedGroups = floorCoverage.corrections
+      .truncated
+      ? ["corrections"]
+      : []
+
+    for (const groupedCoverage of [
+      floorCoverage.dataEntries,
+      floorCoverage.physicalRows,
+    ]) {
+      groupedCoverage.returned = 0
+      groupedCoverage.available = 0
+      groupedCoverage.truncatedGroups = []
+      for (const [group, facts] of Object.entries(groupedCoverage.groups)) {
+        facts.truncated = facts.available > facts.returned
+        groupedCoverage.returned += facts.returned
+        groupedCoverage.available += facts.available
+        if (facts.truncated) groupedCoverage.truncatedGroups.push(group)
+      }
+      groupedCoverage.truncated = groupedCoverage.truncatedGroups.length > 0
+    }
   }
-  kept.sort((left, right) => {
-    const time = timestamp(left.changed_at).localeCompare(
-      timestamp(right.changed_at)
-    )
-    return time || left.source_id.localeCompare(right.source_id)
-  })
-  return { rows: kept, truncatedGroups }
+
+  return coverage
 }
 
 function floorRows(rows: JsonRecord[], floorCode: ProductionFloorCode) {
@@ -253,43 +322,61 @@ export async function readCanonicalDashboardSource(
     `
       WITH data_entries AS (
         SELECT source.source_id, source.source_payload, source.changed_at,
-          source.source_kind, source.source_group, source.entry_type
-        FROM jsonb_each_text($2::jsonb) budget
+          source.source_kind, source.source_group, source.entry_type,
+          budget.floor_code AS production_floor_code, source.available
+        FROM jsonb_to_recordset($2::jsonb)
+          budget(category text, floor_code text, row_limit integer)
         CROSS JOIN LATERAL (
           SELECT source_id, source_payload, changed_at, source_kind,
-            source_group, entry_type
+            source_group, entry_type, (count(*) OVER ())::integer AS available
           FROM derived.dashboard_source_records
           WHERE organization_id = $1 AND source_kind = 'data_entry'
-            AND entry_type = budget.key
+            AND entry_type = budget.category
+            AND production_floor_code = budget.floor_code
           ORDER BY changed_at DESC, source_id DESC
-          LIMIT budget.value::integer + 1
+          LIMIT budget.row_limit
         ) source
       ), physical_rows AS (
         SELECT source.source_id, source.source_payload, source.changed_at,
-          source.source_kind, source.source_group, source.entry_type
-        FROM jsonb_each_text($3::jsonb) budget
+          source.source_kind, source.source_group, source.entry_type,
+          budget.floor_code AS production_floor_code, source.available
+        FROM jsonb_to_recordset($3::jsonb)
+          budget(category text, floor_code text, row_limit integer)
         CROSS JOIN LATERAL (
           SELECT source_id, source_payload, changed_at, source_kind,
-            source_group, entry_type
+            source_group, entry_type, (count(*) OVER ())::integer AS available
           FROM derived.dashboard_source_records
           WHERE organization_id = $1 AND source_kind = 'physical'
-            AND source_group = budget.key
+            AND source_group = budget.category
+            AND production_floor_code = budget.floor_code
           ORDER BY changed_at DESC, source_id DESC
-          LIMIT budget.value::integer + 1
+          LIMIT budget.row_limit
         ) source
       ), correction_rows AS (
-        SELECT source_id, source_payload, changed_at, source_kind,
-          source_group, entry_type
-        FROM derived.dashboard_source_records
-        WHERE organization_id = $1 AND source_kind = 'correction'
-        ORDER BY changed_at DESC, source_id DESC
-        LIMIT 5001
+        SELECT source.source_id, source.source_payload, source.changed_at,
+          source.source_kind, source.source_group, source.entry_type,
+          floor.code AS production_floor_code, source.available
+        FROM jsonb_array_elements_text($4::jsonb) floor(code)
+        CROSS JOIN LATERAL (
+          SELECT source_id, source_payload, changed_at, source_kind,
+            source_group, entry_type, (count(*) OVER ())::integer AS available
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'correction'
+            AND production_floor_code = floor.code
+          ORDER BY changed_at DESC, source_id DESC
+          LIMIT 5000
+        ) source
       )
       SELECT * FROM data_entries
       UNION ALL SELECT * FROM physical_rows
       UNION ALL SELECT * FROM correction_rows
     `,
-    [organizationId, dataEntrySourceBudgets, physicalSourceBudgets]
+    [
+      organizationId,
+      JSON.stringify(floorSourceBudgets(dataEntrySourceBudgets)),
+      JSON.stringify(floorSourceBudgets(physicalSourceBudgets)),
+      JSON.stringify(productionFloors.map((floor) => floor.code)),
+    ]
   )
 
   const byKind = <Kind extends GroupedSourceRow["source_kind"]>(kind: Kind) =>
@@ -301,43 +388,10 @@ export async function readCanonicalDashboardSource(
         )
         return time || left.source_id.localeCompare(right.source_id)
       })
-  const boundedDataEntries = applySourceBudgets(
-    byKind("data_entry"),
-    (row) => row.entry_type ?? "",
-    dataEntrySourceBudgets
-  )
-  const boundedPhysicalRows = applySourceBudgets(
-    byKind("physical"),
-    (row) => row.source_group,
-    physicalSourceBudgets
-  )
-  const dataEntryRows = boundedDataEntries.rows
-  const physicalRows = boundedPhysicalRows.rows
+  const dataEntryRows = byKind("data_entry")
+  const physicalRows = byKind("physical")
   const correctionRows = byKind("correction")
-  const sourceCoverage: SourceCoverage = {
-    corrections: {
-      limit: 5000,
-      truncated: correctionRows.length > 5000,
-      truncatedGroups: correctionRows.length > 5000 ? ["corrections"] : [],
-    },
-    dataEntries: {
-      limit: Object.values(dataEntrySourceBudgets).reduce(
-        (total, limit) => total + limit,
-        0
-      ),
-      truncated: boundedDataEntries.truncatedGroups.length > 0,
-      truncatedGroups: boundedDataEntries.truncatedGroups,
-    },
-    physicalRows: {
-      limit: Object.values(physicalSourceBudgets).reduce(
-        (total, limit) => total + limit,
-        0
-      ),
-      truncated: boundedPhysicalRows.truncatedGroups.length > 0,
-      truncatedGroups: boundedPhysicalRows.truncatedGroups,
-    },
-  }
-  correctionRows.splice(0, Math.max(0, correctionRows.length - 5000))
+  const coverageByFloor = sourceCoverageByFloor(result.rows)
 
   const grouped = new Map<string, JsonRecord[]>()
   for (const row of physicalRows) {
@@ -370,7 +424,8 @@ export async function readCanonicalDashboardSource(
     routeChanges: group("routeChanges"),
     routeSelections: group("routeSelections"),
     setupCompletions: group("setupCompletions"),
-    sourceCoverage,
+    sourceCoverage: coverageByFloor[defaultProductionFloorCode],
+    sourceCoverageByFloor: coverageByFloor,
     trainingRecords: group("trainingRecords"),
   }
 }
@@ -499,7 +554,7 @@ export async function buildCanonicalDashboardReadModel(
       ...snapshot,
       cacheStatus: "ready",
       productionFloorCode: floorCode,
-      sourceCoverage: source.sourceCoverage,
+      sourceCoverage: source.sourceCoverageByFloor[floorCode],
       dataEntry: {
         ...snapshot.dataEntry,
         corrections: floorCorrections,
@@ -546,6 +601,7 @@ export async function buildCanonicalDashboardReadModel(
     sourceWatermark: {
       changedAt: updatedAt || null,
       sourceCoverage: source.sourceCoverage,
+      sourceCoverageByFloor: source.sourceCoverageByFloor,
     },
   }
 }
