@@ -3232,7 +3232,7 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
   }
 
   for (const rows of byMachine.values()) {
-    const queue = [...rows].sort(machineQueueSort);
+    const queue = applyMachineUnavailableQueuePlacementOrder([...rows].sort(machineQueueSort));
     let machineNextDate = "";
     while (queue.length) {
       const row = takeNextMachineQueueRow(queue, machineNextDate);
@@ -3305,19 +3305,24 @@ function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>
   }
   const stateRankDiff = priorityQueueStateRank(a) - priorityQueueStateRank(b);
   if (stateRankDiff) return stateRankDiff;
-  const aMachineHeldBeforeB = machineUnavailableKeepsRowBefore(b, a);
-  const bMachineHeldBeforeA = machineUnavailableKeepsRowBefore(a, b);
-  if (aMachineHeldBeforeB && !bMachineHeldBeforeA) return -1;
-  if (bMachineHeldBeforeA && !aMachineHeldBeforeB) return 1;
-  const aPlacedBeforeB = machineUnavailablePlacesRowBefore(a, b);
-  const bPlacedBeforeA = machineUnavailablePlacesRowBefore(b, a);
-  if (aPlacedBeforeB && !bPlacedBeforeA) return -1;
-  if (bPlacedBeforeA && !aPlacedBeforeB) return 1;
   const familyTargetDiff = compareFamilyIdleGapSortDates(a, b);
   return familyTargetDiff ||
     machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) ||
     rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo"));
+}
+
+function applyMachineUnavailableQueuePlacementOrder(queue: Array<Record<string, unknown>>) {
+  const placementTargets = queue.filter((row) =>
+    machineUnavailableHasQueuePlacement(row) && !planOverrideInterruptionHasFinishedQty(row));
+  let ordered = [...queue];
+  for (const target of placementTargets) {
+    const remaining = ordered.filter((row) => row !== target);
+    const rowsBeforeTarget = remaining.filter((row) => shouldHoldMachineQueuePosition(row, target));
+    const rowsAfterTarget = remaining.filter((row) => !shouldHoldMachineQueuePosition(row, target));
+    ordered = [...rowsBeforeTarget, target, ...rowsAfterTarget];
+  }
+  return ordered;
 }
 
 function machineUnavailableKeepsRowBefore(targetRow: Record<string, unknown>, blockingRow: Record<string, unknown>) {

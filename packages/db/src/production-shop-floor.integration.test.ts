@@ -36,6 +36,15 @@ beforeAll(async () => {
   organizationId = organization.rows[0]!.id
   await pool.query(
     `
+      INSERT INTO manufacturing.production_floors (
+        organization_id, code, name
+      ) VALUES ($1, 'conventional', 'Conventional Production Floor')
+      ON CONFLICT (organization_id, code) DO NOTHING
+    `,
+    [organizationId]
+  )
+  await pool.query(
+    `
       INSERT INTO catalog.items (
         organization_id, uid, uid_kind, lifecycle_status, description,
         item_type, source_system, source_table, source_id

@@ -4012,6 +4012,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   })
 
   it("keeps priority behind a running machine unless the planner approves a stop", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"))
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -5674,6 +5677,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   })
 
   it("moves a later setup when actual previous setup output is below cycle plan", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"))
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [
