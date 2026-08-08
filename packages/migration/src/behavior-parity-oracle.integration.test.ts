@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import { describe, expect, test } from "vitest"
 
 import { createBehaviorFingerprint } from "./behavior-parity-oracle"
@@ -206,6 +208,28 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
       { requested: "cnc", returned: "cnc" },
       { requested: "forging", returned: "forging" },
     ])
+    const normalizedDashboard = (
+      (first.normalized as Record<string, unknown>).observable as Record<
+        string,
+        unknown
+      >
+    ).dashboard as typeof dashboard
+    expect(
+      createHash("sha256")
+        .update(
+          JSON.stringify(
+            normalizedDashboard.floorIsolation.map(({ state, ...floor }) => ({
+              ...floor,
+              state: Object.fromEntries(
+                Object.entries(state).filter(
+                  ([key]) => key !== "sourceWatermark"
+                )
+              ),
+            }))
+          )
+        )
+        .digest("hex")
+    ).toBe("f79662450e79678076249a87701ae85f018df9c396f91e0a1ad31740404f3800")
 
     const observable = firstCapture.observable as Record<string, unknown>
     const commercial = observable.commercial as {
