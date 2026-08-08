@@ -104,7 +104,7 @@ const machinePlanContinuityFields = [
 ] as const
 
 const dataEntrySourceBudgets: Record<string, number> = {
-  cycle: 2500,
+  cycle: 500,
   employee: 1000,
   first_piece_inspection_report: 2500,
   hourly_quality_check: 5000,
@@ -120,11 +120,11 @@ const dataEntrySourceBudgets: Record<string, number> = {
   rejection_remark_master: 500,
   rejection_type_master: 500,
   rm_inward: 2000,
-  route: 2500,
+  route: 500,
   setup_checklist_master: 2000,
   setup_checklist_session: 5000,
   shop_floor_status: 5000,
-  tooling: 2500,
+  tooling: 500,
   work_order: 5000,
 }
 

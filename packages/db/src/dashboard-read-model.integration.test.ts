@@ -19,7 +19,7 @@ let machineSourceId: string
 let coverageOrganizationId: string
 
 const coverageCases = [
-  ["data_entry", "cycle", 2500],
+  ["data_entry", "cycle", 500],
   ["data_entry", "employee", 1000],
   ["data_entry", "first_piece_inspection_report", 2500],
   ["data_entry", "hourly_quality_check", 5000],
@@ -35,11 +35,11 @@ const coverageCases = [
   ["data_entry", "rejection_remark_master", 500],
   ["data_entry", "rejection_type_master", 500],
   ["data_entry", "rm_inward", 2000],
-  ["data_entry", "route", 2500],
+  ["data_entry", "route", 500],
   ["data_entry", "setup_checklist_master", 2000],
   ["data_entry", "setup_checklist_session", 5000],
   ["data_entry", "shop_floor_status", 5000],
-  ["data_entry", "tooling", 2500],
+  ["data_entry", "tooling", 500],
   ["data_entry", "work_order", 5000],
   ["physical", "attendanceRecords", 5000],
   ["physical", "dispatchApprovals", 2000],

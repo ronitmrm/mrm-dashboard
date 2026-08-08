@@ -31,6 +31,14 @@ The machine-readable values live in `config/managed-staging.json`.
 
 The dashboard source byte ceiling protects the database boundary while category caps are calibrated. The stricter 2 MiB changed-response ceiling requires a material improvement over the approximately 5 MiB reference payload without pretending every floor has identical data. Any cap adjustment requires measured evidence and a map amendment; it is not a silent implementation choice.
 
+The 2026-08-09 local imported-source calibration sets the `cycle`, `route`, and
+`tooling` data-entry caps to 500 records per floor. With 4,011, 4,007, and 4,010
+available Conventional records respectively, the former 2,500-record caps
+produced a 4,102,646-byte floor payload. The 500-record caps produce a
+1,742,535-byte floor payload and explicit per-category coverage facts for all
+three truncated collections. The cap-and-coverage integration gate fixes these
+values; a later change requires the same measured amendment.
+
 ## Freshness and polling
 
 - committed write to worker claim: p95 ≤2 seconds and p99 ≤5 seconds while the listener is healthy;
