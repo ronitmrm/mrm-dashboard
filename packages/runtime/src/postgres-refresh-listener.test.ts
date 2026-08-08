@@ -61,11 +61,13 @@ describe("PostgreSQL refresh listener", () => {
         gates.push(resolve)
       })
     })
+    const onTransition = vi.fn()
     const listener = createPostgresRefreshListener({
       connectionString: "postgres://mrmpl:mrmpl@localhost:5434/mrmpl_test",
       createClient: () => clients.shift()!,
       initialReconnectDelayMs: 0,
       maxReconnectDelayMs: 0,
+      onTransition,
       random: () => 0.5,
       reconcile,
     })
@@ -99,7 +101,10 @@ describe("PostgreSQL refresh listener", () => {
       reasons: ["notification"],
     })
 
-    firstClient.emit("error", new Error("connection lost"))
+    firstClient.emit(
+      "error",
+      Object.assign(new Error("connection lost"), { code: "ETIMEDOUT" })
+    )
     firstClient.emit("end")
     await eventually(() => expect(reconcile).toHaveBeenCalledTimes(3))
     gates.shift()?.()
@@ -118,6 +123,18 @@ describe("PostgreSQL refresh listener", () => {
     ])
     expect(secondClient.end).toHaveBeenCalledTimes(1)
     expect(listener.snapshot()).toEqual({ session: 2, state: "stopped" })
+    expect(onTransition).toHaveBeenCalledWith({
+      disconnectCategory: "timeout",
+      reconciliationResult: "not-run",
+      retryCount: 1,
+      state: "retrying",
+    })
+    expect(onTransition).toHaveBeenCalledWith({
+      disconnectCategory: null,
+      reconciliationResult: "success",
+      retryCount: 1,
+      state: "ready",
+    })
   })
 
   it("cancels an in-flight connection without double-closing the client", async () => {

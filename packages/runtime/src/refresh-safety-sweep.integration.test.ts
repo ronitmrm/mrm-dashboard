@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto"
 
 import { migrateDatabase } from "@workspace/db"
+import {
+  createTelemetryRuntime,
+  type StructuredTelemetryEvent,
+} from "@workspace/observability"
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 import { createDurableRefreshWorker } from "./durable-refresh-worker"
+import { createWorkerRuntimeMonitor } from "./worker-runtime-monitor"
 import { runSafetySweepCycle } from "./worker-loop"
 
 const connectionString =
@@ -33,25 +38,83 @@ afterAll(async () => {
 
 describe("durable refresh safety sweep", () => {
   it("uses exactly four PostgreSQL statements for two healthy idle sweeps", async () => {
+    const events: StructuredTelemetryEvent[] = []
+    let nowMs = 0
+    const telemetryRuntime = createTelemetryRuntime({
+      artifactCommit: "commit-sweep-integration",
+      environment: "test",
+      now: () => "2026-08-08T12:00:00.000Z",
+    })
     const worker = createDurableRefreshWorker({
       organizationId,
       postgresPool: pool,
       postgresUrl: connectionString,
       redisUrl: process.env.TEST_REDIS_URL ?? "redis://127.0.0.1:6380",
+      telemetryRuntime,
+      telemetrySink: (event) => events.push(event),
       workerId: `sweep-idle-${randomUUID()}`,
+    })
+    const monitor = createWorkerRuntimeMonitor({
+      nowMs: () => nowMs,
+      runtime: telemetryRuntime,
+      sink: (event) => events.push(event),
+      workerId: "sweep-integration",
+    })
+    monitor.recordListenerTransition({
+      disconnectCategory: null,
+      reconciliationResult: "success",
+      retryCount: 0,
+      state: "ready",
     })
     const query = vi.spyOn(pool, "query")
     query.mockClear()
     try {
-      await expect(worker.probeWork()).resolves.toEqual({
+      const expected = {
         eligibleRefresh: false,
         publishableOutbox: false,
+        snapshot: {
+          failedJobs: 0,
+          lastVersion: null,
+          oldestOutboxSeconds: null,
+          oldestPendingSeconds: null,
+          pendingJobs: 0,
+          pendingOutbox: 0,
+          poolWaiters: 0,
+          retryingOutbox: 0,
+          runningJobs: 0,
+        },
+      }
+      const first = await worker.probeWork()
+      expect(first).toEqual(expected)
+      nowMs = 30_000
+      monitor.recordSweep({
+        cycleOutcome: "success",
+        snapshot: first.snapshot,
       })
-      await expect(worker.probeWork()).resolves.toEqual({
-        eligibleRefresh: false,
-        publishableOutbox: false,
+      const second = await worker.probeWork()
+      expect(second).toEqual(expected)
+      nowMs = 60_000
+      monitor.recordSweep({
+        cycleOutcome: "success",
+        snapshot: second.snapshot,
       })
       expect(query).toHaveBeenCalledTimes(4)
+      expect(
+        events
+          .filter(({ event }) => event === "performance.operation")
+          .map((event) => event.poolWaiters)
+      ).toEqual([0, 0])
+      expect(events.filter(({ event }) => event === "worker.sweep")).toEqual([
+        expect.objectContaining({
+          cycleOutcome: "success",
+          event: "worker.sweep",
+          listenerState: "ready",
+          pendingJobs: 0,
+          pendingOutbox: 0,
+          poolWaiters: 0,
+          sweepCount: 2,
+        }),
+      ])
     } finally {
       query.mockRestore()
       await worker.close()

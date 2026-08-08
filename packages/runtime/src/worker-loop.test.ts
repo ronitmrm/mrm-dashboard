@@ -9,6 +9,18 @@ const idleBatch = {
   retrying: 0,
 }
 
+const idleSnapshot = {
+  failedJobs: 0,
+  lastVersion: 42,
+  oldestOutboxSeconds: null,
+  oldestPendingSeconds: null,
+  pendingJobs: 0,
+  pendingOutbox: 0,
+  poolWaiters: 0,
+  retryingOutbox: 0,
+  runningJobs: 0,
+}
+
 describe("worker safety sweep", () => {
   it("uses probes without opening a full drain while idle", async () => {
     const runBatch = vi.fn().mockResolvedValue(idleBatch)
@@ -19,6 +31,7 @@ describe("worker safety sweep", () => {
       probeWork: vi.fn().mockResolvedValue({
         eligibleRefresh: false,
         publishableOutbox: false,
+        snapshot: idleSnapshot,
       }),
       runBatch,
       workerId: "test-worker",
@@ -26,7 +39,11 @@ describe("worker safety sweep", () => {
 
     expect(result).toEqual({
       consecutiveFailures: 0,
-      probe: { eligibleRefresh: false, publishableOutbox: false },
+      probe: {
+        eligibleRefresh: false,
+        publishableOutbox: false,
+        snapshot: idleSnapshot,
+      },
     })
     expect(runBatch).not.toHaveBeenCalled()
   })
@@ -41,6 +58,7 @@ describe("worker safety sweep", () => {
       probeWork: vi.fn().mockResolvedValue({
         eligibleRefresh: true,
         publishableOutbox: false,
+        snapshot: { ...idleSnapshot, pendingJobs: 1 },
       }),
       runBatch,
       workerId: "test-worker",
@@ -50,7 +68,11 @@ describe("worker safety sweep", () => {
       batch,
       consecutiveFailures: 0,
       event: { batch, event: "batch", workerId: "test-worker" },
-      probe: { eligibleRefresh: true, publishableOutbox: false },
+      probe: {
+        eligibleRefresh: true,
+        publishableOutbox: false,
+        snapshot: { ...idleSnapshot, pendingJobs: 1 },
+      },
     })
     expect(runBatch).toHaveBeenCalledTimes(1)
   })

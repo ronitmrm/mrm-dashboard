@@ -7,9 +7,22 @@ type WorkerBatch = {
   retrying: number
 }
 
+export type WorkerSafetySnapshot = {
+  failedJobs: number
+  lastVersion: number | null
+  oldestOutboxSeconds: number | null
+  oldestPendingSeconds: number | null
+  pendingJobs: number
+  pendingOutbox: number
+  poolWaiters: number
+  retryingOutbox: number
+  runningJobs: number
+}
+
 export type WorkerSafetyProbe = {
   eligibleRefresh: boolean
   publishableOutbox: boolean
+  snapshot: WorkerSafetySnapshot
 }
 
 type RunSafetySweepCycleOptions<T extends WorkerBatch> = {

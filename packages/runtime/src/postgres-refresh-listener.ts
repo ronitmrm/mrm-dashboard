@@ -1,5 +1,7 @@
 import { Client, type Notification } from "pg"
 
+import { runtimeErrorCategory } from "./managed-telemetry"
+
 export const dashboardRefreshChannel = "mrm_dashboard_refresh"
 
 export type RefreshListenerState =
@@ -8,7 +10,15 @@ export type RefreshListenerState =
   | "listening"
   | "reconciling"
   | "ready"
+  | "retrying"
   | "stopped"
+
+export type RefreshListenerTransition = {
+  disconnectCategory: ReturnType<typeof runtimeErrorCategory>
+  reconciliationResult: "error" | "not-run" | "success"
+  retryCount: number
+  state: Exclude<RefreshListenerState, "disconnected">
+}
 
 export type RefreshReconciliationRequest = {
   general: boolean
@@ -24,12 +34,13 @@ export type RefreshListenerClient = {
   query(text: string): Promise<unknown>
 }
 
-type PostgresRefreshListenerOptions = {
+export type PostgresRefreshListenerOptions = {
   applicationName?: string
   connectionString: string
   createClient?: () => RefreshListenerClient
   initialReconnectDelayMs?: number
   maxReconnectDelayMs?: number
+  onTransition?: (transition: RefreshListenerTransition) => void
   random?: () => number
   reconcile(request: RefreshReconciliationRequest): Promise<void>
 }
@@ -76,6 +87,7 @@ export function createPostgresRefreshListener({
     }) as unknown as RefreshListenerClient,
   initialReconnectDelayMs = 250,
   maxReconnectDelayMs = 30_000,
+  onTransition,
   random = Math.random,
   reconcile,
 }: PostgresRefreshListenerOptions) {
@@ -87,13 +99,24 @@ export function createPostgresRefreshListener({
   let pending = false
   let pendingGeneral = false
   let pendingOrganizationIds = new Set<string>()
-  let pendingReasons = new Set<RefreshReconciliationRequest["reasons"][number]>()
+  let pendingReasons = new Set<
+    RefreshReconciliationRequest["reasons"][number]
+  >()
   let runner: Promise<void> | undefined
   let session = 0
   let state: RefreshListenerState = "disconnected"
   let stopping = false
   const firstReady = deferred<void>()
   let firstReadySettled = false
+
+  function transition(next: RefreshListenerTransition) {
+    state = next.state
+    try {
+      onTransition?.(next)
+    } catch {
+      // Telemetry must not alter durable queue processing.
+    }
+  }
 
   function reconnectDelay(failures: number) {
     const exponential = Math.min(
@@ -152,13 +175,21 @@ export function createPostgresRefreshListener({
   async function run() {
     let failures = 0
     while (!stopping) {
-      state = "connecting"
+      transition({
+        disconnectCategory: null,
+        reconciliationResult: "not-run",
+        retryCount: failures,
+        state: "connecting",
+      })
       const client = createClient()
       currentClient = client
       const sessionClosed = deferred<void>()
       let ended = false
       let invalidated = false
       let registered = false
+      let disconnectCategory: ReturnType<typeof runtimeErrorCategory> = null
+      let reconciliationResult: RefreshListenerTransition["reconciliationResult"] =
+        "not-run"
       const endClient = async () => {
         if (ended) return
         ended = true
@@ -169,19 +200,40 @@ export function createPostgresRefreshListener({
         invalidated = true
         sessionClosed.resolve()
       }
-      const onError = () => invalidate()
-      const onEnd = () => invalidate()
+      const onError = (error: unknown) => {
+        disconnectCategory = runtimeErrorCategory(error) ?? "unknown"
+        invalidate()
+      }
+      const onEnd = () => {
+        disconnectCategory ??= "connectivity"
+        invalidate()
+      }
       const onNotification = (notification: Notification) => {
         if (notification.channel !== dashboardRefreshChannel || stopping) return
         const organizationId = notificationOrganizationId(notification)
-        state = "reconciling"
+        transition({
+          disconnectCategory: null,
+          reconciliationResult: "not-run",
+          retryCount: 0,
+          state: "reconciling",
+        })
         void queueReconciliation("notification", organizationId)
           .then(() => {
             if (!invalidated && !stopping && currentClient === client) {
-              state = "ready"
+              transition({
+                disconnectCategory: null,
+                reconciliationResult: "success",
+                retryCount: 0,
+                state: "ready",
+              })
+              reconciliationResult = "not-run"
             }
           })
-          .catch(invalidate)
+          .catch((error: unknown) => {
+            disconnectCategory = runtimeErrorCategory(error) ?? "unknown"
+            reconciliationResult = "error"
+            invalidate()
+          })
       }
       currentClientEnd = endClient
       currentSessionClose = invalidate
@@ -198,18 +250,38 @@ export function createPostgresRefreshListener({
         await client.query(`LISTEN ${dashboardRefreshChannel}`)
         registered = true
         session += 1
-        state = "listening"
-        state = "reconciling"
+        transition({
+          disconnectCategory: null,
+          reconciliationResult: "not-run",
+          retryCount: failures,
+          state: "listening",
+        })
+        transition({
+          disconnectCategory: null,
+          reconciliationResult: "not-run",
+          retryCount: failures,
+          state: "reconciling",
+        })
         await queueReconciliation(session === 1 ? "startup" : "reconnect")
+        reconciliationResult = "success"
         if (stopping) continue
+        transition({
+          disconnectCategory: null,
+          reconciliationResult,
+          retryCount: failures,
+          state: "ready",
+        })
         failures = 0
-        state = "ready"
+        reconciliationResult = "not-run"
         if (!firstReadySettled) {
           firstReadySettled = true
           firstReady.resolve()
         }
         await sessionClosed.promise
-      } catch {
+      } catch (error) {
+        disconnectCategory =
+          runtimeErrorCategory(error) ?? disconnectCategory ?? "unknown"
+        if (registered) reconciliationResult = "error"
         invalidate()
       } finally {
         client.off("error", onError as (...arguments_: unknown[]) => void)
@@ -232,12 +304,22 @@ export function createPostgresRefreshListener({
       }
 
       if (!stopping) {
-        state = "disconnected"
         failures += 1
+        transition({
+          disconnectCategory,
+          reconciliationResult,
+          retryCount: failures,
+          state: "retrying",
+        })
         await waitForReconnect(reconnectDelay(failures))
       }
     }
-    state = "stopped"
+    transition({
+      disconnectCategory: null,
+      reconciliationResult: "not-run",
+      retryCount: 0,
+      state: "stopped",
+    })
   }
 
   return {

@@ -8,6 +8,7 @@ import {
 } from "../managed-runtime"
 import { createPostgresRefreshListener } from "../postgres-refresh-listener"
 import { readRedisAccelerationEnvironment } from "../redis-acceleration"
+import { createWorkerRuntimeMonitor } from "../worker-runtime-monitor"
 import { advanceSweepDeadline, runSafetySweepCycle } from "../worker-loop"
 
 function boundedMilliseconds(
@@ -45,6 +46,7 @@ const worker = createDurableRefreshWorker({
   ...redis,
   workerId,
 })
+const monitor = createWorkerRuntimeMonitor({ workerId })
 
 let stopping = false
 let listener: ReturnType<typeof createPostgresRefreshListener> | undefined
@@ -111,6 +113,7 @@ try {
     const listenerPostgres = readWorkerListenerPostgresEnvironment()
     listener = createPostgresRefreshListener({
       connectionString: listenerPostgres.connectionString,
+      onTransition: monitor.recordListenerTransition,
       reconcile: async () => {
         await reconcileBatch()
       },
@@ -129,6 +132,10 @@ try {
         probeWork: worker.probeWork,
         runBatch: reconcileBatch,
         workerId,
+      })
+      monitor.recordSweep({
+        cycleOutcome: cycle.retryDelayMs ? "error" : "success",
+        snapshot: cycle.probe?.snapshot ?? null,
       })
       consecutiveFailures = cycle.consecutiveFailures
       if (cycle.event) {
@@ -149,5 +156,6 @@ try {
   }
 } finally {
   await listener?.stop()
+  monitor.stop()
   await worker.close()
 }

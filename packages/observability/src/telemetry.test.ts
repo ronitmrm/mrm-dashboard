@@ -14,6 +14,8 @@ import {
   serializedByteLength,
   setOperationCoverage,
   withPerformanceOperation,
+  workerListenerEvent,
+  workerSweepEvent,
   type StructuredTelemetryEvent,
 } from "./index"
 
@@ -256,6 +258,80 @@ describe("structured telemetry contracts", () => {
     expect(JSON.stringify([authorization, redis])).not.toMatch(
       /user|grantSet|capabilit|payload|secret|key|value/i
     )
+  })
+
+  it("emits stable worker listener and sweep rollout fields", () => {
+    const listener = workerListenerEvent(
+      {
+        commandId: "worker-1",
+        disconnectCategory: "connectivity",
+        reconciliationResult: "error",
+        retryCount: 2,
+        state: "retrying",
+      },
+      runtime
+    )
+    const sweep = workerSweepEvent(
+      {
+        commandId: "worker-1",
+        cycleOutcome: "success",
+        failedJobs: 0,
+        lastReconciliationAt: "2026-08-08T11:59:45.000Z",
+        lastReconnectAt: "2026-08-08T11:59:30.000Z",
+        lastVersion: 42,
+        listenerState: "ready",
+        oldestOutboxSeconds: null,
+        oldestPendingSeconds: null,
+        pendingJobs: 0,
+        pendingOutbox: 0,
+        poolWaiters: 0,
+        retryingOutbox: 0,
+        runningJobs: 0,
+        sweepCount: 2,
+      },
+      runtime
+    )
+
+    expect(listener).toEqual({
+      artifactCommit: "commit-abc123",
+      commandId: "worker-1",
+      disconnectCategory: "connectivity",
+      environment: "test",
+      event: "worker.listener",
+      reconciliationResult: "error",
+      retryCount: 2,
+      state: "retrying",
+      subsystem: "worker",
+      timestamp: "2026-08-08T12:00:00.000Z",
+    })
+    expect(sweep).toEqual({
+      artifactCommit: "commit-abc123",
+      commandId: "worker-1",
+      cycleOutcome: "success",
+      environment: "test",
+      event: "worker.sweep",
+      failedJobs: 0,
+      lastReconciliationAt: "2026-08-08T11:59:45.000Z",
+      lastReconnectAt: "2026-08-08T11:59:30.000Z",
+      lastVersion: 42,
+      listenerState: "ready",
+      oldestOutboxSeconds: null,
+      oldestPendingSeconds: null,
+      pendingJobs: 0,
+      pendingOutbox: 0,
+      poolWaiters: 0,
+      retryingOutbox: 0,
+      runningJobs: 0,
+      subsystem: "worker",
+      sweepCount: 2,
+      timestamp: "2026-08-08T12:00:00.000Z",
+    })
+    expect(() =>
+      assertRequiredTelemetry(
+        [listener, sweep],
+        ["worker.listener", "worker.sweep"]
+      )
+    ).not.toThrow()
   })
 
   it("emits one request-scoped authorization summary from logical reads", () => {

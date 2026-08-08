@@ -21,8 +21,11 @@ export {
   dashboardRefreshChannel,
   type RefreshListenerClient,
   type RefreshListenerState,
+  type RefreshListenerTransition,
   type RefreshReconciliationRequest,
 } from "./postgres-refresh-listener"
+export { createWorkerRuntimeMonitor } from "./worker-runtime-monitor"
+export type { WorkerSafetyProbe, WorkerSafetySnapshot } from "./worker-loop"
 export {
   configureManagedRuntimeTelemetry,
   managedRuntimeTelemetrySnapshot,

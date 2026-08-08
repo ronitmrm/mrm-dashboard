@@ -18,6 +18,18 @@ type Instrumented = {
 
 type QueryResultLike = Pick<QueryResult, "rowCount" | "rows">
 
+function canAcquireWithoutWait(pool: Pool) {
+  const maximum = pool.options?.max
+  return (
+    pool.idleCount > 0 ||
+    (typeof maximum === "number" && pool.totalCount < maximum)
+  )
+}
+
+function currentExternalWaiters(pool: Pool, canAcquire: boolean) {
+  return Math.max(0, pool.waitingCount - (canAcquire ? 1 : 0))
+}
+
 function queryRequestBytes(args: readonly unknown[]) {
   const first = args[0]
   const text =
@@ -63,6 +75,7 @@ function measuredQuery(
 ) {
   const requestBytes = queryRequestBytes(args)
   let poolWaiters = pool.waitingCount
+  const canAcquire = canAcquireWithoutWait(pool)
   let recorded = false
   const record = (result?: unknown) => {
     if (recorded) return
@@ -93,7 +106,10 @@ function measuredQuery(
 
   try {
     const query = originalQuery(...args)
-    poolWaiters = Math.max(poolWaiters, pool.waitingCount)
+    poolWaiters = Math.max(
+      poolWaiters,
+      currentExternalWaiters(pool, canAcquire)
+    )
     if (
       callbackIndex < 0 &&
       query &&
@@ -166,6 +182,7 @@ export function instrumentPostgresPool(pool: Pool) {
     ) => void
   ) => {
     let poolWaiters = pool.waitingCount
+    const canAcquire = canAcquireWithoutWait(pool)
     const recordWaiters = () => {
       recordPostgresPoolWaiters(Math.max(poolWaiters, pool.waitingCount))
     }
@@ -178,12 +195,18 @@ export function instrumentPostgresPool(pool: Pool) {
           release
         )
       })
-      poolWaiters = Math.max(poolWaiters, pool.waitingCount)
+      poolWaiters = Math.max(
+        poolWaiters,
+        currentExternalWaiters(pool, canAcquire)
+      )
       return pending
     }
     try {
       const pending = originalConnect()
-      poolWaiters = Math.max(poolWaiters, pool.waitingCount)
+      poolWaiters = Math.max(
+        poolWaiters,
+        currentExternalWaiters(pool, canAcquire)
+      )
       return pending.then(
         (client) => {
           recordWaiters()

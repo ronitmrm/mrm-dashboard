@@ -70,10 +70,58 @@ export type RedisAccelerationEvent = RedisAccelerationCounters & {
   timestamp: string
 }
 
+export type WorkerListenerState =
+  | "connecting"
+  | "listening"
+  | "reconciling"
+  | "ready"
+  | "retrying"
+  | "stopped"
+
+export type WorkerReconciliationResult = "error" | "not-run" | "success"
+
+export type WorkerListenerEvent = {
+  artifactCommit: string
+  commandId: string
+  disconnectCategory: RuntimeErrorCategory | null
+  environment: string
+  event: "worker.listener"
+  reconciliationResult: WorkerReconciliationResult
+  retryCount: number
+  state: WorkerListenerState
+  subsystem: "worker"
+  timestamp: string
+}
+
+export type WorkerSweepEvent = {
+  artifactCommit: string
+  commandId: string
+  cycleOutcome: "error" | "success"
+  environment: string
+  event: "worker.sweep"
+  failedJobs: number
+  lastReconciliationAt: string | null
+  lastReconnectAt: string | null
+  lastVersion: number | null
+  listenerState: WorkerListenerState
+  oldestOutboxSeconds: number | null
+  oldestPendingSeconds: number | null
+  pendingJobs: number
+  pendingOutbox: number
+  poolWaiters: number
+  retryingOutbox: number
+  runningJobs: number
+  subsystem: "worker"
+  sweepCount: number
+  timestamp: string
+}
+
 export type StructuredTelemetryEvent =
   | AuthorizationRequestEvent
   | PerformanceOperationEvent
   | RedisAccelerationEvent
+  | WorkerListenerEvent
+  | WorkerSweepEvent
 
 type OperationMetrics = {
   coverage: OperationCoverage | null
@@ -91,6 +139,10 @@ const operationStorage = new AsyncLocalStorage<readonly OperationMetrics[]>()
 function nonNegative(value: number, field: string) {
   void field
   return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function nullableNonNegative(value: number | null, field: string) {
+  return value === null ? null : nonNegative(value, field)
 }
 
 function runtimeFields(runtime: TelemetryRuntime) {
@@ -403,6 +455,60 @@ export function redisAccelerationEvent(
   }
 }
 
+export function workerListenerEvent(
+  input: Omit<
+    WorkerListenerEvent,
+    "artifactCommit" | "environment" | "event" | "subsystem" | "timestamp"
+  >,
+  runtime: TelemetryRuntime = telemetryRuntimeFromEnvironment()
+): WorkerListenerEvent {
+  return {
+    ...runtimeFields(runtime),
+    commandId: input.commandId,
+    disconnectCategory: input.disconnectCategory,
+    event: "worker.listener",
+    reconciliationResult: input.reconciliationResult,
+    retryCount: nonNegative(input.retryCount, "listener retry count"),
+    state: input.state,
+    subsystem: "worker",
+  }
+}
+
+export function workerSweepEvent(
+  input: Omit<
+    WorkerSweepEvent,
+    "artifactCommit" | "environment" | "event" | "subsystem" | "timestamp"
+  >,
+  runtime: TelemetryRuntime = telemetryRuntimeFromEnvironment()
+): WorkerSweepEvent {
+  return {
+    ...runtimeFields(runtime),
+    commandId: input.commandId,
+    cycleOutcome: input.cycleOutcome,
+    event: "worker.sweep",
+    failedJobs: nonNegative(input.failedJobs, "failed refresh jobs"),
+    lastReconciliationAt: input.lastReconciliationAt,
+    lastReconnectAt: input.lastReconnectAt,
+    lastVersion: nullableNonNegative(input.lastVersion, "last version"),
+    listenerState: input.listenerState,
+    oldestOutboxSeconds: nullableNonNegative(
+      input.oldestOutboxSeconds,
+      "oldest outbox seconds"
+    ),
+    oldestPendingSeconds: nullableNonNegative(
+      input.oldestPendingSeconds,
+      "oldest pending seconds"
+    ),
+    pendingJobs: nonNegative(input.pendingJobs, "pending refresh jobs"),
+    pendingOutbox: nonNegative(input.pendingOutbox, "pending outbox"),
+    poolWaiters: nonNegative(input.poolWaiters, "worker pool waiters"),
+    retryingOutbox: nonNegative(input.retryingOutbox, "retrying outbox"),
+    runningJobs: nonNegative(input.runningJobs, "running refresh jobs"),
+    subsystem: "worker",
+    sweepCount: nonNegative(input.sweepCount, "sweep count"),
+  }
+}
+
 export function emitStructuredTelemetry(
   event: StructuredTelemetryEvent,
   sink: TelemetrySink = retainedJsonTelemetrySink
@@ -489,6 +595,69 @@ export function assertRequiredTelemetry(
         providerErrorCounts.some((value) => !validCounter(value))
       ) {
         throw new Error("redis.acceleration is missing required metrics")
+      }
+    }
+    if (event.event === "worker.listener") {
+      const categories: Array<RuntimeErrorCategory | null> = [
+        null,
+        "authentication",
+        "connectivity",
+        "constraint",
+        "timeout",
+        "unknown",
+      ]
+      if (
+        !event.commandId ||
+        ![
+          "connecting",
+          "listening",
+          "reconciling",
+          "ready",
+          "retrying",
+          "stopped",
+        ].includes(event.state) ||
+        !["error", "not-run", "success"].includes(event.reconciliationResult) ||
+        !categories.includes(event.disconnectCategory) ||
+        !validCounter(event.retryCount)
+      ) {
+        throw new Error("worker.listener is missing required fields")
+      }
+    }
+    if (event.event === "worker.sweep") {
+      const counters = [
+        event.failedJobs,
+        event.pendingJobs,
+        event.pendingOutbox,
+        event.poolWaiters,
+        event.retryingOutbox,
+        event.runningJobs,
+        event.sweepCount,
+      ]
+      const nullableCounters = [
+        event.lastVersion,
+        event.oldestOutboxSeconds,
+        event.oldestPendingSeconds,
+      ]
+      if (
+        !event.commandId ||
+        !["error", "success"].includes(event.cycleOutcome) ||
+        ![
+          "connecting",
+          "listening",
+          "reconciling",
+          "ready",
+          "retrying",
+          "stopped",
+        ].includes(event.listenerState) ||
+        counters.some((value) => !validCounter(value)) ||
+        event.sweepCount < 1 ||
+        nullableCounters.some(
+          (value) => value !== null && !validCounter(value)
+        ) ||
+        (event.lastReconnectAt !== null && !event.lastReconnectAt) ||
+        (event.lastReconciliationAt !== null && !event.lastReconciliationAt)
+      ) {
+        throw new Error("worker.sweep is missing required fields")
       }
     }
   }

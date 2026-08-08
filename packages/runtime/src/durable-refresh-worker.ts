@@ -106,6 +106,7 @@ export function createDurableRefreshWorker({
         connectionString: postgresUrl,
         max: postgresPoolMax,
       })
+  const effectivePoolMax = pool.options?.max ?? postgresPoolMax
   const acceleration =
     redisAcceleration ??
     createRedisAcceleration({
@@ -131,35 +132,121 @@ export function createDurableRefreshWorker({
           subsystem: "worker",
         },
         async () => {
-          const refresh = await pool.query<{ eligible: boolean }>(
+          const refreshWaiters = pool.waitingCount
+          const refreshCanStart =
+            pool.idleCount > 0 || pool.totalCount < effectivePoolMax
+          const refreshQuery = pool.query<{
+            eligible: boolean
+            failed_jobs: string
+            last_version: string | null
+            oldest_pending_seconds: string | null
+            pending_jobs: string
+            running_jobs: string
+          }>(
             `
-              SELECT EXISTS (
-                SELECT 1
-                FROM derived.refresh_jobs
-                WHERE status = 'pending' AND run_after <= now()
-                  AND ($1::uuid IS NULL OR organization_id = $1)
-              ) AS eligible
+              SELECT
+                EXISTS (
+                  SELECT 1
+                  FROM derived.refresh_jobs
+                  WHERE status = 'pending' AND run_after <= now()
+                    AND ($1::uuid IS NULL OR organization_id = $1)
+                ) AS eligible,
+                (SELECT count(*)::text FROM derived.refresh_jobs
+                  WHERE status = 'pending'
+                    AND ($1::uuid IS NULL OR organization_id = $1))
+                  AS pending_jobs,
+                (SELECT count(*)::text FROM derived.refresh_jobs
+                  WHERE status = 'running'
+                    AND ($1::uuid IS NULL OR organization_id = $1))
+                  AS running_jobs,
+                (SELECT count(*)::text FROM derived.refresh_jobs
+                  WHERE status = 'failed'
+                    AND ($1::uuid IS NULL OR organization_id = $1))
+                  AS failed_jobs,
+                (SELECT extract(epoch FROM (now() - min(run_after)))::text
+                  FROM derived.refresh_jobs
+                  WHERE status = 'pending'
+                    AND ($1::uuid IS NULL OR organization_id = $1))
+                  AS oldest_pending_seconds,
+                (SELECT max(version)::text FROM derived.dashboard_read_models
+                  WHERE ($1::uuid IS NULL OR organization_id = $1))
+                  AS last_version
             `,
             [organizationId ?? null]
           )
-          const outbox = await pool.query<{ publishable: boolean }>(
+          let poolWaiters = Math.max(
+            refreshWaiters,
+            pool.waitingCount - (refreshCanStart ? 1 : 0)
+          )
+          const refresh = await refreshQuery
+          const outboxWaiters = pool.waitingCount
+          const outboxCanStart =
+            pool.idleCount > 0 || pool.totalCount < effectivePoolMax
+          const outboxQuery = pool.query<{
+            oldest_outbox_seconds: string | null
+            pending_outbox: string
+            publishable: boolean
+            retrying_outbox: string
+          }>(
             `
-              SELECT EXISTS (
-                SELECT 1
-                FROM derived.outbox_events
-                WHERE published_at IS NULL AND available_at <= now()
-                  AND ($1::uuid IS NULL OR organization_id = $1)
-                  AND (
-                    locked_at IS NULL
-                    OR locked_at < now() - interval '5 minutes'
-                  )
-              ) AS publishable
+              SELECT
+                EXISTS (
+                  SELECT 1
+                  FROM derived.outbox_events
+                  WHERE published_at IS NULL AND available_at <= now()
+                    AND ($1::uuid IS NULL OR organization_id = $1)
+                    AND (
+                      locked_at IS NULL
+                      OR locked_at < now() - interval '5 minutes'
+                    )
+                ) AS publishable,
+                (SELECT count(*)::text FROM derived.outbox_events
+                  WHERE published_at IS NULL
+                    AND ($1::uuid IS NULL OR organization_id = $1))
+                  AS pending_outbox,
+                (SELECT count(*)::text FROM derived.outbox_events
+                  WHERE published_at IS NULL AND attempts > 0
+                    AND ($1::uuid IS NULL OR organization_id = $1))
+                  AS retrying_outbox,
+                (SELECT extract(epoch FROM (now() - min(available_at)))::text
+                  FROM derived.outbox_events
+                  WHERE published_at IS NULL
+                    AND ($1::uuid IS NULL OR organization_id = $1))
+                  AS oldest_outbox_seconds
             `,
             [organizationId ?? null]
           )
+          poolWaiters = Math.max(
+            poolWaiters,
+            outboxWaiters,
+            pool.waitingCount - (outboxCanStart ? 1 : 0)
+          )
+          const outbox = await outboxQuery
+          const refreshRow = refresh.rows[0]!
+          const outboxRow = outbox.rows[0]!
           return {
-            eligibleRefresh: refresh.rows[0]!.eligible,
-            publishableOutbox: outbox.rows[0]!.publishable,
+            eligibleRefresh: refreshRow.eligible,
+            publishableOutbox: outboxRow.publishable,
+            snapshot: {
+              failedJobs: Number(refreshRow.failed_jobs),
+              lastVersion:
+                refreshRow.last_version === null
+                  ? null
+                  : Number(refreshRow.last_version),
+              oldestOutboxSeconds:
+                outboxRow.oldest_outbox_seconds === null
+                  ? null
+                  : Math.max(0, Number(outboxRow.oldest_outbox_seconds)),
+              oldestPendingSeconds:
+                refreshRow.oldest_pending_seconds === null
+                  ? null
+                  : Math.max(0, Number(refreshRow.oldest_pending_seconds)),
+              pendingJobs: Number(refreshRow.pending_jobs),
+              pendingOutbox: Number(outboxRow.pending_outbox),
+              poolWaiters,
+              retryingOutbox: Number(outboxRow.retrying_outbox),
+              runningJobs: Number(refreshRow.running_jobs),
+            },
           }
         }
       )
