@@ -66,19 +66,24 @@ export type DashboardDeliveryAction<Data> =
       atMs: number
       message: string
     } & DashboardRequest)
+  | ({ type: "request.aborted" } & DashboardRequest)
   | ({ type: "request.started" } & DashboardRequest)
+  | ({ type: "state.invalid"; message: string } & DashboardRequest)
   | ({
       type: "state.changed"
       atMs: number
       coverage: DashboardCoverageState
       data: Data
       refresh: DashboardDurableRefreshState
+      refreshError?: string | null
       version: number
     } & DashboardRequest)
   | ({
       type: "state.not-modified"
       atMs: number
+      data: Data
       refresh: DashboardDurableRefreshState
+      refreshError?: string | null
       version: number
     } & DashboardRequest)
 
@@ -237,6 +242,24 @@ export function dashboardDeliveryReducer<Data>(
             ? null
             : action.atMs + DASHBOARD_SAFETY_REFRESH_MS,
       }
+    case "request.aborted":
+      if (!ownsRequest(state, action)) return state
+      return {
+        ...state,
+        inFlight: null,
+        refetchPending: true,
+      }
+    case "state.invalid":
+      if (!ownsRequest(state, action)) return state
+      return {
+        ...state,
+        inFlight: null,
+        lastError: action.message,
+        payload: state.data === null ? "none" : "stale",
+        refetchPending: true,
+        request: "canonical-state",
+        suppressKnownVersion: true,
+      }
     case "state.changed":
       if (!ownsRequest(state, action)) return state
       if (state.version !== null && action.version < state.version) {
@@ -256,9 +279,12 @@ export function dashboardDeliveryReducer<Data>(
         coverage: action.coverage,
         data: action.data,
         inFlight: null,
-        lastError: null,
+        lastError:
+          action.refresh === "failed"
+            ? (action.refreshError ?? "Planning recalculation failed.")
+            : null,
         lastSuccessfulAtMs: action.atMs,
-        payload: "current",
+        payload: action.refresh === "failed" ? "stale" : "current",
         refresh: action.refresh,
         request: state.refetchPending ? "canonical-state" : "settled",
         safetyDeadlineMs: action.atMs + DASHBOARD_SAFETY_REFRESH_MS,
@@ -285,10 +311,14 @@ export function dashboardDeliveryReducer<Data>(
       }
       return {
         ...state,
+        data: action.data,
         inFlight: null,
-        lastError: null,
+        lastError:
+          action.refresh === "failed"
+            ? (action.refreshError ?? "Planning recalculation failed.")
+            : null,
         lastSuccessfulAtMs: action.atMs,
-        payload: "current",
+        payload: action.refresh === "failed" ? "stale" : "current",
         refresh: action.refresh,
         request: state.refetchPending ? "canonical-state" : "settled",
         safetyDeadlineMs: action.atMs + DASHBOARD_SAFETY_REFRESH_MS,

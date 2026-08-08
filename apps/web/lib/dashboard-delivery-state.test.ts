@@ -45,7 +45,9 @@ describe("dashboard delivery state", () => {
   })
 
   it("retains the exact payload for hints and unchanged responses without overlapping requests", () => {
-    const data = { rows: ["CNC-1"] }
+    const dashboard = { rows: ["CNC-1"] }
+    const data = { dashboard, status: { status: "idle" } }
+    const nextData = { dashboard, status: { status: "queued" } }
     const initial = createDashboardDeliveryState<typeof data>("cnc")
     const loaded = dashboardDeliveryReducer(
       dashboardDeliveryReducer(initial, {
@@ -81,6 +83,7 @@ describe("dashboard delivery state", () => {
       type: "state.not-modified",
       requestId: 2,
       floor: "cnc",
+      data: nextData,
       version: 7,
       refresh: "pending",
       atMs: 2_000,
@@ -99,14 +102,37 @@ describe("dashboard delivery state", () => {
     })
     expect(overlapping).toBe(refetching)
     expect(unchanged).toMatchObject({
-      data,
+      data: nextData,
       inFlight: null,
       payload: "current",
       refresh: "pending",
       request: "settled",
       version: 7,
     })
-    expect(unchanged.data).toBe(data)
+    expect(unchanged.data).toBe(nextData)
+    expect(unchanged.data?.dashboard).toBe(dashboard)
+  })
+
+  it("silently releases an aborted request for canonical retry", () => {
+    const initial = createDashboardDeliveryState<{ rows: string[] }>("cnc")
+    const started = dashboardDeliveryReducer(initial, {
+      type: "request.started",
+      floor: "cnc",
+      requestId: 1,
+    })
+    const aborted = dashboardDeliveryReducer(started, {
+      type: "request.aborted",
+      floor: "cnc",
+      requestId: 1,
+    })
+
+    expect(aborted).toMatchObject({
+      inFlight: null,
+      lastError: null,
+      refetchPending: true,
+      request: "initial",
+    })
+    expect(dashboardDeliveryPollDelay(aborted, 0)).toBe(0)
   })
 
   it("keeps same-floor content stale through disconnect, reconnect, and refetch failure", () => {
@@ -432,6 +458,7 @@ describe("dashboard delivery state", () => {
       type: "state.not-modified",
       requestId: 2,
       floor: "cnc",
+      data,
       version: 8,
       refresh: "idle",
       atMs: 2_000,
