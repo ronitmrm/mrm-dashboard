@@ -14,6 +14,8 @@ Scope: staging only; production promotion requires separate business approval
 
 Vercel hosts the web artifact. The continuous worker runs as a separate, application-operations-owned service in the database region, with bounded restart backoff, deploy draining, health/readiness probes, one pooled query URL, and one server-only direct listener URL. The host and owner must be recorded in `config/managed-staging.json` before the worker phase can advance.
 
+Liveness is process-local and readiness uses the last completed listener registration/reconciliation and safety-sweep result; neither probe may issue a PostgreSQL statement. The normal 30-second sweep supplies queue/outbox health telemetry so monitoring cannot push idle worker traffic above four statements per minute.
+
 ## Rollout units
 
 Each unit is built, tested, observed, and recoverable independently:
@@ -34,7 +36,7 @@ For every unit:
 1. Record the source commit, migration head, redacted environment-variable inventory, canonical database fingerprint, queue/outbox status, and current deployment identifier.
 2. Create two database branches from the same fingerprint. Run the last-known-good artifact against one and the candidate artifact against the other.
 3. Compare normalized behavioral fingerprints. For reads, also compare statement, row, packet, and plan budgets. For writes, run the canonical workflow only on the isolated branches and compare final state plus audit evidence.
-4. Build the exact candidate artifact once. Test that artifact as a Vercel preview; do not rebuild during promotion.
+4. Build the exact candidate artifact once. Test that web artifact as a Vercel preview and that worker artifact by immutable digest in one-shot mode; do not rebuild during promotion.
 5. Apply the additive schema unit before promoting code that reads it. Verify migration checksums, projection coverage, indexes, triggers, grants, and the upgrade-path fingerprint.
 6. Promote the tested artifact to staging. Limit stateful smoke tests to approved staging operators and reversible fixtures.
 7. Observe one complete acceptance window. Advance only when behavior, budgets, authorization freshness, queue lag, and error thresholds remain green.
@@ -58,9 +60,34 @@ Use the thresholds in `config/managed-staging.json`. Stop advancement when any o
 - any web or worker pool waiter appears;
 - connection headroom falls below 30 percent;
 - five Redis fallbacks occur within five minutes;
-- a behavioral fingerprint, authorization result, query budget, coverage notice, or audit count differs from the accepted baseline.
+- a behavioral fingerprint, authorization result, query budget, coverage notice, or ordered audit-event sequence differs from the accepted baseline.
 
 A lost PostgreSQL listener does not lose work. Reconnect, commit `LISTEN`, reconcile the durable queue, and retain the 30-second safety sweep. Until the direct listener topology exists, the sweep remains the only enabled PostgreSQL wake-up mechanism.
+
+### Required telemetry surfaces
+
+| Surface                  | Required evidence                                                                                                                                                                                        | Collection path                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `performance.operation`  | subsystem/operation, artifact commit, request ID, statements, rows, PostgreSQL bytes, HTTP bytes, duration, pool waiters, and coverage                                                                   | Structured web/worker JSON; Vercel logs for web and the worker host's retained log drain            |
+| `worker.sweep`           | listener state, last reconnect/reconciliation, pending/running/failed jobs, oldest pending seconds, pending/retrying outbox, oldest outbox seconds, last version, cycle outcome, and worker pool waiters | Emitted once per minute from the two normal safety sweeps; no extra status query                    |
+| `worker.listener`        | connecting/listening/retrying, disconnect category, retry count, and reconciliation result                                                                                                               | Structured worker JSON on every transition                                                          |
+| `redis.acceleration`     | commands, outbox failures, rate-limit fallbacks, and provider errors by category                                                                                                                         | Structured process counters plus Upstash usage/error metrics; Redis keys or values are never logged |
+| `authorization.request`  | request-scoped session/grant read counts, outcome category, and duration                                                                                                                                 | Structured Vercel log/span without user identifiers or grants                                       |
+| `deployment.gate`        | artifact digest/deployment ID, schema head/checksums, redacted environment inventory hash, fingerprint ID, and pass/fail reason                                                                          | Retained promotion record owned by application operations                                           |
+| PostgreSQL control plane | connection use/headroom, SQL latency/rows/temp blocks, locks, and migration errors                                                                                                                       | Neon monitoring plus `pg_stat_statements`; isolated benchmark adds JSON plans                       |
+
+Every record includes timestamp, environment, artifact commit, subsystem, and correlation/command ID where applicable. Field names and event names are stable release contracts. In-memory counters alone are insufficient because Vercel instances and workers restart; their snapshots must be emitted to the named retained log surface.
+
+Alerts use the thresholds already listed in `config/managed-staging.json`. The promotion record links the exact saved queries/log views used to prove each gate. Missing telemetry, a non-retained worker log stream, or a health probe that adds PostgreSQL polling blocks promotion.
+
+## Human acceptance gates
+
+Automated seams run before human testing. The candidate cannot advance past preview until the user accepts:
+
+- Dashboard initial load, floor switch, stale/reconnecting state, refresh progress/failure, recovery, and partial-coverage presentation, including keyboard and screen-reader status behavior;
+- every new commercial bounded-result notice and server-backed truncated selector/search path.
+
+The implementation slice supplies exact seed/setup, URL, account/capability, actions, and expected result for each scenario. No human database inspection is required. A failed scenario returns the unit to implementation; it is never waived by green query tests.
 
 ## Recovery matrix
 
@@ -82,3 +109,13 @@ Neon instant restore affects every database on the restored branch and is limite
 Rollback is complete only when the deployment and environment inventories match the chosen last-good state; authentication and authorization pass; canonical fingerprints are accepted; pending, retrying, and failed refresh/outbox counts are healthy; Redis can be empty; and the affected subsystem's behavioral plus performance seams pass.
 
 Operational commands and destructive-action approvals remain governed by [the staging runbook](../../neon-upstash-staging-runbook.md) and [the recovery runbook](../../neon-upstash-recovery-runbook.md).
+
+## Preconditions still missing in the current tree
+
+- A continuously running worker host and direct listener URL are not configured; notifications remain disabled and safety sweeping remains authoritative.
+- Worker listener/reconciliation telemetry and the retained worker log surface do not exist. Current Redis counters are process-local and exposed only through an on-demand status query.
+- Dashboard delivery/coverage UI and its human acceptance script are not implemented.
+- Commercial per-section coverage, server-backed candidate search, repository Customer pagination, exhaustive export routes, and shared ECN decision graph are not implemented.
+- Recruitment bulk commands lack the 100-input server cap and durable command ID/ordinal audit evidence.
+
+These are promotion blockers, not reasons to weaken the rollout contract or evidence that the corresponding decision tickets are unresolved.

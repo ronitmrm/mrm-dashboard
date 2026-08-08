@@ -47,10 +47,6 @@ Relevant skills: `code-review`, `codebase-design`, `research`, `prototype`, `gri
 - Recruitment bulk commands accept 1–100 ordered inputs and use bounded set-based reads, writes, and audits behind one exported domain-policy interface; command IDs/ordinals make audit order durable while transaction and lifecycle behavior remain unchanged.
 - Rollout proceeds schema-first by independently promotable subsystem, with isolated shadows, tested-artifact promotion, durable-queue recovery, and no automatic code-only rollback after incorrect canonical writes.
 
-## Not yet specified
-
-- Exact telemetry surfaces, exposed after performance and rollout contracts are chosen.
-
 ## Out of scope
 
 - New business workflows or changed domain rules.
