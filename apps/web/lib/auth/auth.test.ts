@@ -166,4 +166,51 @@ describe("PostgreSQL Better Auth", () => {
       await system.close()
     }
   })
+
+  it("rejects a revoked session on the next authenticated request", async () => {
+    const system = createAuthSystem({
+      allowSignUp: true,
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const email = `revocation-${randomUUID()}@mrmpl.test`
+    const password = "revocation-test-password"
+
+    try {
+      await system.auth.api.signUpEmail({
+        body: { email, name: "Revocation Test", password },
+      })
+      const signedIn = await system.auth.api.signInEmail({
+        body: { email, password },
+        returnHeaders: true,
+      })
+      const cookieHeader = signedIn.headers
+        .getSetCookie()
+        .map((cookie) => cookie.split(";", 1)[0])
+        .join("; ")
+
+      const activeSession = await system.auth.api.getSession({
+        headers: new Headers({ cookie: cookieHeader }),
+      })
+      expect(activeSession).toMatchObject({
+        session: { token: signedIn.response.token },
+        user: { email },
+      })
+
+      const deleted = await pool.query(
+        "DELETE FROM identity.sessions WHERE token = $1",
+        [signedIn.response.token]
+      )
+      expect(deleted.rowCount).toBe(1)
+
+      await expect(
+        system.auth.api.getSession({
+          headers: new Headers({ cookie: cookieHeader }),
+        })
+      ).resolves.toBeNull()
+    } finally {
+      await system.close()
+    }
+  })
 })

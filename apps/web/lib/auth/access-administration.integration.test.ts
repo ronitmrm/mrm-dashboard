@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 import {
+  createAccessAdministrationRepository,
   createAuthorizationRepository,
   createInitialAdministratorProvisioner,
   migrateDatabase,
@@ -8,10 +9,13 @@ import {
 
 import { createAccessAdministrationService } from "./access-administration"
 import { createAuthSystem } from "./auth"
+import { listGrantedCapabilities } from "./require-capability"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
   "postgres://mrmpl:mrmpl@localhost:5434/mrmpl_test"
+const originalDatabaseUrl = process.env.DATABASE_URL
+const originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET
 
 async function resetIdentity() {
   const system = createAuthSystem({
@@ -34,6 +38,8 @@ async function resetIdentity() {
 }
 
 beforeAll(async () => {
+  process.env.DATABASE_URL = connectionString
+  process.env.BETTER_AUTH_SECRET = "test-only-better-auth-secret-000000000000"
   await migrateDatabase({ connectionString })
 })
 
@@ -43,6 +49,10 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await resetIdentity()
+  if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL
+  else process.env.DATABASE_URL = originalDatabaseUrl
+  if (originalBetterAuthSecret === undefined) delete process.env.BETTER_AUTH_SECRET
+  else process.env.BETTER_AUTH_SECRET = originalBetterAuthSecret
 })
 
 describe("access administration", () => {
@@ -126,6 +136,9 @@ describe("access administration", () => {
       auth: system.auth,
       connectionString,
     })
+    const otherInstanceAccess = createAccessAdministrationRepository({
+      connectionString,
+    })
     const authorization = createAuthorizationRepository({ connectionString })
 
     try {
@@ -163,13 +176,20 @@ describe("access administration", () => {
       await expect(
         authorization.hasCapability(staff.id, "planning.plan.read")
       ).resolves.toBe(true)
-      await access.setPermissionOverride({
+      await expect(
+        listGrantedCapabilities(staff.id, ["planning.plan.read"])
+      ).resolves.toEqual(["planning.plan.read"])
+
+      await otherInstanceAccess.setPermissionOverride({
         actorUserId: administrator.user.id,
         effect: "deny",
         permissionKey: "planning.plan.read",
         reason: "Temporary training restriction",
         userId: staff.id,
       })
+      await expect(
+        listGrantedCapabilities(staff.id, ["planning.plan.read"])
+      ).resolves.toEqual([])
       await expect(
         authorization.hasCapability(staff.id, "planning.plan.read")
       ).resolves.toBe(false)
@@ -212,6 +232,7 @@ describe("access administration", () => {
       )
     } finally {
       await authorization.close()
+      await otherInstanceAccess.close()
       await access.close()
       await provisioner.close()
       await system.close()

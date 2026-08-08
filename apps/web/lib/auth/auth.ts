@@ -94,8 +94,7 @@ function configureAuth({
     secret,
     session: {
       cookieCache: {
-        enabled: true,
-        maxAge: 60,
+        enabled: false,
       },
     },
   })
