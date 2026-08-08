@@ -1,7 +1,7 @@
 ---
 title: Choose the Rollout and Recovery Contract
 label: wayfinder:grilling
-status: resolved
+status: open
 claim: codex
 blocked_by:
   - Choose the Schema Cutover Contract
