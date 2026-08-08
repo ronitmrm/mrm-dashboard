@@ -542,11 +542,24 @@ describe("candidate application cycles", () => {
       statement.includes("INSERT INTO recruitment.applications")
     )
     expect(insertCall?.[1]?.[4]).toEqual(["candidate-1", "candidate-2"])
-    expect(
-      query.mock.calls.filter(([statement]) =>
-        statement.includes("INSERT INTO audit.events")
-      )
-    ).toHaveLength(2)
+    const auditCalls = query.mock.calls.filter(([statement]) =>
+      statement.includes("INSERT INTO audit.events")
+    )
+    expect(auditCalls).toHaveLength(1)
+    const auditEvents = JSON.parse(String(auditCalls[0]![1]![0])) as Array<{
+      metadata: { candidateId: string }
+      targetId: string
+    }>
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        metadata: { candidateId: "candidate-1" },
+        targetId: "application-1",
+      }),
+      expect.objectContaining({
+        metadata: { candidateId: "candidate-2" },
+        targetId: "application-2",
+      }),
+    ])
   })
 
   test("rolls back the complete selection when one candidate becomes unavailable", async () => {

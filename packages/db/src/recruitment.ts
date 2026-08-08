@@ -263,18 +263,30 @@ async function transaction<T>(
   }
 }
 
-async function audit(
-  client: PoolClient,
-  input: MutationContext & {
-    afterState?: Record<string, unknown> | null
-    beforeState?: Record<string, unknown> | null
-    eventType: string
-    metadata?: Record<string, unknown>
-    reason?: string | null
-    targetId: string
-    targetTable: string
-  }
-) {
+type AuditInput = MutationContext & {
+  afterState?: Record<string, unknown> | null
+  beforeState?: Record<string, unknown> | null
+  eventType: string
+  metadata?: Record<string, unknown>
+  reason?: string | null
+  targetId: string
+  targetTable: string
+}
+
+async function auditMany(client: PoolClient, inputs: AuditInput[]) {
+  if (!inputs.length) return
+  const events = inputs.map((input) => ({
+    actorUserId: input.actorUserId ?? null,
+    afterState: input.afterState ?? null,
+    beforeState: input.beforeState ?? null,
+    eventType: input.eventType,
+    metadata: input.metadata ?? {},
+    organizationId: input.organizationId,
+    reason: input.reason ?? null,
+    sourceId: randomUUID(),
+    targetId: input.targetId,
+    targetTable: input.targetTable,
+  }))
   await client.query(
     `
       INSERT INTO audit.events (
@@ -282,22 +294,30 @@ async function audit(
         actor_user_id, reason, before_state, after_state, metadata,
         source_system, source_table, source_id
       )
-      VALUES ($1, $2, 'recruitment', $3, $4, $5, $6, $7, $8, $9,
-        'mrm-dashboard', 'recruitment_events', $10)
+      SELECT
+        (event.value->>'organizationId')::uuid,
+        event.value->>'eventType',
+        'recruitment',
+        event.value->>'targetTable',
+        (event.value->>'targetId')::uuid,
+        nullif(event.value->>'actorUserId', '')::uuid,
+        event.value->>'reason',
+        nullif(event.value->'beforeState', 'null'::jsonb),
+        nullif(event.value->'afterState', 'null'::jsonb),
+        coalesce(event.value->'metadata', '{}'::jsonb),
+        'mrm-dashboard',
+        'recruitment_events',
+        event.value->>'sourceId'
+      FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY
+        AS event(value, sequence)
+      ORDER BY event.sequence
     `,
-    [
-      input.organizationId,
-      input.eventType,
-      input.targetTable,
-      input.targetId,
-      input.actorUserId ?? null,
-      input.reason ?? null,
-      input.beforeState ?? null,
-      input.afterState ?? null,
-      input.metadata ?? {},
-      randomUUID(),
-    ]
+    [JSON.stringify(events)]
   )
+}
+
+async function audit(client: PoolClient, input: AuditInput) {
+  await auditMany(client, [input])
 }
 
 type CandidateAssignmentInput = MutationContext & {
@@ -373,15 +393,16 @@ async function assignCandidatesInTransaction(
       "One or more selected candidates could not be assigned. Refresh the candidate list and try again."
     )
   }
-  for (const application of result.rows) {
-    await audit(client, {
+  await auditMany(
+    client,
+    result.rows.map((application) => ({
       ...input,
       eventType: "recruitment.application.assigned",
       metadata: { candidateId: application.candidate_id },
       targetId: application.id,
       targetTable: "applications",
-    })
-  }
+    }))
+  )
   return result.rows
 }
 
