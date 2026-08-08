@@ -2,6 +2,26 @@
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
+CREATE INDEX IF NOT EXISTS quote_items_commercial_search_trgm_idx
+  ON sales.quote_items USING gin (
+    (lower(
+      btrim(coalesce(customer_part_code, '')) || ' ' || btrim(quote_number)
+    )) gin_trgm_ops
+  );
+
+CREATE INDEX IF NOT EXISTS quote_items_customer_part_exact_idx
+  ON sales.quote_items (
+    organization_id, customer_id,
+    (lower(btrim(coalesce(customer_part_code, '')))),
+    sent_at DESC NULLS LAST, updated_at DESC, id DESC
+  );
+
+CREATE INDEX IF NOT EXISTS quote_items_quote_number_exact_idx
+  ON sales.quote_items (
+    organization_id, customer_id, (lower(btrim(quote_number))),
+    sent_at DESC NULLS LAST, updated_at DESC, id DESC
+  );
+
 CREATE INDEX IF NOT EXISTS items_commercial_search_trgm_idx
   ON catalog.items USING gin (
     (lower(coalesce(uid, '') || ' ' || coalesce(description, ''))) gin_trgm_ops

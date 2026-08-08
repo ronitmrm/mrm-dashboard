@@ -1134,6 +1134,9 @@ test("commercial contains-search and operational filters are indexed", async () 
         'drawings_commercial_search_trgm_idx',
         'drawings_operational_filter_idx',
         'items_commercial_search_trgm_idx',
+        'quote_items_commercial_search_trgm_idx',
+        'quote_items_customer_part_exact_idx',
+        'quote_items_quote_number_exact_idx',
         'website_profiles_commercial_search_trgm_idx',
         'website_profiles_operational_filter_idx'
       ]
@@ -1149,6 +1152,9 @@ test("commercial contains-search and operational filters are indexed", async () 
       "drawings_commercial_search_trgm_idx",
       "drawings_operational_filter_idx",
       "items_commercial_search_trgm_idx",
+      "quote_items_commercial_search_trgm_idx",
+      "quote_items_customer_part_exact_idx",
+      "quote_items_quote_number_exact_idx",
       "website_profiles_commercial_search_trgm_idx",
       "website_profiles_operational_filter_idx",
     ],

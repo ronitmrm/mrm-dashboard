@@ -176,6 +176,12 @@ pnpm build
 
 Schema commits additionally run the empty-install and representative `0038` upgrade rehearsal against real PostgreSQL. Boundaries A, B, E, G, and H require real-PostgreSQL integration tests; mocks alone do not satisfy them. Boundary H runs the canonical parity and controlled managed-staging benchmark commands introduced by commits 1 and 25.
 
+Commit 3 additionally runs the named controlled-search target against the guarded disposable local PostgreSQL service. Ordinary database tests retain structural plan gates without imposing workstation wall-clock latency on arbitrary runs:
+
+```sh
+pnpm --filter @workspace/db test:controlled-search
+```
+
 Local services are stopped with retained volumes after the final local gate. Provider preflight, schema application, preview promotion, rollback, PITR, and any other external mutation remain explicit staging-operator actions under the runbooks.
 
 ## Current candidate-commit reconciliation

@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src --max-warnings 0",
     "test": "vitest run",
+    "test:controlled-search": "CONTROLLED_SEARCH_GATE=1 vitest run src/commercial-search-indexes.integration.test.ts",
     "test:integration": "vitest run src/schema-contract.test.ts",
     "typecheck": "tsc --noEmit"
   },

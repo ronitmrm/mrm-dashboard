@@ -47,7 +47,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": ["TEST_DATABASE_URL", "TEST_REDIS_URL"]
+      "env": ["CONTROLLED_SEARCH_GATE", "TEST_DATABASE_URL", "TEST_REDIS_URL"]
     },
     "dev": {
       "cache": false,
