@@ -194,7 +194,7 @@ describe("dashboard delivery client", () => {
     })
     const failed = dashboardDeliveryReducer(loaded, {
       type: "refresh.failed",
-      message: "Worker exhausted retries.",
+      message: "Worker exhausted retries",
     })
 
     expect(dashboardConnectionLabel(failed)).toBe("Stale")

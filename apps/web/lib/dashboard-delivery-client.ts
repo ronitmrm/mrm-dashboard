@@ -145,15 +145,20 @@ export function dashboardConnectionLabel<Data>(
   return "Connected"
 }
 
+function sentence(message: string) {
+  const trimmed = message.trim()
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`
+}
+
 export function dashboardDeliveryNotice<Data>(
   state: DashboardDeliveryState<Data>
 ) {
   if (state.data === null) return null
   if (state.refresh === "failed") {
-    return `${state.lastError ?? "Planning recalculation failed."} Showing the last successful dashboard.`
+    return `${sentence(state.lastError ?? "Planning recalculation failed.")} Showing the last successful dashboard.`
   }
   if (state.lastError) {
-    return `${state.lastError} Showing the last successful dashboard.`
+    return `${sentence(state.lastError)} Showing the last successful dashboard.`
   }
   if (state.connection === "retrying") {
     return "Reconnecting to live updates. Showing the last successful dashboard."
