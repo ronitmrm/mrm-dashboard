@@ -94,6 +94,12 @@ type RevisedQuote = {
   replacementQuoteItemId: string
 }
 
+type QuoteGraph = {
+  componentsByQuoteId: Map<string, ComponentRow[]>
+  productsById: Map<string, ProductRow>
+  quotesById: Map<string, QuoteRow>
+}
+
 export const bulkRevisionFields = {
   casting: { label: "Casting", route: "product", valueType: "number" },
   scrap_rate: {
@@ -1304,6 +1310,179 @@ async function activeAffectedQuoteIds(
   return result.rows.map((row) => row.quote_item_id)
 }
 
+async function loadQuoteGraph(
+  client: PoolClient,
+  rootQuoteItemIds: string[]
+): Promise<QuoteGraph> {
+  const quotes = await client.query<QuoteRow>(
+    `
+      WITH RECURSIVE quote_tree (quote_item_id) AS (
+        SELECT unnest($1::uuid[])
+        UNION
+        SELECT component.child_quote_item_id
+        FROM quote_tree
+        JOIN sales.quote_product_snapshots snapshot
+          ON snapshot.quote_item_id = quote_tree.quote_item_id
+        JOIN sales.quote_package_components component
+          ON component.quote_product_snapshot_id = snapshot.id
+        WHERE component.child_quote_item_id IS NOT NULL
+      )
+      SELECT quote.id, quote.quote_number, quote.revision,
+        quote.enquiry_id, quote.enquiry_item_id, quote.customer_id,
+        quote.item_id, quote.lineage_item_id, quote.customer_part_code,
+        quote.quantity, quote.quote_type, quote.packaging,
+        quote.shipping_terms, quote.scrap_rate, quote.alloy_premium,
+        quote.extrusion_cost, quote.forging_cost, quote.packing_cost,
+        quote.shipping_cost, quote.overhead_cost_input, quote.purchase_times,
+        quote.profit_percent, quote.conversion_rate,
+        quote.assembled_part_inr, quote.rate_inr, quote.total_rate_inr,
+        quote.rate_usd, quote.approved_price_usd, quote.calculation_json,
+        quote.price_lineage_key, snapshot.id AS snapshot_id,
+        snapshot.product_snapshot AS snapshot_product_json,
+        snapshot.calculation_json AS snapshot_calculation_json
+      FROM quote_tree
+      JOIN sales.quote_items quote ON quote.id = quote_tree.quote_item_id
+      JOIN sales.quote_product_snapshots snapshot
+        ON snapshot.quote_item_id = quote.id
+    `,
+    [rootQuoteItemIds]
+  )
+  const quoteIds = quotes.rows.map((quote) => quote.id)
+  const productIds = [...new Set(quotes.rows.map((quote) => quote.item_id))]
+  const components = await client.query<
+    ComponentRow & { quote_item_id: string }
+  >(
+    `
+      SELECT snapshot.quote_item_id, component.id,
+        component.component_item_id, component.component_uid,
+        component.description, component.quantity, component.unit_cost,
+        component.extended_cost, component.sequence,
+        component.child_quote_item_id
+      FROM sales.quote_product_snapshots snapshot
+      JOIN sales.quote_package_components component
+        ON component.quote_product_snapshot_id = snapshot.id
+      WHERE snapshot.quote_item_id = ANY($1::uuid[])
+      ORDER BY snapshot.quote_item_id, component.sequence,
+        component.created_at, component.id
+    `,
+    [quoteIds]
+  )
+  const products = await client.query<ProductRow>(
+    "SELECT * FROM catalog.items WHERE id = ANY($1::uuid[])",
+    [productIds]
+  )
+  const componentsByQuoteId = new Map<string, ComponentRow[]>()
+  for (const component of components.rows) {
+    const current = componentsByQuoteId.get(component.quote_item_id) ?? []
+    current.push(component)
+    componentsByQuoteId.set(component.quote_item_id, current)
+  }
+  return {
+    componentsByQuoteId,
+    productsById: new Map(
+      products.rows.map((product) => [product.id, product])
+    ),
+    quotesById: new Map(quotes.rows.map((quote) => [quote.id, quote])),
+  }
+}
+
+function quoteFromGraph(graph: QuoteGraph, quoteItemId: string) {
+  const quote = graph.quotesById.get(quoteItemId)
+  if (!quote) throw new Error("Quote revision source was not found.")
+  return quote
+}
+
+function collectAffectedQuotePathFromGraph(
+  graph: QuoteGraph,
+  rootQuoteItemId: string,
+  affectedItemId: string,
+  depth = 0,
+  visiting = new Set<string>()
+): { affected: Set<string>; containsAffectedItem: boolean } {
+  if (depth > 20) {
+    throw new Error("ECN quote tree exceeds the supported depth of 20.")
+  }
+  if (visiting.has(rootQuoteItemId)) {
+    throw new Error("ECN quote tree contains a cycle.")
+  }
+  const nextVisiting = new Set(visiting)
+  nextVisiting.add(rootQuoteItemId)
+  const quote = quoteFromGraph(graph, rootQuoteItemId)
+  const affected = new Set<string>()
+  let containsAffectedItem = quote.item_id === affectedItemId
+  for (const component of graph.componentsByQuoteId.get(rootQuoteItemId) ??
+    []) {
+    if (!component.child_quote_item_id) continue
+    const child = collectAffectedQuotePathFromGraph(
+      graph,
+      component.child_quote_item_id,
+      affectedItemId,
+      depth + 1,
+      nextVisiting
+    )
+    if (child.containsAffectedItem) {
+      containsAffectedItem = true
+      for (const id of child.affected) affected.add(id)
+    }
+  }
+  if (containsAffectedItem) affected.add(rootQuoteItemId)
+  return { affected, containsAffectedItem }
+}
+
+function previewRevisedQuoteFromGraph(
+  graph: QuoteGraph,
+  input: {
+    affectedQuoteIds: Set<string>
+    cache: Map<string, { newPrice: number; newProfitPercent: number }>
+    overrides: Map<string, QuoteOverride>
+    quoteItemId: string
+    visiting?: Set<string>
+  }
+): { newPrice: number; newProfitPercent: number } {
+  const cached = input.cache.get(input.quoteItemId)
+  if (cached) return cached
+  const visiting = input.visiting ?? new Set<string>()
+  if (visiting.has(input.quoteItemId)) {
+    throw new Error("Quote package cycle detected during ECN preview.")
+  }
+  const nextVisiting = new Set(visiting)
+  nextVisiting.add(input.quoteItemId)
+  const quote = quoteFromGraph(graph, input.quoteItemId)
+  const product = graph.productsById.get(quote.item_id)
+  if (!product) throw new Error("Revision product was not found.")
+  const components = graph.componentsByQuoteId.get(input.quoteItemId) ?? []
+  const revisedChildren = new Map<string, RevisedQuote>()
+  for (const component of components) {
+    if (
+      component.child_quote_item_id &&
+      input.affectedQuoteIds.has(component.child_quote_item_id)
+    ) {
+      const child = previewRevisedQuoteFromGraph(graph, {
+        ...input,
+        quoteItemId: component.child_quote_item_id,
+        visiting: nextVisiting,
+      })
+      revisedChildren.set(component.child_quote_item_id, {
+        ...child,
+        replacementQuoteItemId: component.child_quote_item_id,
+      })
+    }
+  }
+  const revised = revisedCalculation(
+    quote,
+    product,
+    components,
+    revisedChildren,
+    input.overrides.get(input.quoteItemId)
+  )
+  const result = {
+    newPrice: revised.totalRateUsd,
+    newProfitPercent: revised.profit,
+  }
+  input.cache.set(input.quoteItemId, result)
+  return result
+}
+
 async function collectAffectedQuotePath(
   client: PoolClient,
   rootQuoteItemId: string,
@@ -1340,60 +1519,9 @@ async function collectAffectedQuotePath(
   return { affected, containsAffectedItem }
 }
 
-async function previewRevisedQuote(
-  client: PoolClient,
-  input: {
-    affectedQuoteIds: Set<string>
-    cache: Map<string, { newPrice: number; newProfitPercent: number }>
-    overrides: Map<string, QuoteOverride>
-    quoteItemId: string
-    visiting?: Set<string>
-  }
-): Promise<{ newPrice: number; newProfitPercent: number }> {
-  const cached = input.cache.get(input.quoteItemId)
-  if (cached) return cached
-  const visiting = input.visiting ?? new Set<string>()
-  if (visiting.has(input.quoteItemId)) {
-    throw new Error("Quote package cycle detected during ECN preview.")
-  }
-  const nextVisiting = new Set(visiting)
-  nextVisiting.add(input.quoteItemId)
-  const quote = await getQuote(client, input.quoteItemId)
-  const product = await getProduct(client, quote.item_id)
-  const components = await getComponents(client, input.quoteItemId)
-  const revisedChildren = new Map<string, RevisedQuote>()
-  for (const component of components) {
-    if (
-      component.child_quote_item_id &&
-      input.affectedQuoteIds.has(component.child_quote_item_id)
-    ) {
-      const child = await previewRevisedQuote(client, {
-        ...input,
-        quoteItemId: component.child_quote_item_id,
-        visiting: nextVisiting,
-      })
-      revisedChildren.set(component.child_quote_item_id, {
-        ...child,
-        replacementQuoteItemId: component.child_quote_item_id,
-      })
-    }
-  }
-  const revised = revisedCalculation(
-    quote,
-    product,
-    components,
-    revisedChildren,
-    input.overrides.get(input.quoteItemId)
-  )
-  const result = {
-    newPrice: revised.totalRateUsd,
-    newProfitPercent: revised.profit,
-  }
-  input.cache.set(input.quoteItemId, result)
-  return result
-}
-
-export function createCommercialRevisionsRepository(options: RepositoryOptions) {
+export function createCommercialRevisionsRepository(
+  options: RepositoryOptions
+) {
   const { close, pool } = repositoryPool(options)
 
   return {
@@ -2464,13 +2592,14 @@ export function createCommercialRevisionsRepository(options: RepositoryOptions) 
           [engineeringChangeNoteId, affectedQuoteItemIds]
         )
         const result = []
+        const graph = await loadQuoteGraph(client, affectedQuoteItemIds)
         for (const price of prices.rows) {
-          const path = await collectAffectedQuotePath(
-            client,
+          const path = collectAffectedQuotePathFromGraph(
+            graph,
             price.quote_item_id,
             row.item_id
           )
-          const revise = await previewRevisedQuote(client, {
+          const revise = previewRevisedQuoteFromGraph(graph, {
             affectedQuoteIds: path.affected,
             cache: new Map(),
             overrides: new Map(),
@@ -2484,7 +2613,7 @@ export function createCommercialRevisionsRepository(options: RepositoryOptions) 
               ]),
             ],
           ])
-          const keep = await previewRevisedQuote(client, {
+          const keep = previewRevisedQuoteFromGraph(graph, {
             affectedQuoteIds: path.affected,
             cache: new Map(),
             overrides: keepOverrides,

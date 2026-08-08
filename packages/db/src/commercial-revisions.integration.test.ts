@@ -16,6 +16,7 @@ const connectionString =
 const pool = new Pool({ connectionString })
 const repository = createCommercialRevisionsRepository({ connectionString })
 let organizationId: string
+let organizationCode: string
 let customerId: string
 
 async function createItem(uid: string, itemType: string) {
@@ -153,13 +154,14 @@ async function createQuote(input: {
 
 beforeAll(async () => {
   await migrateDatabase({ connectionString })
+  organizationCode = `REV-${randomUUID()}`
   const organization = await pool.query<{ id: string }>(
     `
       INSERT INTO core.organizations (code, name)
-      VALUES ('MRMPL', 'MRM Private Limited')
-      ON CONFLICT (lower(code)) DO UPDATE SET name = EXCLUDED.name
+      VALUES ($1, 'Revision Test Organization')
       RETURNING id
-    `
+    `,
+    [organizationCode]
   )
   organizationId = organization.rows[0]!.id
   const customer = await pool.query<{ id: string }>(
@@ -213,7 +215,7 @@ describe("commercial revisions and corrections", () => {
 
   test("lists engineering change notes for an organization with no ECNs", async () => {
     await expect(
-      repository.listEngineeringChangeNotes("MRMPL")
+      repository.listEngineeringChangeNotes(organizationCode)
     ).resolves.toEqual([])
   })
 
@@ -518,6 +520,85 @@ describe("commercial revisions and corrections", () => {
     expect(decision).toMatchObject({ newPrice: 120, status: "Completed" })
   })
 
+  test("loads the ECN affected-price graph within six statements", async () => {
+    const suffix = randomUUID()
+    const itemId = await createItem(`M-ECN-BATCH-${suffix}`, "List")
+    const packageItemIds = await Promise.all(
+      [0, 1].map((index) =>
+        createItem(`P-ECN-BATCH-${index}-${suffix}`, "Package")
+      )
+    )
+    await pool.query(
+      `
+        UPDATE catalog.items
+        SET weight_100_pcs = 10, casting = 1, machining_cost = 100
+        WHERE id = $1
+      `,
+      [itemId]
+    )
+    const childQuoteItemId = await createQuote({
+      customerPartCode: `ECN-BATCH-CHILD-${suffix}`,
+      itemId,
+      itemType: "List",
+      processBase: 100,
+      profitPercent: 0.2,
+      total: 120,
+    })
+    const packageQuoteItemIds = await Promise.all(
+      packageItemIds.map((packageItemId, index) =>
+        createQuote({
+          child: { itemId, quoteItemId: childQuoteItemId, total: 120 },
+          customerPartCode: `ECN-BATCH-${index}-${suffix}`,
+          itemId: packageItemId,
+          itemType: "Package",
+          processBase: 10 + index,
+          profitPercent: 0.2,
+          total: 132 + index,
+        })
+      )
+    )
+    const quoteItemIds = [childQuoteItemId, ...packageQuoteItemIds]
+    const ecn = await repository.createEngineeringChangeNote({
+      itemId,
+      organizationId,
+      reason: "Bound the affected-price graph",
+    })
+    await repository.completeEngineeringChangeDesign({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: { description: `Revised ${suffix}` },
+    })
+    await repository.completeEngineeringChangeProductCosting({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: { machiningCost: 140 },
+    })
+
+    const trackedPool = new Pool({ connectionString, max: 1 })
+    let statementCount = 0
+    trackedPool.on("connect", (client) => {
+      const originalQuery = client.query.bind(client)
+      client.query = ((...args: Parameters<typeof client.query>) => {
+        statementCount += 1
+        return originalQuery(...args)
+      }) as typeof client.query
+    })
+    const trackedRepository = createCommercialRevisionsRepository({
+      pool: trackedPool,
+    })
+
+    try {
+      const affected =
+        await trackedRepository.listEngineeringChangeAffectedPrices(ecn.id)
+
+      expect(affected.map((price) => price.quoteItemId).sort()).toEqual(
+        quoteItemIds.sort()
+      )
+      expect(statementCount).toBeLessThanOrEqual(6)
+    } finally {
+      await trackedRepository.close()
+      await trackedPool.end()
+    }
+  })
+
   test("records ECN decisions against recursive active customer prices", async () => {
     const itemId = await createItem(`M${Date.now()}2`, "List")
     const quoteItemId = await createQuote({
@@ -669,7 +750,7 @@ describe("commercial revisions and corrections", () => {
       after_state: { nextStageStatus: "Not Started" },
       before_state: { nextStageStatus: "Started" },
     })
-    const register = await repository.listPricingCorrections("MRMPL")
+    const register = await repository.listPricingCorrections(organizationCode)
     expect(register).toContainEqual(
       expect.objectContaining({
         requestedAction: "Reverse Costing Handoff",
@@ -747,7 +828,8 @@ describe("commercial revisions and corrections", () => {
     await expect(
       repository.reverseProductEntry({ itemId: blockedItemId })
     ).rejects.toThrow("quote")
-    const candidates = await repository.listCorrectionCandidates("MRMPL")
+    const candidates =
+      await repository.listCorrectionCandidates(organizationCode)
     expect(candidates.products).toContainEqual(
       expect.objectContaining({
         blockerCounts: expect.objectContaining({ quotes: 1 }),
