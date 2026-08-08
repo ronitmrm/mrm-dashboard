@@ -17,6 +17,7 @@
     "@better-auth/drizzle-adapter": "1.6.23",
     "@vercel/functions": "^3.7.5",
     "@workspace/db": "workspace:*",
+    "@workspace/observability": "workspace:*",
     "@workspace/runtime": "workspace:*",
     "@workspace/ui": "workspace:*",
     "better-auth": "1.6.23",

@@ -1,6 +1,8 @@
 import { Redis } from "@upstash/redis"
 import { createClient } from "redis"
 
+import { recordRedisCommand } from "./managed-telemetry"
+
 type Environment = Record<string, string | undefined>
 
 export type RateLimitResult = {
@@ -30,6 +32,7 @@ export type RedisAcceleration = {
 }
 
 export type RedisAccelerationOptions = {
+  onCommand?: () => void
   redisUrl?: string
   upstashRedisRestToken?: string
   upstashRedisRestUrl?: string
@@ -81,7 +84,10 @@ function versionKey(organizationId: string) {
   return `mrm:dashboard:version:${organizationId}`
 }
 
-function createNodeRedisAcceleration(redisUrl: string): RedisAcceleration {
+function createNodeRedisAcceleration(
+  redisUrl: string,
+  onCommand: () => void
+): RedisAcceleration {
   const client = createClient({
     socket: {
       connectTimeout: 250,
@@ -102,6 +108,7 @@ function createNodeRedisAcceleration(redisUrl: string): RedisAcceleration {
     },
     async consumeRateLimit({ key, limit, windowSeconds }) {
       const redis = await connectedClient()
+      onCommand()
       const result = numericPair(
         await redis.eval(RATE_LIMIT_SCRIPT, {
           arguments: [String(windowSeconds)],
@@ -120,11 +127,13 @@ function createNodeRedisAcceleration(redisUrl: string): RedisAcceleration {
         invalidation.organizationId &&
         Number.isFinite(invalidation.version)
       ) {
+        onCommand()
         await redis.eval(MONOTONIC_VERSION_SCRIPT, {
           arguments: [String(invalidation.version)],
           keys: [versionKey(invalidation.organizationId)],
         })
       }
+      onCommand()
       await redis.publish(
         "mrm:invalidations",
         serializeInvalidation(invalidation)
@@ -134,17 +143,20 @@ function createNodeRedisAcceleration(redisUrl: string): RedisAcceleration {
 }
 
 function createUpstashAcceleration({
+  onCommand,
   token,
   url,
 }: {
   token: string
   url: string
+  onCommand: () => void
 }): RedisAcceleration {
   const redis = new Redis({ token, url })
 
   return {
     async close() {},
     async consumeRateLimit({ key, limit, windowSeconds }) {
+      onCommand()
       const result = numericPair(
         await redis.eval(RATE_LIMIT_SCRIPT, [key], [String(windowSeconds)])
       )
@@ -159,12 +171,14 @@ function createUpstashAcceleration({
         invalidation.organizationId &&
         Number.isFinite(invalidation.version)
       ) {
+        onCommand()
         await redis.eval(
           MONOTONIC_VERSION_SCRIPT,
           [versionKey(invalidation.organizationId)],
           [String(invalidation.version)]
         )
       }
+      onCommand()
       await redis.publish(
         "mrm:invalidations",
         serializeInvalidation(invalidation)
@@ -211,10 +225,18 @@ export function readRedisAccelerationEnvironment(
 }
 
 export function createRedisAcceleration({
+  onCommand = recordRedisCommand,
   redisUrl,
   upstashRedisRestToken,
   upstashRedisRestUrl,
 }: RedisAccelerationOptions): RedisAcceleration {
+  const safeOnCommand = () => {
+    try {
+      onCommand()
+    } catch {
+      // Telemetry must not alter Redis acceleration behavior.
+    }
+  }
   if (upstashRedisRestToken || upstashRedisRestUrl) {
     if (!upstashRedisRestToken || !upstashRedisRestUrl) {
       throw new Error(
@@ -223,6 +245,7 @@ export function createRedisAcceleration({
     }
     validateUpstashRedisRestUrl(upstashRedisRestUrl)
     return createUpstashAcceleration({
+      onCommand: safeOnCommand,
       token: upstashRedisRestToken,
       url: upstashRedisRestUrl,
     })
@@ -232,5 +255,5 @@ export function createRedisAcceleration({
       "A local Redis URL or Upstash REST credentials are required"
     )
   }
-  return createNodeRedisAcceleration(redisUrl)
+  return createNodeRedisAcceleration(redisUrl, safeOnCommand)
 }

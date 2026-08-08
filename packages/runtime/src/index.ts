@@ -14,6 +14,7 @@ export {
 } from "./durable-refresh-worker"
 export { readWorkerPostgresEnvironment } from "./managed-runtime"
 export {
+  configureManagedRuntimeTelemetry,
   managedRuntimeTelemetrySnapshot,
   resetManagedRuntimeTelemetry,
   runtimeErrorCategory,

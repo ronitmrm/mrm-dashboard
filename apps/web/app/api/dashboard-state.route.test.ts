@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const dashboardMocks = vi.hoisted(() => ({
   readPostgresDashboardState: vi.fn(),
 }))
+let telemetryLog: ReturnType<typeof vi.spyOn>
 
 vi.mock("@/lib/production-module", () => ({
   productionModuleIsEnabled: () => true,
@@ -58,7 +59,10 @@ import { GET } from "./[...path]/route"
 describe("dashboard-state route", () => {
   beforeEach(() => {
     dashboardMocks.readPostgresDashboardState.mockReset()
+    telemetryLog = vi.spyOn(console, "info").mockImplementation(() => undefined)
   })
+
+  afterEach(() => telemetryLog.mockRestore())
 
   it("passes floor and known-version bounds to the dashboard state reader", async () => {
     dashboardMocks.readPostgresDashboardState.mockResolvedValue({
@@ -92,6 +96,21 @@ describe("dashboard-state route", () => {
       },
       "cnc",
       7
+    )
+    expect(
+      (telemetryLog.mock.calls as Array<[unknown, ...unknown[]]>)
+        .map(
+          ([message]) =>
+            JSON.parse(String(message)) as {
+              event?: string
+              operation?: string
+            }
+        )
+        .find((event) => event.event === "performance.operation")
+    ).toEqual(
+      expect.objectContaining({
+        operation: "dashboard.api.get.dashboard_state",
+      })
     )
   })
 })

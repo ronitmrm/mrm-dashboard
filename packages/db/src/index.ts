@@ -81,6 +81,7 @@ export { createProductRepository } from "./products"
 export {
   connectionTargetSummary,
   createBoundedPostgresPool,
+  instrumentPostgresPool,
   repositoryPool,
   sharedManagedPostgresPool,
   summarizeManagedPostgresEnvironment,

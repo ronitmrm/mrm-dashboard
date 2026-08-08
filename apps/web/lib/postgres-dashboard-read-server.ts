@@ -6,6 +6,8 @@ import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 import type { NextRequest } from "next/server"
 
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
+import { authorizationRequestTelemetryForCurrentScope } from "./auth/authorization-request-telemetry"
+import { telemetryRequestId } from "./request-telemetry"
 
 export class DashboardReadError extends Error {
   constructor(
@@ -24,30 +26,49 @@ async function withDashboardReadRepository<T>(
     repository: ReturnType<typeof createDashboardReadModelRepository>
   }) => Promise<T>
 ) {
-  const session = await getAuth().api.getSession({ headers: request.headers })
-  if (!session) {
-    throw new DashboardReadError(
-      401,
-      "Authentication is required to access the dashboard API."
-    )
-  }
-
-  const connectionString = readAuthEnvironment().connectionString
-  const authorization = createAuthorizationRepository({ connectionString })
+  const authorizationTelemetry = authorizationRequestTelemetryForCurrentScope({
+    requestId: telemetryRequestId(request),
+  })
+  const { telemetry } = authorizationTelemetry
+  telemetry.recordSessionRead()
+  let authorization: ReturnType<typeof createAuthorizationRepository> | null =
+    null
+  let connectionString = ""
+  let session: Awaited<
+    ReturnType<ReturnType<typeof getAuth>["api"]["getSession"]>
+  >
   try {
+    session = await getAuth().api.getSession({ headers: request.headers })
+    if (!session) {
+      telemetry.setOutcome("unauthenticated")
+      throw new DashboardReadError(
+        401,
+        "Authentication is required to access the dashboard API."
+      )
+    }
+
+    connectionString = readAuthEnvironment().connectionString
+    authorization = createAuthorizationRepository({ connectionString })
+    telemetry.recordGrantRead()
     if (
       !(await authorization.hasCapability(
         session.user.id,
         "operations.dashboard.read"
       ))
     ) {
+      telemetry.setOutcome("unauthorized")
       throw new DashboardReadError(
         403,
         "You do not have permission to view the operations dashboard."
       )
     }
+    telemetry.setOutcome("allowed")
   } finally {
-    await authorization.close()
+    try {
+      await authorization?.close()
+    } finally {
+      authorizationTelemetry.finish()
+    }
   }
 
   const repository = createDashboardReadModelRepository({ connectionString })

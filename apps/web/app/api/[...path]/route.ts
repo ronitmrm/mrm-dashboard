@@ -8,6 +8,10 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
 import {
+  authorizationRequestTelemetryForCurrentScope,
+  withAuthorizationRequestTelemetry,
+} from "../../../lib/auth/authorization-request-telemetry"
+import {
   browserImportPolicy,
   exportUnavailablePayload,
 } from "@/lib/dashboard-api-policy"
@@ -20,6 +24,7 @@ import {
 } from "@/lib/dashboard-planning-input"
 import { shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy"
 import { productionModuleIsEnabled } from "@/lib/production-module"
+import { withHttpPerformanceOperation } from "../../../lib/http-operation-telemetry"
 import {
   DashboardReadError,
   readPostgresCorrectionCandidates,
@@ -36,6 +41,7 @@ import {
   readPostgresHourlyQualityPage,
   readPostgresSetupChecklistPage,
 } from "@/lib/postgres-operational-entry-server"
+import { telemetryRequestId } from "../../../lib/request-telemetry"
 
 class RouteError extends Error {
   constructor(
@@ -270,29 +276,58 @@ function csvRows(fields: string[], rows: Array<Record<string, unknown>>) {
   )
 }
 
-async function authenticatedPlanningContext(
+async function authorizedDashboardSession(
   request: NextRequest,
   capability: string
 ) {
-  const session = await getAuth().api.getSession({ headers: request.headers })
-  if (!session) {
-    throw new RouteError(
-      401,
-      "Authentication is required to access the dashboard API."
-    )
-  }
-  const connectionString = readAuthEnvironment().connectionString
-  const authorization = createAuthorizationRepository({ connectionString })
+  const authorizationTelemetry = authorizationRequestTelemetryForCurrentScope({
+    requestId: telemetryRequestId(request),
+  })
+  const { telemetry } = authorizationTelemetry
+  telemetry.recordSessionRead()
+  let authorization: ReturnType<typeof createAuthorizationRepository> | null =
+    null
   try {
+    const session = await getAuth().api.getSession({ headers: request.headers })
+    if (!session) {
+      telemetry.setOutcome("unauthenticated")
+      throw new RouteError(
+        401,
+        "Authentication is required to access the dashboard API."
+      )
+    }
+    const connectionString = readAuthEnvironment().connectionString
+    authorization = createAuthorizationRepository({ connectionString })
+    telemetry.recordGrantRead()
     if (!(await authorization.hasCapability(session.user.id, capability))) {
+      telemetry.setOutcome("unauthorized")
       throw new RouteError(
         403,
         "You do not have permission to perform this dashboard action."
       )
     }
+    telemetry.setOutcome("allowed")
+    return { connectionString, session }
+  } catch (error) {
+    if (!(error instanceof RouteError)) telemetry.setOutcome("error")
+    throw error
   } finally {
-    await authorization.close()
+    try {
+      await authorization?.close()
+    } finally {
+      authorizationTelemetry.finish()
+    }
   }
+}
+
+async function authenticatedPlanningContext(
+  request: NextRequest,
+  capability: string
+) {
+  const { connectionString, session } = await authorizedDashboardSession(
+    request,
+    capability
+  )
   const repository = createDashboardPlanningRepository({ connectionString })
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
@@ -322,25 +357,10 @@ async function authenticatedProductionContext(
   request: NextRequest,
   capability: string
 ) {
-  const session = await getAuth().api.getSession({ headers: request.headers })
-  if (!session) {
-    throw new RouteError(
-      401,
-      "Authentication is required to access the dashboard API."
-    )
-  }
-  const connectionString = readAuthEnvironment().connectionString
-  const authorization = createAuthorizationRepository({ connectionString })
-  try {
-    if (!(await authorization.hasCapability(session.user.id, capability))) {
-      throw new RouteError(
-        403,
-        "You do not have permission to perform this dashboard action."
-      )
-    }
-  } finally {
-    await authorization.close()
-  }
+  const { connectionString, session } = await authorizedDashboardSession(
+    request,
+    capability
+  )
   const repository = createProductionShopFloorRepository({ connectionString })
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
@@ -517,7 +537,7 @@ async function savePlanningMasterEntry(
   )
 }
 
-export async function GET(request: NextRequest, context: RouteContext) {
+async function get(request: NextRequest, context: RouteContext) {
   if (!productionModuleIsEnabled()) {
     return json({ error: "Production module is temporarily disabled" }, 404)
   }
@@ -634,7 +654,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function POST(request: NextRequest, context: RouteContext) {
+async function post(request: NextRequest, context: RouteContext) {
   if (!productionModuleIsEnabled()) {
     return json({ error: "Production module is temporarily disabled" }, 404)
   }
@@ -1408,4 +1428,69 @@ function firstNumeric(...values: unknown[]) {
     if (Number.isFinite(parsed)) return parsed
   }
   return 0
+}
+
+const knownDashboardApiPaths = new Set([
+  "attendance",
+  "correction-candidates",
+  "dashboard",
+  "dashboard-refresh",
+  "dashboard-refresh-status",
+  "dashboard-state",
+  "data-entry",
+  "data-export",
+  "data-import",
+  "data-template",
+  "dispatch-approval",
+  "export-workbook",
+  "hourly-quality",
+  "machine-constraint",
+  "mark-complete",
+  "plan-override",
+  "planner-priority",
+  "production-entry/reverse",
+  "reschedule",
+  "reverse-entry",
+  "route-change",
+  "route-selection",
+  "setup-checklist",
+  "status",
+  "training",
+])
+
+function dashboardApiOperation(method: "get" | "post", path: string) {
+  const operation = knownDashboardApiPaths.has(path)
+    ? path.replaceAll(/[-/]/g, "_")
+    : "not_found"
+  return `dashboard.api.${method}.${operation}`
+}
+
+function withRequestTelemetry(
+  request: NextRequest,
+  operation: string,
+  execute: () => Promise<Response>
+) {
+  const requestId = telemetryRequestId(request)
+  return withAuthorizationRequestTelemetry({ requestId }, () =>
+    withHttpPerformanceOperation(
+      { operation, request, subsystem: "dashboard" },
+      execute
+    )
+  )
+}
+
+export async function GET(request: NextRequest, context: RouteContext) {
+  const path = (await context.params).path.join("/")
+  return withRequestTelemetry(request, dashboardApiOperation("get", path), () =>
+    get(request, context)
+  )
+}
+
+export async function POST(request: NextRequest, context: RouteContext) {
+  const path = (await context.params).path.join("/")
+  return withRequestTelemetry(
+    request,
+    dashboardApiOperation("post", path),
+    () => post(request, context)
+  )
 }
