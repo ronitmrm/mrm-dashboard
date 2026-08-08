@@ -1,6 +1,8 @@
 import { Pool } from "pg"
 import { afterAll, beforeAll, expect, test } from "vitest"
 
+import publishedChecksums from "../migrations/published-checksums.json"
+
 import { createCatalogMasterRepository } from "./catalog-masters"
 import { createCustomerRepository } from "./customers"
 import { migrateDatabase } from "./migrate"
@@ -158,6 +160,43 @@ const expectedCanonicalTables = [
 ] as const
 
 const pool = new Pool({ connectionString })
+const representativeOrganizationId = "00000000-0000-4000-8000-000000000038"
+
+async function representativeUpgradeFingerprint() {
+  const result = await pool.query<{ fingerprint: Record<string, unknown> }>(
+    `
+      SELECT jsonb_build_object(
+        'organizations', (
+          SELECT jsonb_agg(to_jsonb(source_row) ORDER BY id)
+          FROM core.organizations source_row
+          WHERE id = $1
+        ),
+        'machines', (
+          SELECT jsonb_agg(to_jsonb(source_row) ORDER BY id)
+          FROM catalog.machines source_row
+          WHERE organization_id = $1
+        ),
+        'customers', (
+          SELECT jsonb_agg(to_jsonb(source_row) ORDER BY id)
+          FROM sales.customers source_row
+          WHERE organization_id = $1
+        ),
+        'enquiries', (
+          SELECT jsonb_agg(to_jsonb(source_row) ORDER BY id)
+          FROM sales.enquiries source_row
+          WHERE organization_id = $1
+        ),
+        'candidates', (
+          SELECT jsonb_agg(to_jsonb(source_row) ORDER BY id)
+          FROM recruitment.candidates source_row
+          WHERE organization_id = $1
+        )
+      ) AS fingerprint
+    `,
+    [representativeOrganizationId]
+  )
+  return result.rows[0]!.fingerprint
+}
 
 beforeAll(async () => {
   assertDisposableLocalDatabase(connectionString)
@@ -168,6 +207,135 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.end()
+})
+
+test("a representative 0038 database upgrades without changing canonical rows", async () => {
+  await migrateDatabase({
+    connectionString,
+    through: "0038_recruitment_application_cycles.sql",
+  })
+
+  const priorHistory = await pool.query<{ checksum: string; name: string }>(`
+    SELECT name, checksum
+    FROM migration.schema_migrations
+    ORDER BY name
+  `)
+  expect(
+    Object.fromEntries(
+      priorHistory.rows.map(({ name, checksum }) => [name, checksum])
+    )
+  ).toEqual(publishedChecksums)
+
+  await pool.query(
+    `
+      INSERT INTO core.organizations (id, code, name)
+      VALUES ($1, 'UPGRADE-0038', 'Representative 0038 upgrade')
+    `,
+    [representativeOrganizationId]
+  )
+  await pool.query(
+    `
+      INSERT INTO manufacturing.production_floors (
+        id, organization_id, code, name
+      ) VALUES (
+        '00000000-0000-4000-8000-000000000039', $1, 'cnc', 'CNC'
+      )
+    `,
+    [representativeOrganizationId]
+  )
+  await pool.query(
+    `
+      INSERT INTO catalog.machines (
+        id, organization_id, machine_number, name, production_floor_id,
+        source_system, source_table, source_id, source_payload
+      ) VALUES (
+        '00000000-0000-4000-8000-000000000040', $1, 'CNC-0038',
+        'Upgrade fixture machine', '00000000-0000-4000-8000-000000000039',
+        'mrm-dashboard', 'dataEntries', 'upgrade-machine',
+        '{"_id":"upgrade-machine","entryType":"machine_master","payload":{"machineNumber":"CNC-0038","productionFloorCode":"cnc"}}'::jsonb
+      )
+    `,
+    [representativeOrganizationId]
+  )
+  await pool.query(
+    `
+      INSERT INTO sales.customers (
+        id, organization_id, customer_uid, company_name,
+        source_system, source_table, source_id
+      ) VALUES (
+        '00000000-0000-4000-8000-000000000041', $1, 'UPGRADE-CUSTOMER',
+        'Upgrade customer', 'fixture', 'customers', 'upgrade-customer'
+      )
+    `,
+    [representativeOrganizationId]
+  )
+  await pool.query(
+    `
+      INSERT INTO sales.enquiries (
+        id, organization_id, enquiry_number, customer_id, received_on,
+        source_system, source_table, source_id
+      ) VALUES (
+        '00000000-0000-4000-8000-000000000042', $1, 'UPGRADE-ENQUIRY',
+        '00000000-0000-4000-8000-000000000041', DATE '2026-08-08',
+        'fixture', 'enquiries', 'upgrade-enquiry'
+      )
+    `,
+    [representativeOrganizationId]
+  )
+  await pool.query(
+    `
+      INSERT INTO recruitment.candidates (
+        id, organization_id, name, phone,
+        source_system, source_table, source_id
+      ) VALUES (
+        '00000000-0000-4000-8000-000000000043', $1, 'Upgrade Candidate',
+        '+910038', 'fixture', 'candidates', 'upgrade-candidate'
+      )
+    `,
+    [representativeOrganizationId]
+  )
+
+  const fingerprintBefore = await representativeUpgradeFingerprint()
+  await migrateDatabase({ connectionString })
+  const fingerprintAfter = await representativeUpgradeFingerprint()
+  const preservedHistory = await pool.query<{
+    checksum: string
+    name: string
+  }>(`
+    SELECT name, checksum
+    FROM migration.schema_migrations
+    WHERE name <= '0038_recruitment_application_cycles.sql'
+    ORDER BY name
+  `)
+  const backfill = await pool.query<{
+    entry_type: string
+    source_group: string
+    source_kind: string
+    source_payload: Record<string, unknown>
+  }>(`
+    SELECT source_kind, source_group, entry_type, source_payload
+    FROM derived.dashboard_source_records
+    WHERE organization_id = '${representativeOrganizationId}'
+      AND source_id = 'upgrade-machine'
+  `)
+
+  expect(fingerprintAfter).toEqual(fingerprintBefore)
+  expect(preservedHistory.rows).toEqual(priorHistory.rows)
+  expect(backfill.rows).toEqual([
+    {
+      entry_type: "machine_master",
+      source_group: "dataEntries",
+      source_kind: "data_entry",
+      source_payload: {
+        _id: "upgrade-machine",
+        entryType: "machine_master",
+        payload: {
+          machineNumber: "CNC-0038",
+          productionFloorCode: "cnc",
+        },
+      },
+    },
+  ])
 })
 
 test("an empty database migrates into the MRMPL bounded contexts", async () => {
