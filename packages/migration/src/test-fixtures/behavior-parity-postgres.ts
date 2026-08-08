@@ -718,7 +718,7 @@ async function captureDashboardWorkflow({
   const refresh = await worker.runRefreshOnce()
   const outboxPublished = await worker.flushOutboxOnce()
   const floorStates = await Promise.all(
-    ["conventional", "cnc", "forging"].map(async (floor) => ({
+    (["conventional", "cnc", "forging"] as const).map(async (floor) => ({
       floor,
       state: await dashboard.state(organizationId, { month: "2026-08" }, floor),
     }))
