@@ -12,6 +12,12 @@ import {
   productionFloors,
   type ProductionFloorCode,
 } from "./production-floors"
+import type {
+  CoverageFacts,
+  GroupedSourceCoverage,
+  SourceCoverage,
+  SourceCoverageByFloor,
+} from "./dashboard-coverage"
 
 type JsonRecord = Record<string, unknown>
 type DashboardQueryClient = Pick<PoolClient, "query">
@@ -33,28 +39,6 @@ type GroupedSourceRow = SourceRow & {
   source_kind: "correction" | "data_entry" | "physical"
   source_group: string
 }
-
-type CoverageFacts = {
-  available: number
-  limit: number
-  returned: number
-  truncated: boolean
-}
-
-type GroupedSourceCoverage = CoverageFacts & {
-  groups: Record<string, CoverageFacts>
-  truncatedGroups: string[]
-}
-
-type SourceCoverage = {
-  corrections: CoverageFacts & {
-    truncatedGroups: string[]
-  }
-  dataEntries: GroupedSourceCoverage
-  physicalRows: GroupedSourceCoverage
-}
-
-type SourceCoverageByFloor = Record<ProductionFloorCode, SourceCoverage>
 
 type PreviousMachinePlanRow = {
   machine_plan_row: JsonRecord

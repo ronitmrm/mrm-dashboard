@@ -8,8 +8,13 @@ import {
   type CorrectionTargetRow,
   type DataEntryCorrectionRow,
 } from "./dashboard-corrections"
+import { normalizeSourceCoverage } from "./dashboard-coverage"
 import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  defaultProductionFloorCode,
+  type ProductionFloorCode,
+} from "./production-floors"
 
 type RepositoryOptions = RepositoryPoolOptions
 type JsonRecord = Record<string, unknown>
@@ -99,7 +104,7 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
     async latest(
       organizationId: string,
       filters: JsonRecord = {},
-      productionFloorCode = "conventional"
+      productionFloorCode: ProductionFloorCode = defaultProductionFloorCode
     ) {
       const result = await pool.query<{
         created_at: Date
@@ -121,7 +126,21 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
                 ELSE '{}'::jsonb
               END
             ) AS payload,
-            source_watermark,
+            jsonb_build_object(
+              'changedAt', source_watermark -> 'changedAt',
+              'sourceCoverage', COALESCE(
+                payload #> ARRAY[
+                  'productionFloorSnapshots',
+                  $2::text,
+                  'sourceCoverage'
+                ],
+                CASE
+                  WHEN $2 = 'conventional' THEN payload -> 'sourceCoverage'
+                  ELSE NULL
+                END,
+                '{}'::jsonb
+              )
+            ) AS source_watermark,
             created_at
           FROM derived.dashboard_read_models
           WHERE organization_id = $1
@@ -132,20 +151,25 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
       )
       const row = result.rows[0]
       if (!row) return null
+      const sourceCoverage = normalizeSourceCoverage(row.payload.sourceCoverage)
       return {
         ...row.payload,
         filters,
         productionFloorCode,
         readModelVersion: Number(row.version),
         snapshotCacheUpdatedAt: row.created_at.toISOString(),
-        sourceWatermark: row.source_watermark,
+        sourceCoverage,
+        sourceWatermark: {
+          ...row.source_watermark,
+          sourceCoverage,
+        },
       }
     },
 
     async state(
       organizationId: string,
       filters: JsonRecord = {},
-      productionFloorCode = "conventional",
+      productionFloorCode: ProductionFloorCode = defaultProductionFloorCode,
       knownVersion?: number
     ) {
       const result = await pool.query<{
@@ -187,7 +211,27 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
                   END
                 )
               END AS payload,
-              source_watermark, created_at
+              CASE
+                WHEN $3::bigint IS NOT NULL AND version = $3::bigint
+                  THEN NULL
+                ELSE jsonb_build_object(
+                  'changedAt', source_watermark -> 'changedAt',
+                  'sourceCoverage', COALESCE(
+                    payload #> ARRAY[
+                      'productionFloorSnapshots',
+                      $2::text,
+                      'sourceCoverage'
+                    ],
+                    CASE
+                      WHEN $2 = 'conventional'
+                        THEN payload -> 'sourceCoverage'
+                      ELSE NULL
+                    END,
+                    '{}'::jsonb
+                  )
+                )
+              END AS source_watermark,
+              created_at
             FROM derived.dashboard_read_models
             WHERE organization_id = requested.organization_id
             ORDER BY version DESC
@@ -206,22 +250,32 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
         [organizationId, productionFloorCode, knownVersion ?? null]
       )
       const row = result.rows[0]!
+      const version = row.model_version ? Number(row.model_version) : null
+      const coverage = row.model_payload
+        ? normalizeSourceCoverage(row.model_payload.sourceCoverage)
+        : null
       return {
+        coverage,
         dashboard:
           row.model_version && row.model_payload && row.model_created_at
             ? {
                 ...row.model_payload,
                 filters,
                 productionFloorCode,
-                readModelVersion: Number(row.model_version),
+                readModelVersion: version,
                 snapshotCacheUpdatedAt: row.model_created_at.toISOString(),
-                sourceWatermark: row.model_source_watermark ?? {},
+                sourceCoverage: coverage,
+                sourceWatermark: {
+                  ...(row.model_source_watermark ?? {}),
+                  sourceCoverage: coverage,
+                },
               }
             : null,
         notModified:
           knownVersion !== undefined &&
           row.model_version === String(knownVersion) &&
           row.model_payload === null,
+        productionFloorCode,
         status: row.job_status
           ? {
               attempts: row.attempts ?? 0,
@@ -242,6 +296,7 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
               startedAtMs: undefined,
               status: "idle",
             },
+        version,
       }
     },
 

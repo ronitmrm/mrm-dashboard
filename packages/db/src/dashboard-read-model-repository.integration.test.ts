@@ -119,6 +119,40 @@ describe("PostgreSQL dashboard corrections", () => {
   })
 
   it("returns one floor and omits an unchanged dashboard payload", async () => {
+    const coverage = (available: number, returned: number) => ({
+      corrections: {
+        available: 0,
+        limit: 5_000,
+        returned: 0,
+        truncated: false,
+        truncatedGroups: [],
+      },
+      dataEntries: {
+        available,
+        groups: {
+          machine_master: {
+            available,
+            limit: 1_000,
+            returned,
+            truncated: available > returned,
+          },
+        },
+        limit: 1_000,
+        returned,
+        truncated: available > returned,
+        truncatedGroups: available > returned ? ["machine_master"] : [],
+      },
+      physicalRows: {
+        available: 0,
+        groups: {},
+        limit: 0,
+        returned: 0,
+        truncated: false,
+        truncatedGroups: [],
+      },
+    })
+    const cncCoverage = coverage(1_001, 1_000)
+    const conventionalCoverage = coverage(1, 1)
     await pool.query(
       `
         INSERT INTO derived.dashboard_read_models (
@@ -130,14 +164,46 @@ describe("PostgreSQL dashboard corrections", () => {
         {
           cacheStatus: "ready",
           productionFloorSnapshots: {
-            cnc: { cacheStatus: "ready", marker: "cnc-only" },
+            cnc: {
+              cacheStatus: "ready",
+              marker: "cnc-only",
+              sourceCoverage: cncCoverage,
+            },
             conventional: {
               cacheStatus: "ready",
               marker: "conventional-only",
+              sourceCoverage: conventionalCoverage,
             },
           },
         },
-        { changedAt: "2026-07-21T12:00:00.000Z" },
+        {
+          changedAt: "2026-07-21T12:00:00.000Z",
+          sourceCoverage: conventionalCoverage,
+          sourceCoverageByFloor: {
+            cnc: cncCoverage,
+            conventional: conventionalCoverage,
+            forging: coverage(25, 25),
+          },
+        },
+      ]
+    )
+    const foreignOrganization = await pool.query<{ id: string }>(
+      `INSERT INTO core.organizations (code, name) VALUES ($1, $2) RETURNING id`,
+      [`FOREIGN-${suffix}`, `Foreign ${suffix}`]
+    )
+    await pool.query(
+      `
+        INSERT INTO derived.dashboard_read_models (
+          organization_id, version, payload, source_watermark
+        ) VALUES ($1, 99, $2, '{}'::jsonb)
+      `,
+      [
+        foreignOrganization.rows[0]!.id,
+        {
+          productionFloorSnapshots: {
+            cnc: { marker: "foreign-cnc", sourceCoverage: cncCoverage },
+          },
+        },
       ]
     )
 
@@ -167,16 +233,28 @@ describe("PostgreSQL dashboard corrections", () => {
       )
       expect(statements).toBe(1)
       expect(changed).toMatchObject({
+        coverage: cncCoverage,
         dashboard: {
           filters: { month: "2026-07" },
           marker: "cnc-only",
           productionFloorCode: "cnc",
           readModelVersion: 7,
+          sourceCoverage: cncCoverage,
+          sourceWatermark: {
+            changedAt: "2026-07-21T12:00:00.000Z",
+            sourceCoverage: cncCoverage,
+          },
         },
         notModified: false,
+        productionFloorCode: "cnc",
         status: { isRefreshing: false, status: "idle" },
+        version: 7,
       })
       expect(changed.dashboard).not.toHaveProperty("productionFloorSnapshots")
+      expect(changed.dashboard?.sourceWatermark).not.toHaveProperty(
+        "sourceCoverageByFloor"
+      )
+      expect(packetBytes[0]).toBeLessThanOrEqual(2 * 1024 * 1024)
 
       const unchanged = await countedRepository.state(
         organizationId,
@@ -186,11 +264,27 @@ describe("PostgreSQL dashboard corrections", () => {
       )
       expect(statements).toBe(2)
       expect(unchanged).toMatchObject({
+        coverage: null,
         dashboard: null,
         notModified: true,
+        productionFloorCode: "cnc",
         status: { isRefreshing: false, status: "idle" },
+        version: 7,
       })
       expect(packetBytes[1]).toBeLessThanOrEqual(1024)
+
+      const futureKnownVersion = await countedRepository.state(
+        organizationId,
+        {},
+        "cnc",
+        99
+      )
+      expect(futureKnownVersion).toMatchObject({
+        dashboard: { marker: "cnc-only", readModelVersion: 7 },
+        notModified: false,
+        version: 7,
+      })
+      expect(statements).toBe(3)
     } finally {
       await countedPool.end()
     }

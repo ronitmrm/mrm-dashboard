@@ -26,6 +26,13 @@ export { createCommercialWorkflowRepository } from "./commercial-workflow"
 export { createCustomerRepository } from "./customers"
 export { createDashboardPlanningRepository } from "./dashboard-planning"
 export {
+  normalizeSourceCoverage,
+  type CoverageFacts,
+  type GroupedSourceCoverage,
+  type SourceCoverage,
+  type SourceCoverageByFloor,
+} from "./dashboard-coverage"
+export {
   buildCanonicalDashboardReadModel,
   readCanonicalDashboardSource,
 } from "./dashboard-read-model"

@@ -30,6 +30,7 @@
     ".": "./src/index.ts",
     "./dashboard-analysis": "./src/legacy-dashboard-analysis.ts",
     "./dashboard-corrections": "./src/dashboard-corrections.ts",
+    "./dashboard-coverage": "./src/dashboard-coverage.ts",
     "./dashboard-domain": "./src/dashboard-domain.ts",
     "./planning-rules": "./src/planning-rules.ts",
     "./pricing-calculation": "./src/pricing-calculation.ts",

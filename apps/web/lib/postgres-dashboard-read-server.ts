@@ -116,22 +116,44 @@ export async function readPostgresDashboardState(
       const productionFloorCode = normalizeProductionFloorCode(
         requestedProductionFloor
       )
-      const { dashboard, notModified, status } = await repository.state(
+      const state = await repository.state(
         organizationId,
         filters,
         productionFloorCode,
         knownVersion
       )
-      if (notModified) return { dashboard: null, notModified: true, status }
-      if (dashboard) return { dashboard, status }
+      const envelope = {
+        productionFloorCode,
+        status: state.status,
+        version: state.version,
+      }
+      if (state.notModified) {
+        return {
+          ...envelope,
+          coverage: null,
+          dashboard: null,
+          notModified: true,
+        }
+      }
+      if (state.dashboard) {
+        return {
+          ...envelope,
+          coverage: state.coverage,
+          dashboard: state.dashboard,
+          notModified: false,
+        }
+      }
       await repository.requestRefresh(organizationId)
       return {
+        ...envelope,
+        coverage: null,
         dashboard: {
           cacheStatus: "missing",
           filters,
           productionFloorCode,
         },
-        status: { ...status, isRefreshing: true },
+        notModified: false,
+        status: { ...state.status, isRefreshing: true },
       }
     }
   )

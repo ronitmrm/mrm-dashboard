@@ -501,6 +501,7 @@ function usePostgresDashboardPage(
         const nextData = mergeDashboardStateResponse(
           latestDataRef.current,
           body,
+          new URL(url, window.location.origin).searchParams.get("floor"),
         );
         latestDataRef.current = nextData;
         setResult({ data: nextData, url });
