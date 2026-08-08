@@ -962,13 +962,35 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     expect(
       salesQueue.filter((row) => row.enquiryId === enquiry.id)
     ).toHaveLength(2)
-    await expect(
-      repository.listSalesMatchCandidates(commercialLine.id)
-    ).resolves.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ quoteItemId: quote.rows[0]!.id }),
-      ])
-    )
+    const candidatePool = new Pool({ connectionString })
+    const originalQuery = candidatePool.query.bind(candidatePool)
+    let candidateStatements = 0
+    candidatePool.query = ((...args: Parameters<typeof candidatePool.query>) => {
+      candidateStatements += 1
+      return originalQuery(...args)
+    }) as typeof candidatePool.query
+    const candidateRepository = createCommercialWorkflowRepository({
+      pool: candidatePool,
+    })
+    try {
+      const candidates =
+        await candidateRepository.listSalesMatchCandidatesForItems([
+          commercialLine.id,
+          technicalLine.id,
+        ])
+
+      expect(candidateStatements).toBe(1)
+      for (const line of [commercialLine, technicalLine]) {
+        expect(candidates.get(line.id)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ quoteItemId: quote.rows[0]!.id }),
+          ])
+        )
+      }
+    } finally {
+      await candidateRepository.close()
+      await candidatePool.end()
+    }
     expect(
       (await repository.listTechnicalReviewQueue(organizationCode)).some(
         (row) => row.enquiryId === enquiry.id

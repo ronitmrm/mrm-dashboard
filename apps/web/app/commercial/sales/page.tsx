@@ -59,16 +59,9 @@ export default async function SalesPage() {
       workflow.listSalesQuoteReadyQueue("MRMPL"),
       workflow.listSalesSentQuoteQueue("MRMPL"),
     ])
-    const candidateEntries = await Promise.all(
-      clarificationTasks.map(
-        async (task) =>
-          [
-            task.enquiryItemId,
-            await workflow.listSalesMatchCandidates(task.enquiryItemId),
-          ] as const
-      )
+    const candidates = await workflow.listSalesMatchCandidatesForItems(
+      clarificationTasks.map((task) => task.enquiryItemId)
     )
-    const candidates = new Map(candidateEntries)
     const organizationId = enquiries[0]?.organizationId
     const today = new Date().toISOString().slice(0, 10)
 

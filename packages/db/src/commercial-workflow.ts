@@ -1869,6 +1869,95 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
       }))
     },
 
+    async listSalesMatchCandidatesForItems(
+      enquiryItemIds: readonly string[]
+    ) {
+      const grouped = new Map<
+        string,
+        Array<{
+          customerPartCode: string | null
+          description: string
+          itemType: string | null
+          productId: string
+          productUid: string
+          quoteItemId: string
+          quoteNumber: string
+          revision: number
+          status: string
+          unitPrice: number
+        }>
+      >()
+      if (enquiryItemIds.length === 0) return grouped
+
+      const candidates = await pool.query<{
+        customer_part_code: string | null
+        description: string
+        enquiry_item_id: string
+        item_type: string | null
+        product_id: string
+        product_uid: string
+        quote_item_id: string
+        quote_number: string
+        revision: number
+        status: string
+        unit_price: string
+      }>(
+        `
+          WITH requested AS (
+            SELECT enquiry_item.id, enquiry.customer_id,
+              enquiry.organization_id, enquiry_item.customer_part_code
+            FROM sales.enquiry_items enquiry_item
+            JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+            WHERE enquiry_item.id = ANY($1::uuid[])
+          )
+          SELECT requested.id::text AS enquiry_item_id,
+            candidate.quote_item_id, candidate.quote_number,
+            candidate.revision, candidate.customer_part_code,
+            candidate.unit_price, candidate.status, candidate.product_id,
+            candidate.product_uid, candidate.description, candidate.item_type
+          FROM requested
+          CROSS JOIN LATERAL (
+            SELECT quote.id AS quote_item_id, quote.quote_number,
+              quote.revision, quote.customer_part_code,
+              quote.unit_price::text, quote.status,
+              item.id AS product_id, item.uid AS product_uid,
+              item.description, item.item_type
+            FROM sales.quote_items quote
+            JOIN catalog.items item ON item.id = quote.item_id
+            WHERE quote.organization_id = requested.organization_id
+              AND quote.customer_id = requested.customer_id
+              AND quote.status IN ('Draft', 'Sent', 'Accepted', 'Ordered')
+            ORDER BY
+              CASE WHEN lower(btrim(coalesce(quote.customer_part_code, '')))
+                = lower(btrim(requested.customer_part_code)) THEN 0 ELSE 1 END,
+              quote.sent_at DESC NULLS LAST, quote.updated_at DESC,
+              quote.id DESC
+            LIMIT 50
+          ) candidate
+          ORDER BY requested.id, candidate.quote_item_id
+        `,
+        [enquiryItemIds]
+      )
+
+      for (const row of candidates.rows) {
+        const rows = grouped.get(row.enquiry_item_id) ?? []
+        rows.push({
+          customerPartCode: row.customer_part_code,
+          description: row.description,
+          itemType: row.item_type,
+          productId: row.product_id,
+          productUid: row.product_uid,
+          quoteItemId: row.quote_item_id,
+          quoteNumber: row.quote_number,
+          revision: row.revision,
+          status: row.status,
+          unitPrice: Number(row.unit_price),
+        })
+        grouped.set(row.enquiry_item_id, rows)
+      }
+      return grouped
+    },
+
     async listTechnicalReviewQueue(organizationCode: string) {
       const result = await pool.query<{
         company_name: string
