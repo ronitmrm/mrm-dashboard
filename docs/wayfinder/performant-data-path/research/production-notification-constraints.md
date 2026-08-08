@@ -1,72 +1,188 @@
 # Production notification constraints
 
-Research date: 2026-08-07
+Research date: 2026-08-08
+
+Repository snapshot inspected: `b9480ba113011e3c996b4804c836072608760474`
 
 ## Answer
 
-The repository does **not** establish a production database or hosted-worker topology. It establishes only a non-authoritative Neon staging topology; production promotion is unperformed and the continuous worker host is still a delivery gate.
+PostgreSQL `LISTEN`/`NOTIFY` is suitable only as a disposable wake-up hint over
+the durable refresh-job table. A listener needs its own direct, TLS-verified
+PostgreSQL session in a continuously running worker. The current repository
+does not provide that session, its direct URL, or its production host.
 
-The notification design is nevertheless constrained: a PostgreSQL `LISTEN` consumer needs a dedicated, direct TLS connection owned by a continuously running worker. It cannot use the existing Neon pooled worker URL. Notifications must remain disposable wake-up hints over the durable refresh-job table, with reconnect, re-registration, state reconciliation, and periodic polling covering every lost-session case.
+Session loss is normal: PostgreSQL clears registrations when a session ends;
+Neon suspension and compute failover can close sessions; and `pg` reports idle
+disconnects through client events. Recovery must create a new client, commit
+`LISTEN`, reconcile durable work, and retain a periodic safety sweep.
+
+## Source verification ledger
+
+All external sources below are first-party and were retrieved on 2026-08-08.
+
+| Surface                       | Primary source                                                                                | Version or freshness                                 |
+| ----------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| PostgreSQL listener semantics | [`LISTEN`](https://www.postgresql.org/docs/current/sql-listen.html)                           | PostgreSQL 18.4 current docs                         |
+| PostgreSQL delivery semantics | [`NOTIFY`](https://www.postgresql.org/docs/current/sql-notify.html)                           | PostgreSQL 18.4 current docs                         |
+| Neon pooled versus direct     | [Choosing a connection method](https://neon.com/docs/connect/choose-connection)               | live Neon docs                                       |
+| Neon PgBouncer limits         | [Connection pooling](https://neon.com/docs/connect/connection-pooling)                        | live Neon docs                                       |
+| Neon suspension               | [Compute lifecycle](https://neon.com/docs/introduction/compute-lifecycle)                     | live Neon docs                                       |
+| Neon failover                 | [High availability](https://neon.com/docs/introduction/high-availability)                     | live Neon docs                                       |
+| `pg` disconnect events        | [`pg.Client` API](https://node-postgres.com/apis/client)                                      | live node-postgres docs; repository pins `pg` 8.22.0 |
+| Vercel invocation lifetime    | [Function maximum duration](https://vercel.com/docs/functions/configuring-functions/duration) | updated 2026-07-01                                   |
 
 ## Confirmed repository facts
 
-- PostgreSQL 16+ is the canonical datastore. Web writes enqueue durable refresh work transactionally, and the worker owns read-model jobs. PostgreSQL remains authoritative; Redis is disposable acceleration ([ADR-0005](../../../adr/0005-unified-postgresql-foundation.md), [ADR-0006](../../../adr/0006-better-auth-redis-runtime.md)).
-- The only managed topology recorded here is **staging**, on Neon in a `us-east` region class. It is explicitly non-authoritative, and production promotion requires separate approval ([managed staging contract](../../../../config/managed-staging.json)).
-- Staging declares 0.25–1 compute units, provider-default suspension, worker role connection limit `4`, worker runtime pool maximum `2`, and minimum connection headroom `30%` ([managed staging contract](../../../../config/managed-staging.json)).
-- The managed launcher currently gives both web and worker provider-pooled Neon URLs. Migration alone is forced to a direct URL ([staging runbook](../../../neon-upstash-staging-runbook.md)). Runtime validation likewise permits either a direct or pooled worker endpoint, while bounding the worker pool at `2` by default ([PostgreSQL runtime](../../../../packages/db/src/postgres-runtime.ts), [worker runtime](../../../../packages/runtime/src/managed-runtime.ts)).
-- No hosted continuous-worker platform or accountable runtime owner has been selected. A source-controlled Vercel web deployment and a separately selected continuous-worker host remain open delivery gates ([final staging acceptance](../../../neon-upstash-final-acceptance-2026-07-22.md)). No committed Vercel, Railway, Render, Fly, container, or CI deployment descriptor currently resolves that gap.
+- PostgreSQL 16+ is authoritative. Web writes enqueue durable refresh work in
+  the canonical transaction, while the worker owns read-model jobs. Redis is
+  disposable acceleration, not work authority
+  ([ADR-0005](../../../adr/0005-unified-postgresql-foundation.md),
+  [ADR-0006](../../../adr/0006-better-auth-redis-runtime.md)).
+- The only recorded managed topology is non-authoritative Neon staging. Its
+  declared bounds are 0.25–1 compute units, provider-default suspension,
+  worker-role connection limit `4`, worker runtime pool maximum `2`, and 30%
+  minimum connection headroom
+  ([managed staging contract](../../../../config/managed-staging.json)).
+- The managed launcher asks Neon for pooled web and worker URLs and a direct
+  migration URL. Runtime validation allows the worker URL to be pooled, and
+  there is no listener-specific direct URL
+  ([managed launcher](../../../../scripts/dev-managed.mjs),
+  [PostgreSQL runtime](../../../../packages/db/src/postgres-runtime.ts),
+  [worker runtime](../../../../packages/runtime/src/managed-runtime.ts)).
+- No application code issues `LISTEN`, `NOTIFY`, or `pg_notify` at the inspected
+  snapshot. The continuous worker polls every 1 second by default, while the
+  managed contract requires a 30-second safety sweep and no more than four idle
+  sweep statements per minute
+  ([worker command](../../../../packages/runtime/src/commands/run-worker.ts),
+  [web environment example](../../../../apps/web/.env.example),
+  [managed staging contract](../../../../config/managed-staging.json)).
+- No hosted continuous-worker platform is selected. Source-controlled Vercel
+  web deployment and a separate continuous-worker owner remain delivery gates
+  ([staging runbook](../../../neon-upstash-staging-runbook.md),
+  [final staging acceptance](../../../neon-upstash-final-acceptance-2026-07-22.md)).
 
-## Confirmed PostgreSQL and provider constraints
+## Confirmed PostgreSQL semantics
 
-### Session and endpoint
+- `LISTEN` registers only the current database session; PostgreSQL clears the
+  registration when that session ends. `LISTEN` takes effect at commit.
+- Race-safe startup order is: commit `LISTEN`, inspect canonical state in a new
+  transaction, then depend on later notifications. Initial notifications may
+  duplicate state already observed.
+- A `NOTIFY` inside a transaction is delivered only if that transaction
+  commits. Rollback emits nothing. Identical channel/payload notifications in
+  one transaction may be folded together, so notification count cannot define
+  work.
+- Notifications are delivered only between transactions. A listener should
+  not hold a long transaction because delivery is deferred and notification
+  queue cleanup can be blocked.
+- Payloads are shorter than 8,000 bytes under default configuration. PostgreSQL
+  recommends storing larger information in a table and sending its key.
+  `pg_notification_queue_usage()` exposes queue occupancy.
 
-- `LISTEN` is session-scoped; registrations disappear when the session ends. Neon explicitly requires a **direct** connection for `LISTEN`/`NOTIFY`; its pooled endpoint uses PgBouncer transaction mode and does not support those session features ([PostgreSQL `LISTEN`](https://www.postgresql.org/docs/current/sql-listen.html), [Neon connection selection](https://neon.com/docs/connect/choose-connection), [Neon pooling](https://neon.com/docs/connect/connection-pooling)).
-- Therefore the existing `WORKER_DATABASE_URL` produced by the staging launcher is unsuitable for the listener. Planning must either add a separately named direct listener URL using the worker role or deliberately move the worker to a direct endpoint. Credentials must remain distinct from the migration role.
-- Every worker replica that listens consumes a persistent direct session. Replica count, ordinary query-pool demand, provider backend pooling, role limits, and the repository's 30% headroom threshold must be budgeted together. Conservatively, one listener plus the current two-client worker pool exposes three application-side worker connections; against the locally declared limit of four, that leaves only 25% headroom. Actual PgBouncer-to-backend usage must be measured before using that arithmetic as a production capacity claim.
+These claims are directly specified by PostgreSQL's
+[`LISTEN`](https://www.postgresql.org/docs/current/sql-listen.html) and
+[`NOTIFY`](https://www.postgresql.org/docs/current/sql-notify.html) references.
 
-### Delivery semantics
+## Confirmed Neon constraints
 
-- `LISTEN` takes effect only at commit. PostgreSQL's race-safe startup order is: commit `LISTEN`, inspect canonical database state in a new transaction, then rely on later notifications. Initial notifications may duplicate state already observed ([PostgreSQL `LISTEN`](https://www.postgresql.org/docs/current/sql-listen.html)).
-- A notification sent inside the canonical write transaction is delivered only if that transaction commits. Identical channel/payload notifications within one transaction may be folded together, so the durable job table—not event count—must define work ([PostgreSQL `NOTIFY`](https://www.postgresql.org/docs/current/sql-notify.html)).
-- Payloads are under 8,000 bytes by default. They should contain only a bounded lookup key such as organization ID; canonical work and state remain in tables. A long transaction in a listening session can prevent notification-queue cleanup, so the dedicated listener must remain outside long transactions. Queue usage is observable with `pg_notification_queue_usage()` ([PostgreSQL `NOTIFY`](https://www.postgresql.org/docs/current/sql-notify.html)).
+- Neon pooled endpoints contain `-pooler` and use PgBouncer transaction mode.
+  Neon explicitly lists `LISTEN`/`NOTIFY` as unsupported on pooled connections.
+  A stable listener therefore requires a direct endpoint
+  ([connection selection](https://neon.com/docs/connect/choose-connection),
+  [pooling](https://neon.com/docs/connect/connection-pooling)).
+- A direct listener consumes a persistent PostgreSQL connection bounded by
+  `max_connections` and any SQL role connection limit. One listener plus the
+  repository's two-client worker pool exposes up to three concurrent
+  application-side worker connections. Against the declared role limit of
+  four, that is only 25% nominal headroom; actual direct and PgBouncer backend
+  use must be measured before treating this as production capacity.
+- Neon documents scale-to-zero after a period without active queries. When a
+  compute suspends, inactive connections close; session state including
+  `LISTEN`/`NOTIFY` registrations is lost. A later connection activates the
+  compute ([compute lifecycle](https://neon.com/docs/introduction/compute-lifecycle)).
+- Neon compute recovery preserves the connection string but can interrupt
+  availability for seconds to minutes depending on failure class. Neon
+  explicitly requires applications to handle brief disconnections and
+  reconnect. Session-specific state does not survive failover
+  ([high availability](https://neon.com/docs/introduction/high-availability)).
 
-### Disconnects, suspension, and hosting
+## Confirmed `pg` and Vercel constraints
 
-- Neon may suspend an inactive compute under its scale-to-zero policy. Suspension closes sessions and loses `LISTEN` registrations; connecting again activates the compute. The provider docs do not establish whether a bare idle listener prevents this project's configured suspension, so that behavior requires an environment test rather than an assumption ([Neon compute lifecycle](https://neon.com/docs/introduction/compute-lifecycle)).
-- The `pg` client documents that long-lived clients eventually disconnect because of network partitions, backend crashes, failovers, and similar events, exposing `error` and `end` events ([node-postgres Client API](https://node-postgres.com/apis/client)). The listener must reconnect with bounded backoff and jitter, commit `LISTEN` again, reconcile durable jobs, and resume waiting.
-- A Vercel Function is terminated after its configured maximum duration. Therefore, if Vercel remains the web host, placing the persistent listener inside a web function would not provide continuous ownership; this is an inference from Vercel's runtime contract, not evidence that production is deployed there ([Vercel function duration](https://vercel.com/docs/functions/configuring-functions/duration)).
+- The repository pins `pg` 8.22.0. Its `Client` API documents that a long-lived
+  idle client will eventually disconnect because of network partitions,
+  backend crashes, failovers, and similar events. It emits `error` for idle
+  connection failures and emits `end` once on disconnect; notifications arrive
+  through the `notification` event
+  ([runtime package](../../../../packages/runtime/package.json),
+  [`pg.Client` API](https://node-postgres.com/apis/client)).
+- The API does not document automatic restoration of `LISTEN` registrations.
+  Therefore reconnect, re-registration, and durable reconciliation remain
+  application responsibilities. Handling both `error` and `end` must be
+  idempotent; the primary docs do not promise their ordering for every failure.
+- Vercel terminates a Function when its configured maximum duration expires.
+  Current documented limits are finite even with the 30-minute extended-duration
+  beta. A request-serving Function therefore cannot own an indefinite listener
+  ([Vercel duration](https://vercel.com/docs/functions/configuring-functions/duration)).
+  This is a platform-contract inference, not evidence that production is
+  deployed on Vercel.
 
 ## Unknown production facts
 
-These cannot be inferred from staging credentials, local CLI linkage, or Vercel-oriented repository guidance:
+The following are not established by staging credentials, repository linkage,
+or the provider docs:
 
-- production PostgreSQL provider, project, branch, region, plan, compute size, and scale-to-zero policy;
-- production direct-endpoint availability and the worker role's effective direct/PgBouncer connection limits;
-- continuous-worker hosting platform, process lifetime, replica count, restart policy, health checks, deploy draining, region, and outbound TCP policy;
-- whether worker queries remain pooled while the listener uses a separate direct URL;
-- provider maintenance/failover behavior actually observed by this client and hosting pair;
-- production alert ownership and thresholds for listener health and connection headroom.
+- production PostgreSQL provider, project, branch, region, plan, compute size,
+  scale-to-zero setting, and direct-endpoint policy;
+- whether a passive `LISTEN` registration affects Neon's inactivity timer in
+  the chosen plan; verify suspension behavior instead of assuming it;
+- production worker role limits, effective PgBouncer backend use, intended
+  replica count, and measured connection headroom;
+- continuous-worker host, process lifetime, restart policy, deploy draining,
+  health checks, region, and outbound TCP policy;
+- whether ordinary worker queries stay pooled while a distinct direct URL owns
+  the listener;
+- observed reconnect behavior across maintenance, failover, suspension, and
+  network interruption for the selected database/host pair;
+- alert ownership and thresholds for listener health and connection headroom.
 
-These are cutover inputs. The staging topology must not be relabeled as production evidence.
+These are cutover inputs. Staging topology is not production evidence.
 
-## Constraints to carry into the wake-up decision
+## Constraints for the implementation decision
 
-1. Keep the durable refresh queue as the sole work authority; notification loss may increase latency but cannot lose work.
-2. Run one listener per intended worker replica on a direct, TLS-verified worker-role URL. Reject a `-pooler` listener endpoint during startup validation.
-3. Keep the listener out of request-serving Vercel Functions and other bounded-lifetime runtimes. Select a continuously running worker host before cutover.
-4. On startup or reconnection: connect, commit `LISTEN`, inspect/drain durable jobs, then wait. Continue a bounded periodic sweep even while notifications appear healthy.
-5. Emit `pg_notify` in the same transaction that inserts refresh work. Treat its payload as a bounded routing hint and tolerate coalescing and duplicates.
-6. Reconnect on `error`/`end` with bounded exponential backoff plus jitter. Re-register and reconcile after every new session; never assume session state survived failover or suspension.
-7. Budget the dedicated direct session per replica against role/provider limits and the 30% headroom policy. Measure direct and pooled backend usage on the chosen production topology.
-8. Observe listener connected state, reconnect count, notification-to-claim latency, periodic-sweep recoveries, durable-job age, worker pool waiting, and `pg_notification_queue_usage()`.
+1. Keep the durable refresh queue as the sole work authority. Notification loss
+   may add latency but cannot lose work.
+2. Give each intended worker replica one direct, TLS-verified, worker-role
+   listener URL. Reject a `-pooler` listener endpoint at startup. Keep migration
+   credentials separate.
+3. Emit `pg_notify` in the same transaction that inserts durable refresh work.
+   Use only a bounded routing key in the payload and tolerate coalescing and
+   duplicates.
+4. On startup and every reconnect: create a fresh client, commit `LISTEN`, drain
+   or inspect durable jobs, then wait. Preserve the 30-second safety sweep.
+5. Treat `error` and `end` as one reconnect trigger with bounded exponential
+   backoff and jitter. Re-register exactly once per new session.
+6. Keep the dedicated listener outside transactions while idle and outside
+   request-serving Vercel Functions or any other bounded-lifetime runtime.
+7. Budget one direct session per replica plus query-pool demand against role and
+   provider limits and the 30% headroom requirement.
+8. Observe connected state, reconnects, notification-to-claim latency,
+   sweep-recovered work, oldest durable job, pool waiting, and
+   `pg_notification_queue_usage()`.
 
 ## Required production-like evidence
 
-- Direct listener URL accepted; pooled URL rejected.
-- Notification received only after the canonical transaction commits; rollback produces no wake-up and no durable job.
-- Listener disconnect, Neon compute restart/suspension, and worker restart each recover through re-registration plus durable reconciliation.
-- Deliberately dropped notifications are recovered by the periodic sweep without duplicate business effects.
-- Intended replica count stays within measured connection limits and headroom.
-- If web remains on Vercel, terminating/recycling web instances has no effect on listener ownership.
+- Direct listener URL accepted; `-pooler` listener URL rejected.
+- A canonical commit produces durable work and a wake-up; rollback produces
+  neither. Duplicate/coalesced notifications do not duplicate business effects.
+- Listener disconnect, compute restart/suspension, and worker restart each
+  recover by re-registering and reconciling durable jobs.
+- Deliberately lost notification is recovered by the 30-second sweep within the
+  freshness budget and the idle path stays within four sweep statements/minute.
+- Intended replica count stays within measured connection limits and 30%
+  headroom.
+- Recycling web Functions does not affect listener ownership if Vercel remains
+  the web host.
 
-Until the unknown production facts are resolved, this research supports the architectural constraints but does not authorize a production notification deployment.
+Until the unknown production facts and evidence gates are resolved, this
+research constrains the architecture but does not authorize production
+notification deployment.

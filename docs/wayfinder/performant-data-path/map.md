@@ -39,6 +39,7 @@ Relevant skills: `code-review`, `codebase-design`, `research`, `prototype`, `gri
 - Performance acceptance uses fixed statement/packet/plan/polling/freshness ceilings and p95/p99 measurements from a controlled 1-compute-unit staging benchmark; laptop timings remain diagnostic only.
 - Authorization changes take effect on the next server request across instances. Cookie caching remains disabled; only one session and one complete-grant read may be deduplicated inside a request.
 - Schema cutover promotes additive units through `0040`, `0042`, and `0043` under a write/worker freeze. Old code remains compatible; application rollback retains the schema and destructive down migrations are forbidden.
+- PostgreSQL notifications require a direct TLS worker session on a continuously running host; pooled Neon endpoints and Vercel Functions cannot own the listener. Durable jobs remain authoritative, and current staging connection headroom must be corrected before cutover.
 - Recruitment bulk commands use bounded set-based reads, writes, and audits behind one exported domain-policy interface while preserving transaction and lifecycle behavior.
 - Rollout proceeds schema-first by independently promotable subsystem, with isolated shadows, tested-artifact promotion, durable-queue recovery, and no automatic code-only rollback after incorrect canonical writes.
 
