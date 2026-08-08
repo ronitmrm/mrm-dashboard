@@ -28,6 +28,10 @@ import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  BoundedResultNotice,
+  boundedOperationalRows,
+} from "@/components/bounded-result-notice"
 
 import {
   completeFollowupAction,
@@ -46,19 +50,23 @@ export default async function SalesPage() {
   try {
     const [
       clarificationTasks,
-      enquiries,
-      followups,
+      enquiryResults,
+      followupResults,
       handoverTasks,
       quoteReadyTasks,
       sentQuoteTasks,
     ] = await Promise.all([
       workflow.listSalesClarificationQueue("MRMPL"),
-      workflow.listEnquiries("MRMPL"),
-      workflow.listFollowups("MRMPL"),
+      workflow.listEnquiries("MRMPL", 201),
+      workflow.listFollowups("MRMPL", 201),
       workflow.listSalesHandoverQueue("MRMPL"),
       workflow.listSalesQuoteReadyQueue("MRMPL"),
       workflow.listSalesSentQuoteQueue("MRMPL"),
     ])
+    const { hasMore: hasMoreEnquiries, rows: enquiries } =
+      boundedOperationalRows(enquiryResults)
+    const { hasMore: hasMoreFollowups, rows: followups } =
+      boundedOperationalRows(followupResults)
     const candidates = await workflow.listSalesMatchCandidatesForItems(
       clarificationTasks.map((task) => task.enquiryItemId)
     )
@@ -90,6 +98,7 @@ export default async function SalesPage() {
               </Link>
             </Button>
           </div>
+          <BoundedResultNotice hasMore={hasMoreEnquiries} />
         </section>
 
         <Card>
@@ -484,6 +493,7 @@ export default async function SalesPage() {
               Pending work is due when its local calendar date is today or
               earlier. Completion may chain the next reminder.
             </CardDescription>
+            <BoundedResultNotice hasMore={hasMoreFollowups} />
           </CardHeader>
           <CardContent>
             <div className="overflow-hidden rounded-3xl border">

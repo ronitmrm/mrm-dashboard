@@ -129,6 +129,35 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     }
   })
 
+  test("bounds operational enquiry and follow-up reads", async () => {
+    const enquiries = await Promise.all(
+      [0, 1].map((index) =>
+        repository.createEnquiry({
+          customerId,
+          organizationId,
+          receivedOn: `2026-08-0${index + 1}`,
+          source: "Email",
+        })
+      )
+    )
+    await Promise.all(
+      enquiries.map((enquiry, index) =>
+        repository.createFollowup({
+          dueOn: `2026-08-1${index + 1}`,
+          enquiryId: enquiry.id,
+          organizationId,
+        })
+      )
+    )
+
+    await expect(
+      repository.listEnquiries(organizationCode, 1)
+    ).resolves.toHaveLength(1)
+    await expect(
+      repository.listFollowups(organizationCode, 1)
+    ).resolves.toHaveLength(1)
+  })
+
   test("classifies imported rows with the executable Pricing match order", async () => {
     const suffix = Date.now().toString(36)
     const exactCode = `MATCH-${suffix}`

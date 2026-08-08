@@ -75,6 +75,9 @@ type ClassifiedImportRow = {
 const asTrimmed = (value: unknown) =>
   typeof value === "string" ? value.trim() : ""
 
+const boundedListLimit = (limit: number) =>
+  Math.min(Math.max(Math.floor(limit), 1), 500)
+
 const asNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
@@ -2722,7 +2725,7 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
       })
     },
 
-    async listFollowups(organizationCode: string) {
+    async listFollowups(organizationCode: string, limit = 200) {
       const result = await pool.query<{
         channel: string
         company_name: string
@@ -2751,8 +2754,9 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
             ON quote.id = followup.quote_item_id
           WHERE organization.code = $1
           ORDER BY followup.due_on, followup.created_at, followup.id
+          LIMIT $2
         `,
-        [organizationCode.trim()]
+        [organizationCode.trim(), boundedListLimit(limit)]
       )
       return result.rows.map((row) => ({
         channel: row.channel,
@@ -4261,7 +4265,7 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
       })
     },
 
-    async listEnquiries(organizationCode: string) {
+    async listEnquiries(organizationCode: string, limit = 200) {
       const result = await pool.query<{
         buyer_name: string | null
         company_name: string
@@ -4378,8 +4382,9 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
           WHERE lower(organization.code) = lower($1)
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
           ORDER BY enquiry.created_at DESC
+          LIMIT $2
         `,
-        [organizationCode.trim()]
+        [organizationCode.trim(), boundedListLimit(limit)]
       )
       return result.rows.map((row) => ({
         buyerName: row.buyer_name,
