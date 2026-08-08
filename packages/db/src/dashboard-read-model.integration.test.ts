@@ -298,6 +298,7 @@ describe("canonical PostgreSQL dashboard read model", () => {
       await client.query("BEGIN")
       try {
         await client.query("SET LOCAL enable_seqscan = off")
+        await client.query("SET LOCAL enable_sort = off")
         const plan = await client.query<{ "QUERY PLAN": string }>(
           `EXPLAIN ${statements[0]!.sql}`,
           statements[0]!.parameters
@@ -315,6 +316,100 @@ describe("canonical PostgreSQL dashboard read model", () => {
       } finally {
         await client.query("ROLLBACK")
       }
+    } finally {
+      client.release()
+    }
+  })
+
+  it("transfers only six machine-plan continuity fields from prior models", async () => {
+    const continuityFields = [
+      "jcNo",
+      "machine",
+      "optionNumber",
+      "partCode",
+      "routeMachine",
+      "setupNo",
+    ]
+    const continuityRow = (floorCode: string) => ({
+      forbidden: `not-transferred-${floorCode}`,
+      jcNo: `JC-${floorCode}`,
+      machine: `M-${floorCode}`,
+      optionNumber: 2,
+      partCode: `P-${floorCode}`,
+      routeMachine: `R-${floorCode}`,
+      setupNo: 3,
+    })
+    const priorPayload = {
+      forbiddenLargeField: "x".repeat(1_000_000),
+      productionControl: {
+        machinePlanDetailRows: [continuityRow("conventional")],
+      },
+      productionFloorSnapshots: {
+        cnc: {
+          productionControl: {
+            machinePlanDetailRows: [continuityRow("cnc")],
+          },
+        },
+        forging: {
+          productionControl: {
+            machinePlanDetailRows: [continuityRow("forging")],
+          },
+        },
+      },
+    }
+    await pool.query(
+      `
+        INSERT INTO derived.dashboard_read_models (
+          organization_id, version, payload, source_watermark
+        ) VALUES ($1, 1, $2, '{}'::jsonb)
+      `,
+      [organizationId, priorPayload]
+    )
+
+    const client = await pool.connect()
+    const priorReads: Array<{
+      parameters?: unknown[]
+      responseBytes: number
+      rows: unknown[]
+      sql: string
+    }> = []
+    const measuredClient = {
+      query: async (sql: string, parameters?: unknown[]) => {
+        const result = await client.query(sql, parameters)
+        if (sql.includes("derived.dashboard_read_models")) {
+          priorReads.push({
+            parameters,
+            responseBytes: Buffer.byteLength(JSON.stringify(result.rows)),
+            rows: result.rows,
+            sql,
+          })
+        }
+        return result
+      },
+    }
+
+    try {
+      await buildCanonicalDashboardReadModel(measuredClient as never, {
+        organizationId,
+      })
+      expect(priorReads).toHaveLength(1)
+      const priorRead = priorReads[0]!
+      expect(priorRead.sql.trimStart()).not.toMatch(/^SELECT\s+payload/i)
+      expect(priorRead.parameters).toContainEqual(continuityFields)
+      expect(priorRead.responseBytes).toBeLessThan(2048)
+      expect(priorRead.rows).toEqual(
+        ["conventional", "cnc", "forging"].map((floorCode) => ({
+          machine_plan_row: {
+            jcNo: `JC-${floorCode}`,
+            machine: `M-${floorCode}`,
+            optionNumber: 2,
+            partCode: `P-${floorCode}`,
+            routeMachine: `R-${floorCode}`,
+            setupNo: 3,
+          },
+          production_floor_code: floorCode,
+        }))
+      )
     } finally {
       client.release()
     }
