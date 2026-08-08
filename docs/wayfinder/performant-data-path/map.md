@@ -41,6 +41,7 @@ Relevant skills: `code-review`, `codebase-design`, `research`, `prototype`, `gri
 - Schema cutover promotes additive units through `0040`, `0042`, and `0043` under a write/worker freeze. Old code remains compatible; application rollback retains the schema and destructive down migrations are forbidden.
 - PostgreSQL notifications require a direct TLS worker session on a continuously running host; pooled Neon endpoints and Vercel Functions cannot own the listener. Durable jobs remain authoritative, and current staging connection headroom must be corrected before cutover.
 - Dashboard refresh atomically publishes one organization version containing three isolated floor snapshots from bounded canonical sources; delivery returns one floor, coverage is per-category/per-floor, and prior-state reads are restricted to six machine-plan fields.
+- Refresh wake-up uses commit-scoped `mrm_dashboard_refresh` hints over the durable queue. A direct-session listener always reconciles after `LISTEN`; a 30-second two-probe sweep limits idle traffic to four statements/minute.
 - Recruitment bulk commands use bounded set-based reads, writes, and audits behind one exported domain-policy interface while preserving transaction and lifecycle behavior.
 - Rollout proceeds schema-first by independently promotable subsystem, with isolated shadows, tested-artifact promotion, durable-queue recovery, and no automatic code-only rollback after incorrect canonical writes.
 
