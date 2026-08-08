@@ -1,7 +1,7 @@
 ---
 title: Preserve Business Behavior While Adopting the Performant Data Path
 label: wayfinder:map
-status: open
+status: resolved
 tracker: local-markdown
 ---
 
@@ -31,6 +31,10 @@ Standing constraints:
 - ADR-0006 governs authorization until explicitly amended.
 
 Relevant skills: `code-review`, `codebase-design`, `research`, `prototype`, `grilling`, and `domain-modeling`.
+
+## Resolution
+
+The decision route is complete. Execute the [canonical implementation sequence](./implementation-sequence.md) through its eight review boundaries; the listed blockers and evidence gates, not the presence of earlier candidate commits, determine acceptance.
 
 ## Decisions so far
 
