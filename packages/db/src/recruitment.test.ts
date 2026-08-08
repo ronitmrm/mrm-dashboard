@@ -90,7 +90,13 @@ describe("assignEmployee", () => {
       if (statement.includes("lower(combined.vacancy_code)")) {
         return {
           rowCount: 1,
-          rows: [{ post_id: combinedPostId, target_code: "cmb-1" }],
+          rows: [
+            {
+              post_id: combinedPostId,
+              target_code: "cmb-1",
+              target_type: "combined",
+            },
+          ],
         }
       }
       if (statement.includes("lower(post_code) AS target_code")) {

@@ -120,4 +120,225 @@ describe("PostgreSQL recruitment bulk operations", () => {
       await trackedPool.end()
     }
   })
+
+  test("applies a one-hundred-row employee workbook with bounded statements", async () => {
+    const suffix = randomUUID()
+    const organization = await pool.query<{ id: string }>(
+      `
+        INSERT INTO core.organizations (code, name)
+        VALUES ($1, 'Employee Bulk Test')
+        RETURNING id
+      `,
+      [`EMP-BULK-${suffix}`]
+    )
+    const organizationId = organization.rows[0]!.id
+    const department = await pool.query<{ id: string }>(
+      `
+        INSERT INTO recruitment.departments (
+          organization_id, code, name, source_system, source_table, source_id
+        )
+        VALUES ($1, $2, 'Bulk Department', 'test', 'departments', $2)
+        RETURNING id
+      `,
+      [organizationId, `DEP-${suffix}`]
+    )
+    const designation = await pool.query<{ id: string }>(
+      `
+        INSERT INTO recruitment.designations (
+          organization_id, code, name, source_system, source_table, source_id
+        )
+        VALUES ($1, $2, 'Bulk Designation', 'test', 'designations', $2)
+        RETURNING id
+      `,
+      [organizationId, `DES-${suffix}`]
+    )
+    const combinedRole = await pool.query<{ id: string }>(
+      `
+        INSERT INTO recruitment.combined_roles (
+          organization_id, name, vacancy_code, source_system, source_table,
+          source_id
+        )
+        VALUES ($1, 'Bulk Combined Role', $2, 'test', 'combined_roles', $2)
+        RETURNING id
+      `,
+      [organizationId, `CMB-${suffix}`]
+    )
+    const combinedRoleId = combinedRole.rows[0]!.id
+    const posts = await pool.query<{ id: string; post_code: string }>(
+      `
+        WITH inserted AS (
+          INSERT INTO recruitment.posts (
+            organization_id, department_id, designation_id,
+            combined_role_id, vacancy_number, post_code, vacancy_code,
+            source_system, source_table, source_id
+          )
+          SELECT $1, $2, $3,
+            CASE WHEN post_number > 100 THEN $4::uuid ELSE NULL END,
+            post_number::text,
+            $5 || '-' || lpad(post_number::text, 3, '0'),
+            $5 || '-' || lpad(post_number::text, 3, '0'),
+            'test', 'posts', $6 || ':' || post_number
+          FROM generate_series(1, 102) AS post_number
+          RETURNING id, post_code
+        )
+        SELECT id, post_code FROM inserted ORDER BY post_code
+      `,
+      [
+        organizationId,
+        department.rows[0]!.id,
+        designation.rows[0]!.id,
+        combinedRoleId,
+        `POST-${suffix}`,
+        `post-${suffix}`,
+      ]
+    )
+    await pool.query(
+      `
+        INSERT INTO recruitment.combined_role_posts (
+          combined_role_id, post_id, is_primary
+        )
+        VALUES ($1, $2, true), ($1, $3, false)
+      `,
+      [combinedRoleId, posts.rows[100]!.id, posts.rows[101]!.id]
+    )
+
+    const trackedPool = new Pool({ connectionString, max: 1 })
+    let statementCount = 0
+    trackedPool.on("connect", (client) => {
+      const originalQuery = client.query.bind(client)
+      client.query = ((...args: Parameters<typeof client.query>) => {
+        statementCount += 1
+        return originalQuery(...args)
+      }) as typeof client.query
+    })
+    const repository = createRecruitmentRepository({ pool: trackedPool })
+
+    try {
+      const single = await repository.bulkAssignEmployees({
+        assignments: [
+          {
+            employeeCode: `EMP-1-${suffix}`,
+            employeeEvent: "Joined",
+            employeeName: "Single Employee",
+            rowNumber: 2,
+            targetCode: posts.rows[0]!.post_code,
+            targetType: "individual",
+          },
+        ],
+        organizationId,
+      })
+      const singleStatementCount = statementCount
+      statementCount = 0
+      const bulk = await repository.bulkAssignEmployees({
+        assignments: [
+          ...posts.rows.slice(1, 100).map((post, index) => ({
+            employeeCode: `EMP-${index + 2}-${suffix}`,
+            employeeEvent: "Joined",
+            employeeName: `Employee ${index + 2}`,
+            rowNumber: index + 2,
+            targetCode: post.post_code,
+            targetType: "individual" as const,
+          })),
+          {
+            employeeCode: `EMP-CMB-${suffix}`,
+            employeeEvent: "Joined",
+            employeeName: "Combined Employee",
+            rowNumber: 101,
+            targetCode: `CMB-${suffix}`,
+            targetType: "combined" as const,
+          },
+        ],
+        organizationId,
+      })
+      const bulkStatementCount = statementCount
+
+      expect(single).toEqual({ assignmentCount: 1, updatedPostCount: 1 })
+      expect(bulk).toEqual({ assignmentCount: 100, updatedPostCount: 101 })
+      expect(singleStatementCount).toBe(5)
+      expect(bulkStatementCount).toBe(6)
+      const stored = await pool.query<{ count: string }>(
+        `
+          SELECT count(*)::text AS count
+          FROM recruitment.posts
+          WHERE organization_id = $1 AND status = 'Occupied'
+        `,
+        [organizationId]
+      )
+      const audits = await pool.query<{ count: string }>(
+        `
+          SELECT count(*)::text AS count
+          FROM audit.events
+          WHERE organization_id = $1
+            AND event_type = 'recruitment.employee.occupied'
+        `,
+        [organizationId]
+      )
+      expect(Number(stored.rows[0]!.count)).toBe(102)
+      expect(Number(audits.rows[0]!.count)).toBe(102)
+
+      const beforeFailure = await pool.query<{
+        employee_code: string | null
+        employee_name: string | null
+        row_version: string
+        status: string
+      }>(
+        `
+          SELECT employee_code, employee_name, row_version::text, status
+          FROM recruitment.posts
+          WHERE id = $1
+        `,
+        [posts.rows[0]!.id]
+      )
+      await expect(
+        repository.bulkAssignEmployees({
+          assignments: [
+            {
+              employeeEvent: "Removed",
+              rowNumber: 202,
+              targetCode: posts.rows[0]!.post_code,
+              targetType: "individual",
+            },
+            {
+              employeeCode: `EMP-BAD-${suffix}`,
+              employeeEvent: "Joined",
+              employeeName: "Invalid Employee",
+              rowNumber: 203,
+              targetCode: `MISSING-${suffix}`,
+              targetType: "individual",
+            },
+          ],
+          organizationId,
+        })
+      ).rejects.toThrow(
+        `Individual Posts row 203: MISSING-${suffix} is not an available individual post.`
+      )
+      const afterFailure = await pool.query<{
+        employee_code: string | null
+        employee_name: string | null
+        row_version: string
+        status: string
+      }>(
+        `
+          SELECT employee_code, employee_name, row_version::text, status
+          FROM recruitment.posts
+          WHERE id = $1
+        `,
+        [posts.rows[0]!.id]
+      )
+      const auditsAfterFailure = await pool.query<{ count: string }>(
+        `
+          SELECT count(*)::text AS count
+          FROM audit.events
+          WHERE organization_id = $1
+            AND event_type LIKE 'recruitment.employee.%'
+        `,
+        [organizationId]
+      )
+      expect(afterFailure.rows[0]).toEqual(beforeFailure.rows[0])
+      expect(Number(auditsAfterFailure.rows[0]!.count)).toBe(102)
+    } finally {
+      await repository.close()
+      await trackedPool.end()
+    }
+  })
 })
