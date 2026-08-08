@@ -44,7 +44,7 @@ Relevant skills: `code-review`, `codebase-design`, `research`, `prototype`, `gri
 - Refresh wake-up uses commit-scoped `mrm_dashboard_refresh` hints over the durable queue. A direct-session listener always reconciles after `LISTEN`; a 30-second two-probe sweep limits idle traffic to four statements/minute.
 - Dashboard delivery retains same-floor content through hints/reconnects, distinguishes stale/refresh/error/coverage states, refetches canonically on reconnect, clears state on floor change, and uses a 60-second visible-tab safety refresh.
 - Commercial operational roots are bounded at repositories with section-specific coverage; Customer/Product pages remain 15/25 rows, Sales summaries/candidates use explicit 50-row caps, related rows stay complete for returned roots, and exports/history remain exhaustive.
-- Recruitment bulk commands use bounded set-based reads, writes, and audits behind one exported domain-policy interface while preserving transaction and lifecycle behavior.
+- Recruitment bulk commands accept 1–100 ordered inputs and use bounded set-based reads, writes, and audits behind one exported domain-policy interface; command IDs/ordinals make audit order durable while transaction and lifecycle behavior remain unchanged.
 - Rollout proceeds schema-first by independently promotable subsystem, with isolated shadows, tested-artifact promotion, durable-queue recovery, and no automatic code-only rollback after incorrect canonical writes.
 
 ## Not yet specified

@@ -106,3 +106,11 @@ _Avoid_: Freely selected interview stage.
 The preset question scores, interviewer, decision, and comments recorded for
 one recruitment interview round.
 _Avoid_: Overall score without question-level marks.
+
+**Recruitment Assignment Command**:
+One atomic, ordered request that assigns Candidates to a Recruitment Opening or applies employee transitions to Approved Posts.
+_Avoid_: Independent row updates, workbook import batch.
+
+**Recruitment Assignment Event**:
+One durable, command-ordered fact recording an application or Approved Post transition caused by a Recruitment Assignment Command.
+_Avoid_: Unordered audit row, log message.
