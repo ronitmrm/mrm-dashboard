@@ -1,8 +1,8 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { DatabaseSync } from "node:sqlite"
 
-import Database from "better-sqlite3"
 import { Pool, type PoolClient } from "pg"
 
 import {
@@ -172,7 +172,7 @@ async function upsertRows(
 
 function foreignKeyConflict(
   violation: Record<string, unknown>,
-  database: Database.Database
+  database: DatabaseSync
 ) {
   const table = String(violation.table)
   const rowId = Number(violation.rowid)
@@ -224,11 +224,10 @@ export async function stagePricingExport(
   const directory = await mkdtemp(join(tmpdir(), "mrmpl-pricing-staging-"))
   const databasePath = join(directory, "pricing_app.db")
   await writeFile(databasePath, snapshot.databaseContents)
-  const database = new Database(databasePath, {
-    fileMustExist: true,
-    readonly: true,
+  const database = new DatabaseSync(databasePath, {
+    readOnly: true,
   })
-  database.pragma("query_only = ON")
+  database.exec("PRAGMA query_only = ON")
 
   const stagedRowsByTable: Record<string, number> = {}
   const pool = new Pool({ connectionString: options.connectionString })

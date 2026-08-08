@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "database:migrate": "tsx src/commands/migrate-database.ts",
@@ -26,13 +29,11 @@
   "dependencies": {
     "@workspace/db": "workspace:*",
     "@workspace/runtime": "workspace:*",
-    "better-sqlite3": "12.2.0",
     "fflate": "0.8.3",
     "pg": "8.22.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^20",
+    "@types/node": "^22.10.0",
     "@types/pg": "8.20.0",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
