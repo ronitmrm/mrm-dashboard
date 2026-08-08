@@ -42,6 +42,54 @@
       "retryingOutbox": 1
     }
   },
+  "performance": {
+    "benchmark": {
+      "concurrency": 4,
+      "measuredSamples": 30,
+      "postgresComputeUnits": 1,
+      "warmupSamples": 5
+    },
+    "freshnessMilliseconds": {
+      "committedWriteToReadModelP95": 10000,
+      "committedWriteToReadModelP99": 30000,
+      "notificationToWorkerClaimP95": 2000,
+      "notificationToWorkerClaimP99": 5000,
+      "sseHintToCanonicalReadP95": 2000
+    },
+    "latencyMillisecondsP95": {
+      "authorizationDatabase": 50,
+      "commercialDatabaseWorkflow": 250,
+      "commercialSearchDatabase": 25,
+      "dashboardChangedRoute": 750,
+      "dashboardSourceDatabase": 100,
+      "dashboardUnchangedRoute": 250,
+      "recruitmentBulkDatabase": 500
+    },
+    "packetBytesMaximum": {
+      "commercialRepositoryResponse": 1048576,
+      "dashboardChangedResponse": 2097152,
+      "dashboardSourceDatabaseResponse": 8388608,
+      "dashboardUnchangedResponse": 1024,
+      "recruitmentBulkRequestAndResponse": 524288
+    },
+    "pollingMilliseconds": {
+      "browserActiveRefresh": 1000,
+      "browserSafetyRefresh": 60000,
+      "workerSafetySweep": 30000
+    },
+    "statementMaximum": {
+      "authorizationPerRequest": 2,
+      "commercialDesign": 5,
+      "commercialEcnGraph": 6,
+      "commercialEnquiries": 6,
+      "commercialSales": 6,
+      "dashboardSource": 1,
+      "dashboardState": 1,
+      "recruitmentBulkOneOrOneHundred": 6,
+      "workerIdlePerMinute": 4
+    },
+    "temporaryBlocksWrittenMaximum": 0
+  },
   "recovery": {
     "postgresCanonical": true,
     "productionPromotionPerformed": false,

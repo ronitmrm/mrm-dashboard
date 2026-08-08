@@ -36,6 +36,7 @@ Relevant skills: `code-review`, `codebase-design`, `research`, `prototype`, `gri
 
 - Staging behavior at migration start is the business oracle. Acceptance uses a production-like, real-PostgreSQL workflow-and-worker fingerprint; normalization is limited to volatile values and approved performance metadata.
 - Supported schema starts are empty PostgreSQL and the immutable staging head at `0038`. Both reach `0043`; standard index locks and set-based projection backfill require production-like volume gates before cutover.
+- Performance acceptance uses fixed statement/packet/plan/polling/freshness ceilings and p95/p99 measurements from a controlled 1-compute-unit staging benchmark; laptop timings remain diagnostic only.
 - Recruitment bulk commands use bounded set-based reads, writes, and audits behind one exported domain-policy interface while preserving transaction and lifecycle behavior.
 - Rollout proceeds schema-first by independently promotable subsystem, with isolated shadows, tested-artifact promotion, durable-queue recovery, and no automatic code-only rollback after incorrect canonical writes.
 
