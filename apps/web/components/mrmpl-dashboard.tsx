@@ -74,6 +74,13 @@ import {
 } from "@/lib/dashboard-view-model";
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
 import {
+  dashboardStateRequestUrl,
+  mergeDashboardStateResponse,
+  refreshLockFromStatus,
+  refreshLockHasSettled,
+  type PlanningRefreshLock,
+} from "@/lib/dashboard-live-state";
+import {
   mergeFirstPieceInspectionTasks as mergeStoredFirstPieceInspectionTasks,
   readFirstPieceInspectionDraft as readFirstPieceInspectionDraftFromStorage,
   readFirstPieceInspectionTasks as readFirstPieceInspectionTasksFromStorage,
@@ -115,11 +122,6 @@ type DashboardApiResult = {
   message: string;
   queued?: boolean;
   skipped?: boolean;
-};
-
-type PlanningRefreshLock = {
-  baselineRequestedAtMs: number | null;
-  baselineCompletedAtMs: number | null;
 };
 
 type DataEntrySpec = {
@@ -462,12 +464,15 @@ function usePostgresDashboardPage(
   url: string | null,
   pollIntervalMs = 0,
   onData?: (data: DashboardPayload) => void,
+  activePollIntervalMs = pollIntervalMs,
+  reloadKey = 0,
 ) {
   const [result, setResult] = useState<{
     data?: DashboardPayload;
     error?: string;
     url: string;
   }>({ url: "" });
+  const latestDataRef = useRef<DashboardPayload | undefined>(undefined);
 
   useEffect(() => {
     if (!url) return;
@@ -477,18 +482,30 @@ function usePostgresDashboardPage(
     const load = async () => {
       if (loading || document.visibilityState === "hidden") return;
       loading = true;
+      let nextPollIntervalMs = pollIntervalMs;
       try {
-        const response = await fetch(url, {
+        const response = await fetch(
+          dashboardStateRequestUrl(url, latestDataRef.current),
+          {
           cache: "no-store",
           credentials: "same-origin",
           signal: controller.signal,
-        });
+          },
+        );
         const body = asRecord(await response.json().catch(() => ({})));
         if (!response.ok) {
           throw new Error(str(body.error) || "Dashboard data could not be loaded.");
         }
-        setResult({ data: body, url });
-        onData?.(body);
+        const nextData = mergeDashboardStateResponse(
+          latestDataRef.current,
+          body,
+        );
+        latestDataRef.current = nextData;
+        setResult({ data: nextData, url });
+        onData?.(nextData);
+        if (asRecord(body.status).isRefreshing === true) {
+          nextPollIntervalMs = activePollIntervalMs;
+        }
       } catch (error: unknown) {
         if (controller.signal.aborted) return;
         setResult({
@@ -498,7 +515,7 @@ function usePostgresDashboardPage(
       } finally {
         loading = false;
         const nextDelay = nextDashboardPollDelay(
-          pollIntervalMs,
+          nextPollIntervalMs,
           document.visibilityState,
         );
         if (!controller.signal.aborted && nextDelay !== null) {
@@ -521,7 +538,7 @@ function usePostgresDashboardPage(
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (nextLoad !== undefined) window.clearTimeout(nextLoad);
     };
-  }, [onData, pollIntervalMs, url]);
+  }, [activePollIntervalMs, onData, pollIntervalMs, reloadKey, url]);
 
   return result.url === url ? result : { url: url ?? "" };
 }
@@ -994,28 +1011,43 @@ function DashboardShell({
   const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
-  const handleDashboardStatusData = useCallback((status: DashboardPayload) => {
+  const [dashboardReloadKey, setDashboardReloadKey] = useState(0);
+  const handleDashboardStateData = useCallback((state: DashboardPayload) => {
+    const status = asRecord(state.status);
     setPlanningRefreshLock((current) =>
       current && refreshLockHasSettled(current, status) ? null : current,
     );
   }, []);
-  const dashboardPage = usePostgresDashboardPage(
-    `/api/dashboard?floor=${encodeURIComponent(activeProductionFloor)}`,
-    30_000,
-  );
-  const dashboardStatusPage = usePostgresDashboardPage(
-    planningRefreshLock || isRefreshingSnapshot
-      ? "/api/dashboard-refresh-status"
-      : null,
-    5_000,
-    handleDashboardStatusData,
+  const dashboardStatePage = usePostgresDashboardPage(
+    `/api/dashboard-state?floor=${encodeURIComponent(activeProductionFloor)}`,
+    60_000,
+    handleDashboardStateData,
+    1_000,
+    dashboardReloadKey,
   );
   const correctionCandidatesPage = usePostgresDashboardPage(
     activeTab === "correctionsTab" ? "/api/correction-candidates?limit=200" : null,
     5_000,
+    undefined,
+    5_000,
+    dashboardReloadKey,
   );
-  const dashboardPayload = dashboardPage.data;
-  const dashboardRefreshStatus = dashboardStatusPage.data;
+  const dashboardPayload = dashboardStatePage.data
+    ? asRecord(dashboardStatePage.data.dashboard)
+    : undefined;
+  const dashboardRefreshStatus = dashboardStatePage.data
+    ? asRecord(dashboardStatePage.data.status)
+    : undefined;
+
+  useEffect(() => {
+    const events = new EventSource("/api/dashboard-events");
+    const reload = () => setDashboardReloadKey((current) => current + 1);
+    events.addEventListener("dashboard-version", reload);
+    return () => {
+      events.removeEventListener("dashboard-version", reload);
+      events.close();
+    };
+  }, []);
   const correctionCandidates = asArray(correctionCandidatesPage.data?.rows);
   const isPlanningRefreshLockActive = planningRefreshLock
     ? !refreshLockHasSettled(planningRefreshLock, dashboardRefreshStatus)
@@ -1046,6 +1078,7 @@ function DashboardShell({
     setActionStatus(null);
     try {
       const result = await postDashboardApi("dashboard-refresh", { force });
+      setDashboardReloadKey((current) => current + 1);
       setActionStatus({
         tone: "default",
         message: result.queued
@@ -8289,28 +8322,6 @@ function optionalNumber(value: unknown) {
   if (value === undefined || value === null || value === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function numberOrNull(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function refreshLockFromStatus(status: { requestedAtMs?: unknown; completedAtMs?: unknown } | undefined): PlanningRefreshLock {
-  return {
-    baselineRequestedAtMs: numberOrNull(status?.requestedAtMs),
-    baselineCompletedAtMs: numberOrNull(status?.completedAtMs),
-  };
-}
-
-function refreshLockHasSettled(lock: PlanningRefreshLock, status: { status?: unknown; isRefreshing?: unknown; requestedAtMs?: unknown; completedAtMs?: unknown } | undefined) {
-  if (!status || status.isRefreshing) return false;
-  const currentStatus = str(status.status);
-  if (currentStatus !== "idle" && currentStatus !== "failed") return false;
-  const requestedAtMs = numberOrNull(status.requestedAtMs);
-  const completedAtMs = numberOrNull(status.completedAtMs);
-  const sawNewRequest = requestedAtMs !== lock.baselineRequestedAtMs;
-  const sawNewCompletion = completedAtMs !== lock.baselineCompletedAtMs;
-  return sawNewRequest && (sawNewCompletion || currentStatus === "failed");
 }
 
 function numeric(value: unknown) {
