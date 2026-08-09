@@ -82,7 +82,10 @@ import {
   type ProductionFloorCode,
 } from "@/lib/dashboard-view-model";
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
-import { rowsForProductionMaster } from "@/lib/production-master-tables";
+import {
+  dataEntryRowsForProductionMaster,
+  rowsForProductionMaster,
+} from "@/lib/production-master-tables";
 import {
   dashboardStateRequestUrl,
   refreshLockFromStatus,
@@ -5983,8 +5986,7 @@ function masterTableRows(entryType: string, payload: DashboardPayload, productio
       rows.push(...asArray(productionControl[source]));
       rows.push(...asArray(dataEntry[source]));
     }
-    rows.push(...asArray(dataEntry.rows).filter((row) => str(row.entryType) === entryType));
-    rows.push(...asArray(dataEntry.templates).filter((row) => str(row.entryType) === entryType));
+    rows.push(...dataEntryRowsForProductionMaster(entryType, dataEntry));
   }
 
   const matchingRows = rowsForProductionMaster(entryType, rows);

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { rowsForProductionMaster } from "./production-master-tables"
+import {
+  dataEntryRowsForProductionMaster,
+  rowsForProductionMaster,
+} from "./production-master-tables"
 
 describe("Production master table rows", () => {
   it("does not show rows explicitly belonging to another master", () => {
@@ -11,5 +14,17 @@ describe("Production master table rows", () => {
     expect(
       rowsForProductionMaster("route", [route, machine, legacyRoute])
     ).toEqual([route, legacyRoute])
+  })
+
+  it("does not render Excel template metadata as a master row", () => {
+    const route = { entryType: "route", partNo: "P-1" }
+    const template = { entryType: "route", format: "xlsx" }
+
+    expect(
+      dataEntryRowsForProductionMaster("route", {
+        rows: [route],
+        templates: [template],
+      })
+    ).toEqual([route])
   })
 })
