@@ -8,6 +8,7 @@ import {
   commercialSelectorLimit,
   selectorResult,
   selectorSearchTerm,
+  type BoundedCommercialResult,
 } from "./commercial-bounds"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
@@ -165,6 +166,119 @@ function designQueueItemFromRow(
     toolingApproxCost: Number(row.tooling_approx_cost ?? 0),
     toolingRequired: row.tooling_required ?? "No",
   }
+}
+
+type SalesMatchCandidate = {
+  customerPartCode: string | null
+  description: string
+  itemType: string | null
+  productId: string
+  productUid: string
+  quoteItemId: string
+  quoteNumber: string
+  revision: number
+  status: string
+  unitPrice: number
+}
+
+type SalesMatchCandidateDatabaseRow = {
+  customer_part_code: string | null
+  description: string | null
+  enquiry_item_id: string
+  item_type: string | null
+  product_id: string | null
+  product_uid: string | null
+  quote_item_id: string | null
+  quote_number: string | null
+  revision: number | null
+  status: string | null
+  unit_price: string | null
+}
+
+function salesMatchCandidateFromRow(
+  row: SalesMatchCandidateDatabaseRow
+): SalesMatchCandidate {
+  return {
+    customerPartCode: row.customer_part_code,
+    description: row.description!,
+    itemType: row.item_type,
+    productId: row.product_id!,
+    productUid: row.product_uid!,
+    quoteItemId: row.quote_item_id!,
+    quoteNumber: row.quote_number!,
+    revision: row.revision!,
+    status: row.status!,
+    unitPrice: Number(row.unit_price),
+  }
+}
+
+async function loadSalesMatchCandidatesForItems(
+  queryable: Pick<Pool, "query">,
+  enquiryItemIds: readonly string[]
+) {
+  const grouped = new Map<
+    string,
+    BoundedCommercialResult<SalesMatchCandidate>
+  >()
+  if (!enquiryItemIds.length) return grouped
+
+  const candidates = await queryable.query<SalesMatchCandidateDatabaseRow>(
+    `
+      WITH requested_input AS (
+        SELECT input.id, min(input.ordinality)::bigint AS ordinal
+        FROM unnest($1::uuid[]) WITH ORDINALITY input(id, ordinality)
+        GROUP BY input.id
+      ),
+      requested AS (
+        SELECT requested_input.ordinal, enquiry_item.id,
+          enquiry.customer_id, enquiry.organization_id,
+          enquiry_item.customer_part_code
+        FROM requested_input
+        JOIN sales.enquiry_items enquiry_item
+          ON enquiry_item.id = requested_input.id
+        JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+      )
+      SELECT requested.id::text AS enquiry_item_id,
+        candidate.quote_item_id, candidate.quote_number,
+        candidate.revision, candidate.customer_part_code,
+        candidate.unit_price, candidate.status, candidate.product_id,
+        candidate.product_uid, candidate.description, candidate.item_type
+      FROM requested
+      LEFT JOIN LATERAL (
+        SELECT quote.id AS quote_item_id, quote.quote_number,
+          quote.revision, quote.customer_part_code,
+          quote.unit_price::text, quote.status,
+          item.id AS product_id, item.uid AS product_uid,
+          item.description, item.item_type,
+          CASE WHEN lower(btrim(coalesce(quote.customer_part_code, '')))
+            = lower(btrim(requested.customer_part_code))
+            THEN 0 ELSE 1 END AS match_rank,
+          quote.sent_at, quote.updated_at
+        FROM sales.quote_items quote
+        JOIN catalog.items item ON item.id = quote.item_id
+        WHERE quote.organization_id = requested.organization_id
+          AND quote.customer_id = requested.customer_id
+          AND quote.status IN ('Draft', 'Sent', 'Accepted', 'Ordered')
+        ORDER BY match_rank, quote.sent_at DESC NULLS LAST,
+          quote.updated_at DESC, quote.id DESC
+        LIMIT $2
+      ) candidate ON true
+      ORDER BY requested.ordinal, candidate.match_rank NULLS LAST,
+        candidate.sent_at DESC NULLS LAST, candidate.updated_at DESC NULLS LAST,
+        candidate.quote_item_id DESC NULLS LAST
+    `,
+    [enquiryItemIds, commercialSelectorLimit + 1]
+  )
+  const rowsByItem = new Map<string, SalesMatchCandidate[]>()
+  for (const row of candidates.rows) {
+    const rows = rowsByItem.get(row.enquiry_item_id) ?? []
+    if (row.quote_item_id) rows.push(salesMatchCandidateFromRow(row))
+    rowsByItem.set(row.enquiry_item_id, rows)
+  }
+  for (const [enquiryItemId, rows] of rowsByItem) {
+    grouped.set(enquiryItemId, selectorResult(rows))
+  }
+  return grouped
 }
 
 type ImportRow = {
@@ -2103,157 +2217,90 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
     },
 
     async listSalesMatchCandidates(enquiryItemId: string) {
-      const item = await pool.query<{
-        customer_id: string
-        customer_part_code: string
-        organization_id: string
-      }>(
-        `
-          SELECT enquiry.customer_id, enquiry.organization_id,
-            enquiry_item.customer_part_code
-          FROM sales.enquiry_items enquiry_item
-          JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
-          WHERE enquiry_item.id = $1
-        `,
-        [enquiryItemId]
-      )
-      if (!item.rows[0]) {
-        throw new Error("Line item was not found.")
-      }
-      const candidates = await pool.query<{
-        customer_part_code: string | null
-        description: string
-        item_type: string | null
-        product_id: string
-        product_uid: string
-        quote_item_id: string
-        quote_number: string
-        revision: number
-        status: string
-        unit_price: string
-      }>(
-        `
-          SELECT quote.id AS quote_item_id, quote.quote_number,
-            quote.revision, quote.customer_part_code,
-            quote.unit_price::text, quote.status,
-            item.id AS product_id, item.uid AS product_uid,
-            item.description, item.item_type
-          FROM sales.quote_items quote
-          JOIN catalog.items item ON item.id = quote.item_id
-          WHERE quote.organization_id = $1
-            AND quote.customer_id = $2
-            AND quote.status IN ('Draft', 'Sent', 'Accepted', 'Ordered')
-          ORDER BY
-            CASE WHEN lower(btrim(coalesce(quote.customer_part_code, '')))
-              = lower(btrim($3)) THEN 0 ELSE 1 END,
-            quote.sent_at DESC NULLS LAST, quote.updated_at DESC,
-            quote.id DESC
-        `,
-        [
-          item.rows[0].organization_id,
-          item.rows[0].customer_id,
-          item.rows[0].customer_part_code,
-        ]
-      )
-      return candidates.rows.map((row) => ({
-        customerPartCode: row.customer_part_code,
-        description: row.description,
-        itemType: row.item_type,
-        productId: row.product_id,
-        productUid: row.product_uid,
-        quoteItemId: row.quote_item_id,
-        quoteNumber: row.quote_number,
-        revision: row.revision,
-        status: row.status,
-        unitPrice: Number(row.unit_price),
-      }))
+      const results = await loadSalesMatchCandidatesForItems(pool, [
+        enquiryItemId,
+      ])
+      const result = results.get(enquiryItemId)
+      if (!result) throw new Error("Line item was not found.")
+      return result.rows
     },
 
     async listSalesMatchCandidatesForItems(enquiryItemIds: readonly string[]) {
-      const grouped = new Map<
-        string,
-        Array<{
-          customerPartCode: string | null
-          description: string
-          itemType: string | null
-          productId: string
-          productUid: string
-          quoteItemId: string
-          quoteNumber: string
-          revision: number
-          status: string
-          unitPrice: number
-        }>
-      >()
-      if (enquiryItemIds.length === 0) return grouped
+      const results = await loadSalesMatchCandidatesForItems(
+        pool,
+        enquiryItemIds
+      )
+      return new Map(
+        [...results].map(([enquiryItemId, result]) => [
+          enquiryItemId,
+          result.rows,
+        ])
+      )
+    },
 
-      const candidates = await pool.query<{
-        customer_part_code: string | null
-        description: string
-        enquiry_item_id: string
-        item_type: string | null
-        product_id: string
-        product_uid: string
-        quote_item_id: string
-        quote_number: string
-        revision: number
-        status: string
-        unit_price: string
-      }>(
+    async listSalesMatchCandidatesForItemsBounded(
+      enquiryItemIds: readonly string[]
+    ) {
+      return loadSalesMatchCandidatesForItems(pool, enquiryItemIds)
+    },
+
+    async searchSalesMatchCandidates(enquiryItemId: string, value: string) {
+      const { containsPattern, query } = selectorSearchTerm(value)
+      const candidates = await pool.query<SalesMatchCandidateDatabaseRow>(
         `
           WITH requested AS (
             SELECT enquiry_item.id, enquiry.customer_id,
               enquiry.organization_id, enquiry_item.customer_part_code
             FROM sales.enquiry_items enquiry_item
             JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
-            WHERE enquiry_item.id = ANY($1::uuid[])
+            WHERE enquiry_item.id = $1
           )
           SELECT requested.id::text AS enquiry_item_id,
-            candidate.quote_item_id, candidate.quote_number,
-            candidate.revision, candidate.customer_part_code,
-            candidate.unit_price, candidate.status, candidate.product_id,
-            candidate.product_uid, candidate.description, candidate.item_type
+            quote.id AS quote_item_id, quote.quote_number,
+            quote.revision, quote.customer_part_code,
+            quote.unit_price::text, quote.status,
+            item.id AS product_id, item.uid AS product_uid,
+            item.description, item.item_type
           FROM requested
-          CROSS JOIN LATERAL (
-            SELECT quote.id AS quote_item_id, quote.quote_number,
-              quote.revision, quote.customer_part_code,
-              quote.unit_price::text, quote.status,
-              item.id AS product_id, item.uid AS product_uid,
-              item.description, item.item_type
-            FROM sales.quote_items quote
-            JOIN catalog.items item ON item.id = quote.item_id
-            WHERE quote.organization_id = requested.organization_id
-              AND quote.customer_id = requested.customer_id
-              AND quote.status IN ('Draft', 'Sent', 'Accepted', 'Ordered')
-            ORDER BY
-              CASE WHEN lower(btrim(coalesce(quote.customer_part_code, '')))
-                = lower(btrim(requested.customer_part_code)) THEN 0 ELSE 1 END,
-              quote.sent_at DESC NULLS LAST, quote.updated_at DESC,
-              quote.id DESC
-            LIMIT 50
-          ) candidate
-          ORDER BY requested.id, candidate.quote_item_id
+          JOIN sales.quote_items quote
+            ON quote.organization_id = requested.organization_id
+            AND quote.customer_id = requested.customer_id
+          JOIN catalog.items item ON item.id = quote.item_id
+          WHERE quote.status IN ('Draft', 'Sent', 'Accepted', 'Ordered')
+            AND (
+              $2::text = ''
+              OR lower(btrim(coalesce(quote.customer_part_code, ''))) = $2
+              OR lower(btrim(quote.quote_number)) = $2
+              OR lower(item.uid) = $2
+              OR (
+                $3::text IS NOT NULL
+                AND (
+                  lower(
+                    btrim(coalesce(quote.customer_part_code, '')) || ' ' ||
+                    btrim(quote.quote_number)
+                  ) LIKE $3
+                  OR lower(
+                    coalesce(item.uid, '') || ' ' ||
+                    coalesce(item.description, '')
+                  ) LIKE $3
+                )
+              )
+            )
+          ORDER BY CASE WHEN
+              lower(btrim(coalesce(quote.customer_part_code, ''))) = $2
+              OR lower(btrim(quote.quote_number)) = $2
+              OR lower(item.uid) = $2
+            THEN 0 ELSE 1 END,
+            CASE WHEN lower(btrim(coalesce(quote.customer_part_code, '')))
+              = lower(btrim(requested.customer_part_code))
+              THEN 0 ELSE 1 END,
+            quote.sent_at DESC NULLS LAST, quote.updated_at DESC,
+            quote.id DESC
+          LIMIT $4
         `,
-        [enquiryItemIds]
+        [enquiryItemId, query, containsPattern, commercialSelectorLimit + 1]
       )
-
-      for (const row of candidates.rows) {
-        const rows = grouped.get(row.enquiry_item_id) ?? []
-        rows.push({
-          customerPartCode: row.customer_part_code,
-          description: row.description,
-          itemType: row.item_type,
-          productId: row.product_id,
-          productUid: row.product_uid,
-          quoteItemId: row.quote_item_id,
-          quoteNumber: row.quote_number,
-          revision: row.revision,
-          status: row.status,
-          unitPrice: Number(row.unit_price),
-        })
-        grouped.set(row.enquiry_item_id, rows)
-      }
-      return grouped
+      return selectorResult(candidates.rows.map(salesMatchCandidateFromRow))
     },
 
     async listTechnicalReviewQueue(organizationCode: string) {
