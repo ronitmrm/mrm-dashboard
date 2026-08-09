@@ -1,5 +1,9 @@
 "use server"
 
+import { createHash, randomUUID } from "node:crypto"
+import { mkdir, unlink, writeFile } from "node:fs/promises"
+import nodePath from "node:path"
+
 import {
   createRecruitmentRepository,
   recruitmentInterviewRound,
@@ -188,6 +192,7 @@ export async function assignEmployeeAction(formData: FormData) {
       employeeCode: value(formData, "employee_code"),
       employeeEvent: value(formData, "employee_event"),
       employeeName: value(formData, "employee_name"),
+      lastWorkingDate: value(formData, "last_working_date"),
       postId: value(formData, "post_id"),
     })
   )
@@ -255,19 +260,94 @@ export async function createJobAction(formData: FormData) {
 }
 
 export async function saveCandidateAction(formData: FormData) {
-  await mutate(formData, "hr.recruitment.write", (repository, context) =>
-    repository.upsertCandidate({
-      ...context,
+  const returnTo = returnPath(formData)
+  const session = await requireCapability("hr.recruitment.write", returnTo)
+  const repository = createRecruitmentRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  let outcome: { error?: string; success?: string }
+  try {
+    const organizationId = await repository.organizationIdForCode("MRMPL")
+    const resume = formData.get("resume")
+    let resumeData:
+      | { bytes: Buffer; fileName: string; sourceId: string }
+      | undefined
+    if (resume instanceof File && resume.size > 0) {
+      if (resume.size > 10 * 1024 * 1024) {
+        throw new Error("Candidate resume must be 10 MB or smaller.")
+      }
+      if (!/\.pdf$/i.test(resume.name)) {
+        throw new Error("Candidate resume must be a PDF file.")
+      }
+      const bytes = Buffer.from(await resume.arrayBuffer())
+      if (bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
+        throw new Error("Candidate resume is not a valid PDF file.")
+      }
+      resumeData = {
+        bytes,
+        fileName: resume.name.replace(/[<>:"/\\|?*]+/g, "_"),
+        sourceId: randomUUID(),
+      }
+    }
+    const candidate = await repository.upsertCandidate({
+      actorUserId: session.user.id,
       currentCompany: value(formData, "current_company"),
       departmentCode: value(formData, "department_code"),
       email: value(formData, "email"),
       experience: value(formData, "experience"),
       name: value(formData, "name"),
       notes: value(formData, "notes"),
+      organizationId,
       phone: value(formData, "phone"),
       source: value(formData, "source"),
     })
-  )
+    if (resumeData) {
+      const { bytes, fileName, sourceId } = resumeData
+      const storageKey = nodePath.posix.join(
+        "attachments",
+        "candidate-resumes",
+        candidate.id,
+        sourceId,
+        fileName
+      )
+      const storageRoot =
+        process.env.LOCAL_FILE_STORAGE_PATH ??
+        nodePath.join(/*turbopackIgnore: true*/ process.cwd(), "local-data")
+      const filePath = nodePath.join(
+        /*turbopackIgnore: true*/ storageRoot,
+        ...storageKey.split("/")
+      )
+      await mkdir(nodePath.dirname(filePath), { recursive: true })
+      await writeFile(filePath, bytes, { flag: "wx" })
+      try {
+        await repository.recordCandidateResume({
+          actorUserId: session.user.id,
+          byteSize: bytes.byteLength,
+          candidateId: candidate.id,
+          fileName,
+          mediaType: "application/pdf",
+          organizationId,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+          sourceId,
+          storageKey,
+        })
+      } catch (error) {
+        await unlink(filePath).catch(() => undefined)
+        throw error
+      }
+    }
+    outcome = { success: "Candidate saved successfully." }
+  } catch (error) {
+    outcome = {
+      error:
+        error instanceof Error ? error.message : "The candidate was not saved.",
+    }
+  } finally {
+    await repository.close()
+  }
+  revalidatePath(hrPath)
+  const feedback = new URLSearchParams(outcome)
+  redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}${feedback}`)
 }
 
 export async function assignCandidateAction(formData: FormData) {

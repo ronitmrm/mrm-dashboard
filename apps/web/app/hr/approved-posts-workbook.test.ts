@@ -9,11 +9,16 @@ import {
 
 const posts = [
   {
+    combinedRoleId: "combined-1",
+    combinedRoleName: "Combined operator",
+    combinedVacancyCode: "CMB-1",
     department: "Production",
     designation: "Operator",
     employeeCode: "EMP-001",
     employeeName: "Ankit",
     id: "post-1",
+    isPrimaryCombinedPost: true,
+    lastWorkingDate: null,
     postCode: "PR-OP-1",
     requirementTemplateCode: "JRT-0001",
     status: "Occupied",
@@ -21,11 +26,16 @@ const posts = [
     vacancyNumber: "1",
   },
   {
+    combinedRoleId: null,
+    combinedRoleName: null,
+    combinedVacancyCode: null,
     department: "Quality",
     designation: "Inspector",
     employeeCode: null,
     employeeName: null,
     id: "post-2",
+    isPrimaryCombinedPost: false,
+    lastWorkingDate: null,
     postCode: "QC-IN-1",
     requirementTemplateCode: "JRT-0002",
     status: "Vacant",
@@ -37,7 +47,9 @@ const posts = [
 const templates = [
   {
     department: "Production",
+    departmentCode: "PR",
     designation: "Operator",
+    designationCode: "OP",
     education: null,
     experienceRequirement: null,
     gender: null,
@@ -50,7 +62,9 @@ const templates = [
   },
   {
     department: "Quality",
+    departmentCode: "QC",
     designation: "Inspector",
+    designationCode: "IN",
     education: null,
     experienceRequirement: null,
     gender: null,

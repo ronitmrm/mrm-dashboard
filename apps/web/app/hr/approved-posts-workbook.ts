@@ -56,6 +56,7 @@ export function buildApprovedPostsWorkbook(input: {
       role?.postCodes.join(", ") ?? "",
       post.employeeName ?? "",
       post.employeeCode ?? "",
+      post.lastWorkingDate ?? "",
       post.status,
     ]
   })
@@ -73,6 +74,7 @@ export function buildApprovedPostsWorkbook(input: {
       role.postCodes.join(", "),
       primaryPost?.employeeName ?? "",
       primaryPost?.employeeCode ?? "",
+      primaryPost?.lastWorkingDate ?? "",
       primaryPost?.status ?? "",
     ]
   })
@@ -96,11 +98,12 @@ export function buildApprovedPostsWorkbook(input: {
           "Combined Member Posts",
           "Employee Name",
           "Employee Code",
+          "Last Working Date",
           "Employment Status",
         ],
         ...approvedPostRows,
       ],
-      [20, 20, 24, 28, 20, 34, 15, 20, 34, 20, 16, 54, 24, 20, 20]
+      [20, 20, 24, 28, 20, 34, 15, 20, 34, 20, 16, 54, 24, 20, 20, 20]
     ),
     approvedPostsSheetName
   )
@@ -117,11 +120,12 @@ export function buildApprovedPostsWorkbook(input: {
           "Member Post Codes",
           "Employee Name",
           "Employee Code",
+          "Last Working Date",
           "Employment Status",
         ],
         ...combinedJobRows,
       ],
-      [20, 34, 18, 22, 20, 54, 24, 20, 20]
+      [20, 34, 18, 22, 20, 54, 24, 20, 20, 20]
     ),
     combinedJobsSheetName
   )

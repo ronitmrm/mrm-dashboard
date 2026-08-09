@@ -46,6 +46,9 @@ export { createMaintenanceRepository } from "./maintenance"
 export {
   createRecruitmentRepository,
   type RecruitmentCandidateRow,
+  type RecruitmentCandidateApplicationHistoryRow,
+  type RecruitmentCandidateEventRow,
+  type RecruitmentCandidateWorkspace,
   type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
   type RecruitmentJobApplicationRow,

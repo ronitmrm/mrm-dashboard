@@ -44,4 +44,26 @@ describe("listRecruitableApprovedPosts", () => {
       "QC-IN-2",
     ])
   })
+
+  test("shows one primary vacancy for a combined role", () => {
+    const result = listRecruitableApprovedPosts(
+      [
+        {
+          combinedRoleId: "combined-1",
+          isPrimaryCombinedPost: true,
+          postCode: "PR-OP-1",
+          status: "Vacant",
+        },
+        {
+          combinedRoleId: "combined-1",
+          isPrimaryCombinedPost: false,
+          postCode: "QC-IN-1",
+          status: "Vacant",
+        },
+      ],
+      []
+    )
+
+    expect(result.map((entry) => entry.postCode)).toEqual(["PR-OP-1"])
+  })
 })

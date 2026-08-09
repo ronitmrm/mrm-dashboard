@@ -62,10 +62,16 @@ export function deriveRecruitmentEmployeeAssignment(input: {
   employeeCode?: string | null
   employeeEvent?: string | null
   employeeName?: string | null
+  lastWorkingDate?: string | null
 }) {
   const event = requiredText(input.employeeEvent, "Employee event")
   if (event === "Removed") {
-    return { employeeCode: null, employeeName: null, status: "Vacant" }
+    return {
+      employeeCode: null,
+      employeeName: null,
+      lastWorkingDate: null,
+      status: "Vacant",
+    }
   }
   const employeeCode =
     optionalText(input.employeeCode) ?? optionalText(input.currentEmployeeCode)
@@ -81,11 +87,25 @@ export function deriveRecruitmentEmployeeAssignment(input: {
   } as const
   const status = statuses[event as keyof typeof statuses]
   if (!status) throw new Error("Employee event is invalid.")
-  return { employeeCode, employeeName, status }
+  const lastWorkingDate = optionalText(input.lastWorkingDate)
+  if (status === "Resigned" && !lastWorkingDate) {
+    throw new Error("Last working date is required when an employee resigns.")
+  }
+  return {
+    employeeCode,
+    employeeName,
+    lastWorkingDate: status === "Resigned" ? lastWorkingDate : null,
+    status,
+  }
 }
 
 export function listRecruitableApprovedPosts<
-  Post extends { postCode: string; status: string },
+  Post extends {
+    combinedRoleId?: string | null
+    isPrimaryCombinedPost?: boolean
+    postCode: string
+    status: string
+  },
   Job extends { postCode: string | null; status: string },
 >(posts: readonly Post[], jobs: readonly Job[]) {
   const postsWithOpenJobs = new Set(
@@ -97,6 +117,7 @@ export function listRecruitableApprovedPosts<
   return posts.filter(
     (post) =>
       (post.status === "Vacant" || post.status === "Resigned") &&
+      (!post.combinedRoleId || post.isPrimaryCombinedPost) &&
       !postsWithOpenJobs.has(post.postCode)
   )
 }

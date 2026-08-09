@@ -1,6 +1,10 @@
 "use client"
 
-import type { RecruitmentPostRow, RecruitmentTemplateRow } from "@workspace/db"
+import type {
+  RecruitmentJobRow,
+  RecruitmentPostRow,
+  RecruitmentTemplateRow,
+} from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Checkbox } from "@workspace/ui/components/checkbox"
@@ -38,10 +42,21 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { Download, FilterX, ListFilter, Pencil, Trash2 } from "lucide-react"
+import {
+  BriefcaseBusiness,
+  Download,
+  FilterX,
+  ListFilter,
+  Pencil,
+  Trash2,
+} from "lucide-react"
 import { useMemo, useState } from "react"
 
-import { deletePostAction, updatePostAction } from "@/app/hr/actions"
+import {
+  createJobAction,
+  deletePostAction,
+  updatePostAction,
+} from "@/app/hr/actions"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
@@ -56,6 +71,7 @@ type ApprovedPostFilterKey =
   | "template"
   | "employeeName"
   | "employeeCode"
+  | "lastWorkingDate"
   | "status"
 
 type ApprovedPostFilters = Record<ApprovedPostFilterKey, string[] | null>
@@ -68,6 +84,7 @@ const EMPTY_FILTERS: ApprovedPostFilters = {
   template: null,
   employeeName: null,
   employeeCode: null,
+  lastWorkingDate: null,
   status: null,
 }
 
@@ -250,10 +267,12 @@ function PostStatusBadge({ status }: { status: string }) {
 
 export function ApprovedPostsTable({
   canWrite = false,
+  jobs = [],
   posts,
   templates = [],
 }: {
   canWrite?: boolean
+  jobs?: RecruitmentJobRow[]
   posts: RecruitmentPostRow[]
   templates?: TemplateOption[]
 }) {
@@ -263,7 +282,12 @@ export function ApprovedPostsTable({
   const [filters, setFilters] = useState<ApprovedPostFilters>(() => ({
     ...EMPTY_FILTERS,
   }))
-  const columnCount = canWrite ? 9 : 8
+  const openJobPostCodes = new Set(
+    jobs
+      .filter((job) => job.status === "Open" && job.postCode)
+      .map((job) => job.postCode)
+  )
+  const columnCount = canWrite ? 10 : 9
   const hasFilters = Object.values(filters).some((filter) => filter !== null)
   const filterOptions = useMemo(
     () => ({
@@ -279,6 +303,9 @@ export function ApprovedPostsTable({
       ),
       employeeCode: uniqueOptions(
         posts.map((row) => row.employeeCode ?? "Unassigned")
+      ),
+      lastWorkingDate: uniqueOptions(
+        posts.map((row) => row.lastWorkingDate ?? "Not applicable")
       ),
       status: uniqueOptions(posts.map((row) => row.status)),
     }),
@@ -303,6 +330,10 @@ export function ApprovedPostsTable({
           matchesFilter(
             row.employeeCode ?? "Unassigned",
             filters.employeeCode
+          ) &&
+          matchesFilter(
+            row.lastWorkingDate ?? "Not applicable",
+            filters.lastWorkingDate
           ) &&
           matchesFilter(row.status, filters.status)
       ),
@@ -366,12 +397,24 @@ export function ApprovedPostsTable({
                   <TableHead>Template</TableHead>
                   <TableHead>Employee name</TableHead>
                   <TableHead>Employee code</TableHead>
+                  <TableHead>Last working date</TableHead>
                   <TableHead>Status</TableHead>
                   {canWrite ? (
                     <TableHead className="text-right">Actions</TableHead>
                   ) : null}
                 </TableRow>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableHead>
+                    <ApprovedPostColumnFilter
+                      filterKey="lastWorkingDate"
+                      label="Last working date"
+                      onApply={(value) =>
+                        updateFilter("lastWorkingDate", value)
+                      }
+                      options={filterOptions.lastWorkingDate}
+                      selected={filters.lastWorkingDate}
+                    />
+                  </TableHead>
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="postCode"
@@ -466,12 +509,35 @@ export function ApprovedPostsTable({
                       <TableCell className="font-mono">
                         {row.employeeCode ?? "—"}
                       </TableCell>
+                      <TableCell>{row.lastWorkingDate ?? "—"}</TableCell>
                       <TableCell>
                         <PostStatusBadge status={row.status} />
                       </TableCell>
                       {canWrite ? (
                         <TableCell>
                           <div className="flex justify-end gap-2">
+                            {(row.status === "Vacant" ||
+                              row.status === "Resigned") &&
+                            (!row.combinedRoleId ||
+                              row.isPrimaryCombinedPost) &&
+                            !openJobPostCodes.has(row.postCode) ? (
+                              <form action={createJobAction}>
+                                <input
+                                  name="panel"
+                                  type="hidden"
+                                  value="approvedPostPanel"
+                                />
+                                <input
+                                  name="post_id"
+                                  type="hidden"
+                                  value={row.id}
+                                />
+                                <Button size="sm" type="submit">
+                                  <BriefcaseBusiness data-icon="inline-start" />
+                                  Create job
+                                </Button>
+                              </form>
+                            ) : null}
                             <Button
                               aria-label={`Edit ${row.postCode}`}
                               onClick={() => setEditingPost(row)}

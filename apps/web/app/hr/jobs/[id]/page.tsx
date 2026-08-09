@@ -270,7 +270,7 @@ export default async function JobWorkspacePage({
                 applications={applications.map((application) => ({
                   candidateName: application.candidateName,
                   id: application.id,
-                  nextRound: application.nextRound,
+                  scoreableRound: application.scoreableRound,
                 }))}
                 returnJobId={job.id}
               />

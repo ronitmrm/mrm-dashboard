@@ -54,6 +54,10 @@ describe("unified navigation", () => {
         href: "/hr?panel=candidateSearchPanel",
         label: "Search Candidate",
       },
+      {
+        href: "/hr?panel=conversationLogsPanel",
+        label: "Conversation Logs",
+      },
       { href: "/hr?panel=interviewsPanel", label: "Interviews" },
     ])
   })
@@ -97,5 +101,17 @@ describe("unified navigation", () => {
         "/hr?panel=interviewsPanel"
       )
     ).toBe(false)
+  })
+
+  it("keeps Log Candidate selected inside a candidate workspace", () => {
+    const searchParams = new URLSearchParams()
+
+    expect(
+      navigationHrefMatches(
+        "/hr/candidates/9824b9a7-b917-4dea-a8b2-9eb9d2935dc7",
+        searchParams,
+        "/hr?panel=candidatesPanel"
+      )
+    ).toBe(true)
   })
 })

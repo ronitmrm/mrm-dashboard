@@ -77,6 +77,13 @@ export function navigationHrefMatches(
   ) {
     return true
   }
+  if (
+    pathname.startsWith("/hr/candidates/") &&
+    destination.pathname === "/hr" &&
+    destination.searchParams.get("panel") === "candidatesPanel"
+  ) {
+    return true
+  }
   const pathMatches =
     destination.pathname === "/" || destination.pathname === "/commercial"
       ? pathname === destination.pathname
@@ -341,6 +348,13 @@ export const hrNavigation = [
     icon: PackageSearch,
     label: "Search Candidate",
     panelId: "candidateSearchPanel",
+    requiredCapability: "hr.recruitment.read",
+  },
+  {
+    href: "/hr?panel=conversationLogsPanel",
+    icon: MessageSquareText,
+    label: "Conversation Logs",
+    panelId: "conversationLogsPanel",
     requiredCapability: "hr.recruitment.read",
   },
   {

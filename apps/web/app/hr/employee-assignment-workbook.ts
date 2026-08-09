@@ -11,6 +11,7 @@ export type EmployeeAssignmentWorkbookRow = {
   employeeCode: string | null
   employeeEvent: "Appointed" | "Joined" | "Resigned" | "Removed"
   employeeName: string | null
+  lastWorkingDate: string | null
   rowNumber: number
   targetCode: string
   targetType: "combined" | "individual"
@@ -52,6 +53,7 @@ export function buildEmployeeAssignmentWorkbook(input: {
       "",
       "",
       "",
+      "",
     ]
   })
   const individualRows = input.posts
@@ -65,6 +67,7 @@ export function buildEmployeeAssignmentWorkbook(input: {
       post.designation,
       post.employeeName ?? "",
       post.employeeCode ?? "",
+      "",
       "",
       "",
       "",
@@ -83,10 +86,11 @@ export function buildEmployeeAssignmentWorkbook(input: {
           "Employee Name",
           "Employee Code",
           "Employment Event",
+          "Last Working Date",
         ],
         ...combinedRows,
       ],
-      [20, 34, 54, 24, 20, 24, 20, 20]
+      [20, 34, 54, 24, 20, 24, 20, 20, 20]
     ),
     combinedJobsSheetName
   )
@@ -103,10 +107,11 @@ export function buildEmployeeAssignmentWorkbook(input: {
           "Employee Name",
           "Employee Code",
           "Employment Event",
+          "Last Working Date",
         ],
         ...individualRows,
       ],
-      [20, 24, 28, 24, 20, 24, 20, 20]
+      [20, 24, 28, 24, 20, 24, 20, 20, 20]
     ),
     individualPostsSheetName
   )
@@ -141,6 +146,7 @@ function parseSheet(
     "employee name",
     "employee code",
     "employment event",
+    "last working date",
   ]
   for (const header of requiredHeaders) {
     if (!headers.includes(header)) {
@@ -151,6 +157,7 @@ function parseSheet(
   const employeeNameIndex = headers.indexOf("employee name")
   const employeeCodeIndex = headers.indexOf("employee code")
   const employeeEventIndex = headers.indexOf("employment event")
+  const lastWorkingDateIndex = headers.indexOf("last working date")
   const parsed: EmployeeAssignmentWorkbookRow[] = []
 
   rows.slice(1).forEach((row, index) => {
@@ -159,7 +166,9 @@ function parseSheet(
     const employeeName = cell(row, employeeNameIndex)
     const employeeCode = cell(row, employeeCodeIndex)
     const employeeEvent = cell(row, employeeEventIndex)
-    if (!employeeName && !employeeCode && !employeeEvent) return
+    const lastWorkingDate = cell(row, lastWorkingDateIndex)
+    if (!employeeName && !employeeCode && !employeeEvent && !lastWorkingDate)
+      return
     if (!targetCode) {
       throw new Error(`${sheetName} row ${rowNumber}: target code is required.`)
     }
@@ -173,11 +182,17 @@ function parseSheet(
         `${sheetName} row ${rowNumber}: Employee Name or Employee Code is required.`
       )
     }
+    if (employeeEvent === "Resigned" && !lastWorkingDate) {
+      throw new Error(
+        `${sheetName} row ${rowNumber}: Last Working Date is required for Resigned.`
+      )
+    }
     parsed.push({
       employeeCode: employeeCode || null,
       employeeEvent:
         employeeEvent as EmployeeAssignmentWorkbookRow["employeeEvent"],
       employeeName: employeeName || null,
+      lastWorkingDate: lastWorkingDate || null,
       rowNumber,
       targetCode,
       targetType,

@@ -80,7 +80,7 @@ describe("assignEmployee", () => {
     const updateCall = query.mock.calls.find(([statement]) =>
       statement.includes("UPDATE recruitment.posts")
     )
-    expect(updateCall?.[1]?.[4]).toEqual([selectedPostId, relatedPostId])
+    expect(updateCall?.[1]?.[5]).toEqual([selectedPostId, relatedPostId])
   })
 
   test("rejects a bulk workbook before updating when any target is invalid", async () => {
@@ -258,7 +258,15 @@ describe("job workspace", () => {
         return { rows: [{ id: "application-1", status: "Assigned" }] }
       }
       if (statement.includes("SELECT round_name, status")) {
-        return { rows: [] }
+        return {
+          rows: [
+            {
+              round_name: "Screening Round",
+              scheduled_at: "2026-08-08 10:00:00+00",
+              status: "Scheduled",
+            },
+          ],
+        }
       }
       if (statement.includes("UPDATE recruitment.applications")) {
         return { rows: [{ id: "application-1", status: "Interview" }] }
@@ -330,6 +338,37 @@ describe("job workspace", () => {
     ).rejects.toThrow("The next required round is Screening Round.")
   })
 
+  test("rejects scoring before the required round is scheduled", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (
+        statement.includes("SELECT id") &&
+        statement.includes("FROM recruitment.applications")
+      ) {
+        return { rows: [{ id: "application-1", status: "Assigned" }] }
+      }
+      return { rows: [] }
+    })
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: {
+        connect: vi.fn(async () => client),
+      } as unknown as Pool,
+    })
+
+    await expect(
+      repository.recordInterview({
+        applicationId: "application-1",
+        organizationId: "organization-1",
+        questionScores: {},
+        roundName: "Screening Round",
+        status: "Approved",
+      })
+    ).rejects.toThrow("must be scheduled before scoring is allowed")
+  })
+
   test("stores every preset question score with the interview", async () => {
     const query = vi.fn(async (statement: string, _parameters?: unknown[]) => {
       void _parameters
@@ -340,7 +379,15 @@ describe("job workspace", () => {
         return { rows: [{ id: "application-1", status: "Interview" }] }
       }
       if (statement.includes("SELECT round_name, status")) {
-        return { rows: [] }
+        return {
+          rows: [
+            {
+              round_name: "Screening Round",
+              scheduled_at: "2026-08-08 10:00:00+00",
+              status: "Scheduled",
+            },
+          ],
+        }
       }
       if (statement.includes("INSERT INTO recruitment.interviews")) {
         return { rows: [{ id: "interview-1" }] }
@@ -713,6 +760,7 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
     ).toEqual({
       employeeCode: "EMP-104",
       employeeName: "New employee",
+      lastWorkingDate: null,
       status: "Appointed",
     })
   })
@@ -727,6 +775,7 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
     ).toEqual({
       employeeCode: "EMP-104",
       employeeName: "New employee",
+      lastWorkingDate: null,
       status: "Occupied",
     })
   })
@@ -737,10 +786,12 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
         currentEmployeeCode: "EMP-104",
         currentEmployeeName: "New employee",
         employeeEvent: "Resigned",
+        lastWorkingDate: "2026-08-31",
       })
     ).toEqual({
       employeeCode: "EMP-104",
       employeeName: "New employee",
+      lastWorkingDate: "2026-08-31",
       status: "Resigned",
     })
   })
@@ -752,7 +803,21 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
         currentEmployeeName: "New employee",
         employeeEvent: "Removed",
       })
-    ).toEqual({ employeeCode: null, employeeName: null, status: "Vacant" })
+    ).toEqual({
+      employeeCode: null,
+      employeeName: null,
+      lastWorkingDate: null,
+      status: "Vacant",
+    })
+  })
+
+  test("requires a last working date for a resignation", () => {
+    expect(() =>
+      deriveRecruitmentEmployeeAssignment({
+        currentEmployeeCode: "EMP-104",
+        employeeEvent: "Resigned",
+      })
+    ).toThrow("Last working date is required")
   })
 })
 

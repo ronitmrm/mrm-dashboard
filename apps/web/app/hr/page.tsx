@@ -1,5 +1,6 @@
 import {
   createRecruitmentRepository,
+  type RecruitmentCandidateEventRow,
   type RecruitmentCandidateRow,
   type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
@@ -37,6 +38,7 @@ export default async function HrRecruitmentPage({
     job?: string
     panel?: string
     success?: string
+    template?: string
   }>
 }) {
   const feedback = await searchParams
@@ -61,6 +63,7 @@ export default async function HrRecruitmentPage({
     connectionString: readAuthEnvironment().connectionString,
   })
   let candidates: RecruitmentCandidateRow[] = []
+  let candidateEvents: RecruitmentCandidateEventRow[] = []
   let combinedRoles: RecruitmentCombinedRoleRow[] = []
   let interviews: RecruitmentInterviewRow[] = []
   let jobs: RecruitmentJobRow[] = []
@@ -96,7 +99,11 @@ export default async function HrRecruitmentPage({
       "candidatesPanel",
       "candidateSearchPanel",
     ].includes(panelId)
-    const needsJobs = ["jobsPanel", "candidateSearchPanel"].includes(panelId)
+    const needsJobs = [
+      "approvedPostPanel",
+      "jobsPanel",
+      "candidateSearchPanel",
+    ].includes(panelId)
 
     const [
       loadedStats,
@@ -107,6 +114,7 @@ export default async function HrRecruitmentPage({
       loadedCandidates,
       loadedJobs,
       loadedInterviews,
+      loadedCandidateEvents,
     ] = await Promise.all([
       repository.count(organizationId),
       needsMasters
@@ -128,6 +136,9 @@ export default async function HrRecruitmentPage({
       panelId === "interviewsPanel"
         ? repository.listInterviews(organizationId)
         : Promise.resolve(interviews),
+      panelId === "conversationLogsPanel"
+        ? repository.listCandidateEvents(organizationId)
+        : Promise.resolve(candidateEvents),
     ])
     stats = loadedStats
     masters = loadedMasters
@@ -137,6 +148,7 @@ export default async function HrRecruitmentPage({
     candidates = loadedCandidates
     jobs = loadedJobs
     interviews = loadedInterviews
+    candidateEvents = loadedCandidateEvents
   } finally {
     await repository.close()
   }
@@ -191,6 +203,7 @@ export default async function HrRecruitmentPage({
         canManageEmployees={canManageEmployees}
         canWrite={canWrite}
         candidates={candidates}
+        candidateEvents={candidateEvents}
         combinedRoles={combinedRoles}
         interviews={interviews}
         jobs={jobs}
@@ -198,6 +211,7 @@ export default async function HrRecruitmentPage({
         panelId={activeItem.panelId}
         posts={posts}
         selectedJobId={feedback.job}
+        selectedTemplateCode={feedback.template}
         templates={templates}
       />
     </div>

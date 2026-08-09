@@ -10,11 +10,16 @@ import {
 
 const posts = [
   {
+    combinedRoleId: "combined-1",
+    combinedRoleName: "Combined operator",
+    combinedVacancyCode: "CMB-1",
     department: "Production",
     designation: "Operator",
     employeeCode: null,
     employeeName: null,
     id: "post-1",
+    isPrimaryCombinedPost: true,
+    lastWorkingDate: null,
     postCode: "P-001",
     requirementTemplateCode: null,
     status: "Vacant",
@@ -22,11 +27,16 @@ const posts = [
     vacancyNumber: "1",
   },
   {
+    combinedRoleId: null,
+    combinedRoleName: null,
+    combinedVacancyCode: null,
     department: "Quality",
     designation: "Inspector",
     employeeCode: null,
     employeeName: null,
     id: "post-2",
+    isPrimaryCombinedPost: false,
+    lastWorkingDate: null,
     postCode: "Q-001",
     requirementTemplateCode: null,
     status: "Vacant",
@@ -70,16 +80,23 @@ describe("employee assignment workbook", () => {
           "Employee Name",
           "Employee Code",
           "Employment Event",
+          "Last Working Date",
         ],
-        ["CMB-1", "Ankit", "E-1", "Joined"],
+        ["CMB-1", "Ankit", "E-1", "Joined", ""],
       ]),
       combinedJobsSheetName
     )
     XLSX.utils.book_append_sheet(
       workbook,
       XLSX.utils.aoa_to_sheet([
-        ["Post Code", "Employee Name", "Employee Code", "Employment Event"],
-        ["Q-001", "Ravi", "E-2", "Appointed"],
+        [
+          "Post Code",
+          "Employee Name",
+          "Employee Code",
+          "Employment Event",
+          "Last Working Date",
+        ],
+        ["Q-001", "Ravi", "E-2", "Appointed", ""],
       ]),
       individualPostsSheetName
     )
@@ -134,6 +151,46 @@ describe("employee assignment workbook", () => {
 
     expect(() => parseEmployeeAssignmentWorkbook(workbook)).toThrow(
       "Employment Event must be Appointed, Joined, Resigned, or Removed"
+    )
+  })
+
+  it("requires and preserves the last working date for a resignation", () => {
+    const workbook = buildEmployeeAssignmentWorkbook({
+      combinedRoles: [],
+      posts,
+    })
+    XLSX.utils.sheet_add_aoa(
+      workbook.Sheets[individualPostsSheetName]!,
+      [
+        [
+          "Q-001",
+          "Quality",
+          "Inspector",
+          "",
+          "",
+          "Ravi",
+          "E-2",
+          "Resigned",
+          "2026-08-31",
+        ],
+      ],
+      { origin: "A2" }
+    )
+
+    expect(parseEmployeeAssignmentWorkbook(workbook)).toEqual([
+      expect.objectContaining({
+        employeeEvent: "Resigned",
+        lastWorkingDate: "2026-08-31",
+      }),
+    ])
+
+    XLSX.utils.sheet_add_aoa(
+      workbook.Sheets[individualPostsSheetName]!,
+      [["Q-001", "Quality", "Inspector", "", "", "Ravi", "E-2", "Resigned", ""]],
+      { origin: "A2" }
+    )
+    expect(() => parseEmployeeAssignmentWorkbook(workbook)).toThrow(
+      "Last Working Date is required for Resigned"
     )
   })
 })

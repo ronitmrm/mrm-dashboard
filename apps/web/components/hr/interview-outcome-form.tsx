@@ -22,7 +22,7 @@ import { recordInterviewAction } from "@/app/hr/actions"
 export type InterviewApplicationOption = {
   candidateName: string
   id: string
-  nextRound: RecruitmentInterviewRoundName | null
+  scoreableRound: RecruitmentInterviewRoundName | null
 }
 
 const scoreOptions = [
@@ -48,9 +48,9 @@ export function InterviewOutcomeForm({
   const selectedApplication = applications.find(
     (application) => application.id === applicationId
   )
-  const round = recruitmentInterviewRound(selectedApplication?.nextRound)
+  const round = recruitmentInterviewRound(selectedApplication?.scoreableRound)
   const availableApplications = applications.filter(
-    (application) => application.nextRound !== null
+    (application) => application.scoreableRound !== null
   )
 
   return (
@@ -77,7 +77,7 @@ export function InterviewOutcomeForm({
               <NativeSelectOption value="">Select applicant</NativeSelectOption>
               {availableApplications.map((application) => (
                 <NativeSelectOption key={application.id} value={application.id}>
-                  {application.candidateName} · {application.nextRound}
+                  {application.candidateName} · {application.scoreableRound}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
@@ -137,8 +137,8 @@ export function InterviewOutcomeForm({
         ) : (
           <Alert>
             <AlertDescription>
-              Select an applicant to load the locked round and its preset
-              questions.
+              Schedule the required interview first, then select the applicant
+              to score the locked round.
             </AlertDescription>
           </Alert>
         )}

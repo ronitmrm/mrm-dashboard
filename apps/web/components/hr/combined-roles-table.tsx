@@ -32,9 +32,15 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 import { Pencil } from "lucide-react"
-import { useState } from "react"
+import Link from "next/link"
+import { useMemo, useState } from "react"
 
 import { updateCombinedRoleAction } from "@/app/hr/actions"
+import {
+  ExcelColumnFilter,
+  matchesColumnFilter,
+  uniqueFilterOptions,
+} from "@/components/hr/excel-column-filter"
 
 function CombinedStatusBadge({ status }: { status: string }) {
   return (
@@ -61,6 +67,14 @@ export function CombinedRolesTable({
   const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(
     () => new Set()
   )
+  const [filters, setFilters] = useState<Record<string, string[] | null>>({
+    code: null,
+    name: null,
+    posts: null,
+    primary: null,
+    status: null,
+    templates: null,
+  })
 
   function startEditing(role: RecruitmentCombinedRoleRow) {
     const memberCodes = new Set(role.postCodes)
@@ -115,7 +129,64 @@ export function CombinedRolesTable({
     : editablePosts
   const canSubmit =
     selectedPostIds.size >= 2 && selectedPostIds.has(primaryPostId)
-  const columnCount = canWrite ? 6 : 5
+  const roleValues = useMemo(
+    () =>
+      combinedRoles.map((role) => {
+        const memberTemplates = [
+          ...new Set(
+            posts
+              .filter((post) => role.postCodes.includes(post.postCode))
+              .flatMap((post) =>
+                post.requirementTemplateCode
+                  ? [post.requirementTemplateCode]
+                  : []
+              )
+          ),
+        ].sort()
+        return {
+          code: role.vacancyCode ?? "—",
+          name: role.name,
+          posts: role.postCodes.join(", ") || "—",
+          primary: role.primaryPostCode ?? "—",
+          role,
+          status: role.status,
+          templateLabel: memberTemplates.join(", ") || "—",
+          templates: memberTemplates,
+        }
+      }),
+    [combinedRoles, posts]
+  )
+  const filterOptions = useMemo(
+    () => ({
+      code: uniqueFilterOptions(roleValues.map((row) => row.code)),
+      name: uniqueFilterOptions(roleValues.map((row) => row.name)),
+      posts: uniqueFilterOptions(roleValues.map((row) => row.posts)),
+      primary: uniqueFilterOptions(roleValues.map((row) => row.primary)),
+      status: uniqueFilterOptions(roleValues.map((row) => row.status)),
+      templates: uniqueFilterOptions(
+        roleValues.map((row) => row.templateLabel)
+      ),
+    }),
+    [roleValues]
+  )
+  const visibleRoles = roleValues.filter(
+    (row) =>
+      matchesColumnFilter(row.code, filters.code ?? null) &&
+      matchesColumnFilter(row.name, filters.name ?? null) &&
+      matchesColumnFilter(row.posts, filters.posts ?? null) &&
+      matchesColumnFilter(row.primary, filters.primary ?? null) &&
+      matchesColumnFilter(row.templateLabel, filters.templates ?? null) &&
+      matchesColumnFilter(row.status, filters.status ?? null)
+  )
+  const filterColumns = [
+    ["code", "Combined code"],
+    ["name", "Name"],
+    ["posts", "Post Codes"],
+    ["primary", "Primary Post"],
+    ["templates", "Job templates"],
+    ["status", "Status"],
+  ] as const
+  const columnCount = canWrite ? 7 : 6
 
   return (
     <Sheet
@@ -140,15 +211,34 @@ export function CombinedRolesTable({
                 <TableHead>Name</TableHead>
                 <TableHead>Post Codes</TableHead>
                 <TableHead>Primary Post</TableHead>
+                <TableHead>Job templates</TableHead>
                 <TableHead>Status</TableHead>
                 {canWrite ? (
                   <TableHead className="text-right">Actions</TableHead>
                 ) : null}
               </TableRow>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                {filterColumns.map(([key, label]) => (
+                  <TableHead key={key}>
+                    <ExcelColumnFilter
+                      label={label}
+                      onApply={(selected) =>
+                        setFilters((current) => ({
+                          ...current,
+                          [key]: selected,
+                        }))
+                      }
+                      options={filterOptions[key]}
+                      selected={filters[key] ?? null}
+                    />
+                  </TableHead>
+                ))}
+                {canWrite ? <TableHead /> : null}
+              </TableRow>
             </TableHeader>
             <TableBody>
-              {combinedRoles.length ? (
-                combinedRoles.map((role) => (
+              {visibleRoles.length ? (
+                visibleRoles.map(({ role, templates }) => (
                   <TableRow key={role.id}>
                     <TableCell className="font-mono">
                       {role.vacancyCode ?? "—"}
@@ -159,6 +249,26 @@ export function CombinedRolesTable({
                     </TableCell>
                     <TableCell className="font-mono">
                       {role.primaryPostCode ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        {templates.length
+                          ? templates.map((templateCode) => (
+                              <Button
+                                asChild
+                                className="h-auto p-0 font-mono"
+                                key={templateCode}
+                                variant="link"
+                              >
+                                <Link
+                                  href={`/hr?panel=postMasterPanel&template=${encodeURIComponent(templateCode)}`}
+                                >
+                                  {templateCode}
+                                </Link>
+                              </Button>
+                            ))
+                          : "—"}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <CombinedStatusBadge status={role.status} />
@@ -185,7 +295,9 @@ export function CombinedRolesTable({
                     className="py-10 text-center text-muted-foreground"
                     colSpan={columnCount}
                   >
-                    No combined roles found.
+                    {combinedRoles.length
+                      ? "No combined roles match the selected filters."
+                      : "No combined roles found."}
                   </TableCell>
                 </TableRow>
               )}

@@ -2,6 +2,7 @@ import Link from "next/link"
 
 import {
   nextRecruitmentTemplateCode,
+  type RecruitmentCandidateEventRow,
   type RecruitmentCandidateRow,
   type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
@@ -55,13 +56,18 @@ import {
 } from "@/components/hr/candidate-assignment-panel"
 import { CombinedRoleForm } from "@/components/hr/combined-role-form"
 import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/hr/combined-roles-table"
+import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
+import { EmployeeStatusFields } from "@/components/hr/employee-status-fields"
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
+import { JobTemplatesTable } from "@/components/hr/job-templates-table"
+import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
 
 type RecruitmentPanelProps = {
   canManageEmployees: boolean
   canWrite: boolean
+  candidateEvents: RecruitmentCandidateEventRow[]
   candidates: RecruitmentCandidateRow[]
   combinedRoles: RecruitmentCombinedRoleRow[]
   interviews: RecruitmentInterviewRow[]
@@ -70,6 +76,7 @@ type RecruitmentPanelProps = {
   panelId: string
   posts: RecruitmentPostRow[]
   selectedJobId?: string
+  selectedTemplateCode?: string
   templates: RecruitmentTemplateRow[]
 }
 
@@ -190,39 +197,7 @@ function MastersPanel({
           </Button>
         </PanelForm>
       ) : null}
-      <div className="grid gap-6 xl:grid-cols-2">
-        {[
-          ["Departments", masters.departments],
-          ["Designations", masters.designations],
-        ].map(([title, rows]) => (
-          <Card key={title as string}>
-            <CardHeader>
-              <CardTitle>{title as string}</CardTitle>
-              <CardDescription>
-                {(rows as typeof masters.departments).length} active records
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Name</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(rows as typeof masters.departments).map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell className="font-mono">{row.code}</TableCell>
-                      <TableCell>{row.name}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <MasterTables masters={masters} />
     </>
   )
 }
@@ -230,8 +205,12 @@ function MastersPanel({
 function TemplatePanel({
   canWrite,
   masters,
+  selectedTemplateCode,
   templates,
-}: Pick<RecruitmentPanelProps, "canWrite" | "masters" | "templates">) {
+}: Pick<
+  RecruitmentPanelProps,
+  "canWrite" | "masters" | "selectedTemplateCode" | "templates"
+>) {
   const templateCode = nextRecruitmentTemplateCode(
     templates.map((template) => template.templateCode)
   )
@@ -319,46 +298,12 @@ function TemplatePanel({
           </Button>
         </PanelForm>
       ) : null}
-      <Card>
-        <CardHeader>
-          <CardTitle>Job templates</CardTitle>
-          <CardDescription>
-            {templates.length} reusable profiles
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Designation</TableHead>
-                <TableHead>Education</TableHead>
-                <TableHead>Experience</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {templates.length ? (
-                templates.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="font-mono">
-                      {row.templateCode}
-                    </TableCell>
-                    <TableCell>{row.name}</TableCell>
-                    <TableCell>{row.department ?? "Combined role"}</TableCell>
-                    <TableCell>{row.designation}</TableCell>
-                    <TableCell>{row.education ?? "—"}</TableCell>
-                    <TableCell>{row.experienceRequirement ?? "—"}</TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <EmptyRow columns={6} label="No job templates found." />
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <JobTemplatesTable
+        canWrite={canWrite}
+        initialTemplateCode={selectedTemplateCode}
+        masters={masters}
+        templates={templates}
+      />
     </>
   )
 }
@@ -366,12 +311,13 @@ function TemplatePanel({
 function ApprovedPostPanel({
   canWrite,
   combinedRoles,
+  jobs,
   masters,
   posts,
   templates,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "combinedRoles" | "masters" | "posts" | "templates"
+  "canWrite" | "combinedRoles" | "jobs" | "masters" | "posts" | "templates"
 >) {
   const activeCombinedPostCodes = new Set(
     combinedRoles
@@ -430,6 +376,7 @@ function ApprovedPostPanel({
       />
       <ApprovedPostsTable
         canWrite={canWrite}
+        jobs={jobs}
         posts={posts}
         templates={templates}
       />
@@ -537,29 +484,7 @@ function EmployeePanel({
             </Field>
             <TextField label="Employee name" name="employee_name" />
             <TextField label="Employee code" name="employee_code" />
-            <Field>
-              <FieldLabel htmlFor="employee-event">Employment event</FieldLabel>
-              <NativeSelect
-                className="w-full"
-                defaultValue="Appointed"
-                id="employee-event"
-                name="employee_event"
-                required
-              >
-                <NativeSelectOption value="Appointed">
-                  Appointed — not joined
-                </NativeSelectOption>
-                <NativeSelectOption value="Joined">
-                  Joined — becomes Occupied
-                </NativeSelectOption>
-                <NativeSelectOption value="Resigned">
-                  Resigned
-                </NativeSelectOption>
-                <NativeSelectOption value="Removed">
-                  Remove assignment — becomes Vacant
-                </NativeSelectOption>
-              </NativeSelect>
-            </Field>
+            <EmployeeStatusFields />
             <Button className="md:col-span-2 xl:col-span-3" type="submit">
               Update employee status
             </Button>
@@ -578,6 +503,9 @@ function JobsPanel({
 }: Pick<RecruitmentPanelProps, "canWrite" | "jobs" | "posts">) {
   const recruitablePosts = listRecruitableApprovedPosts(posts, jobs)
   const recruitablePostOptions = recruitablePosts.map((post) => ({
+    combinedRoleId: post.combinedRoleId,
+    combinedRoleName: post.combinedRoleName,
+    combinedVacancyCode: post.combinedVacancyCode,
     department: post.department,
     designation: post.designation,
     id: post.id,
@@ -699,6 +627,18 @@ function LogCandidatePanel({
                 ))}
               </NativeSelect>
             </Field>
+            <Field>
+              <FieldLabel htmlFor="candidate-resume">Resume (PDF)</FieldLabel>
+              <Input
+                accept="application/pdf,.pdf"
+                id="candidate-resume"
+                name="resume"
+                type="file"
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional. Maximum 10 MB.
+              </p>
+            </Field>
             <Field className="md:col-span-2 xl:col-span-3">
               <FieldLabel htmlFor="candidate-notes">Initial notes</FieldLabel>
               <Textarea id="candidate-notes" name="notes" />
@@ -731,8 +671,54 @@ function LogCandidatePanel({
                 ))}
               </NativeSelect>
             </Field>
-            <TextField label="Event type" name="event_type" />
-            <TextField label="Title" name="title" required />
+            <Field>
+              <FieldLabel htmlFor="event-type">Conversation type</FieldLabel>
+              <NativeSelect
+                className="w-full"
+                id="event-type"
+                name="event_type"
+                required
+              >
+                {[
+                  "Phone Call",
+                  "WhatsApp",
+                  "Email",
+                  "In Person",
+                  "Interview Follow-up",
+                  "Offer / Joining",
+                  "Other",
+                ].map((option) => (
+                  <NativeSelectOption key={option} value={option}>
+                    {option}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="event-title">Conversation field</FieldLabel>
+              <NativeSelect
+                className="w-full"
+                id="event-title"
+                name="title"
+                required
+              >
+                {[
+                  "Initial Contact",
+                  "Follow-up",
+                  "Interview Scheduling",
+                  "Document Request",
+                  "Salary Discussion",
+                  "Offer Discussion",
+                  "Joining Confirmation",
+                  "Not Interested",
+                  "Other",
+                ].map((option) => (
+                  <NativeSelectOption key={option} value={option}>
+                    {option}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
             <Field className="md:col-span-2 xl:col-span-3">
               <FieldLabel htmlFor="event-notes">Notes</FieldLabel>
               <Textarea id="event-notes" name="notes" />
@@ -833,7 +819,7 @@ function InterviewsPanel({
                 applications={interviews.map((row) => ({
                   candidateName: `${row.candidateName} · ${row.jobTitle}`,
                   id: row.applicationId,
-                  nextRound: row.nextRound,
+                  scoreableRound: row.scoreableRound,
                 }))}
                 panelId="interviewsPanel"
               />
@@ -910,6 +896,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
         <TemplatePanel
           canWrite={props.canWrite}
           masters={props.masters}
+          selectedTemplateCode={props.selectedTemplateCode}
           templates={props.templates}
         />
       )
@@ -918,6 +905,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
         <ApprovedPostPanel
           canWrite={props.canWrite}
           combinedRoles={props.combinedRoles}
+          jobs={props.jobs}
           masters={props.masters}
           posts={props.posts}
           templates={props.templates}
@@ -963,6 +951,8 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
           interviews={props.interviews}
         />
       )
+    case "conversationLogsPanel":
+      return <ConversationLogsTable events={props.candidateEvents} />
     default:
       return <MastersPanel canWrite={props.canWrite} masters={props.masters} />
   }
