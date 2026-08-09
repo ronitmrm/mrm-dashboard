@@ -599,6 +599,205 @@ describe("commercial revisions and corrections", () => {
     }
   })
 
+  test("shares the exhaustive graph with branching ECN decisions", async () => {
+    const suffix = randomUUID()
+    const itemId = await createItem(`M-ECN-DECISION-${suffix}`, "List")
+    const packageItemIds = await Promise.all(
+      [0, 1].map((index) =>
+        createItem(`P-ECN-DECISION-${index}-${suffix}`, "Package")
+      )
+    )
+    await pool.query(
+      `
+        UPDATE catalog.items
+        SET weight_100_pcs = 10, casting = 1, machining_cost = 100
+        WHERE id = $1
+      `,
+      [itemId]
+    )
+    const childQuoteItemId = await createQuote({
+      customerPartCode: `ECN-DECISION-CHILD-${suffix}`,
+      itemId,
+      itemType: "List",
+      processBase: 100,
+      profitPercent: 0.2,
+      total: 120,
+    })
+    const rollbackQuoteItemId = await createQuote({
+      customerPartCode: `ECN-DECISION-ROLLBACK-${suffix}`,
+      itemId,
+      itemType: "List",
+      processBase: 110,
+      profitPercent: 0.2,
+      total: 132,
+    })
+    const packageQuoteItemIds = await Promise.all(
+      packageItemIds.map((packageItemId, index) =>
+        createQuote({
+          child: { itemId, quoteItemId: childQuoteItemId, total: 120 },
+          customerPartCode: `ECN-DECISION-${index}-${suffix}`,
+          itemId: packageItemId,
+          itemType: "Package",
+          processBase: 10 + index,
+          profitPercent: 0.2,
+          total: 132 + index,
+        })
+      )
+    )
+    const ecn = await repository.createEngineeringChangeNote({
+      itemId,
+      organizationId,
+      reason: "Share the complete decision graph",
+    })
+    await repository.completeEngineeringChangeDesign({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: { description: `Decision revision ${suffix}` },
+    })
+    await repository.completeEngineeringChangeProductCosting({
+      engineeringChangeNoteId: ecn.id,
+      itemPatch: { machiningCost: 140 },
+    })
+    const preview = await repository.listEngineeringChangeAffectedPrices(ecn.id)
+    const selectedPreview = preview.find(
+      (price) => price.quoteItemId === packageQuoteItemIds[0]
+    )!
+
+    const trackedPool = new Pool({ connectionString, max: 1 })
+    let readStatements = 0
+    trackedPool.on("connect", (client) => {
+      const originalQuery = client.query.bind(client)
+      client.query = ((...args: Parameters<typeof client.query>) => {
+        const text = String(args[0]).trim()
+        if (/^(select|with recursive)/i.test(text)) readStatements += 1
+        return originalQuery(...args)
+      }) as typeof client.query
+    })
+    const trackedRepository = createCommercialRevisionsRepository({
+      pool: trackedPool,
+    })
+
+    try {
+      const decision = await trackedRepository.applyEngineeringChangeDecision({
+        decision: "Revise Price",
+        engineeringChangeNoteId: ecn.id,
+        notes: "Use the shared graph",
+        sourceQuoteItemId: packageQuoteItemIds[0]!,
+      })
+      expect(decision).toMatchObject({
+        newPrice: selectedPreview.revisePriceUsd,
+        newProfitPercent: selectedPreview.reviseProfitPercent,
+        status: "Pending Costing",
+      })
+      expect(readStatements).toBeLessThanOrEqual(6)
+
+      const evidence = await pool.query<{
+        decision_count: string
+        event_count: string
+        revision_orders: number[]
+      }>(
+        `
+          SELECT
+            (SELECT count(*)::text
+             FROM sales.engineering_change_decisions decision
+             WHERE decision.engineering_change_note_id = $1)
+              AS decision_count,
+            (SELECT count(*)::text
+             FROM audit.events event
+             WHERE event.target_id = $1
+               AND event.event_type = 'engineering_change.price_decided')
+              AS event_count,
+            ARRAY(
+              SELECT (quote.source_payload ->> 'revisionOrder')::integer
+              FROM sales.quote_items quote
+              WHERE quote.source_payload ->> 'sourceRecordId' = $1::text
+              ORDER BY (quote.source_payload ->> 'revisionOrder')::integer
+            ) AS revision_orders
+        `,
+        [ecn.id]
+      )
+      expect(evidence.rows[0]).toEqual({
+        decision_count: "1",
+        event_count: "1",
+        revision_orders: [1, 2],
+      })
+
+      const beforeFailure = await pool.query<{
+        quote_count: string
+        source_status: string
+      }>(
+        `
+          SELECT count(*)::text AS quote_count,
+            max(status) FILTER (WHERE id = $1) AS source_status
+          FROM sales.quote_items
+          WHERE quote_number = (
+            SELECT quote_number FROM sales.quote_items WHERE id = $1
+          )
+             OR quote_number = (
+               SELECT quote_number FROM sales.quote_items WHERE id = $2
+             )
+        `,
+        [rollbackQuoteItemId, rollbackQuoteItemId]
+      )
+      const failingPool = new Pool({ connectionString, max: 1 })
+      failingPool.on("connect", (client) => {
+        const originalQuery = client.query.bind(client)
+        client.query = ((...args: Parameters<typeof client.query>) => {
+          const text = String(args[0])
+          if (text.includes("INSERT INTO sales.engineering_change_decisions")) {
+            throw new Error("Injected late decision failure")
+          }
+          return originalQuery(...args)
+        }) as typeof client.query
+      })
+      const failingRepository = createCommercialRevisionsRepository({
+        pool: failingPool,
+      })
+      try {
+        await expect(
+          failingRepository.applyEngineeringChangeDecision({
+            decision: "Revise Price",
+            engineeringChangeNoteId: ecn.id,
+            sourceQuoteItemId: rollbackQuoteItemId,
+          })
+        ).rejects.toThrow("Injected late decision failure")
+      } finally {
+        await failingRepository.close()
+        await failingPool.end()
+      }
+      const afterFailure = await pool.query<{
+        decision_count: string
+        quote_count: string
+        source_status: string
+      }>(
+        `
+          SELECT
+            (SELECT count(*)::text
+             FROM sales.engineering_change_decisions decision
+             WHERE decision.engineering_change_note_id = $3
+               AND decision.source_quote_item_id = $1) AS decision_count,
+            count(*)::text AS quote_count,
+            max(status) FILTER (WHERE id = $1) AS source_status
+          FROM sales.quote_items
+          WHERE quote_number = (
+            SELECT quote_number FROM sales.quote_items WHERE id = $1
+          )
+             OR quote_number = (
+               SELECT quote_number FROM sales.quote_items WHERE id = $2
+             )
+        `,
+        [rollbackQuoteItemId, rollbackQuoteItemId, ecn.id]
+      )
+      expect(afterFailure.rows[0]).toEqual({
+        decision_count: "0",
+        quote_count: beforeFailure.rows[0]!.quote_count,
+        source_status: beforeFailure.rows[0]!.source_status,
+      })
+    } finally {
+      await trackedRepository.close()
+      await trackedPool.end()
+    }
+  })
+
   test("records ECN decisions against recursive active customer prices", async () => {
     const itemId = await createItem(`M${Date.now()}2`, "List")
     const quoteItemId = await createQuote({
