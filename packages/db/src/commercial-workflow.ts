@@ -1968,7 +1968,10 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
       })
     },
 
-    async listSalesHandoverQueue(organizationCode: string) {
+    async listSalesHandoverQueue(
+      organizationCode: string,
+      requestedLimit?: number
+    ) {
       const result = await pool.query<{
         company_name: string
         conversion_rate: string
@@ -2007,9 +2010,15 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
           WHERE organization.code = $1
             AND enquiry.technical_handover_status <> 'Handed Over'
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
-          ORDER BY enquiry.created_at DESC
+          ORDER BY enquiry.created_at DESC, enquiry.id DESC
+          LIMIT $2
         `,
-        [organizationCode.trim()]
+        [
+          organizationCode.trim(),
+          requestedLimit === undefined
+            ? null
+            : boundedListLimit(requestedLimit),
+        ]
       )
       return result.rows.map((row) => ({
         companyName: row.company_name,
@@ -2029,7 +2038,10 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
       }))
     },
 
-    async listSalesQuoteReadyQueue(organizationCode: string) {
+    async listSalesQuoteReadyQueue(
+      organizationCode: string,
+      requestedLimit?: number
+    ) {
       const result = await pool.query<{
         company_name: string
         currency: string
@@ -2078,9 +2090,16 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
                 )
             )
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
-          ORDER BY latest_quote_at DESC NULLS LAST, enquiry.created_at DESC
+          ORDER BY latest_quote_at DESC NULLS LAST,
+            enquiry.created_at DESC, enquiry.id DESC
+          LIMIT $2
         `,
-        [organizationCode.trim()]
+        [
+          organizationCode.trim(),
+          requestedLimit === undefined
+            ? null
+            : boundedListLimit(requestedLimit),
+        ]
       )
       return result.rows.map((row) => ({
         companyName: row.company_name,
@@ -2095,7 +2114,10 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
       }))
     },
 
-    async listSalesSentQuoteQueue(organizationCode: string) {
+    async listSalesSentQuoteQueue(
+      organizationCode: string,
+      requestedLimit = commercialSelectorLimit
+    ) {
       const result = await pool.query<{
         company_name: string
         currency: string
@@ -2133,10 +2155,17 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
             ON followup.enquiry_id = enquiry.id
           WHERE organization.code = $1
           GROUP BY enquiry.id, customer.customer_uid, customer.company_name
-          ORDER BY latest_sent_at DESC, enquiry.created_at DESC
-          LIMIT 50
+          ORDER BY latest_sent_at DESC, enquiry.created_at DESC,
+            enquiry.id DESC
+          LIMIT $2
         `,
-        [organizationCode.trim()]
+        [
+          organizationCode.trim(),
+          Math.min(
+            boundedListLimit(requestedLimit),
+            commercialSelectorLimit + 1
+          ),
+        ]
       )
       return result.rows.map((row) => ({
         companyName: row.company_name,
@@ -2152,7 +2181,10 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
       }))
     },
 
-    async listSalesClarificationQueue(organizationCode: string) {
+    async listSalesClarificationQueue(
+      organizationCode: string,
+      requestedLimit?: number
+    ) {
       const result = await pool.query<{
         clarification_task_id: string
         company_name: string
@@ -2192,8 +2224,14 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
             AND clarification.target_stage = 'Sales'
             AND clarification.status = 'Open'
           ORDER BY clarification.created_at, clarification.id
+          LIMIT $2
         `,
-        [organizationCode.trim()]
+        [
+          organizationCode.trim(),
+          requestedLimit === undefined
+            ? null
+            : boundedListLimit(requestedLimit),
+        ]
       )
       return result.rows.map((row) => ({
         clarificationTaskId: row.clarification_task_id,
@@ -4838,6 +4876,56 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
         }
       })
       return boundedResult(rows, limit, roots.rows.length > limit)
+    },
+
+    async listSalesClarificationQueueBounded(
+      organizationCode: string,
+      requestedLimit = 200
+    ) {
+      const limit = operationalRootLimit(requestedLimit)
+      const rows = await this.listSalesClarificationQueue(
+        organizationCode,
+        limit + 1
+      )
+      return boundedResult(rows, limit)
+    },
+
+    async listSalesHandoverQueueBounded(
+      organizationCode: string,
+      requestedLimit = 200
+    ) {
+      const limit = operationalRootLimit(requestedLimit)
+      const rows = await this.listSalesHandoverQueue(
+        organizationCode,
+        limit + 1
+      )
+      return boundedResult(rows, limit)
+    },
+
+    async listSalesQuoteReadyQueueBounded(
+      organizationCode: string,
+      requestedLimit = 200
+    ) {
+      const limit = operationalRootLimit(requestedLimit)
+      const rows = await this.listSalesQuoteReadyQueue(
+        organizationCode,
+        limit + 1
+      )
+      return boundedResult(rows, limit)
+    },
+
+    async listFollowupsBounded(organizationCode: string, requestedLimit = 200) {
+      const limit = operationalRootLimit(requestedLimit)
+      const rows = await this.listFollowups(organizationCode, limit + 1)
+      return boundedResult(rows, limit)
+    },
+
+    async listSalesSentQuoteQueueBounded(organizationCode: string) {
+      const rows = await this.listSalesSentQuoteQueue(
+        organizationCode,
+        commercialSelectorLimit + 1
+      )
+      return boundedResult(rows, commercialSelectorLimit)
     },
 
     async listDesignQueueBounded(
