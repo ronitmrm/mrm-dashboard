@@ -4,6 +4,7 @@ import {
   type RecruitmentCandidateRow,
   type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
+  type RecruitmentInterviewRecordRow,
   type RecruitmentJobRow,
   type RecruitmentMasterSnapshot,
   type RecruitmentPostRow,
@@ -66,6 +67,7 @@ export default async function HrRecruitmentPage({
   let candidateEvents: RecruitmentCandidateEventRow[] = []
   let combinedRoles: RecruitmentCombinedRoleRow[] = []
   let interviews: RecruitmentInterviewRow[] = []
+  let interviewRecords: RecruitmentInterviewRecordRow[] = []
   let jobs: RecruitmentJobRow[] = []
   let posts: RecruitmentPostRow[] = []
   let templates: RecruitmentTemplateRow[] = []
@@ -119,6 +121,7 @@ export default async function HrRecruitmentPage({
       loadedCandidates,
       loadedJobs,
       loadedInterviews,
+      loadedInterviewRecords,
       loadedCandidateEvents,
     ] = await Promise.all([
       repository.count(organizationId),
@@ -138,9 +141,12 @@ export default async function HrRecruitmentPage({
         ? repository.listCandidates(organizationId)
         : Promise.resolve(candidates),
       needsJobs ? repository.listJobs(organizationId) : Promise.resolve(jobs),
-      panelId === "interviewsPanel"
+      ["interviewsPanel", "interviewWorkspacePanel", "interviewProgressPanel"].includes(panelId)
         ? repository.listInterviews(organizationId)
         : Promise.resolve(interviews),
+      panelId === "interviewWorkspacePanel"
+        ? repository.listInterviewRecords(organizationId)
+        : Promise.resolve(interviewRecords),
       panelId === "conversationLogsPanel"
         ? repository.listCandidateEvents(organizationId)
         : Promise.resolve(candidateEvents),
@@ -153,6 +159,7 @@ export default async function HrRecruitmentPage({
     candidates = loadedCandidates
     jobs = loadedJobs
     interviews = loadedInterviews
+    interviewRecords = loadedInterviewRecords
     candidateEvents = loadedCandidateEvents
   } finally {
     await repository.close()
@@ -211,6 +218,7 @@ export default async function HrRecruitmentPage({
         candidateEvents={candidateEvents}
         combinedRoles={combinedRoles}
         interviews={interviews}
+        interviewRecords={interviewRecords}
         jobs={jobs}
         masters={masters}
         panelId={activeItem.panelId}

@@ -1,6 +1,7 @@
 "use client"
 
 import type {
+  RecruitmentCombinedRoleRow,
   RecruitmentJobRow,
   RecruitmentPostRow,
   RecruitmentTemplateRow,
@@ -49,14 +50,17 @@ import {
   ListFilter,
   Pencil,
   Trash2,
+  UserRoundCog,
 } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import {
+  assignEmployeeAction,
   createJobAction,
   deletePostAction,
   updatePostAction,
 } from "@/app/hr/actions"
+import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
@@ -267,11 +271,15 @@ function PostStatusBadge({ status }: { status: string }) {
 
 export function ApprovedPostsTable({
   canWrite = false,
+  combinedRoles = [],
+  employeeManagement = false,
   jobs = [],
   posts,
   templates = [],
 }: {
   canWrite?: boolean
+  combinedRoles?: RecruitmentCombinedRoleRow[]
+  employeeManagement?: boolean
   jobs?: RecruitmentJobRow[]
   posts: RecruitmentPostRow[]
   templates?: TemplateOption[]
@@ -279,6 +287,9 @@ export function ApprovedPostsTable({
   const [editingPost, setEditingPost] = useState<RecruitmentPostRow | null>(
     null
   )
+  const [selectedEmployeePost, setSelectedEmployeePost] =
+    useState<RecruitmentPostRow | null>(null)
+  const [employeeEditorOpen, setEmployeeEditorOpen] = useState(false)
   const [filters, setFilters] = useState<ApprovedPostFilters>(() => ({
     ...EMPTY_FILTERS,
   }))
@@ -287,7 +298,8 @@ export function ApprovedPostsTable({
       .filter((job) => job.status === "Open" && job.postCode)
       .map((job) => job.postCode)
   )
-  const columnCount = canWrite ? 10 : 9
+  const showActions = canWrite || employeeManagement
+  const columnCount = 9 + (employeeManagement ? 1 : 0) + (showActions ? 1 : 0)
   const hasFilters = Object.values(filters).some((filter) => filter !== null)
   const filterOptions = useMemo(
     () => ({
@@ -345,6 +357,7 @@ export function ApprovedPostsTable({
   }
 
   return (
+    <>
     <Sheet
       onOpenChange={(open) => {
         if (!open) setEditingPost(null)
@@ -374,6 +387,18 @@ export function ApprovedPostsTable({
               Open a column filter, tick one or more values, then Apply. Filters
               from different columns work together.
             </p>
+            <div className="flex items-center gap-2">
+            {employeeManagement ? (
+              <Button
+                disabled={!selectedEmployeePost}
+                onClick={() => setEmployeeEditorOpen(true)}
+                size="sm"
+                type="button"
+              >
+                <UserRoundCog data-icon="inline-start" />
+                Update selected employee
+              </Button>
+            ) : null}
             {hasFilters ? (
               <Button
                 onClick={() => setFilters({ ...EMPTY_FILTERS })}
@@ -385,11 +410,13 @@ export function ApprovedPostsTable({
                 Clear filters
               </Button>
             ) : null}
+            </div>
           </div>
           <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
+                  {employeeManagement ? <TableHead>Select</TableHead> : null}
                   <TableHead>Post code</TableHead>
                   <TableHead>Vacancy code</TableHead>
                   <TableHead>Department</TableHead>
@@ -399,22 +426,12 @@ export function ApprovedPostsTable({
                   <TableHead>Employee code</TableHead>
                   <TableHead>Last working date</TableHead>
                   <TableHead>Status</TableHead>
-                  {canWrite ? (
+                  {showActions ? (
                     <TableHead className="text-right">Actions</TableHead>
                   ) : null}
                 </TableRow>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead>
-                    <ApprovedPostColumnFilter
-                      filterKey="lastWorkingDate"
-                      label="Last working date"
-                      onApply={(value) =>
-                        updateFilter("lastWorkingDate", value)
-                      }
-                      options={filterOptions.lastWorkingDate}
-                      selected={filters.lastWorkingDate}
-                    />
-                  </TableHead>
+                  {employeeManagement ? <TableHead /> : null}
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="postCode"
@@ -480,6 +497,17 @@ export function ApprovedPostsTable({
                   </TableHead>
                   <TableHead>
                     <ApprovedPostColumnFilter
+                      filterKey="lastWorkingDate"
+                      label="Last working date"
+                      onApply={(value) =>
+                        updateFilter("lastWorkingDate", value)
+                      }
+                      options={filterOptions.lastWorkingDate}
+                      selected={filters.lastWorkingDate}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <ApprovedPostColumnFilter
                       filterKey="status"
                       label="Status"
                       onApply={(value) => updateFilter("status", value)}
@@ -487,13 +515,30 @@ export function ApprovedPostsTable({
                       selected={filters.status}
                     />
                   </TableHead>
-                  {canWrite ? <TableHead /> : null}
+                  {showActions ? <TableHead /> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredPosts.length ? (
                   filteredPosts.map((row) => (
                     <TableRow key={row.id}>
+                      {employeeManagement ? (
+                        <TableCell>
+                          <Checkbox
+                            aria-label={`Select ${row.postCode}`}
+                            checked={selectedEmployeePost?.id === row.id}
+                            disabled={
+                              Boolean(row.combinedRoleId) &&
+                              !row.isPrimaryCombinedPost
+                            }
+                            onCheckedChange={(checked) =>
+                              setSelectedEmployeePost(
+                                checked === true ? row : null
+                              )
+                            }
+                          />
+                        </TableCell>
+                      ) : null}
                       <TableCell className="font-mono">
                         {row.postCode}
                       </TableCell>
@@ -513,9 +558,29 @@ export function ApprovedPostsTable({
                       <TableCell>
                         <PostStatusBadge status={row.status} />
                       </TableCell>
-                      {canWrite ? (
+                      {showActions ? (
                         <TableCell>
                           <div className="flex justify-end gap-2">
+                            {employeeManagement ? (
+                              <Button
+                                disabled={
+                                  Boolean(row.combinedRoleId) &&
+                                  !row.isPrimaryCombinedPost
+                                }
+                                onClick={() => {
+                                  setSelectedEmployeePost(row)
+                                  setEmployeeEditorOpen(true)
+                                }}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                              >
+                                <UserRoundCog data-icon="inline-start" />
+                                Employee
+                              </Button>
+                            ) : null}
+                            {canWrite ? (
+                              <>
                             {(row.status === "Vacant" ||
                               row.status === "Resigned") &&
                             (!row.combinedRoleId ||
@@ -579,6 +644,8 @@ export function ApprovedPostsTable({
                                 Delete
                               </Button>
                             </form>
+                              </>
+                            ) : null}
                           </div>
                         </TableCell>
                       ) : null}
@@ -673,5 +740,36 @@ export function ApprovedPostsTable({
         </SheetContent>
       ) : null}
     </Sheet>
+    <Sheet
+      onOpenChange={setEmployeeEditorOpen}
+      open={employeeEditorOpen && selectedEmployeePost !== null}
+    >
+      {selectedEmployeePost ? (
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+          <form action={assignEmployeeAction} className="flex min-h-full flex-col">
+            <input name="panel" type="hidden" value="employeeMasterPanel" />
+            <SheetHeader>
+              <SheetTitle>Update employee status</SheetTitle>
+              <SheetDescription>
+                {selectedEmployeePost.postCode} · {selectedEmployeePost.designation}
+              </SheetDescription>
+            </SheetHeader>
+            <div className="grid flex-1 content-start gap-4 px-6 md:grid-cols-2">
+              <SingleEmployeeAssignmentFields
+                combinedRoles={combinedRoles}
+                initialPostId={selectedEmployeePost.id}
+                key={selectedEmployeePost.id}
+                posts={posts}
+                showTargetSelector={false}
+              />
+            </div>
+            <SheetFooter>
+              <Button type="submit">Update employee status</Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      ) : null}
+    </Sheet>
+    </>
   )
 }

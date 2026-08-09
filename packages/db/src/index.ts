@@ -51,6 +51,7 @@ export {
   type RecruitmentCandidateWorkspace,
   type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
+  type RecruitmentInterviewRecordRow,
   type RecruitmentJobApplicationRow,
   type RecruitmentJobInterviewRow,
   type RecruitmentJobRow,

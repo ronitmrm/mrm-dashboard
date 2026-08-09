@@ -25,10 +25,14 @@ type AssignmentTarget = {
 
 export function SingleEmployeeAssignmentFields({
   combinedRoles,
+  initialPostId = "",
   posts,
+  showTargetSelector = true,
 }: {
   combinedRoles: RecruitmentCombinedRoleRow[]
+  initialPostId?: string
   posts: RecruitmentPostRow[]
+  showTargetSelector?: boolean
 }) {
   const { combinedTargets, individualTargets, targets } = useMemo(() => {
     const activeCombinedRoles = combinedRoles.filter(
@@ -58,10 +62,21 @@ export function SingleEmployeeAssignmentFields({
       targets: [...combined, ...individual],
     }
   }, [combinedRoles, posts])
-  const [postId, setPostId] = useState("")
-  const [employeeName, setEmployeeName] = useState("")
-  const [employeeCode, setEmployeeCode] = useState("")
-  const [event, setEvent] = useState("Appointed")
+  const initialTarget = targets.find(({ post }) => post.id === initialPostId)
+  const [postId, setPostId] = useState(initialPostId)
+  const [employeeName, setEmployeeName] = useState(
+    initialTarget?.post.employeeName ?? ""
+  )
+  const [employeeCode, setEmployeeCode] = useState(
+    initialTarget?.post.employeeCode ?? ""
+  )
+  const [event, setEvent] = useState(
+    initialTarget?.post.status === "Occupied"
+      ? "Joined"
+      : initialTarget?.post.status === "Resigned"
+        ? "Resigned"
+        : "Appointed"
+  )
   const selected = targets.find(({ post }) => post.id === postId)
   const occupied = Boolean(
     selected?.post.employeeName || selected?.post.employeeCode
@@ -83,6 +98,7 @@ export function SingleEmployeeAssignmentFields({
 
   return (
     <>
+      {showTargetSelector ? (
       <Field className="md:col-span-2 xl:col-span-3">
         <FieldLabel htmlFor="employee-post">
           Approved post or combined job
@@ -125,6 +141,9 @@ export function SingleEmployeeAssignmentFields({
           </FieldDescription>
         ) : null}
       </Field>
+      ) : (
+        <input name="post_id" type="hidden" value={postId} />
+      )}
       {selected ? (
         <Alert className="md:col-span-2 xl:col-span-3">
           <AlertDescription>

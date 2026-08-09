@@ -29,6 +29,12 @@ function values(formData: FormData, key: string) {
     .filter(Boolean)
 }
 
+function interviewAtValue(formData: FormData) {
+  const date = value(formData, "interview_date")
+  const time = value(formData, "interview_time")
+  return date && time ? `${date}T${time}` : value(formData, "interview_at")
+}
+
 function returnPath(formData: FormData) {
   const returnCandidateId = value(formData, "return_candidate_id")
   if (
@@ -423,7 +429,7 @@ export async function scheduleInterviewAction(formData: FormData) {
     repository.scheduleInterview({
       ...context,
       applicationId: value(formData, "application_id"),
-      interviewAt: value(formData, "interview_at"),
+      interviewAt: interviewAtValue(formData),
     })
   )
 }

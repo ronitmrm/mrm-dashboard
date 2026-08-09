@@ -232,14 +232,25 @@ export default async function JobWorkspacePage({
                     </NativeSelect>
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="job-interview-at">
-                      Interview date and time
+                    <FieldLabel htmlFor="job-interview-date">
+                      Interview date
                     </FieldLabel>
                     <Input
-                      id="job-interview-at"
-                      name="interview_at"
+                      id="job-interview-date"
+                      name="interview_date"
                       required
-                      type="datetime-local"
+                      type="date"
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="job-interview-time">
+                      Interview time
+                    </FieldLabel>
+                    <Input
+                      id="job-interview-time"
+                      name="interview_time"
+                      required
+                      type="time"
                     />
                   </Field>
                   <Button

@@ -6,6 +6,7 @@ import {
   type RecruitmentCandidateRow,
   type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
+  type RecruitmentInterviewRecordRow,
   type RecruitmentJobRow,
   type RecruitmentMasterSnapshot,
   type RecruitmentPostRow,
@@ -38,9 +39,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import {
-  assignEmployeeAction,
   createJobAction,
-  logCandidateEventAction,
   saveCandidateAction,
   saveMasterAction,
   savePostAction,
@@ -49,16 +48,22 @@ import {
 } from "@/app/hr/actions"
 import { ApprovedPostFields } from "@/components/hr/approved-post-fields"
 import { ApprovedPostsTable } from "@/components/hr/approved-posts-table"
-import { CandidateAssignmentPanel } from "@/components/hr/candidate-assignment-panel"
+import {
+  CandidateAssignmentPanel,
+  CandidatesTable,
+} from "@/components/hr/candidate-assignment-panel"
 import { CombinedRoleForm } from "@/components/hr/combined-role-form"
 import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/hr/combined-roles-table"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
-import { InterviewWorkspace } from "@/components/hr/interview-workspace"
+import {
+  InterviewProgress,
+  InterviewResultsWorkspace,
+  InterviewScheduleBoard,
+} from "@/components/hr/interview-workspace"
 import { JobTemplatesTable } from "@/components/hr/job-templates-table"
 import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
-import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
 
 type RecruitmentPanelProps = {
@@ -68,6 +73,7 @@ type RecruitmentPanelProps = {
   candidates: RecruitmentCandidateRow[]
   combinedRoles: RecruitmentCombinedRoleRow[]
   interviews: RecruitmentInterviewRow[]
+  interviewRecords: RecruitmentInterviewRecordRow[]
   jobs: RecruitmentJobRow[]
   masters: RecruitmentMasterSnapshot
   panelId: string
@@ -344,6 +350,7 @@ function ApprovedPostPanel({
       <EditableCombinedRolesTable
         canWrite={canWrite}
         combinedRoles={combinedRoles}
+        masters={masters}
         posts={posts}
         templates={templates}
       />
@@ -397,24 +404,12 @@ function EmployeePanel({
               <EmployeeAssignmentUpload />
             </CardContent>
           </Card>
-          <PanelForm
-            action={assignEmployeeAction}
-            description="Assign one employee to an individual post or to every Approved Post in a combined job. Appointed becomes Occupied only when Joined is selected."
-            panelId="employeeMasterPanel"
-            title="Single employee assignment and status"
-          >
-            <SingleEmployeeAssignmentFields
-              combinedRoles={combinedRoles}
-              posts={posts}
-            />
-            <Button className="md:col-span-2 xl:col-span-3" type="submit">
-              Update employee status
-            </Button>
-          </PanelForm>
         </div>
       ) : null}
       <ApprovedPostsTable
         canWrite={canWrite}
+        combinedRoles={combinedRoles}
+        employeeManagement={canManageEmployees}
         jobs={jobs}
         posts={posts}
         templates={templates.filter((template) => !template.combinedRoleId)}
@@ -532,138 +527,57 @@ function LogCandidatePanel({
   return (
     <>
       {canWrite ? (
-        <div className="grid gap-6 xl:grid-cols-2">
-          <PanelForm
-            action={saveCandidateAction}
-            description="Phone number is the duplicate-safe candidate identity."
-            panelId="candidatesPanel"
-            title="Log candidate"
-          >
-            <TextField label="Candidate name" name="name" required />
-            <TextField label="Phone" name="phone" required />
-            <TextField label="Email" name="email" type="email" />
-            <TextField label="Current company" name="current_company" />
-            <TextField label="Experience" name="experience" />
-            <TextField label="Source" name="source" />
-            <Field>
-              <FieldLabel htmlFor="candidate-department">
-                Preferred department
-              </FieldLabel>
-              <NativeSelect
-                className="w-full"
-                id="candidate-department"
-                name="department_code"
-              >
-                <NativeSelectOption value="">Not selected</NativeSelectOption>
-                {masters.departments.map((row) => (
-                  <NativeSelectOption key={row.id} value={row.code}>
-                    {row.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="candidate-resume">Resume (PDF)</FieldLabel>
-              <Input
-                accept="application/pdf,.pdf"
-                id="candidate-resume"
-                name="resume"
-                type="file"
-              />
-              <p className="text-xs text-muted-foreground">
-                Optional. Maximum 10 MB.
-              </p>
-            </Field>
-            <Field className="md:col-span-2 xl:col-span-3">
-              <FieldLabel htmlFor="candidate-notes">Initial notes</FieldLabel>
-              <Textarea id="candidate-notes" name="notes" />
-            </Field>
-            <Button className="md:col-span-2 xl:col-span-3" type="submit">
-              Save candidate
-            </Button>
-          </PanelForm>
-          <PanelForm
-            action={logCandidateEventAction}
-            description="Append an immutable conversation or follow-up to the candidate timeline."
-            panelId="candidatesPanel"
-            title="Log conversation"
-          >
-            <Field>
-              <FieldLabel htmlFor="event-candidate">Candidate</FieldLabel>
-              <NativeSelect
-                className="w-full"
-                id="event-candidate"
-                name="candidate_id"
-                required
-              >
-                <NativeSelectOption value="">
-                  Select candidate
+        <PanelForm
+          action={saveCandidateAction}
+          description="Phone number is the duplicate-safe candidate identity."
+          panelId="candidatesPanel"
+          title="Log candidate"
+        >
+          <TextField label="Candidate name" name="name" required />
+          <TextField label="Phone" name="phone" required />
+          <TextField label="Email" name="email" type="email" />
+          <TextField label="Current company" name="current_company" />
+          <TextField label="Experience" name="experience" />
+          <TextField label="Source" name="source" />
+          <Field>
+            <FieldLabel htmlFor="candidate-department">
+              Preferred department
+            </FieldLabel>
+            <NativeSelect
+              className="w-full"
+              id="candidate-department"
+              name="department_code"
+            >
+              <NativeSelectOption value="">Not selected</NativeSelectOption>
+              {masters.departments.map((row) => (
+                <NativeSelectOption key={row.id} value={row.code}>
+                  {row.name}
                 </NativeSelectOption>
-                {candidates.map((row) => (
-                  <NativeSelectOption key={row.id} value={row.id}>
-                    {row.name} · {row.phone}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="event-type">Conversation type</FieldLabel>
-              <NativeSelect
-                className="w-full"
-                id="event-type"
-                name="event_type"
-                required
-              >
-                {[
-                  "Phone Call",
-                  "WhatsApp",
-                  "Email",
-                  "In Person",
-                  "Interview Follow-up",
-                  "Offer / Joining",
-                  "Other",
-                ].map((option) => (
-                  <NativeSelectOption key={option} value={option}>
-                    {option}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="event-title">Conversation field</FieldLabel>
-              <NativeSelect
-                className="w-full"
-                id="event-title"
-                name="title"
-                required
-              >
-                {[
-                  "Initial Contact",
-                  "Follow-up",
-                  "Interview Scheduling",
-                  "Document Request",
-                  "Salary Discussion",
-                  "Offer Discussion",
-                  "Joining Confirmation",
-                  "Not Interested",
-                  "Other",
-                ].map((option) => (
-                  <NativeSelectOption key={option} value={option}>
-                    {option}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field className="md:col-span-2 xl:col-span-3">
-              <FieldLabel htmlFor="event-notes">Notes</FieldLabel>
-              <Textarea id="event-notes" name="notes" />
-            </Field>
-            <Button className="md:col-span-2 xl:col-span-3" type="submit">
-              Add to timeline
-            </Button>
-          </PanelForm>
-        </div>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="candidate-resume">Resume (PDF)</FieldLabel>
+            <Input
+              accept="application/pdf,.pdf"
+              id="candidate-resume"
+              name="resume"
+              type="file"
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional. Maximum 10 MB.
+            </p>
+          </Field>
+          <Field className="md:col-span-2 xl:col-span-3">
+            <FieldLabel htmlFor="candidate-notes">Initial notes</FieldLabel>
+            <Textarea id="candidate-notes" name="notes" />
+          </Field>
+          <Button className="md:col-span-2 xl:col-span-3" type="submit">
+            Save candidate
+          </Button>
+        </PanelForm>
       ) : null}
+      <CandidatesTable canWrite={canWrite} candidates={candidates} />
     </>
   )
 }
@@ -693,7 +607,7 @@ function InterviewsPanel({
 }: Pick<RecruitmentPanelProps, "canWrite" | "interviews">) {
   return (
     <>
-      <InterviewWorkspace canWrite={canWrite} interviews={interviews} />
+      <InterviewScheduleBoard canWrite={canWrite} interviews={interviews} />
       {canWrite ? (
         <div className="grid gap-6">
           <PanelForm
@@ -730,12 +644,8 @@ function InterviewsPanel({
                   ))}
               </NativeSelect>
             </Field>
-            <TextField
-              label="Interview date and time"
-              name="interview_at"
-              required
-              type="datetime-local"
-            />
+            <TextField label="Interview date" name="interview_date" required type="date" />
+            <TextField label="Interview time" name="interview_time" required type="time" />
             <Button
               className="md:col-span-2 xl:col-span-3"
               disabled={
@@ -821,6 +731,12 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
           interviews={props.interviews}
         />
       )
+    case "interviewWorkspacePanel":
+      return (
+        <InterviewResultsWorkspace records={props.interviewRecords} />
+      )
+    case "interviewProgressPanel":
+      return <InterviewProgress interviews={props.interviews} />
     case "conversationLogsPanel":
       return (
         <ConversationLogsTable

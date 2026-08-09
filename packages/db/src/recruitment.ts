@@ -160,6 +160,12 @@ export type RecruitmentJobInterviewRow = {
   updatedAt: string
 }
 
+export type RecruitmentInterviewRecordRow = RecruitmentJobInterviewRow & {
+  jobId: string
+  jobNumber: string
+  jobTitle: string
+}
+
 export type RecruitmentJobWorkspace = {
   applications: RecruitmentJobApplicationRow[]
   interviews: RecruitmentJobInterviewRow[]
@@ -1388,6 +1394,71 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           status: row.status,
         }
       })
+    },
+
+    async listInterviewRecords(
+      organizationId: string
+    ): Promise<RecruitmentInterviewRecordRow[]> {
+      const result = await pool.query<{
+        application_id: string
+        candidate_name: string
+        comments: string | null
+        created_at: string
+        id: string
+        interviewer_name: string | null
+        job_id: string
+        job_number: string
+        job_title: string
+        joining_date: string | null
+        question_scores: unknown
+        round_name: string
+        scheduled_at: string | null
+        score: string | null
+        status: string
+        updated_at: string
+      }>(
+        `
+          SELECT interview.id, interview.application_id,
+            candidate.name AS candidate_name, job.id AS job_id,
+            job.job_number, job.title AS job_title, interview.round_name,
+            interview.status, interview.scheduled_at::text,
+            interview.interviewer_name,
+            interview.scores ->> 'overall' AS score,
+            interview.scores -> 'questions' AS question_scores,
+            interview.comments, interview.joining_date::text,
+            interview.created_at::text, interview.updated_at::text
+          FROM recruitment.interviews interview
+          JOIN recruitment.applications application
+            ON application.id = interview.application_id
+          JOIN recruitment.candidates candidate
+            ON candidate.id = application.candidate_id
+          JOIN recruitment.job_posts job
+            ON job.id = application.job_post_id
+          WHERE interview.organization_id = $1
+          ORDER BY interview.scheduled_at DESC NULLS LAST,
+            interview.updated_at DESC, candidate.name
+          LIMIT 2000
+        `,
+        [organizationId]
+      )
+      return result.rows.map((row) => ({
+        applicationId: row.application_id,
+        candidateName: row.candidate_name,
+        comments: row.comments,
+        createdAt: row.created_at,
+        id: row.id,
+        interviewerName: row.interviewer_name,
+        jobId: row.job_id,
+        jobNumber: row.job_number,
+        jobTitle: row.job_title,
+        joiningDate: row.joining_date,
+        questionScores: normalizedQuestionScores(row.question_scores),
+        roundName: row.round_name,
+        scheduledAt: row.scheduled_at,
+        score: row.score === null ? null : Number(row.score),
+        status: row.status,
+        updatedAt: row.updated_at,
+      }))
     },
 
     async upsertMaster(

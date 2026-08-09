@@ -13,6 +13,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import { Field, FieldLabel } from "@workspace/ui/components/field"
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@workspace/ui/components/sheet"
 import {
   Table,
   TableBody,
@@ -21,8 +34,10 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { FileText } from "lucide-react"
+import { Textarea } from "@workspace/ui/components/textarea"
+import { FileText, MessageSquareText } from "lucide-react"
 
+import { logCandidateEventAction } from "@/app/hr/actions"
 import { CandidateAssignmentForm } from "@/components/hr/candidate-assignment-form"
 import {
   ExcelColumnFilter,
@@ -62,11 +77,15 @@ function CandidateStatusBadge({ status }: { status: string }) {
 }
 
 export function CandidatesTable({
+  canWrite = false,
   candidates,
 }: {
+  canWrite?: boolean
   candidates: RecruitmentCandidateRow[]
 }) {
   const [filters, setFilters] = useState({ ...emptyFilters })
+  const [loggingCandidate, setLoggingCandidate] =
+    useState<RecruitmentCandidateRow | null>(null)
   const rows = useMemo(
     () =>
       candidates.map((candidate) => ({
@@ -117,6 +136,12 @@ export function CandidatesTable({
   ]
 
   return (
+    <Sheet
+      onOpenChange={(open) => {
+        if (!open) setLoggingCandidate(null)
+      }}
+      open={loggingCandidate !== null}
+    >
     <Card>
       <CardHeader>
         <CardTitle>Candidates</CardTitle>
@@ -131,6 +156,7 @@ export function CandidatesTable({
               {columns.map(({ key, label }) => (
                 <TableHead key={key}>{label}</TableHead>
               ))}
+              {canWrite ? <TableHead className="text-right">Actions</TableHead> : null}
             </TableRow>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               {columns.map(({ key, label }) => (
@@ -145,6 +171,7 @@ export function CandidatesTable({
                   />
                 </TableHead>
               ))}
+              {canWrite ? <TableHead /> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -184,13 +211,26 @@ export function CandidatesTable({
                 <TableCell>
                   <CandidateStatusBadge status={row.status} />
                 </TableCell>
+                {canWrite ? (
+                  <TableCell className="text-right">
+                    <Button
+                      onClick={() => setLoggingCandidate(row.candidate)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      <MessageSquareText data-icon="inline-start" />
+                      Log conversation
+                    </Button>
+                  </TableCell>
+                ) : null}
               </TableRow>
             ))}
             {!visibleRows.length ? (
               <TableRow>
                 <TableCell
                   className="py-10 text-center text-muted-foreground"
-                  colSpan={11}
+                  colSpan={canWrite ? 12 : 11}
                 >
                   No candidates match the selected filters.
                 </TableCell>
@@ -200,6 +240,46 @@ export function CandidatesTable({
         </Table>
       </CardContent>
     </Card>
+    {loggingCandidate ? (
+      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+        <form action={logCandidateEventAction} className="flex min-h-full flex-col">
+          <input name="panel" type="hidden" value="candidatesPanel" />
+          <input name="candidate_id" type="hidden" value={loggingCandidate.id} />
+          <SheetHeader>
+            <SheetTitle>Log conversation</SheetTitle>
+            <SheetDescription>
+              {loggingCandidate.name} · {loggingCandidate.phone}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="grid flex-1 content-start gap-4 px-6">
+            <Field>
+              <FieldLabel htmlFor="candidate-log-event-type">Conversation type</FieldLabel>
+              <NativeSelect id="candidate-log-event-type" name="event_type" required>
+                {["Phone Call", "WhatsApp", "Email", "In Person", "Interview Follow-up", "Offer / Joining", "Other"].map((option) => (
+                  <NativeSelectOption key={option} value={option}>{option}</NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="candidate-log-title">Conversation field</FieldLabel>
+              <NativeSelect id="candidate-log-title" name="title" required>
+                {["Initial Contact", "Follow-up", "Interview Scheduling", "Document Request", "Salary Discussion", "Offer Discussion", "Joining Confirmation", "Not Interested", "Other"].map((option) => (
+                  <NativeSelectOption key={option} value={option}>{option}</NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="candidate-log-notes">Notes</FieldLabel>
+              <Textarea id="candidate-log-notes" name="notes" rows={8} />
+            </Field>
+          </div>
+          <SheetFooter>
+            <Button type="submit">Add to candidate timeline</Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    ) : null}
+    </Sheet>
   )
 }
 
@@ -216,15 +296,15 @@ export function CandidateAssignmentPanel({
   initialJobId?: string
   jobs?: RecruitmentJobRow[]
 }) {
+  if (!canWrite) return <CandidatesTable candidates={candidates} />
+
   return (
-    <>
-      {canWrite ? (
-        <Card>
+    <Card>
           <CardHeader>
-            <CardTitle>Assign candidates</CardTitle>
+            <CardTitle>Search candidates for a job</CardTitle>
             <CardDescription>
-              Choose one job, filter the candidate table by any column, and
-              assign multiple candidates in one action.
+              Select one job first, use the column filters to find suitable
+              candidates, then tick one or many candidates for that job.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -252,9 +332,6 @@ export function CandidateAssignmentPanel({
                 }))}
             />
           </CardContent>
-        </Card>
-      ) : null}
-      <CandidatesTable candidates={candidates} />
-    </>
+    </Card>
   )
 }

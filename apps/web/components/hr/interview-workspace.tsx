@@ -1,6 +1,10 @@
 "use client"
 
-import type { RecruitmentInterviewRow } from "@workspace/db"
+import type {
+  RecruitmentInterviewRecordRow,
+  RecruitmentInterviewRow,
+} from "@workspace/db"
+import { recruitmentInterviewRound } from "@workspace/db/recruitment-interview-workflow"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -10,6 +14,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import { Field, FieldLabel } from "@workspace/ui/components/field"
+import { Input } from "@workspace/ui/components/input"
 import {
   Sheet,
   SheetContent,
@@ -31,7 +37,7 @@ import {
   ClipboardCheck,
   ListTodo,
 } from "lucide-react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 
@@ -43,39 +49,78 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-export function InterviewWorkspace({
+function dateKey(value: string | null) {
+  if (!value) return ""
+  return new Date(value).toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  })
+}
+
+function formatDate(value: string | null) {
+  return value
+    ? new Date(value).toLocaleDateString("en-IN", {
+        dateStyle: "medium",
+        timeZone: "Asia/Kolkata",
+      })
+    : "—"
+}
+
+function formatTime(value: string | null) {
+  return value
+    ? new Date(value).toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Asia/Kolkata",
+      })
+    : "—"
+}
+
+function SummaryCards({
+  items,
+}: {
+  items: Array<{
+    icon: typeof CalendarClock
+    label: string
+    value: number
+  }>
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {items.map(({ icon: Icon, label, value }) => (
+        <Card key={label}>
+          <CardContent className="flex items-center justify-between gap-4 pt-6">
+            <div>
+              <p className="text-sm text-muted-foreground">{label}</p>
+              <p className="text-3xl font-semibold tabular-nums">{value}</p>
+            </div>
+            <Icon className="size-7 text-primary" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+export function InterviewScheduleBoard({
   canWrite,
   interviews,
 }: {
   canWrite: boolean
   interviews: RecruitmentInterviewRow[]
 }) {
+  const [selectedDate, setSelectedDate] = useState("")
   const [selectedInterview, setSelectedInterview] =
     useState<RecruitmentInterviewRow | null>(null)
-  const planned = interviews.filter((row) => row.scoreableRound !== null)
+  const planned = useMemo(
+    () => interviews.filter((row) => row.scoreableRound !== null),
+    [interviews]
+  )
+  const visiblePlanned = selectedDate
+    ? planned.filter((row) => dateKey(row.interviewAt) === selectedDate)
+    : planned
   const awaitingSchedule = interviews.filter(
     (row) => row.nextRound !== null && row.scoreableRound === null
   )
-  const completedRounds = interviews.filter((row) => row.latestRound !== null)
-  const closed = interviews.filter((row) => row.nextRound === null)
-  const summaries = [
-    {
-      icon: CalendarClock,
-      label: "Pending interviews",
-      value: planned.length,
-    },
-    {
-      icon: ListTodo,
-      label: "Need scheduling",
-      value: awaitingSchedule.length,
-    },
-    {
-      icon: ClipboardCheck,
-      label: "Rounds completed",
-      value: completedRounds.length,
-    },
-    { icon: CheckCircle2, label: "Applications closed", value: closed.length },
-  ]
 
   return (
     <Sheet
@@ -84,26 +129,35 @@ export function InterviewWorkspace({
       }}
       open={selectedInterview !== null}
     >
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {summaries.map(({ icon: Icon, label, value }) => (
-          <Card key={label}>
-            <CardContent className="flex items-center justify-between gap-4 pt-6">
-              <div>
-                <p className="text-sm text-muted-foreground">{label}</p>
-                <p className="text-3xl font-semibold tabular-nums">{value}</p>
-              </div>
-              <Icon className="size-7 text-primary" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <SummaryCards
+        items={[
+          {
+            icon: CalendarClock,
+            label: selectedDate ? "Interviews on selected date" : "All pending interviews",
+            value: visiblePlanned.length,
+          },
+          { icon: ListTodo, label: "Need scheduling", value: awaitingSchedule.length },
+          { icon: ClipboardCheck, label: "All scheduled", value: planned.length },
+        ]}
+      />
 
       <Card>
-        <CardHeader>
-          <CardTitle>Planned interviews</CardTitle>
-          <CardDescription>
-            {planned.length} scheduled interviews waiting for an outcome
-          </CardDescription>
+        <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <CardTitle>Interview schedule</CardTitle>
+            <CardDescription>
+              Select a date to see exactly how many interviews are planned that day.
+            </CardDescription>
+          </div>
+          <Field className="w-full sm:w-64">
+            <FieldLabel htmlFor="interview-schedule-date">View date</FieldLabel>
+            <Input
+              id="interview-schedule-date"
+              onChange={(event) => setSelectedDate(event.target.value)}
+              type="date"
+              value={selectedDate}
+            />
+          </Field>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -111,24 +165,20 @@ export function InterviewWorkspace({
               <TableRow>
                 <TableHead>Candidate</TableHead>
                 <TableHead>Job</TableHead>
-                <TableHead>Date and time</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Time</TableHead>
                 <TableHead>Round</TableHead>
-                {canWrite ? (
-                  <TableHead className="text-right">Outcome</TableHead>
-                ) : null}
+                {canWrite ? <TableHead className="text-right">Action</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {planned.length ? (
-                planned.map((row) => (
+              {visiblePlanned.length ? (
+                visiblePlanned.map((row) => (
                   <TableRow key={row.applicationId}>
                     <TableCell>{row.candidateName}</TableCell>
                     <TableCell>{row.jobTitle}</TableCell>
-                    <TableCell>
-                      {row.interviewAt
-                        ? new Date(row.interviewAt).toLocaleString("en-IN")
-                        : "Scheduled"}
-                    </TableCell>
+                    <TableCell>{formatDate(row.interviewAt)}</TableCell>
+                    <TableCell>{formatTime(row.interviewAt)}</TableCell>
                     <TableCell>{row.scoreableRound}</TableCell>
                     {canWrite ? (
                       <TableCell className="text-right">
@@ -147,72 +197,9 @@ export function InterviewWorkspace({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={canWrite ? 5 : 4}
+                    colSpan={canWrite ? 6 : 5}
                   >
-                    No planned interviews are waiting for an outcome.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Interview workspace</CardTitle>
-          <CardDescription>
-            {interviews.length} candidate applications
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Candidate</TableHead>
-                <TableHead>Job</TableHead>
-                <TableHead>Scheduled</TableHead>
-                <TableHead>Required round</TableHead>
-                <TableHead>Latest outcome</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Joining</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {interviews.length ? (
-                interviews.map((row) => (
-                  <TableRow key={row.applicationId}>
-                    <TableCell>{row.candidateName}</TableCell>
-                    <TableCell>{row.jobTitle}</TableCell>
-                    <TableCell>
-                      {row.interviewAt
-                        ? new Date(row.interviewAt).toLocaleString("en-IN")
-                        : "Not scheduled"}
-                    </TableCell>
-                    <TableCell>
-                      {row.nextRound ??
-                        (row.status === "Approved"
-                          ? "All rounds approved"
-                          : "Application closed")}
-                    </TableCell>
-                    <TableCell>
-                      {row.latestRound
-                        ? `${row.latestRound} · ${row.latestStatus}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={row.status} />
-                    </TableCell>
-                    <TableCell>{row.joiningDate ?? "—"}</TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    className="py-10 text-center text-muted-foreground"
-                    colSpan={7}
-                  >
-                    No candidate applications found.
+                    No interviews are scheduled for this date.
                   </TableCell>
                 </TableRow>
               )}
@@ -226,8 +213,7 @@ export function InterviewWorkspace({
           <SheetHeader>
             <SheetTitle>Interview outcome</SheetTitle>
             <SheetDescription>
-              {selectedInterview.candidateName} · {selectedInterview.jobTitle} ·{" "}
-              {selectedInterview.scoreableRound}
+              {selectedInterview.candidateName} · {selectedInterview.jobTitle} · {selectedInterview.scoreableRound}
             </SheetDescription>
           </SheetHeader>
           <div className="px-6 pb-6">
@@ -242,6 +228,198 @@ export function InterviewWorkspace({
               initialApplicationId={selectedInterview.applicationId}
               panelId="interviewsPanel"
             />
+          </div>
+        </SheetContent>
+      ) : null}
+    </Sheet>
+  )
+}
+
+export function InterviewProgress({
+  interviews,
+}: {
+  interviews: RecruitmentInterviewRow[]
+}) {
+  const completedRounds = interviews.filter((row) => row.latestRound !== null)
+  const closed = interviews.filter((row) => row.nextRound === null)
+  return (
+    <>
+      <SummaryCards
+        items={[
+          { icon: ListTodo, label: "Applications", value: interviews.length },
+          { icon: CalendarClock, label: "Waiting for outcome", value: interviews.filter((row) => row.scoreableRound !== null).length },
+          { icon: ClipboardCheck, label: "Rounds completed", value: completedRounds.length },
+          { icon: CheckCircle2, label: "Applications closed", value: closed.length },
+        ]}
+      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Interview progress</CardTitle>
+          <CardDescription>
+            Round-by-round progress for every candidate application.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Candidate</TableHead>
+                <TableHead>Job</TableHead>
+                <TableHead>Next date</TableHead>
+                <TableHead>Next time</TableHead>
+                <TableHead>Required round</TableHead>
+                <TableHead>Latest outcome</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Joining</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {interviews.length ? (
+                interviews.map((row) => (
+                  <TableRow key={row.applicationId}>
+                    <TableCell>{row.candidateName}</TableCell>
+                    <TableCell>{row.jobTitle}</TableCell>
+                    <TableCell>{formatDate(row.interviewAt)}</TableCell>
+                    <TableCell>{formatTime(row.interviewAt)}</TableCell>
+                    <TableCell>
+                      {row.nextRound ?? (row.status === "Approved" ? "All rounds approved" : "Application closed")}
+                    </TableCell>
+                    <TableCell>{row.latestRound ? `${row.latestRound} · ${row.latestStatus}` : "—"}</TableCell>
+                    <TableCell><StatusBadge status={row.status} /></TableCell>
+                    <TableCell>{row.joiningDate ?? "—"}</TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell className="py-10 text-center text-muted-foreground" colSpan={8}>
+                    No candidate applications found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </>
+  )
+}
+
+export function InterviewResultsWorkspace({
+  records,
+}: {
+  records: RecruitmentInterviewRecordRow[]
+}) {
+  const [selectedRecord, setSelectedRecord] =
+    useState<RecruitmentInterviewRecordRow | null>(null)
+  const completed = records.filter((row) => row.status !== "Scheduled")
+  const approved = completed.filter((row) => row.status === "Approved")
+  const held = completed.filter((row) => row.status === "Hold")
+  const rejected = completed.filter((row) => row.status === "Rejected")
+  const questions = selectedRecord
+    ? (recruitmentInterviewRound(selectedRecord.roundName)?.questions ?? [])
+    : []
+
+  return (
+    <Sheet
+      onOpenChange={(open) => {
+        if (!open) setSelectedRecord(null)
+      }}
+      open={selectedRecord !== null}
+    >
+      <SummaryCards
+        items={[
+          { icon: ClipboardCheck, label: "Completed interviews", value: completed.length },
+          { icon: CheckCircle2, label: "Approved", value: approved.length },
+          { icon: CalendarClock, label: "On hold", value: held.length },
+          { icon: ListTodo, label: "Rejected", value: rejected.length },
+        ]}
+      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Interview workspace</CardTitle>
+          <CardDescription>
+            Open any completed round to review that candidate’s full result.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Candidate</TableHead>
+                <TableHead>Job</TableHead>
+                <TableHead>Round</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Time</TableHead>
+                <TableHead>Outcome</TableHead>
+                <TableHead>Score</TableHead>
+                <TableHead className="text-right">Result</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {records.length ? (
+                records.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>{row.candidateName}</TableCell>
+                    <TableCell>{row.jobNumber} · {row.jobTitle}</TableCell>
+                    <TableCell>{row.roundName}</TableCell>
+                    <TableCell>{formatDate(row.scheduledAt)}</TableCell>
+                    <TableCell>{formatTime(row.scheduledAt)}</TableCell>
+                    <TableCell><StatusBadge status={row.status} /></TableCell>
+                    <TableCell>{row.score ?? "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        onClick={() => setSelectedRecord(row)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        Open result
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell className="py-10 text-center text-muted-foreground" colSpan={8}>
+                    No interview rounds found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {selectedRecord ? (
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+          <SheetHeader>
+            <SheetTitle>{selectedRecord.roundName} result</SheetTitle>
+            <SheetDescription>
+              {selectedRecord.candidateName} · {selectedRecord.jobNumber} · {selectedRecord.jobTitle}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="grid gap-5 px-6 pb-6">
+            <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">
+              <p><span className="text-muted-foreground">Date:</span> {formatDate(selectedRecord.scheduledAt)}</p>
+              <p><span className="text-muted-foreground">Time:</span> {formatTime(selectedRecord.scheduledAt)}</p>
+              <p><span className="text-muted-foreground">Outcome:</span> {selectedRecord.status}</p>
+              <p><span className="text-muted-foreground">Score:</span> {selectedRecord.score ?? "—"}</p>
+              <p><span className="text-muted-foreground">Interviewer:</span> {selectedRecord.interviewerName ?? "—"}</p>
+              <p><span className="text-muted-foreground">Joining date:</span> {selectedRecord.joiningDate ?? "—"}</p>
+            </div>
+            <div className="grid gap-3">
+              <h3 className="font-medium">Round assessment</h3>
+              {questions.length ? questions.map((question) => (
+                <div className="flex items-center justify-between gap-4 rounded-lg border p-3" key={question.id}>
+                    <span>{question.prompt}</span>
+                  <Badge variant="outline">{selectedRecord.questionScores[question.id] ?? "—"}</Badge>
+                </div>
+              )) : <p className="text-sm text-muted-foreground">No scored questions for this record.</p>}
+            </div>
+            <div>
+              <h3 className="font-medium">Comments</h3>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{selectedRecord.comments ?? "No comments recorded."}</p>
+            </div>
           </div>
         </SheetContent>
       ) : null}

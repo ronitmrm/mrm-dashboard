@@ -353,15 +353,29 @@ export const hrNavigation = [
   {
     href: "/hr?panel=conversationLogsPanel",
     icon: MessageSquareText,
-    label: "Conversation Logs",
+    label: "Conversation History",
     panelId: "conversationLogsPanel",
     requiredCapability: "hr.recruitment.read",
   },
   {
     href: "/hr?panel=interviewsPanel",
-    icon: MessageSquareText,
-    label: "Interviews",
+    icon: CalendarDays,
+    label: "Interview Schedule",
     panelId: "interviewsPanel",
+    requiredCapability: "hr.recruitment.read",
+  },
+  {
+    href: "/hr?panel=interviewWorkspacePanel",
+    icon: ClipboardList,
+    label: "Interview Workspace",
+    panelId: "interviewWorkspacePanel",
+    requiredCapability: "hr.recruitment.read",
+  },
+  {
+    href: "/hr?panel=interviewProgressPanel",
+    icon: ListChecks,
+    label: "Interview Progress",
+    panelId: "interviewProgressPanel",
     requiredCapability: "hr.recruitment.read",
   },
 ] as const

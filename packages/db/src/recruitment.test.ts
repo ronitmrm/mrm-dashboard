@@ -1088,6 +1088,53 @@ describe("deriveRecruitmentEmployeeAssignment", () => {
   })
 })
 
+describe("listInterviewRecords", () => {
+  test("returns global round results with job and candidate context", async () => {
+    const query = vi.fn(async () => ({
+      rows: [
+        {
+          application_id: "application-1",
+          candidate_name: "Candidate One",
+          comments: "Strong practical knowledge",
+          created_at: "2026-08-09T04:00:00.000Z",
+          id: "interview-1",
+          interviewer_name: "Manager One",
+          job_id: "job-1",
+          job_number: "JOB-001",
+          job_title: "Maintenance Engineer",
+          joining_date: null,
+          question_scores: { technical_knowledge: 4 },
+          round_name: "Technical Round",
+          scheduled_at: "2026-08-09T05:30:00.000Z",
+          score: "4",
+          status: "Approved",
+          updated_at: "2026-08-09T06:00:00.000Z",
+        },
+      ],
+    }))
+    const repository = createRecruitmentRepository({
+      pool: { query } as unknown as Pool,
+    })
+
+    const rows = await repository.listInterviewRecords("organization-1")
+
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("JOIN recruitment.job_posts job"),
+      ["organization-1"]
+    )
+    expect(rows).toEqual([
+      expect.objectContaining({
+        candidateName: "Candidate One",
+        jobNumber: "JOB-001",
+        jobTitle: "Maintenance Engineer",
+        questionScores: { technical_knowledge: 4 },
+        roundName: "Technical Round",
+        score: 4,
+      }),
+    ])
+  })
+})
+
 describe("recruitmentPostDeletionBlocker", () => {
   test("allows an unassigned post with no linked records to be deleted", () => {
     expect(
