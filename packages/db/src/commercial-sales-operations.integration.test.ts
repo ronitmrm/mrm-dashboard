@@ -303,4 +303,26 @@ describe("bounded Sales operational repositories", () => {
     expect(overflow.rows[0]?.enquiryNumber).toBe("OVER-0201")
     expect(overflow.rows.at(-1)?.enquiryNumber).toBe("OVER-0152")
   })
+
+  test("exports complete Sales history across stable batches", async () => {
+    const history = await repository.getSalesHistoryForExport(
+      overflowOrganizationCode,
+      37
+    )
+
+    expect(history.followups).toHaveLength(201)
+    expect(history.sentQuotes).toHaveLength(201)
+    expect(history.followups.map((row) => row.enquiryNumber)).toEqual(
+      Array.from(
+        { length: 201 },
+        (_, index) => `OVER-${String(201 - index).padStart(4, "0")}`
+      )
+    )
+    expect(history.sentQuotes.map((row) => row.enquiryNumber)).toEqual(
+      Array.from(
+        { length: 201 },
+        (_, index) => `OVER-${String(201 - index).padStart(4, "0")}`
+      )
+    )
+  })
 })

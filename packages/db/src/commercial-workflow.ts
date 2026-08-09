@@ -313,6 +313,7 @@ type EnquiryRootDatabaseRow = {
   buyer_name: string | null
   company_name: string
   created_at: Date
+  cursor_created_at?: string
   customer_uid: string
   enquiry_number: string
   id: string
@@ -717,6 +718,218 @@ async function transaction<T>(
   } finally {
     client.release()
   }
+}
+
+type SalesFollowupHistoryRow = {
+  channel: string
+  companyName: string
+  customerUid: string
+  dueOn: string
+  enquiryId: string
+  enquiryNumber: string
+  id: string
+  note: string
+  quoteItemId: string | null
+  quoteNumber: string | null
+  status: string
+}
+
+type SalesFollowupHistoryDatabaseRow = {
+  channel: string
+  company_name: string
+  created_at: string
+  customer_uid: string
+  due_on: string
+  enquiry_id: string
+  enquiry_number: string
+  id: string
+  note: string
+  quote_item_id: string | null
+  quote_number: string | null
+  status: string
+}
+
+type SalesSentQuoteHistoryRow = {
+  companyName: string
+  currency: string
+  customerUid: string
+  enquiryId: string
+  enquiryNumber: string
+  latestSentAt: Date
+  nextFollowupDue: string | null
+  pendingFollowups: number
+  sentQuoteItems: number
+  totalLines: number
+}
+
+type SalesSentQuoteHistoryDatabaseRow = {
+  company_name: string
+  created_at: Date
+  currency: string
+  cursor_created_at: string
+  cursor_latest_sent_at: string
+  customer_uid: string
+  enquiry_id: string
+  enquiry_number: string
+  latest_sent_at: Date
+  next_followup_due: string | null
+  pending_followups: string
+  sent_quote_items: string
+  total_lines: string
+}
+
+async function followupsForExport(
+  client: PoolClient,
+  organizationCode: string,
+  requestedBatchSize: number
+) {
+  const batchSize = boundedListLimit(requestedBatchSize)
+  const rows: SalesFollowupHistoryRow[] = []
+  let cursorDueOn: string | null = null
+  let cursorCreatedAt: string | null = null
+  let cursorId: string | null = null
+
+  while (true) {
+    const batch: QueryResult<SalesFollowupHistoryDatabaseRow> =
+      await client.query<SalesFollowupHistoryDatabaseRow>(
+        `
+        SELECT followup.id, followup.enquiry_id,
+          followup.quote_item_id, followup.due_on::text,
+          followup.created_at::text AS created_at,
+          followup.channel, followup.status,
+          followup.note, enquiry.enquiry_number, customer.customer_uid,
+          customer.company_name, quote.quote_number
+        FROM sales.followups followup
+        JOIN sales.enquiries enquiry ON enquiry.id = followup.enquiry_id
+        JOIN sales.customers customer ON customer.id = enquiry.customer_id
+        JOIN core.organizations organization
+          ON organization.id = followup.organization_id
+        LEFT JOIN sales.quote_items quote ON quote.id = followup.quote_item_id
+        WHERE lower(organization.code) = lower($1)
+          AND (
+            $2::date IS NULL
+            OR (followup.due_on, followup.created_at, followup.id)
+              > ($2::date, $3::timestamptz, $4::uuid)
+          )
+        ORDER BY followup.due_on, followup.created_at, followup.id
+        LIMIT $5
+      `,
+        [
+          organizationCode.trim(),
+          cursorDueOn,
+          cursorCreatedAt,
+          cursorId,
+          batchSize,
+        ]
+      )
+    rows.push(
+      ...batch.rows.map((row) => ({
+        channel: row.channel,
+        companyName: row.company_name,
+        customerUid: row.customer_uid,
+        dueOn: row.due_on,
+        enquiryId: row.enquiry_id,
+        enquiryNumber: row.enquiry_number,
+        id: row.id,
+        note: row.note,
+        quoteItemId: row.quote_item_id,
+        quoteNumber: row.quote_number,
+        status: row.status,
+      }))
+    )
+    if (batch.rows.length < batchSize) break
+    const cursor: SalesFollowupHistoryDatabaseRow = batch.rows.at(-1)!
+    cursorDueOn = cursor.due_on
+    cursorCreatedAt = cursor.created_at
+    cursorId = cursor.id
+  }
+
+  return rows
+}
+
+async function sentQuotesForExport(
+  client: PoolClient,
+  organizationCode: string,
+  requestedBatchSize: number
+) {
+  const batchSize = boundedListLimit(requestedBatchSize)
+  const rows: SalesSentQuoteHistoryRow[] = []
+  let cursorLatestSentAt: string | null = null
+  let cursorCreatedAt: string | null = null
+  let cursorId: string | null = null
+
+  while (true) {
+    const batch: QueryResult<SalesSentQuoteHistoryDatabaseRow> =
+      await client.query<SalesSentQuoteHistoryDatabaseRow>(
+        `
+        WITH sent_enquiries AS (
+          SELECT enquiry.id AS enquiry_id, enquiry.enquiry_number,
+            enquiry.created_at,
+            enquiry.created_at::text AS cursor_created_at,
+            customer.company_name, enquiry.currency,
+            count(DISTINCT item.id)::text AS total_lines,
+            count(DISTINCT quote.id)::text AS sent_quote_items,
+            max(quote.sent_at) AS latest_sent_at,
+            max(quote.sent_at)::text AS cursor_latest_sent_at,
+            min(followup.due_on) FILTER (
+              WHERE followup.status = 'Pending'
+            )::text AS next_followup_due,
+            count(DISTINCT followup.id) FILTER (
+              WHERE followup.status = 'Pending'
+            )::text AS pending_followups
+          FROM sales.enquiries enquiry
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          LEFT JOIN sales.enquiry_items item ON item.enquiry_id = enquiry.id
+          JOIN sales.quote_items quote ON quote.enquiry_id = enquiry.id
+            AND quote.status <> 'Superseded'
+            AND quote.sent_at IS NOT NULL
+          LEFT JOIN sales.followups followup
+            ON followup.enquiry_id = enquiry.id
+          WHERE lower(organization.code) = lower($1)
+          GROUP BY enquiry.id, customer.customer_uid, customer.company_name
+        )
+        SELECT *
+        FROM sent_enquiries
+        WHERE (
+          $2::timestamptz IS NULL
+          OR (latest_sent_at, created_at, enquiry_id)
+            < ($2::timestamptz, $3::timestamptz, $4::uuid)
+        )
+        ORDER BY latest_sent_at DESC, created_at DESC, enquiry_id DESC
+        LIMIT $5
+      `,
+        [
+          organizationCode.trim(),
+          cursorLatestSentAt,
+          cursorCreatedAt,
+          cursorId,
+          batchSize,
+        ]
+      )
+    rows.push(
+      ...batch.rows.map((row) => ({
+        companyName: row.company_name,
+        currency: row.currency,
+        customerUid: row.customer_uid,
+        enquiryId: row.enquiry_id,
+        enquiryNumber: row.enquiry_number,
+        latestSentAt: row.latest_sent_at,
+        nextFollowupDue: row.next_followup_due,
+        pendingFollowups: Number(row.pending_followups),
+        sentQuoteItems: Number(row.sent_quote_items),
+        totalLines: Number(row.total_lines),
+      }))
+    )
+    if (batch.rows.length < batchSize) break
+    const cursor: SalesSentQuoteHistoryDatabaseRow = batch.rows.at(-1)!
+    cursorLatestSentAt = cursor.cursor_latest_sent_at
+    cursorCreatedAt = cursor.cursor_created_at
+    cursorId = cursor.enquiry_id
+  }
+
+  return rows
 }
 
 async function writeAuditEvent(
@@ -5169,6 +5382,47 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
       )
     },
 
+    async listFollowupsForExport(organizationCode: string, batchSize = 500) {
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        return followupsForExport(client, organizationCode, batchSize)
+      })
+    },
+
+    async listSalesSentQuotesForExport(
+      organizationCode: string,
+      batchSize = 500
+    ) {
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        return sentQuotesForExport(client, organizationCode, batchSize)
+      })
+    },
+
+    async getSalesHistoryForExport(organizationCode: string, batchSize = 500) {
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        return {
+          followups: await followupsForExport(
+            client,
+            organizationCode,
+            batchSize
+          ),
+          sentQuotes: await sentQuotesForExport(
+            client,
+            organizationCode,
+            batchSize
+          ),
+        }
+      })
+    },
+
     async listEnquiriesForExport(organizationCode: string, batchSize = 500) {
       const limit = boundedListLimit(batchSize)
       return transaction(pool, async (client) => {
@@ -5176,7 +5430,7 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
           "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
         )
         const rows: Awaited<ReturnType<typeof enquiryRowsWithRelations>> = []
-        let cursorCreatedAt: Date | null = null
+        let cursorCreatedAt: string | null = null
         let cursorId: string | null = null
 
         while (true) {
@@ -5188,7 +5442,9 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
                 enquiry.technical_handover_status,
                 enquiry.technical_handover_at, enquiry.received_on::text,
                 enquiry.source, enquiry.priority, enquiry.buyer_name,
-                enquiry.remarks, enquiry.created_at, customer.customer_uid,
+                enquiry.remarks, enquiry.created_at,
+                enquiry.created_at::text AS cursor_created_at,
+                customer.customer_uid,
                 customer.company_name
               FROM sales.enquiries enquiry
               JOIN core.organizations organization
@@ -5209,7 +5465,7 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
           if (!roots.rows.length) break
           rows.push(...(await enquiryRowsWithRelations(client, roots.rows)))
           const cursor: EnquiryRootDatabaseRow = roots.rows.at(-1)!
-          cursorCreatedAt = cursor.created_at
+          cursorCreatedAt = cursor.cursor_created_at!
           cursorId = cursor.id
           if (roots.rows.length < limit) break
         }

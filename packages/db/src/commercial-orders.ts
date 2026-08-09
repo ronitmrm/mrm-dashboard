@@ -73,6 +73,40 @@ type QuoteMatchRow = {
   unit_price: string
 }
 
+type PurchaseOrderReportDatabaseRow = {
+  approved_at: Date | null
+  cancellation_reason: string | null
+  company_name: string
+  currency_code: string
+  customer_part_code: string
+  customer_uid: string
+  decision: string
+  decision_comment: string | null
+  description: string | null
+  invoice_number: string | null
+  invoice_status: string | null
+  line_id: string
+  line_number: number
+  matched_uid: string | null
+  pi_price: string | null
+  po_date: string
+  po_number: string
+  price_difference: string | null
+  purchase_order_created_at: string
+  purchase_order_id: string
+  quantity: string
+  quote_enquiry_number: string | null
+  quote_number: string | null
+  quote_request_enquiry_number: string | null
+  quote_request_line_number: number | null
+  sent_at: Date | null
+  system_price: string | null
+  system_profit_percent: string | null
+  system_purchase_times: string | null
+  system_scrap_rate: string | null
+  unit_price: string
+}
+
 const asNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
@@ -87,6 +121,54 @@ const asDateText = (value: string | Date) => {
   const day = value.getDate().toString().padStart(2, "0")
   return `${year}-${month}-${day}`
 }
+
+const purchaseOrderReportRow = (row: PurchaseOrderReportDatabaseRow) => ({
+  cancellationReason: row.cancellation_reason,
+  companyName: row.company_name,
+  currencyCode: row.currency_code,
+  customerPartCode: row.customer_part_code,
+  customerUid: row.customer_uid,
+  decision: row.decision,
+  decisionComment: row.decision_comment,
+  description: row.description,
+  invoiceApprovedAt: row.approved_at,
+  invoiceNumber: row.invoice_number,
+  invoiceSentAt: row.sent_at,
+  invoiceStatus: row.invoice_status,
+  lineNumber: row.line_number,
+  matchedUid: row.matched_uid,
+  piPrice: row.pi_price === null ? null : asNumber(row.pi_price),
+  poDate: asDateText(row.po_date),
+  poNumber: row.po_number,
+  poPrice: asNumber(row.unit_price),
+  priceDifference:
+    row.price_difference === null ? null : asNumber(row.price_difference),
+  quantity: asNumber(row.quantity),
+  quoteEnquiryNumber: row.quote_enquiry_number,
+  quoteNumber: row.quote_number,
+  quoteRequest:
+    row.quote_request_enquiry_number === null
+      ? null
+      : `${row.quote_request_enquiry_number}${
+          row.quote_request_line_number
+            ? ` / Line ${row.quote_request_line_number}`
+            : ""
+        }`,
+  systemPrice: row.system_price === null ? null : asNumber(row.system_price),
+  systemProfitPercent:
+    row.system_profit_percent === null
+      ? null
+      : asNumber(row.system_profit_percent),
+  systemPurchaseTimes:
+    row.system_purchase_times === null
+      ? null
+      : asNumber(row.system_purchase_times),
+  systemScrapRate:
+    row.system_scrap_rate === null ? null : asNumber(row.system_scrap_rate),
+})
+
+const exportBatchSize = (value: number) =>
+  Math.min(Math.max(Math.floor(value), 1), 500)
 
 async function transaction<T>(
   pool: Pool,
@@ -104,6 +186,105 @@ async function transaction<T>(
   } finally {
     client.release()
   }
+}
+
+async function purchaseOrderReportBatch(
+  client: PoolClient,
+  organizationCode: string,
+  input: {
+    approvedOnly?: boolean
+    cursor?: {
+      createdAt: string
+      lineId: string
+      lineNumber: number
+      purchaseOrderId: string
+      poDate: string
+    }
+    limit: number
+  }
+) {
+  const cursor = input.cursor
+  return client.query<PurchaseOrderReportDatabaseRow>(
+    `
+      SELECT purchase_order.id AS purchase_order_id,
+        purchase_order.po_number, purchase_order.po_date,
+        purchase_order.created_at::text AS purchase_order_created_at,
+        purchase_order.cancellation_reason, customer.customer_uid,
+        customer.company_name, line.id AS line_id, line.line_number,
+        line.customer_part_code, line.description, line.quantity,
+        line.currency_code, line.unit_price, line.system_price,
+        line.price_difference, line.pi_price, line.decision,
+        line.decision_comment, line.system_scrap_rate,
+        line.system_purchase_times, line.system_profit_percent,
+        item.uid AS matched_uid, quote.quote_number,
+        quote_enquiry.enquiry_number AS quote_enquiry_number,
+        quote_request_enquiry.enquiry_number
+          AS quote_request_enquiry_number,
+        quote_request.line_number AS quote_request_line_number,
+        invoice.invoice_number, invoice.status AS invoice_status,
+        invoice.sent_at, invoice.approved_at
+      FROM sales.purchase_order_lines line
+      JOIN sales.purchase_orders purchase_order
+        ON purchase_order.id = line.purchase_order_id
+      JOIN core.organizations organization
+        ON organization.id = purchase_order.organization_id
+      JOIN sales.customers customer
+        ON customer.id = purchase_order.customer_id
+      LEFT JOIN catalog.items item ON item.id = line.matched_item_id
+      LEFT JOIN sales.quote_items quote ON quote.id = line.quote_item_id
+      LEFT JOIN sales.enquiries quote_enquiry
+        ON quote_enquiry.id = quote.enquiry_id
+      LEFT JOIN sales.enquiry_items quote_request
+        ON quote_request.source_system = 'mrm-dashboard'
+        AND quote_request.source_table = 'po_quote_request_lines'
+        AND quote_request.source_id = line.id::text
+      LEFT JOIN sales.enquiries quote_request_enquiry
+        ON quote_request_enquiry.id = quote_request.enquiry_id
+      LEFT JOIN LATERAL (
+        SELECT candidate.*
+        FROM sales.proforma_invoices candidate
+        WHERE candidate.purchase_order_id = purchase_order.id
+        ORDER BY candidate.revision DESC, candidate.created_at DESC
+        LIMIT 1
+      ) invoice ON true
+      WHERE lower(organization.code) = lower($1)
+        AND (NOT $2::boolean OR invoice.status = 'Approved')
+        AND (
+          $3::date IS NULL
+          OR purchase_order.po_date < $3::date
+          OR (
+            purchase_order.po_date = $3::date
+            AND purchase_order.created_at < $4::timestamptz
+          )
+          OR (
+            purchase_order.po_date = $3::date
+            AND purchase_order.created_at = $4::timestamptz
+            AND purchase_order.id < $5::uuid
+          )
+          OR (
+            purchase_order.po_date = $3::date
+            AND purchase_order.created_at = $4::timestamptz
+            AND purchase_order.id = $5::uuid
+            AND (line.line_number, line.id)
+              > ($6::integer, $7::uuid)
+          )
+        )
+      ORDER BY purchase_order.po_date DESC,
+        purchase_order.created_at DESC, purchase_order.id DESC,
+        line.line_number, line.id
+      LIMIT $8
+    `,
+    [
+      organizationCode.trim(),
+      input.approvedOnly ?? false,
+      cursor?.poDate ?? null,
+      cursor?.createdAt ?? null,
+      cursor?.purchaseOrderId ?? null,
+      cursor?.lineNumber ?? null,
+      cursor?.lineId ?? null,
+      input.limit,
+    ]
+  )
 }
 
 async function writeAuditEvent(
@@ -2063,7 +2244,8 @@ export function createCommercialOrdersRepository(options: RepositoryOptions) {
           WHERE lower(organization.code) = lower($1)
             AND (NOT $2::boolean OR invoice.status = 'Approved')
           ORDER BY purchase_order.po_date DESC,
-            purchase_order.created_at DESC, line.line_number
+            purchase_order.created_at DESC, purchase_order.id DESC,
+            line.line_number, line.id
         `,
         [organizationCode.trim(), options.approvedOnly ?? false]
       )
@@ -2114,6 +2296,53 @@ export function createCommercialOrdersRepository(options: RepositoryOptions) {
             ? null
             : asNumber(row.system_scrap_rate),
       }))
+    },
+
+    async listPurchaseOrderReportRowsForExport(
+      organizationCode: string,
+      options: { approvedOnly?: boolean } = {},
+      requestedBatchSize = 500
+    ) {
+      const limit = exportBatchSize(requestedBatchSize)
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        const rows: ReturnType<typeof purchaseOrderReportRow>[] = []
+        let cursor:
+          | {
+              createdAt: string
+              lineId: string
+              lineNumber: number
+              purchaseOrderId: string
+              poDate: string
+            }
+          | undefined
+
+        while (true) {
+          const batch = await purchaseOrderReportBatch(
+            client,
+            organizationCode,
+            {
+              approvedOnly: options.approvedOnly,
+              cursor,
+              limit,
+            }
+          )
+          rows.push(...batch.rows.map(purchaseOrderReportRow))
+          if (batch.rows.length < limit) break
+          const last = batch.rows.at(-1)!
+          cursor = {
+            createdAt: last.purchase_order_created_at,
+            lineId: last.line_id,
+            lineNumber: last.line_number,
+            purchaseOrderId: last.purchase_order_id,
+            poDate: asDateText(last.po_date),
+          }
+        }
+
+        return rows
+      })
     },
   }
 }
