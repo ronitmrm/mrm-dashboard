@@ -3,7 +3,12 @@ import path from "node:path"
 
 import type { Pool, PoolClient, QueryResult } from "pg"
 
-import { boundedResult } from "./commercial-bounds"
+import {
+  boundedResult,
+  commercialSelectorLimit,
+  selectorResult,
+  selectorSearchTerm,
+} from "./commercial-bounds"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
 type RepositoryOptions = RepositoryPoolOptions
@@ -52,6 +57,114 @@ type DesignBomLine = {
   quantity: number
   rodSize?: string | null
   rodType?: string | null
+}
+
+type DesignAttachment = {
+  byteSize: number
+  createdAt: Date
+  fileName: string
+  id: string
+  mediaType: string | null
+  purpose: string
+  storageKey: string
+}
+
+type DesignQueueDatabaseRow = {
+  approval_status: string | null
+  assembly_required: string | null
+  checked_by: string | null
+  company_name: string
+  components_required: string | null
+  customer_part_code: string
+  customer_uid: string
+  design_bom_completed: string | null
+  design_bom_required: string | null
+  design_id: string | null
+  design_remarks: string | null
+  design_status: string | null
+  designer_name: string | null
+  description: string
+  enquiry_id: string
+  enquiry_item_id: string
+  enquiry_number: string
+  fixture_approx_cost: string | null
+  fixture_required: string | null
+  gauges_required: string | null
+  inspection_approx_cost: string | null
+  internal_part_category: string | null
+  internal_part_size: string | null
+  internal_part_sub_category: string | null
+  item_type: string | null
+  line_number: number
+  manufacturing_process: string | null
+  matched_product_description: string | null
+  matched_product_id: string | null
+  matched_product_uid: string | null
+  next_stage_status: string | null
+  operation_notes: string | null
+  organization_id: string
+  package_process_required: string | null
+  portfolio_match_status: string | null
+  quantity: string
+  quoted_part_uid: string | null
+  revision_no: string | null
+  target_completion_date: string | null
+  technical_review_status: string
+  tooling_approx_cost: string | null
+  tooling_required: string | null
+}
+
+function designQueueItemFromRow(
+  row: DesignQueueDatabaseRow,
+  bomLines: DesignBomLine[],
+  latestClarificationMessage: string | null
+) {
+  return {
+    approvalStatus: row.approval_status ?? "Pending",
+    assemblyRequired: row.assembly_required ?? "No",
+    bomLines,
+    checkedBy: row.checked_by,
+    companyName: row.company_name,
+    componentsRequired: row.components_required,
+    customerPartCode: row.customer_part_code,
+    customerUid: row.customer_uid,
+    designBomCompleted: row.design_bom_completed ?? "No",
+    designBomRequired: row.design_bom_required ?? "No",
+    designId: row.design_id,
+    designRemarks: row.design_remarks,
+    designStatus: row.design_status ?? "Pending Design",
+    designerName: row.designer_name,
+    description: row.description,
+    enquiryId: row.enquiry_id,
+    enquiryItemId: row.enquiry_item_id,
+    enquiryNumber: row.enquiry_number,
+    fixtureApproxCost: Number(row.fixture_approx_cost ?? 0),
+    fixtureRequired: row.fixture_required ?? "No",
+    gaugesRequired: row.gauges_required ?? "No",
+    inspectionApproxCost: Number(row.inspection_approx_cost ?? 0),
+    internalPartCategory: row.internal_part_category,
+    internalPartSize: row.internal_part_size,
+    internalPartSubCategory: row.internal_part_sub_category,
+    itemType: row.item_type ?? "List",
+    latestClarificationMessage,
+    lineNumber: row.line_number,
+    manufacturingProcess: row.manufacturing_process,
+    matchedProductDescription: row.matched_product_description,
+    matchedProductId: row.matched_product_id,
+    matchedProductUid: row.matched_product_uid,
+    nextStageStatus: row.next_stage_status ?? "Not Started",
+    operationNotes: row.operation_notes,
+    organizationId: row.organization_id,
+    packageProcessRequired: row.package_process_required,
+    portfolioMatchStatus: row.portfolio_match_status ?? "New Design Required",
+    quantity: Number(row.quantity),
+    quotedPartUid: row.quoted_part_uid,
+    revisionNo: row.revision_no ?? "0",
+    targetCompletionDate: row.target_completion_date,
+    technicalReviewStatus: row.technical_review_status,
+    toolingApproxCost: Number(row.tooling_approx_cost ?? 0),
+    toolingRequired: row.tooling_required ?? "No",
+  }
 }
 
 type ImportRow = {
@@ -2056,9 +2169,7 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
       }))
     },
 
-    async listSalesMatchCandidatesForItems(
-      enquiryItemIds: readonly string[]
-    ) {
+    async listSalesMatchCandidatesForItems(enquiryItemIds: readonly string[]) {
       const grouped = new Map<
         string,
         Array<{
@@ -2279,52 +2390,12 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
     },
 
     async listDesignQueue(organizationCode: string) {
-      const items = await pool.query<{
-        approval_status: string | null
-        assembly_required: string | null
-        bom_lines: DesignBomLine[]
-        checked_by: string | null
-        company_name: string
-        components_required: string | null
-        customer_part_code: string
-        customer_uid: string
-        design_bom_completed: string | null
-        design_bom_required: string | null
-        design_id: string | null
-        design_remarks: string | null
-        design_status: string | null
-        designer_name: string | null
-        description: string
-        enquiry_id: string
-        enquiry_item_id: string
-        enquiry_number: string
-        fixture_approx_cost: string | null
-        fixture_required: string | null
-        gauges_required: string | null
-        inspection_approx_cost: string | null
-        internal_part_category: string | null
-        internal_part_size: string | null
-        internal_part_sub_category: string | null
-        item_type: string | null
-        latest_clarification_message: string | null
-        line_number: number
-        manufacturing_process: string | null
-        matched_product_description: string | null
-        matched_product_id: string | null
-        matched_product_uid: string | null
-        next_stage_status: string | null
-        operation_notes: string | null
-        organization_id: string
-        package_process_required: string | null
-        portfolio_match_status: string | null
-        quantity: string
-        quoted_part_uid: string | null
-        revision_no: string | null
-        target_completion_date: string | null
-        technical_review_status: string
-        tooling_approx_cost: string | null
-        tooling_required: string | null
-      }>(
+      const items = await pool.query<
+        DesignQueueDatabaseRow & {
+          bom_lines: DesignBomLine[]
+          latest_clarification_message: string | null
+        }
+      >(
         `
           SELECT enquiry_item.id AS enquiry_item_id,
             enquiry.id AS enquiry_id, enquiry.organization_id,
@@ -2406,53 +2477,13 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
         `,
         [organizationCode.trim()]
       )
-      return items.rows.map((row) => ({
-        approvalStatus: row.approval_status ?? "Pending",
-        assemblyRequired: row.assembly_required ?? "No",
-        bomLines: row.bom_lines,
-        checkedBy: row.checked_by,
-        companyName: row.company_name,
-        componentsRequired: row.components_required,
-        customerPartCode: row.customer_part_code,
-        customerUid: row.customer_uid,
-        designBomCompleted: row.design_bom_completed ?? "No",
-        designBomRequired: row.design_bom_required ?? "No",
-        designId: row.design_id,
-        designRemarks: row.design_remarks,
-        designStatus: row.design_status ?? "Pending Design",
-        designerName: row.designer_name,
-        description: row.description,
-        enquiryId: row.enquiry_id,
-        enquiryItemId: row.enquiry_item_id,
-        enquiryNumber: row.enquiry_number,
-        fixtureApproxCost: Number(row.fixture_approx_cost ?? 0),
-        fixtureRequired: row.fixture_required ?? "No",
-        gaugesRequired: row.gauges_required ?? "No",
-        inspectionApproxCost: Number(row.inspection_approx_cost ?? 0),
-        internalPartCategory: row.internal_part_category,
-        internalPartSize: row.internal_part_size,
-        internalPartSubCategory: row.internal_part_sub_category,
-        itemType: row.item_type ?? "List",
-        latestClarificationMessage: row.latest_clarification_message,
-        lineNumber: row.line_number,
-        manufacturingProcess: row.manufacturing_process,
-        matchedProductDescription: row.matched_product_description,
-        matchedProductId: row.matched_product_id,
-        matchedProductUid: row.matched_product_uid,
-        nextStageStatus: row.next_stage_status ?? "Not Started",
-        operationNotes: row.operation_notes,
-        organizationId: row.organization_id,
-        packageProcessRequired: row.package_process_required,
-        portfolioMatchStatus:
-          row.portfolio_match_status ?? "New Design Required",
-        quantity: Number(row.quantity),
-        quotedPartUid: row.quoted_part_uid,
-        revisionNo: row.revision_no ?? "0",
-        targetCompletionDate: row.target_completion_date,
-        technicalReviewStatus: row.technical_review_status,
-        toolingApproxCost: Number(row.tooling_approx_cost ?? 0),
-        toolingRequired: row.tooling_required ?? "No",
-      }))
+      return items.rows.map((row) =>
+        designQueueItemFromRow(
+          row,
+          row.bom_lines,
+          row.latest_clarification_message
+        )
+      )
     },
 
     async requestDesignClarification(input: {
@@ -3771,7 +3802,10 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
       targetTable: "design_tasks" | "enquiry_items"
     }) {
       if (input.targetIds.length === 0) {
-        return new Map<string, Awaited<ReturnType<typeof this.listAttachments>>>()
+        return new Map<
+          string,
+          Awaited<ReturnType<typeof this.listAttachments>>
+        >()
       }
 
       const files = await pool.query<{
@@ -4757,6 +4791,247 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
         }
       })
       return boundedResult(rows, limit, roots.rows.length > limit)
+    },
+
+    async listDesignQueueBounded(
+      organizationCode: string,
+      requestedLimit = 200
+    ) {
+      const limit = operationalRootLimit(requestedLimit)
+      const roots = await pool.query<DesignQueueDatabaseRow>(
+        `
+          SELECT enquiry_item.id AS enquiry_item_id,
+            enquiry.id AS enquiry_id, enquiry.organization_id,
+            enquiry.enquiry_number, customer.customer_uid,
+            customer.company_name, enquiry_item.line_number,
+            enquiry_item.customer_part_code, enquiry_item.description,
+            enquiry_item.quantity::text,
+            enquiry_item.technical_review_status,
+            design.id AS design_id, design.design_status,
+            design.portfolio_match_status, design.matched_product_id,
+            matched_product.uid AS matched_product_uid,
+            matched_product.description AS matched_product_description,
+            design.quoted_part_uid, design.item_type,
+            design.design_bom_completed, design.next_stage_status,
+            design.manufacturing_process, design.package_process_required,
+            design.design_remarks, design.designer_name,
+            design.target_completion_date::text,
+            design.internal_part_size, design.internal_part_sub_category,
+            design.internal_part_category, design.revision_no,
+            design.design_bom_required, design.components_required,
+            design.assembly_required, design.operation_notes,
+            design.tooling_required, design.tooling_approx_cost::text,
+            design.fixture_required, design.fixture_approx_cost::text,
+            design.gauges_required, design.inspection_approx_cost::text,
+            design.checked_by, design.approval_status
+          FROM sales.enquiry_items enquiry_item
+          JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          LEFT JOIN sales.design_tasks design
+            ON design.enquiry_item_id = enquiry_item.id
+          LEFT JOIN catalog.items matched_product
+            ON matched_product.id = design.matched_product_id
+          WHERE lower(organization.code) = lower($1)
+            AND (
+              enquiry_item.technical_review_status IN (
+                'Feasible', 'Duplicate / Existing Product'
+              )
+              OR design.design_status IN (
+                'Need Clarification', 'Changes Required'
+              )
+            )
+          ORDER BY CASE COALESCE(design.design_status, 'Pending Design')
+              WHEN 'Changes Required' THEN 0
+              WHEN 'Need Clarification' THEN 1
+              WHEN 'Pending Design' THEN 2
+              ELSE 3
+            END,
+            enquiry.created_at, enquiry_item.line_number, enquiry_item.id
+          LIMIT $2
+        `,
+        [organizationCode.trim(), limit + 1]
+      )
+      const returnedRoots = roots.rows.slice(0, limit)
+      if (!returnedRoots.length) {
+        return boundedResult([], limit, roots.rows.length > limit)
+      }
+
+      const designIds = returnedRoots.flatMap((root) =>
+        root.design_id ? [root.design_id] : []
+      )
+      const bomLines = designIds.length
+        ? await pool.query<{
+            component_code: string
+            component_item_type: string
+            component_source: string
+            design_notes: string | null
+            design_task_id: string
+            existing_product_id: string | null
+            id: string
+            line_number: number
+            package_part: string | null
+            package_part_uid: string | null
+            parent_line_number: number | null
+            quantity: string
+          }>(
+            `
+              SELECT bom.id, bom.design_task_id, bom.component_code,
+                bom.component_item_type, bom.component_source,
+                bom.existing_product_id, bom.line_number, bom.design_notes,
+                bom.package_part, bom.package_part_uid,
+                bom.parent_line_number, bom.quantity::text
+              FROM sales.design_bom_lines bom
+              WHERE bom.design_task_id = ANY($1::uuid[])
+              ORDER BY bom.design_task_id, bom.line_number, bom.id
+            `,
+            [designIds]
+          )
+        : { rows: [] }
+      const bomLinesByDesign = new Map<string, DesignBomLine[]>()
+      for (const row of bomLines.rows) {
+        const rows = bomLinesByDesign.get(row.design_task_id) ?? []
+        rows.push({
+          componentCode: row.component_code,
+          componentItemType: row.component_item_type,
+          componentSource: row.component_source,
+          existingProductId: row.existing_product_id,
+          lineNumber: row.line_number,
+          notes: row.design_notes,
+          packagePart: row.package_part,
+          packagePartUid: row.package_part_uid,
+          parentLineNumber: row.parent_line_number,
+          quantity: Number(row.quantity),
+        })
+        bomLinesByDesign.set(row.design_task_id, rows)
+      }
+
+      const clarifications = await pool.query<{
+        enquiry_item_id: string
+        question: string
+      }>(
+        `
+          SELECT DISTINCT ON (clarification.enquiry_item_id)
+            clarification.enquiry_item_id, clarification.question
+          FROM sales.clarification_tasks clarification
+          WHERE clarification.enquiry_item_id = ANY($1::uuid[])
+            AND clarification.target_stage = 'Design'
+            AND clarification.status = 'Open'
+          ORDER BY clarification.enquiry_item_id,
+            clarification.created_at DESC, clarification.id DESC
+        `,
+        [returnedRoots.map((root) => root.enquiry_item_id)]
+      )
+      const clarificationByItem = new Map(
+        clarifications.rows.map(
+          (row) => [row.enquiry_item_id, row.question] as const
+        )
+      )
+
+      const files = designIds.length
+        ? await pool.query<{
+            byte_size: string
+            created_at: Date
+            file_name: string
+            id: string
+            media_type: string | null
+            purpose: string
+            storage_key: string
+            target_id: string
+          }>(
+            `
+              SELECT file_link.target_id, file.id, file.file_name,
+                file.media_type, file.byte_size::text, file.storage_key,
+                file.created_at, file_link.purpose
+              FROM core.file_links file_link
+              JOIN core.files file ON file.id = file_link.file_id
+              WHERE file_link.organization_id = $1
+                AND file_link.target_schema = 'sales'
+                AND file_link.target_table = 'design_tasks'
+                AND file_link.target_id = ANY($2::uuid[])
+              ORDER BY file_link.target_id, file.created_at DESC, file.id DESC
+            `,
+            [returnedRoots[0]!.organization_id, designIds]
+          )
+        : { rows: [] }
+      const attachmentsByDesign = new Map<string, DesignAttachment[]>()
+      for (const row of files.rows) {
+        const rows = attachmentsByDesign.get(row.target_id) ?? []
+        rows.push({
+          byteSize: Number(row.byte_size),
+          createdAt: row.created_at,
+          fileName: row.file_name,
+          id: row.id,
+          mediaType: row.media_type,
+          purpose: row.purpose,
+          storageKey: row.storage_key,
+        })
+        attachmentsByDesign.set(row.target_id, rows)
+      }
+
+      const rows = returnedRoots.map((row) => ({
+        ...designQueueItemFromRow(
+          row,
+          row.design_id ? (bomLinesByDesign.get(row.design_id) ?? []) : [],
+          clarificationByItem.get(row.enquiry_item_id) ?? null
+        ),
+        attachments: row.design_id
+          ? (attachmentsByDesign.get(row.design_id) ?? [])
+          : [],
+      }))
+      return boundedResult(rows, limit, roots.rows.length > limit)
+    },
+
+    async searchDesignPortfolioProducts(
+      organizationCode: string,
+      value: string
+    ) {
+      const { containsPattern, query } = selectorSearchTerm(value)
+      const products = await pool.query<{
+        description: string
+        id: string
+        item_type: string
+        uid: string
+      }>(
+        `
+          SELECT item.id, item.uid, item.description, item.item_type
+          FROM catalog.items item
+          JOIN core.organizations organization
+            ON organization.id = item.organization_id
+          WHERE lower(organization.code) = lower($1)
+            AND item.uid_kind = 'INTERNAL'
+            AND item.lifecycle_status = 'P'
+            AND (
+              $2::text = ''
+              OR lower(item.uid) = $2
+              OR (
+                $3::text IS NOT NULL
+                AND lower(
+                  coalesce(item.uid, '') || ' ' ||
+                  coalesce(item.description, '')
+                ) LIKE $3
+              )
+            )
+          ORDER BY CASE WHEN lower(item.uid) = $2 THEN 0 ELSE 1 END,
+            item.uid, item.id
+          LIMIT $4
+        `,
+        [
+          organizationCode.trim(),
+          query,
+          containsPattern,
+          commercialSelectorLimit + 1,
+        ]
+      )
+      return selectorResult(
+        products.rows.map((row) => ({
+          description: row.description,
+          id: row.id,
+          itemType: row.item_type,
+          uid: row.uid,
+        }))
+      )
     },
 
     async listEnquiriesForExport(organizationCode: string, batchSize = 500) {
