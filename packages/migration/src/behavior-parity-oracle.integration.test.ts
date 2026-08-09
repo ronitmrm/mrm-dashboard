@@ -229,7 +229,24 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
           )
         )
         .digest("hex")
-    ).toBe("f79662450e79678076249a87701ae85f018df9c396f91e0a1ad31740404f3800")
+    ).toBe("1f7b727e01c5e827fdca2281cdfb76b6b6c6b031fc0dfb17614793a7f40dddda")
+    expect(
+      createHash("sha256")
+        .update(
+          JSON.stringify(
+            normalizedDashboard.floorIsolation.map(({ state, ...floor }) => ({
+              ...floor,
+              state: Object.fromEntries(
+                Object.entries(state).filter(
+                  ([key]) =>
+                    key !== "sourceCoverage" && key !== "sourceWatermark"
+                )
+              ),
+            }))
+          )
+        )
+        .digest("hex")
+    ).toBe("8668e8459482aea21d7a4964ca38ab2b22d140a974e336454f04307b3c495a06")
 
     const observable = firstCapture.observable as Record<string, unknown>
     const commercial = observable.commercial as {
