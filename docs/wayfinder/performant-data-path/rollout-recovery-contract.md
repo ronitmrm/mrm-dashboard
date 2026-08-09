@@ -113,9 +113,13 @@ Operational commands and destructive-action approvals remain governed by [the st
 ## Preconditions still missing in the current tree
 
 - A continuously running worker host and direct listener URL are not configured; notifications remain disabled and safety sweeping remains authoritative.
-- Worker listener/reconciliation telemetry and the retained worker log surface do not exist. Current Redis counters are process-local and exposed only through an on-demand status query.
-- Dashboard delivery/coverage UI and its human acceptance script are not implemented.
-- Commercial per-section coverage, server-backed candidate search, repository Customer pagination, exhaustive export routes, and shared ECN decision graph are not implemented.
-- Recruitment bulk commands lack the 100-input server cap and durable command ID/ordinal audit evidence.
+- Worker listener/reconciliation telemetry is implemented, but its hosted retained log surface and application-operations owner are not recorded.
+- Source-controlled web preview and continuous-worker artifacts have not been promoted to managed staging by immutable digest.
+- The controlled managed-staging benchmark, observation window, Redis-empty drill, listener-loss drill, redacted environment inventory hash, and last-good rollback identifiers are not retained.
+
+Dashboard delivery/coverage UI, commercial bounded presentation/search/export,
+and recruitment bulk order/cap contracts have passed their repository, real-
+PostgreSQL, automated, and requested human acceptance gates. Their remaining
+blocker is the managed canary evidence above, not implementation behavior.
 
 These are promotion blockers, not reasons to weaken the rollout contract or evidence that the corresponding decision tickets are unresolved.
