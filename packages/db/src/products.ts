@@ -1,7 +1,13 @@
-import { asc, eq, getTableColumns, sql } from "drizzle-orm"
+import { and, asc, eq, getTableColumns, inArray, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { randomUUID } from "node:crypto"
 
+import {
+  commercialSelectorLimit,
+  exactPageResult,
+  selectorResult,
+  selectorSearchTerm,
+} from "./commercial-bounds"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 import { items } from "./schema/products"
 import { organizations } from "./schema/organizations"
@@ -53,6 +59,10 @@ type CreateProduct = {
 }
 
 type ProductRepositoryOptions = RepositoryPoolOptions
+
+type ProductSelectorOptions = {
+  itemTypes?: string[]
+}
 
 const decimal = (value = 0) => value.toString()
 
@@ -145,7 +155,7 @@ export function createProductRepository(options: ProductRepositoryOptions) {
         .select()
         .from(items)
         .where(eq(items.organizationId, organizationId))
-        .orderBy(asc(items.uid))
+        .orderBy(asc(items.uid), asc(items.id))
     },
 
     async listForOrganization(organizationCode: string) {
@@ -156,7 +166,7 @@ export function createProductRepository(options: ProductRepositoryOptions) {
         .where(
           sql`lower(${organizations.code}) = lower(${organizationCode.trim()})`
         )
-        .orderBy(asc(items.uid))
+        .orderBy(asc(items.uid), asc(items.id))
     },
 
     async listPageForOrganization(
@@ -166,7 +176,7 @@ export function createProductRepository(options: ProductRepositoryOptions) {
       const limit = Math.min(Math.max(Math.trunc(options.limit), 1), 200)
       const offset = Math.max(Math.trunc(options.offset), 0)
 
-      return database
+      const rows = await database
         .select({
           ...getTableColumns(items),
           totalCount: sql<number>`cast(count(*) over() as integer)`,
@@ -176,9 +186,55 @@ export function createProductRepository(options: ProductRepositoryOptions) {
         .where(
           sql`lower(${organizations.code}) = lower(${organizationCode.trim()})`
         )
-        .orderBy(asc(items.uid))
+        .orderBy(asc(items.uid), asc(items.id))
         .limit(limit)
         .offset(offset)
+
+      return exactPageResult(rows, { limit, offset })
+    },
+
+    async searchForOrganization(
+      organizationCode: string,
+      value: string,
+      options: ProductSelectorOptions = {}
+    ) {
+      const { containsPattern, query } = selectorSearchTerm(value)
+      const itemTypes = options.itemTypes
+        ?.map((itemType) => itemType.trim())
+        .filter(Boolean)
+      const organization = sql`lower(${organizations.code}) = lower(${organizationCode.trim()})`
+      const search = query
+        ? containsPattern
+          ? sql`lower(coalesce(${items.uid}, '') || ' ' || coalesce(${items.description}, '')) like ${containsPattern}`
+          : sql`lower(${items.uid}) = ${query}`
+        : undefined
+      const order = query
+        ? [
+            sql`case when lower(${items.uid}) = ${query} then 0 else 1 end`,
+            asc(items.uid),
+            asc(items.id),
+          ]
+        : [asc(items.uid), asc(items.id)]
+      const rows = await database
+        .select({
+          description: items.description,
+          id: items.id,
+          itemType: items.itemType,
+          uid: items.uid,
+        })
+        .from(items)
+        .innerJoin(organizations, eq(items.organizationId, organizations.id))
+        .where(
+          and(
+            organization,
+            search,
+            itemTypes?.length ? inArray(items.itemType, itemTypes) : undefined
+          )
+        )
+        .orderBy(...order)
+        .limit(commercialSelectorLimit + 1)
+
+      return selectorResult(rows)
     },
 
     async listBomLines(organizationCode: string) {

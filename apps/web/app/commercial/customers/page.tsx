@@ -53,17 +53,15 @@ export default async function CustomersPage({
   const repository = createCustomerRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const customers = await repository
-    .listForOrganization("MRMPL")
+  const customerPage = await repository
+    .listPageForOrganization("MRMPL", bounds)
     .finally(() => repository.close())
-  const visibleCustomers = customers.slice(
-    bounds.offset,
-    bounds.offset + bounds.limit
-  )
+  const visibleCustomers = customerPage.rows
   if (!visibleCustomers.length && bounds.page > 1) {
     redirect("/commercial/customers")
   }
-  const totalPages = Math.max(1, Math.ceil(customers.length / bounds.limit))
+  const totalCount = customerPage.coverage.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalCount / bounds.limit))
 
   return (
     <div className="flex flex-col gap-6">
@@ -131,8 +129,8 @@ export default async function CustomersPage({
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
             <span>
               Showing {visibleCustomers.length ? bounds.offset + 1 : 0}–
-              {Math.min(bounds.offset + visibleCustomers.length, customers.length)}{" "}
-              of {customers.length} customers
+              {Math.min(bounds.offset + visibleCustomers.length, totalCount)} of{" "}
+              {totalCount} customers
             </span>
             <div className="flex items-center gap-2">
               {bounds.page > 1 ? (

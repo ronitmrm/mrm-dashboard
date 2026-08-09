@@ -1,6 +1,11 @@
 export { createAccessAdministrationRepository } from "./access-administration"
 export { createAuthorizationRepository } from "./authorization"
 export { createCatalogMasterRepository } from "./catalog-masters"
+export {
+  type BoundedCommercialResult,
+  type CommercialCoverage,
+  commercialSelectorLimit,
+} from "./commercial-bounds"
 export { createCommercialCostingRepository } from "./commercial-costing"
 export {
   commercialTermTypes,
