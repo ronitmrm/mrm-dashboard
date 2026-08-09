@@ -518,8 +518,8 @@ describe("candidate application cycles", () => {
         if (statement.includes("INSERT INTO recruitment.applications")) {
           return {
             rows: [
-              { candidate_id: "candidate-1", id: "application-1" },
               { candidate_id: "candidate-2", id: "application-2" },
+              { candidate_id: "candidate-1", id: "application-1" },
             ],
           }
         }
@@ -553,16 +553,35 @@ describe("candidate application cycles", () => {
     )
     expect(auditCalls).toHaveLength(1)
     const auditEvents = JSON.parse(String(auditCalls[0]![1]![0])) as Array<{
-      metadata: { candidateId: string }
+      metadata: {
+        candidateId: string
+        commandId: string
+        commandOrdinal: number
+        selectionOrdinal: number
+      }
+      sourceId: string
       targetId: string
     }>
+    const commandId = auditEvents[0]!.metadata.commandId
     expect(auditEvents).toEqual([
       expect.objectContaining({
-        metadata: { candidateId: "candidate-1" },
+        metadata: expect.objectContaining({
+          candidateId: "candidate-1",
+          commandId,
+          commandOrdinal: 0,
+          selectionOrdinal: 0,
+        }),
+        sourceId: `recruitment:${commandId}:000000`,
         targetId: "application-1",
       }),
       expect.objectContaining({
-        metadata: { candidateId: "candidate-2" },
+        metadata: expect.objectContaining({
+          candidateId: "candidate-2",
+          commandId,
+          commandOrdinal: 1,
+          selectionOrdinal: 1,
+        }),
+        sourceId: `recruitment:${commandId}:000001`,
         targetId: "application-2",
       }),
     ])

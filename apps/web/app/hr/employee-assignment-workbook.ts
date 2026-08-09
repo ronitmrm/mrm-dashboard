@@ -152,7 +152,6 @@ function parseSheet(
   const employeeCodeIndex = headers.indexOf("employee code")
   const employeeEventIndex = headers.indexOf("employment event")
   const parsed: EmployeeAssignmentWorkbookRow[] = []
-  const seen = new Set<string>()
 
   rows.slice(1).forEach((row, index) => {
     const rowNumber = index + 2
@@ -174,13 +173,6 @@ function parseSheet(
         `${sheetName} row ${rowNumber}: Employee Name or Employee Code is required.`
       )
     }
-    const normalizedCode = targetCode.toLowerCase()
-    if (seen.has(normalizedCode)) {
-      throw new Error(
-        `${sheetName} row ${rowNumber}: ${targetCode} appears more than once.`
-      )
-    }
-    seen.add(normalizedCode)
     parsed.push({
       employeeCode: employeeCode || null,
       employeeEvent:

@@ -162,6 +162,10 @@ function optional(value: unknown) {
   return normalized || null
 }
 
+function compareText(left: string, right: string) {
+  return left === right ? 0 : left < right ? -1 : 1
+}
+
 function normalizedQuestionScores(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {}
   return Object.fromEntries(
@@ -207,6 +211,7 @@ type AuditInput = MutationContext & {
   eventType: string
   metadata?: Record<string, unknown>
   reason?: string | null
+  sourceId?: string
   targetId: string
   targetTable: string
 }
@@ -221,7 +226,7 @@ async function auditMany(client: PoolClient, inputs: AuditInput[]) {
     metadata: input.metadata ?? {},
     organizationId: input.organizationId,
     reason: input.reason ?? null,
-    sourceId: randomUUID(),
+    sourceId: input.sourceId ?? randomUUID(),
     targetId: input.targetId,
     targetTable: input.targetTable,
   }))
@@ -258,9 +263,29 @@ async function audit(client: PoolClient, input: AuditInput) {
   await auditMany(client, [input])
 }
 
+function recruitmentAssignmentAudit(
+  input: AuditInput,
+  commandId: string,
+  commandOrdinal: number
+): AuditInput {
+  return {
+    ...input,
+    metadata: {
+      ...input.metadata,
+      commandId,
+      commandOrdinal,
+    },
+    sourceId: `recruitment:${commandId}:${String(commandOrdinal).padStart(6, "0")}`,
+  }
+}
+
 type CandidateAssignmentInput = MutationContext & {
   candidateIds: string[]
   jobId: string
+}
+
+type CandidateAssignmentCommandInput = CandidateAssignmentInput & {
+  commandId: string
 }
 
 const recruitmentAssignmentCommandLimit = 100
@@ -282,7 +307,7 @@ function assertCandidateAssignmentCount(candidateIds: string[]) {
 
 async function assignCandidatesInTransaction(
   client: PoolClient,
-  input: CandidateAssignmentInput
+  input: CandidateAssignmentCommandInput
 ) {
   const candidateIds = input.candidateIds
   const jobId = input.jobId
@@ -335,7 +360,7 @@ async function assignCandidatesInTransaction(
     [
       input.organizationId,
       input.actorUserId ?? null,
-      randomUUID(),
+      input.commandId,
       jobId,
       candidateIds,
     ]
@@ -345,17 +370,38 @@ async function assignCandidatesInTransaction(
       "One or more selected candidates could not be assigned. Refresh the candidate list and try again."
     )
   }
+  const applicationsByCandidateId = new Map(
+    result.rows.map((application) => [application.candidate_id, application])
+  )
+  const orderedApplications = candidateIds.map((candidateId) => {
+    const application = applicationsByCandidateId.get(candidateId)
+    if (!application) {
+      throw new Error(
+        "One or more selected candidates could not be assigned. Refresh the candidate list and try again."
+      )
+    }
+    return application
+  })
   await auditMany(
     client,
-    result.rows.map((application) => ({
-      ...input,
-      eventType: "recruitment.application.assigned",
-      metadata: { candidateId: application.candidate_id },
-      targetId: application.id,
-      targetTable: "applications",
-    }))
+    orderedApplications.map((application, selectionOrdinal) =>
+      recruitmentAssignmentAudit(
+        {
+          ...input,
+          eventType: "recruitment.application.assigned",
+          metadata: {
+            candidateId: application.candidate_id,
+            selectionOrdinal,
+          },
+          targetId: application.id,
+          targetTable: "applications",
+        },
+        input.commandId,
+        selectionOrdinal
+      )
+    )
   )
-  return result.rows
+  return orderedApplications
 }
 
 type EmployeeAssignmentInput = MutationContext & {
@@ -367,7 +413,8 @@ type EmployeeAssignmentInput = MutationContext & {
 
 async function assignEmployeeInTransaction(
   client: PoolClient,
-  input: EmployeeAssignmentInput
+  input: EmployeeAssignmentInput,
+  commandId: string
 ) {
   const current = await client.query<{
     combined_role_id: string | null
@@ -402,7 +449,7 @@ async function assignEmployeeInTransaction(
             AND combined.status = 'Active'
             AND post.organization_id = $2
             AND post.status <> 'Inactive'
-          ORDER BY link.is_primary DESC, post.post_code
+          ORDER BY link.is_primary DESC, post.post_code, post.id
           FOR UPDATE OF post
         `,
         [currentPost.combined_role_id, input.organizationId]
@@ -445,23 +492,35 @@ async function assignEmployeeInTransaction(
   if (result.rows.length !== targetIds.length) {
     throw new Error("Not every approved post in the assignment was updated.")
   }
-  for (const updated of result.rows) {
-    await audit(client, {
-      ...input,
-      eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
-      metadata: {
-        assignmentScope: currentPost.combined_role_id
-          ? "combined-role"
-          : "approved-post",
-        combinedRoleId: currentPost.combined_role_id,
-        status: assignment.status,
+  const updatedIds = new Set(result.rows.map((post) => post.id))
+  const orderedAudits = targets.rows.map((post, commandOrdinal) => {
+    if (!updatedIds.has(post.id)) {
+      throw new Error("Not every approved post in the assignment was updated.")
+    }
+    return recruitmentAssignmentAudit(
+      {
+        ...input,
+        eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
+        metadata: {
+          assignmentScope: currentPost.combined_role_id
+            ? "combined-role"
+            : "approved-post",
+          combinedRoleId: currentPost.combined_role_id,
+          postId: post.id,
+          status: assignment.status,
+        },
+        targetId: post.id,
+        targetTable: "posts",
       },
-      targetId: updated.id,
-      targetTable: "posts",
-    })
+      commandId,
+      commandOrdinal
+    )
+  })
+  await auditMany(client, orderedAudits)
+  if (!updatedIds.has(currentPost.id)) {
+    throw new Error("Approved post was not found.")
   }
-  const selectedPost = result.rows.find((post) => post.id === currentPost.id)
-  if (!selectedPost) throw new Error("Approved post was not found.")
+  const selectedPost = { id: currentPost.id }
   return { selectedPost, updatedPostCount: result.rows.length }
 }
 
@@ -1728,8 +1787,13 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     },
 
     async assignEmployee(input: EmployeeAssignmentInput) {
+      const commandId = randomUUID()
       return transaction(pool, async (client) => {
-        const result = await assignEmployeeInTransaction(client, input)
+        const result = await assignEmployeeInTransaction(
+          client,
+          input,
+          commandId
+        )
         return result.selectedPost
       })
     },
@@ -1754,11 +1818,41 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `At most ${recruitmentAssignmentCommandLimit} employee assignments are allowed.`
         )
       }
+      const orderedAssignments = input.assignments
+        .map((assignment, inputOrdinal) => ({
+          ...assignment,
+          inputOrdinal,
+        }))
+        .sort(
+          (left, right) =>
+            left.rowNumber - right.rowNumber ||
+            (left.targetType === right.targetType
+              ? left.inputOrdinal - right.inputOrdinal
+              : left.targetType === "combined"
+                ? -1
+                : 1)
+        )
+      const seenWorkbookRows = new Set<string>()
+      for (const assignment of orderedAssignments) {
+        const rowKey = `${assignment.targetType}:${assignment.rowNumber}`
+        if (seenWorkbookRows.has(rowKey)) {
+          const sheet =
+            assignment.targetType === "combined"
+              ? "Combined Jobs"
+              : "Individual Posts"
+          throw new Error(
+            `${sheet} row ${assignment.rowNumber} appears more than once.`
+          )
+        }
+        seenWorkbookRows.add(rowKey)
+      }
+      const commandId = randomUUID()
       return transaction(pool, async (client) => {
         type TargetPost = {
           combined_role_id: string | null
           employee_code: string | null
           employee_name: string | null
+          is_primary: boolean
           post_code: string
           post_id: string
           target_code: string
@@ -1766,14 +1860,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         }
         const combinedCodes = [
           ...new Set(
-            input.assignments
+            orderedAssignments
               .filter((row) => row.targetType === "combined")
               .map((row) => row.targetCode.toLowerCase())
           ),
         ]
         const individualCodes = [
           ...new Set(
-            input.assignments
+            orderedAssignments
               .filter((row) => row.targetType === "individual")
               .map((row) => row.targetCode.toLowerCase())
           ),
@@ -1784,7 +1878,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                   SELECT lower(combined.vacancy_code) AS target_code,
                   'combined'::text AS target_type,
                   combined.id AS combined_role_id, post.id AS post_id,
-                  post.post_code, post.employee_name, post.employee_code
+                  link.is_primary, post.post_code,
+                  post.employee_name, post.employee_code
                 FROM recruitment.combined_roles combined
                 JOIN recruitment.combined_role_posts link
                   ON link.combined_role_id = combined.id
@@ -1804,7 +1899,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                       AND primary_post.status <> 'Inactive'
                   )
                 ORDER BY lower(combined.vacancy_code),
-                  link.is_primary DESC, post.post_code
+                  link.is_primary DESC, post.post_code, post.id
                 FOR UPDATE OF post
               `,
               [input.organizationId, combinedCodes]
@@ -1816,14 +1911,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                 SELECT post.id AS post_id,
                   lower(post.post_code) AS target_code,
                   'individual'::text AS target_type,
-                  post.combined_role_id, post.post_code,
+                  post.combined_role_id, false AS is_primary, post.post_code,
                   post.employee_name, post.employee_code
                 FROM recruitment.posts post
                 WHERE post.organization_id = $1
                   AND post.status <> 'Inactive'
                   AND post.combined_role_id IS NULL
                   AND lower(post.post_code) = ANY($2::text[])
-                ORDER BY lower(post.post_code)
+                ORDER BY lower(post.post_code), post.id
                 FOR UPDATE OF post
               `,
               [input.organizationId, individualCodes]
@@ -1839,7 +1934,15 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           targets.push(target)
           targetsByCode.set(key, targets)
         }
-        for (const row of input.assignments) {
+        for (const targets of targetsByCode.values()) {
+          targets.sort(
+            (left, right) =>
+              Number(right.is_primary) - Number(left.is_primary) ||
+              compareText(left.post_code, right.post_code) ||
+              compareText(left.post_id, right.post_id)
+          )
+        }
+        for (const row of orderedAssignments) {
           const key = `${row.targetType}:${row.targetCode.toLowerCase()}`
           if (!targetsByCode.get(key)?.length) {
             const sheet =
@@ -1878,7 +1981,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         >()
         const auditEvents: AuditInput[] = []
         let updatedPostCount = 0
-        for (const row of input.assignments) {
+        for (const row of orderedAssignments) {
           const key = `${row.targetType}:${row.targetCode.toLowerCase()}`
           const targets = targetsByCode.get(key)!
           const current =
@@ -1909,20 +2012,31 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               status: assignment.status,
               updateCount: (previousUpdate?.updateCount ?? 0) + 1,
             })
-            auditEvents.push({
-              actorUserId: input.actorUserId,
-              eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
-              metadata: {
-                assignmentScope: target.combined_role_id
-                  ? "combined-role"
-                  : "approved-post",
-                combinedRoleId: target.combined_role_id,
-                status: assignment.status,
-              },
-              organizationId: input.organizationId,
-              targetId: target.post_id,
-              targetTable: "posts",
-            })
+            const commandOrdinal = auditEvents.length
+            auditEvents.push(
+              recruitmentAssignmentAudit(
+                {
+                  actorUserId: input.actorUserId,
+                  eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
+                  metadata: {
+                    assignmentScope: target.combined_role_id
+                      ? "combined-role"
+                      : "approved-post",
+                    combinedRoleId: target.combined_role_id,
+                    postId: target.post_id,
+                    rowNumber: row.rowNumber,
+                    status: assignment.status,
+                    targetCode: row.targetCode,
+                    targetType: row.targetType,
+                  },
+                  organizationId: input.organizationId,
+                  targetId: target.post_id,
+                  targetTable: "posts",
+                },
+                commandId,
+                commandOrdinal
+              )
+            )
           }
           updatedPostCount += targets.length
         }
@@ -1959,7 +2073,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         }
         await auditMany(client, auditEvents)
         return {
-          assignmentCount: input.assignments.length,
+          assignmentCount: orderedAssignments.length,
           updatedPostCount,
         }
       })
@@ -2131,10 +2245,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     ) {
       const candidateId = required(input.candidateId, "Candidate")
       const jobId = required(input.jobId, "Recruitment opening")
+      const commandId = randomUUID()
       const applications = await transaction(pool, (client) =>
         assignCandidatesInTransaction(client, {
           ...input,
           candidateIds: [candidateId],
+          commandId,
           jobId,
         })
       )
@@ -2145,10 +2261,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       const candidateIds = normalizedCandidateAssignmentIds(input.candidateIds)
       assertCandidateAssignmentCount(candidateIds)
       const jobId = required(input.jobId, "Recruitment opening")
+      const commandId = randomUUID()
       return transaction(pool, (client) =>
         assignCandidatesInTransaction(client, {
           ...input,
           candidateIds,
+          commandId,
           jobId,
         })
       )

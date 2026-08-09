@@ -93,6 +93,34 @@ describe("employee assignment workbook", () => {
     ])
   })
 
+  it("preserves repeated target transitions in workbook row order", () => {
+    const workbook = buildEmployeeAssignmentWorkbook({
+      combinedRoles: [],
+      posts,
+    })
+    XLSX.utils.sheet_add_aoa(
+      workbook.Sheets[individualPostsSheetName]!,
+      [
+        ["Q-001", "Quality", "Inspector", "", "", "", "", "Removed"],
+        ["Q-001", "Quality", "Inspector", "", "", "Ravi", "E-2", "Appointed"],
+      ],
+      { origin: "A2" }
+    )
+
+    expect(parseEmployeeAssignmentWorkbook(workbook)).toEqual([
+      expect.objectContaining({
+        employeeEvent: "Removed",
+        rowNumber: 2,
+        targetCode: "Q-001",
+      }),
+      expect.objectContaining({
+        employeeEvent: "Appointed",
+        rowNumber: 3,
+        targetCode: "Q-001",
+      }),
+    ])
+  })
+
   it("rejects a row with an invalid event", () => {
     const workbook = buildEmployeeAssignmentWorkbook({
       combinedRoles: [],

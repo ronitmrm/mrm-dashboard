@@ -104,6 +104,8 @@ describe("PostgreSQL recruitment bulk operations", () => {
       expect(Buffer.byteLength(JSON.stringify(bulk))).toBeLessThanOrEqual(
         512 * 1024
       )
+      expect(singleStatementCount).toBe(5)
+      expect(bulkStatementCount).toBe(5)
       expect(bulkStatementCount).toBe(singleStatementCount)
       const applicationIds = [...single, ...bulk].map(
         (application) => application.id
@@ -124,6 +126,53 @@ describe("PostgreSQL recruitment bulk operations", () => {
       expect(audits.rows).toHaveLength(101)
       expect(audits.rows.map((audit) => audit.candidate_id).sort()).toEqual(
         candidates.rows.map((candidate) => candidate.id).sort()
+      )
+
+      const orderedBulkAudits = await pool.query<{
+        candidate_id: string
+        command_id: string
+        command_ordinal: number
+        selection_ordinal: number
+        source_id: string
+        target_id: string
+      }>(
+        `
+          SELECT target_id::text,
+            metadata->>'candidateId' AS candidate_id,
+            metadata->>'commandId' AS command_id,
+            (metadata->>'commandOrdinal')::integer AS command_ordinal,
+            (metadata->>'selectionOrdinal')::integer AS selection_ordinal,
+            source_id
+          FROM audit.events
+          WHERE organization_id = $1
+            AND event_type = 'recruitment.application.assigned'
+            AND target_id = ANY($2::uuid[])
+          ORDER BY (metadata->>'commandOrdinal')::integer
+        `,
+        [organizationId, bulk.map((application) => application.id)]
+      )
+      const commandId = orderedBulkAudits.rows[0]!.command_id
+      expect(orderedBulkAudits.rows.map((audit) => audit.candidate_id)).toEqual(
+        candidates.rows.slice(1).map((candidate) => candidate.id)
+      )
+      expect(orderedBulkAudits.rows.map((audit) => audit.target_id)).toEqual(
+        bulk.map((application) => application.id)
+      )
+      expect(
+        orderedBulkAudits.rows.map((audit) => audit.command_ordinal)
+      ).toEqual(Array.from({ length: 100 }, (_, index) => index))
+      expect(
+        orderedBulkAudits.rows.map((audit) => audit.selection_ordinal)
+      ).toEqual(Array.from({ length: 100 }, (_, index) => index))
+      expect(
+        new Set(orderedBulkAudits.rows.map((audit) => audit.command_id))
+      ).toEqual(new Set([commandId]))
+      expect(orderedBulkAudits.rows.map((audit) => audit.source_id)).toEqual(
+        Array.from(
+          { length: 100 },
+          (_, index) =>
+            `recruitment:${commandId}:${String(index).padStart(6, "0")}`
+        )
       )
 
       statementCount = 0
@@ -230,7 +279,7 @@ describe("PostgreSQL recruitment bulk operations", () => {
         INSERT INTO recruitment.combined_role_posts (
           combined_role_id, post_id, is_primary
         )
-        VALUES ($1, $2, true), ($1, $3, false)
+        VALUES ($1, $2, false), ($1, $3, true)
       `,
       [combinedRoleId, posts.rows[100]!.id, posts.rows[101]!.id]
     )
@@ -316,6 +365,62 @@ describe("PostgreSQL recruitment bulk operations", () => {
       expect(Number(stored.rows[0]!.count)).toBe(102)
       expect(Number(audits.rows[0]!.count)).toBe(102)
 
+      const bulkTargetIds = [
+        ...posts.rows.slice(1, 100).map((post) => post.id),
+        posts.rows[101]!.id,
+        posts.rows[100]!.id,
+      ]
+      const orderedBulkAudits = await pool.query<{
+        command_id: string
+        command_ordinal: number
+        event_type: string
+        post_id: string
+        row_number: number
+        source_id: string
+        target_id: string
+      }>(
+        `
+          SELECT target_id::text,
+            event_type,
+            metadata->>'commandId' AS command_id,
+            (metadata->>'commandOrdinal')::integer AS command_ordinal,
+            (metadata->>'rowNumber')::integer AS row_number,
+            metadata->>'postId' AS post_id,
+            source_id
+          FROM audit.events
+          WHERE organization_id = $1
+            AND event_type = 'recruitment.employee.occupied'
+            AND target_id = ANY($2::uuid[])
+          ORDER BY (metadata->>'commandOrdinal')::integer
+        `,
+        [organizationId, bulkTargetIds]
+      )
+      const commandId = orderedBulkAudits.rows[0]!.command_id
+      expect(orderedBulkAudits.rows.map((audit) => audit.target_id)).toEqual(
+        bulkTargetIds
+      )
+      expect(orderedBulkAudits.rows.map((audit) => audit.post_id)).toEqual(
+        bulkTargetIds
+      )
+      expect(orderedBulkAudits.rows.map((audit) => audit.row_number)).toEqual([
+        ...Array.from({ length: 99 }, (_, index) => index + 2),
+        101,
+        101,
+      ])
+      expect(
+        orderedBulkAudits.rows.map((audit) => audit.command_ordinal)
+      ).toEqual(Array.from({ length: 101 }, (_, index) => index))
+      expect(
+        new Set(orderedBulkAudits.rows.map((audit) => audit.command_id))
+      ).toEqual(new Set([commandId]))
+      expect(orderedBulkAudits.rows.map((audit) => audit.source_id)).toEqual(
+        Array.from(
+          { length: 101 },
+          (_, index) =>
+            `recruitment:${commandId}:${String(index).padStart(6, "0")}`
+        )
+      )
+
       statementCount = 0
       await expect(
         repository.bulkAssignEmployees({
@@ -343,6 +448,123 @@ describe("PostgreSQL recruitment bulk operations", () => {
         })
       ).rejects.toThrow("At most 100 employee assignments are allowed.")
       expect(statementCount).toBe(0)
+
+      await expect(
+        repository.bulkAssignEmployees({
+          assignments: [
+            {
+              employeeEvent: "Removed",
+              rowNumber: 301,
+              targetCode: posts.rows[0]!.post_code,
+              targetType: "individual",
+            },
+            {
+              employeeEvent: "Removed",
+              rowNumber: 301,
+              targetCode: posts.rows[1]!.post_code,
+              targetType: "individual",
+            },
+          ],
+          organizationId,
+        })
+      ).rejects.toThrow("Individual Posts row 301 appears more than once.")
+      expect(statementCount).toBe(0)
+
+      const beforeRepeated = await pool.query<{
+        row_version: string
+      }>(`SELECT row_version::text FROM recruitment.posts WHERE id = $1`, [
+        posts.rows[0]!.id,
+      ])
+      statementCount = 0
+      const repeated = await repository.bulkAssignEmployees({
+        assignments: [
+          {
+            employeeCode: `EMP-REPEATED-${suffix}`,
+            employeeEvent: "Appointed",
+            employeeName: "Repeated Employee",
+            rowNumber: 302,
+            targetCode: posts.rows[0]!.post_code,
+            targetType: "individual",
+          },
+          {
+            employeeEvent: "Removed",
+            rowNumber: 301,
+            targetCode: posts.rows[0]!.post_code,
+            targetType: "individual",
+          },
+        ],
+        organizationId,
+      })
+      expect(repeated).toEqual({ assignmentCount: 2, updatedPostCount: 2 })
+      expect(statementCount).toBe(5)
+      const afterRepeated = await pool.query<{
+        employee_code: string | null
+        employee_name: string | null
+        row_version: string
+        status: string
+      }>(
+        `
+          SELECT employee_code, employee_name, row_version::text, status
+          FROM recruitment.posts
+          WHERE id = $1
+        `,
+        [posts.rows[0]!.id]
+      )
+      expect(afterRepeated.rows[0]).toEqual({
+        employee_code: `EMP-REPEATED-${suffix}`,
+        employee_name: "Repeated Employee",
+        row_version: String(Number(beforeRepeated.rows[0]!.row_version) + 2),
+        status: "Appointed",
+      })
+      const repeatedAudits = await pool.query<{
+        command_id: string
+        command_ordinal: number
+        event_type: string
+        row_number: number
+        source_id: string
+      }>(
+        `
+          SELECT event_type,
+            metadata->>'commandId' AS command_id,
+            (metadata->>'commandOrdinal')::integer AS command_ordinal,
+            (metadata->>'rowNumber')::integer AS row_number,
+            source_id
+          FROM audit.events
+          WHERE organization_id = $1
+            AND target_id = $2
+            AND metadata ? 'commandId'
+          ORDER BY occurred_at, (metadata->>'commandOrdinal')::integer
+        `,
+        [organizationId, posts.rows[0]!.id]
+      )
+      const repeatedAuditsByCommand = new Map<
+        string,
+        typeof repeatedAudits.rows
+      >()
+      for (const audit of repeatedAudits.rows) {
+        const events = repeatedAuditsByCommand.get(audit.command_id) ?? []
+        events.push(audit)
+        repeatedAuditsByCommand.set(audit.command_id, events)
+      }
+      const repeatedCommand = [...repeatedAuditsByCommand.entries()].find(
+        ([, events]) => events.length === 2
+      )
+      expect(repeatedCommand).toBeDefined()
+      const [repeatedCommandId, repeatedCommandEvents] = repeatedCommand!
+      expect(repeatedCommandEvents!.map((audit) => audit.event_type)).toEqual([
+        "recruitment.employee.vacant",
+        "recruitment.employee.appointed",
+      ])
+      expect(repeatedCommandEvents!.map((audit) => audit.row_number)).toEqual([
+        301, 302,
+      ])
+      expect(
+        repeatedCommandEvents!.map((audit) => audit.command_ordinal)
+      ).toEqual([0, 1])
+      expect(repeatedCommandEvents!.map((audit) => audit.source_id)).toEqual([
+        `recruitment:${repeatedCommandId}:000000`,
+        `recruitment:${repeatedCommandId}:000001`,
+      ])
 
       const beforeFailure = await pool.query<{
         employee_code: string | null
@@ -403,7 +625,7 @@ describe("PostgreSQL recruitment bulk operations", () => {
         [organizationId]
       )
       expect(afterFailure.rows[0]).toEqual(beforeFailure.rows[0])
-      expect(Number(auditsAfterFailure.rows[0]!.count)).toBe(102)
+      expect(Number(auditsAfterFailure.rows[0]!.count)).toBe(104)
     } finally {
       await repository.close()
       await trackedPool.end()
