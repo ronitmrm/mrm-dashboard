@@ -38,6 +38,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { BoundedResultNotice } from "@/components/bounded-result-notice"
 
 import { createPurchaseOrderAction } from "./actions"
 
@@ -50,7 +51,11 @@ function money(value: number) {
   }).format(value)
 }
 
-export default async function PurchaseOrdersPage() {
+export default async function PurchaseOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ customer?: string }>
+}) {
   await requireCapability(
     commercialCapabilities.purchaseOrders.read,
     "/commercial/orders"
@@ -60,13 +65,23 @@ export default async function PurchaseOrdersPage() {
     connectionString,
   })
   const customersRepository = createCustomerRepository({ connectionString })
-  const [orders, customers] = await Promise.all([
-    ordersRepository.listPurchaseOrders("MRMPL"),
-    customersRepository.listForOrganization("MRMPL"),
-  ]).finally(async () => {
-    await Promise.all([ordersRepository.close(), customersRepository.close()])
-  })
-  const organizationId = customers[0]?.organizationId
+  const customerSearch = (await searchParams).customer?.trim() ?? ""
+  const { customerOptions, orders, organizationId } = await (async () => {
+    try {
+      return {
+        customerOptions: await customersRepository.searchForOrganization(
+          "MRMPL",
+          customerSearch
+        ),
+        orders: await ordersRepository.listPurchaseOrders("MRMPL"),
+        organizationId:
+          await customersRepository.organizationIdForCode("MRMPL"),
+      }
+    } finally {
+      await ordersRepository.close()
+      await customersRepository.close()
+    }
+  })()
 
   return (
     <div className="grid gap-6">
@@ -79,8 +94,32 @@ export default async function PurchaseOrdersPage() {
             lineages.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {organizationId ? (
+        <CardContent className="grid gap-5">
+          <form
+            className="flex flex-col gap-2 sm:flex-row sm:items-end"
+            id="po-customer-search"
+          >
+            <Field className="max-w-md flex-1">
+              <FieldLabel htmlFor="po-customer-query">Find customer</FieldLabel>
+              <Input
+                defaultValue={customerSearch}
+                id="po-customer-query"
+                name="customer"
+                placeholder="Customer UID or company"
+              />
+            </Field>
+            <Button type="submit" variant="outline">
+              Search
+            </Button>
+          </form>
+          <BoundedResultNotice
+            actionHref="#po-customer-search"
+            actionLabel="Refine customer search"
+            coverage={customerOptions.coverage}
+            searchQuery={customerSearch}
+            section="Customer options"
+          />
+          {organizationId && customerOptions.rows.length ? (
             <form action={createPurchaseOrderAction}>
               <input
                 name="organization_id"
@@ -98,7 +137,7 @@ export default async function PurchaseOrdersPage() {
                         name="customer_id"
                         required
                       >
-                        {customers.map((customer) => (
+                        {customerOptions.rows.map((customer) => (
                           <NativeSelectOption
                             key={customer.id}
                             value={customer.id}
@@ -147,7 +186,9 @@ export default async function PurchaseOrdersPage() {
             </form>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Load at least one customer before creating a purchase order.
+              {customerSearch
+                ? "No customers match this search."
+                : "Load at least one customer before creating a purchase order."}
             </p>
           )}
         </CardContent>

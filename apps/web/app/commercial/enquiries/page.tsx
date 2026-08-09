@@ -36,23 +36,40 @@ import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { BoundedResultNotice } from "@/components/bounded-result-notice"
 
 import { createEnquiryAction, importEnquiryRegisterAction } from "./actions"
 
 export const dynamic = "force-dynamic"
 
-export default async function EnquiriesPage() {
+export default async function EnquiriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ customer?: string }>
+}) {
   await requireCapability("pricing.enquiries.read", "/commercial/enquiries")
+  const customerSearch = (await searchParams).customer?.trim() ?? ""
   const connectionString = readAuthEnvironment().connectionString
   const customerRepository = createCustomerRepository({ connectionString })
   const workflow = createCommercialWorkflowRepository({ connectionString })
-  const [customers, enquiries] = await Promise.all([
-    customerRepository
-      .listForOrganization("MRMPL")
-      .finally(() => customerRepository.close()),
-    workflow.listEnquiries("MRMPL").finally(() => workflow.close()),
-  ])
-  const organizationId = customers[0]?.organizationId
+  const { customerOptions, enquiryResult, organizationId } =
+    await (async () => {
+      try {
+        return {
+          customerOptions: await customerRepository.searchForOrganization(
+            "MRMPL",
+            customerSearch
+          ),
+          enquiryResult: await workflow.listEnquiriesBounded("MRMPL"),
+          organizationId:
+            await customerRepository.organizationIdForCode("MRMPL"),
+        }
+      } finally {
+        await customerRepository.close()
+        await workflow.close()
+      }
+    })()
+  const enquiries = enquiryResult.rows
   const today = new Date().toISOString().slice(0, 10)
 
   return (
@@ -122,7 +139,31 @@ export default async function EnquiriesPage() {
             terms are validated again before technical handover.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="grid gap-5">
+          <form
+            className="flex flex-col gap-2 sm:flex-row sm:items-end"
+            id="customer-search"
+          >
+            <Field className="max-w-md flex-1">
+              <FieldLabel htmlFor="customer-query">Find customer</FieldLabel>
+              <Input
+                defaultValue={customerSearch}
+                id="customer-query"
+                name="customer"
+                placeholder="Customer UID or company"
+              />
+            </Field>
+            <Button type="submit" variant="outline">
+              Search
+            </Button>
+          </form>
+          <BoundedResultNotice
+            actionHref="#customer-search"
+            actionLabel="Refine customer search"
+            coverage={customerOptions.coverage}
+            searchQuery={customerSearch}
+            section="Customer options"
+          />
           {organizationId ? (
             <form action={createEnquiryAction}>
               <input
@@ -139,7 +180,7 @@ export default async function EnquiriesPage() {
                       name="customer_id"
                       required
                     >
-                      {customers.map((customer) => (
+                      {customerOptions.rows.map((customer) => (
                         <NativeSelectOption
                           key={customer.id}
                           value={customer.id}
@@ -274,6 +315,12 @@ export default async function EnquiriesPage() {
             Current handover state and line count from normalized PostgreSQL
             rows.
           </CardDescription>
+          <BoundedResultNotice
+            actionHref="/commercial/enquiries/register/export.xlsx"
+            actionLabel="Export the complete register"
+            coverage={enquiryResult.coverage}
+            section="Enquiries"
+          />
         </CardHeader>
         <CardContent>
           <div className="overflow-hidden rounded-3xl border">
