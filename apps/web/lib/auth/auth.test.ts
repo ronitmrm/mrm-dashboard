@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
 
@@ -35,8 +35,9 @@ async function resetIdentity() {
 
 beforeAll(async () => {
   await migrateDatabase({ connectionString })
-  await resetIdentity()
 })
+
+beforeEach(resetIdentity)
 
 afterAll(async () => {
   await resetIdentity()
@@ -44,6 +45,25 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL Better Auth", () => {
+  it("keeps session authorization in PostgreSQL with cookie caching disabled", async () => {
+    const system = createAuthSystem({
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+
+    try {
+      const options = system.auth.options as {
+        secondaryStorage?: unknown
+        session?: { cookieCache?: { enabled?: boolean } }
+      }
+      expect(options.session?.cookieCache).toEqual({ enabled: false })
+      expect(options.secondaryStorage).toBeUndefined()
+    } finally {
+      await system.close()
+    }
+  })
+
   it("resets identity rows without deleting business data", async () => {
     const organizationId = randomUUID()
     const organizationCode = `AUTH-${organizationId.slice(0, 8)}`
@@ -167,21 +187,27 @@ describe("PostgreSQL Better Auth", () => {
     }
   })
 
-  it("rejects a revoked session on the next authenticated request", async () => {
-    const system = createAuthSystem({
+  it("rejects a revoked session on the next request across instances and Redis loss", async () => {
+    const firstInstance = createAuthSystem({
       allowSignUp: true,
       baseURL: "http://localhost:3001",
       connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const secondInstance = createAuthSystem({
+      baseURL: "http://localhost:3001",
+      connectionString,
+      redisUrl: "redis://127.0.0.1:1",
       secret: "test-only-better-auth-secret-000000000000",
     })
     const email = `revocation-${randomUUID()}@mrmpl.test`
     const password = "revocation-test-password"
 
     try {
-      await system.auth.api.signUpEmail({
+      await firstInstance.auth.api.signUpEmail({
         body: { email, name: "Revocation Test", password },
       })
-      const signedIn = await system.auth.api.signInEmail({
+      const signedIn = await firstInstance.auth.api.signInEmail({
         body: { email, password },
         returnHeaders: true,
       })
@@ -190,13 +216,16 @@ describe("PostgreSQL Better Auth", () => {
         .map((cookie) => cookie.split(";", 1)[0])
         .join("; ")
 
-      const activeSession = await system.auth.api.getSession({
-        headers: new Headers({ cookie: cookieHeader }),
-      })
-      expect(activeSession).toMatchObject({
-        session: { token: signedIn.response.token },
-        user: { email },
-      })
+      for (const instance of [firstInstance, secondInstance]) {
+        await expect(
+          instance.auth.api.getSession({
+            headers: new Headers({ cookie: cookieHeader }),
+          })
+        ).resolves.toMatchObject({
+          session: { token: signedIn.response.token },
+          user: { email },
+        })
+      }
 
       const deleted = await pool.query(
         "DELETE FROM identity.sessions WHERE token = $1",
@@ -204,13 +233,93 @@ describe("PostgreSQL Better Auth", () => {
       )
       expect(deleted.rowCount).toBe(1)
 
+      for (const instance of [firstInstance, secondInstance]) {
+        await expect(
+          instance.auth.api.getSession({
+            headers: new Headers({ cookie: cookieHeader }),
+          })
+        ).resolves.toBeNull()
+      }
+    } finally {
+      await secondInstance.close()
+      await firstInstance.close()
+    }
+  })
+
+  it("rejects a banned user's session on another instance", async () => {
+    const firstInstance = createAuthSystem({
+      allowSignUp: true,
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const secondInstance = createAuthSystem({
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const provisioner = createInitialAdministratorProvisioner({
+      connectionString,
+    })
+    const suffix = randomUUID()
+    const administratorEmail = `ban-admin-${suffix}@mrmpl.test`
+    const staffEmail = `ban-staff-${suffix}@mrmpl.test`
+
+    try {
+      const administrator = await firstInstance.auth.api.signUpEmail({
+        body: {
+          email: administratorEmail,
+          name: "Ban Administrator",
+          password: "ban-administrator-password",
+        },
+      })
+      await provisioner.promote({
+        email: administrator.user.email,
+        userId: administrator.user.id,
+      })
+      const staff = await firstInstance.auth.api.signUpEmail({
+        body: {
+          email: staffEmail,
+          name: "Banned Staff",
+          password: "banned-staff-password",
+        },
+      })
+      const administratorSignIn = await firstInstance.auth.api.signInEmail({
+        body: {
+          email: administratorEmail,
+          password: "ban-administrator-password",
+        },
+        returnHeaders: true,
+      })
+      const staffSignIn = await firstInstance.auth.api.signInEmail({
+        body: { email: staffEmail, password: "banned-staff-password" },
+        returnHeaders: true,
+      })
+      const cookie = (headers: Headers) =>
+        headers
+          .getSetCookie()
+          .map((value) => value.split(";", 1)[0])
+          .join("; ")
+
+      await firstInstance.auth.api.banUser({
+        body: {
+          banReason: "Authorization freshness test",
+          userId: staff.user.id,
+        },
+        headers: new Headers({
+          cookie: cookie(administratorSignIn.headers),
+        }),
+      })
+
       await expect(
-        system.auth.api.getSession({
-          headers: new Headers({ cookie: cookieHeader }),
+        secondInstance.auth.api.getSession({
+          headers: new Headers({ cookie: cookie(staffSignIn.headers) }),
         })
       ).resolves.toBeNull()
     } finally {
-      await system.close()
+      await provisioner.close()
+      await secondInstance.close()
+      await firstInstance.close()
     }
   })
 })

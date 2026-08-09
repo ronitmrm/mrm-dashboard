@@ -1,16 +1,19 @@
 import {
-  createAuthorizationRepository,
   createDashboardPlanningRepository,
   createProductionShopFloorRepository,
 } from "@workspace/db"
 import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 import { NextResponse, type NextRequest } from "next/server"
 
-import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
+import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   authorizationRequestTelemetryForCurrentScope,
   withAuthorizationRequestTelemetry,
 } from "../../../lib/auth/authorization-request-telemetry"
+import {
+  readRequestAuthenticatedSession,
+  readRequestGrantedCapabilitySet,
+} from "../../../lib/auth/request-authorization"
 import {
   browserImportPolicy,
   exportUnavailablePayload,
@@ -284,11 +287,11 @@ async function authorizedDashboardSession(
     requestId: telemetryRequestId(request),
   })
   const { telemetry } = authorizationTelemetry
-  telemetry.recordSessionRead()
-  let authorization: ReturnType<typeof createAuthorizationRepository> | null =
-    null
   try {
-    const session = await getAuth().api.getSession({ headers: request.headers })
+    const session = await readRequestAuthenticatedSession(
+      request.headers,
+      telemetry
+    )
     if (!session) {
       telemetry.setOutcome("unauthenticated")
       throw new RouteError(
@@ -297,9 +300,11 @@ async function authorizedDashboardSession(
       )
     }
     const connectionString = readAuthEnvironment().connectionString
-    authorization = createAuthorizationRepository({ connectionString })
-    telemetry.recordGrantRead()
-    if (!(await authorization.hasCapability(session.user.id, capability))) {
+    const granted = await readRequestGrantedCapabilitySet(
+      session.user.id,
+      telemetry
+    )
+    if (!granted.has(capability)) {
       telemetry.setOutcome("unauthorized")
       throw new RouteError(
         403,
@@ -312,11 +317,7 @@ async function authorizedDashboardSession(
     if (!(error instanceof RouteError)) telemetry.setOutcome("error")
     throw error
   } finally {
-    try {
-      await authorization?.close()
-    } finally {
-      authorizationTelemetry.finish()
-    }
+    authorizationTelemetry.finish()
   }
 }
 

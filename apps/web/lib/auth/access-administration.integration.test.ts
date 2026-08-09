@@ -6,6 +6,7 @@ import {
   createInitialAdministratorProvisioner,
   migrateDatabase,
 } from "@workspace/db"
+import { Pool } from "pg"
 
 import { createAccessAdministrationService } from "./access-administration"
 import { createAuthSystem } from "./auth"
@@ -16,6 +17,7 @@ const connectionString =
   "postgres://mrmpl:mrmpl@localhost:5434/mrmpl_test"
 const originalDatabaseUrl = process.env.DATABASE_URL
 const originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET
+const pool = new Pool({ connectionString })
 
 async function resetIdentity() {
   const system = createAuthSystem({
@@ -51,8 +53,10 @@ afterAll(async () => {
   await resetIdentity()
   if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL
   else process.env.DATABASE_URL = originalDatabaseUrl
-  if (originalBetterAuthSecret === undefined) delete process.env.BETTER_AUTH_SECRET
+  if (originalBetterAuthSecret === undefined)
+    delete process.env.BETTER_AUTH_SECRET
   else process.env.BETTER_AUTH_SECRET = originalBetterAuthSecret
+  await pool.end()
 })
 
 describe("access administration", () => {
@@ -176,6 +180,53 @@ describe("access administration", () => {
       await expect(
         authorization.hasCapability(staff.id, "planning.plan.read")
       ).resolves.toBe(true)
+      await expect(
+        listGrantedCapabilities(staff.id, ["planning.plan.read"])
+      ).resolves.toEqual(["planning.plan.read"])
+
+      await pool.query(
+        `DELETE FROM identity.user_roles
+         WHERE user_id = $1
+           AND role_id = (
+             SELECT id FROM identity.roles WHERE key = 'production-planner'
+           )`,
+        [staff.id]
+      )
+      await expect(
+        listGrantedCapabilities(staff.id, ["planning.plan.read"])
+      ).resolves.toEqual([])
+
+      await access.assignRole({
+        actorUserId: administrator.user.id,
+        roleKey: "production-planner",
+        userId: staff.id,
+      })
+      await expect(
+        listGrantedCapabilities(staff.id, ["planning.plan.read"])
+      ).resolves.toEqual(["planning.plan.read"])
+
+      await pool.query(
+        `DELETE FROM identity.role_permissions
+         WHERE role_id = (
+             SELECT id FROM identity.roles WHERE key = 'production-planner'
+           )
+           AND permission_id = (
+             SELECT id FROM identity.permissions WHERE key = 'planning.plan.read'
+           )`
+      )
+      await expect(
+        listGrantedCapabilities(staff.id, ["planning.plan.read"])
+      ).resolves.toEqual([])
+
+      await pool.query(
+        `INSERT INTO identity.role_permissions (role_id, permission_id)
+         SELECT roles.id, permissions.id
+         FROM identity.roles AS roles
+         CROSS JOIN identity.permissions AS permissions
+         WHERE roles.key = 'production-planner'
+           AND permissions.key = 'planning.plan.read'
+         ON CONFLICT DO NOTHING`
+      )
       await expect(
         listGrantedCapabilities(staff.id, ["planning.plan.read"])
       ).resolves.toEqual(["planning.plan.read"])

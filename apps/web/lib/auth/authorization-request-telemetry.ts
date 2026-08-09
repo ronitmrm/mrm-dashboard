@@ -12,6 +12,7 @@ type AuthorizationTelemetry = ReturnType<
 
 type AuthorizationScope = {
   managed: boolean
+  reads?: Map<string, Promise<unknown>>
   scheduled: boolean
   telemetry?: AuthorizationTelemetry
 } & Parameters<typeof createTelemetry>[0]
@@ -105,4 +106,20 @@ export function getOrCreateAuthorizationRequestTelemetry(
     // Direct tests and non-Next callers finish at their public boundary.
   }
   return handleFor(scope)
+}
+
+export function memoizeAuthorizationRequestRead<Result>(
+  key: string,
+  read: () => Promise<Result>
+) {
+  const scope = authorizationStorage.getStore()
+  if (!scope || (!scope.managed && !scope.scheduled)) return read()
+
+  scope.reads ??= new Map()
+  const existing = scope.reads.get(key) as Promise<Result> | undefined
+  if (existing) return existing
+
+  const pending = read()
+  scope.reads.set(key, pending)
+  return pending
 }

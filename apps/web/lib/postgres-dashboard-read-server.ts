@@ -1,12 +1,13 @@
-import {
-  createAuthorizationRepository,
-  createDashboardReadModelRepository,
-} from "@workspace/db"
+import { createDashboardReadModelRepository } from "@workspace/db"
 import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 import type { NextRequest } from "next/server"
 
-import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
+import { readAuthEnvironment } from "@/lib/auth/auth"
 import { authorizationRequestTelemetryForCurrentScope } from "./auth/authorization-request-telemetry"
+import {
+  readRequestAuthenticatedSession,
+  readRequestGrantedCapabilitySet,
+} from "./auth/request-authorization"
 import { telemetryRequestId } from "./request-telemetry"
 
 export class DashboardReadError extends Error {
@@ -30,15 +31,10 @@ async function withDashboardReadRepository<T>(
     requestId: telemetryRequestId(request),
   })
   const { telemetry } = authorizationTelemetry
-  telemetry.recordSessionRead()
-  let authorization: ReturnType<typeof createAuthorizationRepository> | null =
-    null
   let connectionString = ""
-  let session: Awaited<
-    ReturnType<ReturnType<typeof getAuth>["api"]["getSession"]>
-  >
+  let session: Awaited<ReturnType<typeof readRequestAuthenticatedSession>>
   try {
-    session = await getAuth().api.getSession({ headers: request.headers })
+    session = await readRequestAuthenticatedSession(request.headers, telemetry)
     if (!session) {
       telemetry.setOutcome("unauthenticated")
       throw new DashboardReadError(
@@ -48,14 +44,11 @@ async function withDashboardReadRepository<T>(
     }
 
     connectionString = readAuthEnvironment().connectionString
-    authorization = createAuthorizationRepository({ connectionString })
-    telemetry.recordGrantRead()
-    if (
-      !(await authorization.hasCapability(
-        session.user.id,
-        "operations.dashboard.read"
-      ))
-    ) {
+    const granted = await readRequestGrantedCapabilitySet(
+      session.user.id,
+      telemetry
+    )
+    if (!granted.has("operations.dashboard.read")) {
       telemetry.setOutcome("unauthorized")
       throw new DashboardReadError(
         403,
@@ -64,11 +57,7 @@ async function withDashboardReadRepository<T>(
     }
     telemetry.setOutcome("allowed")
   } finally {
-    try {
-      await authorization?.close()
-    } finally {
-      authorizationTelemetry.finish()
-    }
+    authorizationTelemetry.finish()
   }
 
   const repository = createDashboardReadModelRepository({ connectionString })

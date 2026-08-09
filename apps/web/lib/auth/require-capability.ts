@@ -1,18 +1,19 @@
 import { randomUUID } from "node:crypto"
 
-import { createAuthorizationRepository } from "@workspace/db"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { after } from "next/server"
 import { cache } from "react"
 
-import { getWebPostgresPool } from "../postgres-runtime"
 import {
   getOrCreateAuthorizationRequestTelemetry,
   type AuthorizationTelemetryHandle,
 } from "./authorization-request-telemetry"
-import { getAuth } from "./auth"
 import { safeReturnPath } from "./navigation"
+import {
+  readRequestAuthenticatedSession,
+  readRequestGrantedCapabilitySet,
+} from "./request-authorization"
 
 const readAuthorizationRequestTelemetry = cache(() => {
   return getOrCreateAuthorizationRequestTelemetry(
@@ -23,20 +24,14 @@ const readAuthorizationRequestTelemetry = cache(() => {
 
 const readAuthenticatedSession = cache(async () => {
   const { telemetry } = readAuthorizationRequestTelemetry()
-  telemetry.setOutcome("error")
-  telemetry.recordSessionRead()
-  return getAuth().api.getSession({ headers: await headers() })
+  return readRequestAuthenticatedSession(await headers(), telemetry)
 })
 
 const readGrantedCapabilitySet = cache(async (userId: string) => {
-  const { telemetry } = readAuthorizationRequestTelemetry()
-  telemetry.setOutcome("error")
-  telemetry.recordGrantRead()
-  const authorization = createAuthorizationRepository({
-    pool: getWebPostgresPool(),
-  })
-  const capabilities = await authorization.listAllGrantedCapabilities(userId)
-  return new Set(capabilities)
+  return readRequestGrantedCapabilitySet(
+    userId,
+    readAuthorizationRequestTelemetry().telemetry
+  )
 })
 
 export async function requireCapability(

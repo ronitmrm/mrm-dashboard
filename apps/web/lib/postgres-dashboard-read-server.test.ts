@@ -2,11 +2,10 @@ import { NextRequest } from "next/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
-  authorizationClose: vi.fn(),
   dashboardClose: vi.fn(),
   finishTelemetry: vi.fn(),
   getSession: vi.fn(),
-  hasCapability: vi.fn(),
+  listAllGrantedCapabilities: vi.fn(),
   organizationIdForCode: vi.fn(),
   recordGrantRead: vi.fn(),
   recordSessionRead: vi.fn(),
@@ -17,8 +16,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@workspace/db", () => ({
   createAuthorizationRepository: () => ({
-    close: mocks.authorizationClose,
-    hasCapability: mocks.hasCapability,
+    listAllGrantedCapabilities: mocks.listAllGrantedCapabilities,
   }),
   createDashboardReadModelRepository: () => ({
     close: mocks.dashboardClose,
@@ -33,6 +31,11 @@ vi.mock("@/lib/auth/auth", () => ({
   readAuthEnvironment: () => ({ connectionString: "postgres://test" }),
 }))
 
+vi.mock("./auth/auth", () => ({
+  getAuth: () => ({ api: { getSession: mocks.getSession } }),
+  readAuthEnvironment: () => ({ connectionString: "postgres://test" }),
+}))
+
 vi.mock("./auth/authorization-request-telemetry", () => ({
   authorizationRequestTelemetryForCurrentScope: () => ({
     finish: mocks.finishTelemetry,
@@ -42,6 +45,14 @@ vi.mock("./auth/authorization-request-telemetry", () => ({
       setOutcome: mocks.setOutcome,
     },
   }),
+  memoizeAuthorizationRequestRead: (
+    _key: string,
+    read: () => Promise<unknown>
+  ) => read(),
+}))
+
+vi.mock("./postgres-runtime", () => ({
+  getWebPostgresPool: () => ({ query: vi.fn() }),
 }))
 
 vi.mock("./request-telemetry", () => ({
@@ -59,7 +70,9 @@ describe("authenticated dashboard state reader", () => {
     mocks.getSession.mockResolvedValue({
       user: { email: "operator@example.test", id: "user-1", name: "Operator" },
     })
-    mocks.hasCapability.mockResolvedValue(true)
+    mocks.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.dashboard.read",
+    ])
     mocks.organizationIdForCode.mockResolvedValue("organization-1")
     mocks.state.mockResolvedValue({
       coverage: null,
@@ -84,10 +97,7 @@ describe("authenticated dashboard state reader", () => {
       status: { isRefreshing: false, status: "idle" },
       version: 7,
     })
-    expect(mocks.hasCapability).toHaveBeenCalledWith(
-      "user-1",
-      "operations.dashboard.read"
-    )
+    expect(mocks.listAllGrantedCapabilities).toHaveBeenCalledWith("user-1")
     expect(mocks.state).toHaveBeenCalledWith(
       "organization-1",
       { month: "2026-07" },
@@ -98,7 +108,7 @@ describe("authenticated dashboard state reader", () => {
   })
 
   it("does not open the dashboard repository when authorization fails", async () => {
-    mocks.hasCapability.mockResolvedValue(false)
+    mocks.listAllGrantedCapabilities.mockResolvedValue([])
     const request = new NextRequest("http://localhost/api/dashboard-state")
 
     const error = await readPostgresDashboardState(request, {}, "cnc").catch(
