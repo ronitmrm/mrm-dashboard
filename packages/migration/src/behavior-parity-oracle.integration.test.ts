@@ -2,13 +2,69 @@ import { createHash } from "node:crypto"
 
 import { describe, expect, test } from "vitest"
 
-import { createBehaviorFingerprint } from "./behavior-parity-oracle"
+import {
+  createBehaviorFingerprint,
+  type BehaviorCapture,
+  type BehaviorSnapshot,
+} from "./behavior-parity-oracle"
 import expectedFingerprint from "./test-fixtures/behavior-parity-fingerprint.v1.json"
 import { captureCanonicalBehaviorParityFixture } from "./test-fixtures/behavior-parity-postgres"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
   "postgresql://mrmpl:mrmpl@127.0.0.1:5434/mrmpl_test"
+
+const recruitmentAssignmentMetadataKeys = new Set([
+  "commandId",
+  "commandOrdinal",
+  "postId",
+  "rowNumber",
+  "selectionOrdinal",
+  "targetCode",
+  "targetType",
+])
+
+function stagingComparableCapture(capture: BehaviorCapture): BehaviorCapture {
+  // The immutable staging fingerprint predates durable recruitment command order.
+  // Remove only that evidence and restore its legacy business-key comparison order.
+  const observable = structuredClone(capture.observable) as Record<
+    string,
+    unknown
+  >
+  const transactions = observable.auditEvidence as Array<{
+    events: Array<Record<string, unknown>>
+  }>
+  for (const transaction of transactions) {
+    const assignmentEventIndexes: number[] = []
+    for (const [eventIndex, event] of transaction.events.entries()) {
+      const eventType = String(event.eventType ?? "")
+      if (
+        eventType !== "recruitment.application.assigned" &&
+        !eventType.startsWith("recruitment.employee.")
+      ) {
+        continue
+      }
+      assignmentEventIndexes.push(eventIndex)
+      const metadata = { ...(event.metadata as Record<string, unknown>) }
+      for (const key of recruitmentAssignmentMetadataKeys) {
+        delete metadata[key]
+      }
+      event.inputOrder = null
+      event.metadata = metadata
+    }
+    const legacyComparableEvents = assignmentEventIndexes
+      .map((index) => transaction.events[index]!)
+      .sort((left, right) => {
+        const leftKey = `${left.eventType}:${left.subject}`
+        const rightKey = `${right.eventType}:${right.subject}`
+        return leftKey === rightKey ? 0 : leftKey < rightKey ? -1 : 1
+      })
+    assignmentEventIndexes.forEach((eventIndex, index) => {
+      transaction.events[eventIndex] = legacyComparableEvents[index]!
+    })
+  }
+  return { ...capture, observable: observable as BehaviorSnapshot }
+}
 
 describe("real-PostgreSQL behavior-parity oracle", () => {
   test("captures the production-like fixture with a repeatable fingerprint", async () => {
@@ -20,10 +76,14 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
     })
     const first = createBehaviorFingerprint(firstCapture)
     const second = createBehaviorFingerprint(secondCapture)
+    const stagingComparable = createBehaviorFingerprint(
+      stagingComparableCapture(firstCapture)
+    )
 
     expect(second).toEqual(first)
     expect(first.version).toBe(expectedFingerprint.version)
-    expect(first.digest).toBe(expectedFingerprint.digest)
+    expect(first.digest).toBe(expectedFingerprint.candidateDigest)
+    expect(stagingComparable.digest).toBe(expectedFingerprint.digest)
     expect(firstCapture.observable).toMatchObject({
       authorization: {
         afterRevocation: [],
@@ -307,5 +367,61 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
         }),
       ])
     )
+    const normalizedAuditTransactions = (
+      (first.normalized as Record<string, unknown>).observable as Record<
+        string,
+        unknown
+      >
+    ).auditEvidence as Array<{
+      events: Array<{
+        eventType: string
+        inputOrder: number | null
+        metadata: Record<string, unknown>
+        subject: string
+      }>
+    }>
+    const candidateBulkAudit = normalizedAuditTransactions
+      .map((transaction) =>
+        transaction.events.filter(
+          (event) => event.eventType === "recruitment.application.assigned"
+        )
+      )
+      .find(
+        (events) =>
+          events.length === 3 &&
+          events.some(
+            (event) =>
+              event.subject === "recruitment.applications:Repeat Candidate"
+          )
+      )
+    expect(candidateBulkAudit).toEqual([
+      expect.objectContaining({
+        inputOrder: 0,
+        metadata: expect.objectContaining({
+          commandId: "<generated-id>",
+          commandOrdinal: 0,
+          selectionOrdinal: 0,
+        }),
+        subject: "recruitment.applications:Repeat Candidate",
+      }),
+      expect.objectContaining({
+        inputOrder: 1,
+        metadata: expect.objectContaining({
+          commandId: "<generated-id>",
+          commandOrdinal: 1,
+          selectionOrdinal: 1,
+        }),
+        subject: "recruitment.applications:Bulk Candidate B",
+      }),
+      expect.objectContaining({
+        inputOrder: 2,
+        metadata: expect.objectContaining({
+          commandId: "<generated-id>",
+          commandOrdinal: 2,
+          selectionOrdinal: 2,
+        }),
+        subject: "recruitment.applications:Bulk Candidate C",
+      }),
+    ])
   }, 120_000)
 })
