@@ -1,24 +1,28 @@
 "use client"
 
 import * as React from "react"
-import { FilterX } from "lucide-react"
+import { createPortal } from "react-dom"
 
-import { Button } from "@workspace/ui/components/button"
 import {
   ExcelColumnFilter,
   matchesColumnFilter,
   uniqueFilterOptions,
 } from "@workspace/ui/components/excel-column-filter"
 import { cn } from "@workspace/ui/lib/utils"
-
-type ExcelFilterColumn = {
-  index: number
-  label: string
-  options: string[]
-}
+import {
+  filtersForTableColumns,
+  type TableColumnFilters,
+  type TableFilterColumn,
+} from "@workspace/ui/lib/table-filter-state"
 
 type TableProps = React.ComponentProps<"table"> & {
   excelFilters?: boolean
+}
+
+function headerLabel(cell: HTMLTableCellElement) {
+  const clone = cell.cloneNode(true) as HTMLTableCellElement
+  clone.querySelector('[data-slot="table-column-filter-host"]')?.remove()
+  return clone.textContent?.trim() ?? ""
 }
 
 function tableSnapshot(table: HTMLTableElement) {
@@ -53,7 +57,7 @@ function tableSnapshot(table: HTMLTableElement) {
       Array.from(row.cells).every((cell) => cell.colSpan === 1)
   )
   const columns = headerCells.flatMap((cell, index) => {
-    const label = cell.textContent?.trim() ?? ""
+    const label = headerLabel(cell)
     const cells = rows.map((row) => row.cells.item(index))
     const isActionColumn = cells.every((rowCell) =>
       rowCell?.querySelector("a, button, form, input, select, textarea")
@@ -72,32 +76,63 @@ function tableSnapshot(table: HTMLTableElement) {
   return { columns, rows }
 }
 
-function sameColumns(left: ExcelFilterColumn[], right: ExcelFilterColumn[]) {
+function sameColumns(left: TableFilterColumn[], right: TableFilterColumn[]) {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
 function Table({ className, excelFilters = true, ...props }: TableProps) {
   const tableRef = React.useRef<HTMLTableElement>(null)
-  const [columns, setColumns] = React.useState<ExcelFilterColumn[]>([])
-  const [filters, setFilters] = React.useState<
-    Record<number, string[] | null>
+  const previousColumnsRef = React.useRef<TableFilterColumn[]>([])
+  const [columns, setColumns] = React.useState<TableFilterColumn[]>([])
+  const [filterHosts, setFilterHosts] = React.useState<
+    Record<number, HTMLElement>
   >({})
-  const activeFilterCount = Object.values(filters).filter(
-    (filter) => filter !== null && filter !== undefined
-  ).length
+  const [filters, setFilters] = React.useState<TableColumnFilters>({})
 
   const refreshTable = React.useCallback(() => {
     const table = tableRef.current
     if (!table || !excelFilters) return
 
     const snapshot = tableSnapshot(table)
+    const headerCells = Array.from(table.tHead?.rows.item(0)?.cells ?? [])
+    const nextFilterHosts = Object.fromEntries(
+      snapshot.columns.flatMap((column) => {
+        const headerCell = headerCells[column.index]
+        if (!headerCell) return []
+        let host = headerCell.querySelector<HTMLElement>(
+          '[data-slot="table-column-filter-host"]'
+        )
+        if (!host) {
+          host = document.createElement("div")
+          host.dataset.slot = "table-column-filter-host"
+          host.className = "pt-1 [&>button]:w-full"
+          headerCell.append(host)
+        }
+        return [[column.index, host]]
+      })
+    )
+    const applicableFilters = filtersForTableColumns(
+      previousColumnsRef.current,
+      snapshot.columns,
+      filters
+    )
+    previousColumnsRef.current = snapshot.columns
+    if (applicableFilters !== filters) setFilters(applicableFilters)
+    setFilterHosts((current) => {
+      const currentHosts = Object.values(current)
+      const nextHosts = Object.values(nextFilterHosts)
+      return currentHosts.length === nextHosts.length &&
+        currentHosts.every((host, index) => host === nextHosts[index])
+        ? current
+        : nextFilterHosts
+    })
     setColumns((current) =>
       sameColumns(current, snapshot.columns) ? current : snapshot.columns
     )
 
     for (const row of snapshot.rows) {
       row.hidden = snapshot.columns.some((column) => {
-        const selected = filters[column.index] ?? null
+        const selected = applicableFilters[column.index] ?? null
         const value = row.cells.item(column.index)?.textContent
         return !matchesColumnFilter(value, selected)
       })
@@ -131,46 +166,27 @@ function Table({ className, excelFilters = true, ...props }: TableProps) {
   }, [excelFilters])
 
   return (
-    <div className="w-full space-y-2" data-slot="table-shell">
-      {columns.length ? (
-        <div
-          className="overflow-x-auto rounded-lg border bg-muted/20 p-2"
-          data-slot="table-excel-filters"
-        >
-          <div className="flex w-max min-w-full items-end gap-2">
-            {columns.map((column) => (
-              <div className="grid gap-1" key={column.index}>
-                <span className="max-w-36 truncate px-0.5 text-[11px] font-medium text-muted-foreground">
-                  {column.label}
-                </span>
-                <ExcelColumnFilter
-                  label={column.label}
-                  onApply={(selected) =>
-                    setFilters((current) => ({
-                      ...current,
-                      [column.index]: selected,
-                    }))
-                  }
-                  options={column.options}
-                  selected={filters[column.index] ?? null}
-                />
-              </div>
-            ))}
-            {activeFilterCount ? (
-              <Button
-                className="ml-auto"
-                onClick={() => setFilters({})}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                <FilterX />
-                Clear all
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+    <div className="w-full" data-slot="table-shell">
+      {columns.map((column) => {
+        const host = filterHosts[column.index]
+        return host
+          ? createPortal(
+              <ExcelColumnFilter
+                label={column.label}
+                onApply={(selected) =>
+                  setFilters((current) => ({
+                    ...current,
+                    [column.index]: selected,
+                  }))
+                }
+                options={column.options}
+                selected={filters[column.index] ?? null}
+              />,
+              host,
+              String(column.index)
+            )
+          : null
+      })}
       <div
         data-slot="table-container"
         className="relative w-full overflow-x-auto"

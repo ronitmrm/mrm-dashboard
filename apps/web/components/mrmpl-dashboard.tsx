@@ -82,6 +82,7 @@ import {
   type ProductionFloorCode,
 } from "@/lib/dashboard-view-model";
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
+import { rowsForProductionMaster } from "@/lib/production-master-tables";
 import {
   dashboardStateRequestUrl,
   refreshLockFromStatus,
@@ -5883,7 +5884,7 @@ function MasterTablesPanel({
             <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No saved rows found for this master.</div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
-              <Table>
+              <Table key={selectedSpec.entryType}>
                 <TableHeader>
                   <TableRow>
                     {columns.map((column) => (
@@ -5986,10 +5987,11 @@ function masterTableRows(entryType: string, payload: DashboardPayload, productio
     rows.push(...asArray(dataEntry.templates).filter((row) => str(row.entryType) === entryType));
   }
 
-  if (entryType === "quality_parameter_master") return mergeQualityParameterRows(rows);
-  if (entryType === "maintenance_master") return activeMaintenanceMasterRows(rows);
-  if (entryType === "maintenance_checklist_master") return activeMaintenanceChecklistRows(rows);
-  return dedupeMasterTableRows(entryType, rows);
+  const matchingRows = rowsForProductionMaster(entryType, rows);
+  if (entryType === "quality_parameter_master") return mergeQualityParameterRows(matchingRows);
+  if (entryType === "maintenance_master") return activeMaintenanceMasterRows(matchingRows);
+  if (entryType === "maintenance_checklist_master") return activeMaintenanceChecklistRows(matchingRows);
+  return dedupeMasterTableRows(entryType, matchingRows);
 }
 
 function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
