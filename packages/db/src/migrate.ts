@@ -13,6 +13,7 @@ const migrationsDirectory = resolve(
 
 type MigrateDatabaseOptions = {
   connectionString: string
+  through?: string
 }
 
 type AppliedMigration = {
@@ -34,6 +35,7 @@ async function migrationFiles() {
 
 export async function migrateDatabase({
   connectionString,
+  through,
 }: MigrateDatabaseOptions) {
   const pool = new Pool({ connectionString, max: 1 })
   const client = await pool.connect()
@@ -56,7 +58,13 @@ export async function migrateDatabase({
       appliedResult.rows.map((row) => [row.name, row.checksum])
     )
 
-    for (const name of await migrationFiles()) {
+    const names = await migrationFiles()
+    const throughIndex = through ? names.indexOf(through) : names.length - 1
+    if (throughIndex < 0) {
+      throw new Error(`Unknown migration boundary: ${through}`)
+    }
+
+    for (const name of names.slice(0, throughIndex + 1)) {
       const sql = await readFile(resolve(migrationsDirectory, name), "utf8")
       const expectedChecksum = checksum(sql)
       const recordedChecksum = applied.get(name)

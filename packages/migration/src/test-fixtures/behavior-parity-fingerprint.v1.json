@@ -1,0 +1,6 @@
+{
+  "version": "v1",
+  "digest": "35bcd9b4f05238e6085a85614309bc0f94311dc665b59ab46f3faa0425ffdc3c",
+  "candidateDigest": "a9d2cf5c7e6fe55f493bdb79977d0f3ab7f93c08897ffb91e091825d9dcf29ec",
+  "oracle": "staging behavior at performant-data-path migration start"
+}

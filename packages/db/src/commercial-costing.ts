@@ -66,10 +66,80 @@ type PackageComponent = {
 
 type QuoteCalculation = CostingResult & Record<string, number>
 
+type PricingRegisterDatabaseRow = {
+  calculation_json: Record<string, unknown>
+  change_date: Date
+  company_name: string
+  component_depth: number
+  component_quantity: string
+  currency: string
+  customer_id: string
+  customer_part_code: string | null
+  customer_uid: string
+  enquiry_description: string
+  enquiry_number: string | null
+  id: string
+  is_active: boolean
+  item_type: string
+  lifecycle_status: string
+  line_number: number | null
+  packaging: string | null
+  parent_uid: string | null
+  product_context: Record<string, unknown>
+  product_snapshot: Record<string, unknown>
+  quote_inputs: Record<string, unknown>
+  quote_number: string
+  revision: number
+  root_company_name: string
+  root_customer_part_code: string
+  root_quote_item_id: string
+  row_key: string
+  sent_at: Date | null
+  shipping_terms: string | null
+  status: string
+  unit_price: string
+  uid: string
+}
+
 const asNumber = (value: unknown, fallback = 0) => {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
 }
+
+const exportBatchSize = (value: number) =>
+  Math.min(Math.max(Math.floor(value), 1), 500)
+
+const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => ({
+  calculation: row.calculation_json,
+  changeDate: row.change_date,
+  companyName: row.company_name,
+  componentDepth: row.component_depth,
+  componentQuantity: asNumber(row.component_quantity, 1),
+  currency: row.currency,
+  customerId: row.customer_id,
+  customerPartCode: row.customer_part_code,
+  customerUid: row.customer_uid,
+  enquiryDescription: row.enquiry_description,
+  enquiryNumber: row.enquiry_number,
+  id: row.id,
+  isActive: row.is_active,
+  itemType: row.item_type,
+  lifecycleStatus: row.lifecycle_status,
+  lineNumber: row.line_number,
+  packaging: row.packaging,
+  parentUid: row.parent_uid,
+  productContext: row.product_context,
+  product: row.product_snapshot,
+  quoteInputs: row.quote_inputs,
+  quoteNumber: row.quote_number,
+  rowKey: row.row_key,
+  revision: row.revision,
+  sentAt: row.sent_at,
+  shippingTerms: row.shipping_terms,
+  status: row.status,
+  unitPrice: asNumber(row.unit_price),
+  uid: row.uid,
+})
 
 const isBomParent = (itemType: string) =>
   ["package", "assembly"].includes(itemType.toLowerCase())
@@ -659,6 +729,157 @@ async function persistQuote(
 
 export function createCommercialCostingRepository(options: RepositoryOptions) {
   const { close, pool } = repositoryPool(options)
+
+  const pricingRegisterBatch = async (
+    queryable: Pool | PoolClient,
+    organizationCode: string,
+    input: {
+      cursor?: {
+        companyName: string
+        customerPartCode: string
+        id: string
+        revision: number
+      }
+      limit?: number
+      revisions?: boolean
+    }
+  ) => {
+    const cursor = input.cursor
+    const result = await queryable.query<PricingRegisterDatabaseRow>(
+      `
+        WITH RECURSIVE roots AS (
+          SELECT quote.*, customer.company_name AS root_company_name,
+            COALESCE(quote.customer_part_code, '')
+              AS root_customer_part_code
+          FROM sales.quote_items quote
+          JOIN core.organizations organization
+            ON organization.id = quote.organization_id
+          JOIN sales.customers customer ON customer.id = quote.customer_id
+          WHERE lower(organization.code) = lower($1)
+            AND (
+              $2::boolean
+              OR quote.status = 'Draft'
+              OR quote.is_active
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM sales.quote_package_components component
+              WHERE component.child_quote_item_id = quote.id
+            )
+            AND (
+              $3::text IS NULL
+              OR (
+                customer.company_name,
+                COALESCE(quote.customer_part_code, ''),
+                -quote.revision,
+                quote.id
+              ) > ($3::text, $4::text, -$5::integer, $6::uuid)
+            )
+          ORDER BY customer.company_name,
+            COALESCE(quote.customer_part_code, ''),
+            quote.revision DESC, quote.id
+          LIMIT $7
+        ),
+        quote_tree AS (
+          SELECT root.id AS root_quote_item_id,
+            root.id AS quote_item_id, root.item_id,
+            NULL::uuid AS parent_item_id, 0 AS component_depth,
+            1::numeric AS component_quantity, ARRAY[root.id] AS path
+          FROM roots root
+          UNION ALL
+          SELECT tree.root_quote_item_id, component.child_quote_item_id,
+            component.component_item_id, tree.item_id,
+            tree.component_depth + 1, component.quantity,
+            tree.path || COALESCE(component.child_quote_item_id,
+              component.component_item_id)
+          FROM quote_tree tree
+          JOIN sales.quote_product_snapshots parent_snapshot
+            ON parent_snapshot.quote_item_id = tree.quote_item_id
+          JOIN sales.quote_package_components component
+            ON component.quote_product_snapshot_id = parent_snapshot.id
+          WHERE tree.component_depth < 10
+            AND NOT COALESCE(component.child_quote_item_id,
+              component.component_item_id) = ANY(tree.path)
+        )
+        SELECT COALESCE(member.id, tree.item_id) AS id,
+          tree.root_quote_item_id::text || ':' ||
+            array_to_string(tree.path, '/') AS row_key,
+          root.id AS root_quote_item_id,
+          root.root_company_name, root.root_customer_part_code,
+          root.quote_number, root.revision, root.status, root.is_active,
+          root.sent_at, CASE WHEN tree.component_depth = 0
+            THEN root.customer_part_code ELSE NULL END
+            AS customer_part_code,
+          COALESCE(member.unit_price, 0)::text AS unit_price,
+          customer.id AS customer_id, customer.customer_uid,
+          customer.company_name, item.uid,
+          COALESCE(snapshot.item_type, item.item_type) AS item_type,
+          item.lifecycle_status, enquiry.enquiry_number,
+          enquiry.currency, enquiry_item.line_number,
+          enquiry_item.description AS enquiry_description,
+          parent.uid AS parent_uid, tree.component_depth,
+          tree.component_quantity::text,
+          COALESCE(member.updated_at, item.updated_at) AS change_date,
+          COALESCE(snapshot.product_snapshot, '{}'::jsonb)
+            AS product_snapshot,
+          COALESCE(snapshot.calculation_json, '{}'::jsonb)
+            AS calculation_json,
+          jsonb_build_object(
+            'scrapRate', COALESCE(member.scrap_rate, root.scrap_rate),
+            'packingCost', COALESCE(member.packing_cost, root.packing_cost),
+            'shippingCost', COALESCE(member.shipping_cost, root.shipping_cost),
+            'overheadCost', COALESCE(member.overhead_cost_input,
+              root.overhead_cost_input),
+            'purchaseTimes', COALESCE(member.purchase_times,
+              root.purchase_times),
+            'profitPercent', COALESCE(member.profit_percent,
+              root.profit_percent),
+            'conversionRate', COALESCE(member.conversion_rate,
+              root.conversion_rate),
+            'assembledPartInr', COALESCE(member.assembled_part_inr, 0)
+          ) AS quote_inputs,
+          jsonb_build_object(
+            'grade', grade.name,
+            'rodType', rod_type.name,
+            'machineType', machine_type.name,
+            'rodSize', item.rod_size,
+            'dieCode', item.die_code,
+            'remarks', item.remarks
+          ) AS product_context,
+          COALESCE(member.packaging, root.packaging) AS packaging,
+          COALESCE(member.shipping_terms, root.shipping_terms)
+            AS shipping_terms
+        FROM quote_tree tree
+        JOIN roots root ON root.id = tree.root_quote_item_id
+        LEFT JOIN sales.quote_items member ON member.id = tree.quote_item_id
+        JOIN sales.customers customer ON customer.id = root.customer_id
+        JOIN catalog.items item ON item.id = tree.item_id
+        LEFT JOIN catalog.items parent ON parent.id = tree.parent_item_id
+        LEFT JOIN catalog.material_grades grade
+          ON grade.id = item.material_grade_id
+        LEFT JOIN catalog.rod_types rod_type ON rod_type.id = item.rod_type_id
+        LEFT JOIN catalog.machine_types machine_type
+          ON machine_type.id = item.machine_type_id
+        LEFT JOIN sales.enquiries enquiry ON enquiry.id = root.enquiry_id
+        LEFT JOIN sales.enquiry_items enquiry_item
+          ON enquiry_item.id = root.enquiry_item_id
+        LEFT JOIN sales.quote_product_snapshots snapshot
+          ON snapshot.quote_item_id = tree.quote_item_id
+        ORDER BY root.root_company_name, root.root_customer_part_code,
+          root.revision DESC, root.id, tree.path
+      `,
+      [
+        organizationCode.trim(),
+        input.revisions ?? false,
+        cursor?.companyName ?? null,
+        cursor?.customerPartCode ?? null,
+        cursor?.revision ?? null,
+        cursor?.id ?? null,
+        input.limit ?? null,
+      ]
+    )
+    return result.rows
+  }
 
   return {
     close,
@@ -1890,6 +2111,49 @@ export function createCommercialCostingRepository(options: RepositoryOptions) {
         unitPrice: asNumber(row.unit_price),
         uid: row.uid,
       }))
+    },
+
+    async listPricingRegisterForExport(
+      organizationCode: string,
+      options: { revisions?: boolean } = {},
+      requestedBatchSize = 500
+    ) {
+      const limit = exportBatchSize(requestedBatchSize)
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        const rows: ReturnType<typeof pricingRegisterRow>[] = []
+        let cursor:
+          | {
+              companyName: string
+              customerPartCode: string
+              id: string
+              revision: number
+            }
+          | undefined
+
+        while (true) {
+          const batch = await pricingRegisterBatch(client, organizationCode, {
+            cursor,
+            limit,
+            revisions: options.revisions,
+          })
+          rows.push(...batch.map(pricingRegisterRow))
+          const rootCount = new Set(batch.map((row) => row.root_quote_item_id))
+            .size
+          if (rootCount < limit) break
+          const last = batch.at(-1)!
+          cursor = {
+            companyName: last.root_company_name,
+            customerPartCode: last.root_customer_part_code,
+            id: last.root_quote_item_id,
+            revision: last.revision,
+          }
+        }
+
+        return rows
+      })
     },
 
     async listQuotes(organizationCode: string) {

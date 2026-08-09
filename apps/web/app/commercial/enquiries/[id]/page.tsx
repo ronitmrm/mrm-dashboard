@@ -33,6 +33,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { BoundedResultNotice } from "@/components/bounded-result-notice"
 
 import {
   addEnquiryItemAction,
@@ -60,10 +61,15 @@ const checklist = [
 
 export default async function EnquiryDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ customer?: string; product?: string }>
 }) {
   const { id } = await params
+  const selectorParams = await searchParams
+  const customerSearch = selectorParams.customer?.trim() ?? ""
+  const productSearch = selectorParams.product?.trim() ?? ""
   await requireCapability(
     "pricing.enquiries.read",
     `/commercial/enquiries/${id}`
@@ -94,14 +100,41 @@ export default async function EnquiryDetailPage({
   const drawingHistory = new Map(loaded.drawingHistoryEntries)
   const customerRepository = createCustomerRepository({ connectionString })
   const productRepository = createProductRepository({ connectionString })
-  const [customers, products] = await Promise.all([
-    customerRepository
-      .listForOrganization("MRMPL")
-      .finally(() => customerRepository.close()),
-    productRepository
-      .list(snapshot.enquiry.organizationId)
-      .finally(() => productRepository.close()),
-  ])
+  const { customerOptions, productOptions, selectedCustomerOptions } =
+    await (async () => {
+      try {
+        return {
+          customerOptions: await customerRepository.searchForOrganization(
+            "MRMPL",
+            customerSearch
+          ),
+          productOptions: await productRepository.searchForOrganization(
+            "MRMPL",
+            productSearch
+          ),
+          selectedCustomerOptions:
+            await customerRepository.searchForOrganization(
+              "MRMPL",
+              snapshot.enquiry.customerUid
+            ),
+        }
+      } finally {
+        await customerRepository.close()
+        await productRepository.close()
+      }
+    })()
+  const selectedCustomer = selectedCustomerOptions.rows[0]
+  const customers = customerOptions.rows.some(
+    (customer) => customer.id === snapshot.enquiry.customerId
+  )
+    ? customerOptions.rows
+    : selectedCustomer
+      ? [selectedCustomer, ...customerOptions.rows].slice(
+          0,
+          customerOptions.coverage.limit
+        )
+      : customerOptions.rows
+  const products = productOptions.rows
 
   return (
     <div className="grid gap-6">
@@ -152,7 +185,34 @@ export default async function EnquiryDetailPage({
             gate permits them.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="grid gap-5">
+          <form
+            className="flex flex-col gap-2 sm:flex-row sm:items-end"
+            id="enquiry-customer-search"
+          >
+            <input name="product" type="hidden" value={productSearch} />
+            <Field className="max-w-md flex-1">
+              <FieldLabel htmlFor="enquiry-customer-query">
+                Find customer
+              </FieldLabel>
+              <Input
+                defaultValue={customerSearch}
+                id="enquiry-customer-query"
+                name="customer"
+                placeholder="Customer UID or company"
+              />
+            </Field>
+            <Button type="submit" variant="outline">
+              Search
+            </Button>
+          </form>
+          <BoundedResultNotice
+            actionHref="#enquiry-customer-search"
+            actionLabel="Refine customer search"
+            coverage={customerOptions.coverage}
+            searchQuery={customerSearch}
+            section="Customer options"
+          />
           <form action={updateEnquiryAction}>
             <input type="hidden" name="enquiry_id" value={id} />
             <input
@@ -577,6 +637,33 @@ export default async function EnquiryDetailPage({
             values and handoff gates.
           </p>
         </div>
+        <form
+          className="flex flex-col gap-2 sm:flex-row sm:items-end"
+          id="enquiry-product-search"
+        >
+          <input name="customer" type="hidden" value={customerSearch} />
+          <Field className="max-w-md flex-1">
+            <FieldLabel htmlFor="enquiry-product-query">
+              Find portfolio product
+            </FieldLabel>
+            <Input
+              defaultValue={productSearch}
+              id="enquiry-product-query"
+              name="product"
+              placeholder="Product UID or description"
+            />
+          </Field>
+          <Button type="submit" variant="outline">
+            Search
+          </Button>
+        </form>
+        <BoundedResultNotice
+          actionHref="#enquiry-product-search"
+          actionLabel="Refine product search"
+          coverage={productOptions.coverage}
+          searchQuery={productSearch}
+          section="Portfolio product options"
+        />
         {snapshot.items.length ? (
           snapshot.items.map((item) => {
             const clarification = snapshot.clarifications.find(

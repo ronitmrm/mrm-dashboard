@@ -62,17 +62,32 @@ import {
 } from "@workspace/ui/components/table";
 
 import {
+  dashboardConnectionLabel,
+  dashboardCoverageNotice,
+  dashboardDeliveryNotice,
+} from "@/lib/dashboard-delivery-client";
+import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery";
+import {
+  dashboardPayloadFromState,
   dashboardPayloadForProductionFloor,
+  dashboardRefreshStatusFromState,
   dateSortValue,
   defaultProductionFloorCode,
   formatNumber,
   jobCardScheduleSummary,
+  mergeDashboardStateResponse,
   normalizeProductionFloorCode,
   productionFloors,
   toDashboardViewModel,
   type ProductionFloorCode,
 } from "@/lib/dashboard-view-model";
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
+import {
+  dashboardStateRequestUrl,
+  refreshLockFromStatus,
+  refreshLockHasSettled,
+  type PlanningRefreshLock,
+} from "@/lib/dashboard-live-state";
 import {
   mergeFirstPieceInspectionTasks as mergeStoredFirstPieceInspectionTasks,
   readFirstPieceInspectionDraft as readFirstPieceInspectionDraftFromStorage,
@@ -115,11 +130,6 @@ type DashboardApiResult = {
   message: string;
   queued?: boolean;
   skipped?: boolean;
-};
-
-type PlanningRefreshLock = {
-  baselineRequestedAtMs: number | null;
-  baselineCompletedAtMs: number | null;
 };
 
 type DataEntrySpec = {
@@ -462,12 +472,15 @@ function usePostgresDashboardPage(
   url: string | null,
   pollIntervalMs = 0,
   onData?: (data: DashboardPayload) => void,
+  activePollIntervalMs = pollIntervalMs,
+  reloadKey = 0,
 ) {
   const [result, setResult] = useState<{
     data?: DashboardPayload;
     error?: string;
     url: string;
   }>({ url: "" });
+  const latestDataRef = useRef<DashboardPayload | undefined>(undefined);
 
   useEffect(() => {
     if (!url) return;
@@ -477,18 +490,31 @@ function usePostgresDashboardPage(
     const load = async () => {
       if (loading || document.visibilityState === "hidden") return;
       loading = true;
+      let nextPollIntervalMs = pollIntervalMs;
       try {
-        const response = await fetch(url, {
+        const response = await fetch(
+          dashboardStateRequestUrl(url, latestDataRef.current),
+          {
           cache: "no-store",
           credentials: "same-origin",
           signal: controller.signal,
-        });
+          },
+        );
         const body = asRecord(await response.json().catch(() => ({})));
         if (!response.ok) {
           throw new Error(str(body.error) || "Dashboard data could not be loaded.");
         }
-        setResult({ data: body, url });
-        onData?.(body);
+        const nextData = mergeDashboardStateResponse(
+          latestDataRef.current,
+          body,
+          new URL(url, window.location.origin).searchParams.get("floor"),
+        );
+        latestDataRef.current = nextData;
+        setResult({ data: nextData, url });
+        onData?.(nextData);
+        if (asRecord(body.status).isRefreshing === true) {
+          nextPollIntervalMs = activePollIntervalMs;
+        }
       } catch (error: unknown) {
         if (controller.signal.aborted) return;
         setResult({
@@ -498,7 +524,7 @@ function usePostgresDashboardPage(
       } finally {
         loading = false;
         const nextDelay = nextDashboardPollDelay(
-          pollIntervalMs,
+          nextPollIntervalMs,
           document.visibilityState,
         );
         if (!controller.signal.aborted && nextDelay !== null) {
@@ -521,7 +547,7 @@ function usePostgresDashboardPage(
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (nextLoad !== undefined) window.clearTimeout(nextLoad);
     };
-  }, [onData, pollIntervalMs, url]);
+  }, [activePollIntervalMs, onData, pollIntervalMs, reloadKey, url]);
 
   return result.url === url ? result : { url: url ?? "" };
 }
@@ -994,28 +1020,33 @@ function DashboardShell({
   const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
-  const handleDashboardStatusData = useCallback((status: DashboardPayload) => {
+  const [dashboardReloadKey, setDashboardReloadKey] = useState(0);
+  const handleDashboardStateData = useCallback((state: DashboardPayload) => {
+    const status = asRecord(state.status);
     setPlanningRefreshLock((current) =>
       current && refreshLockHasSettled(current, status) ? null : current,
     );
   }, []);
-  const dashboardPage = usePostgresDashboardPage(
-    `/api/dashboard?floor=${encodeURIComponent(activeProductionFloor)}`,
-    30_000,
-  );
-  const dashboardStatusPage = usePostgresDashboardPage(
-    planningRefreshLock || isRefreshingSnapshot
-      ? "/api/dashboard-refresh-status"
-      : null,
-    5_000,
-    handleDashboardStatusData,
-  );
+  const {
+    refreshFailed: markDashboardRefreshFailed,
+    refreshRequested: markDashboardRefreshRequested,
+    retry: retryDashboardDelivery,
+    state: dashboardDeliveryState,
+  } = useDashboardDelivery({
+    floor: activeProductionFloor,
+    onData: handleDashboardStateData,
+  });
   const correctionCandidatesPage = usePostgresDashboardPage(
     activeTab === "correctionsTab" ? "/api/correction-candidates?limit=200" : null,
     5_000,
+    undefined,
+    5_000,
+    dashboardReloadKey,
   );
-  const dashboardPayload = dashboardPage.data;
-  const dashboardRefreshStatus = dashboardStatusPage.data;
+  const dashboardPayload = dashboardPayloadFromState(dashboardDeliveryState.data ?? undefined);
+  const dashboardRefreshStatus = dashboardRefreshStatusFromState(
+    dashboardDeliveryState.data ?? undefined,
+  );
   const correctionCandidates = asArray(correctionCandidatesPage.data?.rows);
   const isPlanningRefreshLockActive = planningRefreshLock
     ? !refreshLockHasSettled(planningRefreshLock, dashboardRefreshStatus)
@@ -1037,8 +1068,16 @@ function DashboardShell({
     const staleRefreshKey = stalePlanningRefreshKey(dashboardRecord);
     if (lastStalePlanningRefreshKeyRef.current === staleRefreshKey) return;
     lastStalePlanningRefreshKeyRef.current = staleRefreshKey;
-    void postDashboardApi("dashboard-refresh", {});
-  }, [dashboardPayload, dashboardRefreshStatus?.isRefreshing, isPlanningRefreshLockActive]);
+    void postDashboardApi("dashboard-refresh", {})
+      .then(() => markDashboardRefreshRequested())
+      .catch((error: unknown) =>
+        markDashboardRefreshFailed(
+          error instanceof Error
+            ? error.message
+            : "Planning recalculation could not be queued.",
+        ),
+      );
+  }, [dashboardPayload, dashboardRefreshStatus?.isRefreshing, isPlanningRefreshLockActive, markDashboardRefreshFailed, markDashboardRefreshRequested]);
 
   async function refreshDashboardSnapshot(force = true) {
     setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus));
@@ -1046,6 +1085,8 @@ function DashboardShell({
     setActionStatus(null);
     try {
       const result = await postDashboardApi("dashboard-refresh", { force });
+      setDashboardReloadKey((current) => current + 1);
+      markDashboardRefreshRequested();
       setActionStatus({
         tone: "default",
         message: result.queued
@@ -1062,6 +1103,9 @@ function DashboardShell({
       if (result.skipped) setPlanningRefreshLock(null);
     } catch (err) {
       setPlanningRefreshLock(null);
+      markDashboardRefreshFailed(
+        err instanceof Error ? err.message : "Snapshot refresh failed.",
+      );
       setActionStatus({
         tone: "destructive",
         message: err instanceof Error ? err.message : "Snapshot refresh failed.",
@@ -1096,6 +1140,7 @@ function DashboardShell({
         tone: "default",
         message: `${message} ${planningRefreshStatusMessage(queuePlanningRefresh, path, body)}`,
       });
+      if (queuePlanningRefresh) markDashboardRefreshRequested();
       const returnTab = str(body.returnTab) as DashboardTabId;
       if (returnTab && navItems.some((item) => item.id === returnTab)) {
         setActiveTab(returnTab);
@@ -1159,17 +1204,19 @@ function DashboardShell({
     });
   }
 
-  const isDashboardLoading = dashboardPayload === undefined;
+  const hasDashboardData = dashboardDeliveryState.data !== null;
+  const isDashboardLoading = !hasDashboardData && dashboardDeliveryState.request !== "error";
+  const isDashboardUnavailable = !hasDashboardData && dashboardDeliveryState.request === "error";
   const basePayload = useMemo(
     () => (
-      isDashboardLoading
+      !hasDashboardData
         ? ({} as DashboardPayload)
         : dashboardPayloadForProductionFloor(
             dashboardPayload,
             activeProductionFloor,
           )
     ),
-    [activeProductionFloor, dashboardPayload, isDashboardLoading],
+    [activeProductionFloor, dashboardPayload, hasDashboardData],
   );
   const snapshotUpdatedAt = str(basePayload.updatedAt);
   const planningRecalculatedAt = str(basePayload.snapshotCacheUpdatedAt)
@@ -1191,6 +1238,15 @@ function DashboardShell({
     (floor) => floor.code === activeProductionFloor,
   ) ?? productionFloors[0];
   const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
+  const dashboardStatusLabel = dashboardConnectionLabel(dashboardDeliveryState);
+  const dashboardStatusNotice = dashboardDeliveryNotice(dashboardDeliveryState);
+  const dashboardPartialCoverageNotice =
+    activeTab === "masterTablesTab"
+      ? null
+      : dashboardCoverageNotice(
+          dashboardDeliveryState.data,
+          selectedProductionFloor.shortLabel,
+        );
 
   const view = useMemo(
     () => toDashboardViewModel(payload),
@@ -1253,9 +1309,10 @@ function DashboardShell({
             {selectedProductionFloor.shortLabel}
           </Badge>
           <Badge variant="outline">
-            {isDashboardLoading ? "Loading" : "Connected"}
+            {dashboardStatusLabel}
           </Badge>
           <HeaderActions
+            canRefreshSnapshot={hasDashboardData}
             isRefreshingSnapshot={isSnapshotRefreshActive}
             onRefreshSnapshot={() => void refreshDashboardSnapshot(true)}
           />
@@ -1266,7 +1323,41 @@ function DashboardShell({
               {actionStatus.message}
             </Badge>
           ) : null}
-          {isDashboardLoading ? (
+          {dashboardStatusNotice || dashboardPartialCoverageNotice ? (
+            <div
+              className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/35 px-3 py-2 text-sm"
+              role="status"
+              aria-atomic="true"
+              aria-live="polite"
+            >
+              <div className="min-w-0 flex-1 space-y-1">
+                {dashboardStatusNotice ? <p>{dashboardStatusNotice}</p> : null}
+                {dashboardPartialCoverageNotice ? (
+                  <p className="text-muted-foreground">{dashboardPartialCoverageNotice}</p>
+                ) : null}
+              </div>
+              {dashboardDeliveryState.lastError ? (
+                <Button type="button" variant="outline" size="sm" onClick={retryDashboardDelivery}>
+                  Retry
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {isDashboardUnavailable ? (
+            <Card className="max-w-xl">
+              <CardHeader>
+                <CardTitle>Dashboard unavailable</CardTitle>
+                <CardDescription>
+                  {dashboardDeliveryState.lastError ?? "Dashboard data could not be loaded."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button type="button" onClick={retryDashboardDelivery}>
+                  Retry dashboard load
+                </Button>
+              </CardContent>
+            </Card>
+          ) : isDashboardLoading ? (
             <DashboardSkeleton />
           ) : (
             <DashboardContent
@@ -1285,29 +1376,7 @@ function DashboardShell({
           )}
         </main>
       </SidebarInset>
-      {isSnapshotRefreshActive ? (
-        <PlanningRecalculationOverlay status={str(dashboardRefreshStatus?.status)} />
-      ) : null}
     </SidebarProvider>
-  );
-}
-
-function PlanningRecalculationOverlay({ status }: { status: string }) {
-  const title = status === "queued"
-    ? "Planning recalculation queued"
-    : status === "running"
-    ? "Recalculating planning"
-    : "Checking planning recalculation";
-  return (
-    <div className="fixed inset-0 z-50 grid cursor-wait place-items-center bg-background/70 p-4 backdrop-blur-sm" aria-live="polite" aria-busy="true">
-      <div className="flex max-w-sm items-center gap-3 rounded-md border bg-background px-4 py-3 shadow-lg">
-        <RefreshCw className="size-5 shrink-0 animate-spin text-primary" />
-        <div className="grid gap-1">
-          <div className="text-sm font-medium">{title}</div>
-          <div className="text-xs text-muted-foreground">Please wait before saving another task.</div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -1403,9 +1472,11 @@ function setupChecklistSessionPatchKey(row: DashboardPayload) {
   return parts.length >= 5 ? parts.join("|") : "";
 }
 function HeaderActions({
+  canRefreshSnapshot,
   isRefreshingSnapshot,
   onRefreshSnapshot,
 }: {
+  canRefreshSnapshot: boolean;
   isRefreshingSnapshot: boolean;
   onRefreshSnapshot: () => void;
 }) {
@@ -1420,7 +1491,7 @@ function HeaderActions({
         variant="outline"
         size="sm"
         className="gap-2"
-        disabled={isRefreshingSnapshot}
+        disabled={!canRefreshSnapshot || isRefreshingSnapshot}
         onClick={onRefreshSnapshot}
       >
         <RefreshCw className={`size-4${isRefreshingSnapshot ? " animate-spin" : ""}`} />
@@ -8289,28 +8360,6 @@ function optionalNumber(value: unknown) {
   if (value === undefined || value === null || value === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function numberOrNull(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function refreshLockFromStatus(status: { requestedAtMs?: unknown; completedAtMs?: unknown } | undefined): PlanningRefreshLock {
-  return {
-    baselineRequestedAtMs: numberOrNull(status?.requestedAtMs),
-    baselineCompletedAtMs: numberOrNull(status?.completedAtMs),
-  };
-}
-
-function refreshLockHasSettled(lock: PlanningRefreshLock, status: { status?: unknown; isRefreshing?: unknown; requestedAtMs?: unknown; completedAtMs?: unknown } | undefined) {
-  if (!status || status.isRefreshing) return false;
-  const currentStatus = str(status.status);
-  if (currentStatus !== "idle" && currentStatus !== "failed") return false;
-  const requestedAtMs = numberOrNull(status.requestedAtMs);
-  const completedAtMs = numberOrNull(status.completedAtMs);
-  const sawNewRequest = requestedAtMs !== lock.baselineRequestedAtMs;
-  const sawNewCompletion = completedAtMs !== lock.baselineCompletedAtMs;
-  return sawNewRequest && (sawNewCompletion || currentStatus === "failed");
 }
 
 function numeric(value: unknown) {

@@ -4,6 +4,10 @@ import {
   productionFloors,
   type ProductionFloorCode,
 } from "@workspace/db/production-floors";
+import {
+  normalizeSourceCoverage,
+  type SourceCoverage,
+} from "@workspace/db/dashboard-coverage";
 
 export type DashboardRecord = Record<string, unknown>;
 
@@ -13,6 +17,131 @@ export {
   productionFloors,
   type ProductionFloorCode,
 };
+
+export class DashboardStateNormalizationError extends Error {}
+
+function canonicalFloor(value: unknown): ProductionFloorCode | null {
+  return typeof value === "string" && productionFloors.some((floor) => floor.code === value)
+    ? (value as ProductionFloorCode)
+    : null;
+}
+
+function canonicalVersion(value: unknown) {
+  const version = Number(value);
+  return Number.isSafeInteger(version) && version > 0 ? version : null;
+}
+
+export function mergeDashboardStateResponse(
+  currentState: DashboardRecord | undefined,
+  nextState: DashboardRecord,
+  requestedFloor: unknown = nextState.productionFloorCode,
+) {
+  const expectedFloor = normalizeProductionFloorCode(requestedFloor);
+  const nextDashboard = isRecord(nextState.dashboard) ? nextState.dashboard : null;
+  const responseFloor =
+    canonicalFloor(nextState.productionFloorCode) ??
+    canonicalFloor(nextDashboard?.productionFloorCode);
+  if (responseFloor !== expectedFloor) {
+    throw new DashboardStateNormalizationError(
+      "Dashboard state did not match the requested floor.",
+    );
+  }
+
+  const nextVersion =
+    canonicalVersion(nextState.version) ??
+    canonicalVersion(nextDashboard?.readModelVersion);
+  const currentDashboard =
+    currentState && isRecord(currentState.dashboard) ? currentState.dashboard : null;
+  const currentFloor =
+    canonicalFloor(currentState?.productionFloorCode) ??
+    canonicalFloor(currentDashboard?.productionFloorCode);
+  const currentVersion =
+    canonicalVersion(currentState?.version) ??
+    canonicalVersion(currentDashboard?.readModelVersion);
+
+  if (nextState.notModified === true) {
+    if (
+      !currentState ||
+      !currentDashboard ||
+      currentFloor !== expectedFloor ||
+      nextVersion === null ||
+      nextVersion !== currentVersion
+    ) {
+      throw new DashboardStateNormalizationError(
+        "An unchanged dashboard response requires the exact retained same-floor payload.",
+      );
+    }
+    return {
+      ...currentState,
+      ...nextState,
+      coverage: dashboardCoverageFromState(currentState),
+      dashboard: currentDashboard,
+      productionFloorCode: expectedFloor,
+      version: nextVersion,
+    };
+  }
+
+  if (!nextDashboard) {
+    throw new DashboardStateNormalizationError(
+      "A changed dashboard response requires a floor payload.",
+    );
+  }
+  if ("productionFloorSnapshots" in nextDashboard) {
+    throw new DashboardStateNormalizationError(
+      "A changed dashboard response cannot contain all floor snapshots.",
+    );
+  }
+  if (canonicalFloor(nextDashboard.productionFloorCode) !== expectedFloor) {
+    throw new DashboardStateNormalizationError(
+      "Dashboard payload did not match the requested floor.",
+    );
+  }
+  const payloadVersion = canonicalVersion(nextDashboard.readModelVersion);
+  if (nextVersion !== null && payloadVersion !== nextVersion) {
+    throw new DashboardStateNormalizationError(
+      "Dashboard response version metadata did not match its payload.",
+    );
+  }
+  if (
+    currentFloor === expectedFloor &&
+    currentVersion !== null &&
+    nextVersion !== null &&
+    nextVersion < currentVersion
+  ) {
+    throw new DashboardStateNormalizationError(
+      "Dashboard response contained a regressive version.",
+    );
+  }
+
+  const coverage = dashboardCoverageFromState(nextState);
+  return {
+    ...nextState,
+    coverage,
+    dashboard: {
+      ...nextDashboard,
+      ...(coverage ? { sourceCoverage: coverage } : {}),
+      productionFloorCode: expectedFloor,
+      ...(nextVersion === null ? {} : { readModelVersion: nextVersion }),
+    },
+    productionFloorCode: expectedFloor,
+    version: nextVersion,
+  };
+}
+
+export function dashboardPayloadFromState(state: unknown) {
+  return isRecord(state) ? isRecord(state.dashboard) ? state.dashboard : {} : undefined;
+}
+
+export function dashboardRefreshStatusFromState(state: unknown) {
+  return isRecord(state) ? isRecord(state.status) ? state.status : {} : undefined;
+}
+
+export function dashboardCoverageFromState(state: unknown): SourceCoverage | null {
+  if (!isRecord(state)) return null;
+  const dashboard = isRecord(state.dashboard) ? state.dashboard : {};
+  const coverage = state.coverage ?? dashboard.sourceCoverage;
+  return isRecord(coverage) ? normalizeSourceCoverage(coverage) : null;
+}
 
 export type DashboardRankedRow = {
   label: string;

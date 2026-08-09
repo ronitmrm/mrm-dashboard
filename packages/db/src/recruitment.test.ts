@@ -90,7 +90,13 @@ describe("assignEmployee", () => {
       if (statement.includes("lower(combined.vacancy_code)")) {
         return {
           rowCount: 1,
-          rows: [{ post_id: combinedPostId, target_code: "cmb-1" }],
+          rows: [
+            {
+              post_id: combinedPostId,
+              target_code: "cmb-1",
+              target_type: "combined",
+            },
+          ],
         }
       }
       if (statement.includes("lower(post_code) AS target_code")) {
@@ -512,8 +518,8 @@ describe("candidate application cycles", () => {
         if (statement.includes("INSERT INTO recruitment.applications")) {
           return {
             rows: [
-              { candidate_id: "candidate-1", id: "application-1" },
               { candidate_id: "candidate-2", id: "application-2" },
+              { candidate_id: "candidate-1", id: "application-1" },
             ],
           }
         }
@@ -542,11 +548,43 @@ describe("candidate application cycles", () => {
       statement.includes("INSERT INTO recruitment.applications")
     )
     expect(insertCall?.[1]?.[4]).toEqual(["candidate-1", "candidate-2"])
-    expect(
-      query.mock.calls.filter(([statement]) =>
-        statement.includes("INSERT INTO audit.events")
-      )
-    ).toHaveLength(2)
+    const auditCalls = query.mock.calls.filter(([statement]) =>
+      statement.includes("INSERT INTO audit.events")
+    )
+    expect(auditCalls).toHaveLength(1)
+    const auditEvents = JSON.parse(String(auditCalls[0]![1]![0])) as Array<{
+      metadata: {
+        candidateId: string
+        commandId: string
+        commandOrdinal: number
+        selectionOrdinal: number
+      }
+      sourceId: string
+      targetId: string
+    }>
+    const commandId = auditEvents[0]!.metadata.commandId
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          candidateId: "candidate-1",
+          commandId,
+          commandOrdinal: 0,
+          selectionOrdinal: 0,
+        }),
+        sourceId: `recruitment:${commandId}:000000`,
+        targetId: "application-1",
+      }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          candidateId: "candidate-2",
+          commandId,
+          commandOrdinal: 1,
+          selectionOrdinal: 1,
+        }),
+        sourceId: `recruitment:${commandId}:000001`,
+        targetId: "application-2",
+      }),
+    ])
   })
 
   test("rolls back the complete selection when one candidate becomes unavailable", async () => {

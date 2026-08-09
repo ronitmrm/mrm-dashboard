@@ -1,6 +1,11 @@
 export { createAccessAdministrationRepository } from "./access-administration"
 export { createAuthorizationRepository } from "./authorization"
 export { createCatalogMasterRepository } from "./catalog-masters"
+export {
+  type BoundedCommercialResult,
+  type CommercialCoverage,
+  commercialSelectorLimit,
+} from "./commercial-bounds"
 export { createCommercialCostingRepository } from "./commercial-costing"
 export {
   commercialTermTypes,
@@ -26,6 +31,13 @@ export { createCommercialWorkflowRepository } from "./commercial-workflow"
 export { createCustomerRepository } from "./customers"
 export { createDashboardPlanningRepository } from "./dashboard-planning"
 export {
+  normalizeSourceCoverage,
+  type CoverageFacts,
+  type GroupedSourceCoverage,
+  type SourceCoverage,
+  type SourceCoverageByFloor,
+} from "./dashboard-coverage"
+export {
   buildCanonicalDashboardReadModel,
   readCanonicalDashboardSource,
 } from "./dashboard-read-model"
@@ -33,8 +45,6 @@ export { createDashboardReadModelRepository } from "./dashboard-read-model-repos
 export { createMaintenanceRepository } from "./maintenance"
 export {
   createRecruitmentRepository,
-  deriveRecruitmentEmployeeAssignment,
-  isActiveRecruitmentApplicationStatus,
   type RecruitmentCandidateRow,
   type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
@@ -46,6 +56,13 @@ export {
   type RecruitmentPostRow,
   type RecruitmentTemplateRow,
 } from "./recruitment"
+export {
+  deriveRecruitmentEmployeeAssignment,
+  deriveRecruitmentPostStatus,
+  isActiveRecruitmentApplicationStatus,
+  listRecruitableApprovedPosts,
+  recruitmentPostDeletionBlocker,
+} from "./recruitment-domain"
 export {
   nextRecruitmentPostIdentity,
   nextRecruitmentTemplateCode,
@@ -76,6 +93,7 @@ export { createProductRepository } from "./products"
 export {
   connectionTargetSummary,
   createBoundedPostgresPool,
+  instrumentPostgresPool,
   repositoryPool,
   sharedManagedPostgresPool,
   summarizeManagedPostgresEnvironment,

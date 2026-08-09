@@ -4,7 +4,6 @@ import {
 } from "@workspace/db"
 
 import type { AuthSystem } from "./auth"
-import { invalidateAuthorizationGrants } from "./authorization-grants"
 
 type CreateAccessAdministrationServiceOptions = {
   auth: AuthSystem["auth"]
@@ -110,20 +109,12 @@ export function createAccessAdministrationService({
 
     async assignRole({ actorUserId, roleKey, userId }: AssignRoleInput) {
       await requireActorCapability(actorUserId, MANAGE_ROLES_CAPABILITY)
-      const assignment = await access.assignRole({
-        actorUserId,
-        roleKey,
-        userId,
-      })
-      invalidateAuthorizationGrants(userId)
-      return assignment
+      return access.assignRole({ actorUserId, roleKey, userId })
     },
 
     async setPermissionOverride(input: SetPermissionOverrideInput) {
       await requireActorCapability(input.actorUserId, MANAGE_ROLES_CAPABILITY)
-      const override = await access.setPermissionOverride(input)
-      invalidateAuthorizationGrants(input.userId)
-      return override
+      return access.setPermissionOverride(input)
     },
 
     async getSnapshot({ actorUserId }: { actorUserId: string }) {

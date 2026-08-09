@@ -1,9 +1,9 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { DatabaseSync } from "node:sqlite"
 
 import { migrateDatabase } from "@workspace/db"
-import Database from "better-sqlite3"
 import { strToU8, zipSync } from "fflate"
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
@@ -182,7 +182,7 @@ describe.runIf(Boolean(connectionString))("Convex PostgreSQL staging", () => {
     temporaryDirectories.push(directory)
     const databasePath = join(directory, "pricing_app.db")
     const artifactPath = join(directory, "pricing-export.zip")
-    const database = new Database(databasePath)
+    const database = new DatabaseSync(databasePath)
 
     database.exec(`
       PRAGMA foreign_keys = OFF;

@@ -11,6 +11,8 @@ import type { NextRequest } from "next/server"
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
 import { operationalEntryPlan } from "@/lib/postgres-operational-entry"
 import { withPostgresRepository } from "@/lib/postgres-repository-lifecycle"
+import { authorizationRequestTelemetryForCurrentScope } from "./auth/authorization-request-telemetry"
+import { telemetryRequestId } from "./request-telemetry"
 
 const operationalEntryTypes = new Set([
   "attendance",
@@ -33,7 +35,6 @@ const operationalEntryTypes = new Set([
   "training",
   "training_record",
 ])
-
 export class OperationalEntryError extends Error {
   constructor(
     public readonly status: number,
@@ -48,29 +49,44 @@ export function isPostgresOperationalEntryType(entryType: string) {
 }
 
 async function authorizedActor(request: NextRequest, capability: string) {
-  const session = await getAuth().api.getSession({ headers: request.headers })
-  if (!session) {
-    throw new OperationalEntryError(
-      401,
-      "Authentication is required to access the dashboard API."
-    )
-  }
-  const connectionString = readAuthEnvironment().connectionString
-  const authorization = createAuthorizationRepository({ connectionString })
+  const authorizationTelemetry = authorizationRequestTelemetryForCurrentScope({
+    requestId: telemetryRequestId(request),
+  })
+  const { telemetry } = authorizationTelemetry
+  telemetry.recordSessionRead()
+  let authorization: ReturnType<typeof createAuthorizationRepository> | null =
+    null
   try {
+    const session = await getAuth().api.getSession({ headers: request.headers })
+    if (!session) {
+      telemetry.setOutcome("unauthenticated")
+      throw new OperationalEntryError(
+        401,
+        "Authentication is required to access the dashboard API."
+      )
+    }
+    const connectionString = readAuthEnvironment().connectionString
+    authorization = createAuthorizationRepository({ connectionString })
+    telemetry.recordGrantRead()
     if (!(await authorization.hasCapability(session.user.id, capability))) {
+      telemetry.setOutcome("unauthorized")
       throw new OperationalEntryError(
         403,
         "You do not have permission to perform this dashboard action."
       )
     }
+    telemetry.setOutcome("allowed")
+    return {
+      actorUser: session.user,
+      actorUserId: session.user.id,
+      connectionString,
+    }
   } finally {
-    await authorization.close()
-  }
-  return {
-    actorUser: session.user,
-    actorUserId: session.user.id,
-    connectionString,
+    try {
+      await authorization?.close()
+    } finally {
+      authorizationTelemetry.finish()
+    }
   }
 }
 
@@ -98,6 +114,11 @@ export async function readPostgresHourlyQualityPage(
           userId: actor.actorUser.id,
         },
       }
+    },
+    {
+      operation: "quality.hourly.read",
+      requestId: telemetryRequestId(request),
+      subsystem: "quality",
     }
   )
 }
@@ -117,6 +138,11 @@ export async function readPostgresSetupChecklistPage(
         productionFloorCode: productionFloorCode ?? undefined,
         sessionKey,
       })
+    },
+    {
+      operation: "quality.setup_checklist.read",
+      requestId: telemetryRequestId(request),
+      subsystem: "quality",
     }
   )
 }
@@ -154,13 +180,18 @@ export async function executePostgresOperationalEntry(
           actorUserId: actor.actorUserId,
           organizationId,
         })
+      },
+      {
+        operation: `${plan.family}.${plan.operation}.write`,
+        requestId: telemetryRequestId(request),
+        subsystem: plan.family,
       }
     )
   }
 
   if (plan.family === "quality") {
     return withPostgresRepository(
-    createQualityRepository(actor),
+      createQualityRepository(actor),
       async (repository) => {
         const organizationId = await repository.organizationIdForCode("MRMPL")
         if (plan.operation === "rejection-type") {
@@ -259,6 +290,11 @@ export async function executePostgresOperationalEntry(
           )
         }
         return result
+      },
+      {
+        operation: `${plan.family}.${plan.operation}.write`,
+        requestId: telemetryRequestId(request),
+        subsystem: plan.family,
       }
     )
   }
@@ -301,6 +337,11 @@ export async function executePostgresOperationalEntry(
         actorUserId: actor.actorUserId,
         organizationId,
       })
+    },
+    {
+      operation: `${plan.family}.${plan.operation}.write`,
+      requestId: telemetryRequestId(request),
+      subsystem: plan.family,
     }
   )
 }

@@ -1,5 +1,9 @@
 import { Pool, type PoolConfig } from "pg"
 
+import { instrumentPostgresPool } from "./postgres-telemetry"
+
+export { instrumentPostgresPool } from "./postgres-telemetry"
+
 export type DatabaseResponsibility =
   | "migration"
   | "reporting"
@@ -148,7 +152,7 @@ export function createBoundedPostgresPool({
   }
   const pool = new Pool(config)
   pool.on("error", () => undefined)
-  return pool
+  return instrumentPostgresPool(pool)
 }
 
 export function connectionTargetSummary(pool: Pool) {
@@ -176,7 +180,7 @@ export function repositoryPool(options: RepositoryPoolOptions) {
   if (options.pool) {
     return {
       close: async () => undefined,
-      pool: options.pool,
+      pool: instrumentPostgresPool(options.pool),
     }
   }
 

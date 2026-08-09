@@ -106,6 +106,10 @@ const workerDatabaseUrl =
   webOnly || seedAdmin || !workerEnabled
     ? undefined
     : neonConnectionString("mrmpl_staging_worker")
+const workerListenerDatabaseUrl =
+  webOnly || seedAdmin || !workerEnabled || workerOnly
+    ? undefined
+    : neonConnectionString("mrmpl_staging_worker", false)
 const migrationDatabaseUrl = seedAdmin
   ? neonConnectionString("mrmpl_staging_migration", false)
   : undefined
@@ -128,6 +132,9 @@ const managedEnvironment = {
     ? { MIGRATION_DATABASE_URL: migrationDatabaseUrl }
     : {}),
   ...(workerDatabaseUrl ? { WORKER_DATABASE_URL: workerDatabaseUrl } : {}),
+  ...(workerListenerDatabaseUrl
+    ? { WORKER_LISTENER_DATABASE_URL: workerListenerDatabaseUrl }
+    : {}),
 }
 
 console.log(

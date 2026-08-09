@@ -27,6 +27,7 @@
     "runtime:worker:managed:status": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs --worker-status",
     "runtime:worker:once": "pnpm --filter @workspace/runtime worker:once",
     "runtime:worker:status": "pnpm --filter @workspace/runtime worker:status",
+    "staging:record-envelope": "pnpm --filter @workspace/migration staging:record-envelope",
     "postgres:up": "pnpm services:up",
     "postgres:down": "pnpm services:down",
     "provider:preflight": "pnpm --filter @workspace/migration provider:preflight",
@@ -44,6 +45,6 @@
     "typescript": "^5"
   },
   "engines": {
-    "node": ">=20.9 <25"
+    "node": ">=20.9"
   }
 }

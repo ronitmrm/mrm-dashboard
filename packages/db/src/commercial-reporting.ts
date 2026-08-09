@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 
-import type { PoolClient } from "pg"
+import type { Pool, PoolClient, QueryResult } from "pg"
 
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
@@ -35,6 +35,22 @@ export type DrawingHistoryRow = {
   revisionDate: string
   rowNumber: number
   sourceQuoteItemId: string | null
+  uid: string
+}
+
+type DrawingHistoryDatabaseRow = {
+  buffoli_laminated_quantity: number
+  cnc_laminated_quantity: number
+  conventional_laminated_quantity: number
+  drawing_id: string
+  drawing_number: string | null
+  item_description: string
+  item_id: string
+  remarks: string | null
+  revision: string
+  revision_date: string | Date | null
+  row_number: string
+  source_quote_item_id: string | null
   uid: string
 }
 
@@ -184,6 +200,24 @@ function isoDate(value: string | Date | null | undefined) {
   if (!value) return ""
   if (value instanceof Date) return value.toISOString().slice(0, 10)
   return String(value).slice(0, 10)
+}
+
+function drawingHistoryRow(row: DrawingHistoryDatabaseRow): DrawingHistoryRow {
+  return {
+    buffoliLaminatedQuantity: row.buffoli_laminated_quantity,
+    cncLaminatedQuantity: row.cnc_laminated_quantity,
+    conventionalLaminatedQuantity: row.conventional_laminated_quantity,
+    drawingId: row.drawing_id,
+    drawingNumber: row.drawing_number ?? "",
+    itemDescription: row.item_description,
+    itemId: row.item_id,
+    remarks: row.remarks,
+    revision: row.revision,
+    revisionDate: isoDate(row.revision_date),
+    rowNumber: Number(row.row_number),
+    sourceQuoteItemId: row.source_quote_item_id,
+    uid: row.uid,
+  }
 }
 
 export function deriveThreadStandard(
@@ -381,6 +415,29 @@ async function syncWebsiteAssemblies(
         profile.id,
       ]
     )
+  }
+}
+
+const exportBatchSize = (value: number) =>
+  Math.min(Math.max(Math.floor(value), 1), 500)
+
+async function readSnapshot<T>(
+  pool: Pool,
+  operation: (client: PoolClient) => Promise<T>
+) {
+  const client = await pool.connect()
+  try {
+    await client.query(
+      "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+    )
+    const result = await operation(client)
+    await client.query("COMMIT")
+    return result
+  } catch (error) {
+    await client.query("ROLLBACK")
+    throw error
+  } finally {
+    client.release()
   }
 }
 
@@ -654,23 +711,7 @@ export function createCommercialReportingRepository(
         `,
         [input.organizationId, optional(input.revision), optional(input.query)]
       )
-      return result.rows.map(
-        (row): DrawingHistoryRow => ({
-          buffoliLaminatedQuantity: row.buffoli_laminated_quantity,
-          cncLaminatedQuantity: row.cnc_laminated_quantity,
-          conventionalLaminatedQuantity: row.conventional_laminated_quantity,
-          drawingId: row.drawing_id,
-          drawingNumber: row.drawing_number ?? "",
-          itemDescription: row.item_description,
-          itemId: row.item_id,
-          remarks: row.remarks,
-          revision: row.revision,
-          revisionDate: isoDate(row.revision_date),
-          rowNumber: Number(row.row_number),
-          sourceQuoteItemId: row.source_quote_item_id,
-          uid: row.uid,
-        })
-      )
+      return result.rows.map(drawingHistoryRow)
     },
 
     async listWebsiteProducts(input: {
@@ -701,6 +742,145 @@ export function createCommercialReportingRepository(
         ]
       )
       return result.rows.map(websiteRow)
+    },
+
+    async listDrawingHistoryForExport(
+      input: {
+        organizationId: string
+        query?: string | null
+        revision?: string | null
+      },
+      requestedBatchSize = 500
+    ) {
+      const batchSize = exportBatchSize(requestedBatchSize)
+      return readSnapshot(pool, async (client) => {
+        const rows: DrawingHistoryRow[] = []
+        let cursorRowNumber = 0
+
+        while (true) {
+          const batch = await client.query<DrawingHistoryDatabaseRow>(
+            `
+              WITH drawing_rows AS (
+                SELECT drawings.id drawing_id, drawings.item_id,
+                  drawings.source_quote_item_id, items.uid,
+                  items.description item_description,
+                  COALESCE(drawings.drawing_number, '') drawing_number,
+                  drawings.revision,
+                  to_char(
+                    COALESCE(drawings.effective_at, drawings.created_at),
+                    'YYYY-MM-DD'
+                  ) revision_date,
+                  drawings.buffoli_laminated_quantity,
+                  drawings.conventional_laminated_quantity,
+                  drawings.cnc_laminated_quantity, drawings.remarks,
+                  ROW_NUMBER() OVER (
+                    ORDER BY CASE WHEN items.uid ~ '^M[0-9]+$'
+                      THEN substring(items.uid from 2)::bigint
+                      ELSE 9223372036854775807 END,
+                      items.uid,
+                      CASE WHEN drawings.revision ~ '^[0-9]+$'
+                        THEN drawings.revision::bigint
+                        ELSE 9223372036854775807 END,
+                      drawings.revision, drawings.id
+                  ) row_number
+                FROM catalog.drawings drawings
+                JOIN catalog.items items ON items.id = drawings.item_id
+                WHERE drawings.organization_id = $1
+                  AND ($2::text IS NULL OR drawings.revision = $2)
+                  AND ($3::text IS NULL OR concat_ws(' ', items.uid,
+                    items.description, drawings.drawing_number,
+                    drawings.remarks) ILIKE '%' || $3 || '%')
+              )
+              SELECT *
+              FROM drawing_rows
+              WHERE row_number > $4
+              ORDER BY row_number
+              LIMIT $5
+            `,
+            [
+              input.organizationId,
+              optional(input.revision),
+              optional(input.query),
+              cursorRowNumber,
+              batchSize,
+            ]
+          )
+          rows.push(...batch.rows.map(drawingHistoryRow))
+          if (batch.rows.length < batchSize) break
+          cursorRowNumber = Number(batch.rows.at(-1)!.row_number)
+        }
+
+        return rows
+      })
+    },
+
+    async listWebsiteProductsForExport(
+      input: {
+        active?: boolean | null
+        category?: string | null
+        organizationId: string
+        query?: string | null
+        status?: string | null
+      },
+      requestedBatchSize = 500
+    ) {
+      const batchSize = exportBatchSize(requestedBatchSize)
+      return readSnapshot(pool, async (client) => {
+        const rows: WebsiteProductRow[] = []
+        let cursorUidNumber: string | null = null
+        let cursorUid: string | null = null
+        let cursorId: string | null = null
+
+        while (true) {
+          const batch: QueryResult<WebsiteDatabaseRow> =
+            await client.query<WebsiteDatabaseRow>(
+              `${websiteSelect}
+             WHERE profiles.organization_id = $1
+               AND ($2::boolean IS NULL OR profiles.is_active = $2)
+               AND ($3::text IS NULL OR profiles.website_status = $3)
+               AND ($4::text IS NULL OR profiles.category = $4)
+               AND ($5::text IS NULL OR concat_ws(' ', items.uid,
+                 profiles.part_code, profiles.product_description,
+                 profiles.category, profiles.sub_category, profiles.grade)
+                 ILIKE '%' || $5 || '%')
+               AND (
+                 $6::bigint IS NULL
+                 OR (
+                   CASE WHEN items.uid ~ '^M[0-9]+$'
+                     THEN substring(items.uid from 2)::bigint
+                     ELSE 9223372036854775807 END,
+                   items.uid,
+                   profiles.id
+                 ) > ($6::bigint, $7::text, $8::uuid)
+               )
+             ORDER BY CASE WHEN items.uid ~ '^M[0-9]+$'
+               THEN substring(items.uid from 2)::bigint
+               ELSE 9223372036854775807 END,
+               items.uid, profiles.id
+             LIMIT $9`,
+              [
+                input.organizationId,
+                input.active ?? null,
+                optional(input.status),
+                optional(input.category),
+                optional(input.query),
+                cursorUidNumber,
+                cursorUid,
+                cursorId,
+                batchSize,
+              ]
+            )
+          rows.push(...batch.rows.map(websiteRow))
+          if (batch.rows.length < batchSize) break
+          const last: WebsiteDatabaseRow = batch.rows.at(-1)!
+          cursorUidNumber =
+            /^M([0-9]+)$/.exec(last.uid)?.[1] ?? "9223372036854775807"
+          cursorUid = last.uid
+          cursorId = last.profile_id
+        }
+
+        return rows
+      })
     },
 
     async updateDrawingHistory(

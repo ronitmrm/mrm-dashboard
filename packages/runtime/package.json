@@ -19,6 +19,7 @@
   "dependencies": {
     "@upstash/redis": "^1.38.0",
     "@workspace/db": "workspace:*",
+    "@workspace/observability": "workspace:*",
     "pg": "8.22.0",
     "redis": "5.8.2"
   },

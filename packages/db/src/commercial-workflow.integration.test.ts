@@ -63,6 +63,101 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL enquiry-to-design workflow", () => {
+  test("loads attachments for many targets in one statement", async () => {
+    const enquiry = await repository.createEnquiry({
+      customerId,
+      organizationId,
+      receivedOn: "2026-08-08",
+      source: "Email",
+    })
+    const targets = await Promise.all(
+      [0, 1].map((index) =>
+        repository.addEnquiryItem({
+          customerPartCode: `BATCH-${randomUUID()}`,
+          description: `Batch attachment target ${index}`,
+          enquiryId: enquiry.id,
+          organizationId,
+          quantity: 1,
+        })
+      )
+    )
+    const targetIds = targets.map(({ id }) => id)
+    await Promise.all(
+      targetIds.map((targetId, index) =>
+        repository.recordAttachment({
+          byteSize: 100 + index,
+          fileName: `batch-design-${index}.pdf`,
+          mediaType: "application/pdf",
+          organizationId,
+          purpose: "internal_drawing",
+          sourceId: `batch-design-${targetId}`,
+          storageKey: `attachments/batch-design-${targetId}.pdf`,
+          targetId,
+          targetTable: "enquiry_items",
+        })
+      )
+    )
+
+    const trackedPool = new Pool({ connectionString })
+    const originalQuery = trackedPool.query.bind(trackedPool)
+    let statementCount = 0
+    trackedPool.query = ((...args: Parameters<typeof trackedPool.query>) => {
+      statementCount += 1
+      return originalQuery(...args)
+    }) as typeof trackedPool.query
+    const trackedRepository = createCommercialWorkflowRepository({
+      pool: trackedPool,
+    })
+
+    try {
+      const grouped = await trackedRepository.listAttachmentsForTargets({
+        organizationId,
+        targetIds,
+        targetTable: "enquiry_items",
+      })
+
+      expect(statementCount).toBe(1)
+      expect(grouped.get(targetIds[0]!)).toEqual([
+        expect.objectContaining({ fileName: "batch-design-0.pdf" }),
+      ])
+      expect(grouped.get(targetIds[1]!)).toEqual([
+        expect.objectContaining({ fileName: "batch-design-1.pdf" }),
+      ])
+    } finally {
+      await trackedRepository.close()
+      await trackedPool.end()
+    }
+  })
+
+  test("bounds operational enquiry and follow-up reads", async () => {
+    const enquiries = await Promise.all(
+      [0, 1].map((index) =>
+        repository.createEnquiry({
+          customerId,
+          organizationId,
+          receivedOn: `2026-08-0${index + 1}`,
+          source: "Email",
+        })
+      )
+    )
+    await Promise.all(
+      enquiries.map((enquiry, index) =>
+        repository.createFollowup({
+          dueOn: `2026-08-1${index + 1}`,
+          enquiryId: enquiry.id,
+          organizationId,
+        })
+      )
+    )
+
+    await expect(
+      repository.listEnquiries(organizationCode, 1)
+    ).resolves.toHaveLength(1)
+    await expect(
+      repository.listFollowups(organizationCode, 1)
+    ).resolves.toHaveLength(1)
+  })
+
   test("classifies imported rows with the executable Pricing match order", async () => {
     const suffix = Date.now().toString(36)
     const exactCode = `MATCH-${suffix}`
@@ -896,13 +991,35 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     expect(
       salesQueue.filter((row) => row.enquiryId === enquiry.id)
     ).toHaveLength(2)
-    await expect(
-      repository.listSalesMatchCandidates(commercialLine.id)
-    ).resolves.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ quoteItemId: quote.rows[0]!.id }),
-      ])
-    )
+    const candidatePool = new Pool({ connectionString })
+    const originalQuery = candidatePool.query.bind(candidatePool)
+    let candidateStatements = 0
+    candidatePool.query = ((...args: Parameters<typeof candidatePool.query>) => {
+      candidateStatements += 1
+      return originalQuery(...args)
+    }) as typeof candidatePool.query
+    const candidateRepository = createCommercialWorkflowRepository({
+      pool: candidatePool,
+    })
+    try {
+      const candidates =
+        await candidateRepository.listSalesMatchCandidatesForItems([
+          commercialLine.id,
+          technicalLine.id,
+        ])
+
+      expect(candidateStatements).toBe(1)
+      for (const line of [commercialLine, technicalLine]) {
+        expect(candidates.get(line.id)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ quoteItemId: quote.rows[0]!.id }),
+          ])
+        )
+      }
+    } finally {
+      await candidateRepository.close()
+      await candidatePool.end()
+    }
     expect(
       (await repository.listTechnicalReviewQueue(organizationCode)).some(
         (row) => row.enquiryId === enquiry.id

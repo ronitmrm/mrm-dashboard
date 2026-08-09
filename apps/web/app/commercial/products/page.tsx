@@ -38,13 +38,14 @@ export default async function ProductsPage({
   const repository = createProductRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const products = await repository
+  const productPage = await repository
     .listPageForOrganization("MRMPL", bounds)
     .finally(() => repository.close())
+  const products = productPage.rows
   if (!products.length && bounds.page > 1) {
     redirect("/commercial/products")
   }
-  const totalCount = products[0]?.totalCount ?? 0
+  const totalCount = productPage.coverage.total ?? 0
   const totalPages = Math.max(1, Math.ceil(totalCount / bounds.limit))
 
   return (
