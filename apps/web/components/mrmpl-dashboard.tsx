@@ -1240,10 +1240,13 @@ function DashboardShell({
   const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
   const dashboardStatusLabel = dashboardConnectionLabel(dashboardDeliveryState);
   const dashboardStatusNotice = dashboardDeliveryNotice(dashboardDeliveryState);
-  const dashboardPartialCoverageNotice = dashboardCoverageNotice(
-    dashboardDeliveryState.data,
-    selectedProductionFloor.shortLabel,
-  );
+  const dashboardPartialCoverageNotice =
+    activeTab === "masterTablesTab"
+      ? null
+      : dashboardCoverageNotice(
+          dashboardDeliveryState.data,
+          selectedProductionFloor.shortLabel,
+        );
 
   const view = useMemo(
     () => toDashboardViewModel(payload),
