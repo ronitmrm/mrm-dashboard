@@ -106,6 +106,7 @@ export async function saveTemplateAction(formData: FormData) {
   await mutate(formData, "hr.recruitment.write", (repository, context) =>
     repository.upsertTemplate({
       ...context,
+      combinedRoleId: value(formData, "combined_role_id"),
       departmentCode: value(formData, "department_code"),
       designationCode: value(formData, "designation_code"),
       education: value(formData, "education"),

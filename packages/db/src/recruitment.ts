@@ -39,6 +39,8 @@ export type RecruitmentMasterSnapshot = {
 }
 
 export type RecruitmentTemplateRow = {
+  combinedRoleId: string | null
+  combinedRoleName: string | null
   department: string | null
   departmentCode: string | null
   designation: string
@@ -458,13 +460,19 @@ async function assignEmployeeInTransaction(
   commandId: string
 ) {
   const current = await client.query<{
+    can_replace: boolean
     combined_role_id: string | null
     employee_code: string | null
     employee_name: string | null
     id: string
+    last_working_date: string | null
+    status: string
   }>(
     `
-      SELECT id, employee_name, employee_code, combined_role_id
+      SELECT id, employee_name, employee_code, combined_role_id,
+        last_working_date::text, status,
+        (status = 'Vacant' OR (status = 'Resigned'
+          AND last_working_date < current_date)) AS can_replace
       FROM recruitment.posts
       WHERE id = $1 AND organization_id = $2 AND status <> 'Inactive'
       FOR UPDATE
@@ -475,12 +483,18 @@ async function assignEmployeeInTransaction(
   const currentPost = current.rows[0]
   const targets = currentPost.combined_role_id
     ? await client.query<{
+        can_replace: boolean
         employee_code: string | null
         employee_name: string | null
         id: string
+        last_working_date: string | null
+        status: string
       }>(
         `
-          SELECT post.id, post.employee_name, post.employee_code
+          SELECT post.id, post.employee_name, post.employee_code,
+            post.last_working_date::text, post.status,
+            (post.status = 'Vacant' OR (post.status = 'Resigned'
+              AND post.last_working_date < current_date)) AS can_replace
           FROM recruitment.combined_role_posts link
           JOIN recruitment.combined_roles combined
             ON combined.id = link.combined_role_id
@@ -503,12 +517,40 @@ async function assignEmployeeInTransaction(
     targets.rows.find(
       (post) => optional(post.employee_name) || optional(post.employee_code)
     ) ?? currentPost
+  const employeeEvent = optional(input.employeeEvent) ?? "Appointed"
+  const currentEmployeeName = optional(existingAssignment.employee_name)
+  const currentEmployeeCode = optional(existingAssignment.employee_code)
+  const requestedEmployeeName =
+    optional(input.employeeName) ?? currentEmployeeName
+  const requestedEmployeeCode =
+    optional(input.employeeCode) ?? currentEmployeeCode
+  const normal = (value: string | null) => value?.trim().toLowerCase() ?? ""
+  const changesAssignedPerson =
+    normal(requestedEmployeeName) !== normal(currentEmployeeName) ||
+    normal(requestedEmployeeCode) !== normal(currentEmployeeCode)
+  const canAssignNewPerson = existingAssignment.can_replace
+  if (
+    (employeeEvent === "Appointed" || employeeEvent === "Joined") &&
+    Boolean(currentEmployeeName || currentEmployeeCode) &&
+    changesAssignedPerson &&
+    !canAssignNewPerson
+  ) {
+    throw new Error(
+      "This post is assigned to another employee. Mark the current employee as Removed or Resigned and vacate the post before assigning a different person."
+    )
+  }
   const assignment = deriveRecruitmentEmployeeAssignment({
-    currentEmployeeCode: existingAssignment.employee_code,
-    currentEmployeeName: existingAssignment.employee_name,
-    employeeCode: input.employeeCode,
-    employeeEvent: input.employeeEvent,
-    employeeName: input.employeeName,
+    currentEmployeeCode,
+    currentEmployeeName,
+    employeeCode:
+      employeeEvent === "Appointed" || employeeEvent === "Joined"
+        ? input.employeeCode
+        : null,
+    employeeEvent,
+    employeeName:
+      employeeEvent === "Appointed" || employeeEvent === "Joined"
+        ? input.employeeName
+        : null,
     lastWorkingDate: input.lastWorkingDate,
   })
   const targetIds = targets.rows.map((post) => post.id)
@@ -695,6 +737,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       organizationId: string
     ): Promise<RecruitmentTemplateRow[]> {
       const result = await pool.query<{
+        combined_role_id: string | null
+        combined_role_name: string | null
         department: string | null
         department_code: string | null
         designation: string
@@ -711,6 +755,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }>(
         `
           SELECT template.id, template.template_code, template.name,
+            combined.id AS combined_role_id,
+            combined.name AS combined_role_name,
             department.name AS department, department.code AS department_code,
             designation.name AS designation,
             designation.code AS designation_code,
@@ -720,6 +766,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           FROM recruitment.requirement_templates template
           LEFT JOIN recruitment.departments department
             ON department.id = template.department_id
+          LEFT JOIN recruitment.combined_roles combined
+            ON combined.id = template.combined_role_id
           JOIN recruitment.designations designation
             ON designation.id = template.designation_id
           WHERE template.organization_id = $1 AND template.active
@@ -728,6 +776,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         [organizationId]
       )
       return result.rows.map((row) => ({
+        combinedRoleId: row.combined_role_id,
+        combinedRoleName: row.combined_role_name,
         department: row.department,
         departmentCode: row.department_code,
         designation: row.designation,
@@ -1351,21 +1401,32 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       return transaction(pool, async (client) => {
         const code = required(input.code, `${input.kind} code`)
         const name = required(input.name, `${input.kind} name`)
-        const duplicate = await client.query<{ code: string }>(
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+          [`${input.organizationId}:${table}:master`]
+        )
+        const duplicate = await client.query<{ code: string; name: string }>(
           `
-            SELECT code FROM recruitment.${table}
+            SELECT code, name FROM recruitment.${table}
             WHERE organization_id = $1
-              AND lower(btrim(name)) = lower(btrim($2))
-              AND lower(code) <> lower($3)
+              AND (
+                lower(btrim(code)) = lower(btrim($2))
+                OR lower(btrim(name)) = lower(btrim($3))
+              )
             LIMIT 1
           `,
-          [input.organizationId, name, code]
+          [input.organizationId, code, name]
         )
         if (duplicate.rows[0]) {
           const label =
             input.kind === "department" ? "Department" : "Designation"
+          const duplicateField =
+            duplicate.rows[0].code.trim().toLowerCase() ===
+            code.trim().toLowerCase()
+              ? `code ${code}`
+              : `name "${name}"`
           throw new Error(
-            `${label} "${name}" already exists with code ${duplicate.rows[0].code}.`
+            `${label} ${duplicateField} is already used by ${duplicate.rows[0].code} - ${duplicate.rows[0].name}.`
           )
         }
         const result = await client.query<{ id: string }>(
@@ -1375,11 +1436,6 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               updated_by_user_id, source_system, source_table, source_id
             )
             VALUES ($1, upper($2), $3, $4, $4, 'mrm-dashboard', $5, $6)
-            ON CONFLICT (organization_id, lower(code)) DO UPDATE SET
-              name = EXCLUDED.name,
-              updated_by_user_id = EXCLUDED.updated_by_user_id,
-              updated_at = now(),
-              row_version = recruitment.${table}.row_version + 1
             RETURNING id
           `,
           [
@@ -1403,7 +1459,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
     async upsertTemplate(
       input: MutationContext & {
-        departmentCode: string
+        combinedRoleId?: string | null
+        departmentCode?: string | null
         designationCode: string
         education?: string | null
         experienceRequirement?: string | null
@@ -1416,27 +1473,42 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }
     ) {
       return transaction(pool, async (client) => {
+        const departmentCode = optional(input.departmentCode)
+        const combinedRoleId = optional(input.combinedRoleId)
+        if ((departmentCode ? 1 : 0) + (combinedRoleId ? 1 : 0) !== 1) {
+          throw new Error(
+            "Select either one department or one combined job for the template."
+          )
+        }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.requirement_templates (
               organization_id, template_code, name, department_id,
-              designation_id, gender, experience_requirement, education,
+              combined_role_id, designation_id, gender,
+              experience_requirement, education,
               minimum_salary, maximum_salary, role_responsibilities,
               created_by_user_id, updated_by_user_id, source_system,
               source_table, source_id
             )
-            SELECT $1, upper($2), $3, department.id, designation.id,
-              $4, $5, $6, $7, $8, $9, $10, $10, 'mrm-dashboard',
-              'requirementTemplates', $11
-            FROM recruitment.departments department
-            JOIN recruitment.designations designation
-              ON designation.organization_id = $1
-             AND lower(designation.code) = lower($12)
-            WHERE department.organization_id = $1
-              AND lower(department.code) = lower($13)
+            SELECT $1, upper($2), $3, department.id, combined.id,
+              designation.id, $4, $5, $6, $7, $8, $9, $10, $10,
+              'mrm-dashboard', 'requirementTemplates', $11
+            FROM recruitment.designations designation
+            LEFT JOIN recruitment.departments department
+              ON department.organization_id = $1
+             AND lower(department.code) = lower($13)
+            LEFT JOIN recruitment.combined_roles combined
+              ON combined.organization_id = $1
+             AND combined.id = nullif($14, '')::uuid
+             AND combined.status = 'Active'
+            WHERE designation.organization_id = $1
+              AND lower(designation.code) = lower($12)
+              AND (($13 <> '' AND department.id IS NOT NULL AND combined.id IS NULL)
+                OR ($14 <> '' AND combined.id IS NOT NULL AND department.id IS NULL))
             ON CONFLICT (organization_id, lower(template_code)) DO UPDATE SET
               name = EXCLUDED.name,
               department_id = EXCLUDED.department_id,
+              combined_role_id = EXCLUDED.combined_role_id,
               designation_id = EXCLUDED.designation_id,
               gender = EXCLUDED.gender,
               experience_requirement = EXCLUDED.experience_requirement,
@@ -1462,11 +1534,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
             randomUUID(),
             required(input.designationCode, "Designation"),
-            required(input.departmentCode, "Department"),
+            departmentCode ?? "",
+            combinedRoleId ?? "",
           ]
         )
         if (!result.rows[0]) {
-          throw new Error("Department or designation was not found.")
+          throw new Error(
+            "Department, combined job, or designation was not found."
+          )
         }
         await audit(client, {
           ...input,
@@ -2407,8 +2482,21 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               ON post.id = COALESCE(primary_post.id, selected.id)
             JOIN recruitment.departments department ON department.id = post.department_id
             JOIN recruitment.designations designation ON designation.id = post.designation_id
-            LEFT JOIN recruitment.requirement_templates template
-              ON template.id = post.requirement_template_id
+            LEFT JOIN LATERAL (
+              SELECT candidate.*
+              FROM recruitment.requirement_templates candidate
+              WHERE candidate.organization_id = selected.organization_id
+                AND candidate.active
+                AND (
+                  candidate.id = post.requirement_template_id
+                  OR (combined.id IS NOT NULL
+                    AND candidate.combined_role_id = combined.id)
+                )
+              ORDER BY
+                (candidate.combined_role_id = combined.id) DESC NULLS LAST,
+                candidate.updated_at DESC, candidate.id
+              LIMIT 1
+            ) template ON true
             WHERE selected.id = $4 AND selected.organization_id = $5
               AND (
                 selected.status = 'Resigned'

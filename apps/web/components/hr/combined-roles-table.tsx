@@ -3,6 +3,7 @@
 import type {
   RecruitmentCombinedRoleRow,
   RecruitmentPostRow,
+  RecruitmentTemplateRow,
 } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -54,10 +55,12 @@ export function CombinedRolesTable({
   canWrite,
   combinedRoles,
   posts,
+  templates,
 }: {
   canWrite: boolean
   combinedRoles: RecruitmentCombinedRoleRow[]
   posts: RecruitmentPostRow[]
+  templates: RecruitmentTemplateRow[]
 }) {
   const [editingRole, setEditingRole] =
     useState<RecruitmentCombinedRoleRow | null>(null)
@@ -133,15 +136,18 @@ export function CombinedRolesTable({
     () =>
       combinedRoles.map((role) => {
         const memberTemplates = [
-          ...new Set(
-            posts
+          ...new Set([
+            ...templates
+              .filter((template) => template.combinedRoleId === role.id)
+              .map((template) => template.templateCode),
+            ...posts
               .filter((post) => role.postCodes.includes(post.postCode))
               .flatMap((post) =>
                 post.requirementTemplateCode
                   ? [post.requirementTemplateCode]
                   : []
-              )
-          ),
+              ),
+          ]),
         ].sort()
         return {
           code: role.vacancyCode ?? "—",
@@ -154,7 +160,7 @@ export function CombinedRolesTable({
           templates: memberTemplates,
         }
       }),
-    [combinedRoles, posts]
+    [combinedRoles, posts, templates]
   )
   const filterOptions = useMemo(
     () => ({

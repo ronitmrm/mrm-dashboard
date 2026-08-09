@@ -46,6 +46,8 @@ const posts = [
 
 const templates = [
   {
+    combinedRoleId: null,
+    combinedRoleName: null,
     department: "Production",
     departmentCode: "PR",
     designation: "Operator",
@@ -61,6 +63,8 @@ const templates = [
     templateCode: "JRT-0001",
   },
   {
+    combinedRoleId: null,
+    combinedRoleName: null,
     department: "Quality",
     departmentCode: "QC",
     designation: "Inspector",

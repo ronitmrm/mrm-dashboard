@@ -16,6 +16,47 @@ import {
 } from "./recruitment-codes"
 
 describe("assignEmployee", () => {
+  test("rejects replacing an occupied employee before the post is vacated", async () => {
+    const postId = "00000000-0000-4000-8000-000000000001"
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("SELECT id, employee_name, employee_code")) {
+        return {
+          rows: [
+            {
+              can_replace: false,
+              combined_role_id: null,
+              employee_code: "EMP-1",
+              employee_name: "Current Employee",
+              id: postId,
+              last_working_date: null,
+              status: "Occupied",
+            },
+          ],
+        }
+      }
+      return { rows: [] }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await expect(
+      repository.assignEmployee({
+        employeeCode: "EMP-2",
+        employeeEvent: "Joined",
+        employeeName: "Replacement Employee",
+        organizationId: "00000000-0000-4000-8000-000000000010",
+        postId,
+      })
+    ).rejects.toThrow("vacate the post before assigning a different person")
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("UPDATE recruitment.posts")
+      )
+    ).toBe(false)
+  })
+
   test("assigns the employee to every post in a combined role", async () => {
     const selectedPostId = "00000000-0000-4000-8000-000000000001"
     const relatedPostId = "00000000-0000-4000-8000-000000000002"
@@ -143,6 +184,77 @@ describe("assignEmployee", () => {
         statement.includes("UPDATE recruitment.posts")
       )
     ).toBe(false)
+  })
+})
+
+describe("masters", () => {
+  test("rejects a reused code even when the name is unchanged", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (
+        statement.includes("SELECT code, name FROM recruitment.departments")
+      ) {
+        return { rows: [{ code: "HR", name: "Human Resources" }] }
+      }
+      return { rows: [] }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await expect(
+      repository.upsertMaster({
+        code: "hr",
+        kind: "department",
+        name: "Human Resources",
+        organizationId: "00000000-0000-4000-8000-000000000010",
+      })
+    ).rejects.toThrow("code hr is already used")
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("INSERT INTO recruitment.departments")
+      )
+    ).toBe(false)
+  })
+})
+
+describe("combined job templates", () => {
+  test("prefers a combined-role template when creating its job", async () => {
+    const postId = "00000000-0000-4000-8000-000000000001"
+    const combinedRoleId = "00000000-0000-4000-8000-000000000002"
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("SELECT selected.combined_role_id")) {
+        return {
+          rows: [{ combined_role_id: combinedRoleId, post_id: postId }],
+        }
+      }
+      if (statement.includes("FROM recruitment.job_posts job")) {
+        return { rowCount: 0, rows: [] }
+      }
+      if (statement.includes("INSERT INTO recruitment.job_posts")) {
+        expect(statement).toContain("candidate.combined_role_id = combined.id")
+        expect(statement).toContain(
+          "(candidate.combined_role_id = combined.id) DESC"
+        )
+        return { rows: [{ id: "job-1" }] }
+      }
+      return { rows: [] }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.createJobFromPost({
+      organizationId: "00000000-0000-4000-8000-000000000010",
+      postId,
+    })
+
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("INSERT INTO recruitment.job_posts")
+      )
+    ).toBe(true)
   })
 })
 

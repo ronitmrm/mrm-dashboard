@@ -35,15 +35,17 @@ const scoreOptions = [
 
 export function InterviewOutcomeForm({
   applications,
+  initialApplicationId = "",
   panelId,
   returnJobId,
 }: {
   applications: InterviewApplicationOption[]
+  initialApplicationId?: string
   panelId?: string
   returnJobId?: string
 }) {
   const fieldId = useId()
-  const [applicationId, setApplicationId] = useState("")
+  const [applicationId, setApplicationId] = useState(initialApplicationId)
   const [decision, setDecision] = useState("Approved")
   const selectedApplication = applications.find(
     (application) => application.id === applicationId

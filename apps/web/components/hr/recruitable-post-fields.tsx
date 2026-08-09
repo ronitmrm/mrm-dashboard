@@ -23,7 +23,7 @@ type RecruitablePost = Pick<
   | "postCode"
   | "status"
   | "vacancyCode"
->
+> & { combinedPostCodes: string[] }
 
 export function RecruitablePostFields({ posts }: { posts: RecruitablePost[] }) {
   const combinedJobs = posts.filter((post) => post.combinedRoleId)
@@ -38,7 +38,8 @@ export function RecruitablePostFields({ posts }: { posts: RecruitablePost[] }) {
             {combinedJobs.map((post) => (
               <NativeSelectOption key={post.id} value={post.id}>
                 {post.combinedVacancyCode ?? post.vacancyCode} ·{" "}
-                {post.combinedRoleName} · combined job
+                {post.combinedRoleName} · includes{" "}
+                {post.combinedPostCodes.join(", ")}
               </NativeSelectOption>
             ))}
           </NativeSelectOptGroup>
@@ -55,8 +56,8 @@ export function RecruitablePostFields({ posts }: { posts: RecruitablePost[] }) {
         ) : null}
       </NativeSelect>
       <FieldDescription>
-        Each combined code appears once; its member posts are not offered
-        separately.
+        A combined selection shows every included Post Code. It creates one job
+        opening and its member posts are not offered separately.
       </FieldDescription>
     </Field>
   )

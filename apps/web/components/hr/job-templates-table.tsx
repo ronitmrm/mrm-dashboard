@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 
 import type {
+  RecruitmentCombinedRoleRow,
   RecruitmentMasterSnapshot,
   RecruitmentTemplateRow,
 } from "@workspace/db"
@@ -16,10 +17,6 @@ import {
 } from "@workspace/ui/components/card"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
 import {
   Sheet,
   SheetContent,
@@ -44,6 +41,7 @@ import {
   matchesColumnFilter,
   uniqueFilterOptions,
 } from "@/components/hr/excel-column-filter"
+import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
 
 type FilterKey =
   | "code"
@@ -63,9 +61,11 @@ const emptyFilters: Record<FilterKey, string[] | null> = {
 }
 
 function TemplateEditor({
+  combinedRoles,
   masters,
   template,
 }: {
+  combinedRoles: RecruitmentCombinedRoleRow[]
   masters: RecruitmentMasterSnapshot
   template: RecruitmentTemplateRow
 }) {
@@ -93,40 +93,14 @@ function TemplateEditor({
             required
           />
         </Field>
-        <Field>
-          <FieldLabel htmlFor="edit-template-department">Department</FieldLabel>
-          <NativeSelect
-            className="w-full"
-            defaultValue={template.departmentCode ?? ""}
-            id="edit-template-department"
-            name="department_code"
-            required
-          >
-            {masters.departments.map((department) => (
-              <NativeSelectOption key={department.id} value={department.code}>
-                {department.name}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="edit-template-designation">
-            Designation
-          </FieldLabel>
-          <NativeSelect
-            className="w-full"
-            defaultValue={template.designationCode}
-            id="edit-template-designation"
-            name="designation_code"
-            required
-          >
-            {masters.designations.map((designation) => (
-              <NativeSelectOption key={designation.id} value={designation.code}>
-                {designation.name}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
+        <TemplateScopeFields
+          combinedRoles={combinedRoles}
+          defaultCombinedRoleId={template.combinedRoleId}
+          defaultDepartmentCode={template.departmentCode}
+          defaultDesignationCode={template.designationCode}
+          masters={masters}
+          prefix="edit-template"
+        />
         <Field>
           <FieldLabel htmlFor="edit-template-gender">Gender</FieldLabel>
           <Input
@@ -198,11 +172,13 @@ function TemplateEditor({
 
 export function JobTemplatesTable({
   canWrite,
+  combinedRoles,
   initialTemplateCode,
   masters,
   templates,
 }: {
   canWrite: boolean
+  combinedRoles: RecruitmentCombinedRoleRow[]
   initialTemplateCode?: string
   masters: RecruitmentMasterSnapshot
   templates: RecruitmentTemplateRow[]
@@ -218,7 +194,9 @@ export function JobTemplatesTable({
   const options = useMemo(
     () => ({
       code: uniqueFilterOptions(templates.map((row) => row.templateCode)),
-      department: uniqueFilterOptions(templates.map((row) => row.department)),
+      department: uniqueFilterOptions(
+        templates.map((row) => row.combinedRoleName ?? row.department)
+      ),
       designation: uniqueFilterOptions(templates.map((row) => row.designation)),
       education: uniqueFilterOptions(templates.map((row) => row.education)),
       experience: uniqueFilterOptions(
@@ -232,7 +210,10 @@ export function JobTemplatesTable({
     (row) =>
       matchesColumnFilter(row.templateCode, filters.code) &&
       matchesColumnFilter(row.name, filters.name) &&
-      matchesColumnFilter(row.department, filters.department) &&
+      matchesColumnFilter(
+        row.combinedRoleName ?? row.department,
+        filters.department
+      ) &&
       matchesColumnFilter(row.designation, filters.designation) &&
       matchesColumnFilter(row.education, filters.education) &&
       matchesColumnFilter(row.experienceRequirement, filters.experience)
@@ -240,7 +221,7 @@ export function JobTemplatesTable({
   const filterKeys: Array<{ key: FilterKey; label: string }> = [
     { key: "code", label: "Code" },
     { key: "name", label: "Name" },
-    { key: "department", label: "Department" },
+    { key: "department", label: "Department / combined job" },
     { key: "designation", label: "Designation" },
     { key: "education", label: "Education" },
     { key: "experience", label: "Experience" },
@@ -305,7 +286,11 @@ export function JobTemplatesTable({
                     )}
                   </TableCell>
                   <TableCell>{row.name}</TableCell>
-                  <TableCell>{row.department ?? "Combined role"}</TableCell>
+                  <TableCell>
+                    {row.combinedRoleName
+                      ? `Combined: ${row.combinedRoleName}`
+                      : (row.department ?? "—")}
+                  </TableCell>
                   <TableCell>{row.designation}</TableCell>
                   <TableCell>{row.education ?? "—"}</TableCell>
                   <TableCell>{row.experienceRequirement ?? "—"}</TableCell>
@@ -327,7 +312,11 @@ export function JobTemplatesTable({
       </Card>
       {editingTemplate ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-          <TemplateEditor masters={masters} template={editingTemplate} />
+          <TemplateEditor
+            combinedRoles={combinedRoles}
+            masters={masters}
+            template={editingTemplate}
+          />
         </SheetContent>
       ) : null}
     </Sheet>

@@ -25,7 +25,6 @@ import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
   NativeSelect,
-  NativeSelectOptGroup,
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
 import {
@@ -50,19 +49,17 @@ import {
 } from "@/app/hr/actions"
 import { ApprovedPostFields } from "@/components/hr/approved-post-fields"
 import { ApprovedPostsTable } from "@/components/hr/approved-posts-table"
-import {
-  CandidateAssignmentPanel,
-  CandidatesTable,
-} from "@/components/hr/candidate-assignment-panel"
+import { CandidateAssignmentPanel } from "@/components/hr/candidate-assignment-panel"
 import { CombinedRoleForm } from "@/components/hr/combined-role-form"
 import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/hr/combined-roles-table"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
-import { EmployeeStatusFields } from "@/components/hr/employee-status-fields"
-import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
+import { InterviewWorkspace } from "@/components/hr/interview-workspace"
 import { JobTemplatesTable } from "@/components/hr/job-templates-table"
 import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
+import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
+import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
 
 type RecruitmentPanelProps = {
   canManageEmployees: boolean
@@ -177,7 +174,7 @@ function MastersPanel({
           action={saveMasterAction}
           description="Codes are the stable identity used by templates and approved posts."
           panelId="mastersPanel"
-          title="Add or update a master"
+          title="Add a master"
         >
           <Field>
             <FieldLabel htmlFor="master-kind">Master type</FieldLabel>
@@ -204,12 +201,17 @@ function MastersPanel({
 
 function TemplatePanel({
   canWrite,
+  combinedRoles,
   masters,
   selectedTemplateCode,
   templates,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "masters" | "selectedTemplateCode" | "templates"
+  | "canWrite"
+  | "combinedRoles"
+  | "masters"
+  | "selectedTemplateCode"
+  | "templates"
 >) {
   const templateCode = nextRecruitmentTemplateCode(
     templates.map((template) => template.templateCode)
@@ -232,42 +234,11 @@ function TemplatePanel({
             required
           />
           <TextField label="Template name" name="name" required />
-          <Field>
-            <FieldLabel htmlFor="template-department">Department</FieldLabel>
-            <NativeSelect
-              className="w-full"
-              id="template-department"
-              name="department_code"
-              required
-            >
-              <NativeSelectOption value="">
-                Select department
-              </NativeSelectOption>
-              {masters.departments.map((row) => (
-                <NativeSelectOption key={row.id} value={row.code}>
-                  {row.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="template-designation">Designation</FieldLabel>
-            <NativeSelect
-              className="w-full"
-              id="template-designation"
-              name="designation_code"
-              required
-            >
-              <NativeSelectOption value="">
-                Select designation
-              </NativeSelectOption>
-              {masters.designations.map((row) => (
-                <NativeSelectOption key={row.id} value={row.code}>
-                  {row.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
+          <TemplateScopeFields
+            combinedRoles={combinedRoles}
+            masters={masters}
+            prefix="template"
+          />
           <TextField label="Gender" name="gender" />
           <TextField label="Education" name="education" />
           <TextField
@@ -300,6 +271,7 @@ function TemplatePanel({
       ) : null}
       <JobTemplatesTable
         canWrite={canWrite}
+        combinedRoles={combinedRoles}
         initialTemplateCode={selectedTemplateCode}
         masters={masters}
         templates={templates}
@@ -373,12 +345,13 @@ function ApprovedPostPanel({
         canWrite={canWrite}
         combinedRoles={combinedRoles}
         posts={posts}
+        templates={templates}
       />
       <ApprovedPostsTable
         canWrite={canWrite}
         jobs={jobs}
         posts={posts}
-        templates={templates}
+        templates={templates.filter((template) => !template.combinedRoleId)}
       />
     </>
   )
@@ -386,33 +359,20 @@ function ApprovedPostPanel({
 
 function EmployeePanel({
   canManageEmployees,
+  canWrite,
   combinedRoles,
+  jobs,
   posts,
+  templates,
 }: Pick<
   RecruitmentPanelProps,
-  "canManageEmployees" | "combinedRoles" | "posts"
+  | "canManageEmployees"
+  | "canWrite"
+  | "combinedRoles"
+  | "jobs"
+  | "posts"
+  | "templates"
 >) {
-  const activeCombinedRoles = combinedRoles.filter(
-    (combinedRole) => combinedRole.status === "Active"
-  )
-  const postByCode = new Map(posts.map((post) => [post.postCode, post]))
-  const combinedAssignmentTargets = activeCombinedRoles.flatMap(
-    (combinedRole) => {
-      const targetPost = postByCode.get(
-        combinedRole.primaryPostCode ?? combinedRole.postCodes[0] ?? ""
-      )
-      return targetPost ? [{ combinedRole, targetPost }] : []
-    }
-  )
-  const combinedPostCodes = new Set(
-    combinedAssignmentTargets.flatMap(
-      ({ combinedRole }) => combinedRole.postCodes
-    )
-  )
-  const standalonePosts = posts.filter(
-    (post) => !combinedPostCodes.has(post.postCode)
-  )
-
   return (
     <>
       {canManageEmployees ? (
@@ -443,66 +403,41 @@ function EmployeePanel({
             panelId="employeeMasterPanel"
             title="Single employee assignment and status"
           >
-            <Field>
-              <FieldLabel htmlFor="employee-post">
-                Approved post or combined job
-              </FieldLabel>
-              <NativeSelect
-                className="w-full"
-                id="employee-post"
-                name="post_id"
-                required
-              >
-                <NativeSelectOption value="">
-                  Select post or combined job
-                </NativeSelectOption>
-                {combinedAssignmentTargets.length ? (
-                  <NativeSelectOptGroup label="Combined jobs">
-                    {combinedAssignmentTargets.map(
-                      ({ combinedRole, targetPost }) => (
-                        <NativeSelectOption
-                          key={combinedRole.id}
-                          value={targetPost.id}
-                        >
-                          {combinedRole.vacancyCode} · {combinedRole.name} ·{" "}
-                          {combinedRole.postCodes.length} posts
-                        </NativeSelectOption>
-                      )
-                    )}
-                  </NativeSelectOptGroup>
-                ) : null}
-                {standalonePosts.length ? (
-                  <NativeSelectOptGroup label="Individual approved posts">
-                    {standalonePosts.map((row) => (
-                      <NativeSelectOption key={row.id} value={row.id}>
-                        {row.postCode} · {row.designation}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelectOptGroup>
-                ) : null}
-              </NativeSelect>
-            </Field>
-            <TextField label="Employee name" name="employee_name" />
-            <TextField label="Employee code" name="employee_code" />
-            <EmployeeStatusFields />
+            <SingleEmployeeAssignmentFields
+              combinedRoles={combinedRoles}
+              posts={posts}
+            />
             <Button className="md:col-span-2 xl:col-span-3" type="submit">
               Update employee status
             </Button>
           </PanelForm>
         </div>
       ) : null}
-      <ApprovedPostsTable posts={posts} />
+      <ApprovedPostsTable
+        canWrite={canWrite}
+        jobs={jobs}
+        posts={posts}
+        templates={templates.filter((template) => !template.combinedRoleId)}
+      />
     </>
   )
 }
 
 function JobsPanel({
   canWrite,
+  combinedRoles,
   jobs,
   posts,
-}: Pick<RecruitmentPanelProps, "canWrite" | "jobs" | "posts">) {
+}: Pick<
+  RecruitmentPanelProps,
+  "canWrite" | "combinedRoles" | "jobs" | "posts"
+>) {
   const recruitablePosts = listRecruitableApprovedPosts(posts, jobs)
+  const combinedRoleById = new Map(combinedRoles.map((role) => [role.id, role]))
   const recruitablePostOptions = recruitablePosts.map((post) => ({
+    combinedPostCodes: post.combinedRoleId
+      ? (combinedRoleById.get(post.combinedRoleId)?.postCodes ?? [])
+      : [],
     combinedRoleId: post.combinedRoleId,
     combinedRoleName: post.combinedRoleName,
     combinedVacancyCode: post.combinedVacancyCode,
@@ -729,7 +664,6 @@ function LogCandidatePanel({
           </PanelForm>
         </div>
       ) : null}
-      <CandidatesTable candidates={candidates} />
     </>
   )
 }
@@ -759,8 +693,9 @@ function InterviewsPanel({
 }: Pick<RecruitmentPanelProps, "canWrite" | "interviews">) {
   return (
     <>
+      <InterviewWorkspace canWrite={canWrite} interviews={interviews} />
       {canWrite ? (
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid gap-6">
           <PanelForm
             action={scheduleInterviewAction}
             description="Plan the next interview round for a candidate application."
@@ -781,7 +716,10 @@ function InterviewsPanel({
                   Select application
                 </NativeSelectOption>
                 {interviews
-                  .filter((row) => row.nextRound !== null)
+                  .filter(
+                    (row) =>
+                      row.nextRound !== null && row.scoreableRound === null
+                  )
                   .map((row) => (
                     <NativeSelectOption
                       key={row.applicationId}
@@ -800,91 +738,18 @@ function InterviewsPanel({
             />
             <Button
               className="md:col-span-2 xl:col-span-3"
-              disabled={!interviews.some((row) => row.nextRound !== null)}
+              disabled={
+                !interviews.some(
+                  (row) => row.nextRound !== null && row.scoreableRound === null
+                )
+              }
               type="submit"
             >
               Schedule interview
             </Button>
           </PanelForm>
-          <Card>
-            <CardHeader>
-              <CardTitle>Interview outcome</CardTitle>
-              <CardDescription>
-                The required round is locked. Complete every preset question to
-                save a unified assessment.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <InterviewOutcomeForm
-                applications={interviews.map((row) => ({
-                  candidateName: `${row.candidateName} · ${row.jobTitle}`,
-                  id: row.applicationId,
-                  scoreableRound: row.scoreableRound,
-                }))}
-                panelId="interviewsPanel"
-              />
-            </CardContent>
-          </Card>
         </div>
       ) : null}
-      <Card>
-        <CardHeader>
-          <CardTitle>Interview workspace</CardTitle>
-          <CardDescription>
-            {interviews.length} candidate applications
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Candidate</TableHead>
-                <TableHead>Job</TableHead>
-                <TableHead>Scheduled</TableHead>
-                <TableHead>Required round</TableHead>
-                <TableHead>Latest outcome</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Joining</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {interviews.length ? (
-                interviews.map((row) => (
-                  <TableRow key={row.applicationId}>
-                    <TableCell>{row.candidateName}</TableCell>
-                    <TableCell>{row.jobTitle}</TableCell>
-                    <TableCell>
-                      {row.interviewAt
-                        ? new Date(row.interviewAt).toLocaleString("en-IN")
-                        : "Not scheduled"}
-                    </TableCell>
-                    <TableCell>
-                      {row.nextRound ??
-                        (row.status === "Approved"
-                          ? "All rounds approved"
-                          : "Application closed")}
-                    </TableCell>
-                    <TableCell>
-                      {row.latestRound
-                        ? `${row.latestRound} · ${row.latestStatus}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={row.status} />
-                    </TableCell>
-                    <TableCell>{row.joiningDate ?? "—"}</TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <EmptyRow
-                  columns={7}
-                  label="No candidate applications found."
-                />
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
     </>
   )
 }
@@ -895,6 +760,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
       return (
         <TemplatePanel
           canWrite={props.canWrite}
+          combinedRoles={props.combinedRoles}
           masters={props.masters}
           selectedTemplateCode={props.selectedTemplateCode}
           templates={props.templates}
@@ -915,14 +781,18 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
       return (
         <EmployeePanel
           canManageEmployees={props.canManageEmployees}
+          canWrite={props.canWrite}
           combinedRoles={props.combinedRoles}
+          jobs={props.jobs}
           posts={props.posts}
+          templates={props.templates}
         />
       )
     case "jobsPanel":
       return (
         <JobsPanel
           canWrite={props.canWrite}
+          combinedRoles={props.combinedRoles}
           jobs={props.jobs}
           posts={props.posts}
         />
