@@ -30,6 +30,14 @@ function values(formData: FormData, key: string) {
 }
 
 function returnPath(formData: FormData) {
+  const returnCandidateId = value(formData, "return_candidate_id")
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      returnCandidateId
+    )
+  ) {
+    return `${hrPath}/candidates/${returnCandidateId}`
+  }
   const returnJobId = value(formData, "return_job_id")
   if (
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -378,6 +386,35 @@ export async function logCandidateEventAction(formData: FormData) {
       notes: value(formData, "notes"),
       title: value(formData, "title"),
     })
+  )
+}
+
+export async function updateCandidateEventAction(formData: FormData) {
+  await mutate(
+    formData,
+    "hr.recruitment.write",
+    (repository, context) =>
+      repository.updateCandidateEvent({
+        ...context,
+        eventId: value(formData, "event_id"),
+        eventType: value(formData, "event_type"),
+        notes: value(formData, "notes"),
+        title: value(formData, "title"),
+      }),
+    "Conversation log updated."
+  )
+}
+
+export async function deleteCandidateEventAction(formData: FormData) {
+  await mutate(
+    formData,
+    "hr.recruitment.write",
+    (repository, context) =>
+      repository.deleteCandidateEvent({
+        ...context,
+        eventId: value(formData, "event_id"),
+      }),
+    "Conversation log deleted."
   )
 }
 

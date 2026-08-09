@@ -307,7 +307,9 @@ export default async function CandidateWorkspacePage({
       </Card>
 
       <ConversationLogsTable
+        canWrite={canWrite}
         events={events}
+        returnCandidateId={candidate.id}
         showCandidate={false}
         title="Candidate conversation history"
       />

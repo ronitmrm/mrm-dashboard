@@ -822,7 +822,12 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
         />
       )
     case "conversationLogsPanel":
-      return <ConversationLogsTable events={props.candidateEvents} />
+      return (
+        <ConversationLogsTable
+          canWrite={props.canWrite}
+          events={props.candidateEvents}
+        />
+      )
     default:
       return <MastersPanel canWrite={props.canWrite} masters={props.masters} />
   }

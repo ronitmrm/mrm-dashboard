@@ -258,6 +258,109 @@ describe("combined job templates", () => {
   })
 })
 
+describe("candidate conversation logs", () => {
+  const organizationId = "00000000-0000-4000-8000-000000000010"
+  const eventId = "00000000-0000-4000-8000-000000000011"
+
+  test("edits a log inside its organization and writes an audit record", async () => {
+    const query = vi.fn(
+      async (statement: string, _parameters?: readonly unknown[]) => {
+        void _parameters
+        if (statement.includes("SELECT * FROM recruitment.candidate_events")) {
+          return {
+            rows: [
+              {
+                event_type: "Phone Call",
+                id: eventId,
+                notes: "Original",
+                title: "Initial Contact",
+              },
+            ],
+          }
+        }
+        if (statement.includes("UPDATE recruitment.candidate_events")) {
+          return {
+            rows: [
+              {
+                event_type: "WhatsApp",
+                id: eventId,
+                notes: "Updated",
+                title: "Follow-up",
+              },
+            ],
+          }
+        }
+        return { rows: [] }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.updateCandidateEvent({
+      eventId,
+      eventType: "WhatsApp",
+      notes: "Updated",
+      organizationId,
+      title: "Follow-up",
+    })
+
+    const updateCall = query.mock.calls.find(([statement]) =>
+      statement.includes("UPDATE recruitment.candidate_events")
+    )
+    expect(updateCall?.[1]).toEqual([
+      "WhatsApp",
+      "Follow-up",
+      "Updated",
+      eventId,
+      organizationId,
+    ])
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("INSERT INTO audit.events")
+      )
+    ).toBe(true)
+  })
+
+  test("deletes a log inside its organization and retains audit evidence", async () => {
+    const query = vi.fn(
+      async (statement: string, _parameters?: readonly unknown[]) => {
+        void _parameters
+        if (statement.includes("DELETE FROM recruitment.candidate_events")) {
+          return {
+            rows: [
+              {
+                event_type: "Phone Call",
+                id: eventId,
+                notes: "Remove me",
+                title: "Follow-up",
+              },
+            ],
+          }
+        }
+        return { rows: [] }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.deleteCandidateEvent({ eventId, organizationId })
+
+    const deleteCall = query.mock.calls.find(([statement]) =>
+      statement.includes("DELETE FROM recruitment.candidate_events")
+    )
+    expect(deleteCall?.[1]).toEqual([eventId, organizationId])
+    const auditCall = query.mock.calls.find(([statement]) =>
+      statement.includes("INSERT INTO audit.events")
+    )
+    expect(auditCall?.[1]?.[0]).toContain("recruitment.candidate_event.deleted")
+    expect(auditCall?.[1]?.[0]).toContain("Remove me")
+  })
+})
+
 describe("job workspace", () => {
   test("returns one job with its applications and every interview round", async () => {
     const query = vi.fn(async (statement: string) => {

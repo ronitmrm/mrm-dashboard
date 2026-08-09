@@ -2857,6 +2857,85 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    async updateCandidateEvent(
+      input: MutationContext & {
+        eventId: string
+        eventType?: string | null
+        notes?: string | null
+        title: string
+      }
+    ) {
+      return transaction(pool, async (client) => {
+        const eventId = required(input.eventId, "Conversation log")
+        const before = await client.query<
+          Record<string, unknown> & { id: string }
+        >(
+          `
+            SELECT * FROM recruitment.candidate_events
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [eventId, input.organizationId]
+        )
+        if (!before.rows[0]) {
+          throw new Error("Conversation log was not found.")
+        }
+        const after = await client.query<
+          Record<string, unknown> & { id: string }
+        >(
+          `
+            UPDATE recruitment.candidate_events
+            SET event_type = $1, title = $2, notes = $3
+            WHERE id = $4 AND organization_id = $5
+            RETURNING *
+          `,
+          [
+            optional(input.eventType) ?? "Conversation",
+            required(input.title, "Conversation title"),
+            optional(input.notes),
+            eventId,
+            input.organizationId,
+          ]
+        )
+        await audit(client, {
+          ...input,
+          afterState: after.rows[0],
+          beforeState: before.rows[0],
+          eventType: "recruitment.candidate_event.updated",
+          targetId: eventId,
+          targetTable: "candidate_events",
+        })
+        return after.rows[0]!
+      })
+    },
+
+    async deleteCandidateEvent(input: MutationContext & { eventId: string }) {
+      return transaction(pool, async (client) => {
+        const eventId = required(input.eventId, "Conversation log")
+        const deleted = await client.query<
+          Record<string, unknown> & { id: string }
+        >(
+          `
+            DELETE FROM recruitment.candidate_events
+            WHERE id = $1 AND organization_id = $2
+            RETURNING *
+          `,
+          [eventId, input.organizationId]
+        )
+        if (!deleted.rows[0]) {
+          throw new Error("Conversation log was not found.")
+        }
+        await audit(client, {
+          ...input,
+          beforeState: deleted.rows[0],
+          eventType: "recruitment.candidate_event.deleted",
+          targetId: eventId,
+          targetTable: "candidate_events",
+        })
+        return { id: eventId }
+      })
+    },
+
     async scheduleInterview(
       input: MutationContext & {
         applicationId: string
