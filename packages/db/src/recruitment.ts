@@ -263,15 +263,29 @@ type CandidateAssignmentInput = MutationContext & {
   jobId: string
 }
 
+const recruitmentAssignmentCommandLimit = 100
+
+function normalizedCandidateAssignmentIds(candidateIds: string[]) {
+  return [
+    ...new Set(candidateIds.map((candidateId) => candidateId.trim())),
+  ].filter(Boolean)
+}
+
+function assertCandidateAssignmentCount(candidateIds: string[]) {
+  if (!candidateIds.length) throw new Error("Select at least one candidate.")
+  if (candidateIds.length > recruitmentAssignmentCommandLimit) {
+    throw new Error(
+      `Select no more than ${recruitmentAssignmentCommandLimit} candidates.`
+    )
+  }
+}
+
 async function assignCandidatesInTransaction(
   client: PoolClient,
   input: CandidateAssignmentInput
 ) {
-  const candidateIds = [
-    ...new Set(input.candidateIds.map((candidateId) => candidateId.trim())),
-  ].filter(Boolean)
-  if (!candidateIds.length) throw new Error("Select at least one candidate.")
-  const jobId = required(input.jobId, "Recruitment opening")
+  const candidateIds = input.candidateIds
+  const jobId = input.jobId
 
   const activeApplications = await client.query<{
     candidate_name: string
@@ -1735,6 +1749,11 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       if (!input.assignments.length) {
         throw new Error("At least one employee assignment is required.")
       }
+      if (input.assignments.length > recruitmentAssignmentCommandLimit) {
+        throw new Error(
+          `At most ${recruitmentAssignmentCommandLimit} employee assignments are allowed.`
+        )
+      }
       return transaction(pool, async (client) => {
         type TargetPost = {
           combined_role_id: string | null
@@ -2110,18 +2129,28 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     async assignCandidate(
       input: MutationContext & { candidateId: string; jobId: string }
     ) {
+      const candidateId = required(input.candidateId, "Candidate")
+      const jobId = required(input.jobId, "Recruitment opening")
       const applications = await transaction(pool, (client) =>
         assignCandidatesInTransaction(client, {
           ...input,
-          candidateIds: [required(input.candidateId, "Candidate")],
+          candidateIds: [candidateId],
+          jobId,
         })
       )
       return { id: applications[0]!.id }
     },
 
     async assignCandidates(input: CandidateAssignmentInput) {
+      const candidateIds = normalizedCandidateAssignmentIds(input.candidateIds)
+      assertCandidateAssignmentCount(candidateIds)
+      const jobId = required(input.jobId, "Recruitment opening")
       return transaction(pool, (client) =>
-        assignCandidatesInTransaction(client, input)
+        assignCandidatesInTransaction(client, {
+          ...input,
+          candidateIds,
+          jobId,
+        })
       )
     },
 

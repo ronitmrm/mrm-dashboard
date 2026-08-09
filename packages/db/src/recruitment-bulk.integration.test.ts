@@ -85,15 +85,25 @@ describe("PostgreSQL recruitment bulk operations", () => {
       })
       const singleStatementCount = statementCount
       statementCount = 0
-      const bulk = await repository.assignCandidates({
-        candidateIds: candidates.rows.slice(1).map((candidate) => candidate.id),
+      const bulkInput = {
+        candidateIds: [
+          candidates.rows[1]!.id,
+          ...candidates.rows.slice(1).map((candidate) => candidate.id),
+        ],
         jobId: jobs.rows[1]!.id,
         organizationId,
-      })
+      }
+      expect(Buffer.byteLength(JSON.stringify(bulkInput))).toBeLessThanOrEqual(
+        512 * 1024
+      )
+      const bulk = await repository.assignCandidates(bulkInput)
       const bulkStatementCount = statementCount
 
       expect(single).toHaveLength(1)
       expect(bulk).toHaveLength(100)
+      expect(Buffer.byteLength(JSON.stringify(bulk))).toBeLessThanOrEqual(
+        512 * 1024
+      )
       expect(bulkStatementCount).toBe(singleStatementCount)
       const applicationIds = [...single, ...bulk].map(
         (application) => application.id
@@ -115,6 +125,29 @@ describe("PostgreSQL recruitment bulk operations", () => {
       expect(audits.rows.map((audit) => audit.candidate_id).sort()).toEqual(
         candidates.rows.map((candidate) => candidate.id).sort()
       )
+
+      statementCount = 0
+      await expect(
+        repository.assignCandidates({
+          candidateIds: [],
+          jobId: jobs.rows[1]!.id,
+          organizationId,
+        })
+      ).rejects.toThrow("Select at least one candidate.")
+      expect(statementCount).toBe(0)
+
+      const oversizedInput = {
+        candidateIds: candidates.rows.map((candidate) => candidate.id),
+        jobId: jobs.rows[1]!.id,
+        organizationId,
+      }
+      expect(
+        Buffer.byteLength(JSON.stringify(oversizedInput))
+      ).toBeLessThanOrEqual(512 * 1024)
+      await expect(repository.assignCandidates(oversizedInput)).rejects.toThrow(
+        "Select no more than 100 candidates."
+      )
+      expect(statementCount).toBe(0)
     } finally {
       await repository.close()
       await trackedPool.end()
@@ -229,7 +262,7 @@ describe("PostgreSQL recruitment bulk operations", () => {
       })
       const singleStatementCount = statementCount
       statementCount = 0
-      const bulk = await repository.bulkAssignEmployees({
+      const bulkInput = {
         assignments: [
           ...posts.rows.slice(1, 100).map((post, index) => ({
             employeeCode: `EMP-${index + 2}-${suffix}`,
@@ -249,11 +282,18 @@ describe("PostgreSQL recruitment bulk operations", () => {
           },
         ],
         organizationId,
-      })
+      }
+      expect(Buffer.byteLength(JSON.stringify(bulkInput))).toBeLessThanOrEqual(
+        512 * 1024
+      )
+      const bulk = await repository.bulkAssignEmployees(bulkInput)
       const bulkStatementCount = statementCount
 
       expect(single).toEqual({ assignmentCount: 1, updatedPostCount: 1 })
       expect(bulk).toEqual({ assignmentCount: 100, updatedPostCount: 101 })
+      expect(Buffer.byteLength(JSON.stringify(bulk))).toBeLessThanOrEqual(
+        512 * 1024
+      )
       expect(singleStatementCount).toBe(5)
       expect(bulkStatementCount).toBe(6)
       const stored = await pool.query<{ count: string }>(
@@ -275,6 +315,34 @@ describe("PostgreSQL recruitment bulk operations", () => {
       )
       expect(Number(stored.rows[0]!.count)).toBe(102)
       expect(Number(audits.rows[0]!.count)).toBe(102)
+
+      statementCount = 0
+      await expect(
+        repository.bulkAssignEmployees({
+          assignments: [],
+          organizationId,
+        })
+      ).rejects.toThrow("At least one employee assignment is required.")
+      expect(statementCount).toBe(0)
+
+      const oversizedAssignments = Array.from({ length: 101 }, (_, index) => ({
+        employeeCode: `EMP-OVERSIZED-${index}-${suffix}`,
+        employeeEvent: "Joined",
+        employeeName: `Oversized Employee ${index}`,
+        rowNumber: index + 2,
+        targetCode: posts.rows[0]!.post_code,
+        targetType: "individual" as const,
+      }))
+      expect(
+        Buffer.byteLength(JSON.stringify(oversizedAssignments))
+      ).toBeLessThanOrEqual(512 * 1024)
+      await expect(
+        repository.bulkAssignEmployees({
+          assignments: oversizedAssignments,
+          organizationId,
+        })
+      ).rejects.toThrow("At most 100 employee assignments are allowed.")
+      expect(statementCount).toBe(0)
 
       const beforeFailure = await pool.query<{
         employee_code: string | null
