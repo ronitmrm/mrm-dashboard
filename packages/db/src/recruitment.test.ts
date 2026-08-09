@@ -749,6 +749,58 @@ describe("deriveRecruitmentPostStatus", () => {
   )
 })
 
+describe("upsertCandidate", () => {
+  test("edits an existing candidate by id and replaces the preferred department", async () => {
+    const candidateId = "00000000-0000-4000-8000-000000000001"
+    const departmentId = "00000000-0000-4000-8000-000000000002"
+    const query = vi.fn(
+      async (statement: string, _parameters?: readonly unknown[]) => {
+        void _parameters
+        if (statement.includes("SELECT id FROM recruitment.departments")) {
+          return { rowCount: 1, rows: [{ id: departmentId }] }
+        }
+        if (statement.includes("UPDATE recruitment.candidates")) {
+          return { rowCount: 1, rows: [{ id: candidateId }] }
+        }
+        return { rowCount: 0, rows: [] }
+      }
+    )
+    const client = {
+      query,
+      release: vi.fn(),
+    } as unknown as PoolClient
+    const pool = {
+      connect: vi.fn(async () => client),
+    } as unknown as Pool
+    const repository = createRecruitmentRepository({ pool })
+
+    await repository.upsertCandidate({
+      candidateId,
+      departmentCode: "QA",
+      name: "Edited candidate",
+      organizationId: "00000000-0000-4000-8000-000000000010",
+      phone: "9999999999",
+    })
+
+    const updateCall = query.mock.calls.find(([statement]) =>
+      statement.includes("UPDATE recruitment.candidates")
+    )
+    expect(updateCall?.[1]?.[9]).toBe(candidateId)
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("DELETE FROM recruitment.candidate_departments")
+      )
+    ).toBe(true)
+    expect(
+      query.mock.calls.some(
+        ([statement, parameters]) =>
+          statement.includes("INSERT INTO recruitment.candidate_departments") &&
+          parameters?.[1] === departmentId
+      )
+    ).toBe(true)
+  })
+})
+
 describe("deriveRecruitmentEmployeeAssignment", () => {
   test("records an appointment before the person joins", () => {
     expect(

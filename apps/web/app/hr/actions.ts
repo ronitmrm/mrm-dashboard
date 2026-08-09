@@ -291,6 +291,7 @@ export async function saveCandidateAction(formData: FormData) {
     }
     const candidate = await repository.upsertCandidate({
       actorUserId: session.user.id,
+      candidateId: value(formData, "candidate_id"),
       currentCompany: value(formData, "current_company"),
       departmentCode: value(formData, "department_code"),
       email: value(formData, "email"),

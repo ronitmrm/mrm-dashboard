@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { createRecruitmentRepository } from "@workspace/db"
+import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -11,6 +12,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import { Field, FieldLabel } from "@workspace/ui/components/field"
+import { Input } from "@workspace/ui/components/input"
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
 import {
   Table,
   TableBody,
@@ -19,37 +26,63 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
+import { Textarea } from "@workspace/ui/components/textarea"
 import { ArrowLeft, FileText } from "lucide-react"
 
+import { saveCandidateAction } from "@/app/hr/actions"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  listGrantedCapabilities,
+  requireCapability,
+} from "@/lib/auth/require-capability"
 
 export const dynamic = "force-dynamic"
 
 export default async function CandidateWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ error?: string; success?: string }>
 }) {
   const { id } = await params
-  await requireCapability("hr.recruitment.read", "/hr?panel=candidatesPanel")
+  const feedback = await searchParams
+  const session = await requireCapability(
+    "hr.recruitment.read",
+    "/hr?panel=candidatesPanel"
+  )
+  const canWrite = (
+    await listGrantedCapabilities(session.user.id, ["hr.recruitment.write"])
+  ).includes("hr.recruitment.write")
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const workspace = await (async () => {
+  const loaded = await (async () => {
     try {
       const organizationId = await repository.organizationIdForCode("MRMPL")
-      return repository.getCandidateWorkspace(organizationId, id)
+      const [workspace, masters] = await Promise.all([
+        repository.getCandidateWorkspace(organizationId, id),
+        repository.listMasters(organizationId),
+      ])
+      return { masters, workspace }
     } finally {
       await repository.close()
     }
   })()
+  const { masters, workspace } = loaded
   if (!workspace) notFound()
 
   const { applications, candidate, events } = workspace
   return (
     <div className="grid gap-6">
+      {feedback.error || feedback.success ? (
+        <Alert variant={feedback.error ? "destructive" : "default"}>
+          <AlertDescription>
+            {feedback.error ?? feedback.success}
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <Button asChild className="w-fit" size="sm" variant="ghost">
         <Link href="/hr?panel=candidatesPanel">
           <ArrowLeft data-icon="inline-start" />
@@ -98,6 +131,127 @@ export default async function CandidateWorkspacePage({
           </Card>
         ))}
       </section>
+
+      {canWrite ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Edit candidate</CardTitle>
+            <CardDescription>
+              Update candidate details, preferred department, or replace the
+              resume PDF.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              action={saveCandidateAction}
+              className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+            >
+              <input name="candidate_id" type="hidden" value={candidate.id} />
+              <input
+                name="return_to"
+                type="hidden"
+                value={`/hr/candidates/${candidate.id}`}
+              />
+              <Field>
+                <FieldLabel htmlFor="edit-candidate-name">Name</FieldLabel>
+                <Input
+                  defaultValue={candidate.name}
+                  id="edit-candidate-name"
+                  name="name"
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-candidate-phone">Phone</FieldLabel>
+                <Input
+                  defaultValue={candidate.phone}
+                  id="edit-candidate-phone"
+                  name="phone"
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-candidate-email">Email</FieldLabel>
+                <Input
+                  defaultValue={candidate.email ?? ""}
+                  id="edit-candidate-email"
+                  name="email"
+                  type="email"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-candidate-department">
+                  Preferred department
+                </FieldLabel>
+                <NativeSelect
+                  className="w-full"
+                  defaultValue={candidate.preferredDepartmentCode ?? ""}
+                  id="edit-candidate-department"
+                  name="department_code"
+                >
+                  <NativeSelectOption value="">Not selected</NativeSelectOption>
+                  {masters.departments.map((department) => (
+                    <NativeSelectOption
+                      key={department.id}
+                      value={department.code}
+                    >
+                      {department.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-candidate-company">
+                  Current company
+                </FieldLabel>
+                <Input
+                  defaultValue={candidate.currentCompany ?? ""}
+                  id="edit-candidate-company"
+                  name="current_company"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-candidate-experience">
+                  Experience
+                </FieldLabel>
+                <Input
+                  defaultValue={candidate.experience ?? ""}
+                  id="edit-candidate-experience"
+                  name="experience"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-candidate-source">Source</FieldLabel>
+                <Input
+                  defaultValue={candidate.source ?? ""}
+                  id="edit-candidate-source"
+                  name="source"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-candidate-resume">
+                  Resume PDF
+                </FieldLabel>
+                <Input
+                  accept="application/pdf,.pdf"
+                  id="edit-candidate-resume"
+                  name="resume"
+                  type="file"
+                />
+              </Field>
+              <Field className="md:col-span-2 xl:col-span-3">
+                <FieldLabel htmlFor="edit-candidate-notes">
+                  Change note
+                </FieldLabel>
+                <Textarea id="edit-candidate-notes" name="notes" />
+              </Field>
+              <Button className="md:col-span-2 xl:col-span-3" type="submit">
+                Save candidate changes
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

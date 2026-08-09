@@ -93,6 +93,7 @@ export type RecruitmentCandidateRow = {
   hasResume: boolean
   name: string
   phone: string
+  preferredDepartmentCode: string | null
   resumeFileName: string | null
   source: string | null
   status: string
@@ -877,6 +878,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         id: string
         name: string
         phone: string
+        preferred_department_code: string | null
         resume_file_name: string | null
         source: string | null
         status: string
@@ -885,6 +887,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           SELECT candidate.id, candidate.name, candidate.phone, candidate.email,
             candidate.current_company, candidate.experience, candidate.source,
             candidate.status, resume.file_name AS resume_file_name,
+            preferred_department.code AS preferred_department_code,
             (resume.id IS NOT NULL) AS has_resume,
             COALESCE(array_agg(DISTINCT department.name)
               FILTER (WHERE department.id IS NOT NULL), '{}') AS departments,
@@ -898,6 +901,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             ON candidate_department.candidate_id = candidate.id
           LEFT JOIN recruitment.departments department
             ON department.id = candidate_department.department_id
+          LEFT JOIN recruitment.departments preferred_department
+            ON preferred_department.id = candidate.preferred_department_id
           LEFT JOIN recruitment.applications application
             ON application.candidate_id = candidate.id
           LEFT JOIN recruitment.candidate_events event
@@ -915,7 +920,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             LIMIT 1
           ) resume ON true
           WHERE candidate.organization_id = $1
-          GROUP BY candidate.id, resume.id, resume.file_name
+          GROUP BY candidate.id, resume.id, resume.file_name,
+            preferred_department.code
           ORDER BY candidate.updated_at DESC, candidate.name
           LIMIT 500
         `,
@@ -933,6 +939,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         id: row.id,
         name: row.name,
         phone: row.phone,
+        preferredDepartmentCode: row.preferred_department_code,
         resumeFileName: row.resume_file_name,
         source: row.source,
         status: row.status,
@@ -2434,6 +2441,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
     async upsertCandidate(
       input: MutationContext & {
+        candidateId?: string | null
         currentCompany?: string | null
         departmentCode?: string | null
         email?: string | null
@@ -2445,55 +2453,96 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }
     ) {
       return transaction(pool, async (client) => {
-        const result = await client.query<{ id: string }>(
-          `
-            INSERT INTO recruitment.candidates (
-              organization_id, name, phone, email, current_company,
-              experience, source, preferred_department_id,
-              created_by_user_id, updated_by_user_id, source_system,
-              source_table, source_id
+        const candidateId = optional(input.candidateId)
+        const departmentCode = optional(input.departmentCode)
+        let departmentId: string | null = null
+        if (departmentCode) {
+          const department = await client.query<{ id: string }>(
+            `
+              SELECT id FROM recruitment.departments
+              WHERE organization_id = $1 AND lower(code) = lower($2)
+            `,
+            [input.organizationId, departmentCode]
+          )
+          if (!department.rows[0]) {
+            throw new Error("Preferred department was not found in the master.")
+          }
+          departmentId = department.rows[0].id
+        }
+        const parameters = [
+          input.organizationId,
+          required(input.name, "Candidate name"),
+          required(input.phone, "Candidate phone"),
+          optional(input.email),
+          optional(input.currentCompany),
+          optional(input.experience),
+          optional(input.source),
+          departmentId,
+          input.actorUserId ?? null,
+        ]
+        if (candidateId) {
+          const duplicatePhone = await client.query<{ id: string }>(
+            `
+              SELECT id FROM recruitment.candidates
+              WHERE organization_id = $1 AND phone = $2 AND id <> $3
+              LIMIT 1
+            `,
+            [input.organizationId, parameters[2], candidateId]
+          )
+          if (duplicatePhone.rows[0]) {
+            throw new Error("Another candidate already uses this phone number.")
+          }
+        }
+        const result = candidateId
+          ? await client.query<{ id: string }>(
+              `
+                UPDATE recruitment.candidates
+                SET name = $2, phone = $3, email = $4, current_company = $5,
+                  experience = $6, source = $7, preferred_department_id = $8,
+                  updated_by_user_id = $9, updated_at = now(),
+                  row_version = row_version + 1
+                WHERE organization_id = $1 AND id = $10
+                RETURNING id
+              `,
+              [...parameters, candidateId]
             )
-            SELECT $1, $2, $3, $4, $5, $6, $7, department.id,
-              $8, $8, 'mrm-dashboard', 'candidates', $9
-            FROM (SELECT 1) seed
-            LEFT JOIN recruitment.departments department
-              ON department.organization_id = $1
-             AND lower(department.code) = lower($10)
-            ON CONFLICT (organization_id, phone) DO UPDATE SET
-              name = EXCLUDED.name, email = EXCLUDED.email,
-              current_company = EXCLUDED.current_company,
-              experience = EXCLUDED.experience, source = EXCLUDED.source,
-              preferred_department_id = EXCLUDED.preferred_department_id,
-              updated_by_user_id = EXCLUDED.updated_by_user_id,
-              updated_at = now(),
-              row_version = recruitment.candidates.row_version + 1
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            required(input.name, "Candidate name"),
-            required(input.phone, "Candidate phone"),
-            optional(input.email),
-            optional(input.currentCompany),
-            optional(input.experience),
-            optional(input.source),
-            input.actorUserId ?? null,
-            randomUUID(),
-            optional(input.departmentCode) ?? "",
-          ]
+          : await client.query<{ id: string }>(
+              `
+                INSERT INTO recruitment.candidates (
+                  organization_id, name, phone, email, current_company,
+                  experience, source, preferred_department_id,
+                  created_by_user_id, updated_by_user_id, source_system,
+                  source_table, source_id
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9,
+                  'mrm-dashboard', 'candidates', $10)
+                ON CONFLICT (organization_id, phone) DO UPDATE SET
+                  name = EXCLUDED.name, email = EXCLUDED.email,
+                  current_company = EXCLUDED.current_company,
+                  experience = EXCLUDED.experience, source = EXCLUDED.source,
+                  preferred_department_id = EXCLUDED.preferred_department_id,
+                  updated_by_user_id = EXCLUDED.updated_by_user_id,
+                  updated_at = now(),
+                  row_version = recruitment.candidates.row_version + 1
+                RETURNING id
+              `,
+              [...parameters, randomUUID()]
+            )
+        if (!result.rows[0]) throw new Error("Candidate was not found.")
+        const savedCandidateId = result.rows[0].id
+        await client.query(
+          `DELETE FROM recruitment.candidate_departments WHERE candidate_id = $1`,
+          [savedCandidateId]
         )
-        const candidateId = result.rows[0]!.id
-        if (optional(input.departmentCode)) {
+        if (departmentId) {
           await client.query(
             `
               INSERT INTO recruitment.candidate_departments (
                 candidate_id, department_id
               )
-              SELECT $1, id FROM recruitment.departments
-              WHERE organization_id = $2 AND lower(code) = lower($3)
-              ON CONFLICT DO NOTHING
+              VALUES ($1, $2)
             `,
-            [candidateId, input.organizationId, input.departmentCode]
+            [savedCandidateId, departmentId]
           )
         }
         if (optional(input.notes)) {
@@ -2508,7 +2557,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             `,
             [
               input.organizationId,
-              candidateId,
+              savedCandidateId,
               optional(input.notes),
               input.actorUserId ?? null,
               randomUUID(),
@@ -2518,10 +2567,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         await audit(client, {
           ...input,
           eventType: "recruitment.candidate.saved",
-          targetId: candidateId,
+          targetId: savedCandidateId,
           targetTable: "candidates",
         })
-        return { id: candidateId }
+        return { id: savedCandidateId }
       })
     },
 
