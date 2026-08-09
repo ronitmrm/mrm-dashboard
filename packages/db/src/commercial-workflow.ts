@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto"
 import path from "node:path"
 
-import type { Pool, PoolClient } from "pg"
+import type { Pool, PoolClient, QueryResult } from "pg"
 
+import { boundedResult } from "./commercial-bounds"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
 type RepositoryOptions = RepositoryPoolOptions
@@ -77,6 +78,189 @@ const asTrimmed = (value: unknown) =>
 
 const boundedListLimit = (limit: number) =>
   Math.min(Math.max(Math.floor(limit), 1), 500)
+
+const operationalRootLimit = (limit: number) =>
+  Math.min(boundedListLimit(limit), 200)
+
+type EnquiryRootDatabaseRow = {
+  buyer_name: string | null
+  company_name: string
+  created_at: Date
+  customer_uid: string
+  enquiry_number: string
+  id: string
+  organization_id: string
+  priority: string
+  received_on: string
+  remarks: string | null
+  source: string
+  status: string
+  technical_handover_at: Date | null
+  technical_handover_status: string
+}
+
+type EnquiryStatsDatabaseRow = {
+  design_task_count: string
+  enquiry_id: string
+  item_count: string
+  latest_quote_sent_at: Date | null
+  not_feasible_line_count: string
+  open_sales_clarification_count: string
+  ordered_line_count: string
+  pending_line_count: string
+  po_line_count: string
+  quote_item_count: string
+  quote_sent_count: string
+  quoted_line_count: string
+  technical_started_count: string
+}
+
+type FollowupStatsDatabaseRow = {
+  due_followup_count: string
+  enquiry_id: string
+  next_followup_due: string | null
+}
+
+type EnquiryLineExportDatabaseRow = {
+  customer_part_code: string | null
+  description: string
+  drawing_file_name: string | null
+  drawing_reference: string | null
+  grade: string | null
+  id: string
+  line_number: number
+  quantity: string
+  remarks: string | null
+  target_price: string | null
+}
+
+async function enquiryRowsWithRelations(
+  queryable: Pick<Pool, "query">,
+  roots: EnquiryRootDatabaseRow[]
+) {
+  if (!roots.length) return []
+  const rootIds = roots.map((root) => root.id)
+  const related = await queryable.query<EnquiryStatsDatabaseRow>(
+    `
+      SELECT root.enquiry_id,
+        count(DISTINCT item.id)::text AS item_count,
+        count(DISTINCT item.id) FILTER (
+          WHERE quote.id IS NOT NULL
+        )::text AS quoted_line_count,
+        count(DISTINCT item.id) FILTER (
+          WHERE po_line.id IS NOT NULL
+        )::text AS ordered_line_count,
+        count(DISTINCT item.id) FILTER (
+          WHERE item.technical_review_status IN (
+            'Pending Review', 'Need Clarification',
+            'Need Sales Confirmation'
+          )
+        )::text AS pending_line_count,
+        count(DISTINCT item.id) FILTER (
+          WHERE item.technical_review_status = 'Not Feasible'
+        )::text AS not_feasible_line_count,
+        count(DISTINCT quote.id)::text AS quote_item_count,
+        count(DISTINCT quote.id) FILTER (
+          WHERE quote.sent_at IS NOT NULL
+        )::text AS quote_sent_count,
+        max(quote.sent_at) AS latest_quote_sent_at,
+        count(DISTINCT po_line.id)::text AS po_line_count,
+        count(DISTINCT item.id) FILTER (
+          WHERE item.reviewed_at IS NOT NULL
+        )::text AS technical_started_count,
+        count(DISTINCT design.id)::text AS design_task_count,
+        count(DISTINCT clarification.id)::text
+          AS open_sales_clarification_count
+      FROM unnest($1::uuid[]) root(enquiry_id)
+      LEFT JOIN sales.enquiry_items item
+        ON item.enquiry_id = root.enquiry_id
+      LEFT JOIN sales.quote_items quote
+        ON quote.enquiry_item_id = item.id
+      LEFT JOIN sales.purchase_order_lines po_line
+        ON po_line.quote_item_id = quote.id
+      LEFT JOIN sales.design_tasks design
+        ON design.enquiry_item_id = item.id
+      LEFT JOIN sales.clarification_tasks clarification
+        ON clarification.enquiry_id = root.enquiry_id
+        AND clarification.target_stage = 'Sales'
+        AND clarification.status = 'Open'
+      GROUP BY root.enquiry_id
+    `,
+    [rootIds]
+  )
+  const followups = await queryable.query<FollowupStatsDatabaseRow>(
+    `
+      SELECT root.enquiry_id,
+        (min(followup.due_on) FILTER (
+          WHERE followup.status = 'Pending'
+        ))::text AS next_followup_due,
+        (count(followup.id) FILTER (
+          WHERE followup.status = 'Pending'
+            AND followup.due_on <= current_date
+        ))::text AS due_followup_count
+      FROM unnest($1::uuid[]) root(enquiry_id)
+      LEFT JOIN sales.followups followup
+        ON followup.enquiry_id = root.enquiry_id
+      GROUP BY root.enquiry_id
+    `,
+    [rootIds]
+  )
+  const relatedByEnquiry = new Map(
+    related.rows.map((row) => [row.enquiry_id, row] as const)
+  )
+  const followupsByEnquiry = new Map(
+    followups.rows.map((row) => [row.enquiry_id, row] as const)
+  )
+
+  return roots.map((root) => {
+    const stats = relatedByEnquiry.get(root.id)
+    const followup = followupsByEnquiry.get(root.id)
+    const quoteItemCount = Number(stats?.quote_item_count ?? 0)
+    const poLineCount = Number(stats?.po_line_count ?? 0)
+    const technicalStartedCount = Number(stats?.technical_started_count ?? 0)
+    const designTaskCount = Number(stats?.design_task_count ?? 0)
+    const openSalesClarificationCount = Number(
+      stats?.open_sales_clarification_count ?? 0
+    )
+
+    return {
+      buyerName: root.buyer_name,
+      canDelete:
+        quoteItemCount === 0 &&
+        poLineCount === 0 &&
+        root.technical_handover_status !== "Handed Over" &&
+        technicalStartedCount === 0 &&
+        designTaskCount === 0,
+      canEdit:
+        quoteItemCount === 0 &&
+        poLineCount === 0 &&
+        (root.technical_handover_status !== "Handed Over" ||
+          openSalesClarificationCount > 0 ||
+          (technicalStartedCount === 0 && designTaskCount === 0)),
+      companyName: root.company_name,
+      customerUid: root.customer_uid,
+      dueFollowupCount: Number(followup?.due_followup_count ?? 0),
+      enquiryNumber: root.enquiry_number,
+      id: root.id,
+      itemCount: Number(stats?.item_count ?? 0),
+      latestQuoteSentAt: stats?.latest_quote_sent_at ?? null,
+      nextFollowupDue: followup?.next_followup_due ?? null,
+      notFeasibleLineCount: Number(stats?.not_feasible_line_count ?? 0),
+      orderedLineCount: Number(stats?.ordered_line_count ?? 0),
+      organizationId: root.organization_id,
+      pendingLineCount: Number(stats?.pending_line_count ?? 0),
+      priority: root.priority,
+      quoteSentCount: Number(stats?.quote_sent_count ?? 0),
+      quotedLineCount: Number(stats?.quoted_line_count ?? 0),
+      receivedOn: root.received_on,
+      remarks: root.remarks,
+      source: root.source,
+      status: root.status,
+      technicalHandoverAt: root.technical_handover_at,
+      technicalHandoverStatus: root.technical_handover_status,
+    }
+  })
+}
 
 const asNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value)
@@ -4423,6 +4607,305 @@ export function createCommercialWorkflowRepository(options: RepositoryOptions) {
         technicalHandoverAt: row.technical_handover_at,
         technicalHandoverStatus: row.technical_handover_status,
       }))
+    },
+
+    async listEnquiriesBounded(organizationCode: string, requestedLimit = 200) {
+      const limit = operationalRootLimit(requestedLimit)
+      const roots = await pool.query<EnquiryRootDatabaseRow>(
+        `
+          SELECT enquiry.id, enquiry.organization_id,
+            enquiry.enquiry_number, enquiry.status,
+            enquiry.technical_handover_status,
+            enquiry.technical_handover_at, enquiry.received_on::text,
+            enquiry.source, enquiry.priority, enquiry.buyer_name,
+            enquiry.remarks, enquiry.created_at, customer.customer_uid,
+            customer.company_name
+          FROM sales.enquiries enquiry
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          WHERE lower(organization.code) = lower($1)
+          ORDER BY enquiry.created_at DESC, enquiry.id DESC
+          LIMIT $2
+        `,
+        [organizationCode.trim(), limit + 1]
+      )
+      const rows = await enquiryRowsWithRelations(
+        pool,
+        roots.rows.slice(0, limit)
+      )
+      return boundedResult(rows, limit, roots.rows.length > limit)
+    },
+
+    async listTechnicalReviewQueueBounded(
+      organizationCode: string,
+      requestedLimit = 200
+    ) {
+      const limit = operationalRootLimit(requestedLimit)
+      const roots = await pool.query<{
+        company_name: string
+        created_at: Date
+        customer_part_code: string
+        customer_uid: string
+        description: string
+        drawing_reference: string | null
+        enquiry_id: string
+        enquiry_item_id: string
+        enquiry_number: string
+        feasibility_reason: string | null
+        grade: string | null
+        line_number: number
+        missing_information: string | null
+        quantity: string
+        reviewed_at: Date | null
+        target_price: string | null
+        technical_checklist: TechnicalChecklist
+        technical_remarks: string | null
+        technical_review_status: string
+      }>(
+        `
+          SELECT enquiry_item.id AS enquiry_item_id,
+            enquiry.id AS enquiry_id, enquiry.enquiry_number,
+            enquiry.created_at, customer.customer_uid,
+            customer.company_name, enquiry_item.line_number,
+            enquiry_item.customer_part_code, enquiry_item.description,
+            enquiry_item.grade, enquiry_item.quantity::text,
+            enquiry_item.target_price::text,
+            enquiry_item.drawing_reference,
+            enquiry_item.technical_review_status,
+            enquiry_item.technical_checklist,
+            enquiry_item.missing_information,
+            enquiry_item.feasibility_reason,
+            enquiry_item.technical_remarks, enquiry_item.reviewed_at
+          FROM sales.enquiry_items enquiry_item
+          JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          WHERE lower(organization.code) = lower($1)
+            AND enquiry_item.linked_enquiry_item_id IS NULL
+            AND enquiry.technical_handover_status = 'Handed Over'
+            AND enquiry_item.technical_review_status
+              <> 'Need Sales Confirmation'
+            AND NOT EXISTS (
+              SELECT 1 FROM sales.clarification_tasks sales_clarification
+              WHERE sales_clarification.enquiry_item_id = enquiry_item.id
+                AND sales_clarification.status = 'Open'
+                AND sales_clarification.target_stage = 'Sales'
+            )
+          ORDER BY CASE enquiry_item.technical_review_status
+              WHEN 'Pending Review' THEN 0
+              WHEN 'Need Clarification' THEN 1
+              WHEN 'Feasible' THEN 2
+              WHEN 'Not Feasible' THEN 3
+              ELSE 5
+            END,
+            enquiry.created_at DESC, enquiry_item.line_number,
+            enquiry_item.id
+          LIMIT $2
+        `,
+        [organizationCode.trim(), limit + 1]
+      )
+      const returnedRoots = roots.rows.slice(0, limit)
+      const clarifications = returnedRoots.length
+        ? await pool.query<{
+            enquiry_item_id: string
+            question: string
+            source_stage: string
+          }>(
+            `
+              SELECT DISTINCT ON (clarification.enquiry_item_id)
+                clarification.enquiry_item_id, clarification.question,
+                clarification.source_stage
+              FROM sales.clarification_tasks clarification
+              WHERE clarification.enquiry_item_id = ANY($1::uuid[])
+                AND clarification.status = 'Open'
+                AND clarification.target_stage = 'Technical'
+              ORDER BY clarification.enquiry_item_id,
+                clarification.created_at DESC, clarification.id DESC
+            `,
+            [returnedRoots.map((root) => root.enquiry_item_id)]
+          )
+        : { rows: [] }
+      const clarificationByItem = new Map(
+        clarifications.rows.map((row) => [row.enquiry_item_id, row] as const)
+      )
+      const rows = returnedRoots.map((row) => {
+        const clarification = clarificationByItem.get(row.enquiry_item_id)
+        return {
+          companyName: row.company_name,
+          customerPartCode: row.customer_part_code,
+          customerUid: row.customer_uid,
+          description: row.description,
+          drawingReference: row.drawing_reference,
+          enquiryId: row.enquiry_id,
+          enquiryItemId: row.enquiry_item_id,
+          enquiryNumber: row.enquiry_number,
+          feasibilityReason: row.feasibility_reason,
+          grade: row.grade,
+          latestClarificationMessage: clarification?.question ?? null,
+          latestClarificationSource: clarification?.source_stage ?? null,
+          lineNumber: row.line_number,
+          missingInformation: row.missing_information,
+          quantity: Number(row.quantity),
+          reviewedAt: row.reviewed_at,
+          targetPrice:
+            row.target_price === null ? null : Number(row.target_price),
+          technicalChecklist: row.technical_checklist ?? {},
+          technicalRemarks: row.technical_remarks,
+          technicalReviewStatus: row.technical_review_status,
+        }
+      })
+      return boundedResult(rows, limit, roots.rows.length > limit)
+    },
+
+    async listEnquiriesForExport(organizationCode: string, batchSize = 500) {
+      const limit = boundedListLimit(batchSize)
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        const rows: Awaited<ReturnType<typeof enquiryRowsWithRelations>> = []
+        let cursorCreatedAt: Date | null = null
+        let cursorId: string | null = null
+
+        while (true) {
+          const roots: QueryResult<EnquiryRootDatabaseRow> =
+            await client.query<EnquiryRootDatabaseRow>(
+              `
+              SELECT enquiry.id, enquiry.organization_id,
+                enquiry.enquiry_number, enquiry.status,
+                enquiry.technical_handover_status,
+                enquiry.technical_handover_at, enquiry.received_on::text,
+                enquiry.source, enquiry.priority, enquiry.buyer_name,
+                enquiry.remarks, enquiry.created_at, customer.customer_uid,
+                customer.company_name
+              FROM sales.enquiries enquiry
+              JOIN core.organizations organization
+                ON organization.id = enquiry.organization_id
+              JOIN sales.customers customer
+                ON customer.id = enquiry.customer_id
+              WHERE lower(organization.code) = lower($1)
+                AND (
+                  $2::timestamptz IS NULL
+                  OR (enquiry.created_at, enquiry.id)
+                    < ($2::timestamptz, $3::uuid)
+                )
+              ORDER BY enquiry.created_at DESC, enquiry.id DESC
+              LIMIT $4
+            `,
+              [organizationCode.trim(), cursorCreatedAt, cursorId, limit]
+            )
+          if (!roots.rows.length) break
+          rows.push(...(await enquiryRowsWithRelations(client, roots.rows)))
+          const cursor: EnquiryRootDatabaseRow = roots.rows.at(-1)!
+          cursorCreatedAt = cursor.created_at
+          cursorId = cursor.id
+          if (roots.rows.length < limit) break
+        }
+
+        return rows
+      })
+    },
+
+    async getEnquiryLinesForExport(enquiryId: string, batchSize = 500) {
+      const limit = boundedListLimit(batchSize)
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+        )
+        const enquiry = await client.query<{
+          company_name: string
+          customer_uid: string
+          enquiry_number: string
+        }>(
+          `
+            SELECT enquiry.enquiry_number, customer.customer_uid,
+              customer.company_name
+            FROM sales.enquiries enquiry
+            JOIN sales.customers customer ON customer.id = enquiry.customer_id
+            WHERE enquiry.id = $1
+          `,
+          [enquiryId]
+        )
+        if (!enquiry.rows[0]) throw new Error("ENQ was not found.")
+
+        const items: Array<{
+          customerPartCode: string | null
+          description: string
+          drawingFileName: string | null
+          drawingReference: string | null
+          grade: string | null
+          id: string
+          lineNumber: number
+          quantity: number
+          remarks: string | null
+          targetPrice: number | null
+        }> = []
+        let cursorLineNumber: number | null = null
+        let cursorId: string | null = null
+
+        while (true) {
+          const batch: QueryResult<EnquiryLineExportDatabaseRow> =
+            await client.query<EnquiryLineExportDatabaseRow>(
+              `
+              SELECT item.id, item.line_number, item.customer_part_code,
+                item.description, item.grade, item.quantity::text,
+                item.target_price::text, item.drawing_reference,
+                item.remarks, drawing.file_name AS drawing_file_name
+              FROM sales.enquiry_items item
+              LEFT JOIN LATERAL (
+                SELECT file.file_name
+                FROM core.file_links file_link
+                JOIN core.files file ON file.id = file_link.file_id
+                WHERE file_link.target_schema = 'sales'
+                  AND file_link.target_table = 'enquiry_items'
+                  AND file_link.target_id = item.id
+                  AND file_link.purpose = 'drawing'
+                ORDER BY file.created_at DESC, file.id DESC
+                LIMIT 1
+              ) drawing ON true
+              WHERE item.enquiry_id = $1
+                AND (
+                  $2::integer IS NULL
+                  OR (item.line_number, item.id)
+                    > ($2::integer, $3::uuid)
+                )
+              ORDER BY item.line_number, item.id
+              LIMIT $4
+            `,
+              [enquiryId, cursorLineNumber, cursorId, limit]
+            )
+          items.push(
+            ...batch.rows.map((row) => ({
+              customerPartCode: row.customer_part_code,
+              description: row.description,
+              drawingFileName: row.drawing_file_name,
+              drawingReference: row.drawing_reference,
+              grade: row.grade,
+              id: row.id,
+              lineNumber: row.line_number,
+              quantity: Number(row.quantity),
+              remarks: row.remarks,
+              targetPrice:
+                row.target_price === null ? null : Number(row.target_price),
+            }))
+          )
+          if (!batch.rows.length || batch.rows.length < limit) break
+          const cursor: EnquiryLineExportDatabaseRow = batch.rows.at(-1)!
+          cursorLineNumber = cursor.line_number
+          cursorId = cursor.id
+        }
+
+        return {
+          enquiry: {
+            companyName: enquiry.rows[0].company_name,
+            customerUid: enquiry.rows[0].customer_uid,
+            enquiryNumber: enquiry.rows[0].enquiry_number,
+          },
+          items,
+        }
+      })
     },
   }
 }

@@ -33,19 +33,27 @@ export function exactPageResult<Row extends { totalCount: number }>(
   }
 }
 
-export function selectorResult<Row>(
+export function boundedResult<Row>(
   rows: Row[],
-  limit = commercialSelectorLimit
+  limit: number,
+  truncated = rows.length > limit
 ): BoundedCommercialResult<Row> {
   const resultRows = rows.slice(0, limit)
   return {
     coverage: {
       limit,
       returned: resultRows.length,
-      truncated: rows.length > limit,
+      truncated,
     },
     rows: resultRows,
   }
+}
+
+export function selectorResult<Row>(
+  rows: Row[],
+  limit = commercialSelectorLimit
+): BoundedCommercialResult<Row> {
+  return boundedResult(rows, limit)
 }
 
 export function selectorSearchTerm(value: string) {
