@@ -38,10 +38,11 @@ import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-acce
 import {
   administrationNavigation,
   commercialNavigation,
-  dashboardNavigation,
   dashboardTabHref,
   hrNavigation,
   navigationHrefMatches,
+  planningHolidayNavigation,
+  productionFloorNavigation,
   type DashboardTabId,
 } from "@/lib/unified-navigation"
 
@@ -145,6 +146,7 @@ export function UnifiedSidebarNavigation({
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const PlanningHolidayIcon = planningHolidayNavigation.icon
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [menuSearch, setMenuSearch] = useState("")
   const storedSections = useSyncExternalStore(
@@ -183,13 +185,21 @@ export function UnifiedSidebarNavigation({
         .map((floor) => ({
           floor,
           items: filterProductionItems(
-            dashboardNavigation,
+            productionFloorNavigation,
             normalizedMenuSearch,
             `${floor.label} ${floor.shortLabel} production`.toLowerCase()
           ),
         }))
         .filter(({ items }) => items.length)
     : []
+  const planningHolidayMatchesSearch =
+    navigationAccess.operations &&
+    (!normalizedMenuSearch ||
+      [
+        planningHolidayNavigation.title,
+        planningHolidayNavigation.subtitle,
+        "holiday calendar",
+      ].some((value) => value.toLowerCase().includes(normalizedMenuSearch)))
   const administrationMatchesSearch =
     navigationAccess.administration &&
     (!normalizedMenuSearch ||
@@ -322,13 +332,56 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
+      {planningHolidayMatchesSearch ? (
+        <SidebarGroup className="px-3 py-0.5">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                  isActive={activeDashboardTab === planningHolidayNavigation.id}
+                >
+                  {onDashboardTabSelect ? (
+                    <button
+                      onClick={() =>
+                        onDashboardTabSelect(
+                          planningHolidayNavigation.id,
+                          activeProductionFloor
+                        )
+                      }
+                      type="button"
+                    >
+                      <PlanningHolidayIcon />
+                      <span>{planningHolidayNavigation.title}</span>
+                    </button>
+                  ) : (
+                    <a
+                      href={dashboardTabHref(
+                        planningHolidayNavigation.id,
+                        activeProductionFloor
+                      )}
+                    >
+                      <PlanningHolidayIcon />
+                      <span>{planningHolidayNavigation.title}</span>
+                    </a>
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ) : null}
+
       {filteredProductionNavigation.map(({ floor, items }) => {
         const sectionId = productionSectionIds[floor.code]
         return (
           <NavigationSection
             icon={Factory}
             isActive={
-              activeDashboardTab !== undefined &&
+              productionFloorNavigation.some(
+                (item) => item.id === activeDashboardTab
+              ) &&
               floor.code === activeProductionFloor
             }
             key={floor.code}
@@ -407,6 +460,7 @@ export function UnifiedSidebarNavigation({
       {normalizedMenuSearch &&
       !filteredHrNavigation.length &&
       !filteredCommercialNavigation.length &&
+      !planningHolidayMatchesSearch &&
       !filteredProductionNavigation.length &&
       !administrationMatchesSearch ? (
         <p className="px-6 py-8 text-center text-sm text-muted-foreground">

@@ -236,6 +236,14 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
   },
 ]
 
+export const planningHolidayNavigation = dashboardNavigation.find(
+  (item) => item.id === "planningHolidayTab"
+)!
+
+export const productionFloorNavigation = dashboardNavigation.filter(
+  (item) => item.id !== planningHolidayNavigation.id
+)
+
 export const commercialNavigation = [
   {
     href: "/commercial",

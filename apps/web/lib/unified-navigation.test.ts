@@ -10,6 +10,8 @@ import {
   dashboardTabHref,
   hrNavigation,
   navigationHrefMatches,
+  planningHolidayNavigation,
+  productionFloorNavigation,
 } from "./unified-navigation"
 
 describe("unified navigation", () => {
@@ -42,6 +44,14 @@ describe("unified navigation", () => {
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
     expect(dashboardNavigation).toHaveLength(19)
+    expect(productionFloorNavigation).toHaveLength(18)
+    expect(productionFloorNavigation).not.toContainEqual(
+      planningHolidayNavigation
+    )
+    expect(planningHolidayNavigation).toMatchObject({
+      id: "planningHolidayTab",
+      title: "Planning Holidays",
+    })
     expect(dashboardNavigation.map(({ id }) => id)).toEqual([
       "productionControlTab",
       "planningControlTab",
