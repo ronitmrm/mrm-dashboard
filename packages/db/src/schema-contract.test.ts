@@ -808,7 +808,9 @@ test("refresh-job hints are commit-scoped, coalesced, and bounded", async () => 
       listener,
       writer,
       async () => {
-        await repository.requestRefresh(committedOrganizationId)
+        await expect(
+          repository.requestRefresh(committedOrganizationId)
+        ).resolves.toMatchObject({ queued: true, skipped: false })
       }
     )
     const committedEffects = await writer.query<{
@@ -900,7 +902,9 @@ test("refresh-job hints are commit-scoped, coalesced, and bounded", async () => 
       listener,
       writer,
       async () => {
-        await repository.requestRefresh(committedOrganizationId)
+        await expect(
+          repository.requestRefresh(committedOrganizationId)
+        ).resolves.toMatchObject({ queued: false, skipped: true })
       }
     )
     const duplicateEffects = await writer.query<{
@@ -918,9 +922,8 @@ test("refresh-job hints are commit-scoped, coalesced, and bounded", async () => 
       [committedOrganizationId]
     )
 
-    expect(duplicate).toHaveLength(1)
-    expect(JSON.parse(duplicate[0]!)).toEqual(expectedPayload)
-    expect(duplicateEffects.rows).toEqual([{ jobs: "1", outbox_events: "2" }])
+    expect(duplicate).toEqual([])
+    expect(duplicateEffects.rows).toEqual([{ jobs: "1", outbox_events: "1" }])
   } finally {
     if (listenerConnected) {
       await listener

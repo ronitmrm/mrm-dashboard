@@ -19,6 +19,11 @@ import {
   exportUnavailablePayload,
 } from "@/lib/dashboard-api-policy"
 import {
+  dashboardErrorResponse,
+  DashboardRequestPolicyError,
+  enforceDashboardRequestSize,
+} from "@/lib/dashboard-route-policy"
+import {
   normalizeInterruptedSetups,
   normalizeQueueBeforeSetups,
   normalizeQueuePlacements,
@@ -644,14 +649,16 @@ async function get(request: NextRequest, context: RouteContext) {
 
     return json({ error: "Not found" }, 404)
   } catch (err) {
-    return json(
-      { error: err instanceof Error ? err.message : "Request failed" },
+    const status =
       err instanceof RouteError ||
-        err instanceof OperationalEntryError ||
-        err instanceof DashboardReadError
+      err instanceof OperationalEntryError ||
+      err instanceof DashboardReadError ||
+      err instanceof DashboardRequestPolicyError
         ? err.status
         : 500
-    )
+    if (status >= 500) console.error("Dashboard API request failed", err)
+    const response = dashboardErrorResponse(err, status)
+    return json({ error: response.error }, response.status)
   }
 }
 
@@ -661,12 +668,14 @@ async function post(request: NextRequest, context: RouteContext) {
   }
 
   const path = (await context.params).path.join("/")
-  const body = await request.json().catch(() => ({}))
 
   try {
     if (path === "dashboard-refresh") {
       return json(await requestPostgresDashboardRefresh(request))
     }
+
+    enforceDashboardRequestSize(request.headers.get("content-length"))
+    const body = await request.json().catch(() => ({}))
 
     if (path === "attendance" || path === "training") {
       const result = await executePostgresOperationalEntry(
@@ -1205,14 +1214,16 @@ async function post(request: NextRequest, context: RouteContext) {
 
     return json({ error: "Not found" }, 404)
   } catch (err) {
-    return json(
-      { error: err instanceof Error ? err.message : "Request failed" },
+    const status =
       err instanceof RouteError ||
-        err instanceof OperationalEntryError ||
-        err instanceof DashboardReadError
+      err instanceof OperationalEntryError ||
+      err instanceof DashboardReadError ||
+      err instanceof DashboardRequestPolicyError
         ? err.status
-        : 400
-    )
+        : 500
+    if (status >= 500) console.error("Dashboard API request failed", err)
+    const response = dashboardErrorResponse(err, status)
+    return json({ error: response.error }, response.status)
   }
 }
 

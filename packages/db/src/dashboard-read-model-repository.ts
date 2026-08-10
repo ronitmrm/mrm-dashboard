@@ -310,13 +310,32 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
             VALUES ($1, 'dashboard', $2, 'pending', now())
             ON CONFLICT (organization_id, queue_key)
               WHERE status IN ('pending', 'running')
-            DO UPDATE SET run_after = LEAST(derived.refresh_jobs.run_after, now()),
-              updated_at = now(), last_error = NULL
+            DO NOTHING
             RETURNING id, status
           `,
           [organizationId, randomUUID()]
         )
-        const job = result.rows[0]!
+        const insertedJob = result.rows[0]
+        if (!insertedJob) {
+          const active = await client.query<{ id: string }>(
+            `
+              SELECT id
+              FROM derived.refresh_jobs
+              WHERE organization_id = $1
+                AND queue_key = 'dashboard'
+                AND status IN ('pending', 'running')
+              ORDER BY created_at
+              LIMIT 1
+            `,
+            [organizationId]
+          )
+          const job = active.rows[0]
+          if (!job) {
+            throw new Error("Active dashboard refresh job was not found")
+          }
+          return { jobId: job.id, queued: false, skipped: true }
+        }
+
         await client.query(
           `
             INSERT INTO derived.outbox_events (
@@ -328,12 +347,16 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
           `,
           [
             organizationId,
-            job.id,
-            { organizationId, queueKey: "dashboard", refreshJobId: job.id },
+            insertedJob.id,
+            {
+              organizationId,
+              queueKey: "dashboard",
+              refreshJobId: insertedJob.id,
+            },
             randomUUID(),
           ]
         )
-        return { jobId: job.id, queued: true, skipped: false }
+        return { jobId: insertedJob.id, queued: true, skipped: false }
       })
     },
 
