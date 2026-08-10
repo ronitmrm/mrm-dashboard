@@ -1,12 +1,46 @@
+import { randomUUID } from "node:crypto"
+
+import type { PoolClient } from "pg"
+
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
 type AccessAdministrationRepositoryOptions = RepositoryPoolOptions
 
 type CreateRoleInput = {
+  actorUserId: string
   description?: string
   key: string
   name: string
   permissionKeys: string[]
+}
+
+async function auditAccessChange(
+  client: PoolClient,
+  input: {
+    actorUserId: string
+    eventType: string
+    metadata?: Record<string, unknown>
+    reason?: string
+    targetId: string
+    targetTable: string
+  }
+) {
+  await client.query(
+    `INSERT INTO audit.events (
+       event_type, target_schema, target_table, target_id, actor_user_id,
+       reason, metadata, source_system, source_table, source_id
+     ) VALUES ($1, 'identity', $2, $3, $4, $5, $6,
+       'mrm-dashboard', 'access_administration', $7)`,
+    [
+      input.eventType,
+      input.targetTable,
+      input.targetId,
+      input.actorUserId,
+      input.reason ?? null,
+      input.metadata ?? {},
+      randomUUID(),
+    ]
+  )
 }
 
 type AssignRoleInput = {
@@ -65,6 +99,7 @@ export function createAccessAdministrationRepository(
     close,
 
     async createRole({
+      actorUserId,
       description,
       key,
       name,
@@ -106,6 +141,22 @@ export function createAccessAdministrationRepository(
            ON CONFLICT (role_id, permission_id) DO NOTHING`,
           [roleId, permissionKeys]
         )
+        await auditAccessChange(client, {
+          actorUserId,
+          eventType: "access.role.created",
+          metadata: { key, name },
+          targetId: roleId,
+          targetTable: "roles",
+        })
+        for (const permissionKey of permissionKeys) {
+          await auditAccessChange(client, {
+            actorUserId,
+            eventType: "access.role.capability_granted",
+            metadata: { permissionKey, roleKey: key },
+            targetId: roleId,
+            targetTable: "roles",
+          })
+        }
         await client.query("COMMIT")
 
         return { id: roleId, key }
@@ -118,8 +169,11 @@ export function createAccessAdministrationRepository(
     },
 
     async assignRole({ actorUserId, roleKey, userId }: AssignRoleInput) {
-      const result = await pool.query(
-        `INSERT INTO identity.user_roles (
+      const client = await pool.connect()
+      try {
+        await client.query("BEGIN")
+        const result = await client.query(
+          `INSERT INTO identity.user_roles (
            user_id,
            role_id,
            assigned_by_user_id
@@ -132,11 +186,25 @@ export function createAccessAdministrationRepository(
          ON CONFLICT (user_id, role_id) DO UPDATE
          SET assigned_by_user_id = EXCLUDED.assigned_by_user_id,
              assigned_at = now()`,
-        [actorUserId, userId, roleKey]
-      )
+          [actorUserId, userId, roleKey]
+        )
 
-      if (result.rowCount !== 1) {
-        throw new Error("The selected user or role does not exist")
+        if (result.rowCount !== 1) {
+          throw new Error("The selected user or role does not exist")
+        }
+        await auditAccessChange(client, {
+          actorUserId,
+          eventType: "access.role.assigned",
+          metadata: { roleKey },
+          targetId: userId,
+          targetTable: "users",
+        })
+        await client.query("COMMIT")
+      } catch (error) {
+        await client.query("ROLLBACK")
+        throw error
+      } finally {
+        client.release()
       }
     },
 
@@ -148,8 +216,11 @@ export function createAccessAdministrationRepository(
       reason,
       userId,
     }: SetPermissionOverrideInput) {
-      const result = await pool.query(
-        `INSERT INTO identity.user_permission_overrides (
+      const client = await pool.connect()
+      try {
+        await client.query("BEGIN")
+        const result = await client.query(
+          `INSERT INTO identity.user_permission_overrides (
            user_id,
            permission_id,
            effect,
@@ -168,18 +239,55 @@ export function createAccessAdministrationRepository(
              assigned_by_user_id = EXCLUDED.assigned_by_user_id,
              assigned_at = now(),
              expires_at = EXCLUDED.expires_at`,
-        [
-          effect,
-          reason ?? null,
-          actorUserId,
-          expiresAt ?? null,
-          userId,
-          permissionKey,
-        ]
-      )
+          [
+            effect,
+            reason ?? null,
+            actorUserId,
+            expiresAt ?? null,
+            userId,
+            permissionKey,
+          ]
+        )
 
-      if (result.rowCount !== 1) {
-        throw new Error("The selected user or capability does not exist")
+        if (result.rowCount !== 1) {
+          throw new Error("The selected user or capability does not exist")
+        }
+        await auditAccessChange(client, {
+          actorUserId,
+          eventType: "access.permission.override_set",
+          metadata: { effect, expiresAt, permissionKey },
+          reason,
+          targetId: userId,
+          targetTable: "users",
+        })
+        await client.query("COMMIT")
+      } catch (error) {
+        await client.query("ROLLBACK")
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
+    async recordUserProvisioned(input: {
+      actorUserId: string
+      userId: string
+    }) {
+      const client = await pool.connect()
+      try {
+        await client.query("BEGIN")
+        await auditAccessChange(client, {
+          actorUserId: input.actorUserId,
+          eventType: "access.user.provisioned",
+          targetId: input.userId,
+          targetTable: "users",
+        })
+        await client.query("COMMIT")
+      } catch (error) {
+        await client.query("ROLLBACK")
+        throw error
+      } finally {
+        client.release()
       }
     },
 

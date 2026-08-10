@@ -111,6 +111,32 @@ describe("access administration", () => {
         user: { id: staff.id },
       })
 
+      const audit = await pool.query<{
+        actor_user_id: string
+        event_type: string
+        target_id: string
+      }>(
+        `SELECT event_type, actor_user_id, target_id
+         FROM audit.events
+         WHERE target_id = ANY($1::uuid[])
+         ORDER BY event_type`,
+        [[administrator.user.id, staff.id]]
+      )
+      expect(audit.rows).toEqual(
+        expect.arrayContaining([
+          {
+            actor_user_id: administrator.user.id,
+            event_type: "access.initial_administrator.promoted",
+            target_id: administrator.user.id,
+          },
+          {
+            actor_user_id: administrator.user.id,
+            event_type: "access.user.provisioned",
+            target_id: staff.id,
+          },
+        ])
+      )
+
       await expect(
         access.provisionStaff({
           actorUserId: staff.id,
@@ -280,6 +306,22 @@ describe("access administration", () => {
             }),
           ]),
         })
+      )
+
+      const audit = await pool.query<{ event_type: string }>(
+        `SELECT event_type
+         FROM audit.events
+         WHERE actor_user_id = $1
+           AND event_type LIKE 'access.%'`,
+        [administrator.user.id]
+      )
+      expect(audit.rows.map((row) => row.event_type)).toEqual(
+        expect.arrayContaining([
+          "access.role.created",
+          "access.role.capability_granted",
+          "access.role.assigned",
+          "access.permission.override_set",
+        ])
       )
     } finally {
       await authorization.close()

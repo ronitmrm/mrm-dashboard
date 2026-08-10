@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
 type ProvisionerOptions = RepositoryPoolOptions
@@ -61,6 +63,19 @@ export function createInitialAdministratorProvisioner(
         if (assignment.rowCount !== 1) {
           throw new Error("The seeded administrator role is missing")
         }
+
+        await client.query(
+          `INSERT INTO audit.events (
+             event_type, target_schema, target_table, target_id,
+             actor_user_id, reason, metadata, source_system, source_table,
+             source_id
+           ) VALUES (
+             'access.initial_administrator.promoted', 'identity', 'users', $1,
+             $1, 'Initial administrator bootstrap', $2,
+             'mrm-dashboard', 'initial_administrator', $3
+           )`,
+          [userId, { email }, randomUUID()]
+        )
 
         await client.query("COMMIT")
       } catch (error) {

@@ -81,6 +81,11 @@ export function createAccessAdministrationService({
         },
       })
 
+      await access.recordUserProvisioned({
+        actorUserId,
+        userId: created.user.id,
+      })
+
       return created.user
     },
 
@@ -100,6 +105,7 @@ export function createAccessAdministrationService({
       }
 
       return access.createRole({
+        actorUserId,
         description: description?.trim() || undefined,
         key: normalizedKey,
         name: name.trim(),
