@@ -116,9 +116,10 @@ export default async function CandidateWorkspacePage({
         ) : null}
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {[
           ["Departments", candidate.departments.join(", ") || "—"],
+          ["Designation", candidate.preferredDesignation ?? "—"],
           ["Current company", candidate.currentCompany ?? "—"],
           ["Experience", candidate.experience ?? "—"],
           ["Source", candidate.source ?? "—"],
@@ -137,8 +138,8 @@ export default async function CandidateWorkspacePage({
           <CardHeader>
             <CardTitle>Edit candidate</CardTitle>
             <CardDescription>
-              Update candidate details, preferred department, or replace the
-              resume PDF.
+              Update candidate details, department, designation, or replace
+              the resume PDF.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -196,6 +197,27 @@ export default async function CandidateWorkspacePage({
                       value={department.code}
                     >
                       {department.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="edit-candidate-designation">
+                  Designation
+                </FieldLabel>
+                <NativeSelect
+                  className="w-full"
+                  defaultValue={candidate.preferredDesignationCode ?? ""}
+                  id="edit-candidate-designation"
+                  name="designation_code"
+                >
+                  <NativeSelectOption value="">Not selected</NativeSelectOption>
+                  {masters.designations.map((designation) => (
+                    <NativeSelectOption
+                      key={designation.id}
+                      value={designation.code}
+                    >
+                      {designation.name}
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>
