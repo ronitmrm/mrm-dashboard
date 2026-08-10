@@ -28,6 +28,7 @@ import {
 import { shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy"
 import { productionModuleIsEnabled } from "@/lib/production-module"
 import { withHttpPerformanceOperation } from "../../../lib/http-operation-telemetry"
+import { normalizeUserEnteredPayload } from "../../../lib/user-entry-text"
 import {
   DashboardReadError,
   readPostgresCorrectionCandidates,
@@ -707,7 +708,9 @@ async function post(request: NextRequest, context: RouteContext) {
   }
 
   const path = (await context.params).path.join("/")
-  const body = await request.json().catch(() => ({}))
+  const body = normalizeUserEnteredPayload(
+    plainRecord(await request.json().catch(() => ({})))
+  )
 
   try {
     if (path === "dashboard-refresh") {
@@ -1326,6 +1329,7 @@ function parseTemplateUpload(
   const csvText = decodeDataUrl(fileBase64)
   return parseCsv(csvText)
     .map(normalizeImportedPayload)
+    .map((payload) => normalizeUserEnteredPayload(payload))
     .filter((row) => Object.values(row).some((value) => text(value)))
 }
 

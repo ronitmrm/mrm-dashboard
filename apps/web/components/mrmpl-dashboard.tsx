@@ -127,6 +127,7 @@ import {
   dashboardTabHref,
   type DashboardTabId,
 } from "@/lib/unified-navigation";
+import { normalizeUserEnteredPayload } from "@/lib/user-entry-text";
 
 type DashboardPayload = Record<string, unknown>;
 
@@ -564,11 +565,12 @@ function usePostgresDashboardPage(
 
 async function savePostgresDashboardEntry(entryType: string, payload: DashboardPayload) {
   const productionFloorCode = productionFloorFromLocation();
+  const normalizedPayload = normalizeUserEnteredPayload(payload);
   const response = await fetch("/api/data-entry", {
     body: JSON.stringify({
       entryType,
       productionFloorCode,
-      payload: { ...payload, productionFloorCode },
+      payload: { ...normalizedPayload, productionFloorCode },
     }),
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -1139,34 +1141,35 @@ function DashboardShell({
     options: { throwOnError?: boolean } = {},
   ) {
     if (actionInFlightRef.current) return;
+    const normalizedBody = normalizeUserEnteredPayload(body);
     actionInFlightRef.current = true;
-    setProcessingAction(dashboardActionProcessingMessage(path, body));
+    setProcessingAction(dashboardActionProcessingMessage(path, normalizedBody));
     setActionStatus(null);
-    const queuePlanningRefresh = shouldQueuePlanningRefresh(path, body);
+    const queuePlanningRefresh = shouldQueuePlanningRefresh(path, normalizedBody);
     if (queuePlanningRefresh) {
       setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus));
     }
     try {
-      const apiResult = await postDashboardApi(path, body);
+      const apiResult = await postDashboardApi(path, normalizedBody);
       const message = apiResult.message;
-      const shopFloorPatch = shopFloorStatusPatchFromAction(path, body);
+      const shopFloorPatch = shopFloorStatusPatchFromAction(path, normalizedBody);
       if (shopFloorPatch) {
         setOptimisticShopFloorStatuses((current) => upsertShopFloorStatusPatch(current, shopFloorPatch));
       }
-      const setupChecklistSessionPatch = setupChecklistSessionPatchFromAction(path, body);
+      const setupChecklistSessionPatch = setupChecklistSessionPatchFromAction(path, normalizedBody);
       if (setupChecklistSessionPatch) {
         setOptimisticSetupChecklistSessions((current) => upsertSetupChecklistSessionPatch(current, setupChecklistSessionPatch));
       }
-      const productionCardPatch = productionCardPatchFromAction(path, body);
+      const productionCardPatch = productionCardPatchFromAction(path, normalizedBody);
       if (productionCardPatch) {
         setOptimisticProductionCards((current) => upsertProductionCardPatch(current, productionCardPatch));
       }
       setActionStatus({
         tone: "default",
-        message: `${message} ${planningRefreshStatusMessage(queuePlanningRefresh, path, body)}`,
+        message: `${message} ${planningRefreshStatusMessage(queuePlanningRefresh, path, normalizedBody)}`,
       });
       if (queuePlanningRefresh) markDashboardRefreshRequested();
-      const returnTab = str(body.returnTab) as DashboardTabId;
+      const returnTab = str(normalizedBody.returnTab) as DashboardTabId;
       if (returnTab && navItems.some((item) => item.id === returnTab)) {
         setActiveTab(returnTab);
       }
@@ -6656,8 +6659,12 @@ function QualityParameterMasterForm({
     setIsSaving(true);
     setStatus(null);
     try {
-      const activePayloads = activeDrafts.map((draft, index) => qualityParameterPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, setupFields, "Active"));
-      const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
+      const activePayloads = activeDrafts.map((draft, index) => normalizeUserEnteredPayload(
+        qualityParameterPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, setupFields, "Active"),
+      ));
+      const inactivePayloads = removedRows
+        .filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)))
+        .map((row) => normalizeUserEnteredPayload(row));
       for (const payload of [...activePayloads, ...inactivePayloads]) {
         await submitAction("data-entry", {
           entryType: spec.entryType,
@@ -6667,6 +6674,7 @@ function QualityParameterMasterForm({
         }, { throwOnError: true });
       }
       setLocalRows((current) => mergeQualityParameterRows([...current, ...activePayloads, ...inactivePayloads]));
+      setDrafts(activePayloads.map(qualityParameterDraftFromRow));
       setRemovedRows([]);
       setStatus({ tone: "default", message: "Quality inspection parameter set saved." });
     } catch (err) {
@@ -6923,8 +6931,12 @@ function MaintenanceChecklistMasterForm({
     setIsSaving(true);
     setStatus(null);
     try {
-      const activePayloads = activeDrafts.map((draft, index) => maintenanceChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, "Active"));
-      const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
+      const activePayloads = activeDrafts.map((draft, index) => normalizeUserEnteredPayload(
+        maintenanceChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, "Active"),
+      ));
+      const inactivePayloads = removedRows
+        .filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)))
+        .map((row) => normalizeUserEnteredPayload(row));
       for (const payload of [...activePayloads, ...inactivePayloads]) {
         await submitAction("data-entry", {
           entryType: spec.entryType,
@@ -6935,6 +6947,8 @@ function MaintenanceChecklistMasterForm({
         });
       }
       setLocalRows((current) => mergeMaintenanceChecklistRows([...current, ...activePayloads, ...inactivePayloads]));
+      setChecklistTitle(str(activePayloads[0]?.checklistTitle));
+      setDrafts(activePayloads.map(maintenanceChecklistDraftFromRow));
       setRemovedRows([]);
       setSelectedCode(code);
       setStatus({ tone: "default", message: "Maintenance checklist saved." });
@@ -7083,8 +7097,12 @@ function SetupChecklistMasterForm({
     setIsSaving(true);
     setStatus(null);
     try {
-      const activePayloads = activeDrafts.map((draft, index) => setupChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, effectiveFrom, "Active"));
-      const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
+      const activePayloads = activeDrafts.map((draft, index) => normalizeUserEnteredPayload(
+        setupChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, effectiveFrom, "Active"),
+      ));
+      const inactivePayloads = removedRows
+        .filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)))
+        .map((row) => normalizeUserEnteredPayload(row));
       for (const payload of [...activePayloads, ...inactivePayloads]) {
         await submitAction("data-entry", {
           entryType: spec.entryType,
@@ -7094,6 +7112,8 @@ function SetupChecklistMasterForm({
         });
       }
       setLocalRows((current) => mergeSetupChecklistRows([...current, ...activePayloads, ...inactivePayloads]));
+      setChecklistTitle(str(activePayloads[0]?.checklistTitle));
+      setDrafts(activePayloads.map(setupChecklistDraftFromRow));
       setRemovedRows([]);
       setSelectedCode(code);
       setStatus({ tone: "default", message: "Setup checklist saved." });
