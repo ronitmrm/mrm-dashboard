@@ -1,3 +1,24 @@
+export const checklistWorkspaceEntryTypes = [
+  "setup_checklist_master",
+  "maintenance_checklist_master",
+] as const
+
+export const qualityWorkspaceEntryTypes = [
+  "quality_parameter_master",
+  "rejection_type_master",
+  "rejection_remark_master",
+  "rejection_reason_master",
+] as const
+
+export const productionMasterTableEntryTypes = [
+  "route",
+  "cycle",
+  "tooling",
+  "employee",
+  "machine_master",
+  "maintenance_master",
+] as const
+
 export function rowsForProductionMaster<T extends Record<string, unknown>>(
   entryType: string,
   rows: T[]
@@ -47,22 +68,9 @@ type ProductionMasterField = {
   label: string
 }
 
-function hasMasterValue(value: unknown) {
-  if (value === null || value === undefined) return false
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase()
-    return normalized !== "" && normalized !== "-" && normalized !== "n/a"
-  }
-  if (Array.isArray(value)) return value.length > 0
-  if (typeof value === "object") return Object.keys(value).length > 0
-  return true
-}
-
 export function columnsForProductionMaster(
-  fields: ProductionMasterField[],
-  rows: Array<Record<string, unknown>>
+  fields: ProductionMasterField[]
 ) {
   return fields
-    .filter((field) => rows.some((row) => hasMasterValue(row[field.name])))
     .map((field) => ({ key: field.name, label: field.label }))
 }

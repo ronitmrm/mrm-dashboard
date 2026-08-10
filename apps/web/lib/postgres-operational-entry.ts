@@ -122,7 +122,13 @@ function parameterPlan(payload: Payload) {
 }
 
 function setupTemplateCode(payload: Payload) {
-  return `SETUP-${text(payload.masterVersion || payload.version) || "CURRENT"}`
+  const checklistCode = text(payload.checklistCode)
+  if (checklistCode) return checklistCode
+  const legacyVersion = text(payload.masterVersion || payload.version)
+  if (!legacyVersion) return ""
+  return /^(SC\d+|SETUP-)/i.test(legacyVersion)
+    ? legacyVersion
+    : `SETUP-${legacyVersion}`
 }
 
 function setupSessionPlan(payload: Payload) {
@@ -136,7 +142,7 @@ function setupSessionPlan(payload: Payload) {
     productionFloorCode: text(payload.productionFloorCode),
     sessionKey: text(payload.sessionId),
     status: text(payload.status) || "In progress",
-    templateCode: setupTemplateCode(payload),
+    templateCode: setupTemplateCode(payload) || "SETUP-CURRENT",
   }
   const phases = [
     {
@@ -430,7 +436,7 @@ export function operationalEntryPlan(entryType: string, payload: Payload) {
             sequence,
           },
         ],
-        name: text(payload.title) || "Setup checklist",
+        name: text(payload.checklistTitle || payload.title) || "Setup checklist",
         payload,
         revision: 1,
       },

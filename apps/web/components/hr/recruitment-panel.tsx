@@ -555,6 +555,21 @@ function LogCandidatePanel({
             </NativeSelect>
           </Field>
           <Field>
+            <FieldLabel htmlFor="candidate-designation">Designation</FieldLabel>
+            <NativeSelect
+              className="w-full"
+              id="candidate-designation"
+              name="designation_code"
+            >
+              <NativeSelectOption value="">Not selected</NativeSelectOption>
+              {masters.designations.map((row) => (
+                <NativeSelectOption key={row.id} value={row.code}>
+                  {row.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field>
             <FieldLabel htmlFor="candidate-resume">Resume (PDF)</FieldLabel>
             <Input
               accept="application/pdf,.pdf"

@@ -49,6 +49,7 @@ type CandidateFilterKey =
   | "applications"
   | "company"
   | "departments"
+  | "designation"
   | "email"
   | "experience"
   | "logs"
@@ -62,6 +63,7 @@ const emptyFilters: Record<CandidateFilterKey, string[] | null> = {
   applications: null,
   company: null,
   departments: null,
+  designation: null,
   email: null,
   experience: null,
   logs: null,
@@ -92,6 +94,7 @@ export function CandidatesTable({
         applications: String(candidate.applicationCount),
         candidate,
         company: candidate.currentCompany ?? "—",
+        designation: candidate.preferredDesignation ?? "—",
         departments: candidate.departments.join(", ") || "—",
         email: candidate.email ?? "—",
         experience: candidate.experience ?? "—",
@@ -126,6 +129,7 @@ export function CandidatesTable({
     { key: "phone", label: "Phone" },
     { key: "email", label: "Email" },
     { key: "departments", label: "Departments" },
+    { key: "designation", label: "Designation" },
     { key: "company", label: "Company" },
     { key: "experience", label: "Experience" },
     { key: "source", label: "Source" },
@@ -187,6 +191,7 @@ export function CandidatesTable({
                 <TableCell className="font-mono">{row.phone}</TableCell>
                 <TableCell>{row.email}</TableCell>
                 <TableCell>{row.departments}</TableCell>
+                <TableCell>{row.designation}</TableCell>
                 <TableCell>{row.company}</TableCell>
                 <TableCell>{row.experience}</TableCell>
                 <TableCell>{row.source}</TableCell>
@@ -230,7 +235,7 @@ export function CandidatesTable({
               <TableRow>
                 <TableCell
                   className="py-10 text-center text-muted-foreground"
-                  colSpan={canWrite ? 12 : 11}
+                  colSpan={canWrite ? 13 : 12}
                 >
                   No candidates match the selected filters.
                 </TableCell>

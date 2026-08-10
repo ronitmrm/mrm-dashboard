@@ -1,9 +1,14 @@
+import { readFileSync } from "node:fs"
+
 import { describe, expect, it } from "vitest"
 
 import {
+  checklistWorkspaceEntryTypes,
   columnsForProductionMaster,
   dataEntryRowsForProductionMaster,
+  productionMasterTableEntryTypes,
   productionMasterRowSources,
+  qualityWorkspaceEntryTypes,
   rowsForProductionMaster,
 } from "./production-master-tables"
 
@@ -37,44 +42,75 @@ describe("Production master table rows", () => {
     expect(productionMasterRowSources.route).toEqual(["routeMasterRows"])
   })
 
-  it("shows only populated form fields as columns", () => {
+  it("shows every configured master column even when values are blank", () => {
     const fields = [
-      { name: "machineNo", label: "Machine no." },
-      { name: "machineType", label: "Machine type" },
-      { name: "location", label: "Location" },
+      { name: "machineNo", label: "Machine No." },
+      { name: "machineFamily", label: "Machine Family" },
+      { name: "machineType", label: "Machine Type" },
+      { name: "machineName", label: "Machine Name" },
+      { name: "location", label: "Machine Location" },
       { name: "capacity", label: "Capacity" },
       { name: "status", label: "Status" },
     ]
-    const rows = [
-      {
-        machineNo: "A-01",
-        machineType: "Automatic",
-        location: "",
-        capacity: null,
-        status: "Active",
-        ownerId: "metadata-owner",
-        output: 42,
-      },
-    ]
-
-    expect(columnsForProductionMaster(fields, rows)).toEqual([
-      { key: "machineNo", label: "Machine no." },
-      { key: "machineType", label: "Machine type" },
+    expect(columnsForProductionMaster(fields)).toEqual([
+      { key: "machineNo", label: "Machine No." },
+      { key: "machineFamily", label: "Machine Family" },
+      { key: "machineType", label: "Machine Type" },
+      { key: "machineName", label: "Machine Name" },
+      { key: "location", label: "Machine Location" },
+      { key: "capacity", label: "Capacity" },
       { key: "status", label: "Status" },
     ])
   })
 
-  it("keeps populated zero and false values", () => {
+  it("keeps every configured column when rows contain zero and false values", () => {
     const fields = [
       { name: "capacity", label: "Capacity" },
       { name: "required", label: "Required" },
     ]
 
     expect(
-      columnsForProductionMaster(fields, [{ capacity: 0, required: false }])
+      columnsForProductionMaster(fields)
     ).toEqual([
       { key: "capacity", label: "Capacity" },
       { key: "required", label: "Required" },
     ])
+  })
+
+  it("keeps checklist authoring outside Master Tables", () => {
+    expect(checklistWorkspaceEntryTypes).toEqual([
+      "setup_checklist_master",
+      "maintenance_checklist_master",
+    ])
+    expect(productionMasterTableEntryTypes).not.toContain(
+      "setup_checklist_master"
+    )
+    expect(productionMasterTableEntryTypes).not.toContain(
+      "maintenance_checklist_master"
+    )
+  })
+
+  it("keeps quality authoring outside Master Tables", () => {
+    expect(qualityWorkspaceEntryTypes).toEqual([
+      "quality_parameter_master",
+      "rejection_type_master",
+      "rejection_remark_master",
+      "rejection_reason_master",
+    ])
+    for (const entryType of qualityWorkspaceEntryTypes) {
+      expect(productionMasterTableEntryTypes).not.toContain(entryType)
+    }
+  })
+
+  it("uses the Route Master line as the quality parameter set selector", () => {
+    const source = readFileSync(
+      new URL("../components/mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
+
+    expect(source).not.toContain('Field label="Saved parameter set"')
+    expect(source).toContain('Field label="Item code"')
+    expect(source).toContain('Field label="Option no."')
+    expect(source).toContain('Field label="Setup no."')
   })
 })

@@ -97,6 +97,8 @@ export type RecruitmentCandidateRow = {
   name: string
   phone: string
   preferredDepartmentCode: string | null
+  preferredDesignation: string | null
+  preferredDesignationCode: string | null
   resumeFileName: string | null
   source: string | null
   status: string
@@ -180,6 +182,7 @@ export type RecruitmentCandidateEventRow = {
   candidateId: string
   candidateName: string
   candidatePhone: string
+  department: string | null
   eventType: string
   id: string
   jobNumber: string | null
@@ -939,6 +942,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         name: string
         phone: string
         preferred_department_code: string | null
+        preferred_designation: string | null
+        preferred_designation_code: string | null
         resume_file_name: string | null
         source: string | null
         status: string
@@ -948,6 +953,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             candidate.current_company, candidate.experience, candidate.source,
             candidate.status, resume.file_name AS resume_file_name,
             preferred_department.code AS preferred_department_code,
+            preferred_designation.name AS preferred_designation,
+            preferred_designation.code AS preferred_designation_code,
             (resume.id IS NOT NULL) AS has_resume,
             COALESCE(array_agg(DISTINCT department.name)
               FILTER (WHERE department.id IS NOT NULL), '{}') AS departments,
@@ -963,6 +970,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             ON department.id = candidate_department.department_id
           LEFT JOIN recruitment.departments preferred_department
             ON preferred_department.id = candidate.preferred_department_id
+          LEFT JOIN recruitment.designations preferred_designation
+            ON preferred_designation.id = candidate.preferred_designation_id
           LEFT JOIN recruitment.applications application
             ON application.candidate_id = candidate.id
           LEFT JOIN recruitment.candidate_events event
@@ -981,7 +990,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           ) resume ON true
           WHERE candidate.organization_id = $1
           GROUP BY candidate.id, resume.id, resume.file_name,
-            preferred_department.code
+            preferred_department.code, preferred_designation.name,
+            preferred_designation.code
           ORDER BY candidate.updated_at DESC, candidate.name
           LIMIT 500
         `,
@@ -1000,6 +1010,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         name: row.name,
         phone: row.phone,
         preferredDepartmentCode: row.preferred_department_code,
+        preferredDesignation: row.preferred_designation,
+        preferredDesignationCode: row.preferred_designation_code,
         resumeFileName: row.resume_file_name,
         source: row.source,
         status: row.status,
@@ -1014,6 +1026,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         candidate_id: string
         candidate_name: string
         candidate_phone: string
+        department: string | null
         event_type: string
         id: string
         job_number: string | null
@@ -1025,11 +1038,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           SELECT event.id, event.candidate_id,
             candidate.name AS candidate_name,
             candidate.phone AS candidate_phone,
+            department.name AS department,
             event.event_type, event.title, event.notes,
             event.occurred_at::text, job.job_number
           FROM recruitment.candidate_events event
           JOIN recruitment.candidates candidate
             ON candidate.id = event.candidate_id
+          LEFT JOIN recruitment.departments department
+            ON department.id = candidate.preferred_department_id
           LEFT JOIN recruitment.job_posts job ON job.id = event.job_post_id
           WHERE event.organization_id = $1
             AND ($2::uuid IS NULL OR event.candidate_id = $2::uuid)
@@ -1042,6 +1058,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         candidateId: row.candidate_id,
         candidateName: row.candidate_name,
         candidatePhone: row.candidate_phone,
+        department: row.department,
         eventType: row.event_type,
         id: row.id,
         jobNumber: row.job_number,
@@ -2634,6 +2651,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         candidateId?: string | null
         currentCompany?: string | null
         departmentCode?: string | null
+        designationCode?: string | null
         email?: string | null
         experience?: string | null
         name: string
@@ -2645,7 +2663,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       return transaction(pool, async (client) => {
         const candidateId = optional(input.candidateId)
         const departmentCode = optional(input.departmentCode)
+        const designationCode = optional(input.designationCode)
         let departmentId: string | null = null
+        let designationId: string | null = null
         if (departmentCode) {
           const department = await client.query<{ id: string }>(
             `
@@ -2659,6 +2679,19 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           }
           departmentId = department.rows[0].id
         }
+        if (designationCode) {
+          const designation = await client.query<{ id: string }>(
+            `
+              SELECT id FROM recruitment.designations
+              WHERE organization_id = $1 AND lower(code) = lower($2)
+            `,
+            [input.organizationId, designationCode]
+          )
+          if (!designation.rows[0]) {
+            throw new Error("Preferred designation was not found in the master.")
+          }
+          designationId = designation.rows[0].id
+        }
         const parameters = [
           input.organizationId,
           required(input.name, "Candidate name"),
@@ -2668,6 +2701,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           optional(input.experience),
           optional(input.source),
           departmentId,
+          designationId,
           input.actorUserId ?? null,
         ]
         if (candidateId) {
@@ -2689,9 +2723,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                 UPDATE recruitment.candidates
                 SET name = $2, phone = $3, email = $4, current_company = $5,
                   experience = $6, source = $7, preferred_department_id = $8,
-                  updated_by_user_id = $9, updated_at = now(),
+                  preferred_designation_id = $9, updated_by_user_id = $10,
+                  updated_at = now(),
                   row_version = row_version + 1
-                WHERE organization_id = $1 AND id = $10
+                WHERE organization_id = $1 AND id = $11
                 RETURNING id
               `,
               [...parameters, candidateId]
@@ -2701,16 +2736,18 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                 INSERT INTO recruitment.candidates (
                   organization_id, name, phone, email, current_company,
                   experience, source, preferred_department_id,
-                  created_by_user_id, updated_by_user_id, source_system,
+                  preferred_designation_id, created_by_user_id,
+                  updated_by_user_id, source_system,
                   source_table, source_id
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9,
-                  'mrm-dashboard', 'candidates', $10)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10,
+                  'mrm-dashboard', 'candidates', $11)
                 ON CONFLICT (organization_id, phone) DO UPDATE SET
                   name = EXCLUDED.name, email = EXCLUDED.email,
                   current_company = EXCLUDED.current_company,
                   experience = EXCLUDED.experience, source = EXCLUDED.source,
                   preferred_department_id = EXCLUDED.preferred_department_id,
+                  preferred_designation_id = EXCLUDED.preferred_designation_id,
                   updated_by_user_id = EXCLUDED.updated_by_user_id,
                   updated_at = now(),
                   row_version = recruitment.candidates.row_version + 1

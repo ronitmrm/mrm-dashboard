@@ -50,6 +50,31 @@ function requiredText(value: unknown, label: string) {
   return result
 }
 
+async function generatedMaintenanceChecklistCode(
+  client: PoolClient,
+  organizationId: string,
+  requestedCode: string
+) {
+  const cleaned = requestedCode.trim()
+  if (cleaned) return cleaned
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtext('maintenance.checklist-code'), hashtext($1))",
+    [organizationId]
+  )
+  const result = await client.query<{ nextNumber: number }>(
+    `
+      SELECT COALESCE(MAX(
+        CASE WHEN code ~* '^MC[0-9]+$'
+          THEN substring(code from '([0-9]+)$')::integer END
+      ), 0) + 1 AS "nextNumber"
+      FROM maintenance.definitions
+      WHERE organization_id = $1
+    `,
+    [organizationId]
+  )
+  return `MC${String(result.rows[0]?.nextNumber ?? 1).padStart(3, "0")}`
+}
+
 async function transaction<T>(
   pool: Pool,
   operation: (client: PoolClient) => Promise<T>
@@ -441,7 +466,9 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
       payload: Record<string, unknown>
     }) {
       return transaction(pool, async (client) => {
-        const code = requiredText(input.checklistCode, "Maintenance checklist")
+        const code = await generatedMaintenanceChecklistCode(client, input.organizationId, input.checklistCode)
+        const payload = { ...input.payload, checklistCode: code }
+        const normalizedItem = { ...input.item, itemKey: `${code}|${input.item.sequence}` }
         await client.query(
           `
             INSERT INTO maintenance.definitions (
@@ -460,7 +487,7 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
             requiredText(input.checklistTitle, "Maintenance checklist title"),
             input.actorUserId ?? null,
             randomUUID(),
-            input.payload,
+            payload,
           ]
         )
         const definition = await client.query<{ id: string }>(
@@ -476,18 +503,18 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
         await upsertDefinitionItems(client, {
           actorUserId: input.actorUserId,
           definitionId: definition.rows[0].id,
-          items: [input.item],
+          items: [normalizedItem],
           organizationId: input.organizationId,
-          payload: input.payload,
+          payload,
         })
-        const item = await client.query<{ id: string }>(
+        const itemResult = await client.query<{ id: string }>(
           `
             SELECT id FROM maintenance.checklist_items
             WHERE definition_id = $1 AND lower(item_key) = lower($2)
           `,
-          [definition.rows[0].id, input.item.itemKey]
+          [definition.rows[0].id, normalizedItem.itemKey]
         )
-        return item.rows[0]!
+        return itemResult.rows[0]!
       })
     },
 

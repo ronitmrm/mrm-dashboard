@@ -313,6 +313,7 @@ export async function saveCandidateAction(formData: FormData) {
       candidateId: value(formData, "candidate_id"),
       currentCompany: value(formData, "current_company"),
       departmentCode: value(formData, "department_code"),
+      designationCode: value(formData, "designation_code"),
       email: value(formData, "email"),
       experience: value(formData, "experience"),
       name: value(formData, "name"),

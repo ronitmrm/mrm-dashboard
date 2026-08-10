@@ -49,6 +49,7 @@ import {
 type FilterKey =
   | "candidate"
   | "date"
+  | "department"
   | "job"
   | "notes"
   | "phone"
@@ -58,6 +59,7 @@ type FilterKey =
 const emptyFilters: Record<FilterKey, string[] | null> = {
   candidate: null,
   date: null,
+  department: null,
   job: null,
   notes: null,
   phone: null,
@@ -108,6 +110,7 @@ export function ConversationLogsTable({
       events.map((event) => ({
         candidate: event.candidateName,
         date: new Date(event.occurredAt).toLocaleString("en-IN"),
+        department: event.department ?? "—",
         event,
         job: event.jobNumber ?? "—",
         notes: event.notes ?? "—",
@@ -140,6 +143,7 @@ export function ConversationLogsTable({
           ["phone", "Phone"],
         ]
       : []),
+    ["department", "Department"],
     ["type", "Type"],
     ["title", "Field"],
     ["notes", "Notes"],
@@ -209,6 +213,7 @@ export function ConversationLogsTable({
                       <TableCell className="font-mono">{row.phone}</TableCell>
                     </>
                   ) : null}
+                  <TableCell>{row.department}</TableCell>
                   <TableCell>{row.type}</TableCell>
                   <TableCell>{row.title}</TableCell>
                   <TableCell className="max-w-lg whitespace-normal">

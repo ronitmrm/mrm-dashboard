@@ -339,6 +339,40 @@ describe("candidate conversation logs", () => {
   const organizationId = "00000000-0000-4000-8000-000000000010"
   const eventId = "00000000-0000-4000-8000-000000000011"
 
+  test("includes the candidate department in conversation rows", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("FROM recruitment.candidate_events event")) {
+        return {
+          rows: [
+            {
+              candidate_id: "00000000-0000-4000-8000-000000000012",
+              candidate_name: "Candidate",
+              candidate_phone: "9999999999",
+              department: "Quality",
+              event_type: "Phone Call",
+              id: eventId,
+              job_number: null,
+              notes: "Follow up tomorrow",
+              occurred_at: "2026-08-10T10:00:00.000Z",
+              title: "Follow-up",
+            },
+          ],
+        }
+      }
+      return { rows: [] }
+    })
+    const repository = createRecruitmentRepository({
+      pool: { query } as unknown as Pool,
+    })
+
+    const events = await repository.listCandidateEvents(organizationId)
+
+    expect(events[0]?.department).toBe("Quality")
+    expect(query.mock.calls[0]?.[0]).toContain(
+      "department.id = candidate.preferred_department_id"
+    )
+  })
+
   test("edits a log inside its organization and writes an audit record", async () => {
     const query = vi.fn(
       async (statement: string, _parameters?: readonly unknown[]) => {
@@ -1093,11 +1127,15 @@ describe("upsertCandidate", () => {
   test("edits an existing candidate by id and replaces the preferred department", async () => {
     const candidateId = "00000000-0000-4000-8000-000000000001"
     const departmentId = "00000000-0000-4000-8000-000000000002"
+    const designationId = "00000000-0000-4000-8000-000000000003"
     const query = vi.fn(
       async (statement: string, _parameters?: readonly unknown[]) => {
         void _parameters
         if (statement.includes("SELECT id FROM recruitment.departments")) {
           return { rowCount: 1, rows: [{ id: departmentId }] }
+        }
+        if (statement.includes("SELECT id FROM recruitment.designations")) {
+          return { rowCount: 1, rows: [{ id: designationId }] }
         }
         if (statement.includes("UPDATE recruitment.candidates")) {
           return { rowCount: 1, rows: [{ id: candidateId }] }
@@ -1117,6 +1155,7 @@ describe("upsertCandidate", () => {
     await repository.upsertCandidate({
       candidateId,
       departmentCode: "QA",
+      designationCode: "INSPECTOR",
       name: "Edited candidate",
       organizationId: "00000000-0000-4000-8000-000000000010",
       phone: "9999999999",
@@ -1125,7 +1164,8 @@ describe("upsertCandidate", () => {
     const updateCall = query.mock.calls.find(([statement]) =>
       statement.includes("UPDATE recruitment.candidates")
     )
-    expect(updateCall?.[1]?.[9]).toBe(candidateId)
+    expect(updateCall?.[1]?.[8]).toBe(designationId)
+    expect(updateCall?.[1]?.[10]).toBe(candidateId)
     const replaceDepartmentCall = query.mock.calls.find(([statement]) =>
       statement.includes("recruitment.replace_candidate_department")
     )

@@ -119,6 +119,37 @@ describe("PostgreSQL operational entry mapping", () => {
     })
   })
 
+  test("uses the generated checklist code for setup checklist masters and sessions", () => {
+    expect(
+      operationalEntryPlan("setup_checklist_master", {
+        checklistCode: "SC001",
+        checklistTitle: "Machinist setup checks",
+        sequence: 1,
+        checkPoint: "Drawing checked",
+        inputType: "checkbox",
+        required: "Yes",
+      })
+    ).toMatchObject({
+      operation: "setup-template",
+      input: {
+        code: "SC001",
+        name: "Machinist setup checks",
+      },
+    })
+
+    expect(
+      operationalEntryPlan("setup_checklist_session", {
+        sessionId: "JC-9|M15|1|2|TR506",
+        jcNo: "JC-9",
+        setupNo: "2",
+        checklistCode: "SC001",
+        items: [{ sequence: 1, checkPoint: "Drawing checked", startValue: "Yes" }],
+      })
+    ).toMatchObject({
+      phases: [{ input: { templateCode: "SC001" } }],
+    })
+  })
+
   test("preserves planned and breakdown maintenance task semantics", () => {
     expect(
       operationalEntryPlan("maintenance_task", {

@@ -38,6 +38,9 @@ export type DashboardTabId =
   | "masterTablesTab"
   | "dataEntryTab"
   | "planningHolidayTab"
+  | "setupChecklistMasterTab"
+  | "maintenanceMastersTab"
+  | "qualityMastersTab"
   | "maintenanceTab"
   | "planningControlTab"
   | "shopFloorStatusTab"
@@ -153,6 +156,27 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     id: "planningHolidayTab",
     subtitle: "Friday shutdown, holidays",
     title: "Planning Holidays",
+  },
+  {
+    href: dashboardTabHref("setupChecklistMasterTab"),
+    icon: ListChecks,
+    id: "setupChecklistMasterTab",
+    subtitle: "setup and maintenance",
+    title: "Checklists",
+  },
+  {
+    href: dashboardTabHref("maintenanceMastersTab"),
+    icon: Settings2,
+    id: "maintenanceMastersTab",
+    subtitle: "maintenance schedules",
+    title: "Maintenance Masters",
+  },
+  {
+    href: dashboardTabHref("qualityMastersTab"),
+    icon: ShieldCheck,
+    id: "qualityMastersTab",
+    subtitle: "inspection lines and codes",
+    title: "Quality Masters",
   },
   {
     href: dashboardTabHref("maintenanceTab"),
