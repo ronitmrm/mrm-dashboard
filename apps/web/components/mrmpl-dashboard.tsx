@@ -713,6 +713,8 @@ function HourlyQualityCheckShell({
             Quality Control
           </Button>
         </div>
+        {isSaving ? <ProcessingNotice message="Saving hourly quality check..." /> : null}
+        <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
         <Card>
           <CardContent className="grid gap-3 pt-4 md:grid-cols-5">
             <LabeledInput label="Date" value={prodDate} onChange={setProdDate} type="date" />
@@ -808,6 +810,7 @@ function HourlyQualityCheckShell({
             </div>
           </CardContent>
         </Card>
+        </fieldset>
       </div>
     </main>
   );
@@ -948,6 +951,8 @@ function SetupChecklistShell({
             Machinist
           </Button>
         </div>
+        {isSaving ? <ProcessingNotice message="Saving checklist progress..." /> : null}
+        <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
         {sessionId ? (
           <>
             <Card>
@@ -999,6 +1004,7 @@ function SetupChecklistShell({
             </CardContent>
           </Card>
         )}
+        </fieldset>
       </div>
     </main>
   );
@@ -1028,7 +1034,9 @@ function DashboardShell({
   const [planningRefreshLock, setPlanningRefreshLock] = useState<PlanningRefreshLock | null>(null);
   const lastStalePlanningRefreshKeyRef = useRef<string | undefined>(undefined);
   const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
+  const actionInFlightRef = useRef(false);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
+  const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
   const [dashboardReloadKey, setDashboardReloadKey] = useState(0);
   const handleDashboardStateData = useCallback((state: DashboardPayload) => {
@@ -1125,7 +1133,14 @@ function DashboardShell({
     }
   }
 
-  async function submitAction(path: string, body: Record<string, unknown>) {
+  async function submitAction(
+    path: string,
+    body: Record<string, unknown>,
+    options: { throwOnError?: boolean } = {},
+  ) {
+    if (actionInFlightRef.current) return;
+    actionInFlightRef.current = true;
+    setProcessingAction(dashboardActionProcessingMessage(path, body));
     setActionStatus(null);
     const queuePlanningRefresh = shouldQueuePlanningRefresh(path, body);
     if (queuePlanningRefresh) {
@@ -1157,10 +1172,15 @@ function DashboardShell({
       }
     } catch (err) {
       if (queuePlanningRefresh) setPlanningRefreshLock(null);
+      const actionError = err instanceof Error ? err : new Error("Action failed.");
       setActionStatus({
         tone: "destructive",
-        message: err instanceof Error ? err.message : "Action failed.",
+        message: actionError.message,
       });
+      if (options.throwOnError) throw actionError;
+    } finally {
+      actionInFlightRef.current = false;
+      setProcessingAction(null);
     }
   }
 
@@ -1328,7 +1348,9 @@ function DashboardShell({
           />
         </header>
         <main className="@container/main flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
-          {actionStatus ? (
+          {processingAction ? (
+            <ProcessingNotice message={processingAction} />
+          ) : actionStatus ? (
             <Badge variant={actionStatus.tone === "destructive" ? "destructive" : "outline"} className="w-fit">
               {actionStatus.message}
             </Badge>
@@ -1370,19 +1392,21 @@ function DashboardShell({
           ) : isDashboardLoading ? (
             <DashboardSkeleton />
           ) : (
-            <DashboardContent
-              activeTab={activeTab}
-              payload={payload}
-              submitAction={submitAction}
-              correctionCandidates={correctionCandidates}
-              openDataEntry={openDataEntry}
-              openMasterReadiness={openMasterReadiness}
-              openFirstPieceInspection={openFirstPieceInspection}
-              closeFirstPieceInspection={closeFirstPieceInspection}
-              firstPieceInspectionTasks={firstPieceInspectionTasks}
-              preferredDataEntryType={preferredDataEntryType}
-              preferredDataEntryDefaults={preferredDataEntryDefaults}
-            />
+            <fieldset aria-busy={Boolean(processingAction)} className="contents" disabled={Boolean(processingAction)}>
+              <DashboardContent
+                activeTab={activeTab}
+                payload={payload}
+                submitAction={submitAction}
+                correctionCandidates={correctionCandidates}
+                openDataEntry={openDataEntry}
+                openMasterReadiness={openMasterReadiness}
+                openFirstPieceInspection={openFirstPieceInspection}
+                closeFirstPieceInspection={closeFirstPieceInspection}
+                firstPieceInspectionTasks={firstPieceInspectionTasks}
+                preferredDataEntryType={preferredDataEntryType}
+                preferredDataEntryDefaults={preferredDataEntryDefaults}
+              />
+            </fieldset>
           )}
         </main>
       </SidebarInset>
@@ -5772,6 +5796,7 @@ function DataEntryPanel({
     ? preferredEntryType
     : availableSpecs[0]?.entryType || "route";
   const [bulkEntryType, setBulkEntryType] = useState(initialEntryType);
+  const [isImporting, setIsImporting] = useState(false);
   const selectedSpec = availableSpecs.find((spec) => spec.entryType === bulkEntryType) ?? availableSpecs[0];
   const selectedMasterRows = useMemo(
     () => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [],
@@ -5780,12 +5805,18 @@ function DataEntryPanel({
 
   async function importEntryTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isImporting) return;
     const form = event.currentTarget;
     const file = new FormData(form).get("file");
     if (!(file instanceof File) || !file.name) return;
-    const fileBase64 = await readFileAsDataUrl(file);
-    await submitAction("data-import", { entryType: bulkEntryType, fileName: file.name, fileBase64 });
-    if (typeof form.reset === "function") form.reset();
+    setIsImporting(true);
+    try {
+      const fileBase64 = await readFileAsDataUrl(file);
+      await submitAction("data-import", { entryType: bulkEntryType, fileName: file.name, fileBase64 });
+      if (typeof form.reset === "function") form.reset();
+    } finally {
+      setIsImporting(false);
+    }
   }
 
   return (
@@ -5795,6 +5826,8 @@ function DataEntryPanel({
           <CardTitle>{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
         </CardHeader>
+        {isImporting ? <div className="px-6"><ProcessingNotice message="Reading and importing the CSV file..." /></div> : null}
+        <fieldset aria-busy={isImporting} className="contents" disabled={isImporting}>
         <CardContent className="grid gap-4">
           <form className="grid gap-3 @3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]" onSubmit={importEntryTemplate}>
             <Field label="Select entry form">
@@ -5813,7 +5846,7 @@ function DataEntryPanel({
             <Field label="Filled CSV template">
               <Input name="file" type="file" accept=".csv,text/csv" />
             </Field>
-            <Button className="self-end" type="submit">Import CSV</Button>
+            <Button className="self-end" type="submit" disabled={isImporting}>{isImporting ? "Importing..." : "Import CSV"}</Button>
           </form>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => downloadApi("data-template", bulkEntryType)}>
@@ -5821,6 +5854,7 @@ function DataEntryPanel({
             </Button>
           </div>
         </CardContent>
+        </fieldset>
       </Card>
       {selectedSpec ? (
         <DataEntryForm
@@ -6396,32 +6430,39 @@ function PlanningHolidayPanel({
 }) {
   const holidayRows = asArray(productionControl.planningHolidayRows);
   const calendar = asRecord(productionControl.planningCalendar);
+  const [isSaving, setIsSaving] = useState(false);
 
   async function saveHoliday(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSaving) return;
     const form = event.currentTarget;
     const formData = new FormData(form);
     const coverage = str(formData.get("coverage"));
     const targets = coverage === "all"
       ? productionFloors
       : productionFloors.filter((floor) => floor.code === coverage);
-    for (const floor of targets) {
-      await submitAction("data-entry", {
-        entryType: "planning_holiday",
-        productionFloorCode: floor.code,
-        returnTab: "planningHolidayTab",
-        payload: {
-          date: str(formData.get("date")),
-          reason: str(formData.get("reason")) || "Plant holiday",
-          scope: coverage === "all" ? "Factory" : "Department",
-          department: floor.code,
-          departmentLabel: floor.shortLabel,
-          factoryWide: coverage === "all",
-          remark: str(formData.get("remark")),
-        },
-      });
+    setIsSaving(true);
+    try {
+      for (const floor of targets) {
+        await submitAction("data-entry", {
+          entryType: "planning_holiday",
+          productionFloorCode: floor.code,
+          returnTab: "planningHolidayTab",
+          payload: {
+            date: str(formData.get("date")),
+            reason: str(formData.get("reason")) || "Plant holiday",
+            scope: coverage === "all" ? "Factory" : "Department",
+            department: floor.code,
+            departmentLabel: floor.shortLabel,
+            factoryWide: coverage === "all",
+            remark: str(formData.get("remark")),
+          },
+        });
+      }
+      form.reset();
+    } finally {
+      setIsSaving(false);
     }
-    form.reset();
   }
 
   return (
@@ -6435,6 +6476,8 @@ function PlanningHolidayPanel({
       />
       <Card>
         <CardHeader><CardTitle>Plan a holiday</CardTitle><CardDescription>All factory applies the date to Conventional, CNC, and Forging planning. A department choice affects only that production floor.</CardDescription></CardHeader>
+        {isSaving ? <div className="px-6"><ProcessingNotice message="Saving the planning holiday..." /></div> : null}
+        <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
         <CardContent>
           <form className="grid gap-3" onSubmit={saveHoliday}>
             <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
@@ -6443,9 +6486,10 @@ function PlanningHolidayPanel({
               <Field label="Applies to"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="coverage" defaultValue="all"><option value="all">All factory</option>{productionFloors.map((floor) => <option key={floor.code} value={floor.code}>{floor.shortLabel}</option>)}</select></Field>
               <Field label="Remark"><Input name="remark" /></Field>
             </div>
-            <Button className="w-fit" type="submit"><CalendarDays className="size-4" />Save holiday</Button>
+            <Button className="w-fit" type="submit" disabled={isSaving}><CalendarDays className="size-4" />{isSaving ? "Saving..." : "Save holiday"}</Button>
           </form>
         </CardContent>
+        </fieldset>
       </Card>
       <Card>
         <CardHeader><CardTitle>Saved planning holidays</CardTitle><CardDescription>Dates affecting the selected department / production floor.</CardDescription></CardHeader>
@@ -6464,7 +6508,7 @@ function DataEntryForm({
   productionControl = {},
 }: {
   spec: DataEntrySpec;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  submitAction: (path: string, body: Record<string, unknown>, options?: { throwOnError?: boolean }) => Promise<void>;
   defaults: Record<string, unknown>;
   dataEntry?: DashboardPayload;
   masterRows?: DashboardPayload[];
@@ -6487,7 +6531,7 @@ function DataEntryForm({
     return <SetupChecklistMasterForm spec={spec} submitAction={submitAction} defaults={defaults} rows={masterRows} />;
   }
   if (spec.entryType === "quality_parameter_master") {
-    return <QualityParameterMasterForm spec={spec} defaults={defaults} dataEntry={dataEntry} masterRows={masterRows} productionControl={productionControl} />;
+    return <QualityParameterMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} masterRows={masterRows} productionControl={productionControl} />;
   }
   return (
     <Card>
@@ -6503,8 +6547,8 @@ function DataEntryForm({
           fields={spec.fields}
           defaults={resolvedDefaults}
           buttonLabel={`Save ${spec.title}`}
-          onSubmit={(body) => {
-            void submitAction("data-entry", {
+          onSubmit={async (body) => {
+            await submitAction("data-entry", {
               entryType: spec.entryType,
               id: defaults.__entryId,
               key: defaults.__entryKey,
@@ -6521,12 +6565,14 @@ function DataEntryForm({
 
 function QualityParameterMasterForm({
   spec,
+  submitAction,
   defaults,
   dataEntry,
   masterRows,
   productionControl,
 }: {
   spec: DataEntrySpec;
+  submitAction: (path: string, body: Record<string, unknown>, options?: { throwOnError?: boolean }) => Promise<void>;
   defaults: Record<string, unknown>;
   dataEntry?: DashboardPayload;
   masterRows: DashboardPayload[];
@@ -6613,7 +6659,12 @@ function QualityParameterMasterForm({
       const activePayloads = activeDrafts.map((draft, index) => qualityParameterPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, setupFields, "Active"));
       const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
       for (const payload of [...activePayloads, ...inactivePayloads]) {
-        await savePostgresDashboardEntry(spec.entryType, payload);
+        await submitAction("data-entry", {
+          entryType: spec.entryType,
+          key: dataEntryKey(spec.entryType, payload),
+          returnTab: "qualityParameterMasterTab",
+          payload,
+        }, { throwOnError: true });
       }
       setLocalRows((current) => mergeQualityParameterRows([...current, ...activePayloads, ...inactivePayloads]));
       setRemovedRows([]);
@@ -6631,6 +6682,8 @@ function QualityParameterMasterForm({
         <CardTitle>{spec.title}</CardTitle>
         <CardDescription>Maintain one parameter set for an item, option, and setup. The same rows are used by first-piece inspection and hourly quality checks.</CardDescription>
       </CardHeader>
+      {isSaving ? <div className="px-6"><ProcessingNotice message="Saving quality inspection parameters..." /></div> : null}
+      <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
       <CardContent className="grid gap-4">
         {!routeLines.length ? <AlertMessage tone="destructive">Create the item, option, and setup line in Route Master before adding quality inspection parameters.</AlertMessage> : null}
         <div className="grid gap-3 md:grid-cols-3">
@@ -6678,6 +6731,7 @@ function QualityParameterMasterForm({
           </div>
         </div>
       </CardContent>
+      </fieldset>
     </Card>
   );
 }
@@ -6897,6 +6951,8 @@ function MaintenanceChecklistMasterForm({
         <CardTitle>{spec.title}</CardTitle>
         <CardDescription>Create the checklist once, then add all steps in the table. Step codes are not required.</CardDescription>
       </CardHeader>
+      {isSaving ? <div className="px-6"><ProcessingNotice message="Saving maintenance checklist..." /></div> : null}
+      <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px_140px]">
           <Field label="Checklist">
@@ -6947,6 +7003,7 @@ function MaintenanceChecklistMasterForm({
           </div>
         </div>
       </CardContent>
+      </fieldset>
     </Card>
   );
 }
@@ -7053,6 +7110,8 @@ function SetupChecklistMasterForm({
         <CardTitle>{spec.title}</CardTitle>
         <CardDescription>Create one generated checklist code, then maintain all machinist steps under it.</CardDescription>
       </CardHeader>
+      {isSaving ? <div className="px-6"><ProcessingNotice message="Saving setup checklist..." /></div> : null}
+      <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px_140px]">
           <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}><option value={nextSetupChecklistCode(savedRows)}>New checklist ({nextSetupChecklistCode(savedRows)})</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
@@ -7073,6 +7132,7 @@ function SetupChecklistMasterForm({
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2"><Button type="button" variant="outline" onClick={() => setDrafts((current) => [...current, newSetupChecklistDraft(current.length + 1)])}><Plus className="size-4" />Add step</Button><div className="flex flex-wrap items-center gap-2">{status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}<Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save checklist"}</Button></div></div>
       </CardContent>
+      </fieldset>
     </Card>
   );
 }
@@ -7337,17 +7397,26 @@ function LegacyActionForm({
   fields: LegacyField[];
   defaults?: Record<string, unknown>;
   buttonLabel: string;
-  onSubmit: (body: Record<string, unknown>) => void;
+  onSubmit: (body: Record<string, unknown>) => void | Promise<void>;
 }) {
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmitting) return;
     const form = event.currentTarget;
-    onSubmit(formPayload(new FormData(form), fields));
-    form.reset();
+    setIsSubmitting(true);
+    try {
+      await onSubmit(formPayload(new FormData(form), fields));
+      form.reset();
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
-    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+    <form aria-busy={isSubmitting} className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={(event) => void submit(event)}>
+      <fieldset className="contents" disabled={isSubmitting}>
       <div>
         <div className="text-sm font-medium">{title}</div>
         <div className="text-xs text-muted-foreground">{description}</div>
@@ -7383,10 +7452,11 @@ function LegacyActionForm({
           </Field>
         ))}
       </div>
-      <Button className="w-fit" type="submit">
+      <Button className="w-fit" type="submit" disabled={isSubmitting}>
         <Wrench className="size-4" />
-        {buttonLabel}
+        {isSubmitting ? "Processing..." : buttonLabel}
       </Button>
+      </fieldset>
     </form>
   );
 }
@@ -9489,6 +9559,36 @@ function AlertMessage({ tone, children }: { tone: NonNullable<ActionStatus>["ton
       {children}
     </Badge>
   );
+}
+
+function ProcessingNotice({ message }: { message: string }) {
+  return (
+    <div
+      aria-atomic="true"
+      aria-live="polite"
+      className="flex w-fit items-center gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
+      role="status"
+    >
+      <span aria-hidden="true" className="animate-spin text-primary">
+        <RefreshCw className="size-4" />
+      </span>
+      <div>
+        <div className="font-medium">{message}</div>
+        <div className="text-xs text-muted-foreground">Please wait. Data-entry controls are locked until processing finishes.</div>
+      </div>
+    </div>
+  );
+}
+
+function dashboardActionProcessingMessage(path: string, body: Record<string, unknown>) {
+  if (path === "data-import") return "Importing entered data...";
+  if (path === "reverse-entry") return "Applying the correction...";
+  if (path === "data-entry") {
+    const entryType = str(body.entryType);
+    const title = dataEntrySpecs.find((spec) => spec.entryType === entryType)?.title;
+    return title ? `Saving ${title.toLowerCase()}...` : "Saving entered data...";
+  }
+  return "Processing entered data...";
 }
 
 function hourSlotOptions() {
