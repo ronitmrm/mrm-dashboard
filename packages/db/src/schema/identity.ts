@@ -1,4 +1,12 @@
-import { boolean, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import {
+  bigint,
+  boolean,
+  integer,
+  pgSchema,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core"
 
 const identity = pgSchema("identity")
 
@@ -90,8 +98,16 @@ export const verification = identity.table("verifications", {
     .defaultNow(),
 })
 
+export const rateLimit = identity.table("rate_limits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+})
+
 export const identitySchema = {
   account,
+  rateLimit,
   session,
   user,
   verification,

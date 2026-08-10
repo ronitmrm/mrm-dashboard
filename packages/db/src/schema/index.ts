@@ -2,6 +2,7 @@ export { customers, type Customer } from "./customers"
 export {
   account,
   identitySchema,
+  rateLimit,
   session,
   user,
   verification,

@@ -8,7 +8,7 @@ import {
   migrateDatabase,
 } from "@workspace/db"
 
-import { createAuthRateLimitStorage, createAuthSystem } from "./auth"
+import { createAuthSystem } from "./auth"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -92,34 +92,6 @@ describe("PostgreSQL Better Auth", () => {
     }
   })
 
-  it("uses a fail-open Redis accelerator through Better Auth's atomic limiter", async () => {
-    const calls: Array<Record<string, unknown>> = []
-    const storage = createAuthRateLimitStorage(
-      "redis://localhost:6380",
-      async (input) => {
-        calls.push(input)
-        return {
-          allowed: false,
-          count: 4,
-          retryAfterSeconds: 7,
-          source: "redis" as const,
-        }
-      }
-    )
-
-    await expect(
-      storage.consume("sign-in:127.0.0.1", { max: 3, window: 10 })
-    ).resolves.toEqual({ allowed: false, retryAfter: 7 })
-    expect(calls).toEqual([
-      expect.objectContaining({
-        key: expect.stringMatching(/^mrm:auth:rate:[a-f0-9]{64}$/),
-        limit: 3,
-        redisUrl: "redis://localhost:6380",
-        windowSeconds: 10,
-      }),
-    ])
-  })
-
   it("provisions a fresh user and authenticates the new credential", async () => {
     const system = createAuthSystem({
       allowSignUp: true,
@@ -197,7 +169,6 @@ describe("PostgreSQL Better Auth", () => {
     const secondInstance = createAuthSystem({
       baseURL: "http://localhost:3001",
       connectionString,
-      redisUrl: "redis://127.0.0.1:1",
       secret: "test-only-better-auth-secret-000000000000",
     })
     const email = `revocation-${randomUUID()}@mrmpl.test`
