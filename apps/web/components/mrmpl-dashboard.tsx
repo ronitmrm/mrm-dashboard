@@ -620,7 +620,6 @@ function FirstPieceInspectionShell({
   const { state: dashboardDeliveryState } = useDashboardDelivery({ floor: productionFloorCode });
   const [storedTasks, setStoredTasks] = useState<DashboardPayload[]>([]);
   const [completedTaskKeys, setCompletedTaskKeys] = useState<Set<string>>(() => new Set());
-  const [showExample, setShowExample] = useState(true);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
   const dashboardPayload = dashboardPayloadFromState(dashboardDeliveryState.data ?? undefined);
@@ -676,16 +675,10 @@ function FirstPieceInspectionShell({
           <h1 className="text-2xl font-semibold">First Piece Inspection</h1>
           <p className="text-sm text-muted-foreground">Select A Pending Setup, Enter Five Readings, Then Approve It. Works On Tablet And Computer.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => setShowExample((current) => !current)}>
-            <FileText className="size-4" />
-            {showExample ? "Hide Example" : "Show Example"}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => window.location.assign(dashboardTabHref("qualityControlTasksTab", productionFloorCode))}>
-            <LayoutDashboard className="size-4" />
-            Quality Control
-          </Button>
-        </div>
+        <Button type="button" variant="outline" onClick={() => window.location.assign(dashboardTabHref("qualityControlTasksTab", productionFloorCode))}>
+          <LayoutDashboard className="size-4" />
+          Quality Control
+        </Button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -694,7 +687,6 @@ function FirstPieceInspectionShell({
         <MetricCard label="Required Readings" value="5 Per Dimension" />
       </div>
 
-      {showExample ? <FirstPieceInspectionExample /> : null}
       {processingAction ? <ProcessingNotice message={processingAction} /> : null}
       {actionStatus ? <AlertMessage tone={actionStatus.tone}>{actionStatus.message}</AlertMessage> : null}
       {isLoading ? <Skeleton className="h-64 w-full" /> : null}
@@ -711,57 +703,6 @@ function FirstPieceInspectionShell({
         />
       ) : null}
     </section>
-  );
-}
-
-function FirstPieceInspectionExample() {
-  const task: DashboardPayload = {
-    jcNo: "JC-DEMO-101",
-    machine: "CNC-04",
-    machineType: "CNC Turning",
-    optionNumber: "1",
-    partCode: "DEMO-SHAFT-25",
-    setupName: "Finish Turning",
-    setupNo: "20",
-    shopFloorStage: "setting",
-    shopFloorUpdatedAt: "10 Aug 2026, 10:15 AM",
-  };
-  const masters: DashboardPayload[] = [
-    { code: "DIM-01", inputType: "number", instrumentUsed: "Outside Micrometer", optionNumber: "1", parameterName: "Outer Diameter", partNo: "DEMO-SHAFT-25", setupNo: "20", specification: "25.000", toleranceMinus: "0.020", tolerancePlus: "0.020" },
-    { code: "DIM-02", inputType: "number", instrumentUsed: "Vernier Caliper", optionNumber: "1", parameterName: "Overall Length", partNo: "DEMO-SHAFT-25", setupNo: "20", specification: "82.000", toleranceMinus: "0.100", tolerancePlus: "0.100" },
-  ];
-  const readings = {
-    [firstPieceMasterKey(masters[0]!)]: ["25.004", "25.006", "25.003", "25.005", "25.004"],
-    [firstPieceMasterKey(masters[1]!)]: ["82.02", "82.01", "82.03", "82.02", "82.01"],
-  };
-
-  return (
-    <Card className="border-emerald-300 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/10">
-      <CardHeader>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">Example Only</Badge>
-          <CardTitle className="text-base">Filled Dummy Inspection</CardTitle>
-        </div>
-        <CardDescription>This Shows The Finished Entry. It Is Not Real Production Data And Cannot Be Saved.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-          <TileField label="Item Code" value={task.partCode} />
-          <TileField label="Jc No." value={task.jcNo} />
-          <TileField label="Machine" value={task.machine} />
-          <TileField label="Setup" value={task.setupNo} />
-          <TileField label="Option" value={task.optionNumber} />
-          <TileField label="Result" value="All Within Limit" />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <TileField label="Approved By" value="QC-014 / Ramesh" />
-          <TileField label="Remark" value="First piece accepted for production." />
-        </div>
-        <fieldset className="contents" disabled>
-          <FirstPieceInspectionForm row={task} masters={masters} readings={readings} onReadingChange={() => undefined} />
-        </fieldset>
-      </CardContent>
-    </Card>
   );
 }
 
