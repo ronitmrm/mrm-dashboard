@@ -42,6 +42,27 @@ describe("unified navigation", () => {
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
     expect(dashboardNavigation).toHaveLength(19)
+    expect(dashboardNavigation.map(({ id }) => id)).toEqual([
+      "productionControlTab",
+      "planningControlTab",
+      "jobCardStatusTab",
+      "machineDetailTab",
+      "shopFloorStatusTab",
+      "shopFloorTasksTab",
+      "machinistTasksTab",
+      "qualityControlTasksTab",
+      "firstPieceInspectionTab",
+      "maintenanceTab",
+      "correctionsTab",
+      "dataEntryTab",
+      "masterTablesTab",
+      "masterGapsTab",
+      "machineMasterTab",
+      "planningHolidayTab",
+      "setupChecklistMasterTab",
+      "maintenanceMastersTab",
+      "qualityMastersTab",
+    ])
     expect(
       dashboardNavigation.find(({ id }) => id === "setupChecklistMasterTab")
     ).toMatchObject({
