@@ -15,6 +15,7 @@ import * as XLSX from "xlsx"
 import { parseEmployeeAssignmentWorkbook } from "@/app/hr/employee-assignment-workbook"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { hrReturnPath } from "@/lib/hr-return-path"
 
 const hrPath = "/hr"
 
@@ -35,37 +36,6 @@ function interviewAtValue(formData: FormData) {
   return date && time ? `${date}T${time}` : value(formData, "interview_at")
 }
 
-function returnPath(formData: FormData) {
-  const returnCandidateId = value(formData, "return_candidate_id")
-  if (
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      returnCandidateId
-    )
-  ) {
-    return `${hrPath}/candidates/${returnCandidateId}`
-  }
-  const returnJobId = value(formData, "return_job_id")
-  if (
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      returnJobId
-    )
-  ) {
-    return `${hrPath}/jobs/${returnJobId}`
-  }
-  const panel = value(formData, "panel")
-  const params = new URLSearchParams({ panel: panel || "mastersPanel" })
-  const selectedJobId = value(formData, "job_id")
-  if (
-    panel === "candidateSearchPanel" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      selectedJobId
-    )
-  ) {
-    params.set("job", selectedJobId)
-  }
-  return `${hrPath}?${params}`
-}
-
 async function mutate(
   formData: FormData,
   capability: "hr.employees.write" | "hr.recruitment.write",
@@ -75,7 +45,7 @@ async function mutate(
   ) => Promise<unknown>,
   successMessage = "Saved successfully."
 ) {
-  const path = returnPath(formData)
+  const path = hrReturnPath(formData)
   const session = await requireCapability(capability, path)
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
@@ -218,7 +188,7 @@ export async function assignEmployeeAction(formData: FormData) {
 }
 
 export async function bulkAssignEmployeesAction(formData: FormData) {
-  const path = returnPath(formData)
+  const path = hrReturnPath(formData)
   const session = await requireCapability("hr.employees.write", path)
   const file = formData.get("employee_assignments_file")
   if (!(file instanceof File) || file.size === 0) {
@@ -279,7 +249,7 @@ export async function createJobAction(formData: FormData) {
 }
 
 export async function saveCandidateAction(formData: FormData) {
-  const returnTo = returnPath(formData)
+  const returnTo = hrReturnPath(formData)
   const session = await requireCapability("hr.recruitment.write", returnTo)
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,

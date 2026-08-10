@@ -89,11 +89,13 @@ export function CandidateAssignmentForm({
   fixedJob,
   initialJobId,
   jobs,
+  returnJobId,
 }: {
   candidates: CandidateOption[]
   fixedJob?: JobOption
   initialJobId?: string
   jobs: JobOption[]
+  returnJobId?: string
 }) {
   const fieldId = useId()
   const [jobId, setJobId] = useState(() =>
@@ -163,8 +165,8 @@ export function CandidateAssignmentForm({
 
   return (
     <form action={assignCandidateAction}>
-      {fixedJob ? (
-        <input name="return_job_id" type="hidden" value={fixedJob.id} />
+      {fixedJob || returnJobId ? (
+        <input name="return_job_id" type="hidden" value={fixedJob?.id ?? returnJobId} />
       ) : (
         <input name="panel" type="hidden" value="candidateSearchPanel" />
       )}

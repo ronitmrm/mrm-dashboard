@@ -77,6 +77,7 @@ type RecruitmentPanelProps = {
   masters: RecruitmentMasterSnapshot
   panelId: string
   posts: RecruitmentPostRow[]
+  returnJobId?: string
   selectedJobId?: string
   selectedTemplateCode?: string
   templates: RecruitmentTemplateRow[]
@@ -599,10 +600,11 @@ function CandidateSearchPanel({
   canWrite,
   candidates,
   jobs,
+  returnJobId,
   selectedJobId,
 }: Pick<
   RecruitmentPanelProps,
-  "canWrite" | "candidates" | "jobs" | "selectedJobId"
+  "canWrite" | "candidates" | "jobs" | "returnJobId" | "selectedJobId"
 >) {
   return (
     <CandidateAssignmentPanel
@@ -610,6 +612,7 @@ function CandidateSearchPanel({
       candidates={candidates}
       initialJobId={selectedJobId}
       jobs={jobs}
+      returnJobId={returnJobId}
     />
   )
 }
@@ -683,6 +686,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
           canWrite={props.canWrite}
           candidates={props.candidates}
           jobs={props.jobs}
+          returnJobId={props.returnJobId}
           selectedJobId={props.selectedJobId}
         />
       )

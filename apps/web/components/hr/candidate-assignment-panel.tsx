@@ -294,12 +294,14 @@ export function CandidateAssignmentPanel({
   fixedJob,
   initialJobId,
   jobs = [],
+  returnJobId,
 }: {
   canWrite: boolean
   candidates: RecruitmentCandidateRow[]
   fixedJob?: Pick<RecruitmentJobRow, "id" | "title" | "vacancyCode">
   initialJobId?: string
   jobs?: RecruitmentJobRow[]
+  returnJobId?: string
 }) {
   if (!canWrite) return <CandidatesTable candidates={candidates} />
 
@@ -335,6 +337,7 @@ export function CandidateAssignmentPanel({
                   title: job.title,
                   vacancyCode: job.vacancyCode,
                 }))}
+              returnJobId={returnJobId}
             />
           </CardContent>
     </Card>

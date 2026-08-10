@@ -145,7 +145,7 @@ export default async function JobWorkspacePage({
           {canWrite ? (
             <Button asChild className="shrink-0" size="sm">
               <Link
-                href={`/hr?panel=candidateSearchPanel&job=${encodeURIComponent(job.id)}`}
+                href={`/hr?panel=candidateSearchPanel&job=${encodeURIComponent(job.id)}&returnJob=${encodeURIComponent(job.id)}`}
               >
                 <UserPlus data-icon="inline-start" />
                 Assign candidates

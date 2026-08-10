@@ -38,6 +38,7 @@ export default async function HrRecruitmentPage({
     error?: string
     job?: string
     panel?: string
+    returnJob?: string
     success?: string
     template?: string
   }>
@@ -226,6 +227,7 @@ export default async function HrRecruitmentPage({
         masters={masters}
         panelId={activeItem.panelId}
         posts={posts}
+        returnJobId={feedback.returnJob}
         selectedJobId={feedback.job}
         selectedTemplateCode={feedback.template}
         templates={templates}
