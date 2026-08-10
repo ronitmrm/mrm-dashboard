@@ -9,6 +9,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  MetricCard,
 } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -134,18 +135,14 @@ export function CostingCalculator() {
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-3xl bg-muted p-4">
-              <p className="text-xs text-muted-foreground">Inr / Piece</p>
-              <p className="font-heading text-2xl font-medium">
-                {money(result.totalRateInr, 4)}
-              </p>
-            </div>
-            <div className="rounded-3xl bg-primary p-4 text-primary-foreground">
-              <p className="text-xs opacity-70">Usd / Piece</p>
-              <p className="font-heading text-2xl font-medium">
-                {money(result.rateUsd, 4)}
-              </p>
-            </div>
+            <MetricCard
+              label="Inr / Piece"
+              value={money(result.totalRateInr, 4)}
+            />
+            <MetricCard
+              label="Usd / Piece"
+              value={money(result.rateUsd, 4)}
+            />
           </div>
           <div className="overflow-hidden rounded-3xl border">
             <Table>

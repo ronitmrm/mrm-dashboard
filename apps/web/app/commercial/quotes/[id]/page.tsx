@@ -10,6 +10,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  MetricCard,
 } from "@workspace/ui/components/card"
 import {
   Table,
@@ -90,30 +91,18 @@ export default async function QuoteDetailPage({
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border p-4">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground">
-                Rate Before Rejection
-              </p>
-              <p className="mt-2 text-xl font-semibold tabular-nums">
-                ₹ {money(quote.rateInr)}
-              </p>
-            </div>
-            <div className="rounded-2xl border p-4">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground">
-                Total Inr
-              </p>
-              <p className="mt-2 text-xl font-semibold tabular-nums">
-                ₹ {money(quote.totalRateInr)}
-              </p>
-            </div>
-            <div className="rounded-2xl border p-4">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground">
-                Approved Usd / Pc
-              </p>
-              <p className="mt-2 text-xl font-semibold tabular-nums">
-                $ {money(quote.approvedPriceUsd)}
-              </p>
-            </div>
+            <MetricCard
+              label="Rate Before Rejection"
+              value={`₹ ${money(quote.rateInr)}`}
+            />
+            <MetricCard
+              label="Total Inr"
+              value={`₹ ${money(quote.totalRateInr)}`}
+            />
+            <MetricCard
+              label="Approved Usd / Pc"
+              value={`$ ${money(quote.approvedPriceUsd)}`}
+            />
           </div>
         </CardContent>
       </Card>

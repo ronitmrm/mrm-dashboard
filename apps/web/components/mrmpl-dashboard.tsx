@@ -7366,13 +7366,12 @@ function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
       <CardContent className="grid gap-4">
         <section className="grid gap-3 sm:grid-cols-2 @5xl/main:grid-cols-5">
           {rows.map((row) => (
-            <div key={str(row.category)} className="rounded-lg border p-3">
-              <div className="truncate text-xs text-muted-foreground">{str(row.category)}</div>
-              <div className="text-xl font-semibold tabular-nums">{str(row.recommendedNumber || row.nextNew)}</div>
-              <div className="text-xs text-muted-foreground">
-                {str(row.recommendationType || "Next Number")} | {formatNumber(numValue(row, "usedCount"))} Used
-              </div>
-            </div>
+            <MetricCard
+              description={`${str(row.recommendationType || "Next Number")} | ${formatNumber(numValue(row, "usedCount"))} Used`}
+              key={str(row.category)}
+              label={str(row.category)}
+              value={str(row.recommendedNumber || row.nextNew)}
+            />
           ))}
         </section>
       </CardContent>

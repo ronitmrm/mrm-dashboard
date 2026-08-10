@@ -91,12 +91,14 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
 
 function MetricCard({
   className,
+  description,
   icon,
   label,
   onClick,
   value,
 }: {
   className?: string
+  description?: React.ReactNode
   icon?: React.ReactNode
   label: React.ReactNode
   onClick?: () => void
@@ -109,6 +111,11 @@ function MetricCard({
           {label}
         </div>
         <div className="text-base font-semibold tabular-nums">{value}</div>
+        {description ? (
+          <div className="truncate text-[10px] text-muted-foreground">
+            {description}
+          </div>
+        ) : null}
       </div>
       {icon ? <div className="shrink-0 text-primary">{icon}</div> : null}
     </>

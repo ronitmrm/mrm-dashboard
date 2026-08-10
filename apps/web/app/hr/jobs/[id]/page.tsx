@@ -12,6 +12,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  MetricCard,
 } from "@workspace/ui/components/card"
 import {
   Table,
@@ -173,14 +174,7 @@ export default async function JobWorkspacePage({
           ["Posted", job.postDate],
           ["Target", job.targetDate ?? "Not Set"],
         ].map(([label, value]) => (
-          <Card key={label}>
-            <CardContent className="p-5">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground">
-                {label}
-              </p>
-              <p className="mt-2 text-xl font-semibold">{value}</p>
-            </CardContent>
-          </Card>
+          <MetricCard key={label} label={label} value={value} />
         ))}
       </section>
 

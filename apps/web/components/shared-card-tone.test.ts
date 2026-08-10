@@ -21,6 +21,20 @@ describe("shared software card tone", () => {
     expect(production).toContain("<MetricCard")
     expect(production).not.toContain("rounded-4xl")
     expect(source("./hr/interview-workspace.tsx")).toContain("<MetricCard")
+    expect(source("../app/hr/page.tsx")).toContain("<MetricCard")
+    expect(source("../app/hr/jobs/[id]/page.tsx")).toContain("<MetricCard")
     expect(source("../app/commercial/page.tsx")).toContain("<MetricCard")
+    expect(source("../app/commercial/quotes/[id]/page.tsx")).toContain(
+      "<MetricCard"
+    )
+    expect(source("./commercial/costing-calculator.tsx")).toContain(
+      "<MetricCard"
+    )
+
+    const toolFixturePanel = production.slice(
+      production.indexOf("function ToolFixturePanel"),
+      production.indexOf("type LegacyField")
+    )
+    expect(toolFixturePanel).toContain("<MetricCard")
   })
 })

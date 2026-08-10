@@ -11,13 +11,7 @@ import {
   type RecruitmentTemplateRow,
 } from "@workspace/db"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card"
+import { MetricCard } from "@workspace/ui/components/card"
 import { BriefcaseBusiness } from "lucide-react"
 import { redirect } from "next/navigation"
 
@@ -203,14 +197,7 @@ export default async function HrRecruitmentPage({
             ["Candidates", stats.candidates],
             ["Interviews", stats.interviews],
           ].map(([label, value]) => (
-            <Card key={label}>
-              <CardHeader className="pb-1">
-                <CardDescription>{label}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <CardTitle className="font-mono text-2xl">{value}</CardTitle>
-              </CardContent>
-            </Card>
+            <MetricCard key={label} label={label} value={value} />
           ))}
         </section>
       ) : null}
