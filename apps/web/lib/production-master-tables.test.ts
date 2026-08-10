@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+
 import { describe, expect, it } from "vitest"
 
 import {
@@ -6,6 +8,7 @@ import {
   dataEntryRowsForProductionMaster,
   productionMasterTableEntryTypes,
   productionMasterRowSources,
+  qualityWorkspaceEntryTypes,
   rowsForProductionMaster,
 } from "./production-master-tables"
 
@@ -85,5 +88,29 @@ describe("Production master table rows", () => {
     expect(productionMasterTableEntryTypes).not.toContain(
       "maintenance_checklist_master"
     )
+  })
+
+  it("keeps quality authoring outside Master Tables", () => {
+    expect(qualityWorkspaceEntryTypes).toEqual([
+      "quality_parameter_master",
+      "rejection_type_master",
+      "rejection_remark_master",
+      "rejection_reason_master",
+    ])
+    for (const entryType of qualityWorkspaceEntryTypes) {
+      expect(productionMasterTableEntryTypes).not.toContain(entryType)
+    }
+  })
+
+  it("uses the Route Master line as the quality parameter set selector", () => {
+    const source = readFileSync(
+      new URL("../components/mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
+
+    expect(source).not.toContain('Field label="Saved parameter set"')
+    expect(source).toContain('Field label="Item code"')
+    expect(source).toContain('Field label="Option no."')
+    expect(source).toContain('Field label="Setup no."')
   })
 })

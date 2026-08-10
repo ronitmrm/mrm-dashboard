@@ -88,6 +88,7 @@ import {
   dataEntryRowsForProductionMaster,
   productionMasterTableEntryTypes,
   productionMasterRowSources,
+  qualityWorkspaceEntryTypes,
   rowsForProductionMaster,
 } from "@/lib/production-master-tables";
 import {
@@ -205,7 +206,7 @@ function dataEntryDestination(entryType: string): DashboardTabId {
   if (entryType === "planning_holiday") return "planningHolidayTab";
   if (checklistWorkspaceEntryTypes.includes(entryType as typeof checklistWorkspaceEntryTypes[number])) return "setupChecklistMasterTab";
   if (maintenanceMasterEntryTypes.includes(entryType as typeof maintenanceMasterEntryTypes[number])) return "maintenanceMastersTab";
-  if (qualityMasterEntryTypes.includes(entryType as typeof qualityMasterEntryTypes[number])) return "qualityMastersTab";
+  if (qualityWorkspaceEntryTypes.includes(entryType as typeof qualityWorkspaceEntryTypes[number])) return "qualityMastersTab";
   return "dataEntryTab";
 }
 const dataEntrySpecs: DataEntrySpec[] = [
@@ -468,7 +469,6 @@ const generalDataEntryTypes = [
 ] as const;
 
 const maintenanceMasterEntryTypes = ["maintenance_master"] as const;
-const qualityMasterEntryTypes = ["quality_parameter_master", "rejection_type_master", "rejection_remark_master", "rejection_reason_master"] as const;
 
 function masterTableSpecs() {
   const allowed = new Set<string>(productionMasterTableEntryTypes);
@@ -1595,7 +1595,7 @@ function DashboardContent({
   }
 
   if (activeTab === "qualityMastersTab") {
-    return <DataEntryPanel key={`quality-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={qualityMasterEntryTypes} title="Quality master workspace" description="Maintain inspection parameters only for existing route lines and manage generated quality codes." />;
+    return <DataEntryPanel key={`quality-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={qualityWorkspaceEntryTypes} title="Quality master workspace" description="Maintain inspection parameters only for existing route lines and manage generated quality codes." />;
   }
 
   if (activeTab === "maintenanceTab") {
@@ -6546,39 +6546,26 @@ function QualityParameterMasterForm({
     ]);
   }, [dataEntry, hourlyQualityPageRecord.qualityParameterMasterRows, masterRows]);
   const savedRows = useMemo(() => mergeQualityParameterRows([...persistedRows, ...localRows]), [persistedRows, localRows]);
-  const parameterSetOptions = useMemo(() => qualityParameterSetupOptions(savedRows), [savedRows]);
-  const defaultSetupKey = qualityParameterSetupKey(defaults);
-  const [selectedSetupKey, setSelectedSetupKey] = useState(defaultSetupKey || parameterSetOptions[0]?.key || "");
-  const selectedOption = parameterSetOptions.find((option) => option.key === selectedSetupKey);
-  const selectedRows = useMemo(() => selectedSetupKey ? sortQualityParameterRows(savedRows.filter((row) => qualityParameterSetupKey(row) === selectedSetupKey && str(row.status || "Active").toLowerCase() !== "inactive")) : [], [savedRows, selectedSetupKey]);
   const [setupFields, setSetupFields] = useState(() => ({
-    partNo: str(defaults.partNo || selectedOption?.partNo),
-    optionNumber: str(defaults.optionNumber || selectedOption?.optionNumber),
-    setupNo: str(defaults.setupNo || selectedOption?.setupNo),
+    partNo: str(defaults.partNo),
+    optionNumber: str(defaults.optionNumber),
+    setupNo: str(defaults.setupNo),
   }));
-  const [drafts, setDrafts] = useState<QualityParameterDraft[]>(() => selectedRows.map(qualityParameterDraftFromRow));
+  const selectedSetupKey = qualityParameterSetupKey(setupFields);
+  const selectedRows = useMemo(() => selectedSetupKey.replaceAll("|", "") ? sortQualityParameterRows(savedRows.filter((row) => qualityParameterSetupKey(row) === selectedSetupKey && str(row.status || "Active").toLowerCase() !== "inactive")) : [], [savedRows, selectedSetupKey]);
+  const [drafts, setDrafts] = useState<QualityParameterDraft[]>(() => selectedRows.length ? selectedRows.map(qualityParameterDraftFromRow) : [newQualityParameterDraft(1)]);
+  const loadedParameterSetRef = useRef("");
 
   useEffect(() => {
-    const firstSetupKey = parameterSetOptions[0]?.key;
-    if (selectedSetupKey || !firstSetupKey) return;
-    const timeout = window.setTimeout(() => setSelectedSetupKey(firstSetupKey), 0);
-    return () => window.clearTimeout(timeout);
-  }, [parameterSetOptions, selectedSetupKey]);
-
-  useEffect(() => {
+    const nextSignature = `${selectedSetupKey}|${qualityParameterRowsSignature(selectedRows)}`;
+    if (loadedParameterSetRef.current === nextSignature) return;
+    loadedParameterSetRef.current = nextSignature;
     const timeout = window.setTimeout(() => {
-      const option = parameterSetOptions.find((item) => item.key === selectedSetupKey);
-      const nextRows = selectedSetupKey ? sortQualityParameterRows(savedRows.filter((row) => qualityParameterSetupKey(row) === selectedSetupKey && str(row.status || "Active").toLowerCase() !== "inactive")) : [];
-      setSetupFields({
-        partNo: str(defaults.partNo || option?.partNo),
-        optionNumber: str(defaults.optionNumber || option?.optionNumber),
-        setupNo: str(defaults.setupNo || option?.setupNo),
-      });
-      setDrafts(nextRows.length ? nextRows.map(qualityParameterDraftFromRow) : [newQualityParameterDraft(1)]);
+      setDrafts(selectedRows.length ? selectedRows.map(qualityParameterDraftFromRow) : [newQualityParameterDraft(1)]);
       setRemovedRows([]);
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [defaults.partNo, defaults.optionNumber, defaults.setupNo, parameterSetOptions, savedRows, selectedSetupKey]);
+  }, [selectedRows, selectedSetupKey]);
 
   const routeLines = useMemo(() => qualityParameterRouteLines(asArray(productionControl.routeMasterRows)), [productionControl.routeMasterRows]);
   const itemOptions = useMemo(() => uniqueValues(routeLines.map((row) => row.partNo)), [routeLines]);
@@ -6630,7 +6617,6 @@ function QualityParameterMasterForm({
       }
       setLocalRows((current) => mergeQualityParameterRows([...current, ...activePayloads, ...inactivePayloads]));
       setRemovedRows([]);
-      setSelectedSetupKey(qualityParameterSetupKey(activePayloads[0] ?? setupFields));
       setStatus({ tone: "default", message: "Quality inspection parameter set saved." });
     } catch (err) {
       setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Quality parameter save failed." });
@@ -6646,25 +6632,11 @@ function QualityParameterMasterForm({
         <CardDescription>Maintain one parameter set for an item, option, and setup. The same rows are used by first-piece inspection and hourly quality checks.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-          <Field label="Saved parameter set">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedSetupKey} onChange={(event) => setSelectedSetupKey(event.target.value)}>
-              <option value="">New parameter set</option>
-              {parameterSetOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-            </select>
-          </Field>
-          <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" onClick={() => { setSelectedSetupKey(""); setSetupFields({ partNo: "", optionNumber: "", setupNo: "" }); setDrafts([newQualityParameterDraft(1)]); setRemovedRows([]); }}>
-              <Plus className="size-4" />
-              New set
-            </Button>
-          </div>
-        </div>
         {!routeLines.length ? <AlertMessage tone="destructive">Create the item, option, and setup line in Route Master before adding quality inspection parameters.</AlertMessage> : null}
         <div className="grid gap-3 md:grid-cols-3">
-          <Field label="Item code"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.partNo} onChange={(event) => setSetupFields({ partNo: event.target.value, optionNumber: "", setupNo: "" })} required><option value="">Select Route Master item</option>{itemOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
-          <Field label="Option no."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.optionNumber} onChange={(event) => setSetupFields((current) => ({ ...current, optionNumber: event.target.value, setupNo: "" }))} required disabled={!setupFields.partNo}><option value="">Select option</option>{optionOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
-          <Field label="Setup no."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.setupNo} onChange={(event) => setSetupFields((current) => ({ ...current, setupNo: event.target.value }))} required disabled={!setupFields.optionNumber}><option value="">Select setup</option>{setupNumberOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
+          <Field label="Item code"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.partNo} onChange={(event) => { setSetupFields({ partNo: event.target.value, optionNumber: "", setupNo: "" }); setStatus(null); }} required><option value="">Select Route Master item</option>{itemOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
+          <Field label="Option no."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.optionNumber} onChange={(event) => { setSetupFields((current) => ({ ...current, optionNumber: event.target.value, setupNo: "" })); setStatus(null); }} required disabled={!setupFields.partNo}><option value="">Select option</option>{optionOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
+          <Field label="Setup no."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.setupNo} onChange={(event) => { setSetupFields((current) => ({ ...current, setupNo: event.target.value })); setStatus(null); }} required disabled={!setupFields.optionNumber}><option value="">Select setup</option>{setupNumberOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
         </div>
         <div className="overflow-auto rounded-lg border">
           <Table>
@@ -9840,26 +9812,19 @@ function mergeQualityParameterRows(rows: DashboardPayload[]) {
   return sortQualityParameterRows([...byKey.values()]);
 }
 
-function qualityParameterSetupOptions(rows: DashboardPayload[]) {
-  const byKey = new Map<string, { key: string; label: string; partNo: string; optionNumber: string; setupNo: string; count: number }>();
-  for (const row of rows) {
-    if (str(row.status || "Active").toLowerCase() === "inactive") continue;
-    const key = qualityParameterSetupKey(row);
-    if (!key.replaceAll("|", "")) continue;
-    const partNo = displayValue(row.partNo || row.partCode);
-    const optionNumber = displayValue(row.optionNumber);
-    const setupNo = displayValue(row.setupNo);
-    const current = byKey.get(key);
-    byKey.set(key, {
-      key,
-      partNo,
-      optionNumber,
-      setupNo,
-      label: `${partNo} | Option ${optionNumber} | Setup ${setupNo}`,
-      count: (current?.count ?? 0) + 1,
-    });
-  }
-  return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+function qualityParameterRowsSignature(rows: DashboardPayload[]) {
+  return rows.map((row) => [
+    qualityParameterMasterKey(row),
+    row.sequence,
+    qualityParameterName(row),
+    row.specification,
+    row.instrumentUsed,
+    row.tolerancePlus,
+    row.toleranceMinus,
+    qualityParameterInputType(row),
+    row.status,
+    row.remark,
+  ].map((value) => str(value)).join("|")).join("||");
 }
 
 function newQualityParameterDraft(sequence: number): QualityParameterDraft {

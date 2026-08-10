@@ -3,6 +3,13 @@ export const checklistWorkspaceEntryTypes = [
   "maintenance_checklist_master",
 ] as const
 
+export const qualityWorkspaceEntryTypes = [
+  "quality_parameter_master",
+  "rejection_type_master",
+  "rejection_remark_master",
+  "rejection_reason_master",
+] as const
+
 export const productionMasterTableEntryTypes = [
   "route",
   "cycle",
@@ -10,10 +17,6 @@ export const productionMasterTableEntryTypes = [
   "employee",
   "machine_master",
   "maintenance_master",
-  "rejection_type_master",
-  "rejection_remark_master",
-  "rejection_reason_master",
-  "quality_parameter_master",
 ] as const
 
 export function rowsForProductionMaster<T extends Record<string, unknown>>(
