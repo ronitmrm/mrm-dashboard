@@ -19,6 +19,7 @@ import {
 } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import {
   Table,
   TableBody,
@@ -147,7 +148,7 @@ function SelectField({
   return (
     <div className="grid gap-2">
       <Label htmlFor={name}>{label}</Label>
-      <select
+      <SearchableSelect
         className={selectClassName}
         defaultValue={current ?? ""}
         id={name}
@@ -159,7 +160,7 @@ function SelectField({
             {option.label ?? option.value}
           </option>
         ))}
-      </select>
+      </SearchableSelect>
     </div>
   )
 }
@@ -282,7 +283,7 @@ export default async function WebsiteProductsPage({
               name="q"
               placeholder="Search Uid, Code, Description Or Grade"
             />
-            <select
+            <SearchableSelect
               aria-label="Filter Category"
               className={selectClassName}
               defaultValue={filters.category ?? ""}
@@ -294,8 +295,8 @@ export default async function WebsiteProductsPage({
                   {category.name}
                 </option>
               ))}
-            </select>
-            <select
+            </SearchableSelect>
+            <SearchableSelect
               aria-label="Filter Website Status"
               className={selectClassName}
               defaultValue={filters.status ?? ""}
@@ -304,8 +305,8 @@ export default async function WebsiteProductsPage({
               <option value="">All Statuses</option>
               <option value="In Progress">In Progress</option>
               <option value="Completed">Completed</option>
-            </select>
-            <select
+            </SearchableSelect>
+            <SearchableSelect
               aria-label="Filter Website Active"
               className={selectClassName}
               defaultValue={filters.active ?? ""}
@@ -314,7 +315,7 @@ export default async function WebsiteProductsPage({
               <option value="">All Activation States</option>
               <option value="true">True</option>
               <option value="false">False</option>
-            </select>
+            </SearchableSelect>
             <Button type="submit">Apply Filters</Button>
             <Button asChild variant="ghost">
               <Link href={websiteProductsPath}>
@@ -469,7 +470,7 @@ export default async function WebsiteProductsPage({
                 />
                 <div className="grid gap-2">
                   <Label htmlFor="is_active">Website Active</Label>
-                  <select
+                  <SearchableSelect
                     className={selectClassName}
                     defaultValue={editing.isActive ? "TRUE" : "FALSE"}
                     id="is_active"
@@ -477,7 +478,7 @@ export default async function WebsiteProductsPage({
                   >
                     <option value="TRUE">True</option>
                     <option value="FALSE">False</option>
-                  </select>
+                  </SearchableSelect>
                 </div>
                 <Field
                   defaultValue={editing.entryCreatedAt}

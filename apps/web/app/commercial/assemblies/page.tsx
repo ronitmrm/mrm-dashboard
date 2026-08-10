@@ -9,6 +9,7 @@ import {
 } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import {
   Table,
   TableBody,
@@ -180,7 +181,7 @@ export default async function AssembliesPage({
               <form action={addBomLineAction} className="grid gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="parent_item_id">Parent Product</Label>
-                  <select
+                  <SearchableSelect
                     className="h-9 rounded-md border bg-background px-3 text-sm"
                     id="parent_item_id"
                     name="parent_item_id"
@@ -192,11 +193,11 @@ export default async function AssembliesPage({
                         {product.uid} — {product.description}
                       </option>
                     ))}
-                  </select>
+                  </SearchableSelect>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="component_item_id">Component Product</Label>
-                  <select
+                  <SearchableSelect
                     className="h-9 rounded-md border bg-background px-3 text-sm"
                     id="component_item_id"
                     name="component_item_id"
@@ -208,7 +209,7 @@ export default async function AssembliesPage({
                         {product.uid} — {product.description}
                       </option>
                     ))}
-                  </select>
+                  </SearchableSelect>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="quantity">Quantity</Label>

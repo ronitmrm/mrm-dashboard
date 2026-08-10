@@ -41,6 +41,7 @@ import {
 } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
+import { SearchableSelect } from "@workspace/ui/components/searchable-select";
 import { Separator } from "@workspace/ui/components/separator";
 import {
   Sidebar,
@@ -766,11 +767,11 @@ function HourlyQualityCheckShell({
                           <TableCell>{displayValue(parameter.instrumentUsed)}</TableCell>
                           <TableCell>
                             {qualityParameterInputType(parameter) === "pass_fail" ? (
-                              <select className={`h-9 w-full rounded-md border bg-background px-3 text-sm ${readingClass}`} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))}>
+                              <SearchableSelect className={`h-9 w-full rounded-md border bg-background px-3 text-sm ${readingClass}`} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))}>
                                 <option value="">Select</option>
                                 <option value="OK">Ok</option>
                                 <option value="Not OK">Not Ok</option>
-                              </select>
+                              </SearchableSelect>
                             ) : (
                               <Input className={readingClass} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))} type={qualityParameterInputType(parameter) === "number" ? "number" : "text"} step="0.001" />
                             )}
@@ -1848,7 +1849,7 @@ function MachineConstraintPlannerForm({
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
         <Field label="Machine Unavailable">
-          <select
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={machineNo}
             required
@@ -1858,7 +1859,7 @@ function MachineConstraintPlannerForm({
             {machineOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="From">
           <Input type="date" value={unavailableFrom} required onChange={(event) => updateField(setUnavailableFrom, event.target.value)} />
@@ -1867,17 +1868,17 @@ function MachineConstraintPlannerForm({
           <Input type="date" value={unavailableTo} onChange={(event) => updateField(setUnavailableTo, event.target.value)} />
         </Field>
         <Field label="Plan Action">
-          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={rescheduleAction} onChange={(event) => updateField(setRescheduleAction, event.target.value)}>
+          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={rescheduleAction} onChange={(event) => updateField(setRescheduleAction, event.target.value)}>
             <option value="shift_required">Shift Required</option>
             <option value="shift_all">Shift All</option>
             <option value="delay">Delay Plan</option>
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Planning Confirmation">
-          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={planningMode} onChange={(event) => updatePlanningInput(setPlanningMode, event.target.value)}>
+          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={planningMode} onChange={(event) => updatePlanningInput(setPlanningMode, event.target.value)}>
             <option value="system_recalculate">System Recalculation (All Planning Rules)</option>
             <option value="review_then_plan">Review Queue Before Saving</option>
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Reason">
           <Input value={reason} placeholder="Breakdown / Quality Hold" required onChange={(event) => setReason(event.target.value)} />
@@ -2161,7 +2162,7 @@ function PartMachineSwitchPlannerForm({
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-6">
         <Field label="Item Code">
-          <select
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={selectedItem}
             required
@@ -2177,10 +2178,10 @@ function PartMachineSwitchPlannerForm({
             {itemOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Job Card">
-          <select
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={target}
             required
@@ -2195,10 +2196,10 @@ function PartMachineSwitchPlannerForm({
             {jobCardOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Setup No.">
-          <select
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={setupNo}
             required
@@ -2212,10 +2213,10 @@ function PartMachineSwitchPlannerForm({
             {setupOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="From Machine">
-          <select
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={fromMachine}
             required
@@ -2228,10 +2229,10 @@ function PartMachineSwitchPlannerForm({
             {fromMachineOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Plan On Machine">
-          <select
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={toMachine}
             required
@@ -2241,7 +2242,7 @@ function PartMachineSwitchPlannerForm({
             {targetMachineOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Reason">
           <Input value={reason} placeholder="Planner Approved Machine Switch" required onChange={(event) => setReason(event.target.value)} />
@@ -2912,7 +2913,7 @@ function PlannerPriorityForm({
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
         <Field label="Item Code">
-          <select
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={partCode}
             required
@@ -2926,10 +2927,10 @@ function PlannerPriorityForm({
             {itemOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Jc Number">
-          <select
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={jcNo}
             onChange={(event) => {
@@ -2941,10 +2942,10 @@ function PlannerPriorityForm({
             {jobCardOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Priority">
-          <select
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={priority}
             onChange={(event) => {
@@ -2955,7 +2956,7 @@ function PlannerPriorityForm({
             {["Urgent", "High", "Normal", "Low"].map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Reason">
           <Input value={remark} placeholder="Customer Urgent / Dispatch Commitment" onChange={(event) => setRemark(event.target.value)} />
@@ -3537,11 +3538,11 @@ function RouteChangePlannerForm({
           </datalist>
         </Field>
         <Field label="New Route Option">
-          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedOption} required onChange={(event) => setNewOption(event.target.value)}>
+          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedOption} required onChange={(event) => setNewOption(event.target.value)}>
             {optionNumbers.length ? optionNumbers.map((option) => (
               <option key={option} value={option}>{option}</option>
             )) : <option value="">Select Job Card First</option>}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Reason">
           <Input value={reason} placeholder="Why Route Is Changing" required onChange={(event) => setReason(event.target.value)} />
@@ -5067,20 +5068,20 @@ useEffect(() => {
       {role !== "shopFloor" ? (
         <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-6">
           <CompactEntryField className="lg:col-span-2" label="Machine No.">
-            <select className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+            <SearchableSelect className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
               <option value="">Select Machine</option>
               {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-            </select>
+            </SearchableSelect>
           </CompactEntryField>
           <CompactEntryField label="Date">
             <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
           </CompactEntryField>
           <CompactEntryField label="Shift">
-            <select className={compactSelectClass} value={shift} onChange={(event) => setShift(event.target.value)}>
+            <SearchableSelect className={compactSelectClass} value={shift} onChange={(event) => setShift(event.target.value)}>
               <option value="Day">Day</option>
               <option value="Night">Night</option>
               <option value="General">General</option>
-            </select>
+            </SearchableSelect>
           </CompactEntryField>
           {selectedRow ? (
             <div className="flex min-h-8 items-center rounded-md border bg-background px-2 sm:col-span-2 lg:col-span-2">
@@ -5094,20 +5095,20 @@ useEffect(() => {
         <>
           <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-6">
             <CompactEntryField className="lg:col-span-2" label="Machine No.">
-              <select className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+              <SearchableSelect className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
                 <option value="">Select Machine</option>
                 {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-              </select>
+              </SearchableSelect>
             </CompactEntryField>
             <CompactEntryField label="Date">
               <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
             </CompactEntryField>
             <CompactEntryField label="Shift">
-              <select className={compactSelectClass} value={shift} onChange={(event) => setShift(event.target.value)}>
+              <SearchableSelect className={compactSelectClass} value={shift} onChange={(event) => setShift(event.target.value)}>
                 <option value="Day">Day</option>
                 <option value="Night">Night</option>
                 <option value="General">General</option>
-              </select>
+              </SearchableSelect>
             </CompactEntryField>
             {selectedRow ? (
               <div className="flex min-h-8 items-center rounded-md border bg-background px-2 sm:col-span-2 lg:col-span-2">
@@ -5138,9 +5139,9 @@ useEffect(() => {
               <Input className={compactInputClass} type="number" step="1" value={cratesUsed} onChange={(event) => setCratesUsed(event.target.value)} />
             </CompactEntryField>
             <CompactEntryField label="Crate Weight Kg">
-              <select className={compactSelectClass} value={crateWeightKg} onChange={(event) => setCrateWeightKg(event.target.value)}>
+              <SearchableSelect className={compactSelectClass} value={crateWeightKg} onChange={(event) => setCrateWeightKg(event.target.value)}>
                 {CRATE_WEIGHT_OPTIONS_KG.map((weight) => <option key={weight} value={String(weight)}>{formatNumber(weight)} Kg</option>)}
-              </select>
+              </SearchableSelect>
             </CompactEntryField>
             <CompactEntryField label="Net Produced Kg">
               <Input className={compactInputClass} value={formatNumber(netProducedKg)} readOnly />
@@ -5163,10 +5164,10 @@ useEffect(() => {
               <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
             </CompactEntryField>
             <CompactEntryField label="Downtime Code">
-              <select className={compactSelectClass} value={bulkDowntimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setBulkDowntimeCode(event.target.value)}>
+              <SearchableSelect className={compactSelectClass} value={bulkDowntimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setBulkDowntimeCode(event.target.value)}>
                 <option value="">{downtimeReasonOptions.length ? "Select Code" : "Add Downtime Reason Master"}</option>
                 {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-              </select>
+              </SearchableSelect>
             </CompactEntryField>
             <CompactEntryField label="Start">
               <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(time24Input(event.target.value))} />
@@ -5214,10 +5215,10 @@ useEffect(() => {
             <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
           </CompactEntryField>
           <CompactEntryField label="Downtime Code">
-            <select className={compactSelectClass} value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
+            <SearchableSelect className={compactSelectClass} value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
               <option value="">{downtimeReasonOptions.length ? "Select Code" : "Add Downtime Reason Master"}</option>
               {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-            </select>
+            </SearchableSelect>
           </CompactEntryField>
           <CompactEntryField label="Start">
             <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />
@@ -5234,22 +5235,22 @@ useEffect(() => {
       {isRejectionEntry ? (
         <div className="grid gap-1.5 rounded-md border bg-background p-2 sm:grid-cols-2 lg:grid-cols-4">
           <CompactEntryField label="Rejection Type">
-            <select className={compactSelectClass} value={rejectionTypeCode} onChange={(event) => setRejectionTypeCode(event.target.value)}>
+            <SearchableSelect className={compactSelectClass} value={rejectionTypeCode} onChange={(event) => setRejectionTypeCode(event.target.value)}>
               <option value="">Select Type</option>
               {rejectionTypeOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
-            </select>
+            </SearchableSelect>
           </CompactEntryField>
           <CompactEntryField label="Rejection Reason">
-            <select className={compactSelectClass} value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}>
+            <SearchableSelect className={compactSelectClass} value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}>
               <option value="">Select Reason</option>
               {rejectionReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
-            </select>
+            </SearchableSelect>
           </CompactEntryField>
           <CompactEntryField label="Rejection Remark">
-            <select className={compactSelectClass} value={rejectionRemarkCode} onChange={(event) => setRejectionRemarkCode(event.target.value)}>
+            <SearchableSelect className={compactSelectClass} value={rejectionRemarkCode} onChange={(event) => setRejectionRemarkCode(event.target.value)}>
               <option value="">Select Remark</option>
               {rejectionRemarkOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
-            </select>
+            </SearchableSelect>
           </CompactEntryField>
           <CompactEntryField label="Rejected Pcs">
             <Input className={compactInputClass} type="number" step="1" min="0" value={rejectedPieces} onChange={(event) => setRejectedPieces(event.target.value)} />
@@ -5342,11 +5343,11 @@ function SetupChecklistForm({
                   </TableCell>
                   <TableCell>
                     {inputType === "checkbox" ? (
-                      <select className="h-8 rounded-md border bg-background px-2 text-sm" value={value} onChange={(event) => onValueChange(item, event.target.value)}>
+                      <SearchableSelect className="h-8 rounded-md border bg-background px-2 text-sm" value={value} onChange={(event) => onValueChange(item, event.target.value)}>
                         <option value="">Select</option>
                         <option value="Yes">Yes</option>
                         <option value="No">No</option>
-                      </select>
+                      </SearchableSelect>
                     ) : (
                       <Input className="h-8 min-w-28" type={inputType === "number" ? "number" : "text"} value={value} onChange={(event) => onValueChange(item, event.target.value)} />
                     )}
@@ -5441,11 +5442,11 @@ function FirstPieceInspectionForm({
                     <TableCell key={pieceIndex} className={qualityResultTone(result) === "bad" ? "bg-red-50/70 dark:bg-red-950/20" : ""}>
                       <div className="grid gap-1">
                         {qualityParameterInputType(master) === "pass_fail" ? (
-                          <select className={`h-8 min-w-20 rounded-md border bg-background px-2 text-sm ${qualityReadingInputClass(result)}`} value={value} onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)} required>
+                          <SearchableSelect className={`h-8 min-w-20 rounded-md border bg-background px-2 text-sm ${qualityReadingInputClass(result)}`} value={value} onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)} required>
                             <option value="">Select</option>
                             <option value="OK">Ok</option>
                             <option value="Not OK">Not Ok</option>
-                          </select>
+                          </SearchableSelect>
                         ) : (
                           <Input
                             className={`h-8 min-w-20 ${qualityReadingInputClass(result)}`}
@@ -5565,21 +5566,21 @@ function WorkOrderGapTable({
         {showFilters ? (
           <div className="grid gap-3 md:grid-cols-2">
           <Field label="Gap Type">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={gapFilter} onChange={(event) => setGapFilter(event.target.value)}>
+            <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={gapFilter} onChange={(event) => setGapFilter(event.target.value)}>
               <option value="all">All Gaps</option>
               <option value="route_option">Route Option Missing</option>
               <option value="route_master">Route Master Missing</option>
               <option value="cycle_time">Cycle Time Missing</option>
               <option value="tooling">Tooling Missing</option>
               <option value="machine_master">Machine Master Missing</option>
-            </select>
+            </SearchableSelect>
           </Field>
           <Field label="Rm Status">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={rmFilter} onChange={(event) => setRmFilter(event.target.value)}>
+            <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={rmFilter} onChange={(event) => setRmFilter(event.target.value)}>
               <option value="all">All Work Orders</option>
               <option value="received">Rm Received</option>
               <option value="waiting">Waiting Rm</option>
-            </select>
+            </SearchableSelect>
           </Field>
           </div>
         ) : null}
@@ -5660,7 +5661,7 @@ function WorkOrderGapRow({
             <form className="grid gap-1.5" onSubmit={(event) => void submitRoute(event)}>
               <Label className="text-xs text-muted-foreground">Select Option Number</Label>
               <div className="grid gap-2 sm:grid-cols-[minmax(12rem,1fr)_7.5rem]">
-                <select className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm" name="optionNumber" defaultValue="" required>
+                <SearchableSelect className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm" name="optionNumber" defaultValue="" required>
                   <option value="">Select Option</option>
                   {options.map((option, optionIndex) => {
                     const record = asRecord(option);
@@ -5671,7 +5672,7 @@ function WorkOrderGapRow({
                       </option>
                     );
                   })}
-                </select>
+                </SearchableSelect>
                 <Button type="submit" size="sm" className="w-full">Save Option</Button>
               </div>
             </form>
@@ -5822,7 +5823,7 @@ function DataEntryPanel({
         <CardContent className="grid gap-4">
           <form className="grid gap-3 @3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]" onSubmit={importEntryTemplate}>
             <Field label="Select Entry Form">
-              <select
+              <SearchableSelect
                 className="h-9 rounded-md border bg-background px-3 text-sm"
                 value={bulkEntryType}
                 onChange={(event) => setBulkEntryType(event.target.value)}
@@ -5832,7 +5833,7 @@ function DataEntryPanel({
                     {spec.title}
                   </option>
                 ))}
-              </select>
+              </SearchableSelect>
             </Field>
             <Field label="Filled Csv Template">
               <Input name="file" type="file" accept=".csv,text/csv" />
@@ -5908,7 +5909,7 @@ function MasterTablesPanel({
         </CardHeader>
         <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(260px,1fr)_auto]">
           <Field label="Master">
-            <select
+            <SearchableSelect
               className="h-9 rounded-md border bg-background px-3 text-sm"
               value={selectedSpec.entryType}
               onChange={(event) => { setEntryType(event.target.value); setSearchQuery(""); setTableResetKey((current) => current + 1); }}
@@ -5916,7 +5917,7 @@ function MasterTablesPanel({
               {specs.map((spec) => (
                 <option key={spec.entryType} value={spec.entryType}>{spec.title}</option>
               ))}
-            </select>
+            </SearchableSelect>
           </Field>
           <Field label="Search All Visible Columns">
             <div className="relative">
@@ -6299,17 +6300,17 @@ function MachineMasterPanel({
                 <input type="hidden" name="machineNo" value={displayValue(selectedMachine.machineNo)} />
                 <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
                   <Field label="Maintenance Schedule">
-                    <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedMaintenanceCode} onChange={(event) => { const code = event.target.value; setSelectedMaintenanceCode(code); const master = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(code)); setSelectedChecklistCode(displayValue(master?.checklistCode) !== "-" ? displayValue(master?.checklistCode) : ""); }} required>
+                    <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedMaintenanceCode} onChange={(event) => { const code = event.target.value; setSelectedMaintenanceCode(code); const master = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(code)); setSelectedChecklistCode(displayValue(master?.checklistCode) !== "-" ? displayValue(master?.checklistCode) : ""); }} required>
                       <option value="">Select Schedule</option>
                       {maintenanceMasterRows.map((row) => <option key={displayValue(row.maintenanceCode)} value={displayValue(row.maintenanceCode)}>{displayValue(row.maintenanceTitle)}</option>)}
-                    </select>
+                    </SearchableSelect>
                   </Field>
                   <Field label="Schedule Code"><Input value={displayValue(selectedMaintenance?.maintenanceCode)} readOnly /></Field>
                   <Field label="Frequency Days"><Input value={displayValue(selectedMaintenance?.frequencyDays)} readOnly /></Field>
                   <Field label="Checklist Code"><Input value={displayValue(selectedMaintenance?.checklistCode)} readOnly /></Field>
                   <Field label="First Due Date"><Input name="firstDueDate" type="date" defaultValue={todayIsoDate()} required /></Field>
                   <Field label="Estimated Minutes"><Input value={displayValue(selectedMaintenance?.estimatedMinutes)} readOnly /></Field>
-                  <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue="Active"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
+                  <Field label="Status"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue="Active"><option value="Active">Active</option><option value="Inactive">Inactive</option></SearchableSelect></Field>
                   <Field label="Remark"><Input name="remark" /></Field>
                 </div>
                 <Button type="submit" className="w-fit" disabled={!selectedMaintenance}><CalendarDays className="size-4" />Save Schedule</Button>
@@ -6376,7 +6377,7 @@ function MaintenancePanel
       </Card>
       <Card>
         <CardHeader><CardTitle>Breakdown Maintenance Entry</CardTitle><CardDescription>Use This For Maintenance Not Against A Planned Schedule.</CardDescription></CardHeader>
-        <CardContent><form className="grid gap-3" onSubmit={saveBreakdownMaintenance}><div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3"><Field label="Machine No."><select className="h-9 rounded-md border bg-background px-3 text-sm" name="machineNo" required><option value="">Select Machine</option>{machineRows.map((row) => <option key={displayValue(row.machineNo)} value={displayValue(row.machineNo)}>{displayValue(row.machineNo)}</option>)}</select></Field><Field label="Date"><Input name="completedDate" type="date" defaultValue={todayIsoDate()} required /></Field><Field label="Completed By"><Input name="completedBy" required /></Field><Field label="Actual Minutes"><Input name="actualMinutes" type="number" min="0" /></Field><Field label="Maintenance Code"><Input name="maintenanceCode" defaultValue="BREAKDOWN" /></Field><Field label="Maintenance Title"><Input name="maintenanceTitle" defaultValue="Breakdown maintenance" /></Field><Field label="Result"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="result" defaultValue="Completed"><option value="Completed">Completed</option><option value="Needs follow up">Needs Follow Up</option><option value="Skipped">Skipped</option></select></Field><Field label="Breakdown Reason"><Input name="breakdownReason" required /></Field><Field label="Parts Changed"><Input name="partsChanged" /></Field><Field label="Work Done"><Input name="workDone" /></Field><Field label="Remark"><Input name="remark" /></Field></div><Button type="submit" className="w-fit" disabled={!machineRows.length}><Wrench className="size-4" />Save Breakdown</Button></form></CardContent>
+        <CardContent><form className="grid gap-3" onSubmit={saveBreakdownMaintenance}><div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3"><Field label="Machine No."><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="machineNo" required><option value="">Select Machine</option>{machineRows.map((row) => <option key={displayValue(row.machineNo)} value={displayValue(row.machineNo)}>{displayValue(row.machineNo)}</option>)}</SearchableSelect></Field><Field label="Date"><Input name="completedDate" type="date" defaultValue={todayIsoDate()} required /></Field><Field label="Completed By"><Input name="completedBy" required /></Field><Field label="Actual Minutes"><Input name="actualMinutes" type="number" min="0" /></Field><Field label="Maintenance Code"><Input name="maintenanceCode" defaultValue="BREAKDOWN" /></Field><Field label="Maintenance Title"><Input name="maintenanceTitle" defaultValue="Breakdown maintenance" /></Field><Field label="Result"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="result" defaultValue="Completed"><option value="Completed">Completed</option><option value="Needs follow up">Needs Follow Up</option><option value="Skipped">Skipped</option></SearchableSelect></Field><Field label="Breakdown Reason"><Input name="breakdownReason" required /></Field><Field label="Parts Changed"><Input name="partsChanged" /></Field><Field label="Work Done"><Input name="workDone" /></Field><Field label="Remark"><Input name="remark" /></Field></div><Button type="submit" className="w-fit" disabled={!machineRows.length}><Wrench className="size-4" />Save Breakdown</Button></form></CardContent>
       </Card>
     </section>
   );
@@ -6473,8 +6474,8 @@ function PlanningHolidayPanel({
           <form className="grid gap-3" onSubmit={saveHoliday}>
             <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
               <Field label="Holiday Date"><Input name="date" type="date" required /></Field>
-              <Field label="Reason"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="reason" defaultValue="Plant holiday"><option value="Plant holiday">Plant Holiday</option><option value="Vacation">Vacation</option><option value="Maintenance shutdown">Maintenance Shutdown</option><option value="Other">Other</option></select></Field>
-              <Field label="Applies To"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="coverage" defaultValue="all"><option value="all">All Factory</option>{productionFloors.map((floor) => <option key={floor.code} value={floor.code}>{floor.shortLabel}</option>)}</select></Field>
+              <Field label="Reason"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="reason" defaultValue="Plant holiday"><option value="Plant holiday">Plant Holiday</option><option value="Vacation">Vacation</option><option value="Maintenance shutdown">Maintenance Shutdown</option><option value="Other">Other</option></SearchableSelect></Field>
+              <Field label="Applies To"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="coverage" defaultValue="all"><option value="all">All Factory</option>{productionFloors.map((floor) => <option key={floor.code} value={floor.code}>{floor.shortLabel}</option>)}</SearchableSelect></Field>
               <Field label="Remark"><Input name="remark" /></Field>
             </div>
             <Button className="w-fit" type="submit" disabled={isSaving}><CalendarDays className="size-4" />{isSaving ? "Saving..." : "Save Holiday"}</Button>
@@ -6683,9 +6684,9 @@ function QualityParameterMasterForm({
       <CardContent className="grid gap-4">
         {!routeLines.length ? <AlertMessage tone="destructive">Create The Item, Option, And Setup Line In Route Master Before Adding Quality Inspection Parameters.</AlertMessage> : null}
         <div className="grid gap-3 md:grid-cols-3">
-          <Field label="Item Code"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.partNo} onChange={(event) => { setSetupFields({ partNo: event.target.value, optionNumber: "", setupNo: "" }); setStatus(null); }} required><option value="">Select Route Master Item</option>{itemOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
-          <Field label="Option No."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.optionNumber} onChange={(event) => { setSetupFields((current) => ({ ...current, optionNumber: event.target.value, setupNo: "" })); setStatus(null); }} required disabled={!setupFields.partNo}><option value="">Select Option</option>{optionOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
-          <Field label="Setup No."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.setupNo} onChange={(event) => { setSetupFields((current) => ({ ...current, setupNo: event.target.value })); setStatus(null); }} required disabled={!setupFields.optionNumber}><option value="">Select Setup</option>{setupNumberOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
+          <Field label="Item Code"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.partNo} onChange={(event) => { setSetupFields({ partNo: event.target.value, optionNumber: "", setupNo: "" }); setStatus(null); }} required><option value="">Select Route Master Item</option>{itemOptions.map((value) => <option key={value} value={value}>{value}</option>)}</SearchableSelect></Field>
+          <Field label="Option No."><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.optionNumber} onChange={(event) => { setSetupFields((current) => ({ ...current, optionNumber: event.target.value, setupNo: "" })); setStatus(null); }} required disabled={!setupFields.partNo}><option value="">Select Option</option>{optionOptions.map((value) => <option key={value} value={value}>{value}</option>)}</SearchableSelect></Field>
+          <Field label="Setup No."><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.setupNo} onChange={(event) => { setSetupFields((current) => ({ ...current, setupNo: event.target.value })); setStatus(null); }} required disabled={!setupFields.optionNumber}><option value="">Select Setup</option>{setupNumberOptions.map((value) => <option key={value} value={value}>{value}</option>)}</SearchableSelect></Field>
         </div>
         <div className="overflow-auto rounded-lg border">
           <Table>
@@ -6711,7 +6712,7 @@ function QualityParameterMasterForm({
                   <TableCell><Input className="h-8 min-w-36" value={draft.instrumentUsed} onChange={(event) => updateDraft(draft.draftId, "instrumentUsed", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.tolerancePlus} onChange={(event) => updateDraft(draft.draftId, "tolerancePlus", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.toleranceMinus} onChange={(event) => updateDraft(draft.draftId, "toleranceMinus", event.target.value)} /></TableCell>
-                  <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="number">Number</option><option value="text">Text</option><option value="pass_fail">Ok / Not Ok</option></select></TableCell>
+                  <TableCell><SearchableSelect className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="number">Number</option><option value="text">Text</option><option value="pass_fail">Ok / Not Ok</option></SearchableSelect></TableCell>
                   <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
                   <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Parameter" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
                 </TableRow>
@@ -6806,10 +6807,10 @@ function MaintenanceMasterForm({
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
           <Field label="Maintenance Schedule">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => { setSelectedCode(event.target.value); setChecklistCodeOverride(""); }}>
+            <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => { setSelectedCode(event.target.value); setChecklistCodeOverride(""); }}>
               <option value={nextMaintenanceMasterCode(savedRows)}>New Schedule ({nextMaintenanceMasterCode(savedRows)})</option>
               {scheduleOptions.map((row) => <option key={displayValue(row.maintenanceCode)} value={displayValue(row.maintenanceCode)}>{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</option>)}
-            </select>
+            </SearchableSelect>
           </Field>
           <TileField label="Saved Schedules" value={scheduleOptions.length} numeric />
         </div>
@@ -6823,10 +6824,10 @@ function MaintenanceMasterForm({
             <Field label="Maintenance Code"><Input name="maintenanceCode" value={selectedCode} readOnly /></Field>
             <Field label="Maintenance Schedule Title"><Input name="maintenanceTitle" defaultValue={selectedTitle !== "-" ? selectedTitle : ""} required /></Field>
             <Field label="Frequency"><Input name="frequencyDays" type="number" min="1" defaultValue={selectedFrequency !== "-" ? selectedFrequency : ""} required /></Field>
-            <Field label="Frequency Basis"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="frequencyBasis" defaultValue={selectedFrequencyBasis !== "-" ? selectedFrequencyBasis : "Calendar Days"}><option value="Calendar days">Calendar Days</option><option value="Running days">Running Days</option></select></Field>
-            <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={previewChecklistCode} onChange={(event) => setChecklistCodeOverride(event.target.value)}><option value="">No Checklist</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
+            <Field label="Frequency Basis"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="frequencyBasis" defaultValue={selectedFrequencyBasis !== "-" ? selectedFrequencyBasis : "Calendar Days"}><option value="Calendar days">Calendar Days</option><option value="Running days">Running Days</option></SearchableSelect></Field>
+            <Field label="Checklist"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={previewChecklistCode} onChange={(event) => setChecklistCodeOverride(event.target.value)}><option value="">No Checklist</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</SearchableSelect></Field>
             <Field label="Estimated Minutes"><Input name="estimatedMinutes" type="number" min="0" defaultValue={selectedEstimatedMinutes !== "-" ? selectedEstimatedMinutes : ""} /></Field>
-            <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue={selectedStatus !== "-" ? selectedStatus : "Active"}><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
+            <Field label="Status"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue={selectedStatus !== "-" ? selectedStatus : "Active"}><option value="Active">Active</option><option value="Inactive">Inactive</option></SearchableSelect></Field>
             <Field label="Remark"><Input name="remark" defaultValue={selectedRemark !== "-" ? selectedRemark : ""} /></Field>
           </div>
           <Button className="w-fit" type="submit"><Wrench className="size-4" />{isExistingSchedule ? "Update Schedule" : "Create Schedule"}</Button>
@@ -6958,10 +6959,10 @@ function MaintenanceChecklistMasterForm({
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px_140px]">
           <Field label="Checklist">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}>
+            <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}>
               <option value={nextMaintenanceChecklistCode(savedRows)}>New Checklist ({nextMaintenanceChecklistCode(savedRows)})</option>
               {checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}
-            </select>
+            </SearchableSelect>
           </Field>
           <div className="flex items-end gap-2">
             <Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New Checklist</Button>
@@ -6989,7 +6990,7 @@ function MaintenanceChecklistMasterForm({
                 <TableRow key={draft.draftId}>
                   <TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-72" value={draft.stepDescription} onChange={(event) => updateDraft(draft.draftId, "stepDescription", event.target.value)} /></TableCell>
-                  <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></select></TableCell>
+                  <TableCell><SearchableSelect className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></SearchableSelect></TableCell>
                   <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
                   <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Checklist Step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
                 </TableRow>
@@ -7122,7 +7123,7 @@ function SetupChecklistMasterForm({
       <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px_140px]">
-          <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}><option value={nextSetupChecklistCode(savedRows)}>New Checklist ({nextSetupChecklistCode(savedRows)})</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
+          <Field label="Checklist"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}><option value={nextSetupChecklistCode(savedRows)}>New Checklist ({nextSetupChecklistCode(savedRows)})</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</SearchableSelect></Field>
           <div className="flex items-end"><Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New Checklist</Button></div>
           <TileField label="Checklists" value={checklistOptions.length} numeric />
           <TileField label="Steps" value={drafts.filter((draft) => draft.checkPoint.trim()).length} numeric />
@@ -7135,7 +7136,7 @@ function SetupChecklistMasterForm({
         <div className="overflow-auto rounded-lg border">
           <Table>
             <TableHeader><TableRow><TableHead className="min-w-20">Step</TableHead><TableHead className="min-w-72">Check Point</TableHead><TableHead className="min-w-32">Input</TableHead><TableHead className="min-w-28">Required</TableHead><TableHead className="min-w-52">Section</TableHead><TableHead className="min-w-44">Remark</TableHead><TableHead className="w-12"></TableHead></TableRow></TableHeader>
-            <TableBody>{drafts.map((draft, index) => <TableRow key={draft.draftId}><TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-64" value={draft.checkPoint} onChange={(event) => updateDraft(draft.draftId, "checkPoint", event.target.value)} /></TableCell><TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></select></TableCell><TableCell><select className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.required} onChange={(event) => updateDraft(draft.draftId, "required", event.target.value)}><option value="Yes">Yes</option><option value="No">No</option></select></TableCell><TableCell><Input className="h-8 min-w-48" value={draft.section} onChange={(event) => updateDraft(draft.draftId, "section", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell><TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Setup Checklist Step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell></TableRow>)}</TableBody>
+            <TableBody>{drafts.map((draft, index) => <TableRow key={draft.draftId}><TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-64" value={draft.checkPoint} onChange={(event) => updateDraft(draft.draftId, "checkPoint", event.target.value)} /></TableCell><TableCell><SearchableSelect className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></SearchableSelect></TableCell><TableCell><SearchableSelect className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.required} onChange={(event) => updateDraft(draft.draftId, "required", event.target.value)}><option value="Yes">Yes</option><option value="No">No</option></SearchableSelect></TableCell><TableCell><Input className="h-8 min-w-48" value={draft.section} onChange={(event) => updateDraft(draft.draftId, "section", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell><TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Setup Checklist Step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell></TableRow>)}</TableBody>
           </Table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2"><Button type="button" variant="outline" onClick={() => setDrafts((current) => [...current, newSetupChecklistDraft(current.length + 1)])}><Plus className="size-4" />Add Step</Button><div className="flex flex-wrap items-center gap-2">{status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}<Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save Checklist"}</Button></div></div>
@@ -7433,7 +7434,7 @@ function LegacyActionForm({
         {fields.map((field) => (
           <Field key={field.name} label={field.label}>
             {field.options ? (
-              <select
+              <SearchableSelect
                 className="h-9 rounded-md border bg-background px-3 text-sm"
                 name={field.name}
                 defaultValue={str(defaults[field.name]) || field.defaultValue || field.options[0]}
@@ -7444,7 +7445,7 @@ function LegacyActionForm({
                     {option ? option.replaceAll("_", " ") : "Normal"}
                   </option>
                 ))}
-              </select>
+              </SearchableSelect>
             ) : (
               <Input
                 name={field.name}
@@ -8059,7 +8060,7 @@ function FilterSelect({
   return (
       <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
         <span>{label}</span>
-        <select
+        <SearchableSelect
           className="h-9 rounded-3xl border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors hover:border-primary/45 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 dark:bg-input/20"
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -8069,7 +8070,7 @@ function FilterSelect({
               {label}
             </option>
           ))}
-        </select>
+        </SearchableSelect>
       </Label>
   );
 }
@@ -8086,7 +8087,7 @@ function MachineMasterColumnFilter({
   options: string[];
 }) {
   return (
-    <select
+    <SearchableSelect
       aria-label={`Filter ${label}`}
       className="h-8 w-full min-w-32 rounded-md border bg-background px-2 text-xs font-normal outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
       value={value}
@@ -8096,7 +8097,7 @@ function MachineMasterColumnFilter({
       {options.map((option) => (
         <option key={option} value={option}>{option}</option>
       ))}
-    </select>
+    </SearchableSelect>
   );
 }
 
@@ -8117,7 +8118,7 @@ function ExcelStyleFilters({
       {filters.map((filter) => (
         <Label key={filter.id} className="grid gap-1 text-xs font-medium text-muted-foreground">
           <span>{filter.label}</span>
-          <select
+          <SearchableSelect
             className="h-9 rounded-3xl border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors hover:border-primary/45 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 dark:bg-input/20"
             value={filter.value}
             onChange={(event) => filter.onChange(event.target.value)}
@@ -8128,7 +8129,7 @@ function ExcelStyleFilters({
                 {option}
               </option>
             ))}
-          </select>
+          </SearchableSelect>
         </Label>
       ))}
     </div>
@@ -9534,14 +9535,14 @@ function LabeledSelect({
   return (
     <label className="grid gap-1 text-xs font-medium text-muted-foreground">
       {label}
-      <select className="h-9 rounded-md border bg-background px-3 text-sm text-foreground" value={value} onChange={(event) => onChange(event.target.value)}>
+      <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm text-foreground" value={value} onChange={(event) => onChange(event.target.value)}>
         {placeholder ? <option value="">{placeholder}</option> : null}
         {options.map((option) => {
           const optionValue = typeof option === "string" ? option : option.value;
           const optionLabel = typeof option === "string" ? option : option.label;
           return <option key={optionValue} value={optionValue}>{optionLabel}</option>;
         })}
-      </select>
+      </SearchableSelect>
     </label>
   );
 }
