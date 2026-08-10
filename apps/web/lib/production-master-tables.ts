@@ -47,27 +47,25 @@ type ProductionMasterField = {
   label: string
 }
 
-function hasMasterValue(value: unknown) {
-  if (value === null || value === undefined) return false
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase()
-    return normalized !== "" && normalized !== "-" && normalized !== "n/a"
-  }
-  if (Array.isArray(value)) return value.length > 0
-  if (typeof value === "object") return Object.keys(value).length > 0
-  return true
-}
-
 export function columnsForProductionMaster(
-  fields: ProductionMasterField[],
-  rows: Array<Record<string, unknown>>,
-  alwaysInclude: readonly string[] = []
+  fields: ProductionMasterField[]
 ) {
   return fields
-    .filter(
-      (field) =>
-        alwaysInclude.includes(field.name) ||
-        rows.some((row) => hasMasterValue(row[field.name]))
-    )
     .map((field) => ({ key: field.name, label: field.label }))
+}
+
+export function uniqueChecklistCodeCount(
+  entryType: "maintenance_checklist_master" | "setup_checklist_master",
+  rows: Array<Record<string, unknown>>
+) {
+  const codes = new Set<string>()
+  for (const row of rows) {
+    const value =
+      entryType === "maintenance_checklist_master"
+        ? row.checklistCode
+        : row.checklistCode ?? row.version
+    const code = String(value ?? "").trim().toLowerCase()
+    if (code && code !== "-" && code !== "n/a") codes.add(code)
+  }
+  return codes.size
 }

@@ -5,6 +5,7 @@ import {
   dataEntryRowsForProductionMaster,
   productionMasterRowSources,
   rowsForProductionMaster,
+  uniqueChecklistCodeCount,
 } from "./production-master-tables"
 
 describe("Production master table rows", () => {
@@ -37,7 +38,7 @@ describe("Production master table rows", () => {
     expect(productionMasterRowSources.route).toEqual(["routeMasterRows"])
   })
 
-  it("shows only populated form fields as columns", () => {
+  it("shows every configured master column even when values are blank", () => {
     const fields = [
       { name: "machineNo", label: "Machine No." },
       { name: "machineFamily", label: "Machine Family" },
@@ -47,47 +48,45 @@ describe("Production master table rows", () => {
       { name: "capacity", label: "Capacity" },
       { name: "status", label: "Status" },
     ]
-    const rows = [
-      {
-        machineNo: "A-01",
-        machineFamily: "A",
-        machineType: "Automatic",
-        machineName: "Turning centre",
-        location: "",
-        capacity: null,
-        status: "Active",
-        ownerId: "metadata-owner",
-        output: 42,
-      },
-    ]
-
-    expect(columnsForProductionMaster(fields, rows, [
-      "machineNo",
-      "machineFamily",
-      "machineType",
-      "machineName",
-      "location",
-    ])).toEqual([
+    expect(columnsForProductionMaster(fields)).toEqual([
       { key: "machineNo", label: "Machine No." },
       { key: "machineFamily", label: "Machine Family" },
       { key: "machineType", label: "Machine Type" },
       { key: "machineName", label: "Machine Name" },
       { key: "location", label: "Machine Location" },
+      { key: "capacity", label: "Capacity" },
       { key: "status", label: "Status" },
     ])
   })
 
-  it("keeps populated zero and false values", () => {
+  it("keeps every configured column when rows contain zero and false values", () => {
     const fields = [
       { name: "capacity", label: "Capacity" },
       { name: "required", label: "Required" },
     ]
 
     expect(
-      columnsForProductionMaster(fields, [{ capacity: 0, required: false }])
+      columnsForProductionMaster(fields)
     ).toEqual([
       { key: "capacity", label: "Capacity" },
       { key: "required", label: "Required" },
     ])
+  })
+
+  it("counts checklist codes rather than checklist step rows", () => {
+    expect(
+      uniqueChecklistCodeCount("maintenance_checklist_master", [
+        { checklistCode: "MC001", sequence: 1 },
+        { checklistCode: "MC001", sequence: 2 },
+        { checklistCode: "MC002", sequence: 1 },
+      ])
+    ).toBe(2)
+    expect(
+      uniqueChecklistCodeCount("setup_checklist_master", [
+        { checklistCode: "SC001", sequence: 1 },
+        { checklistCode: "SC001", sequence: 2 },
+        { version: "legacy-v2", sequence: 1 },
+      ])
+    ).toBe(2)
   })
 })

@@ -56,6 +56,22 @@ _Avoid_: Single probable date.
 The ordered parameters, specifications, instruments, and tolerances assigned to one item, option, and setup and reused by both first-piece inspection and hourly quality checks.
 _Avoid_: Separate FPIR master, hourly QC parameter master.
 
+**Quality Inspection Line**:
+An existing Route Master combination of item code, option number, and setup number to which a Quality Inspection Parameter Set may be assigned.
+_Avoid_: Free-text quality master target.
+
+**Coded Checklist**:
+A reusable checklist identified by one generated code and containing one or more ordered steps. Checklist counts refer to unique checklist codes, not step rows.
+_Avoid_: Checklist row count.
+
+**Factory Planning Holiday**:
+A non-working date applied to Conventional, CNC, and Forging production-floor planning.
+_Avoid_: Re-entering the same factory holiday separately for each floor.
+
+**Production-Floor Planning Holiday**:
+A non-working date applied only to one selected production floor while other floors remain available for planning.
+_Avoid_: Department holiday.
+
 **Defect / Downtime Reason**:
 A coded reason describing a quality defect or a downtime cause that can stop or affect machine production.
 _Avoid_: Separate defect code, separate downtime code.

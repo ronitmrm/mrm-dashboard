@@ -87,6 +87,7 @@ import {
   dataEntryRowsForProductionMaster,
   productionMasterRowSources,
   rowsForProductionMaster,
+  uniqueChecklistCodeCount,
 } from "@/lib/production-master-tables";
 import {
   dashboardStateRequestUrl,
@@ -166,6 +167,17 @@ type MaintenanceChecklistStepDraft = {
   remark: string;
 };
 
+type SetupChecklistStepDraft = {
+  draftId: string;
+  persisted?: boolean;
+  sequence: string;
+  checkPoint: string;
+  inputType: string;
+  required: string;
+  section: string;
+  remark: string;
+};
+
 function productionFloorFromLocation(): ProductionFloorCode {
   if (typeof window === "undefined") return defaultProductionFloorCode;
   return normalizeProductionFloorCode(
@@ -186,6 +198,14 @@ function dashboardReturnHref(defaultTab: DashboardTabId) {
 
 function validDashboardTab(tab: DashboardTabId | null) {
   return tab && navItems.some((item) => item.id === tab) ? tab : undefined;
+}
+
+function dataEntryDestination(entryType: string): DashboardTabId {
+  if (entryType === "planning_holiday") return "planningHolidayTab";
+  if (entryType === "setup_checklist_master") return "setupChecklistMasterTab";
+  if (maintenanceMasterEntryTypes.includes(entryType as typeof maintenanceMasterEntryTypes[number])) return "maintenanceMastersTab";
+  if (qualityMasterEntryTypes.includes(entryType as typeof qualityMasterEntryTypes[number])) return "qualityMastersTab";
+  return "dataEntryTab";
 }
 const dataEntrySpecs: DataEntrySpec[] = [
   {
@@ -338,8 +358,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
     fields: [
       { name: "date", label: "Holiday date", type: "date", required: true },
       { name: "reason", label: "Reason", options: ["Plant holiday", "Vacation", "Maintenance shutdown", "Other"], defaultValue: "Plant holiday" },
-      { name: "scope", label: "Scope", options: ["Plant", "Machine", "Department"], defaultValue: "Plant" },
-      { name: "machine", label: "Machine no." },
+      { name: "scope", label: "Scope", options: ["Factory", "Department"], defaultValue: "Factory" },
       { name: "department", label: "Department" },
       { name: "remark", label: "Remark" },
     ],
@@ -347,9 +366,10 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "setup_checklist_master",
     title: "Setup checklist master",
-    description: "Versioned machinist checklist used from pre setting start through setting completion.",
+    description: "Coded machinist checklists used from pre setting start through setting completion.",
     fields: [
-      { name: "version", label: "Version", required: true },
+      { name: "checklistCode", label: "Checklist code", required: true, readOnly: true },
+      { name: "checklistTitle", label: "Checklist title", required: true },
       { name: "sequence", label: "Sequence", type: "number", required: true },
       { name: "checkPoint", label: "Check point", required: true },
       { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
@@ -365,7 +385,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
     title: "Rejection type master",
     description: "Quality rejection type codes used in QC rejection entry.",
     fields: [
-      { name: "code", label: "Code", required: true },
+      { name: "code", label: "Code", required: true, readOnly: true },
       { name: "typeOfRejection", label: "Type of rejection", required: true },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
@@ -376,7 +396,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
     title: "Rejection remark master",
     description: "Quality rejection remark codes used in QC rejection entry.",
     fields: [
-      { name: "code", label: "Code", required: true },
+      { name: "code", label: "Code", required: true, readOnly: true },
       { name: "rejectionRemark", label: "Rejection remark", required: true },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
@@ -387,7 +407,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
     title: "Defect / downtime reason master",
     description: "Shared defect and downtime reason codes used by QC rejection and downtime entries.",
     fields: [
-      { name: "code", label: "Code", required: true },
+      { name: "code", label: "Code", required: true, readOnly: true },
       { name: "rejectionReason", label: "Defect / downtime reason", required: true },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
@@ -443,13 +463,26 @@ const masterTableEntryTypes = [
   "machine_master",
   "maintenance_master",
   "maintenance_checklist_master",
-  "planning_holiday",
   "setup_checklist_master",
   "rejection_type_master",
   "rejection_remark_master",
   "rejection_reason_master",
   "quality_parameter_master",
 ] as const;
+
+const generalDataEntryTypes = [
+  "route",
+  "cycle",
+  "tooling",
+  "work_order",
+  "rm_inward",
+  "employee",
+  "machine_master",
+  "software_raw",
+] as const;
+
+const maintenanceMasterEntryTypes = ["maintenance_master", "maintenance_checklist_master"] as const;
+const qualityMasterEntryTypes = ["quality_parameter_master", "rejection_type_master", "rejection_remark_master", "rejection_reason_master"] as const;
 
 function masterTableSpecs() {
   const allowed = new Set<string>(masterTableEntryTypes);
@@ -1148,7 +1181,7 @@ function DashboardShell({
   function openDataEntry(entryType: string, defaults: Record<string, unknown> = {}) {
     setPreferredDataEntryType(entryType);
     setPreferredDataEntryDefaults(defaults);
-    setActiveTab("dataEntryTab");
+    setActiveTab(dataEntryDestination(entryType));
   }
 
   function openMasterReadiness() {
@@ -1556,7 +1589,7 @@ function DashboardContent({
   }
 
   if (activeTab === "dataEntryTab") {
-    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} />;
+    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={generalDataEntryTypes} />;
   }
 
   if (activeTab === "masterTablesTab") {
@@ -1565,6 +1598,18 @@ function DashboardContent({
 
   if (activeTab === "planningHolidayTab") {
     return <PlanningHolidayPanel productionControl={productionControl} submitAction={submitAction} />;
+  }
+
+  if (activeTab === "setupChecklistMasterTab") {
+    return <DataEntryPanel key={`setup-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={["setup_checklist_master"]} title="Setup checklist workspace" description="Create one coded checklist and maintain all of its ordered machinist steps together." />;
+  }
+
+  if (activeTab === "maintenanceMastersTab") {
+    return <DataEntryPanel key={`maintenance-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={maintenanceMasterEntryTypes} title="Maintenance master workspace" description="Create reusable maintenance schedules and their coded checklists." />;
+  }
+
+  if (activeTab === "qualityMastersTab") {
+    return <DataEntryPanel key={`quality-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={qualityMasterEntryTypes} title="Quality master workspace" description="Maintain inspection parameters only for existing route lines and manage generated quality codes." />;
   }
 
   if (activeTab === "maintenanceTab") {
@@ -5717,15 +5762,35 @@ function DataEntryPanel({
   submitAction,
   preferredEntryType,
   preferredDefaults,
+  allowedEntryTypes,
+  title = "Production data entry",
+  description = "Use focused forms for manual entry or download the matching CSV template for a small import.",
 }: {
   payload: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   preferredEntryType: string;
   preferredDefaults: Record<string, unknown>;
+  allowedEntryTypes?: readonly string[];
+  title?: string;
+  description?: string;
 }) {
   const dataEntry = asRecord(payload.dataEntry);
-  const [bulkEntryType, setBulkEntryType] = useState(preferredEntryType || dataEntrySpecs[0]?.entryType || "route");
-  const selectedSpec = dataEntrySpecs.find((spec) => spec.entryType === bulkEntryType) ?? dataEntrySpecs[0];
+  const productionControl = asRecord(payload.productionControl);
+  const availableSpecs = useMemo(
+    () => allowedEntryTypes?.length
+      ? dataEntrySpecs.filter((spec) => allowedEntryTypes.includes(spec.entryType))
+      : dataEntrySpecs,
+    [allowedEntryTypes],
+  );
+  const initialEntryType = availableSpecs.some((spec) => spec.entryType === preferredEntryType)
+    ? preferredEntryType
+    : availableSpecs[0]?.entryType || "route";
+  const [bulkEntryType, setBulkEntryType] = useState(initialEntryType);
+  const selectedSpec = availableSpecs.find((spec) => spec.entryType === bulkEntryType) ?? availableSpecs[0];
+  const selectedMasterRows = useMemo(
+    () => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [],
+    [payload, productionControl, selectedSpec],
+  );
 
   async function importEntryTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -5741,8 +5806,8 @@ function DataEntryPanel({
     <section className="grid gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Production data entry</CardTitle>
-          <CardDescription>Manual entries write through authenticated Convex mutations. Upload filled CSV templates here for small targeted imports; use the local script only for large full-workbook uploads.</CardDescription>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <form className="grid gap-3 @3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]" onSubmit={importEntryTemplate}>
@@ -5752,7 +5817,7 @@ function DataEntryPanel({
                 value={bulkEntryType}
                 onChange={(event) => setBulkEntryType(event.target.value)}
               >
-                {dataEntrySpecs.map((spec) => (
+                {availableSpecs.map((spec) => (
                   <option key={spec.entryType} value={spec.entryType}>
                     {spec.title}
                   </option>
@@ -5778,6 +5843,8 @@ function DataEntryPanel({
           submitAction={submitAction}
           defaults={selectedSpec.entryType === preferredEntryType ? preferredDefaults : {}}
           dataEntry={dataEntry}
+          masterRows={selectedMasterRows}
+          productionControl={productionControl}
         />
       ) : null}
     </section>
@@ -5800,7 +5867,7 @@ function MasterTablesPanel({
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
   const dataEntry = asRecord(payload.dataEntry);
   const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [], [payload, productionControl, selectedSpec]);
-  const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec, rows) : [], [selectedSpec, rows]);
+  const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec) : [], [selectedSpec]);
   const filteredRows = useMemo(
     () => rows.filter((row) => masterTableRowMatches(row, columns, searchQuery)),
     [rows, columns, searchQuery],
@@ -5939,6 +6006,14 @@ type MasterTableColumn = {
 };
 
 function masterTableKeySummaryRows(spec: DataEntrySpec, dataEntry: DashboardPayload, rows: DashboardPayload[], filteredRows: DashboardPayload[]) {
+  if (["maintenance_checklist_master", "setup_checklist_master"].includes(spec.entryType)) {
+    const checklistEntryType = spec.entryType as "maintenance_checklist_master" | "setup_checklist_master";
+    return [{
+      master: spec.title,
+      uniqueChecklistCodes: uniqueChecklistCodeCount(checklistEntryType, rows),
+      matchingChecklistCodes: uniqueChecklistCodeCount(checklistEntryType, filteredRows),
+    }];
+  }
   const existingRows = asArray(dataEntry.keySummary).filter((row) => {
     const rowType = str(row.entryType || row.type || row.master || row.table || row.name);
     return rowType.toLowerCase() === spec.entryType.toLowerCase() || rowType.toLowerCase() === spec.title.toLowerCase();
@@ -5969,6 +6044,7 @@ function masterTableRows(entryType: string, payload: DashboardPayload, productio
   if (entryType === "quality_parameter_master") return mergeQualityParameterRows(matchingRows);
   if (entryType === "maintenance_master") return activeMaintenanceMasterRows(dedupeMasterTableRows(entryType, matchingRows));
   if (entryType === "maintenance_checklist_master") return mergeMaintenanceChecklistRows(matchingRows);
+  if (entryType === "setup_checklist_master") return mergeSetupChecklistRows(matchingRows);
   return dedupeMasterTableRows(entryType, matchingRows);
 }
 
@@ -5981,11 +6057,8 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
   return [...byKey.values()].sort((a, b) => masterTableRowKey(entryType, a, 0).localeCompare(masterTableRowKey(entryType, b, 0), undefined, { numeric: true }));
 }
 
-function masterTableColumns(spec: DataEntrySpec, rows: DashboardPayload[]): MasterTableColumn[] {
-  const alwaysInclude = spec.entryType === "machine_master"
-    ? ["machineNo", "machineFamily", "machineType", "machineName", "location"]
-    : [];
-  return columnsForProductionMaster(spec.fields, rows, alwaysInclude);
+function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
+  return columnsForProductionMaster(spec.fields);
 }
 
 function humanizeMasterTableColumn(key: string) {
@@ -6343,9 +6416,35 @@ function PlanningHolidayPanel({
   productionControl: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
 }) {
-  const spec = dataEntrySpecs.find((item) => item.entryType === "planning_holiday");
   const holidayRows = asArray(productionControl.planningHolidayRows);
   const calendar = asRecord(productionControl.planningCalendar);
+
+  async function saveHoliday(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const coverage = str(formData.get("coverage"));
+    const targets = coverage === "all"
+      ? productionFloors
+      : productionFloors.filter((floor) => floor.code === coverage);
+    for (const floor of targets) {
+      await submitAction("data-entry", {
+        entryType: "planning_holiday",
+        productionFloorCode: floor.code,
+        returnTab: "planningHolidayTab",
+        payload: {
+          date: str(formData.get("date")),
+          reason: str(formData.get("reason")) || "Plant holiday",
+          scope: coverage === "all" ? "Factory" : "Department",
+          department: floor.code,
+          departmentLabel: floor.shortLabel,
+          factoryWide: coverage === "all",
+          remark: str(formData.get("remark")),
+        },
+      });
+    }
+    form.reset();
+  }
 
   return (
     <section className="grid gap-4">
@@ -6356,10 +6455,24 @@ function PlanningHolidayPanel({
           ["Next saved date", nextPlanningHolidayLabel(holidayRows)],
         ]}
       />
-      {spec ? (
-        <DataEntryForm spec={spec} submitAction={submitAction} defaults={{ scope: "Plant", reason: "Plant holiday", __returnTab: "planningHolidayTab" }} />
-      ) : null}
-      <DataRowsCard title="Saved planning holidays" rows={holidayRows} empty="No manual planning holidays saved yet" />
+      <Card>
+        <CardHeader><CardTitle>Plan a holiday</CardTitle><CardDescription>All factory applies the date to Conventional, CNC, and Forging planning. A department choice affects only that production floor.</CardDescription></CardHeader>
+        <CardContent>
+          <form className="grid gap-3" onSubmit={saveHoliday}>
+            <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
+              <Field label="Holiday date"><Input name="date" type="date" required /></Field>
+              <Field label="Reason"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="reason" defaultValue="Plant holiday"><option value="Plant holiday">Plant holiday</option><option value="Vacation">Vacation</option><option value="Maintenance shutdown">Maintenance shutdown</option><option value="Other">Other</option></select></Field>
+              <Field label="Applies to"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="coverage" defaultValue="all"><option value="all">All factory</option>{productionFloors.map((floor) => <option key={floor.code} value={floor.code}>{floor.shortLabel}</option>)}</select></Field>
+              <Field label="Remark"><Input name="remark" /></Field>
+            </div>
+            <Button className="w-fit" type="submit"><CalendarDays className="size-4" />Save holiday</Button>
+          </form>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Saved planning holidays</CardTitle><CardDescription>Dates affecting the selected department / production floor.</CardDescription></CardHeader>
+        <CardContent>{holidayRows.length ? <div className="overflow-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Reason</TableHead><TableHead>Applies to</TableHead><TableHead>Remark</TableHead></TableRow></TableHeader><TableBody>{holidayRows.map((row, index) => <TableRow key={`${displayValue(row.dateValue || row.date)}-${index}`}><TableCell>{displayValue(row.date)}</TableCell><TableCell>{displayValue(row.reason)}</TableCell><TableCell>{planningHolidayCoverageLabel(row)}</TableCell><TableCell>{displayValue(row.remark)}</TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No manual planning holidays saved yet.</EmptyRowsMessage>}</CardContent>
+      </Card>
     </section>
   );
 }
@@ -6369,21 +6482,34 @@ function DataEntryForm({
   submitAction,
   defaults,
   dataEntry,
+  masterRows = [],
+  productionControl = {},
 }: {
   spec: DataEntrySpec;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   defaults: Record<string, unknown>;
   dataEntry?: DashboardPayload;
+  masterRows?: DashboardPayload[];
+  productionControl?: DashboardPayload;
 }) {
-  const defaultsKey = JSON.stringify(defaults);
+  const [locallyGeneratedCodes, setLocallyGeneratedCodes] = useState<string[]>([]);
+  const generatedCode = nextAutomaticMasterCode(spec.entryType, [
+    ...masterRows,
+    ...locallyGeneratedCodes.map((code) => ({ code })),
+  ]);
+  const resolvedDefaults = generatedCode ? { ...defaults, code: generatedCode } : defaults;
+  const defaultsKey = JSON.stringify(resolvedDefaults);
   if (spec.entryType === "maintenance_master") {
     return <MaintenanceMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} />;
   }
   if (spec.entryType === "maintenance_checklist_master") {
     return <MaintenanceChecklistMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} />;
   }
+  if (spec.entryType === "setup_checklist_master") {
+    return <SetupChecklistMasterForm spec={spec} submitAction={submitAction} defaults={defaults} rows={masterRows} />;
+  }
   if (spec.entryType === "quality_parameter_master") {
-    return <QualityParameterMasterForm spec={spec} defaults={defaults} dataEntry={dataEntry} />;
+    return <QualityParameterMasterForm spec={spec} defaults={defaults} dataEntry={dataEntry} masterRows={masterRows} productionControl={productionControl} />;
   }
   return (
     <Card>
@@ -6397,15 +6523,18 @@ function DataEntryForm({
           title={`Save ${spec.title}`}
           description="Writes the same entry type and payload shape used by the legacy form."
           fields={spec.fields}
-          defaults={defaults}
+          defaults={resolvedDefaults}
           buttonLabel={`Save ${spec.title}`}
-          onSubmit={(body) => void submitAction("data-entry", {
-            entryType: spec.entryType,
-            id: defaults.__entryId,
-            key: defaults.__entryKey,
-            returnTab: defaults.__returnTab,
-            payload: body,
-          })}
+          onSubmit={(body) => {
+            void submitAction("data-entry", {
+              entryType: spec.entryType,
+              id: defaults.__entryId,
+              key: defaults.__entryKey,
+              returnTab: defaults.__returnTab,
+              payload: body,
+            });
+            if (generatedCode) setLocallyGeneratedCodes((current) => [...current, generatedCode]);
+          }}
         />
       </CardContent>
     </Card>
@@ -6416,10 +6545,14 @@ function QualityParameterMasterForm({
   spec,
   defaults,
   dataEntry,
+  masterRows,
+  productionControl,
 }: {
   spec: DataEntrySpec;
   defaults: Record<string, unknown>;
   dataEntry?: DashboardPayload;
+  masterRows: DashboardPayload[];
+  productionControl: DashboardPayload;
 }) {
   const hourlyQualityPageData = usePostgresDashboardPage("/api/hourly-quality", 5_000).data;
   const hourlyQualityPageRecord = asRecord(hourlyQualityPageData);
@@ -6429,15 +6562,16 @@ function QualityParameterMasterForm({
   const [isSaving, setIsSaving] = useState(false);
   const persistedRows = useMemo(() => {
     return mergeQualityParameterRows([
+      ...masterRows,
       ...qualityParameterRowsFromDataEntry(dataEntry),
       ...asArray(hourlyQualityPageRecord.qualityParameterMasterRows),
     ]);
-  }, [dataEntry, hourlyQualityPageRecord.qualityParameterMasterRows]);
+  }, [dataEntry, hourlyQualityPageRecord.qualityParameterMasterRows, masterRows]);
   const savedRows = useMemo(() => mergeQualityParameterRows([...persistedRows, ...localRows]), [persistedRows, localRows]);
-  const setupOptions = useMemo(() => qualityParameterSetupOptions(savedRows), [savedRows]);
+  const parameterSetOptions = useMemo(() => qualityParameterSetupOptions(savedRows), [savedRows]);
   const defaultSetupKey = qualityParameterSetupKey(defaults);
-  const [selectedSetupKey, setSelectedSetupKey] = useState(defaultSetupKey || setupOptions[0]?.key || "");
-  const selectedOption = setupOptions.find((option) => option.key === selectedSetupKey);
+  const [selectedSetupKey, setSelectedSetupKey] = useState(defaultSetupKey || parameterSetOptions[0]?.key || "");
+  const selectedOption = parameterSetOptions.find((option) => option.key === selectedSetupKey);
   const selectedRows = useMemo(() => selectedSetupKey ? sortQualityParameterRows(savedRows.filter((row) => qualityParameterSetupKey(row) === selectedSetupKey && str(row.status || "Active").toLowerCase() !== "inactive")) : [], [savedRows, selectedSetupKey]);
   const [setupFields, setSetupFields] = useState(() => ({
     partNo: str(defaults.partNo || selectedOption?.partNo),
@@ -6447,15 +6581,15 @@ function QualityParameterMasterForm({
   const [drafts, setDrafts] = useState<QualityParameterDraft[]>(() => selectedRows.map(qualityParameterDraftFromRow));
 
   useEffect(() => {
-    const firstSetupKey = setupOptions[0]?.key;
+    const firstSetupKey = parameterSetOptions[0]?.key;
     if (selectedSetupKey || !firstSetupKey) return;
     const timeout = window.setTimeout(() => setSelectedSetupKey(firstSetupKey), 0);
     return () => window.clearTimeout(timeout);
-  }, [selectedSetupKey, setupOptions]);
+  }, [parameterSetOptions, selectedSetupKey]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      const option = setupOptions.find((item) => item.key === selectedSetupKey);
+      const option = parameterSetOptions.find((item) => item.key === selectedSetupKey);
       const nextRows = selectedSetupKey ? sortQualityParameterRows(savedRows.filter((row) => qualityParameterSetupKey(row) === selectedSetupKey && str(row.status || "Active").toLowerCase() !== "inactive")) : [];
       setSetupFields({
         partNo: str(defaults.partNo || option?.partNo),
@@ -6466,13 +6600,19 @@ function QualityParameterMasterForm({
       setRemovedRows([]);
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [defaults.partNo, defaults.optionNumber, defaults.setupNo, savedRows, selectedSetupKey, setupOptions]);
+  }, [defaults.partNo, defaults.optionNumber, defaults.setupNo, parameterSetOptions, savedRows, selectedSetupKey]);
 
-  const datalistValues = useMemo(() => ({
-    partNos: uniqueValues(savedRows.map((row) => displayValue(row.partNo || row.partCode)).filter((value) => value !== "-")),
-    optionNumbers: uniqueValues(savedRows.map((row) => displayValue(row.optionNumber)).filter((value) => value !== "-")),
-    setupNos: uniqueValues(savedRows.map((row) => displayValue(row.setupNo)).filter((value) => value !== "-")),
-  }), [savedRows]);
+  const routeLines = useMemo(() => qualityParameterRouteLines(asArray(productionControl.routeMasterRows)), [productionControl.routeMasterRows]);
+  const itemOptions = useMemo(() => uniqueValues(routeLines.map((row) => row.partNo)), [routeLines]);
+  const optionOptions = useMemo(
+    () => uniqueValues(routeLines.filter((row) => machineKey(row.partNo) === machineKey(setupFields.partNo)).map((row) => row.optionNumber)),
+    [routeLines, setupFields.partNo],
+  );
+  const setupNumberOptions = useMemo(
+    () => uniqueValues(routeLines.filter((row) => machineKey(row.partNo) === machineKey(setupFields.partNo) && machineKey(row.optionNumber) === machineKey(setupFields.optionNumber)).map((row) => row.setupNo)),
+    [routeLines, setupFields.optionNumber, setupFields.partNo],
+  );
+  const selectedRouteLineExists = routeLines.some((row) => qualityParameterSetupKey(row) === qualityParameterSetupKey(setupFields));
 
   function updateDraft(draftId: string, field: keyof QualityParameterDraft, value: string) {
     setDrafts((current) => current.map((draft) => draft.draftId === draftId ? { ...draft, [field]: value } : draft));
@@ -6490,8 +6630,8 @@ function QualityParameterMasterForm({
   async function saveParameterSet() {
     const activeDrafts = drafts.filter((draft) => draft.parameterName.trim());
     const duplicateSequences = activeDrafts.map((draft, index) => str(optionalNumber(draft.sequence) ?? index + 1)).filter((sequence, index, sequences) => sequence && sequences.indexOf(sequence) !== index);
-    if (!setupFields.partNo.trim() || !setupFields.optionNumber.trim() || !setupFields.setupNo.trim()) {
-      setStatus({ tone: "destructive", message: "Item, option, and setup are required." });
+    if (!selectedRouteLineExists) {
+      setStatus({ tone: "destructive", message: "Select an item, option, and setup that already exists in Route Master." });
       return;
     }
     if (!activeDrafts.length) {
@@ -6532,7 +6672,7 @@ function QualityParameterMasterForm({
           <Field label="Saved parameter set">
             <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedSetupKey} onChange={(event) => setSelectedSetupKey(event.target.value)}>
               <option value="">New parameter set</option>
-              {setupOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+              {parameterSetOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
             </select>
           </Field>
           <div className="flex items-end gap-2">
@@ -6542,14 +6682,12 @@ function QualityParameterMasterForm({
             </Button>
           </div>
         </div>
+        {!routeLines.length ? <AlertMessage tone="destructive">Create the item, option, and setup line in Route Master before adding quality inspection parameters.</AlertMessage> : null}
         <div className="grid gap-3 md:grid-cols-3">
-          <Field label="Item code"><Input list="quality-part-options" value={setupFields.partNo} onChange={(event) => setSetupFields((current) => ({ ...current, partNo: event.target.value }))} required /></Field>
-          <Field label="Option no."><Input list="quality-option-options" value={setupFields.optionNumber} onChange={(event) => setSetupFields((current) => ({ ...current, optionNumber: event.target.value }))} required /></Field>
-          <Field label="Setup no."><Input list="quality-setup-options" value={setupFields.setupNo} onChange={(event) => setSetupFields((current) => ({ ...current, setupNo: event.target.value }))} required /></Field>
+          <Field label="Item code"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.partNo} onChange={(event) => setSetupFields({ partNo: event.target.value, optionNumber: "", setupNo: "" })} required><option value="">Select Route Master item</option>{itemOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
+          <Field label="Option no."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.optionNumber} onChange={(event) => setSetupFields((current) => ({ ...current, optionNumber: event.target.value, setupNo: "" }))} required disabled={!setupFields.partNo}><option value="">Select option</option>{optionOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
+          <Field label="Setup no."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.setupNo} onChange={(event) => setSetupFields((current) => ({ ...current, setupNo: event.target.value }))} required disabled={!setupFields.optionNumber}><option value="">Select setup</option>{setupNumberOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
         </div>
-        <datalist id="quality-part-options">{datalistValues.partNos.map((value) => <option key={value} value={value} />)}</datalist>
-        <datalist id="quality-option-options">{datalistValues.optionNumbers.map((value) => <option key={value} value={value} />)}</datalist>
-        <datalist id="quality-setup-options">{datalistValues.setupNos.map((value) => <option key={value} value={value} />)}</datalist>
         <div className="overflow-auto rounded-lg border">
           <Table>
             <TableHeader>
@@ -6810,7 +6948,7 @@ function MaintenanceChecklistMasterForm({
         <CardDescription>Create the checklist once, then add all steps in the table. Step codes are not required.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px]">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px_140px]">
           <Field label="Checklist">
             <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}>
               <option value={nextMaintenanceChecklistCode(savedRows)}>New checklist ({nextMaintenanceChecklistCode(savedRows)})</option>
@@ -6820,6 +6958,7 @@ function MaintenanceChecklistMasterForm({
           <div className="flex items-end gap-2">
             <Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New checklist</Button>
           </div>
+          <TileField label="Checklists" value={checklistOptions.length} numeric />
           <TileField label="Steps" value={drafts.filter((draft) => draft.stepDescription.trim()).length} numeric />
         </div>
         <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
@@ -6857,6 +6996,132 @@ function MaintenanceChecklistMasterForm({
             <Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save checklist"}</Button>
           </div>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SetupChecklistMasterForm({
+  spec,
+  submitAction,
+  defaults,
+  rows,
+}: {
+  spec: DataEntrySpec;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  defaults: Record<string, unknown>;
+  rows: DashboardPayload[];
+}) {
+  const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
+  const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([]);
+  const [status, setStatus] = useState<ActionStatus>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const savedRows = useMemo(() => mergeSetupChecklistRows([...rows, ...localRows]), [localRows, rows]);
+  const checklistOptions = useMemo(() => setupChecklistOptions(savedRows), [savedRows]);
+  const defaultCode = displayValue(defaults.checklistCode) !== "-" ? displayValue(defaults.checklistCode) : nextSetupChecklistCode(savedRows);
+  const [selectedCode, setSelectedCode] = useState(defaultCode);
+  const selectedRows = useMemo(() => setupChecklistRowsForCode(savedRows, selectedCode), [savedRows, selectedCode]);
+  const selectedChecklist = checklistOptions.find((row) => machineKey(row.code) === machineKey(selectedCode));
+  const [checklistTitle, setChecklistTitle] = useState(selectedChecklist?.title || str(defaults.checklistTitle));
+  const [effectiveFrom, setEffectiveFrom] = useState(displayValue(selectedRows[0]?.effectiveFrom ?? defaults.effectiveFrom) !== "-" ? displayValue(selectedRows[0]?.effectiveFrom ?? defaults.effectiveFrom) : todayIsoDate());
+  const [drafts, setDrafts] = useState<SetupChecklistStepDraft[]>(() => selectedRows.length ? selectedRows.map(setupChecklistDraftFromRow) : [newSetupChecklistDraft(1)]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const matchingRows = setupChecklistRowsForCode(savedRows, selectedCode);
+      const option = checklistOptions.find((item) => machineKey(item.code) === machineKey(selectedCode));
+      setChecklistTitle(option?.title || "");
+      setEffectiveFrom(displayValue(matchingRows[0]?.effectiveFrom) !== "-" ? displayValue(matchingRows[0]?.effectiveFrom) : todayIsoDate());
+      setDrafts(matchingRows.length ? matchingRows.map(setupChecklistDraftFromRow) : [newSetupChecklistDraft(1)]);
+      setRemovedRows([]);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [checklistOptions, savedRows, selectedCode]);
+
+  function startNewChecklist() {
+    setSelectedCode(nextSetupChecklistCode(savedRows));
+    setChecklistTitle("");
+    setEffectiveFrom(todayIsoDate());
+    setDrafts([newSetupChecklistDraft(1)]);
+    setRemovedRows([]);
+    setStatus(null);
+  }
+
+  function updateDraft(draftId: string, field: keyof SetupChecklistStepDraft, value: string) {
+    setDrafts((current) => current.map((draft) => draft.draftId === draftId ? { ...draft, [field]: value } : draft));
+  }
+
+  function removeDraft(draft: SetupChecklistStepDraft) {
+    if (draft.persisted) setRemovedRows((current) => [...current, setupChecklistPayload(draft, selectedCode, checklistTitle, effectiveFrom, "Inactive")]);
+    setDrafts((current) => current.filter((item) => item.draftId !== draft.draftId));
+  }
+
+  async function saveChecklist() {
+    const code = selectedCode || nextSetupChecklistCode(savedRows);
+    const title = checklistTitle.trim();
+    const activeDrafts = drafts.filter((draft) => draft.checkPoint.trim());
+    const duplicateSequences = activeDrafts.map((draft, index) => str(optionalNumber(draft.sequence) ?? index + 1)).filter((sequence, index, sequences) => sequence && sequences.indexOf(sequence) !== index);
+    if (!title) {
+      setStatus({ tone: "destructive", message: "Checklist title is required." });
+      return;
+    }
+    if (!activeDrafts.length) {
+      setStatus({ tone: "destructive", message: "Add at least one checklist step." });
+      return;
+    }
+    if (duplicateSequences.length) {
+      setStatus({ tone: "destructive", message: "Step numbers must be unique in one checklist." });
+      return;
+    }
+    setIsSaving(true);
+    setStatus(null);
+    try {
+      const activePayloads = activeDrafts.map((draft, index) => setupChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, effectiveFrom, "Active"));
+      const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
+      for (const payload of [...activePayloads, ...inactivePayloads]) {
+        await submitAction("data-entry", {
+          entryType: spec.entryType,
+          key: dataEntryKey(spec.entryType, payload),
+          returnTab: "setupChecklistMasterTab",
+          payload,
+        });
+      }
+      setLocalRows((current) => mergeSetupChecklistRows([...current, ...activePayloads, ...inactivePayloads]));
+      setRemovedRows([]);
+      setSelectedCode(code);
+      setStatus({ tone: "default", message: "Setup checklist saved." });
+    } catch (err) {
+      setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Setup checklist save failed." });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{spec.title}</CardTitle>
+        <CardDescription>Create one generated checklist code, then maintain all machinist steps under it.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px_140px]">
+          <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}><option value={nextSetupChecklistCode(savedRows)}>New checklist ({nextSetupChecklistCode(savedRows)})</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
+          <div className="flex items-end"><Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New checklist</Button></div>
+          <TileField label="Checklists" value={checklistOptions.length} numeric />
+          <TileField label="Steps" value={drafts.filter((draft) => draft.checkPoint.trim()).length} numeric />
+        </div>
+        <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_180px]">
+          <Field label="Checklist code"><Input value={selectedCode} readOnly /></Field>
+          <Field label="Checklist title"><Input value={checklistTitle} onChange={(event) => setChecklistTitle(event.target.value)} required /></Field>
+          <Field label="Effective from"><Input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></Field>
+        </div>
+        <div className="overflow-auto rounded-lg border">
+          <Table>
+            <TableHeader><TableRow><TableHead className="min-w-20">Step</TableHead><TableHead className="min-w-72">Check point</TableHead><TableHead className="min-w-32">Input</TableHead><TableHead className="min-w-28">Required</TableHead><TableHead className="min-w-52">Section</TableHead><TableHead className="min-w-44">Remark</TableHead><TableHead className="w-12"></TableHead></TableRow></TableHeader>
+            <TableBody>{drafts.map((draft, index) => <TableRow key={draft.draftId}><TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-64" value={draft.checkPoint} onChange={(event) => updateDraft(draft.draftId, "checkPoint", event.target.value)} /></TableCell><TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></select></TableCell><TableCell><select className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.required} onChange={(event) => updateDraft(draft.draftId, "required", event.target.value)}><option value="Yes">Yes</option><option value="No">No</option></select></TableCell><TableCell><Input className="h-8 min-w-48" value={draft.section} onChange={(event) => updateDraft(draft.draftId, "section", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell><TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove setup checklist step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell></TableRow>)}</TableBody>
+          </Table>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><Button type="button" variant="outline" onClick={() => setDrafts((current) => [...current, newSetupChecklistDraft(current.length + 1)])}><Plus className="size-4" />Add step</Button><div className="flex flex-wrap items-center gap-2">{status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}<Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save checklist"}</Button></div></div>
       </CardContent>
     </Card>
   );
@@ -8232,7 +8497,7 @@ function downloadApi(kind: "data-template", entryType: string) {
 }
 
 async function postDashboardApi(path: string, body: Record<string, unknown>): Promise<DashboardApiResult> {
-  const productionFloorCode = productionFloorFromLocation();
+  const productionFloorCode = normalizeProductionFloorCode(body.productionFloorCode ?? productionFloorFromLocation());
   const bodyPayload = asRecord(body.payload);
   const scopedBody = {
     ...body,
@@ -8444,6 +8709,13 @@ function nextPlanningHolidayLabel(rows: DashboardPayload[]) {
     .filter((row) => row.value && row.value >= today)
     .sort((a, b) => a.value.localeCompare(b.value))[0];
   return next?.label ?? "-";
+}
+
+function planningHolidayCoverageLabel(row: DashboardPayload) {
+  if (row.factoryWide === true || str(row.scope).toLowerCase() === "factory") return "All factory";
+  const department = str(row.departmentLabel || row.department);
+  const floor = productionFloors.find((item) => item.code === department);
+  return floor?.shortLabel || department || "Selected production floor";
 }
 
 type MachineConstraintQueuePlacementPayload = {
@@ -9496,9 +9768,8 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   }
   if (entryType === "setup_checklist_master") {
     return [
-      payload.version,
+      payload.checklistCode || payload.version,
       payload.sequence,
-      payload.checkPoint,
     ].map((value) => str(value).toLowerCase()).join("|");
   }
   if (entryType === "setup_checklist_session") {
@@ -9674,6 +9945,129 @@ function combinedQualityInspectionMasterRows(productionControl: DashboardPayload
     ...asArray(productionControl.qualityParameterMasterRows),
     ...asArray(productionControl.firstPieceInspectionMasterRows),
   ];
+}
+
+function qualityParameterRouteLines(rows: DashboardPayload[]) {
+  const byKey = new Map<string, { partNo: string; optionNumber: string; setupNo: string }>();
+  for (const row of rows) {
+    const line = {
+      partNo: displayValue(row.partNo || row.partCode),
+      optionNumber: displayValue(row.optionNumber),
+      setupNo: displayValue(row.setupNo),
+    };
+    if (Object.values(line).some((value) => value === "-")) continue;
+    byKey.set(qualityParameterSetupKey(line), line);
+  }
+  return [...byKey.values()].sort((a, b) => qualityParameterSetupKey(a).localeCompare(qualityParameterSetupKey(b), undefined, { numeric: true }));
+}
+
+function automaticMasterCodePrefix(entryType: string) {
+  return {
+    rejection_type_master: "RT",
+    rejection_remark_master: "RR",
+    rejection_reason_master: "DC",
+  }[entryType] ?? "";
+}
+
+function nextAutomaticMasterCode(entryType: string, rows: DashboardPayload[]) {
+  const prefix = automaticMasterCodePrefix(entryType);
+  if (!prefix) return "";
+  const expression = new RegExp(`^${prefix}(\\d+)$`, "i");
+  const max = rows.reduce((highest, row) => {
+    const match = expression.exec(displayValue(row.code));
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return `${prefix}${String(max + 1).padStart(3, "0")}`;
+}
+
+function setupChecklistCode(row: DashboardPayload) {
+  const explicitCode = displayValue(row.checklistCode);
+  if (explicitCode !== "-") return explicitCode;
+  const version = displayValue(row.version);
+  return version === "-" ? "" : /^(SC\d+|SETUP-)/i.test(version) ? version : `SETUP-${version}`;
+}
+
+function nextSetupChecklistCode(rows: DashboardPayload[]) {
+  const max = rows.reduce((highest, row) => {
+    const match = /^SC(\d+)$/i.exec(setupChecklistCode(row));
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return `SC${String(max + 1).padStart(3, "0")}`;
+}
+
+function setupChecklistRowKey(row: DashboardPayload) {
+  return [setupChecklistCode(row), row.sequence].map((value) => str(value).toLowerCase()).join("|");
+}
+
+function mergeSetupChecklistRows(rows: DashboardPayload[]) {
+  const byKey = new Map<string, DashboardPayload>();
+  for (const row of rows) {
+    const key = setupChecklistRowKey(row);
+    if (!key.replaceAll("|", "")) continue;
+    byKey.set(key, row);
+  }
+  return [...byKey.values()]
+    .filter((row) => str(row.status || "Active").toLowerCase() !== "inactive")
+    .sort((a, b) => setupChecklistCode(a).localeCompare(setupChecklistCode(b), undefined, { numeric: true }) || (optionalNumber(a.sequence) ?? 0) - (optionalNumber(b.sequence) ?? 0));
+}
+
+function setupChecklistRowsForCode(rows: DashboardPayload[], checklistCode: unknown) {
+  const code = machineKey(checklistCode);
+  return code ? rows.filter((row) => machineKey(setupChecklistCode(row)) === code) : [];
+}
+
+function setupChecklistOptions(rows: DashboardPayload[]) {
+  const byCode = new Map<string, { code: string; title: string; steps: number }>();
+  for (const row of rows) {
+    const code = setupChecklistCode(row);
+    if (!code) continue;
+    const existing = byCode.get(machineKey(code));
+    if (existing) existing.steps += 1;
+    else byCode.set(machineKey(code), { code, title: displayValue(row.checklistTitle || row.title || "Setup checklist"), steps: 1 });
+  }
+  return [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+}
+
+function newSetupChecklistDraft(sequence: number): SetupChecklistStepDraft {
+  return {
+    draftId: `setup-checklist-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    sequence: String(sequence),
+    checkPoint: "",
+    inputType: "checkbox",
+    required: "Yes",
+    section: "Pre setting / setting",
+    remark: "",
+  };
+}
+
+function setupChecklistDraftFromRow(row: DashboardPayload): SetupChecklistStepDraft {
+  return {
+    draftId: setupChecklistRowKey(row) || `setup-checklist-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    persisted: true,
+    sequence: displayValue(row.sequence) !== "-" ? displayValue(row.sequence) : "",
+    checkPoint: str(row.checkPoint),
+    inputType: str(row.inputType || "checkbox"),
+    required: str(row.required || "Yes"),
+    section: str(row.section || "Pre setting / setting"),
+    remark: str(row.remark),
+  };
+}
+
+function setupChecklistPayload(draft: SetupChecklistStepDraft, checklistCode: string, checklistTitle: string, effectiveFrom: string, status: string): DashboardPayload {
+  return {
+    checklistCode,
+    checklistTitle,
+    version: checklistCode,
+    title: checklistTitle,
+    sequence: optionalNumber(draft.sequence) ?? str(draft.sequence),
+    checkPoint: str(draft.checkPoint),
+    inputType: str(draft.inputType || "checkbox"),
+    required: str(draft.required || "Yes"),
+    section: str(draft.section || "Pre setting / setting"),
+    effectiveFrom,
+    status,
+    remark: str(draft.remark),
+  };
 }
 function maintenanceMasterRowsFromDataEntry(dataEntry: DashboardPayload | undefined) {
   return asArray(asRecord(dataEntry).maintenanceMasterRows)
@@ -10306,18 +10700,20 @@ function mostCompleteSetupChecklistSession(snapshotSession: DashboardPayload | u
 }
 function activeSetupChecklistMasterRows(rows: DashboardPayload[]) {
   const activeRows = rows.filter((row) => str(row.status || "Active").toLowerCase() !== "inactive");
-  const latestVersion = activeRows
-    .map((row) => str(row.version || "1"))
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  const latestChecklistCode = activeRows
+    .map((row) => setupChecklistCode(row))
+    .sort((a, b) => Number(/^SC\d+$/i.test(a)) - Number(/^SC\d+$/i.test(b)) || a.localeCompare(b, undefined, { numeric: true }))
     .at(-1);
   return activeRows
-    .filter((row) => str(row.version || "1") === latestVersion)
+    .filter((row) => setupChecklistCode(row) === latestChecklistCode)
     .sort((a, b) => (optionalNumber(a.sequence) ?? 0) - (optionalNumber(b.sequence) ?? 0));
 }
 
 function setupChecklistItemsFromMaster(rows: DashboardPayload[]) {
   return rows.map((row, index) => ({
-    version: displayValue(row.version || "1"),
+    checklistCode: setupChecklistCode(row),
+    checklistTitle: displayValue(row.checklistTitle || row.title || "Setup checklist"),
+    version: setupChecklistCode(row),
     sequence: optionalNumber(row.sequence) ?? index + 1,
     checkPoint: displayValue(row.checkPoint),
     inputType: displayValue(row.inputType || "checkbox"),
@@ -10328,7 +10724,7 @@ function setupChecklistItemsFromMaster(rows: DashboardPayload[]) {
 }
 
 function setupChecklistItemKey(item: DashboardPayload, fallbackIndex = 0) {
-  return [item.version, item.sequence ?? fallbackIndex + 1, item.checkPoint].map((value) => str(value).toLowerCase()).join("|");
+  return [item.checklistCode || item.version, item.sequence ?? fallbackIndex + 1, item.checkPoint].map((value) => str(value).toLowerCase()).join("|");
 }
 
 function setupChecklistItemRequired(item: DashboardPayload) {
@@ -10395,7 +10791,8 @@ function setupChecklistSessionForStage({
 
 function setupChecklistMasterDefaults() {
   return {
-    version: new Date().toISOString().slice(0, 10).replaceAll("-", ""),
+    checklistCode: "",
+    checklistTitle: "",
     sequence: "",
     checkPoint: "",
     inputType: "checkbox",

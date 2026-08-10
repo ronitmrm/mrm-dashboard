@@ -41,7 +41,7 @@ describe("unified navigation", () => {
     ]
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
-    expect(dashboardNavigation).toHaveLength(16)
+    expect(dashboardNavigation).toHaveLength(19)
     expect(commercialNavigation).toHaveLength(17)
     expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([
       { href: "/hr?panel=mastersPanel", label: "Masters" },
