@@ -291,12 +291,13 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "machine_master",
     title: "Machine master",
-    description: "Machine number, type, location, and active status used by planning and machine filters.",
+    description: "Machine number, family, type, name, and location used by planning and machine filters.",
     fields: [
-      { name: "machineNo", label: "Machine no.", required: true },
-      { name: "machineType", label: "Machine type", required: true },
-      { name: "machineName", label: "Machine name" },
-      { name: "location", label: "Location" },
+      { name: "machineNo", label: "Machine No.", required: true },
+      { name: "machineFamily", label: "Machine Family", required: true },
+      { name: "machineType", label: "Machine Type", required: true },
+      { name: "machineName", label: "Machine Name" },
+      { name: "location", label: "Machine Location" },
       { name: "capacity", label: "Capacity", type: "number", step: "0.01" },
       { name: "status", label: "Status", options: ["Active", "Inactive", "Maintenance"], defaultValue: "Active" },
       { name: "remarks", label: "Remarks" },
@@ -5667,6 +5668,7 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
   if (entryType === "machine_master") {
     return {
       machineNo: "",
+      machineFamily: machineUsed,
       machineType: str(row.machineType),
       status: "Active",
       remarks: machineUsed ? `Active machine required for route family ${machineUsed}` : "Active machine required for route family",
@@ -5980,7 +5982,10 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
 }
 
 function masterTableColumns(spec: DataEntrySpec, rows: DashboardPayload[]): MasterTableColumn[] {
-  return columnsForProductionMaster(spec.fields, rows);
+  const alwaysInclude = spec.entryType === "machine_master"
+    ? ["machineNo", "machineFamily", "machineType", "machineName", "location"]
+    : [];
+  return columnsForProductionMaster(spec.fields, rows, alwaysInclude);
 }
 
 function humanizeMasterTableColumn(key: string) {
@@ -6052,6 +6057,7 @@ function MachineMasterPanel({
   const [historyResultFilter, setHistoryResultFilter] = useState("");
   const [selectedReportKey, setSelectedReportKey] = useState("");
   const [machineNoFilter, setMachineNoFilter] = useState("");
+  const [machineFamilyFilter, setMachineFamilyFilter] = useState("");
   const [machineNameFilter, setMachineNameFilter] = useState("");
   const [machineTypeFilter, setMachineTypeFilter] = useState("");
   const [machineLocationFilter, setMachineLocationFilter] = useState("");
@@ -6065,14 +6071,15 @@ function MachineMasterPanel({
   const [scheduleStatusFilter, setScheduleStatusFilter] = useState("");
 
   const machineNoOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineNo)).filter((value) => value !== "-")), [machineRows]);
+  const machineFamilyOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineFamily)).filter((value) => value !== "-")), [machineRows]);
   const machineNameOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineName)).filter((value) => value !== "-")), [machineRows]);
   const machineTypeOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineType)).filter((value) => value !== "-")), [machineRows]);
   const machineLocationOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.location)).filter((value) => value !== "-")), [machineRows]);
   const machineStatusOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.status || "Active")).filter((value) => value !== "-")), [machineRows]);
-  const hasMachineFilters = Boolean(machineNoFilter || machineNameFilter || machineTypeFilter || machineLocationFilter || machineStatusFilter);
+  const hasMachineFilters = Boolean(machineNoFilter || machineFamilyFilter || machineNameFilter || machineTypeFilter || machineLocationFilter || machineStatusFilter);
   const filteredMachineRows = useMemo(
-    () => machineRows.filter((row) => machineMasterMatches(row, machineNoFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter)),
-    [machineRows, machineNoFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter],
+    () => machineRows.filter((row) => machineMasterMatches(row, machineNoFilter, machineFamilyFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter)),
+    [machineRows, machineNoFilter, machineFamilyFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter],
   );
 
   const selectedMaintenance = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(selectedMaintenanceCode));
@@ -6122,6 +6129,7 @@ function MachineMasterPanel({
       frequencyDays: optionalNumber(selectedMaintenance.frequencyDays) ?? displayValue(selectedMaintenance.frequencyDays),
       frequencyBasis: displayValue(selectedMaintenance.frequencyBasis) !== "-" ? displayValue(selectedMaintenance.frequencyBasis) : "Calendar days",
       estimatedMinutes: optionalNumber(selectedMaintenance.estimatedMinutes) ?? displayValue(selectedMaintenance.estimatedMinutes),
+      machineFamily: displayValue(selectedMachine.machineFamily) !== "-" ? displayValue(selectedMachine.machineFamily) : "",
       machineType: displayValue(selectedMachine.machineType) !== "-" ? displayValue(selectedMachine.machineType) : "",
       machineName: displayValue(selectedMachine.machineName) !== "-" ? displayValue(selectedMachine.machineName) : "",
       location: displayValue(selectedMachine.location) !== "-" ? displayValue(selectedMachine.location) : "",
@@ -6146,18 +6154,18 @@ function MachineMasterPanel({
           <CardContent className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               {!machineRows.length ? <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("machine_master", { status: "Active", __returnTab: "machineMasterTab" })}>Add machine</Button> : <div className="text-xs text-muted-foreground">Showing {formatNumber(filteredMachineRows.length)} of {formatNumber(machineRows.length)} machines</div>}
-              {hasMachineFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setMachineNoFilter(""); setMachineNameFilter(""); setMachineTypeFilter(""); setMachineLocationFilter(""); setMachineStatusFilter(""); }}>Clear filters</Button> : null}
+              {hasMachineFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setMachineNoFilter(""); setMachineFamilyFilter(""); setMachineNameFilter(""); setMachineTypeFilter(""); setMachineLocationFilter(""); setMachineStatusFilter(""); }}>Clear filters</Button> : null}
             </div>
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow><TableHead>Machine</TableHead><TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Location</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow>
-                  <TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Machine" value={machineNoFilter} onChange={setMachineNoFilter} options={machineNoOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Name" value={machineNameFilter} onChange={setMachineNameFilter} options={machineNameOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Type" value={machineTypeFilter} onChange={setMachineTypeFilter} options={machineTypeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Location" value={machineLocationFilter} onChange={setMachineLocationFilter} options={machineLocationOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={machineStatusFilter} onChange={setMachineStatusFilter} options={machineStatusOptions} /></TableHead><TableHead></TableHead></TableRow>
+                  <TableRow><TableHead>Machine No.</TableHead><TableHead>Machine Family</TableHead><TableHead>Machine Type</TableHead><TableHead>Machine Name</TableHead><TableHead>Machine Location</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow>
+                  <TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Machine No." value={machineNoFilter} onChange={setMachineNoFilter} options={machineNoOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Family" value={machineFamilyFilter} onChange={setMachineFamilyFilter} options={machineFamilyOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Type" value={machineTypeFilter} onChange={setMachineTypeFilter} options={machineTypeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Name" value={machineNameFilter} onChange={setMachineNameFilter} options={machineNameOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Location" value={machineLocationFilter} onChange={setMachineLocationFilter} options={machineLocationOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={machineStatusFilter} onChange={setMachineStatusFilter} options={machineStatusOptions} /></TableHead><TableHead></TableHead></TableRow>
                 </TableHeader>
                 <TableBody>{filteredMachineRows.length ? filteredMachineRows.map((row) => {
                   const machineNo = displayValue(row.machineNo);
-                  return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></TableCell></TableRow>;
-                }) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">No machines match the selected filters.</TableCell></TableRow>}</TableBody>
+                  return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineFamily)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></TableCell></TableRow>;
+                }) : <TableRow><TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">No machines match the selected filters.</TableCell></TableRow>}</TableBody>
               </Table>
             </div>
           </CardContent>
@@ -6192,7 +6200,7 @@ function MachineMasterPanel({
       <TrackingSummary items={[["Schedules", formatNumber(machineSchedules.length)], ["Records", formatNumber(machineHistory.length)], ["Filtered", formatNumber(filteredHistory.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)]]} />
       <Card>
         <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine maintenance schedules and records.</CardDescription></CardHeader>
-        <CardContent><div className="grid gap-3 md:grid-cols-4"><TileField label="Machine type" value={selectedMachine.machineType} important /><TileField label="Machine name" value={selectedMachine.machineName} /><TileField label="Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
+        <CardContent><div className="grid gap-3 md:grid-cols-5"><TileField label="Machine Family" value={selectedMachine.machineFamily} important /><TileField label="Machine Type" value={selectedMachine.machineType} /><TileField label="Machine Name" value={selectedMachine.machineName} /><TileField label="Machine Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
       </Card>
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3">
@@ -9845,16 +9853,18 @@ function maintenanceMachineRows(rows: DashboardPayload[]) {
     byMachine.set(key, {
       ...row,
       machineNo,
+      machineFamily: displayValue(row.machineFamily || row["MACHINE FAMILY"]),
       machineType: displayValue(row.machineType || row["MACHINE TYPE"]),
       machineName: displayValue(row.machineName || row["MACHINE NAME"]),
-      location: displayValue(row.location || row["LOCATION"]),
+      location: displayValue(row.location || row["MACHINE LOCATION"] || row["LOCATION"]),
     });
   }
   return [...byMachine.values()].sort((a, b) => displayValue(a.machineNo).localeCompare(displayValue(b.machineNo), undefined, { numeric: true }));
 }
 
-function machineMasterMatches(row: DashboardPayload, machineNoFilter: string, machineNameFilter: string, machineTypeFilter: string, machineLocationFilter: string, machineStatusFilter: string) {
+function machineMasterMatches(row: DashboardPayload, machineNoFilter: string, machineFamilyFilter: string, machineNameFilter: string, machineTypeFilter: string, machineLocationFilter: string, machineStatusFilter: string) {
   return typedFilterMatches(displayValue(row.machineNo), machineNoFilter) &&
+    typedFilterMatches(displayValue(row.machineFamily), machineFamilyFilter) &&
     typedFilterMatches(displayValue(row.machineName), machineNameFilter) &&
     typedFilterMatches(displayValue(row.machineType), machineTypeFilter) &&
     typedFilterMatches(displayValue(row.location), machineLocationFilter) &&

@@ -60,9 +60,14 @@ function hasMasterValue(value: unknown) {
 
 export function columnsForProductionMaster(
   fields: ProductionMasterField[],
-  rows: Array<Record<string, unknown>>
+  rows: Array<Record<string, unknown>>,
+  alwaysInclude: readonly string[] = []
 ) {
   return fields
-    .filter((field) => rows.some((row) => hasMasterValue(row[field.name])))
+    .filter(
+      (field) =>
+        alwaysInclude.includes(field.name) ||
+        rows.some((row) => hasMasterValue(row[field.name]))
+    )
     .map((field) => ({ key: field.name, label: field.label }))
 }

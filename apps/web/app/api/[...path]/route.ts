@@ -146,6 +146,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
   ],
   machine_master: [
     "machineNo",
+    "machineFamily",
     "machineType",
     "machineName",
     "location",

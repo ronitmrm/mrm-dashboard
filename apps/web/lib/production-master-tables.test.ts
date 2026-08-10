@@ -39,16 +39,20 @@ describe("Production master table rows", () => {
 
   it("shows only populated form fields as columns", () => {
     const fields = [
-      { name: "machineNo", label: "Machine no." },
-      { name: "machineType", label: "Machine type" },
-      { name: "location", label: "Location" },
+      { name: "machineNo", label: "Machine No." },
+      { name: "machineFamily", label: "Machine Family" },
+      { name: "machineType", label: "Machine Type" },
+      { name: "machineName", label: "Machine Name" },
+      { name: "location", label: "Machine Location" },
       { name: "capacity", label: "Capacity" },
       { name: "status", label: "Status" },
     ]
     const rows = [
       {
         machineNo: "A-01",
+        machineFamily: "A",
         machineType: "Automatic",
+        machineName: "Turning centre",
         location: "",
         capacity: null,
         status: "Active",
@@ -57,9 +61,18 @@ describe("Production master table rows", () => {
       },
     ]
 
-    expect(columnsForProductionMaster(fields, rows)).toEqual([
-      { key: "machineNo", label: "Machine no." },
-      { key: "machineType", label: "Machine type" },
+    expect(columnsForProductionMaster(fields, rows, [
+      "machineNo",
+      "machineFamily",
+      "machineType",
+      "machineName",
+      "location",
+    ])).toEqual([
+      { key: "machineNo", label: "Machine No." },
+      { key: "machineFamily", label: "Machine Family" },
+      { key: "machineType", label: "Machine Type" },
+      { key: "machineName", label: "Machine Name" },
+      { key: "location", label: "Machine Location" },
       { key: "status", label: "Status" },
     ])
   })
