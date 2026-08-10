@@ -1,4 +1,4 @@
-CREATE TABLE identity.rate_limits (
+CREATE TABLE IF NOT EXISTS identity.rate_limits (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   key text NOT NULL UNIQUE,
   count integer NOT NULL,
