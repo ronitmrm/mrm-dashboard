@@ -724,6 +724,11 @@ async function post(request: NextRequest, context: RouteContext) {
       return json(await requestPostgresDashboardRefresh(request))
     }
 
+    const preParseCapability = dashboardPostCapability(path)
+    if (preParseCapability) {
+      await authorizedDashboardSession(request, preParseCapability)
+    }
+
     const body = plainRecord(await readDashboardJsonBody(request))
 
     if (path === "attendance" || path === "training") {
@@ -1506,6 +1511,24 @@ const knownDashboardApiPaths = new Set([
   "status",
   "training",
 ])
+
+const dashboardPostCapabilities = new Map<string, string>([
+  ["attendance", "operations.dashboard.read"],
+  ["dispatch-approval", "operations.dispatch.write"],
+  ["machine-constraint", "planning.constraint.write"],
+  ["mark-complete", "operations.shop_floor.write"],
+  ["plan-override", "planning.override.write"],
+  ["planner-priority", "planning.priority.write"],
+  ["production-entry/reverse", "operations.corrections.write"],
+  ["reverse-entry", "operations.corrections.write"],
+  ["route-change", "planning.route_change.write"],
+  ["route-selection", "operations.route_selection.write"],
+  ["training", "operations.dashboard.read"],
+])
+
+function dashboardPostCapability(path: string) {
+  return dashboardPostCapabilities.get(path)
+}
 
 function dashboardApiOperation(method: "get" | "post", path: string) {
   const operation = knownDashboardApiPaths.has(path)
