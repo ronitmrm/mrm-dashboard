@@ -42,6 +42,12 @@ describe("unified navigation", () => {
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
     expect(dashboardNavigation).toHaveLength(19)
+    expect(
+      dashboardNavigation.find(({ id }) => id === "setupChecklistMasterTab")
+    ).toMatchObject({
+      subtitle: "setup and maintenance",
+      title: "Checklists",
+    })
     expect(commercialNavigation).toHaveLength(17)
     expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([
       { href: "/hr?panel=mastersPanel", label: "Masters" },

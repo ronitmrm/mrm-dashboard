@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  checklistWorkspaceEntryTypes,
   columnsForProductionMaster,
   dataEntryRowsForProductionMaster,
+  productionMasterTableEntryTypes,
   productionMasterRowSources,
   rowsForProductionMaster,
-  uniqueChecklistCodeCount,
 } from "./production-master-tables"
 
 describe("Production master table rows", () => {
@@ -73,20 +74,16 @@ describe("Production master table rows", () => {
     ])
   })
 
-  it("counts checklist codes rather than checklist step rows", () => {
-    expect(
-      uniqueChecklistCodeCount("maintenance_checklist_master", [
-        { checklistCode: "MC001", sequence: 1 },
-        { checklistCode: "MC001", sequence: 2 },
-        { checklistCode: "MC002", sequence: 1 },
-      ])
-    ).toBe(2)
-    expect(
-      uniqueChecklistCodeCount("setup_checklist_master", [
-        { checklistCode: "SC001", sequence: 1 },
-        { checklistCode: "SC001", sequence: 2 },
-        { version: "legacy-v2", sequence: 1 },
-      ])
-    ).toBe(2)
+  it("keeps checklist authoring outside Master Tables", () => {
+    expect(checklistWorkspaceEntryTypes).toEqual([
+      "setup_checklist_master",
+      "maintenance_checklist_master",
+    ])
+    expect(productionMasterTableEntryTypes).not.toContain(
+      "setup_checklist_master"
+    )
+    expect(productionMasterTableEntryTypes).not.toContain(
+      "maintenance_checklist_master"
+    )
   })
 })

@@ -161,14 +161,14 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     href: dashboardTabHref("setupChecklistMasterTab"),
     icon: ListChecks,
     id: "setupChecklistMasterTab",
-    subtitle: "coded machinist checklists",
-    title: "Setup Checklists",
+    subtitle: "setup and maintenance",
+    title: "Checklists",
   },
   {
     href: dashboardTabHref("maintenanceMastersTab"),
     icon: Settings2,
     id: "maintenanceMastersTab",
-    subtitle: "schedules and checklists",
+    subtitle: "maintenance schedules",
     title: "Maintenance Masters",
   },
   {

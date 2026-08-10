@@ -83,11 +83,12 @@ import {
 } from "@/lib/dashboard-view-model";
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
 import {
+  checklistWorkspaceEntryTypes,
   columnsForProductionMaster,
   dataEntryRowsForProductionMaster,
+  productionMasterTableEntryTypes,
   productionMasterRowSources,
   rowsForProductionMaster,
-  uniqueChecklistCodeCount,
 } from "@/lib/production-master-tables";
 import {
   dashboardStateRequestUrl,
@@ -202,7 +203,7 @@ function validDashboardTab(tab: DashboardTabId | null) {
 
 function dataEntryDestination(entryType: string): DashboardTabId {
   if (entryType === "planning_holiday") return "planningHolidayTab";
-  if (entryType === "setup_checklist_master") return "setupChecklistMasterTab";
+  if (checklistWorkspaceEntryTypes.includes(entryType as typeof checklistWorkspaceEntryTypes[number])) return "setupChecklistMasterTab";
   if (maintenanceMasterEntryTypes.includes(entryType as typeof maintenanceMasterEntryTypes[number])) return "maintenanceMastersTab";
   if (qualityMasterEntryTypes.includes(entryType as typeof qualityMasterEntryTypes[number])) return "qualityMastersTab";
   return "dataEntryTab";
@@ -340,7 +341,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
   },
   {
     entryType: "maintenance_checklist_master",
-    title: "Maintenance checklist master",
+    title: "Maintenance checklist",
     description: "Reusable maintenance checklist steps assigned to machine maintenance schedules.",
     fields: [
       { name: "checklistCode", label: "Checklist code", required: true },
@@ -365,7 +366,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
   },
   {
     entryType: "setup_checklist_master",
-    title: "Setup checklist master",
+    title: "Setup checklist",
     description: "Coded machinist checklists used from pre setting start through setting completion.",
     fields: [
       { name: "checklistCode", label: "Checklist code", required: true, readOnly: true },
@@ -455,21 +456,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
     ],
   },
 ];
-const masterTableEntryTypes = [
-  "route",
-  "cycle",
-  "tooling",
-  "employee",
-  "machine_master",
-  "maintenance_master",
-  "maintenance_checklist_master",
-  "setup_checklist_master",
-  "rejection_type_master",
-  "rejection_remark_master",
-  "rejection_reason_master",
-  "quality_parameter_master",
-] as const;
-
 const generalDataEntryTypes = [
   "route",
   "cycle",
@@ -481,11 +467,11 @@ const generalDataEntryTypes = [
   "software_raw",
 ] as const;
 
-const maintenanceMasterEntryTypes = ["maintenance_master", "maintenance_checklist_master"] as const;
+const maintenanceMasterEntryTypes = ["maintenance_master"] as const;
 const qualityMasterEntryTypes = ["quality_parameter_master", "rejection_type_master", "rejection_remark_master", "rejection_reason_master"] as const;
 
 function masterTableSpecs() {
-  const allowed = new Set<string>(masterTableEntryTypes);
+  const allowed = new Set<string>(productionMasterTableEntryTypes);
   return dataEntrySpecs.filter((spec) => allowed.has(spec.entryType));
 }
 const subscribeToHydration = () => () => {};
@@ -1601,11 +1587,11 @@ function DashboardContent({
   }
 
   if (activeTab === "setupChecklistMasterTab") {
-    return <DataEntryPanel key={`setup-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={["setup_checklist_master"]} title="Setup checklist workspace" description="Create one coded checklist and maintain all of its ordered machinist steps together." />;
+    return <DataEntryPanel key={`checklists-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={checklistWorkspaceEntryTypes} title="Checklist workspace" description="Create and maintain all coded setup and maintenance checklists in one place." />;
   }
 
   if (activeTab === "maintenanceMastersTab") {
-    return <DataEntryPanel key={`maintenance-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={maintenanceMasterEntryTypes} title="Maintenance master workspace" description="Create reusable maintenance schedules and their coded checklists." />;
+    return <DataEntryPanel key={`maintenance-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={maintenanceMasterEntryTypes} title="Maintenance master workspace" description="Create reusable maintenance schedules and assign checklists created in the Checklists tab." />;
   }
 
   if (activeTab === "qualityMastersTab") {
@@ -4609,7 +4595,7 @@ function ShopFloorRowAction({
                 </Button>
                 {checklistPhase === "start" && !activeChecklistMasters.length && openDataEntry ? (
                   <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("setup_checklist_master", setupChecklistMasterDefaults())}>
-                    Add checklist master
+                    Add setup checklist
                   </Button>
                 ) : null}
               </div>
@@ -5287,11 +5273,11 @@ function SetupChecklistForm({
   if (phase === "start" && !items.length) {
     return (
       <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
-        <div className="font-medium text-amber-900 dark:text-amber-100">Setup checklist master missing</div>
-        <div className="text-amber-800 dark:text-amber-200">Add active checklist master rows before pre setting can start.</div>
+        <div className="font-medium text-amber-900 dark:text-amber-100">Setup checklist missing</div>
+        <div className="text-amber-800 dark:text-amber-200">Create an active setup checklist before pre setting can start.</div>
         {onAddMaster ? (
           <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onAddMaster("setup_checklist_master", defaults)}>
-            Add checklist master
+            Add setup checklist
           </Button>
         ) : null}
       </div>
@@ -6006,14 +5992,6 @@ type MasterTableColumn = {
 };
 
 function masterTableKeySummaryRows(spec: DataEntrySpec, dataEntry: DashboardPayload, rows: DashboardPayload[], filteredRows: DashboardPayload[]) {
-  if (["maintenance_checklist_master", "setup_checklist_master"].includes(spec.entryType)) {
-    const checklistEntryType = spec.entryType as "maintenance_checklist_master" | "setup_checklist_master";
-    return [{
-      master: spec.title,
-      uniqueChecklistCodes: uniqueChecklistCodeCount(checklistEntryType, rows),
-      matchingChecklistCodes: uniqueChecklistCodeCount(checklistEntryType, filteredRows),
-    }];
-  }
   const existingRows = asArray(dataEntry.keySummary).filter((row) => {
     const rowType = str(row.entryType || row.type || row.master || row.table || row.name);
     return rowType.toLowerCase() === spec.entryType.toLowerCase() || rowType.toLowerCase() === spec.title.toLowerCase();
@@ -6290,7 +6268,7 @@ function MachineMasterPanel({
           {isScheduleFormOpen ? (
             <div className="grid gap-4 rounded-lg border p-3">
               {!maintenanceMasterRows.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No maintenance schedule master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_master", {})}>Add schedule in Data Entry</Button></div> : null}
-              {!checklistOptions.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No checklist master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_checklist_master", maintenanceChecklistMasterDefaults("machineMasterTab"))}>Add checklist in Data Entry</Button></div> : null}
+              {!checklistOptions.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No maintenance checklist saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_checklist_master", maintenanceChecklistMasterDefaults("machineMasterTab"))}>Open Checklists</Button></div> : null}
               {selectedChecklistRows.length ? <MaintenanceChecklistPreview rows={selectedChecklistRows} /> : null}
               <form className="grid gap-3" onSubmit={saveSchedule}>
                 <input type="hidden" name="machineNo" value={displayValue(selectedMachine.machineNo)} />
