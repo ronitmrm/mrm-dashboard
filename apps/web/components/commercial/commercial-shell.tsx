@@ -6,6 +6,10 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Settings2 } from "lucide-react"
 
+import {
+  defaultProductionFloorCode,
+  normalizeProductionFloorCode,
+} from "@workspace/db/production-floors"
 import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
 import {
@@ -24,9 +28,25 @@ import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-acce
 import {
   administrationNavigation,
   commercialNavigation,
+  dashboardNavigation,
   hrNavigation,
   navigationHrefMatches,
+  type DashboardTabId,
 } from "@/lib/unified-navigation"
+
+const productionPageNavigation: Record<
+  string,
+  { label: string; parentTab: DashboardTabId }
+> = {
+  "/dashboard/hourly-quality-check": {
+    label: "Hourly Quality Check",
+    parentTab: "qualityControlTasksTab",
+  },
+  "/dashboard/setup-checklist": {
+    label: "Setup Checklist",
+    parentTab: "machinistTasksTab",
+  },
+}
 
 export function CommercialShell({
   children,
@@ -39,7 +59,17 @@ export function CommercialShell({
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const current =
+  const productionPage = productionPageNavigation[pathname]
+  const requestedReturnTab = searchParams.get("returnTab")
+  const activeDashboardTab = dashboardNavigation.some(
+    (item) => item.id === requestedReturnTab
+  )
+    ? (requestedReturnTab as DashboardTabId)
+    : productionPage?.parentTab
+  const activeProductionFloor = normalizeProductionFloorCode(
+    searchParams.get("floor") ?? defaultProductionFloorCode
+  )
+  const current = productionPage ??
     [
       ...commercialNavigation,
       ...hrNavigation,
@@ -72,7 +102,11 @@ export function CommercialShell({
           </Link>
         </SidebarHeader>
         <SidebarContent>
-          <UnifiedSidebarNavigation navigationAccess={navigationAccess} />
+          <UnifiedSidebarNavigation
+            activeDashboardTab={activeDashboardTab}
+            activeProductionFloor={activeProductionFloor}
+            navigationAccess={navigationAccess}
+          />
         </SidebarContent>
         <SidebarFooter>
           <div className="grid gap-0.5 px-2 py-2">
@@ -108,3 +142,5 @@ export function CommercialShell({
     </SidebarProvider>
   )
 }
+
+export const ProductionShell = CommercialShell

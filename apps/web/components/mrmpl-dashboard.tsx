@@ -75,7 +75,6 @@ import {
   defaultProductionFloorCode,
   formatNumber,
   jobCardScheduleSummary,
-  mergeDashboardStateResponse,
   normalizeProductionFloorCode,
   productionFloors,
   toDashboardViewModel,
@@ -92,7 +91,6 @@ import {
   rowsForProductionMaster,
 } from "@/lib/production-master-tables";
 import {
-  dashboardStateRequestUrl,
   refreshLockFromStatus,
   refreshLockHasSettled,
   type PlanningRefreshLock,
@@ -479,7 +477,7 @@ const subscribeToHydration = () => () => {};
 const clientHydrationSnapshot = () => true;
 const serverHydrationSnapshot = () => false;
 
-function usePostgresDashboardPage(
+function usePostgresOperationalPage(
   url: string | null,
   pollIntervalMs = 0,
   onData?: (data: DashboardPayload) => void,
@@ -491,8 +489,6 @@ function usePostgresDashboardPage(
     error?: string;
     url: string;
   }>({ url: "" });
-  const latestDataRef = useRef<DashboardPayload | undefined>(undefined);
-
   useEffect(() => {
     if (!url) return;
     const controller = new AbortController();
@@ -503,26 +499,17 @@ function usePostgresDashboardPage(
       loading = true;
       let nextPollIntervalMs = pollIntervalMs;
       try {
-        const response = await fetch(
-          dashboardStateRequestUrl(url, latestDataRef.current),
-          {
+        const response = await fetch(url, {
           cache: "no-store",
           credentials: "same-origin",
           signal: controller.signal,
-          },
-        );
+        });
         const body = asRecord(await response.json().catch(() => ({})));
         if (!response.ok) {
           throw new Error(str(body.error) || "Dashboard data could not be loaded.");
         }
-        const nextData = mergeDashboardStateResponse(
-          latestDataRef.current,
-          body,
-          new URL(url, window.location.origin).searchParams.get("floor"),
-        );
-        latestDataRef.current = nextData;
-        setResult({ data: nextData, url });
-        onData?.(nextData);
+        setResult({ data: body, url });
+        onData?.(body);
         if (asRecord(body.status).isRefreshing === true) {
           nextPollIntervalMs = activePollIntervalMs;
         }
@@ -620,7 +607,7 @@ function HourlyQualityCheckShell({
 }: {
   productionFloorCode: ProductionFloorCode;
 }) {
-  const hourlyQualityPage = usePostgresDashboardPage(
+  const hourlyQualityPage = usePostgresOperationalPage(
     `/api/hourly-quality?floor=${encodeURIComponent(productionFloorCode)}`,
   );
   const hourlyQualityPageData = hourlyQualityPage.data;
@@ -646,7 +633,7 @@ function HourlyQualityCheckShell({
     [qualityParameterRows, selectedRow],
   );
   const selectedCheckKey = selectedRow ? hourlyQualityCheckId(selectedRow, prodDate, shift, hourSlot) : "";
-  const existingCheckPage = usePostgresDashboardPage(
+  const existingCheckPage = usePostgresOperationalPage(
     selectedCheckKey
       ? `/api/hourly-quality?checkKey=${encodeURIComponent(selectedCheckKey)}&floor=${encodeURIComponent(productionFloorCode)}`
       : null,
@@ -703,8 +690,8 @@ function HourlyQualityCheckShell({
   }));
 
   return (
-    <main className="min-h-screen bg-background p-4 text-foreground md:p-6">
-      <div className="mx-auto grid max-w-7xl gap-4">
+    <section className="grid w-full gap-4 text-foreground">
+      <div className="mx-auto grid w-full max-w-7xl gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">Hourly Quality Check</h1>
@@ -814,7 +801,7 @@ function HourlyQualityCheckShell({
         </Card>
         </fieldset>
       </div>
-    </main>
+    </section>
   );
 }
 
@@ -854,7 +841,7 @@ function SetupChecklistShell({
 }) {
   const isClientHydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
   const { sessionId, phase, row } = isClientHydrated ? setupChecklistQueryFromLocation() : { sessionId: "", phase: "", row: {} as DashboardPayload };
-  const checklistPage = usePostgresDashboardPage(
+  const checklistPage = usePostgresOperationalPage(
     sessionId
       ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}&floor=${encodeURIComponent(productionFloorCode)}`
       : null,
@@ -941,8 +928,8 @@ function SetupChecklistShell({
   }
 
   return (
-    <main className="min-h-screen bg-background p-4 text-foreground md:p-6">
-      <div className="mx-auto grid max-w-6xl gap-4">
+    <section className="grid w-full gap-4 text-foreground">
+      <div className="mx-auto grid w-full max-w-6xl gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">Setup Checklist</h1>
@@ -1008,7 +995,7 @@ function SetupChecklistShell({
         )}
         </fieldset>
       </div>
-    </main>
+    </section>
   );
 }
 
@@ -1056,7 +1043,7 @@ function DashboardShell({
     floor: activeProductionFloor,
     onData: handleDashboardStateData,
   });
-  const correctionCandidatesPage = usePostgresDashboardPage(
+  const correctionCandidatesPage = usePostgresOperationalPage(
     activeTab === "correctionsTab" ? "/api/correction-candidates?limit=200" : null,
     5_000,
     undefined,
@@ -6581,7 +6568,7 @@ function QualityParameterMasterForm({
   masterRows: DashboardPayload[];
   productionControl: DashboardPayload;
 }) {
-  const hourlyQualityPageData = usePostgresDashboardPage("/api/hourly-quality", 5_000).data;
+  const hourlyQualityPageData = usePostgresOperationalPage("/api/hourly-quality", 5_000).data;
   const hourlyQualityPageRecord = asRecord(hourlyQualityPageData);
   const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
   const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([]);
