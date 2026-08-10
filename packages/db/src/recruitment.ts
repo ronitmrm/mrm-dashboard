@@ -3003,22 +3003,22 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     async deleteCandidateEvent(input: MutationContext & { eventId: string }) {
       return transaction(pool, async (client) => {
         const eventId = required(input.eventId, "Conversation log")
-        const deleted = await client.query<
-          Record<string, unknown> & { id: string }
-        >(
+        const deleted = await client.query<{
+          deleted_event: Record<string, unknown> & { id: string }
+        }>(
           `
-            DELETE FROM recruitment.candidate_events
-            WHERE id = $1 AND organization_id = $2
-            RETURNING *
+            SELECT recruitment.delete_candidate_event($1, $2)
+              AS deleted_event
           `,
-          [eventId, input.organizationId]
+          [input.organizationId, eventId]
         )
-        if (!deleted.rows[0]) {
+        const deletedEvent = deleted.rows[0]?.deleted_event
+        if (!deletedEvent) {
           throw new Error("Conversation log was not found.")
         }
         await audit(client, {
           ...input,
-          beforeState: deleted.rows[0],
+          beforeState: deletedEvent,
           eventType: "recruitment.candidate_event.deleted",
           targetId: eventId,
           targetTable: "candidate_events",

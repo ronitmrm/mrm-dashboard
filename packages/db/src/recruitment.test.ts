@@ -404,14 +404,16 @@ describe("candidate conversation logs", () => {
     const query = vi.fn(
       async (statement: string, _parameters?: readonly unknown[]) => {
         void _parameters
-        if (statement.includes("DELETE FROM recruitment.candidate_events")) {
+        if (statement.includes("recruitment.delete_candidate_event")) {
           return {
             rows: [
               {
-                event_type: "Phone Call",
-                id: eventId,
-                notes: "Remove me",
-                title: "Follow-up",
+                deleted_event: {
+                  event_type: "Phone Call",
+                  id: eventId,
+                  notes: "Remove me",
+                  title: "Follow-up",
+                },
               },
             ],
           }
@@ -426,10 +428,15 @@ describe("candidate conversation logs", () => {
 
     await repository.deleteCandidateEvent({ eventId, organizationId })
 
-    const deleteCall = query.mock.calls.find(([statement]) =>
-      statement.includes("DELETE FROM recruitment.candidate_events")
+    const deleteActionCall = query.mock.calls.find(([statement]) =>
+      statement.includes("recruitment.delete_candidate_event")
     )
-    expect(deleteCall?.[1]).toEqual([eventId, organizationId])
+    expect(deleteActionCall?.[1]).toEqual([organizationId, eventId])
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("DELETE FROM recruitment.candidate_events")
+      )
+    ).toBe(false)
     const auditCall = query.mock.calls.find(([statement]) =>
       statement.includes("INSERT INTO audit.events")
     )

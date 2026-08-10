@@ -1232,6 +1232,8 @@ test("database roles enforce least privilege across migration, web, worker, and 
     migration_can_migrate: boolean
     reporting_can_update_quotes: boolean
     reporting_reads_quotes: boolean
+    web_can_delete_candidate_event: boolean
+    web_can_delete_candidate_events: boolean
     web_can_delete_candidate_departments: boolean
     web_can_delete_customers: boolean
     web_can_execute_try_date: boolean
@@ -1254,6 +1256,16 @@ test("database roles enforce least privilege across migration, web, worker, and 
         'recruitment.candidate_departments',
         'DELETE'
       ) AS web_can_delete_candidate_departments,
+      has_table_privilege(
+        'mrmpl_web',
+        'recruitment.candidate_events',
+        'DELETE'
+      ) AS web_can_delete_candidate_events,
+      has_function_privilege(
+        'mrmpl_web',
+        'recruitment.delete_candidate_event(uuid, uuid)',
+        'EXECUTE'
+      ) AS web_can_delete_candidate_event,
       has_function_privilege(
         'mrmpl_web',
         'recruitment.replace_candidate_department(uuid, uuid, uuid)',
@@ -1291,6 +1303,8 @@ test("database roles enforce least privilege across migration, web, worker, and 
     migration_can_migrate: true,
     reporting_can_update_quotes: false,
     reporting_reads_quotes: true,
+    web_can_delete_candidate_event: true,
+    web_can_delete_candidate_events: false,
     web_can_delete_candidate_departments: false,
     web_can_delete_customers: false,
     web_can_execute_try_date: true,
