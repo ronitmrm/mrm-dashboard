@@ -2721,20 +2721,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         if (!result.rows[0]) throw new Error("Candidate was not found.")
         const savedCandidateId = result.rows[0].id
         await client.query(
-          `DELETE FROM recruitment.candidate_departments WHERE candidate_id = $1`,
-          [savedCandidateId]
+          `SELECT recruitment.replace_candidate_department($1, $2, $3)`,
+          [input.organizationId, savedCandidateId, departmentId]
         )
-        if (departmentId) {
-          await client.query(
-            `
-              INSERT INTO recruitment.candidate_departments (
-                candidate_id, department_id
-              )
-              VALUES ($1, $2)
-            `,
-            [savedCandidateId, departmentId]
-          )
-        }
         if (optional(input.notes)) {
           await client.query(
             `

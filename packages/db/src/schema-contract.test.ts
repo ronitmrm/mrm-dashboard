@@ -1232,11 +1232,13 @@ test("database roles enforce least privilege across migration, web, worker, and 
     migration_can_migrate: boolean
     reporting_can_update_quotes: boolean
     reporting_reads_quotes: boolean
+    web_can_delete_candidate_departments: boolean
     web_can_delete_customers: boolean
     web_can_execute_try_date: boolean
     web_can_execute_try_timestamptz: boolean
     web_can_migrate: boolean
     web_can_read_migration_evidence: boolean
+    web_can_replace_candidate_department: boolean
     web_can_use_migration_schema: boolean
     web_writes_customers: boolean
     worker_reads_work_orders: boolean
@@ -1247,6 +1249,16 @@ test("database roles enforce least privilege across migration, web, worker, and 
         AS web_writes_customers,
       has_table_privilege('mrmpl_web', 'sales.customers', 'DELETE')
         AS web_can_delete_customers,
+      has_table_privilege(
+        'mrmpl_web',
+        'recruitment.candidate_departments',
+        'DELETE'
+      ) AS web_can_delete_candidate_departments,
+      has_function_privilege(
+        'mrmpl_web',
+        'recruitment.replace_candidate_department(uuid, uuid, uuid)',
+        'EXECUTE'
+      ) AS web_can_replace_candidate_department,
       has_table_privilege('mrmpl_web', 'migration.schema_migrations', 'INSERT')
         AS web_can_migrate,
       has_table_privilege('mrmpl_web', 'migration.schema_migrations', 'SELECT')
@@ -1279,11 +1291,13 @@ test("database roles enforce least privilege across migration, web, worker, and 
     migration_can_migrate: true,
     reporting_can_update_quotes: false,
     reporting_reads_quotes: true,
+    web_can_delete_candidate_departments: false,
     web_can_delete_customers: false,
     web_can_execute_try_date: true,
     web_can_execute_try_timestamptz: true,
     web_can_migrate: false,
     web_can_read_migration_evidence: false,
+    web_can_replace_candidate_department: true,
     web_can_use_migration_schema: true,
     web_writes_customers: true,
     worker_reads_work_orders: true,

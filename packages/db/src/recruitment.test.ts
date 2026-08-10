@@ -1119,18 +1119,19 @@ describe("upsertCandidate", () => {
       statement.includes("UPDATE recruitment.candidates")
     )
     expect(updateCall?.[1]?.[9]).toBe(candidateId)
+    const replaceDepartmentCall = query.mock.calls.find(([statement]) =>
+      statement.includes("recruitment.replace_candidate_department")
+    )
+    expect(replaceDepartmentCall?.[1]).toEqual([
+      "00000000-0000-4000-8000-000000000010",
+      candidateId,
+      departmentId,
+    ])
     expect(
       query.mock.calls.some(([statement]) =>
         statement.includes("DELETE FROM recruitment.candidate_departments")
       )
-    ).toBe(true)
-    expect(
-      query.mock.calls.some(
-        ([statement, parameters]) =>
-          statement.includes("INSERT INTO recruitment.candidate_departments") &&
-          parameters?.[1] === departmentId
-      )
-    ).toBe(true)
+    ).toBe(false)
   })
 })
 
