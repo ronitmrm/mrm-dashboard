@@ -4,6 +4,7 @@ import type {
   RecruitmentCombinedRoleRow,
   RecruitmentPostRow,
 } from "@workspace/db"
+import { resolveRecruitmentEmployeeAssignmentTarget } from "@workspace/db/recruitment-domain"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import {
   Field,
@@ -69,8 +70,14 @@ export function SingleEmployeeAssignmentFields({
       targets: [...combined, ...individual],
     }
   }, [combinedRoles, posts])
-  const initialTarget = targets.find(({ post }) => post.id === initialPostId)
-  const [postId, setPostId] = useState(initialPostId)
+  const requestedInitialPost = resolveRecruitmentEmployeeAssignmentTarget(
+    posts,
+    initialPostId
+  )
+  const initialTarget = targets.find(
+    ({ post }) => post.id === requestedInitialPost?.id
+  )
+  const [postId, setPostId] = useState(initialTarget?.post.id ?? "")
   const [employeeName, setEmployeeName] = useState(
     initialTarget?.post.employeeName ?? ""
   )

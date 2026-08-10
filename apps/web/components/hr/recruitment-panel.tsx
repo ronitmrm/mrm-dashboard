@@ -44,7 +44,6 @@ import {
   saveMasterAction,
   savePostAction,
   saveTemplateAction,
-  scheduleInterviewAction,
 } from "@/app/hr/actions"
 import { ApprovedPostFields } from "@/components/hr/approved-post-fields"
 import { ApprovedPostsTable } from "@/components/hr/approved-posts-table"
@@ -60,6 +59,7 @@ import {
   InterviewResultsWorkspace,
   InterviewScheduleBoard,
 } from "@/components/hr/interview-workspace"
+import { InterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { JobTemplatesTable } from "@/components/hr/job-templates-table"
 import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
@@ -606,58 +606,7 @@ function InterviewsPanel({
   return (
     <>
       <InterviewScheduleBoard canWrite={canWrite} interviews={interviews} />
-      {canWrite ? (
-        <div className="grid gap-6">
-          <PanelForm
-            action={scheduleInterviewAction}
-            description="Plan the next interview round for a candidate application."
-            panelId="interviewsPanel"
-            title="Schedule interview"
-          >
-            <Field>
-              <FieldLabel htmlFor="schedule-application">
-                Application
-              </FieldLabel>
-              <NativeSelect
-                className="w-full"
-                id="schedule-application"
-                name="application_id"
-                required
-              >
-                <NativeSelectOption value="">
-                  Select application
-                </NativeSelectOption>
-                {interviews
-                  .filter(
-                    (row) =>
-                      row.nextRound !== null && row.scoreableRound === null
-                  )
-                  .map((row) => (
-                    <NativeSelectOption
-                      key={row.applicationId}
-                      value={row.applicationId}
-                    >
-                      {row.candidateName} · {row.jobTitle} · {row.nextRound}
-                    </NativeSelectOption>
-                  ))}
-              </NativeSelect>
-            </Field>
-            <TextField label="Interview date" name="interview_date" required type="date" />
-            <TextField label="Interview time" name="interview_time" required type="time" />
-            <Button
-              className="md:col-span-2 xl:col-span-3"
-              disabled={
-                !interviews.some(
-                  (row) => row.nextRound !== null && row.scoreableRound === null
-                )
-              }
-              type="submit"
-            >
-              Schedule interview
-            </Button>
-          </PanelForm>
-        </div>
-      ) : null}
+      {canWrite ? <InterviewScheduleForm interviews={interviews} /> : null}
     </>
   )
 }

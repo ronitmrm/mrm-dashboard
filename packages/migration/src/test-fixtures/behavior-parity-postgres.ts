@@ -1991,6 +1991,7 @@ export async function captureCanonicalBehaviorParityFixture({
         applicationId: repeatedApplication[0]!.id,
         interviewAt: `2026-08-${String(index + 10).padStart(2, "0")}T10:00:00.000Z`,
         organizationId,
+        roundName: round.name,
       })
       await recruitment.recordInterview({
         applicationId: repeatedApplication[0]!.id,

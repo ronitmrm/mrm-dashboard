@@ -578,6 +578,7 @@ describe("job workspace", () => {
       applicationId: "application-1",
       interviewAt: "2026-08-08T10:00",
       organizationId: "organization-1",
+      roundName: "Screening Round",
     })
 
     expect(
@@ -595,6 +596,45 @@ describe("job workspace", () => {
           parameters?.[2] === "Screening Round"
       )
     ).toBe(true)
+  })
+
+  test("rejects scheduling a round other than the next required round", async () => {
+    const query = vi.fn(async (statement: string) => {
+      if (
+        statement.includes("SELECT id") &&
+        statement.includes("FROM recruitment.applications")
+      ) {
+        return { rows: [{ id: "application-1", status: "Assigned" }] }
+      }
+      if (statement.includes("SELECT round_name, status")) {
+        return { rows: [] }
+      }
+      if (statement.includes("UPDATE recruitment.applications")) {
+        return { rows: [{ id: "application-1" }] }
+      }
+      return { rows: [] }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: {
+        connect: vi.fn(async () => client),
+      } as unknown as Pool,
+    })
+    const input = {
+      applicationId: "application-1",
+      interviewAt: "2026-08-10T10:00",
+      organizationId: "organization-1",
+      roundName: "Technical Round",
+    }
+
+    await expect(repository.scheduleInterview(input)).rejects.toThrow(
+      "The next required round is Screening Round."
+    )
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("UPDATE recruitment.applications")
+      )
+    ).toBe(false)
   })
 
   test("rejects a manually supplied later outcome round", async () => {
@@ -764,6 +804,7 @@ describe("candidate application cycles", () => {
         applicationId: "application-1",
         interviewAt: "2026-08-10T10:00",
         organizationId: "organization-1",
+        roundName: "Screening Round",
       })
     ).rejects.toThrow("This candidate application is closed.")
     expect(
@@ -1209,6 +1250,52 @@ describe("listInterviewRecords", () => {
         score: 4,
       }),
     ])
+  })
+})
+
+describe("listInterviews", () => {
+  test("includes the job and approved-post context needed for scheduling", async () => {
+    const query = vi.fn(async () => ({
+      rows: [
+        {
+          application_id: "application-1",
+          approved_rounds: [],
+          candidate_name: "Candidate One",
+          interview_at: null,
+          job_id: "job-1",
+          job_number: "JOB-001",
+          job_title: "Maintenance Engineer",
+          joining_date: null,
+          latest_round: null,
+          latest_status: null,
+          planned_round: null,
+          post_code: "ME-AS-1",
+          scheduled_rounds: [],
+          status: "Assigned",
+        },
+      ],
+    }))
+    const repository = createRecruitmentRepository({
+      pool: { query } as unknown as Pool,
+    })
+
+    const rows = await repository.listInterviews("organization-1")
+
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "LEFT JOIN recruitment.posts post ON post.id = job.post_id"
+      ),
+      ["organization-1"]
+    )
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        applicationId: "application-1",
+        jobId: "job-1",
+        jobNumber: "JOB-001",
+        nextRound: "Screening Round",
+        postCode: "ME-AS-1",
+      })
+    )
   })
 })
 

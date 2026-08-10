@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest"
 
-import { listRecruitableApprovedPosts } from "./recruitment-domain"
+import {
+  listRecruitableApprovedPosts,
+  resolveRecruitmentEmployeeAssignmentTarget,
+} from "./recruitment-domain"
 
 const post = (postCode: string, status: string) => ({ postCode, status })
 
@@ -65,5 +68,26 @@ describe("listRecruitableApprovedPosts", () => {
     )
 
     expect(result.map((entry) => entry.postCode)).toEqual(["PR-OP-1"])
+  })
+})
+
+describe("resolveRecruitmentEmployeeAssignmentTarget", () => {
+  test("maps any combined-role member to its primary employee assignment", () => {
+    const posts = [
+      {
+        combinedRoleId: "combined-1",
+        id: "primary-post",
+        isPrimaryCombinedPost: true,
+      },
+      {
+        combinedRoleId: "combined-1",
+        id: "manager-post",
+        isPrimaryCombinedPost: false,
+      },
+    ]
+
+    expect(
+      resolveRecruitmentEmployeeAssignmentTarget(posts, "manager-post")?.id
+    ).toBe("primary-post")
   })
 })

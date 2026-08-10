@@ -121,3 +121,22 @@ export function listRecruitableApprovedPosts<
       !postsWithOpenJobs.has(post.postCode)
   )
 }
+
+export function resolveRecruitmentEmployeeAssignmentTarget<
+  Post extends {
+    combinedRoleId?: string | null
+    id: string
+    isPrimaryCombinedPost?: boolean
+  },
+>(posts: readonly Post[], requestedPostId: string) {
+  const requestedPost = posts.find((post) => post.id === requestedPostId)
+  if (!requestedPost?.combinedRoleId) return requestedPost ?? null
+
+  return (
+    posts.find(
+      (post) =>
+        post.combinedRoleId === requestedPost.combinedRoleId &&
+        post.isPrimaryCombinedPost
+    ) ?? requestedPost
+  )
+}

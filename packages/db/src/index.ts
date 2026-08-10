@@ -66,6 +66,7 @@ export {
   isActiveRecruitmentApplicationStatus,
   listRecruitableApprovedPosts,
   recruitmentPostDeletionBlocker,
+  resolveRecruitmentEmployeeAssignmentTarget,
 } from "./recruitment-domain"
 export {
   nextRecruitmentPostIdentity,

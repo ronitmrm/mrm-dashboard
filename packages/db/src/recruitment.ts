@@ -26,6 +26,7 @@ export {
   deriveRecruitmentPostStatus,
   isActiveRecruitmentApplicationStatus,
   recruitmentPostDeletionBlocker,
+  resolveRecruitmentEmployeeAssignmentTarget,
 } from "./recruitment-domain"
 
 type MutationContext = {
@@ -117,12 +118,15 @@ export type RecruitmentInterviewRow = {
   applicationId: string
   candidateName: string
   interviewAt: string | null
+  jobId: string
+  jobNumber: string
   joiningDate: string | null
   jobTitle: string
   latestRound: string | null
   latestStatus: string | null
   nextRound: RecruitmentInterviewRoundName | null
   plannedRound: string | null
+  postCode: string | null
   scoreableRound: RecruitmentInterviewRoundName | null
   status: string
 }
@@ -1318,17 +1322,21 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         approved_rounds: string[]
         candidate_name: string
         interview_at: string | null
+        job_id: string
+        job_number: string
         job_title: string
         joining_date: string | null
         latest_round: string | null
         latest_status: string | null
         planned_round: string | null
+        post_code: string | null
         scheduled_rounds: string[]
         status: string
       }>(
         `
           SELECT application.id AS application_id,
             candidate.name AS candidate_name, job.title AS job_title,
+            job.id AS job_id, job.job_number, post.post_code,
             application.status, application.interview_at::text,
             application.planned_round, application.joining_date::text,
             latest.round_name AS latest_round, latest.status AS latest_status,
@@ -1336,6 +1344,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           FROM recruitment.applications application
           JOIN recruitment.candidates candidate ON candidate.id = application.candidate_id
           JOIN recruitment.job_posts job ON job.id = application.job_post_id
+          LEFT JOIN recruitment.posts post ON post.id = job.post_id
           LEFT JOIN LATERAL (
             SELECT interview.round_name, interview.status
             FROM recruitment.interviews interview
@@ -1377,12 +1386,15 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           applicationId: row.application_id,
           candidateName: row.candidate_name,
           interviewAt: row.interview_at,
+          jobId: row.job_id,
+          jobNumber: row.job_number,
           joiningDate: row.joining_date,
           jobTitle: row.job_title,
           latestRound: row.latest_round,
           latestStatus: row.latest_status,
           nextRound,
           plannedRound: row.planned_round,
+          postCode: row.post_code,
           scoreableRound:
             nextRound &&
             (row.scheduled_rounds ?? []).some(
@@ -3030,6 +3042,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       input: MutationContext & {
         applicationId: string
         interviewAt: string
+        roundName: string
       }
     ) {
       return transaction(pool, async (client) => {
@@ -3078,6 +3091,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         )
         if (!nextRound) {
           throw new Error("All three interview rounds are already approved.")
+        }
+        const selectedRound = required(input.roundName, "Interview round")
+        if (canonicalRecruitmentInterviewRound(selectedRound) !== nextRound.name) {
+          throw new Error(`The next required round is ${nextRound.name}.`)
         }
         const interviewAt = required(
           input.interviewAt,

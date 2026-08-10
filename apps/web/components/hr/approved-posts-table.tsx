@@ -527,10 +527,6 @@ export function ApprovedPostsTable({
                           <Checkbox
                             aria-label={`Select ${row.postCode}`}
                             checked={selectedEmployeePost?.id === row.id}
-                            disabled={
-                              Boolean(row.combinedRoleId) &&
-                              !row.isPrimaryCombinedPost
-                            }
                             onCheckedChange={(checked) =>
                               setSelectedEmployeePost(
                                 checked === true ? row : null
@@ -563,10 +559,6 @@ export function ApprovedPostsTable({
                           <div className="flex justify-end gap-2">
                             {employeeManagement ? (
                               <Button
-                                disabled={
-                                  Boolean(row.combinedRoleId) &&
-                                  !row.isPrimaryCombinedPost
-                                }
                                 onClick={() => {
                                   setSelectedEmployeePost(row)
                                   setEmployeeEditorOpen(true)

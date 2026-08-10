@@ -434,6 +434,7 @@ export async function scheduleInterviewAction(formData: FormData) {
       ...context,
       applicationId: value(formData, "application_id"),
       interviewAt: interviewAtValue(formData),
+      roundName: value(formData, "round_name"),
     })
   )
 }

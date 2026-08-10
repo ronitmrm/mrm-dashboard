@@ -13,12 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
-import { Input } from "@workspace/ui/components/input"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
 import {
   Table,
   TableBody,
@@ -29,8 +23,8 @@ import {
 } from "@workspace/ui/components/table"
 import { ArrowLeft, BriefcaseBusiness, UserPlus } from "lucide-react"
 
-import { scheduleInterviewAction } from "@/app/hr/actions"
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
+import { JobInterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   listGrantedCapabilities,
@@ -62,29 +56,6 @@ function formatDateTime(value: string | null) {
         year: "numeric",
       })
     : "—"
-}
-
-function ApplicationOptions({
-  applications,
-}: {
-  applications: Array<{
-    candidateName: string
-    id: string
-    nextRound: string | null
-  }>
-}) {
-  return (
-    <>
-      <NativeSelectOption value="">Select applicant</NativeSelectOption>
-      {applications
-        .filter((application) => application.nextRound !== null)
-        .map((application) => (
-          <NativeSelectOption key={application.id} value={application.id}>
-            {application.candidateName} · {application.nextRound}
-          </NativeSelectOption>
-        ))}
-    </>
-  )
 }
 
 function formatInterviewScore(score: number | null) {
@@ -219,61 +190,15 @@ export default async function JobWorkspacePage({
             <CardHeader>
               <CardTitle>Schedule interview</CardTitle>
               <CardDescription>
-                The next required round is selected automatically and retained
-                in this job’s interview history.
+                Select an assigned candidate and confirm the required next
+                round.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form action={scheduleInterviewAction}>
-                <input name="return_job_id" type="hidden" value={job.id} />
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="job-schedule-application">
-                      Applicant
-                    </FieldLabel>
-                    <NativeSelect
-                      className="w-full"
-                      id="job-schedule-application"
-                      name="application_id"
-                      required
-                    >
-                      <ApplicationOptions applications={applications} />
-                    </NativeSelect>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="job-interview-date">
-                      Interview date
-                    </FieldLabel>
-                    <Input
-                      id="job-interview-date"
-                      name="interview_date"
-                      required
-                      type="date"
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="job-interview-time">
-                      Interview time
-                    </FieldLabel>
-                    <Input
-                      id="job-interview-time"
-                      name="interview_time"
-                      required
-                      type="time"
-                    />
-                  </Field>
-                  <Button
-                    disabled={
-                      !applications.some(
-                        (application) => application.nextRound !== null
-                      )
-                    }
-                    type="submit"
-                  >
-                    Schedule interview
-                  </Button>
-                </FieldGroup>
-              </form>
+              <JobInterviewScheduleForm
+                applications={applications}
+                job={job}
+              />
             </CardContent>
           </Card>
 

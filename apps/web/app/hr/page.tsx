@@ -191,25 +191,28 @@ export default async function HrRecruitmentPage({
         </Alert>
       ) : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        {[
-          ["Approved posts", stats.posts],
-          ["Vacant posts", stats.vacantPosts],
-          ["Templates", stats.templates],
-          ["Open jobs", stats.openJobs],
-          ["Candidates", stats.candidates],
-          ["Interviews", stats.interviews],
-        ].map(([label, value]) => (
-          <Card key={label}>
-            <CardHeader className="pb-1">
-              <CardDescription>{label}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <CardTitle className="font-mono text-2xl">{value}</CardTitle>
-            </CardContent>
-          </Card>
-        ))}
-      </section>
+      {activeItem.panelId !== "interviewsPanel" &&
+      activeItem.panelId !== "interviewWorkspacePanel" ? (
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          {[
+            ["Approved posts", stats.posts],
+            ["Vacant posts", stats.vacantPosts],
+            ["Templates", stats.templates],
+            ["Open jobs", stats.openJobs],
+            ["Candidates", stats.candidates],
+            ["Interviews", stats.interviews],
+          ].map(([label, value]) => (
+            <Card key={label}>
+              <CardHeader className="pb-1">
+                <CardDescription>{label}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CardTitle className="font-mono text-2xl">{value}</CardTitle>
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+      ) : null}
 
       <RecruitmentPanel
         canManageEmployees={canManageEmployees}
