@@ -371,13 +371,6 @@ export const hrNavigation = [
     panelId: "interviewWorkspacePanel",
     requiredCapability: "hr.recruitment.read",
   },
-  {
-    href: "/hr?panel=interviewProgressPanel",
-    icon: ListChecks,
-    label: "Interview Progress",
-    panelId: "interviewProgressPanel",
-    requiredCapability: "hr.recruitment.read",
-  },
 ] as const
 
 export const administrationNavigation = [

@@ -1832,6 +1832,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         name?: string | null
         postIds: string[]
         primaryPostId: string
+        requirementTemplateCode?: string | null
       }
     ) {
       return transaction(pool, async (client) => {
@@ -1874,6 +1875,20 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           throw new Error("Only an active combined role can be edited.")
         }
         const vacancyCode = required(role.vacancy_code, "Combined vacancy code")
+        const templateCode = optional(input.requirementTemplateCode)
+        let templateId: string | null = null
+        if (templateCode) {
+          const template = await client.query<{ id: string }>(
+            `
+              SELECT id FROM recruitment.requirement_templates
+              WHERE organization_id = $1 AND active
+                AND lower(template_code) = lower($2)
+            `,
+            [input.organizationId, templateCode]
+          )
+          if (!template.rows[0]) throw new Error("Job template was not found.")
+          templateId = template.rows[0].id
+        }
 
         const selectedPosts = await client.query<{
           id: string
@@ -1984,13 +1999,15 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `
             UPDATE recruitment.posts
             SET combined_role_id = $1, vacancy_code = $2,
-              updated_by_user_id = $3, updated_at = now(),
+              requirement_template_id = $3, updated_by_user_id = $4,
+              updated_at = now(),
               row_version = row_version + 1
-            WHERE organization_id = $4 AND id = ANY($5::uuid[])
+            WHERE organization_id = $5 AND id = ANY($6::uuid[])
           `,
           [
             combinedRoleId,
             vacancyCode,
+            templateId,
             input.actorUserId ?? null,
             input.organizationId,
             postIds,
@@ -2023,6 +2040,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             primaryPostCode: selectedPosts.rows.find(
               (post) => post.id === primaryPostId
             )?.post_code,
+            requirementTemplateCode: templateCode,
           },
           targetId: combinedRoleId,
           targetTable: "combined_roles",
@@ -2564,6 +2582,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                     AND candidate.combined_role_id = combined.id)
                 )
               ORDER BY
+                (candidate.id = post.requirement_template_id) DESC NULLS LAST,
                 (candidate.combined_role_id = combined.id) DESC NULLS LAST,
                 candidate.updated_at DESC, candidate.id
               LIMIT 1

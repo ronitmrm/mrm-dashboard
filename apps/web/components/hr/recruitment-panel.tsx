@@ -57,7 +57,6 @@ import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/h
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
 import {
-  InterviewProgress,
   InterviewResultsWorkspace,
   InterviewScheduleBoard,
 } from "@/components/hr/interview-workspace"
@@ -350,7 +349,6 @@ function ApprovedPostPanel({
       <EditableCombinedRolesTable
         canWrite={canWrite}
         combinedRoles={combinedRoles}
-        masters={masters}
         posts={posts}
         templates={templates}
       />
@@ -735,8 +733,6 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
       return (
         <InterviewResultsWorkspace records={props.interviewRecords} />
       )
-    case "interviewProgressPanel":
-      return <InterviewProgress interviews={props.interviews} />
     case "conversationLogsPanel":
       return (
         <ConversationLogsTable

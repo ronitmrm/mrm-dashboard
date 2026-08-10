@@ -58,9 +58,11 @@ function dateKey(value: string | null) {
 
 function formatDate(value: string | null) {
   return value
-    ? new Date(value).toLocaleDateString("en-IN", {
-        dateStyle: "medium",
+    ? new Date(value).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
         timeZone: "Asia/Kolkata",
+        year: "numeric",
       })
     : "—"
 }
@@ -85,15 +87,17 @@ function SummaryCards({
   }>
 }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
       {items.map(({ icon: Icon, label, value }) => (
-        <Card key={label}>
-          <CardContent className="flex items-center justify-between gap-4 pt-6">
-            <div>
-              <p className="text-sm text-muted-foreground">{label}</p>
-              <p className="text-3xl font-semibold tabular-nums">{value}</p>
+        <Card className="h-20" key={label}>
+          <CardContent className="flex h-full items-center justify-between gap-2 px-4 py-3">
+            <div className="min-w-0">
+              <p className="truncate text-xs text-muted-foreground" title={label}>
+                {label}
+              </p>
+              <p className="text-xl font-semibold tabular-nums">{value}</p>
             </div>
-            <Icon className="size-7 text-primary" />
+            <Icon className="size-5 shrink-0 text-primary" />
           </CardContent>
         </Card>
       ))}
@@ -138,6 +142,7 @@ export function InterviewScheduleBoard({
           },
           { icon: ListTodo, label: "Need scheduling", value: awaitingSchedule.length },
           { icon: ClipboardCheck, label: "All scheduled", value: planned.length },
+          { icon: CheckCircle2, label: "Applications", value: interviews.length },
         ]}
       />
 
@@ -232,75 +237,6 @@ export function InterviewScheduleBoard({
         </SheetContent>
       ) : null}
     </Sheet>
-  )
-}
-
-export function InterviewProgress({
-  interviews,
-}: {
-  interviews: RecruitmentInterviewRow[]
-}) {
-  const completedRounds = interviews.filter((row) => row.latestRound !== null)
-  const closed = interviews.filter((row) => row.nextRound === null)
-  return (
-    <>
-      <SummaryCards
-        items={[
-          { icon: ListTodo, label: "Applications", value: interviews.length },
-          { icon: CalendarClock, label: "Waiting for outcome", value: interviews.filter((row) => row.scoreableRound !== null).length },
-          { icon: ClipboardCheck, label: "Rounds completed", value: completedRounds.length },
-          { icon: CheckCircle2, label: "Applications closed", value: closed.length },
-        ]}
-      />
-      <Card>
-        <CardHeader>
-          <CardTitle>Interview progress</CardTitle>
-          <CardDescription>
-            Round-by-round progress for every candidate application.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Candidate</TableHead>
-                <TableHead>Job</TableHead>
-                <TableHead>Next date</TableHead>
-                <TableHead>Next time</TableHead>
-                <TableHead>Required round</TableHead>
-                <TableHead>Latest outcome</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Joining</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {interviews.length ? (
-                interviews.map((row) => (
-                  <TableRow key={row.applicationId}>
-                    <TableCell>{row.candidateName}</TableCell>
-                    <TableCell>{row.jobTitle}</TableCell>
-                    <TableCell>{formatDate(row.interviewAt)}</TableCell>
-                    <TableCell>{formatTime(row.interviewAt)}</TableCell>
-                    <TableCell>
-                      {row.nextRound ?? (row.status === "Approved" ? "All rounds approved" : "Application closed")}
-                    </TableCell>
-                    <TableCell>{row.latestRound ? `${row.latestRound} · ${row.latestStatus}` : "—"}</TableCell>
-                    <TableCell><StatusBadge status={row.status} /></TableCell>
-                    <TableCell>{row.joiningDate ?? "—"}</TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell className="py-10 text-center text-muted-foreground" colSpan={8}>
-                    No candidate applications found.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </>
   )
 }
 

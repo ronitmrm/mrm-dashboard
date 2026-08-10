@@ -52,7 +52,16 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function formatDateTime(value: string | null) {
-  return value ? new Date(value).toLocaleString("en-IN") : "—"
+  return value
+    ? new Date(value).toLocaleString("en-GB", {
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        month: "2-digit",
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+      })
+    : "—"
 }
 
 function ApplicationOptions({

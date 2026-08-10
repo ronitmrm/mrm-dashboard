@@ -141,7 +141,7 @@ export default async function HrRecruitmentPage({
         ? repository.listCandidates(organizationId)
         : Promise.resolve(candidates),
       needsJobs ? repository.listJobs(organizationId) : Promise.resolve(jobs),
-      ["interviewsPanel", "interviewWorkspacePanel", "interviewProgressPanel"].includes(panelId)
+      ["interviewsPanel", "interviewWorkspacePanel"].includes(panelId)
         ? repository.listInterviews(organizationId)
         : Promise.resolve(interviews),
       panelId === "interviewWorkspacePanel"

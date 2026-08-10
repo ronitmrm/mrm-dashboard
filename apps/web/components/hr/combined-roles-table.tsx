@@ -2,11 +2,9 @@
 
 import type {
   RecruitmentCombinedRoleRow,
-  RecruitmentMasterSnapshot,
   RecruitmentPostRow,
   RecruitmentTemplateRow,
 } from "@workspace/db"
-import { nextRecruitmentTemplateCode } from "@workspace/db/recruitment-codes"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -38,18 +36,16 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { Textarea } from "@workspace/ui/components/textarea"
 import { Pencil } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useState } from "react"
 
-import { saveTemplateAction, updateCombinedRoleAction } from "@/app/hr/actions"
+import { updateCombinedRoleAction } from "@/app/hr/actions"
 import {
   ExcelColumnFilter,
   matchesColumnFilter,
   uniqueFilterOptions,
 } from "@/components/hr/excel-column-filter"
-import { JobTemplateEditor } from "@/components/hr/job-templates-table"
 
 function CombinedStatusBadge({ status }: { status: string }) {
   return (
@@ -62,25 +58,20 @@ function CombinedStatusBadge({ status }: { status: string }) {
 export function CombinedRolesTable({
   canWrite,
   combinedRoles,
-  masters,
   posts,
   templates,
 }: {
   canWrite: boolean
   combinedRoles: RecruitmentCombinedRoleRow[]
-  masters: RecruitmentMasterSnapshot
   posts: RecruitmentPostRow[]
   templates: RecruitmentTemplateRow[]
 }) {
   const [editingRole, setEditingRole] =
     useState<RecruitmentCombinedRoleRow | null>(null)
-  const [editingTemplate, setEditingTemplate] =
-    useState<RecruitmentTemplateRow | null>(null)
-  const [creatingTemplateFor, setCreatingTemplateFor] =
-    useState<RecruitmentCombinedRoleRow | null>(null)
   const [name, setName] = useState("")
   const [primaryPostId, setPrimaryPostId] = useState("")
   const [search, setSearch] = useState("")
+  const [templateCode, setTemplateCode] = useState("")
   const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(
     () => new Set()
   )
@@ -96,10 +87,18 @@ export function CombinedRolesTable({
   function startEditing(role: RecruitmentCombinedRoleRow) {
     const memberCodes = new Set(role.postCodes)
     const memberPosts = posts.filter((post) => memberCodes.has(post.postCode))
+    const primaryPost = memberPosts.find(
+      (post) => post.postCode === role.primaryPostCode
+    )
     setEditingRole(role)
     setName(role.name)
-    setPrimaryPostId(
-      memberPosts.find((post) => post.postCode === role.primaryPostCode)?.id ??
+    setPrimaryPostId(primaryPost?.id ?? "")
+    setTemplateCode(
+      primaryPost?.requirementTemplateCode ??
+        memberPosts.find((post) => post.requirementTemplateCode)
+          ?.requirementTemplateCode ??
+        templates.find((template) => template.combinedRoleId === role.id)
+          ?.templateCode ??
         ""
     )
     setSearch("")
@@ -111,6 +110,7 @@ export function CombinedRolesTable({
     setName("")
     setPrimaryPostId("")
     setSearch("")
+    setTemplateCode("")
     setSelectedPostIds(new Set())
   }
 
@@ -171,9 +171,6 @@ export function CombinedRolesTable({
           role,
           status: role.status,
           templateLabel: memberTemplates.join(", ") || "—",
-          templateRows: templates.filter(
-            (template) => template.combinedRoleId === role.id
-          ),
           templates: memberTemplates,
         }
       }),
@@ -209,10 +206,8 @@ export function CombinedRolesTable({
     ["templates", "Job templates"],
     ["status", "Status"],
   ] as const
-  const columnCount = canWrite ? 7 : 6
 
   return (
-    <>
     <Sheet
       onOpenChange={(open) => {
         if (!open) closeEditor()
@@ -235,7 +230,7 @@ export function CombinedRolesTable({
                 <TableHead>Name</TableHead>
                 <TableHead>Post Codes</TableHead>
                 <TableHead>Primary Post</TableHead>
-                <TableHead>Job templates</TableHead>
+                <TableHead>Job template</TableHead>
                 <TableHead>Status</TableHead>
                 {canWrite ? (
                   <TableHead className="text-right">Actions</TableHead>
@@ -262,7 +257,7 @@ export function CombinedRolesTable({
             </TableHeader>
             <TableBody>
               {visibleRoles.length ? (
-                visibleRoles.map(({ role, templateRows, templates }) => (
+                visibleRoles.map(({ role, templates: templateCodes }) => (
                   <TableRow key={role.id}>
                     <TableCell className="font-mono">
                       {role.vacancyCode ?? "—"}
@@ -276,18 +271,18 @@ export function CombinedRolesTable({
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
-                        {templates.length
-                          ? templates.map((templateCode) => (
+                        {templateCodes.length
+                          ? templateCodes.map((code) => (
                               <Button
                                 asChild
                                 className="h-auto p-0 font-mono"
-                                key={templateCode}
+                                key={code}
                                 variant="link"
                               >
                                 <Link
-                                  href={`/hr?panel=postMasterPanel&template=${encodeURIComponent(templateCode)}`}
+                                  href={`/hr?panel=postMasterPanel&template=${encodeURIComponent(code)}`}
                                 >
-                                  {templateCode}
+                                  {code}
                                 </Link>
                               </Button>
                             ))
@@ -299,40 +294,16 @@ export function CombinedRolesTable({
                     </TableCell>
                     {canWrite ? (
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {templateRows.map((template) => (
-                            <Button
-                              key={template.id}
-                              onClick={() => setEditingTemplate(template)}
-                              size="sm"
-                              type="button"
-                              variant="outline"
-                            >
-                              <Pencil data-icon="inline-start" />
-                              Edit {template.templateCode}
-                            </Button>
-                          ))}
-                          {!templateRows.length ? (
-                            <Button
-                              onClick={() => setCreatingTemplateFor(role)}
-                              size="sm"
-                              type="button"
-                              variant="outline"
-                            >
-                              Add job template
-                            </Button>
-                          ) : null}
-                          <Button
-                            disabled={role.status !== "Active"}
-                            onClick={() => startEditing(role)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            <Pencil data-icon="inline-start" />
-                            Edit combined posts
-                          </Button>
-                        </div>
+                        <Button
+                          disabled={role.status !== "Active"}
+                          onClick={() => startEditing(role)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Pencil data-icon="inline-start" />
+                          Edit
+                        </Button>
                       </TableCell>
                     ) : null}
                   </TableRow>
@@ -341,7 +312,7 @@ export function CombinedRolesTable({
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={columnCount}
+                    colSpan={canWrite ? 7 : 6}
                   >
                     {combinedRoles.length
                       ? "No combined roles match the selected filters."
@@ -355,7 +326,7 @@ export function CombinedRolesTable({
       </Card>
 
       {editingRole ? (
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+        <SheetContent className="!w-full overflow-y-auto sm:!w-[40rem] sm:!max-w-[40rem]">
           <form
             action={updateCombinedRoleAction}
             className="flex min-h-full flex-col"
@@ -378,8 +349,7 @@ export function CombinedRolesTable({
             <SheetHeader>
               <SheetTitle>Edit combined role</SheetTitle>
               <SheetDescription>
-                Change the role name, member Post Codes, or primary
-                responsibility. The combined vacancy code stays unchanged.
+                Select its job template and maintain the combined Post Codes.
               </SheetDescription>
             </SheetHeader>
             <div className="grid flex-1 content-start gap-4 px-6">
@@ -407,6 +377,28 @@ export function CombinedRolesTable({
                   />
                 </Field>
               </div>
+              <Field>
+                <FieldLabel htmlFor="edit-combined-template">
+                  Job template
+                </FieldLabel>
+                <NativeSelect
+                  className="w-full"
+                  id="edit-combined-template"
+                  name="requirement_template_code"
+                  onChange={(event) => setTemplateCode(event.target.value)}
+                  value={templateCode}
+                >
+                  <NativeSelectOption value="">No template</NativeSelectOption>
+                  {templates.map((template) => (
+                    <NativeSelectOption
+                      key={template.id}
+                      value={template.templateCode}
+                    >
+                      {template.templateCode} / {template.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
               <Field>
                 <FieldLabel htmlFor="edit-combined-search">
                   Search Post Codes
@@ -452,8 +444,7 @@ export function CombinedRolesTable({
                             {post.postCode}
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">
-                            {post.department} / {post.designation} /{" "}
-                            {post.status}
+                            {post.department} / {post.designation} / {post.status}
                           </span>
                         </label>
                         <label className="flex items-center gap-2 text-xs">
@@ -486,109 +477,5 @@ export function CombinedRolesTable({
         </SheetContent>
       ) : null}
     </Sheet>
-    <Sheet
-      onOpenChange={(open) => {
-        if (!open) setEditingTemplate(null)
-      }}
-      open={editingTemplate !== null}
-    >
-      {editingTemplate ? (
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-          <JobTemplateEditor
-            combinedRoles={combinedRoles}
-            masters={masters}
-            panelId="approvedPostPanel"
-            template={editingTemplate}
-          />
-        </SheetContent>
-      ) : null}
-    </Sheet>
-    <Sheet
-      onOpenChange={(open) => {
-        if (!open) setCreatingTemplateFor(null)
-      }}
-      open={creatingTemplateFor !== null}
-    >
-      {creatingTemplateFor ? (
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-          <form action={saveTemplateAction} className="flex min-h-full flex-col">
-            <input name="panel" type="hidden" value="approvedPostPanel" />
-            <input name="combined_role_id" type="hidden" value={creatingTemplateFor.id} />
-            <input
-              name="template_code"
-              type="hidden"
-              value={nextRecruitmentTemplateCode(
-                templates.map((template) => template.templateCode)
-              )}
-            />
-            <SheetHeader>
-              <SheetTitle>Add combined job template</SheetTitle>
-              <SheetDescription>
-                {creatingTemplateFor.vacancyCode} · {creatingTemplateFor.name} · includes {creatingTemplateFor.postCodes.join(", ")}
-              </SheetDescription>
-            </SheetHeader>
-            <div className="grid flex-1 content-start gap-4 px-6 sm:grid-cols-2">
-              <Field>
-                <FieldLabel>Template code</FieldLabel>
-                <Input
-                  readOnly
-                  value={nextRecruitmentTemplateCode(
-                    templates.map((template) => template.templateCode)
-                  )}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="combined-template-name">Template name</FieldLabel>
-                <Input
-                  defaultValue={creatingTemplateFor.name}
-                  id="combined-template-name"
-                  name="name"
-                  required
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="combined-template-designation">Designation</FieldLabel>
-                <NativeSelect id="combined-template-designation" name="designation_code" required>
-                  <NativeSelectOption value="">Select designation</NativeSelectOption>
-                  {masters.designations.map((designation) => (
-                    <NativeSelectOption key={designation.id} value={designation.code}>
-                      {designation.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="combined-template-gender">Gender</FieldLabel>
-                <Input id="combined-template-gender" name="gender" />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="combined-template-education">Education</FieldLabel>
-                <Input id="combined-template-education" name="education" />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="combined-template-experience">Experience requirement</FieldLabel>
-                <Input id="combined-template-experience" name="experience_requirement" />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="combined-template-minimum-salary">Minimum salary</FieldLabel>
-                <Input id="combined-template-minimum-salary" min="0" name="minimum_salary" type="number" />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="combined-template-maximum-salary">Maximum salary</FieldLabel>
-                <Input id="combined-template-maximum-salary" min="0" name="maximum_salary" type="number" />
-              </Field>
-              <Field className="sm:col-span-2">
-                <FieldLabel htmlFor="combined-template-responsibilities">Role responsibilities</FieldLabel>
-                <Textarea id="combined-template-responsibilities" name="role_responsibilities" rows={8} />
-              </Field>
-            </div>
-            <SheetFooter>
-              <Button type="submit">Save combined job template</Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      ) : null}
-    </Sheet>
-    </>
   )
 }

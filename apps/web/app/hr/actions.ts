@@ -195,6 +195,10 @@ export async function updateCombinedRoleAction(formData: FormData) {
         name: value(formData, "name"),
         postIds: values(formData, "post_ids"),
         primaryPostId: value(formData, "primary_post_id"),
+        requirementTemplateCode: value(
+          formData,
+          "requirement_template_code"
+        ),
       }),
     "Combined role updated."
   )

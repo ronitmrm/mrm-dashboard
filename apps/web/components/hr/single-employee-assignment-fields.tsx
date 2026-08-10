@@ -23,6 +23,13 @@ type AssignmentTarget = {
   post: RecruitmentPostRow
 }
 
+function initialEmploymentEvent(status?: string) {
+  if (status === "Appointed") return "Joined"
+  if (status === "Resigned") return "Resigned"
+  if (status === "Occupied") return ""
+  return "Appointed"
+}
+
 export function SingleEmployeeAssignmentFields({
   combinedRoles,
   initialPostId = "",
@@ -71,11 +78,7 @@ export function SingleEmployeeAssignmentFields({
     initialTarget?.post.employeeCode ?? ""
   )
   const [event, setEvent] = useState(
-    initialTarget?.post.status === "Occupied"
-      ? "Joined"
-      : initialTarget?.post.status === "Resigned"
-        ? "Resigned"
-        : "Appointed"
+    initialEmploymentEvent(initialTarget?.post.status)
   )
   const selected = targets.find(({ post }) => post.id === postId)
   const occupied = Boolean(
@@ -87,30 +90,24 @@ export function SingleEmployeeAssignmentFields({
     setPostId(nextPostId)
     setEmployeeName(next?.post.employeeName ?? "")
     setEmployeeCode(next?.post.employeeCode ?? "")
-    setEvent(
-      next?.post.status === "Occupied"
-        ? "Joined"
-        : next?.post.status === "Resigned"
-          ? "Resigned"
-          : "Appointed"
-    )
+    setEvent(initialEmploymentEvent(next?.post.status))
   }
 
   return (
     <>
       {showTargetSelector ? (
-      <Field className="md:col-span-2 xl:col-span-3">
-        <FieldLabel htmlFor="employee-post">
-          Approved post or combined job
-        </FieldLabel>
-        <NativeSelect
-          className="w-full"
-          id="employee-post"
-          name="post_id"
-          onChange={(change) => selectTarget(change.target.value)}
-          required
-          value={postId}
-        >
+        <Field className="w-full min-w-0">
+          <FieldLabel htmlFor="employee-post">
+            Approved post or combined job
+          </FieldLabel>
+          <NativeSelect
+            className="w-full"
+            id="employee-post"
+            name="post_id"
+            onChange={(change) => selectTarget(change.target.value)}
+            required
+            value={postId}
+          >
           <NativeSelectOption value="">
             Select post or combined job
           </NativeSelectOption>
@@ -133,19 +130,19 @@ export function SingleEmployeeAssignmentFields({
               ))}
             </NativeSelectOptGroup>
           ) : null}
-        </NativeSelect>
-        {selected?.combinedRole ? (
-          <FieldDescription>
-            Included posts: {selected.combinedRole.postCodes.join(", ")}. One
-            employee assignment updates the complete combined job.
-          </FieldDescription>
-        ) : null}
-      </Field>
+          </NativeSelect>
+          {selected?.combinedRole ? (
+            <FieldDescription>
+              Included posts: {selected.combinedRole.postCodes.join(", ")}. One
+              employee assignment updates the complete combined job.
+            </FieldDescription>
+          ) : null}
+        </Field>
       ) : (
         <input name="post_id" type="hidden" value={postId} />
       )}
       {selected ? (
-        <Alert className="md:col-span-2 xl:col-span-3">
+        <Alert className="w-full min-w-0">
           <AlertDescription>
             Current assignment: {selected.post.employeeName ?? "Unassigned"}
             {selected.post.employeeCode
@@ -158,25 +155,32 @@ export function SingleEmployeeAssignmentFields({
           </AlertDescription>
         </Alert>
       ) : null}
-      <Field>
+      <Field className="w-full min-w-0">
         <FieldLabel htmlFor="employee-name">Employee name</FieldLabel>
         <Input
           id="employee-name"
           name="employee_name"
           onChange={(change) => setEmployeeName(change.target.value)}
+          readOnly={occupied}
           value={employeeName}
         />
       </Field>
-      <Field>
+      <Field className="w-full min-w-0">
         <FieldLabel htmlFor="employee-code">Employee code</FieldLabel>
         <Input
           id="employee-code"
           name="employee_code"
           onChange={(change) => setEmployeeCode(change.target.value)}
+          readOnly={occupied}
           value={employeeCode}
         />
+        {occupied ? (
+          <FieldDescription>
+            Employee details stay locked until this post is vacated.
+          </FieldDescription>
+        ) : null}
       </Field>
-      <Field>
+      <Field className="w-full min-w-0">
         <FieldLabel htmlFor="employee-event">Employment event</FieldLabel>
         <NativeSelect
           className="w-full"
@@ -186,6 +190,7 @@ export function SingleEmployeeAssignmentFields({
           required
           value={event}
         >
+          <NativeSelectOption value="">Select action</NativeSelectOption>
           <NativeSelectOption value="Appointed">
             Appointed — not joined
           </NativeSelectOption>
@@ -199,7 +204,7 @@ export function SingleEmployeeAssignmentFields({
         </NativeSelect>
       </Field>
       {event === "Resigned" ? (
-        <Field>
+        <Field className="w-full min-w-0">
           <FieldLabel htmlFor="last-working-date">Last working date</FieldLabel>
           <Input
             id="last-working-date"
@@ -211,15 +216,6 @@ export function SingleEmployeeAssignmentFields({
             The approved post becomes vacant after this date.
           </FieldDescription>
         </Field>
-      ) : null}
-      {occupied && (event === "Appointed" || event === "Joined") ? (
-        <Alert className="md:col-span-2 xl:col-span-3" variant="destructive">
-          <AlertDescription>
-            A different employee cannot replace the current employee directly.
-            First save Remove assignment, or save Resigned with the last working
-            date; assign the new person only after the post is vacant.
-          </AlertDescription>
-        </Alert>
       ) : null}
     </>
   )

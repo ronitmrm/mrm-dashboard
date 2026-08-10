@@ -66,10 +66,6 @@ describe("unified navigation", () => {
         href: "/hr?panel=interviewWorkspacePanel",
         label: "Interview Workspace",
       },
-      {
-        href: "/hr?panel=interviewProgressPanel",
-        label: "Interview Progress",
-      },
     ])
   })
 

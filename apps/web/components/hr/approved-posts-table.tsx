@@ -745,7 +745,7 @@ export function ApprovedPostsTable({
       open={employeeEditorOpen && selectedEmployeePost !== null}
     >
       {selectedEmployeePost ? (
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+        <SheetContent className="!w-full overflow-y-auto sm:!w-[30rem] sm:!max-w-[30rem]">
           <form action={assignEmployeeAction} className="flex min-h-full flex-col">
             <input name="panel" type="hidden" value="employeeMasterPanel" />
             <SheetHeader>
@@ -754,7 +754,7 @@ export function ApprovedPostsTable({
                 {selectedEmployeePost.postCode} · {selectedEmployeePost.designation}
               </SheetDescription>
             </SheetHeader>
-            <div className="grid flex-1 content-start gap-4 px-6 md:grid-cols-2">
+            <div className="flex flex-1 flex-col gap-5 px-6 pb-2">
               <SingleEmployeeAssignmentFields
                 combinedRoles={combinedRoles}
                 initialPostId={selectedEmployeePost.id}

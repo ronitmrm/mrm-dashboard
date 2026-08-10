@@ -187,6 +187,82 @@ describe("assignEmployee", () => {
   })
 })
 
+describe("updateCombinedRole", () => {
+  test("applies the selected job template to every combined post", async () => {
+    const organizationId = "00000000-0000-4000-8000-000000000010"
+    const combinedRoleId = "00000000-0000-4000-8000-000000000020"
+    const primaryPostId = "00000000-0000-4000-8000-000000000030"
+    const memberPostId = "00000000-0000-4000-8000-000000000031"
+    const templateId = "00000000-0000-4000-8000-000000000040"
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("SELECT * FROM recruitment.combined_roles")) {
+        return {
+          rows: [
+            {
+              id: combinedRoleId,
+              name: "Combined maintenance",
+              status: "Active",
+              vacancy_code: "CMB-1",
+            },
+          ],
+        }
+      }
+      if (statement.includes("SELECT id FROM recruitment.requirement_templates")) {
+        return { rows: [{ id: templateId }] }
+      }
+      if (statement.includes("SELECT id, post_code, status")) {
+        return {
+          rows: [
+            { id: primaryPostId, post_code: "POST-1", status: "Vacant" },
+            { id: memberPostId, post_code: "POST-2", status: "Vacant" },
+          ],
+        }
+      }
+      if (statement.includes("SELECT DISTINCT post.post_code")) {
+        return { rows: [] }
+      }
+      if (statement.includes("SELECT post_id FROM recruitment.combined_role_posts")) {
+        return {
+          rows: [{ post_id: primaryPostId }, { post_id: memberPostId }],
+        }
+      }
+      if (statement.includes("UPDATE recruitment.combined_roles")) {
+        return { rows: [{ id: combinedRoleId }] }
+      }
+      return { rows: [] }
+    })
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: {
+        connect: vi.fn(async () => client),
+      } as unknown as Pool,
+    })
+
+    await repository.updateCombinedRole({
+      combinedRoleId,
+      name: "Combined maintenance",
+      organizationId,
+      postIds: [primaryPostId, memberPostId],
+      primaryPostId,
+      requirementTemplateCode: "JRT-0001",
+    })
+
+    const updatePosts = (
+      query.mock.calls as unknown as Array<[string, unknown[]]>
+    ).find(([statement]) =>
+      statement.includes("requirement_template_id = $3")
+    )
+    expect(updatePosts?.[1]).toEqual([
+      combinedRoleId,
+      "CMB-1",
+      templateId,
+      null,
+      organizationId,
+      [primaryPostId, memberPostId],
+    ])
+  })
+})
+
 describe("masters", () => {
   test("rejects a reused code even when the name is unchanged", async () => {
     const query = vi.fn(async (statement: string) => {
@@ -219,7 +295,7 @@ describe("masters", () => {
 })
 
 describe("combined job templates", () => {
-  test("prefers a combined-role template when creating its job", async () => {
+  test("prefers the template explicitly selected on the combined posts", async () => {
     const postId = "00000000-0000-4000-8000-000000000001"
     const combinedRoleId = "00000000-0000-4000-8000-000000000002"
     const query = vi.fn(async (statement: string) => {
@@ -232,9 +308,10 @@ describe("combined job templates", () => {
         return { rowCount: 0, rows: [] }
       }
       if (statement.includes("INSERT INTO recruitment.job_posts")) {
+        expect(statement).toContain("candidate.id = post.requirement_template_id")
         expect(statement).toContain("candidate.combined_role_id = combined.id")
-        expect(statement).toContain(
-          "(candidate.combined_role_id = combined.id) DESC"
+        expect(statement.indexOf("candidate.id = post.requirement_template_id")).toBeLessThan(
+          statement.indexOf("candidate.combined_role_id = combined.id) DESC")
         )
         return { rows: [{ id: "job-1" }] }
       }
