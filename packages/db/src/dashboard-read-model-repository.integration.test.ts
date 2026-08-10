@@ -82,13 +82,11 @@ describe("PostgreSQL dashboard corrections", () => {
     )
 
     const result = await repository.reverseEntry({
-      correctedBy: "Correction Tester",
+      actorUserId: "user-1",
+      correctionKind: "dataEntries",
       organizationId,
       reason: "Incorrect machine row",
-      targetId: sourceId,
-      targetKey: "CORRECTION-01",
-      targetLabel: "Machine CORRECTION-01",
-      targetTable: "dataEntries",
+      recordId: sourceId,
     })
 
     expect(result).toEqual({ reversed: true })
@@ -111,11 +109,19 @@ describe("PostgreSQL dashboard corrections", () => {
     )
     expect(stored.rows[0]?.source_payload).toMatchObject({
       action: "reverse",
-      correctedBy: "Correction Tester",
+      actorUserId: "user-1",
       reason: "Incorrect machine row",
-      targetId: sourceId,
-      targetTable: "dataEntries",
+      target: { id: sourceId, kind: "dataEntries" },
     })
+    await expect(
+      repository.reverseEntry({
+        actorUserId: "user-1",
+        correctionKind: "dataEntries",
+        organizationId,
+        reason: "Duplicate reversal",
+        recordId: sourceId,
+      })
+    ).rejects.toThrow("Active correction target was not found")
   })
 
   it("returns one floor and omits an unchanged dashboard payload", async () => {

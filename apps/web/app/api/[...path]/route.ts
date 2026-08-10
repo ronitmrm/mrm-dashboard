@@ -889,12 +889,9 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "reverse-entry") {
       const result = await requestPostgresDashboardCorrection(request, {
-        correctedBy: optionalText(body.correctedBy),
+        correctionKind: text(body.correctionKind || body.targetTable),
         reason: text(body.reason),
-        targetId: text(body.targetId),
-        targetKey: optionalText(body.targetKey),
-        targetLabel: optionalText(body.targetLabel),
-        targetTable: text(body.targetTable),
+        recordId: text(body.recordId || body.targetId),
       })
       return json(
         await withPlanningRefresh(path, body, {
@@ -907,11 +904,11 @@ async function post(request: NextRequest, context: RouteContext) {
     if (path === "production-entry/reverse") {
       const result = await withProductionRepository(
         request,
-        "operations.production.write",
+        "operations.corrections.write",
         ({ actorUserId, repository }) =>
           repository.reverseProductionEntry({
             actorUserId,
-            productionEntryId: text(body.productionEntryId),
+            productionEntryId: text(body.recordId || body.productionEntryId),
             reason: text(body.reason),
           })
       )

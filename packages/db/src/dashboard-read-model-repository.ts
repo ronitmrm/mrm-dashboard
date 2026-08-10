@@ -67,6 +67,39 @@ function correctionCandidate(table: string, row: JsonRecord) {
   }
 }
 
+function activeCorrectionCandidates(
+  source: Awaited<ReturnType<typeof readCanonicalDashboardSource>>
+) {
+  const corrections = source.corrections as CorrectionTargetRow[]
+  const directTargets = activeCorrectionTargetKeys(corrections)
+  const dataEntryTargets = dataEntryCorrectionTargetsWithWorkflowCascade(
+    source.allDataEntries as DataEntryCorrectionRow[],
+    directTargets,
+    corrections
+  )
+  const groups: Array<[string, JsonRecord[]]> = [
+    ["routeSelections", source.routeSelections],
+    ["plannerPriorities", source.plannerPriorities],
+    ["machineConstraints", source.machineConstraints],
+    ["planOverrides", source.planOverrides],
+    ["routeChanges", source.routeChanges],
+    ["dispatchApprovals", source.dispatchApprovals],
+    ["setupCompletions", source.setupCompletions],
+    ["dataEntries", source.allDataEntries],
+  ]
+  return groups
+    .flatMap(([table, rows]) =>
+      rows
+        .filter((row) => {
+          const targets =
+            table === "dataEntries" ? dataEntryTargets : directTargets
+          return !targets.has(`${table}:${String(row._id)}`)
+        })
+        .map((row) => correctionCandidate(table, row))
+    )
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+}
+
 async function transaction<T>(
   pool: Pool,
   operation: (client: PoolClient) => Promise<T>
@@ -403,54 +436,71 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
     },
 
     async reverseEntry(input: {
-      correctedBy: string
+      actorUserId: string
+      correctionKind: string
       organizationId: string
       reason: string
-      targetId: string
-      targetKey?: string
-      targetLabel?: string
-      targetTable: string
+      recordId: string
     }) {
-      const targetTable = text(input.targetTable)
-      const targetId = text(input.targetId)
+      const correctionKind = text(input.correctionKind)
+      const recordId = text(input.recordId)
       const reason = text(input.reason)
-      const correctedBy = text(input.correctedBy)
-      if (!targetTable) throw new Error("Correction target table is required.")
-      if (!targetId) throw new Error("Correction target id is required.")
+      const actorUserId = text(input.actorUserId)
+      if (!correctionKind) throw new Error("Correction kind is required.")
+      if (!recordId) throw new Error("Correction record id is required.")
       if (!reason) throw new Error("Correction reason is required.")
-      if (!correctedBy) throw new Error("Corrected by is required.")
+      if (!actorUserId) throw new Error("Correction actor is required.")
 
-      const createdAt = new Date().toISOString()
-      const sourceId = `correction-${randomUUID()}`
-      await pool.query(
-        `
-          INSERT INTO audit.legacy_convex_corrections (
-            organization_id, source_id, target_source_table, target_source_id,
-            correction_type, reason, legacy_actor, original_timestamp,
-            resolved, source_payload
-          ) VALUES ($1, $2, $3, $4, 'reverse', $5, $6, $7, true, $8)
-        `,
-        [
-          input.organizationId,
-          sourceId,
-          targetTable,
-          targetId,
-          reason,
-          correctedBy,
-          createdAt,
-          {
-            action: "reverse",
-            correctedBy,
-            createdAt,
+      return transaction(pool, async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+          `${input.organizationId}:${correctionKind}:${recordId}`,
+        ])
+        const source = await readCanonicalDashboardSource(
+          client,
+          input.organizationId
+        )
+        const candidate = activeCorrectionCandidates(source).find(
+          (row) =>
+            row.targetTable === correctionKind && row.targetId === recordId
+        )
+        if (!candidate) {
+          throw new Error("Active correction target was not found.")
+        }
+
+        const createdAt = new Date().toISOString()
+        const sourceId = `correction-${randomUUID()}`
+        await client.query(
+          `
+            INSERT INTO audit.legacy_convex_corrections (
+              organization_id, source_id, target_source_table, target_source_id,
+              correction_type, reason, legacy_actor, original_timestamp,
+              resolved, source_payload
+            ) VALUES ($1, $2, $3, $4, 'reverse', $5, $6, $7, true, $8)
+          `,
+          [
+            input.organizationId,
+            sourceId,
+            candidate.targetTable,
+            candidate.targetId,
             reason,
-            targetId,
-            targetKey: text(input.targetKey),
-            targetLabel: text(input.targetLabel),
-            targetTable,
-          },
-        ]
-      )
-      return { reversed: true }
+            actorUserId,
+            createdAt,
+            {
+              action: "reverse",
+              actorUserId,
+              createdAt,
+              reason,
+              target: {
+                id: candidate.targetId,
+                kind: candidate.targetTable,
+              },
+              targetId: candidate.targetId,
+              targetTable: candidate.targetTable,
+            },
+          ]
+        )
+        return { reversed: true }
+      })
     },
 
     async correctionCandidates(organizationId: string, limit = 200) {
@@ -460,34 +510,7 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
           client,
           organizationId
         )
-        const corrections = source.corrections as CorrectionTargetRow[]
-        const directTargets = activeCorrectionTargetKeys(corrections)
-        const dataEntryTargets = dataEntryCorrectionTargetsWithWorkflowCascade(
-          source.allDataEntries as DataEntryCorrectionRow[],
-          directTargets,
-          corrections
-        )
-        const groups: Array<[string, JsonRecord[]]> = [
-          ["routeSelections", source.routeSelections],
-          ["plannerPriorities", source.plannerPriorities],
-          ["machineConstraints", source.machineConstraints],
-          ["planOverrides", source.planOverrides],
-          ["routeChanges", source.routeChanges],
-          ["dispatchApprovals", source.dispatchApprovals],
-          ["setupCompletions", source.setupCompletions],
-          ["dataEntries", source.allDataEntries],
-        ]
-        return groups
-          .flatMap(([table, rows]) =>
-            rows
-              .filter((row) => {
-                const targets =
-                  table === "dataEntries" ? dataEntryTargets : directTargets
-                return !targets.has(`${table}:${String(row._id)}`)
-              })
-              .map((row) => correctionCandidate(table, row))
-          )
-          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+        return activeCorrectionCandidates(source)
           .slice(0, Math.min(Math.max(Math.floor(limit), 1), 200))
       } finally {
         client.release()

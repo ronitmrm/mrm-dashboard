@@ -22,10 +22,11 @@ export class DashboardReadError extends Error {
 async function withDashboardReadRepository<T>(
   request: NextRequest,
   operation: (context: {
-    actorEmail: string
+    actorUserId: string
     organizationId: string
     repository: ReturnType<typeof createDashboardReadModelRepository>
-  }) => Promise<T>
+  }) => Promise<T>,
+  capability = "operations.dashboard.read"
 ) {
   const authorizationTelemetry = authorizationRequestTelemetryForCurrentScope({
     requestId: telemetryRequestId(request),
@@ -48,11 +49,11 @@ async function withDashboardReadRepository<T>(
       session.user.id,
       telemetry
     )
-    if (!granted.has("operations.dashboard.read")) {
+    if (!granted.has(capability)) {
       telemetry.setOutcome("unauthorized")
       throw new DashboardReadError(
         403,
-        "You do not have permission to view the operations dashboard."
+        "You do not have permission to perform this dashboard action."
       )
     }
     telemetry.setOutcome("allowed")
@@ -64,7 +65,7 @@ async function withDashboardReadRepository<T>(
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     return await operation({
-      actorEmail: session.user.email || session.user.name || session.user.id,
+      actorUserId: session.user.id,
       organizationId,
       repository,
     })
@@ -183,21 +184,19 @@ export async function readPostgresCorrectionCandidates(
 export async function requestPostgresDashboardCorrection(
   request: NextRequest,
   input: {
-    correctedBy?: string
+    correctionKind: string
     reason: string
-    targetId: string
-    targetKey?: string
-    targetLabel?: string
-    targetTable: string
+    recordId: string
   }
 ) {
   return withDashboardReadRepository(
     request,
-    ({ actorEmail, organizationId, repository }) =>
+    ({ actorUserId, organizationId, repository }) =>
       repository.reverseEntry({
         ...input,
-        correctedBy: input.correctedBy || actorEmail,
+        actorUserId,
         organizationId,
-      })
+      }),
+    "operations.corrections.write"
   )
 }
