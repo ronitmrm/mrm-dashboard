@@ -8,6 +8,7 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
 
 const purposes = new Set(["cad", "customer_marked", "internal_drawing"])
 
@@ -48,23 +49,16 @@ export async function GET(
       throw new Error("Design attachment storage key is invalid.")
     }
     const bytes = await readFile(filePath)
-    const safeName = attachment.fileName.replace(/[\r\n"]/g, "_")
     return new Response(
       bytes.buffer.slice(
         bytes.byteOffset,
         bytes.byteOffset + bytes.byteLength
       ) as ArrayBuffer,
       {
-        headers: {
-          "Content-Disposition":
-            'inline; filename="' +
-            safeName +
-            "\"; filename*=UTF-8''" +
-            encodeURIComponent(safeName),
-          "Content-Length": String(bytes.byteLength),
-          "Content-Type": attachment.mediaType ?? "application/octet-stream",
-          "X-Content-Type-Options": "nosniff",
-        },
+        headers: userAttachmentDownloadHeaders(
+          attachment.fileName,
+          bytes.byteLength
+        ),
       }
     )
   } finally {

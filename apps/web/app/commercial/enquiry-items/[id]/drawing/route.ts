@@ -8,6 +8,7 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
 
 export async function GET(
   _request: Request,
@@ -33,19 +34,16 @@ export async function GET(
       throw new Error("Drawing storage key is invalid.")
     }
     const bytes = await readFile(filePath)
-    const safeName = drawing.fileName.replace(/[\r\n"]/g, "_")
     return new Response(
       bytes.buffer.slice(
         bytes.byteOffset,
         bytes.byteOffset + bytes.byteLength
       ) as ArrayBuffer,
       {
-        headers: {
-          "Content-Disposition": `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
-          "Content-Length": String(bytes.byteLength),
-          "Content-Type": drawing.mediaType ?? "application/octet-stream",
-          "X-Content-Type-Options": "nosniff",
-        },
+        headers: userAttachmentDownloadHeaders(
+          drawing.fileName,
+          bytes.byteLength
+        ),
       }
     )
   } finally {
