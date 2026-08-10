@@ -25,3 +25,44 @@ export function dataEntryRowsForProductionMaster(
     (row) => row.entryType === entryType
   )
 }
+
+export const productionMasterRowSources: Record<string, readonly string[]> = {
+  route: ["routeMasterRows"],
+  cycle: ["cycleMasterRows"],
+  tooling: ["toolingMasterRows"],
+  employee: ["employeeMasterRows"],
+  machine_master: ["machinePlanningRows"],
+  maintenance_master: ["maintenanceMasterRows"],
+  maintenance_checklist_master: ["maintenanceChecklistMasterRows"],
+  planning_holiday: ["planningHolidayRows"],
+  setup_checklist_master: ["setupChecklistMasterRows"],
+  rejection_type_master: ["rejectionTypeMasterRows"],
+  rejection_remark_master: ["rejectionRemarkMasterRows"],
+  rejection_reason_master: ["rejectionReasonMasterRows"],
+  quality_parameter_master: ["qualityParameterMasterRows"],
+}
+
+type ProductionMasterField = {
+  name: string
+  label: string
+}
+
+function hasMasterValue(value: unknown) {
+  if (value === null || value === undefined) return false
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase()
+    return normalized !== "" && normalized !== "-" && normalized !== "n/a"
+  }
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === "object") return Object.keys(value).length > 0
+  return true
+}
+
+export function columnsForProductionMaster(
+  fields: ProductionMasterField[],
+  rows: Array<Record<string, unknown>>
+) {
+  return fields
+    .filter((field) => rows.some((row) => hasMasterValue(row[field.name])))
+    .map((field) => ({ key: field.name, label: field.label }))
+}

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  columnsForProductionMaster,
   dataEntryRowsForProductionMaster,
+  productionMasterRowSources,
   rowsForProductionMaster,
 } from "./production-master-tables"
 
@@ -26,5 +28,53 @@ describe("Production master table rows", () => {
         templates: [template],
       })
     ).toEqual([route])
+  })
+
+  it("uses only canonical master row sources", () => {
+    expect(productionMasterRowSources.machine_master).toEqual([
+      "machinePlanningRows",
+    ])
+    expect(productionMasterRowSources.route).toEqual(["routeMasterRows"])
+  })
+
+  it("shows only populated form fields as columns", () => {
+    const fields = [
+      { name: "machineNo", label: "Machine no." },
+      { name: "machineType", label: "Machine type" },
+      { name: "location", label: "Location" },
+      { name: "capacity", label: "Capacity" },
+      { name: "status", label: "Status" },
+    ]
+    const rows = [
+      {
+        machineNo: "A-01",
+        machineType: "Automatic",
+        location: "",
+        capacity: null,
+        status: "Active",
+        ownerId: "metadata-owner",
+        output: 42,
+      },
+    ]
+
+    expect(columnsForProductionMaster(fields, rows)).toEqual([
+      { key: "machineNo", label: "Machine no." },
+      { key: "machineType", label: "Machine type" },
+      { key: "status", label: "Status" },
+    ])
+  })
+
+  it("keeps populated zero and false values", () => {
+    const fields = [
+      { name: "capacity", label: "Capacity" },
+      { name: "required", label: "Required" },
+    ]
+
+    expect(
+      columnsForProductionMaster(fields, [{ capacity: 0, required: false }])
+    ).toEqual([
+      { key: "capacity", label: "Capacity" },
+      { key: "required", label: "Required" },
+    ])
   })
 })

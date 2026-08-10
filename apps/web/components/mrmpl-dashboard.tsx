@@ -83,7 +83,9 @@ import {
 } from "@/lib/dashboard-view-model";
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
 import {
+  columnsForProductionMaster,
   dataEntryRowsForProductionMaster,
+  productionMasterRowSources,
   rowsForProductionMaster,
 } from "@/lib/production-master-tables";
 import {
@@ -447,22 +449,6 @@ const masterTableEntryTypes = [
   "rejection_reason_master",
   "quality_parameter_master",
 ] as const;
-
-const masterTableRowSources: Record<string, string[]> = {
-  route: ["routeMasterRows", "routeRows"],
-  cycle: ["cycleMasterRows", "cycleRows"],
-  tooling: ["toolingMasterRows", "toolingRows"],
-  employee: ["employeeMasterRows", "employeeRows"],
-  machine_master: ["machinePlanningRows", "machineRows"],
-  maintenance_master: ["maintenanceMasterRows"],
-  maintenance_checklist_master: ["maintenanceChecklistMasterRows"],
-  planning_holiday: ["planningHolidayRows"],
-  setup_checklist_master: ["setupChecklistMasterRows"],
-  rejection_type_master: ["rejectionTypeMasterRows"],
-  rejection_remark_master: ["rejectionRemarkMasterRows"],
-  rejection_reason_master: ["rejectionReasonMasterRows"],
-  quality_parameter_master: ["qualityParameterMasterRows"],
-};
 
 function masterTableSpecs() {
   const allowed = new Set<string>(masterTableEntryTypes);
@@ -5808,14 +5794,14 @@ function MasterTablesPanel({
   const specs = useMemo(() => masterTableSpecs(), []);
   const [entryType, setEntryType] = useState(() => specs[0]?.entryType ?? "");
   const [searchQuery, setSearchQuery] = useState("");
-  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [tableResetKey, setTableResetKey] = useState(0);
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
   const dataEntry = asRecord(payload.dataEntry);
   const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [], [payload, productionControl, selectedSpec]);
   const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec, rows) : [], [selectedSpec, rows]);
   const filteredRows = useMemo(
-    () => rows.filter((row) => masterTableRowMatches(row, columns, searchQuery, columnFilters)),
-    [rows, columns, searchQuery, columnFilters],
+    () => rows.filter((row) => masterTableRowMatches(row, columns, searchQuery)),
+    [rows, columns, searchQuery],
   );
   const summaryRows = useMemo(
     () => selectedSpec ? masterTableKeySummaryRows(selectedSpec, dataEntry, rows, filteredRows) : [],
@@ -5845,7 +5831,7 @@ function MasterTablesPanel({
             <select
               className="h-9 rounded-md border bg-background px-3 text-sm"
               value={selectedSpec.entryType}
-              onChange={(event) => { setEntryType(event.target.value); setSearchQuery(""); setColumnFilters({}); }}
+              onChange={(event) => { setEntryType(event.target.value); setSearchQuery(""); setTableResetKey((current) => current + 1); }}
             >
               {specs.map((spec) => (
                 <option key={spec.entryType} value={spec.entryType}>{spec.title}</option>
@@ -5859,7 +5845,7 @@ function MasterTablesPanel({
             </div>
           </Field>
           <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); setColumnFilters({}); }}>Clear filters</Button>
+            <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); setTableResetKey((current) => current + 1); }}>Clear filters</Button>
             <Button type="button" variant="outline" disabled={!filteredRows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, filteredRows, columns)}>
               <Download className="size-4" />
               Export visible rows
@@ -5887,23 +5873,11 @@ function MasterTablesPanel({
             <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No saved rows found for this master.</div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
-              <Table key={selectedSpec.entryType}>
+              <Table key={`${selectedSpec.entryType}-${tableResetKey}`}>
                 <TableHeader>
                   <TableRow>
                     {columns.map((column) => (
-                      <TableHead key={column.key} className="min-w-36 whitespace-nowrap">{column.label}</TableHead>
-                    ))}
-                  </TableRow>
-                  <TableRow>
-                    {columns.map((column) => (
-                      <TableHead key={`${column.key}-filter`} className="min-w-36 whitespace-nowrap">
-                        <MachineMasterColumnFilter
-                          label={column.label}
-                          value={columnFilters[column.key] ?? ""}
-                          options={masterTableColumnOptions(rows, column.key)}
-                          onChange={(value) => setColumnFilters((current) => ({ ...current, [column.key]: value }))}
-                        />
-                      </TableHead>
+                      <TableHead key={column.key} className="h-10 min-w-28 px-2 py-1 text-xs">{column.label}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
@@ -5911,7 +5885,7 @@ function MasterTablesPanel({
                   {filteredRows.map((row, index) => (
                     <TableRow key={masterTableRowKey(selectedSpec.entryType, row, index)}>
                       {columns.map((column) => (
-                        <TableCell key={column.key} className="align-top text-xs">
+                        <TableCell key={column.key} className="max-w-64 whitespace-normal px-2 py-1.5 align-top text-xs leading-5">
                           {masterTableCellText(row, column.key)}
                         </TableCell>
                       ))}
@@ -5982,7 +5956,7 @@ function masterTableRows(entryType: string, payload: DashboardPayload, productio
   if (directRows) {
     rows.push(...directRows);
   } else {
-    for (const source of masterTableRowSources[entryType] ?? []) {
+    for (const source of productionMasterRowSources[entryType] ?? []) {
       rows.push(...asArray(productionControl[source]));
       rows.push(...asArray(dataEntry[source]));
     }
@@ -5991,8 +5965,8 @@ function masterTableRows(entryType: string, payload: DashboardPayload, productio
 
   const matchingRows = rowsForProductionMaster(entryType, rows);
   if (entryType === "quality_parameter_master") return mergeQualityParameterRows(matchingRows);
-  if (entryType === "maintenance_master") return activeMaintenanceMasterRows(matchingRows);
-  if (entryType === "maintenance_checklist_master") return activeMaintenanceChecklistRows(matchingRows);
+  if (entryType === "maintenance_master") return activeMaintenanceMasterRows(dedupeMasterTableRows(entryType, matchingRows));
+  if (entryType === "maintenance_checklist_master") return mergeMaintenanceChecklistRows(matchingRows);
   return dedupeMasterTableRows(entryType, matchingRows);
 }
 
@@ -6006,16 +5980,7 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
 }
 
 function masterTableColumns(spec: DataEntrySpec, rows: DashboardPayload[]): MasterTableColumn[] {
-  const ignored = new Set(["_id", "_creationTime", "entryType", "payload", "key", "dataEntryKey"]);
-  const columns = new Map<string, MasterTableColumn>();
-  for (const field of spec.fields) columns.set(field.name, { key: field.name, label: field.label });
-  for (const row of rows) {
-    for (const key of Object.keys(row)) {
-      if (ignored.has(key) || columns.has(key)) continue;
-      columns.set(key, { key, label: humanizeMasterTableColumn(key) });
-    }
-  }
-  return [...columns.values()];
+  return columnsForProductionMaster(spec.fields, rows);
 }
 
 function humanizeMasterTableColumn(key: string) {
@@ -6054,14 +6019,9 @@ function csvCell(value: unknown) {
 function safeExportFileName(value: unknown) {
   return str(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "master-table";
 }
-function masterTableColumnOptions(rows: DashboardPayload[], key: string) {
-  return uniqueValues(rows.map((row) => masterTableCellText(row, key)).filter((value) => value !== "-"));
-}
-
-function masterTableRowMatches(row: DashboardPayload, columns: MasterTableColumn[], searchQuery: string, columnFilters: Record<string, string>) {
+function masterTableRowMatches(row: DashboardPayload, columns: MasterTableColumn[], searchQuery: string) {
   const query = searchQuery.trim().toLowerCase();
-  if (query && !columns.some((column) => masterTableCellText(row, column.key).toLowerCase().includes(query))) return false;
-  return columns.every((column) => typedFilterMatches(masterTableCellText(row, column.key), columnFilters[column.key] ?? ""));
+  return !query || columns.some((column) => masterTableCellText(row, column.key).toLowerCase().includes(query));
 }
 
 function masterTableRowKey(entryType: string, row: DashboardPayload, index: number) {
