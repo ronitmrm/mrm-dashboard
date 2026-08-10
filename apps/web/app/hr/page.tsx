@@ -172,12 +172,12 @@ export default async function HrRecruitmentPage({
         <div className="flex items-center gap-2">
           <BriefcaseBusiness className="size-5 text-primary" />
           <h2 className="text-2xl font-semibold tracking-tight">
-            HR Recruitment
+            Hr Recruitment
           </h2>
         </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          {activeItem.label} is part of the authenticated MRMPL dashboard and
-          uses the same account, permissions, and PostgreSQL records.
+          {activeItem.label} Is Part Of The Authenticated Mrmpl Dashboard And
+          Uses The Same Account, Permissions, And Postgresql Records.
         </p>
       </section>
 
@@ -196,10 +196,10 @@ export default async function HrRecruitmentPage({
       activeItem.panelId !== "interviewWorkspacePanel" ? (
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           {[
-            ["Approved posts", stats.posts],
-            ["Vacant posts", stats.vacantPosts],
+            ["Approved Posts", stats.posts],
+            ["Vacant Posts", stats.vacantPosts],
             ["Templates", stats.templates],
-            ["Open jobs", stats.openJobs],
+            ["Open Jobs", stats.openJobs],
             ["Candidates", stats.candidates],
             ["Interviews", stats.interviews],
           ].map(([label, value]) => (

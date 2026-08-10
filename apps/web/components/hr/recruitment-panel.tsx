@@ -178,12 +178,12 @@ function MastersPanel({
       {canWrite ? (
         <PanelForm
           action={saveMasterAction}
-          description="Codes are the stable identity used by templates and approved posts."
+          description="Codes Are The Stable Identity Used By Templates And Approved Posts."
           panelId="mastersPanel"
-          title="Add a master"
+          title="Add A Master"
         >
           <Field>
-            <FieldLabel htmlFor="master-kind">Master type</FieldLabel>
+            <FieldLabel htmlFor="master-kind">Master Type</FieldLabel>
             <NativeSelect className="w-full" id="master-kind" name="kind">
               <NativeSelectOption value="department">
                 Department
@@ -196,7 +196,7 @@ function MastersPanel({
           <TextField label="Code" name="code" required />
           <TextField label="Name" name="name" required />
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
-            Save master
+            Save Master
           </Button>
         </PanelForm>
       ) : null}
@@ -228,18 +228,18 @@ function TemplatePanel({
       {canWrite ? (
         <PanelForm
           action={saveTemplateAction}
-          description="Create the reusable qualification and salary profile used by recruitment openings."
+          description="Create The Reusable Qualification And Salary Profile Used By Recruitment Openings."
           panelId="postMasterPanel"
-          title="Job requirement template"
+          title="Job Requirement Template"
         >
           <TextField
             defaultValue={templateCode}
-            label="Template code (auto-generated)"
+            label="Template Code (Auto-Generated)"
             name="template_code"
             readOnly
             required
           />
-          <TextField label="Template name" name="name" required />
+          <TextField label="Template Name" name="name" required />
           <TemplateScopeFields
             combinedRoles={combinedRoles}
             masters={masters}
@@ -248,22 +248,22 @@ function TemplatePanel({
           <TextField label="Gender" name="gender" />
           <TextField label="Education" name="education" />
           <TextField
-            label="Experience requirement"
+            label="Experience Requirement"
             name="experience_requirement"
           />
           <TextField
-            label="Minimum salary"
+            label="Minimum Salary"
             name="minimum_salary"
             type="number"
           />
           <TextField
-            label="Maximum salary"
+            label="Maximum Salary"
             name="maximum_salary"
             type="number"
           />
           <Field className="md:col-span-2 xl:col-span-3">
             <FieldLabel htmlFor="template-responsibilities">
-              Role responsibilities
+              Role Responsibilities
             </FieldLabel>
             <Textarea
               id="template-responsibilities"
@@ -271,7 +271,7 @@ function TemplatePanel({
             />
           </Field>
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
-            Save template
+            Save Template
           </Button>
         </PanelForm>
       ) : null}
@@ -312,9 +312,9 @@ function ApprovedPostPanel({
       {canWrite ? (
         <PanelForm
           action={savePostAction}
-          description="Register a sanctioned post and connect it to its requirement template."
+          description="Register A Sanctioned Post And Connect It To Its Requirement Template."
           panelId="approvedPostPanel"
-          title="Approved post form"
+          title="Approved Post Form"
         >
           <ApprovedPostFields
             departments={masters.departments}
@@ -327,7 +327,7 @@ function ApprovedPostPanel({
             }))}
           />
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
-            Save approved post
+            Save Approved Post
           </Button>
         </PanelForm>
       ) : null}
@@ -385,19 +385,19 @@ function EmployeePanel({
         <div className="grid gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Bulk employee assignment</CardTitle>
+              <CardTitle>Bulk Employee Assignment</CardTitle>
               <CardDescription>
-                Start with the Combined Jobs sheet and upload it. Then download
-                a fresh template and complete Individual Posts. Empty rows are
-                ignored, and each complete file is checked before any post is
-                changed. Use Appointed, Joined, Resigned, or Removed in the
-                Employment Event column.
+                Start With The Combined Jobs Sheet And Upload It. Then Download
+                A Fresh Template And Complete Individual Posts. Empty Rows Are
+                Ignored, And Each Complete File Is Checked Before Any Post Is
+                Changed. Use Appointed, Joined, Resigned, Or Removed In The
+                Employment Event Column.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 lg:grid-cols-[auto_1fr] lg:items-end">
               <Button asChild variant="outline">
                 <a href="/hr/employee-assignments/template">
-                  Download Excel template
+                  Download Excel Template
                 </a>
               </Button>
               <EmployeeAssignmentUpload />
@@ -448,21 +448,21 @@ function JobsPanel({
       {canWrite ? (
         <PanelForm
           action={createJobAction}
-          description="Create one active recruitment opening from a vacant or resigned approved post."
+          description="Create One Active Recruitment Opening From A Vacant Or Resigned Approved Post."
           panelId="jobsPanel"
-          title="Create job post"
+          title="Create Job Post"
         >
           <RecruitablePostFields posts={recruitablePostOptions} />
-          <TextField label="Target date" name="target_date" type="date" />
+          <TextField label="Target Date" name="target_date" type="date" />
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
-            Create recruitment opening
+            Create Recruitment Opening
           </Button>
         </PanelForm>
       ) : null}
       <Card>
         <CardHeader>
-          <CardTitle>Job posts</CardTitle>
-          <CardDescription>{jobs.length} recruitment openings</CardDescription>
+          <CardTitle>Job Posts</CardTitle>
+          <CardDescription>{jobs.length} Recruitment Openings</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -502,13 +502,13 @@ function JobsPanel({
                     </TableCell>
                     <TableCell className="text-right">
                       <Button asChild size="sm" variant="outline">
-                        <Link href={`/hr/jobs/${row.id}`}>Open job</Link>
+                        <Link href={`/hr/jobs/${row.id}`}>Open Job</Link>
                       </Button>
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
-                <EmptyRow columns={8} label="No job posts found." />
+                <EmptyRow columns={8} label="No Job Posts Found." />
               )}
             </TableBody>
           </Table>
@@ -528,26 +528,26 @@ function LogCandidatePanel({
       {canWrite ? (
         <PanelForm
           action={saveCandidateAction}
-          description="Phone number is the duplicate-safe candidate identity."
+          description="Phone Number Is The Duplicate-Safe Candidate Identity."
           panelId="candidatesPanel"
-          title="Log candidate"
+          title="Log Candidate"
         >
-          <TextField label="Candidate name" name="name" required />
+          <TextField label="Candidate Name" name="name" required />
           <TextField label="Phone" name="phone" required />
           <TextField label="Email" name="email" type="email" />
-          <TextField label="Current company" name="current_company" />
+          <TextField label="Current Company" name="current_company" />
           <TextField label="Experience" name="experience" />
           <TextField label="Source" name="source" />
           <Field>
             <FieldLabel htmlFor="candidate-department">
-              Preferred department
+              Preferred Department
             </FieldLabel>
             <NativeSelect
               className="w-full"
               id="candidate-department"
               name="department_code"
             >
-              <NativeSelectOption value="">Not selected</NativeSelectOption>
+              <NativeSelectOption value="">Not Selected</NativeSelectOption>
               {masters.departments.map((row) => (
                 <NativeSelectOption key={row.id} value={row.code}>
                   {row.name}
@@ -562,7 +562,7 @@ function LogCandidatePanel({
               id="candidate-designation"
               name="designation_code"
             >
-              <NativeSelectOption value="">Not selected</NativeSelectOption>
+              <NativeSelectOption value="">Not Selected</NativeSelectOption>
               {masters.designations.map((row) => (
                 <NativeSelectOption key={row.id} value={row.code}>
                   {row.name}
@@ -571,7 +571,7 @@ function LogCandidatePanel({
             </NativeSelect>
           </Field>
           <Field>
-            <FieldLabel htmlFor="candidate-resume">Resume (PDF)</FieldLabel>
+            <FieldLabel htmlFor="candidate-resume">Resume (Pdf)</FieldLabel>
             <Input
               accept="application/pdf,.pdf"
               id="candidate-resume"
@@ -579,15 +579,15 @@ function LogCandidatePanel({
               type="file"
             />
             <p className="text-xs text-muted-foreground">
-              Optional. Maximum 10 MB.
+              Optional. Maximum 10 Mb.
             </p>
           </Field>
           <Field className="md:col-span-2 xl:col-span-3">
-            <FieldLabel htmlFor="candidate-notes">Initial notes</FieldLabel>
+            <FieldLabel htmlFor="candidate-notes">Initial Notes</FieldLabel>
             <Textarea id="candidate-notes" name="notes" />
           </Field>
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
-            Save candidate
+            Save Candidate
           </Button>
         </PanelForm>
       ) : null}

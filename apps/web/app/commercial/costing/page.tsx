@@ -82,15 +82,15 @@ export default async function CostingPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Product costing
+            Product Costing
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Complete product parameters, calculate customer pricing, and retain
-            every revision as an immutable PostgreSQL snapshot.
+            Complete Product Parameters, Calculate Customer Pricing, And Retain
+            Every Revision As An Immutable Postgresql Snapshot.
           </p>
         </div>
         <Button asChild variant="outline">
-          <Link href="/commercial/quotes">View quote register</Link>
+          <Link href="/commercial/quotes">View Quote Register</Link>
         </Button>
       </div>
 
@@ -135,24 +135,24 @@ export default async function CostingPage() {
                 <form action={updateProductCostingAction}>
                   <input name="item_id" type="hidden" value={task.itemId} />
                   <FieldSet>
-                    <FieldLegend>Product parameters</FieldLegend>
+                    <FieldLegend>Product Parameters</FieldLegend>
                     <FieldGroup>
                       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                         <NumberField
                           defaultValue={task.product.weight100Pcs}
                           id={`${prefix}-weight`}
-                          label="One-piece weight (g)"
+                          label="One-Piece Weight (G)"
                           name="weight_100_pcs"
                         />
                         <NumberField
                           defaultValue={task.product.piecesPerKg}
                           id={`${prefix}-pieces`}
-                          label="Pieces / kg"
+                          label="Pieces / Kg"
                           name="pieces_per_kg"
                         />
                         <Field>
                           <FieldLabel htmlFor={`${prefix}-pricing-method`}>
-                            Pricing method
+                            Pricing Method
                           </FieldLabel>
                           <NativeSelect
                             defaultValue={task.product.pricingMethod}
@@ -163,98 +163,98 @@ export default async function CostingPage() {
                               Derived
                             </NativeSelectOption>
                             <NativeSelectOption value="Direct Purchase">
-                              Direct purchase
+                              Direct Purchase
                             </NativeSelectOption>
                           </NativeSelect>
                         </Field>
                         <NumberField
                           defaultValue={task.product.directPurchasePricePerKg}
                           id={`${prefix}-purchase`}
-                          label="Direct purchase ₹ / kg"
+                          label="Direct Purchase ₹ / Kg"
                           name="direct_purchase_price_per_kg"
                         />
                         <NumberField
                           defaultValue={task.product.alloyPremium}
                           id={`${prefix}-alloy`}
-                          label="Alloy premium ₹ / kg"
+                          label="Alloy Premium ₹ / Kg"
                           name="alloy_premium"
                         />
                         <NumberField
                           defaultValue={task.product.extrusionCost}
                           id={`${prefix}-extrusion`}
-                          label="Extrusion ₹ / kg"
+                          label="Extrusion ₹ / Kg"
                           name="extrusion_cost"
                         />
                         <NumberField
                           defaultValue={task.product.forgingCost}
                           id={`${prefix}-forging`}
-                          label="Forging ₹ / kg"
+                          label="Forging ₹ / Kg"
                           name="forging_cost"
                         />
                         <NumberField
                           defaultValue={task.product.machiningCost}
                           id={`${prefix}-machining`}
-                          label="Machining ₹ / kg"
+                          label="Machining ₹ / Kg"
                           name="machining_cost"
                         />
                         <NumberField
                           defaultValue={task.product.washing}
                           id={`${prefix}-washing`}
-                          label="Washing ₹ / pc"
+                          label="Washing ₹ / Pc"
                           name="washing"
                         />
                         <NumberField
                           defaultValue={task.product.checking}
                           id={`${prefix}-checking`}
-                          label="Checking ₹ / pc"
+                          label="Checking ₹ / Pc"
                           name="checking"
                         />
                         <NumberField
                           defaultValue={task.product.marking}
                           id={`${prefix}-marking`}
-                          label="Marking ₹ / pc"
+                          label="Marking ₹ / Pc"
                           name="marking"
                         />
                         <NumberField
                           defaultValue={task.product.plating}
                           id={`${prefix}-plating`}
-                          label="Plating ₹ / pc"
+                          label="Plating ₹ / Pc"
                           name="plating"
                         />
                         <NumberField
                           defaultValue={task.product.annealing}
                           id={`${prefix}-annealing`}
-                          label="Annealing ₹ / pc"
+                          label="Annealing ₹ / Pc"
                           name="annealing"
                         />
                         <NumberField
                           defaultValue={task.product.buffing}
                           id={`${prefix}-buffing`}
-                          label="Buffing ₹ / pc"
+                          label="Buffing ₹ / Pc"
                           name="buffing"
                         />
                         <NumberField
                           defaultValue={task.product.deburring}
                           id={`${prefix}-deburring`}
-                          label="Deburring ₹ / pc"
+                          label="Deburring ₹ / Pc"
                           name="deburring"
                         />
                         <NumberField
                           defaultValue={task.product.sealant}
                           id={`${prefix}-sealant`}
-                          label="Sealant ₹ / pc"
+                          label="Sealant ₹ / Pc"
                           name="sealant"
                         />
                         <NumberField
                           defaultValue={task.product.assemblyOperationCost}
                           id={`${prefix}-assembly`}
-                          label="Assembly operation ₹ / kg"
+                          label="Assembly Operation ₹ / Kg"
                           name="assembly_operation_cost"
                         />
                         <NumberField
                           defaultValue={task.product.overheadCost}
                           id={`${prefix}-overhead`}
-                          label="Overhead ₹ / pc"
+                          label="Overhead ₹ / Pc"
                           name="overhead_cost"
                         />
                         <NumberField
@@ -262,7 +262,7 @@ export default async function CostingPage() {
                             task.product.burningLossPercent
                           )}
                           id={`${prefix}-burning`}
-                          label="Burning loss (%)"
+                          label="Burning Loss (%)"
                           name="burning_loss_percent"
                         />
                         <NumberField
@@ -274,13 +274,13 @@ export default async function CostingPage() {
                       </div>
                       <Field>
                         <FieldLabel htmlFor={`${prefix}-remarks`}>
-                          Costing remarks
+                          Costing Remarks
                         </FieldLabel>
                         <Textarea id={`${prefix}-remarks`} name="remarks" />
                       </Field>
                       <div className="flex flex-wrap gap-2">
                         <Button name="action" type="submit" value="in_progress">
-                          Save parameters
+                          Save Parameters
                         </Button>
                         <Button
                           name="action"
@@ -288,7 +288,7 @@ export default async function CostingPage() {
                           value="complete"
                           variant="secondary"
                         >
-                          Complete product costing
+                          Complete Product Costing
                         </Button>
                       </div>
                     </FieldGroup>
@@ -306,12 +306,12 @@ export default async function CostingPage() {
                     />
                     <input name="item_id" type="hidden" value={task.itemId} />
                     <FieldSet>
-                      <FieldLegend>Customer quote parameters</FieldLegend>
+                      <FieldLegend>Customer Quote Parameters</FieldLegend>
                       <FieldGroup>
                         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                           <Field>
                             <FieldLabel htmlFor={`${prefix}-customer-part`}>
-                              Customer part code
+                              Customer Part Code
                             </FieldLabel>
                             <Input
                               defaultValue={task.customerPartCode ?? ""}
@@ -328,19 +328,19 @@ export default async function CostingPage() {
                           <NumberField
                             defaultValue={task.conversionRate}
                             id={`${prefix}-conversion`}
-                            label="₹ per USD"
+                            label="₹ Per Usd"
                             name="conversion_rate"
                           />
                           <NumberField
                             defaultValue={0}
                             id={`${prefix}-scrap`}
-                            label="Scrap ₹ / kg"
+                            label="Scrap ₹ / Kg"
                             name="scrap_rate"
                           />
                           <NumberField
                             defaultValue={1}
                             id={`${prefix}-purchase-times`}
-                            label="Purchase multiplier"
+                            label="Purchase Multiplier"
                             name="purchase_times"
                           />
                           <NumberField
@@ -352,19 +352,19 @@ export default async function CostingPage() {
                           <NumberField
                             defaultValue={task.product.overheadCost}
                             id={`${prefix}-quote-overhead`}
-                            label="Quote overhead ₹ / pc"
+                            label="Quote Overhead ₹ / Pc"
                             name="quote_overhead_cost"
                           />
                           <NumberField
                             defaultValue={0}
                             id={`${prefix}-packing`}
-                            label="Packing ₹ / kg"
+                            label="Packing ₹ / Kg"
                             name="packing_cost"
                           />
                           <NumberField
                             defaultValue={0}
                             id={`${prefix}-shipping`}
-                            label="Shipping ₹ / kg"
+                            label="Shipping ₹ / Kg"
                             name="shipping_cost"
                           />
                           <Field>
@@ -378,7 +378,7 @@ export default async function CostingPage() {
                           </Field>
                           <Field>
                             <FieldLabel htmlFor={`${prefix}-shipping-terms`}>
-                              Shipping terms
+                              Shipping Terms
                             </FieldLabel>
                             <Input
                               id={`${prefix}-shipping-terms`}
@@ -391,11 +391,11 @@ export default async function CostingPage() {
                           <div className="grid gap-4 rounded-2xl border p-4">
                             <div>
                               <h3 className="text-sm font-medium">
-                                Component quote inputs
+                                Component Quote Inputs
                               </h3>
                               <p className="text-sm text-muted-foreground">
-                                Applied to each leaf product without flattening
-                                package snapshots.
+                                Applied To Each Leaf Product Without Flattening
+                                Package Snapshots.
                               </p>
                             </div>
                             {leafItems.map((item) => (
@@ -414,13 +414,13 @@ export default async function CostingPage() {
                                 <NumberField
                                   defaultValue={0}
                                   id={`${prefix}-${item.itemId}-scrap`}
-                                  label="Scrap ₹ / kg"
+                                  label="Scrap ₹ / Kg"
                                   name="child_scrap_rate"
                                 />
                                 <NumberField
                                   defaultValue={1}
                                   id={`${prefix}-${item.itemId}-purchase`}
-                                  label="Purchase multiplier"
+                                  label="Purchase Multiplier"
                                   name="child_purchase_times"
                                 />
                                 <NumberField
@@ -438,11 +438,11 @@ export default async function CostingPage() {
                           <div className="grid gap-4 rounded-2xl border p-4">
                             <div>
                               <h3 className="text-sm font-medium">
-                                Nested assembly profit
+                                Nested Assembly Profit
                               </h3>
                               <p className="text-sm text-muted-foreground">
-                                Profit applies only to each assembly&apos;s own
-                                process cost.
+                                Profit Applies Only To Each Assembly&apos;s Own
+                                Process Cost.
                               </p>
                             </div>
                             {assemblyItems.map((item) => (
@@ -461,7 +461,7 @@ export default async function CostingPage() {
                                 <NumberField
                                   defaultValue={0}
                                   id={`${prefix}-${item.itemId}-assembly-profit`}
-                                  label="Assembly profit (%)"
+                                  label="Assembly Profit (%)"
                                   name="assembly_profit_percent"
                                 />
                               </div>
@@ -469,14 +469,14 @@ export default async function CostingPage() {
                           </div>
                         ) : null}
 
-                        <Button type="submit">Save draft quote</Button>
+                        <Button type="submit">Save Draft Quote</Button>
                       </FieldGroup>
                     </FieldSet>
                   </form>
                 ) : (
                   <div className="rounded-2xl border border-dashed p-6 text-sm text-muted-foreground">
-                    Complete product costing before entering customer quote
-                    parameters.
+                    Complete Product Costing Before Entering Customer Quote
+                    Parameters.
                   </div>
                 )}
                 {task.nextStageStatus === "Started" ? (
@@ -488,7 +488,7 @@ export default async function CostingPage() {
                     />
                     <input name="item_id" type="hidden" value={task.itemId} />
                     <Button type="submit" variant="outline">
-                      Return unsent quote to Product Costing
+                      Return Unsent Quote To Product Costing
                     </Button>
                   </form>
                 ) : null}
@@ -499,10 +499,10 @@ export default async function CostingPage() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>No costing tasks</CardTitle>
+            <CardTitle>No Costing Tasks</CardTitle>
             <CardDescription>
-              Complete an enquiry&apos;s technical and design stages to prepare
-              it for product costing.
+              Complete An Enquiry&apos;s Technical And Design Stages To Prepare
+              It For Product Costing.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -511,11 +511,11 @@ export default async function CostingPage() {
       <Separator />
       <div>
         <h2 className="text-lg font-semibold tracking-tight">
-          Calculation workbook
+          Calculation Workbook
         </h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          Use the same recovered Pricing formula independently for checks and
-          what-if calculations.
+          Use The Same Recovered Pricing Formula Independently For Checks And
+          What-If Calculations.
         </p>
         <CostingCalculator />
       </div>

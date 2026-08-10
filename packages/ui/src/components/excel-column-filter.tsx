@@ -92,7 +92,7 @@ export function ExcelColumnFilter({
           aria-label={`Search ${label} values`}
           className="h-8 text-xs"
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search values..."
+          placeholder="Search Values..."
           value={query}
         />
         <label className="flex cursor-pointer items-center gap-2 border-b pb-2 text-xs font-medium">
@@ -106,7 +106,7 @@ export function ExcelColumnFilter({
             }
             onCheckedChange={(checked) => toggleVisible(checked === true)}
           />
-          Select all{query ? " matching" : ""}
+          Select All{query ? " matching" : ""}
         </label>
         <div className="max-h-56 space-y-1 overflow-y-auto">
           {visible.map((option) => (
@@ -131,7 +131,7 @@ export function ExcelColumnFilter({
           ))}
           {!visible.length ? (
             <p className="py-4 text-center text-xs text-muted-foreground">
-              No values found.
+              No Values Found.
             </p>
           ) : null}
         </div>

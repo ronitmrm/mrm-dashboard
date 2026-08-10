@@ -50,9 +50,13 @@ const emailOrUrl = /^(?:[^\s@]+@[^\s@]+\.[^\s@]+|(?:data|https?):\/\/)/i;
 
 export function properCaseUserText(value: string) {
   const cleaned = value.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-IN");
-  return cleaned.replace(/(^|[^\p{L}\p{N}])(\p{L})/gu, (_, boundary: string, letter: string) => (
-    `${boundary}${letter.toLocaleUpperCase("en-IN")}`
-  ));
+  return cleaned
+    .replace(/(^|[^\p{L}\p{N}])(\p{L})/gu, (_, boundary: string, letter: string) => (
+      `${boundary}${letter.toLocaleUpperCase("en-IN")}`
+    ))
+    .replace(/(['’])(S|T|Re|Ve|Ll|D|M)\b/g, (_, apostrophe: string, suffix: string) => (
+      `${apostrophe}${suffix.toLocaleLowerCase("en-IN")}`
+    ));
 }
 
 export function normalizeUserEnteredPayload<T>(value: T, fieldName = ""): T {

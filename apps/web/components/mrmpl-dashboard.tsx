@@ -213,73 +213,73 @@ function dataEntryDestination(entryType: string): DashboardTabId {
 const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "route",
-    title: "Route master",
-    description: "Part route, option, setup, and route-level machine details.",
+    title: "Route Master",
+    description: "Part Route, Option, Setup, And Route-Level Machine Details.",
     fields: [
-      { name: "partNo", label: "Part no.", required: true },
-      { name: "optionNumber", label: "Option no.", required: true },
-      { name: "setupNo", label: "Setup no.", required: true },
-      { name: "numberOfSetups", label: "No. of setup", type: "number" },
-      { name: "setupName", label: "Setup name" },
-      { name: "machineUsed", label: "Machine family" },
-      { name: "machineType", label: "Machine type" },
-      { name: "stageWeight", label: "Stage weight gram", type: "number", step: "0.01" },
-      { name: "rodSize", label: "Rod size" },
-      { name: "cuttingLength", label: "Cutting length" },
-      { name: "finishedGoodsLength", label: "FG length" },
+      { name: "partNo", label: "Part No.", required: true },
+      { name: "optionNumber", label: "Option No.", required: true },
+      { name: "setupNo", label: "Setup No.", required: true },
+      { name: "numberOfSetups", label: "No. Of Setup", type: "number" },
+      { name: "setupName", label: "Setup Name" },
+      { name: "machineUsed", label: "Machine Family" },
+      { name: "machineType", label: "Machine Type" },
+      { name: "stageWeight", label: "Stage Weight Gram", type: "number", step: "0.01" },
+      { name: "rodSize", label: "Rod Size" },
+      { name: "cuttingLength", label: "Cutting Length" },
+      { name: "finishedGoodsLength", label: "Fg Length" },
     ],
   },
   {
     entryType: "cycle",
-    title: "Cycle time",
-    description: "Setup cycle and loading/unloading timings used by planning.",
+    title: "Cycle Time",
+    description: "Setup Cycle And Loading/Unloading Timings Used By Planning.",
     fields: [
-      { name: "partNo", label: "Part no.", required: true },
-      { name: "optionNumber", label: "Option no.", required: true },
-      { name: "setupNo", label: "Setup no.", required: true },
-      { name: "setupName", label: "Setup name" },
-      { name: "machineUsed", label: "Machine family" },
-      { name: "operationWeight", label: "Operation weight gram", type: "number", step: "0.01" },
-      { name: "cycleTime", label: "Cycle time sec", type: "number", step: "0.01", required: true },
-      { name: "loadingUnloading", label: "Loading/unloading sec", type: "number", step: "0.01", required: true },
+      { name: "partNo", label: "Part No.", required: true },
+      { name: "optionNumber", label: "Option No.", required: true },
+      { name: "setupNo", label: "Setup No.", required: true },
+      { name: "setupName", label: "Setup Name" },
+      { name: "machineUsed", label: "Machine Family" },
+      { name: "operationWeight", label: "Operation Weight Gram", type: "number", step: "0.01" },
+      { name: "cycleTime", label: "Cycle Time Sec", type: "number", step: "0.01", required: true },
+      { name: "loadingUnloading", label: "Loading/Unloading Sec", type: "number", step: "0.01", required: true },
     ],
   },
   {
     entryType: "tooling",
     title: "Tooling",
-    description: "Fixture, tooling, foam tool, and planning remarks.",
+    description: "Fixture, Tooling, Foam Tool, And Planning Remarks.",
     fields: [
-      { name: "partNo", label: "Part no.", required: true },
-      { name: "optionNumber", label: "Option no.", required: true },
-      { name: "setupNo", label: "Setup no.", required: true },
-      { name: "setupName", label: "Setup name" },
-      { name: "machineUsed", label: "Machine family" },
+      { name: "partNo", label: "Part No.", required: true },
+      { name: "optionNumber", label: "Option No.", required: true },
+      { name: "setupNo", label: "Setup No.", required: true },
+      { name: "setupName", label: "Setup Name" },
+      { name: "machineUsed", label: "Machine Family" },
       { name: "fixture", label: "Fixture" },
-      { name: "fixtureQty", label: "Fixture qty", type: "number" },
+      { name: "fixtureQty", label: "Fixture Qty", type: "number" },
       { name: "tooling", label: "Tooling" },
-      { name: "toolingQty", label: "Tooling qty", type: "number" },
-      { name: "foamTool", label: "Foam tool" },
-      { name: "foamToolQty", label: "Foam qty", type: "number" },
+      { name: "toolingQty", label: "Tooling Qty", type: "number" },
+      { name: "foamTool", label: "Foam Tool" },
+      { name: "foamToolQty", label: "Foam Qty", type: "number" },
       { name: "remarks", label: "Remarks" },
     ],
   },
   {
     entryType: "work_order",
-    title: "Work order",
-    description: "JC, part, PO, RM inward, delivery, and priority metadata.",
+    title: "Work Order",
+    description: "Jc, Part, Po, Rm Inward, Delivery, And Priority Metadata.",
     fields: [
-      { name: "jcNo", label: "JC no.", required: true },
-      { name: "partCode", label: "Part code", required: true },
-      { name: "fgPoNo", label: "FG PO no." },
-      { name: "rmPoNo", label: "RM PO no." },
-      { name: "poDate", label: "PO date", type: "date" },
-      { name: "orderPcs", label: "Order pcs", type: "number", required: true },
-      { name: "orderKg", label: "Order kg", type: "number", step: "0.01" },
-      { name: "numberOfSetups", label: "No. of setup", type: "number" },
-      { name: "optionNumber", label: "Selected option" },
-      { name: "rmInwardKg", label: "RM inward kg", type: "number", step: "0.01" },
-      { name: "rmInwardDate", label: "RM inward date", type: "date" },
-      { name: "deliveryDate", label: "Delivery date", type: "date" },
+      { name: "jcNo", label: "Jc No.", required: true },
+      { name: "partCode", label: "Part Code", required: true },
+      { name: "fgPoNo", label: "Fg Po No." },
+      { name: "rmPoNo", label: "Rm Po No." },
+      { name: "poDate", label: "Po Date", type: "date" },
+      { name: "orderPcs", label: "Order Pcs", type: "number", required: true },
+      { name: "orderKg", label: "Order Kg", type: "number", step: "0.01" },
+      { name: "numberOfSetups", label: "No. Of Setup", type: "number" },
+      { name: "optionNumber", label: "Selected Option" },
+      { name: "rmInwardKg", label: "Rm Inward Kg", type: "number", step: "0.01" },
+      { name: "rmInwardDate", label: "Rm Inward Date", type: "date" },
+      { name: "deliveryDate", label: "Delivery Date", type: "date" },
       { name: "plannerPriority", label: "Priority", options: ["", "Urgent", "High", "Low"], defaultValue: "" },
       { name: "description", label: "Description" },
       { name: "deliveryRemark", label: "Remark" },
@@ -287,34 +287,34 @@ const dataEntrySpecs: DataEntrySpec[] = [
   },
   {
     entryType: "rm_inward",
-    title: "RM inward",
-    description: "Raw-material inward status against job card.",
+    title: "Rm Inward",
+    description: "Raw-Material Inward Status Against Job Card.",
     fields: [
-      { name: "jcNo", label: "JC no.", required: true },
-      { name: "rmInwardDate", label: "RM inward date", type: "date", required: true },
-      { name: "rmInwardKg", label: "RM inward kg", type: "number", step: "0.01" },
+      { name: "jcNo", label: "Jc No.", required: true },
+      { name: "rmInwardDate", label: "Rm Inward Date", type: "date", required: true },
+      { name: "rmInwardKg", label: "Rm Inward Kg", type: "number", step: "0.01" },
       { name: "status", label: "Status" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "employee",
-    title: "Employee master",
-    description: "Operator and shop-floor employee master data.",
+    title: "Employee Master",
+    description: "Operator And Shop-Floor Employee Master Data.",
     fields: [
-      { name: "empId", label: "Emp ID", required: true },
-      { name: "employeeType", label: "Employee type" },
-      { name: "employeeName", label: "Employee name", required: true },
+      { name: "empId", label: "Emp Id", required: true },
+      { name: "employeeType", label: "Employee Type" },
+      { name: "employeeName", label: "Employee Name", required: true },
       { name: "location", label: "Location" },
-      { name: "doj", label: "DOJ", type: "date" },
-      { name: "terminatedDate", label: "Terminated date", type: "date" },
+      { name: "doj", label: "Doj", type: "date" },
+      { name: "terminatedDate", label: "Terminated Date", type: "date" },
       { name: "status", label: "Status", options: ["Active", "Inactive", "Terminated"], defaultValue: "Active" },
     ],
   },
   {
     entryType: "machine_master",
-    title: "Machine master",
-    description: "Machine number, family, type, name, and location used by planning and machine filters.",
+    title: "Machine Master",
+    description: "Machine Number, Family, Type, Name, And Location Used By Planning And Machine Filters.",
     fields: [
       { name: "machineNo", label: "Machine No.", required: true },
       { name: "machineFamily", label: "Machine Family", required: true },
@@ -328,38 +328,38 @@ const dataEntrySpecs: DataEntrySpec[] = [
   },
   {
     entryType: "maintenance_master",
-    title: "Maintenance schedule master",
-    description: "Reusable weekly, monthly, or custom maintenance schedules. Machine numbers are assigned later from Machine Master.",
+    title: "Maintenance Schedule Master",
+    description: "Reusable Weekly, Monthly, Or Custom Maintenance Schedules. Machine Numbers Are Assigned Later From Machine Master.",
     fields: [
-      { name: "maintenanceCode", label: "Maintenance code", required: true },
-      { name: "maintenanceTitle", label: "Maintenance schedule title", required: true },
-      { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
-      { name: "frequencyBasis", label: "Frequency basis", options: ["Calendar days", "Running days"], defaultValue: "Calendar days" },
-      { name: "checklistCode", label: "Checklist code" },
-      { name: "estimatedMinutes", label: "Estimated minutes", type: "number", min: "0" },
+      { name: "maintenanceCode", label: "Maintenance Code", required: true },
+      { name: "maintenanceTitle", label: "Maintenance Schedule Title", required: true },
+      { name: "frequencyDays", label: "Frequency Days", type: "number", min: "1", required: true },
+      { name: "frequencyBasis", label: "Frequency Basis", options: ["Calendar days", "Running days"], defaultValue: "Calendar days" },
+      { name: "checklistCode", label: "Checklist Code" },
+      { name: "estimatedMinutes", label: "Estimated Minutes", type: "number", min: "0" },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "maintenance_checklist_master",
-    title: "Maintenance checklist",
-    description: "Reusable maintenance checklist steps assigned to machine maintenance schedules.",
+    title: "Maintenance Checklist",
+    description: "Reusable Maintenance Checklist Steps Assigned To Machine Maintenance Schedules.",
     fields: [
-      { name: "checklistCode", label: "Checklist code", required: true },
-      { name: "checklistTitle", label: "Checklist title", required: true },
-      { name: "sequence", label: "Step no.", type: "number", min: "1", required: true },
-      { name: "stepDescription", label: "Step description", required: true },
-      { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
+      { name: "checklistCode", label: "Checklist Code", required: true },
+      { name: "checklistTitle", label: "Checklist Title", required: true },
+      { name: "sequence", label: "Step No.", type: "number", min: "1", required: true },
+      { name: "stepDescription", label: "Step Description", required: true },
+      { name: "inputType", label: "Input Type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "planning_holiday",
-    title: "Planning holiday",
-    description: "Plant shutdown dates and vacation days that planning should skip.",
+    title: "Planning Holiday",
+    description: "Plant Shutdown Dates And Vacation Days That Planning Should Skip.",
     fields: [
-      { name: "date", label: "Holiday date", type: "date", required: true },
+      { name: "date", label: "Holiday Date", type: "date", required: true },
       { name: "reason", label: "Reason", options: ["Plant holiday", "Vacation", "Maintenance shutdown", "Other"], defaultValue: "Plant holiday" },
       { name: "scope", label: "Scope", options: ["Factory", "Department"], defaultValue: "Factory" },
       { name: "department", label: "Department" },
@@ -368,93 +368,93 @@ const dataEntrySpecs: DataEntrySpec[] = [
   },
   {
     entryType: "setup_checklist_master",
-    title: "Setup checklist",
-    description: "Coded machinist checklists used from pre setting start through setting completion.",
+    title: "Setup Checklist",
+    description: "Coded Machinist Checklists Used From Pre Setting Start Through Setting Completion.",
     fields: [
-      { name: "checklistCode", label: "Checklist code", required: true, readOnly: true },
-      { name: "checklistTitle", label: "Checklist title", required: true },
+      { name: "checklistCode", label: "Checklist Code", required: true, readOnly: true },
+      { name: "checklistTitle", label: "Checklist Title", required: true },
       { name: "sequence", label: "Sequence", type: "number", required: true },
-      { name: "checkPoint", label: "Check point", required: true },
-      { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
+      { name: "checkPoint", label: "Check Point", required: true },
+      { name: "inputType", label: "Input Type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
       { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
       { name: "section", label: "Section", defaultValue: "Pre setting / setting" },
-      { name: "effectiveFrom", label: "Effective from", type: "date" },
+      { name: "effectiveFrom", label: "Effective From", type: "date" },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "rejection_type_master",
-    title: "Rejection type master",
-    description: "Quality rejection type codes used in QC rejection entry.",
+    title: "Rejection Type Master",
+    description: "Quality Rejection Type Codes Used In Qc Rejection Entry.",
     fields: [
       { name: "code", label: "Code", required: true, readOnly: true },
-      { name: "typeOfRejection", label: "Type of rejection", required: true },
+      { name: "typeOfRejection", label: "Type Of Rejection", required: true },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "rejection_remark_master",
-    title: "Rejection remark master",
-    description: "Quality rejection remark codes used in QC rejection entry.",
+    title: "Rejection Remark Master",
+    description: "Quality Rejection Remark Codes Used In Qc Rejection Entry.",
     fields: [
       { name: "code", label: "Code", required: true, readOnly: true },
-      { name: "rejectionRemark", label: "Rejection remark", required: true },
+      { name: "rejectionRemark", label: "Rejection Remark", required: true },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "rejection_reason_master",
-    title: "Defect / downtime reason master",
-    description: "Shared defect and downtime reason codes used by QC rejection and downtime entries.",
+    title: "Defect / Downtime Reason Master",
+    description: "Shared Defect And Downtime Reason Codes Used By Qc Rejection And Downtime Entries.",
     fields: [
       { name: "code", label: "Code", required: true, readOnly: true },
-      { name: "rejectionReason", label: "Defect / downtime reason", required: true },
+      { name: "rejectionReason", label: "Defect / Downtime Reason", required: true },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "quality_parameter_master",
-    title: "Quality inspection parameter master",
-    description: "Shared FPIR and hourly quality check parameters by item, option, and setup.",
+    title: "Quality Inspection Parameter Master",
+    description: "Shared Fpir And Hourly Quality Check Parameters By Item, Option, And Setup.",
     fields: [
-      { name: "partNo", label: "Part no.", required: true },
-      { name: "optionNumber", label: "Option no.", required: true },
-      { name: "setupNo", label: "Setup no.", required: true },
+      { name: "partNo", label: "Part No.", required: true },
+      { name: "optionNumber", label: "Option No.", required: true },
+      { name: "setupNo", label: "Setup No.", required: true },
       { name: "sequence", label: "Sequence", type: "number", min: "1" },
-      { name: "parameterName", label: "Parameter name", required: true },
+      { name: "parameterName", label: "Parameter Name", required: true },
       { name: "specification", label: "Specification", required: true },
-      { name: "instrumentUsed", label: "Instrument used" },
+      { name: "instrumentUsed", label: "Instrument Used" },
       { name: "tolerancePlus", label: "Tolerance +", type: "number", step: "0.001" },
       { name: "toleranceMinus", label: "Tolerance -", type: "number", step: "0.001" },
-      { name: "inputType", label: "Input type", options: ["number", "text", "pass_fail"], defaultValue: "number" },
+      { name: "inputType", label: "Input Type", options: ["number", "text", "pass_fail"], defaultValue: "number" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "software_raw",
-    title: "Software production output",
-    description: "Daily production rows from the shop-floor software.",
+    title: "Software Production Output",
+    description: "Daily Production Rows From The Shop-Floor Software.",
     fields: [
-      { name: "prodDate", label: "Production date", type: "date", required: true },
-      { name: "operatorId", label: "Operator ID", required: true },
-      { name: "operatorName", label: "Operator name" },
-      { name: "machineType", label: "Machine type" },
-      { name: "machine", label: "Machine no.", required: true },
-      { name: "partCode", label: "Part code", required: true },
-      { name: "jobCard", label: "JC no." },
-      { name: "setupNo", label: "Setup no." },
-      { name: "outputQty", label: "Output qty", type: "number", required: true },
-      { name: "actualQty", label: "Actual qty", type: "number" },
-      { name: "targetQty", label: "Target qty", type: "number" },
-      { name: "rejectQty", label: "Reject qty", type: "number" },
-      { name: "rejectionType", label: "Rejection type" },
-      { name: "rejectionRemark", label: "Rejection remark" },
-      { name: "downtimeMinutes", label: "Downtime minutes", type: "number" },
-      { name: "downtimeReason", label: "Downtime reason" },
+      { name: "prodDate", label: "Production Date", type: "date", required: true },
+      { name: "operatorId", label: "Operator Id", required: true },
+      { name: "operatorName", label: "Operator Name" },
+      { name: "machineType", label: "Machine Type" },
+      { name: "machine", label: "Machine No.", required: true },
+      { name: "partCode", label: "Part Code", required: true },
+      { name: "jobCard", label: "Jc No." },
+      { name: "setupNo", label: "Setup No." },
+      { name: "outputQty", label: "Output Qty", type: "number", required: true },
+      { name: "actualQty", label: "Actual Qty", type: "number" },
+      { name: "targetQty", label: "Target Qty", type: "number" },
+      { name: "rejectQty", label: "Reject Qty", type: "number" },
+      { name: "rejectionType", label: "Rejection Type" },
+      { name: "rejectionRemark", label: "Rejection Remark" },
+      { name: "downtimeMinutes", label: "Downtime Minutes", type: "number" },
+      { name: "downtimeReason", label: "Downtime Reason" },
     ],
   },
 ];
@@ -707,8 +707,8 @@ function HourlyQualityCheckShell({
       <div className="mx-auto grid max-w-7xl gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold">Hourly quality check</h1>
-            <p className="text-sm text-muted-foreground">Select the running machine, then record the hourly inspection against the active item, option, and setup.</p>
+            <h1 className="text-2xl font-semibold">Hourly Quality Check</h1>
+            <p className="text-sm text-muted-foreground">Select The Running Machine, Then Record The Hourly Inspection Against The Active Item, Option, And Setup.</p>
           </div>
           <Button type="button" variant="outline" onClick={() => { window.location.assign(dashboardReturnHref("qualityControlTasksTab")); }}>
             <LayoutDashboard className="size-4" />
@@ -721,29 +721,29 @@ function HourlyQualityCheckShell({
           <CardContent className="grid gap-3 pt-4 md:grid-cols-5">
             <LabeledInput label="Date" value={prodDate} onChange={setProdDate} type="date" />
             <LabeledSelect label="Shift" value={shift} onChange={setShift} options={["Day", "Night"]} />
-            <LabeledSelect label="Machine no." value={selectedKey} onChange={setSelectedKey} options={runningRows.map((row) => ({ value: shopFloorPlanKey(row), label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}` }))} placeholder="Select machine" />
-            <LabeledSelect label="Hour slot" value={hourSlot} onChange={setHourSlot} options={hourSlotOptions()} />
-            <label className="grid gap-1 text-xs font-medium text-muted-foreground">Checked by<Input value={performerDisplay || "Loading user..."} readOnly /></label>
+            <LabeledSelect label="Machine No." value={selectedKey} onChange={setSelectedKey} options={runningRows.map((row) => ({ value: shopFloorPlanKey(row), label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}` }))} placeholder="Select Machine" />
+            <LabeledSelect label="Hour Slot" value={hourSlot} onChange={setHourSlot} options={hourSlotOptions()} />
+            <label className="grid gap-1 text-xs font-medium text-muted-foreground">Checked By<Input value={performerDisplay || "Loading user..."} readOnly /></label>
           </CardContent>
         </Card>
         {selectedRow ? (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">{displayValue(selectedRow.machine)} running details</CardTitle>
+              <CardTitle className="text-base">{displayValue(selectedRow.machine)} Running Details</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2 text-sm md:grid-cols-5">
-              <TileField label="Item code" value={itemCode(selectedRow)} />
-              <TileField label="JC no." value={jobCardNumber(selectedRow)} />
+              <TileField label="Item Code" value={itemCode(selectedRow)} />
+              <TileField label="Jc No." value={jobCardNumber(selectedRow)} />
               <TileField label="Option" value={selectedRow.optionNumber} />
-              <TileField label="Setup no." value={selectedRow.setupNo} />
-              <TileField label="Setup name" value={selectedRow.setupName} />
+              <TileField label="Setup No." value={selectedRow.setupNo} />
+              <TileField label="Setup Name" value={selectedRow.setupName} />
             </CardContent>
           </Card>
         ) : null}
         <Card>
           <CardHeader>
-            <CardTitle>Inspection readings</CardTitle>
-            <CardDescription>{existingCheck ? "Existing hourly card loaded for editing." : "Readings are saved against the selected date, shift, hour, machine, item, and setup."}</CardDescription>
+            <CardTitle>Inspection Readings</CardTitle>
+            <CardDescription>{existingCheck ? "Existing Hourly Card Loaded For Editing." : "Readings Are Saved Against The Selected Date, Shift, Hour, Machine, Item, And Setup."}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             {selectedRow && existingCheck === undefined && selectedCheckKey ? (
@@ -758,7 +758,7 @@ function HourlyQualityCheckShell({
                       <TableHead className="min-w-36">Specification</TableHead>
                       <TableHead className="min-w-32">Tolerance</TableHead>
                       <TableHead className="min-w-40">Instrument</TableHead>
-                      <TableHead className="min-w-44">Actual reading</TableHead>
+                      <TableHead className="min-w-44">Actual Reading</TableHead>
                       <TableHead className="min-w-24">Result</TableHead>
                       <TableHead className="min-w-56">Remark</TableHead>
                     </TableRow>
@@ -780,8 +780,8 @@ function HourlyQualityCheckShell({
                             {qualityParameterInputType(parameter) === "pass_fail" ? (
                               <select className={`h-9 w-full rounded-md border bg-background px-3 text-sm ${readingClass}`} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))}>
                                 <option value="">Select</option>
-                                <option value="OK">OK</option>
-                                <option value="Not OK">Not OK</option>
+                                <option value="OK">Ok</option>
+                                <option value="Not OK">Not Ok</option>
                               </select>
                             ) : (
                               <Input className={readingClass} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))} type={qualityParameterInputType(parameter) === "number" ? "number" : "text"} step="0.001" />
@@ -796,9 +796,9 @@ function HourlyQualityCheckShell({
                 </Table>
               </div>
             ) : selectedRow ? (
-              <EmptyRowsMessage>No active quality parameter master rows match this item, option, and setup.</EmptyRowsMessage>
+              <EmptyRowsMessage>No Active Quality Parameter Master Rows Match This Item, Option, And Setup.</EmptyRowsMessage>
             ) : (
-              <EmptyRowsMessage>Select a machine to start the hourly check.</EmptyRowsMessage>
+              <EmptyRowsMessage>Select A Machine To Start The Hourly Check.</EmptyRowsMessage>
             )}
             {hourlyQualityPage.error || existingCheckPage.error ? (
               <AlertMessage tone="destructive">{hourlyQualityPage.error || existingCheckPage.error}</AlertMessage>
@@ -807,7 +807,7 @@ function HourlyQualityCheckShell({
             <div className="flex justify-end">
               <Button type="button" disabled={!canSave || isSaving} onClick={saveHourlyCheck}>
                 <CheckCircle2 className="size-4" />
-                {isSaving ? "Saving" : "Save hourly check"}
+                {isSaving ? "Saving" : "Save Hourly Check"}
               </Button>
             </div>
           </CardContent>
@@ -945,8 +945,8 @@ function SetupChecklistShell({
       <div className="mx-auto grid max-w-6xl gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold">Setup checklist</h1>
-            <p className="text-sm text-muted-foreground">Save pre setting and setting checklist progress outside the machinist task list.</p>
+            <h1 className="text-2xl font-semibold">Setup Checklist</h1>
+            <p className="text-sm text-muted-foreground">Save Pre Setting And Setting Checklist Progress Outside The Machinist Task List.</p>
           </div>
           <Button type="button" variant="outline" onClick={() => { window.location.assign(dashboardReturnHref("machinistTasksTab")); }}>
             <LayoutDashboard className="size-4" />
@@ -959,20 +959,20 @@ function SetupChecklistShell({
           <>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">{phase === "end" ? "Setting completion" : "Pre setting start"}</CardTitle>
-                <CardDescription>Running setup details</CardDescription>
+                <CardTitle className="text-base">{phase === "end" ? "Setting Completion" : "Pre Setting Start"}</CardTitle>
+                <CardDescription>Running Setup Details</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-                  <TileField label="Item code" value={itemCode(row)} />
-                  <TileField label="JC no." value={jobCardNumber(row)} />
+                  <TileField label="Item Code" value={itemCode(row)} />
+                  <TileField label="Jc No." value={jobCardNumber(row)} />
                   <TileField label="Option" value={row.optionNumber} />
-                  <TileField label="Setup no." value={row.setupNo} />
+                  <TileField label="Setup No." value={row.setupNo} />
                   <TileField label="Machine" value={row.machine} />
                   <TileField label="Phase" value={phase === "end" ? "Completion" : "Start"} />
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <LabeledInput label={phase === "end" ? "Completed by" : "Started by"} value={doneBy} onChange={setDoneBy} />
+                  <LabeledInput label={phase === "end" ? "Completed By" : "Started By"} value={doneBy} onChange={setDoneBy} />
                   <LabeledInput label="Remark" value={remark} onChange={setRemark} />
                 </div>
               </CardContent>
@@ -995,14 +995,14 @@ function SetupChecklistShell({
               <StatusBadge value={isComplete ? "Checklist complete" : "Progress can be saved"} />
               <Button type="button" disabled={!canSave || isSaving} onClick={() => void saveProgress()}>
                 <CheckCircle2 className="size-4" />
-                {isSaving ? "Saving" : "Save checklist progress"}
+                {isSaving ? "Saving" : "Save Checklist Progress"}
               </Button>
             </div>
           </>
         ) : (
           <Card>
             <CardContent className="pt-6">
-              <EmptyRowsMessage>Checklist setup was not found. Open this page from a machinist task row.</EmptyRowsMessage>
+              <EmptyRowsMessage>Checklist Setup Was Not Found. Open This Page From A Machinist Task Row.</EmptyRowsMessage>
             </CardContent>
           </Card>
         )}
@@ -1303,7 +1303,7 @@ function DashboardShell({
           >
             <Image
               src="/mrm-green.svg"
-              alt="MRMPL"
+              alt="Mrmpl"
               width={792}
               height={176}
               priority
@@ -1334,8 +1334,8 @@ function DashboardShell({
           <div className="min-w-0 flex-1">
            <h1 className="truncate text-base font-semibold">{selectedTab.title}</h1>
             <p className="truncate text-xs text-muted-foreground">
-              <span>{selectedProductionFloor.label} · {planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live PostgreSQL records"}</span>
-              {planningRecalculatedAt && view.updatedAt ? <span> - Workbook updated {formatDate(view.updatedAt)}</span> : null}
+              <span>{selectedProductionFloor.label} · {planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live Postgresql Records"}</span>
+              {planningRecalculatedAt && view.updatedAt ? <span> - Workbook Updated {formatDate(view.updatedAt)}</span> : null}
             </p>
           </div>
           <Badge className="hidden sm:inline-flex" variant="outline">
@@ -1381,14 +1381,14 @@ function DashboardShell({
           {isDashboardUnavailable ? (
             <Card className="max-w-xl">
               <CardHeader>
-                <CardTitle>Dashboard unavailable</CardTitle>
+                <CardTitle>Dashboard Unavailable</CardTitle>
                 <CardDescription>
                   {dashboardDeliveryState.lastError ?? "Dashboard data could not be loaded."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button type="button" onClick={retryDashboardDelivery}>
-                  Retry dashboard load
+                  Retry Dashboard Load
                 </Button>
               </CardContent>
             </Card>
@@ -1532,14 +1532,14 @@ function HeaderActions({
         onClick={onRefreshSnapshot}
       >
         <RefreshCw className={`size-4${isRefreshingSnapshot ? " animate-spin" : ""}`} />
-        <span className="hidden sm:inline">{isRefreshingSnapshot ? "Recalculating" : "Recalculate planning"}</span>
+        <span className="hidden sm:inline">{isRefreshingSnapshot ? "Recalculating" : "Recalculate Planning"}</span>
       </Button>
       <Button
         type="button"
         variant="outline"
         size="icon"
-        aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-        title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+        aria-label={isDark ? "Switch To Light Mode" : "Switch To Dark Mode"}
+        title={isDark ? "Switch To Light Mode" : "Switch To Dark Mode"}
         onClick={() => setTheme(isDark ? "light" : "dark")}
       >
         {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
@@ -1552,7 +1552,7 @@ function HeaderActions({
         onClick={() => void authClient.signOut().then(() => window.location.assign("/sign-in"))}
       >
         <LogOut className="size-4" />
-        <span className="hidden sm:inline">Sign out</span>
+        <span className="hidden sm:inline">Sign Out</span>
       </Button>
     </div>
   );
@@ -1614,15 +1614,15 @@ function DashboardContent({
   }
 
   if (activeTab === "setupChecklistMasterTab") {
-    return <DataEntryPanel key={`checklists-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={checklistWorkspaceEntryTypes} title="Checklist workspace" description="Create and maintain all coded setup and maintenance checklists in one place." />;
+    return <DataEntryPanel key={`checklists-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={checklistWorkspaceEntryTypes} title="Checklist Workspace" description="Create And Maintain All Coded Setup And Maintenance Checklists In One Place." />;
   }
 
   if (activeTab === "maintenanceMastersTab") {
-    return <DataEntryPanel key={`maintenance-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={maintenanceMasterEntryTypes} title="Maintenance master workspace" description="Create reusable maintenance schedules and assign checklists created in the Checklists tab." />;
+    return <DataEntryPanel key={`maintenance-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={maintenanceMasterEntryTypes} title="Maintenance Master Workspace" description="Create Reusable Maintenance Schedules And Assign Checklists Created In The Checklists Tab." />;
   }
 
   if (activeTab === "qualityMastersTab") {
-    return <DataEntryPanel key={`quality-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={qualityWorkspaceEntryTypes} title="Quality master workspace" description="Maintain inspection parameters only for existing route lines and manage generated quality codes." />;
+    return <DataEntryPanel key={`quality-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={qualityWorkspaceEntryTypes} title="Quality Master Workspace" description="Maintain Inspection Parameters Only For Existing Route Lines And Manage Generated Quality Codes." />;
   }
 
   if (activeTab === "maintenanceTab") {
@@ -1680,7 +1680,7 @@ function ProductionControlPanel({
       <PlannerDecisionConsole productionControl={productionControl} submitAction={submitAction} />
       <ActionLogTable rows={asArray(productionControl.plannerActionLog)} />
       <section className="grid gap-4">
-        <DataRowsCard title="Machine issues" rows={asArray(productionControl.machineConstraintRows)} empty="No machine constraints yet" />
+        <DataRowsCard title="Machine Issues" rows={asArray(productionControl.machineConstraintRows)} empty="No machine constraints yet" />
       </section>
     </>
   );
@@ -1696,8 +1696,8 @@ function PlannerDecisionConsole({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Planner decision console</CardTitle>
-        <CardDescription>Priority changes, machine breakdowns, part-specific machine switches, and mid-route changes.</CardDescription>
+        <CardTitle>Planner Decision Console</CardTitle>
+        <CardDescription>Priority Changes, Machine Breakdowns, Part-Specific Machine Switches, And Mid-Route Changes.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <PlannerActionConflictPanel productionControl={productionControl} submitAction={submitAction} />
@@ -1855,18 +1855,18 @@ function MachineConstraintPlannerForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={saveMachineIssue}>
       <div>
-        <div className="text-sm font-medium">2. Machine unavailable / breakdown</div>
-        <div className="text-xs text-muted-foreground">Running rows need produced quantity before remaining quantity is planned elsewhere.</div>
+        <div className="text-sm font-medium">2. Machine Unavailable / Breakdown</div>
+        <div className="text-xs text-muted-foreground">Running Rows Need Produced Quantity Before Remaining Quantity Is Planned Elsewhere.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-        <Field label="Machine unavailable">
+        <Field label="Machine Unavailable">
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={machineNo}
             required
             onChange={(event) => updateField(setMachineNo, event.target.value)}
           >
-            <option value="">Select machine</option>
+            <option value="">Select Machine</option>
             {machineOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
@@ -1878,30 +1878,30 @@ function MachineConstraintPlannerForm({
         <Field label="To">
           <Input type="date" value={unavailableTo} onChange={(event) => updateField(setUnavailableTo, event.target.value)} />
         </Field>
-        <Field label="Plan action">
+        <Field label="Plan Action">
           <select className="h-9 rounded-md border bg-background px-3 text-sm" value={rescheduleAction} onChange={(event) => updateField(setRescheduleAction, event.target.value)}>
-            <option value="shift_required">shift required</option>
-            <option value="shift_all">shift all</option>
-            <option value="delay">delay plan</option>
+            <option value="shift_required">Shift Required</option>
+            <option value="shift_all">Shift All</option>
+            <option value="delay">Delay Plan</option>
           </select>
         </Field>
-        <Field label="Planning confirmation">
+        <Field label="Planning Confirmation">
           <select className="h-9 rounded-md border bg-background px-3 text-sm" value={planningMode} onChange={(event) => updatePlanningInput(setPlanningMode, event.target.value)}>
-            <option value="system_recalculate">System recalculation (all planning rules)</option>
-            <option value="review_then_plan">Review queue before saving</option>
+            <option value="system_recalculate">System Recalculation (All Planning Rules)</option>
+            <option value="review_then_plan">Review Queue Before Saving</option>
           </select>
         </Field>
         <Field label="Reason">
-          <Input value={reason} placeholder="Breakdown / quality hold" required onChange={(event) => setReason(event.target.value)} />
+          <Input value={reason} placeholder="Breakdown / Quality Hold" required onChange={(event) => setReason(event.target.value)} />
         </Field>
       </div>
       {reviewReady ? (
         <div className="grid gap-2 rounded-md border bg-muted/15 p-3">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{formatNumber(affectedRows.length)} affected setup rows</span>
-            <span>{formatNumber(lockedCount)} locked on machine</span>
-            <span>{formatNumber(plannedCount)} planned/unlocked</span>
-            <span>{formatNumber(runningRows.length)} running quantity inputs</span>
+            <span>{formatNumber(affectedRows.length)} Affected Setup Rows</span>
+            <span>{formatNumber(lockedCount)} Locked On Machine</span>
+            <span>{formatNumber(plannedCount)} Planned/Unlocked</span>
+            <span>{formatNumber(runningRows.length)} Running Quantity Inputs</span>
           </div>
           {affectedRows.length ? (
             <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
@@ -1916,10 +1916,10 @@ function MachineConstraintPlannerForm({
                       <StatusBadge value={needsProducedQty ? "Produced qty required" : machineIssueRowIsLocked(row) ? "Delay locked setup" : "Shift if alternate exists"} />
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} Of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} To {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
                     </div>
                     {needsProducedQty ? (
-                      <Field label="Produced qty">
+                      <Field label="Produced Qty">
                         <Input
                           type="number"
                           min="0"
@@ -1937,12 +1937,12 @@ function MachineConstraintPlannerForm({
               })}
             </div>
           ) : (
-            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup rows overlap this unavailable window.</div>
+            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No Planned Setup Rows Overlap This Unavailable Window.</div>
           )}
           <PlannerPreSaveConflictReview
             conflicts={machineConstraintConflicts}
-            title="Conflicting machine action found"
-            description="This machine action cannot be saved while another active unavailable/breakdown decision overlaps the same machine with a different action or queue choice."
+            title="Conflicting Machine Action Found"
+            description="This Machine Action Cannot Be Saved While Another Active Unavailable/Breakdown Decision Overlaps The Same Machine With A Different Action Or Queue Choice."
             onKeepExisting={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}
             onReverseExisting={reverseMachineConstraintConflict}
           />
@@ -1966,7 +1966,7 @@ function MachineConstraintPlannerForm({
                   checked={queueReviewConfirmed}
                   onChange={(event) => setQueueReviewConfirmed(event.target.checked)}
                 />
-                <span>Queue reviewed; save this breakdown and recalculate planning.</span>
+                <span>Queue Reviewed; Save This Breakdown And Recalculate Planning.</span>
               </label>
             </>
           ) : null}
@@ -1975,11 +1975,11 @@ function MachineConstraintPlannerForm({
       <div className="flex flex-wrap gap-2">
         <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && !canSave)}>
           <Wrench className="size-4" />
-          {reviewReady ? queueReviewRequired ? "Save after queue review" : "Save and replan remaining qty" : "Review affected queue"}
+          {reviewReady ? queueReviewRequired ? "Save After Queue Review" : "Save And Replan Remaining Qty" : "Review Affected Queue"}
         </Button>
         {reviewReady ? (
           <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
-            Recheck inputs
+            Recheck Inputs
           </Button>
         ) : null}
       </div>
@@ -2168,11 +2168,11 @@ function PartMachineSwitchPlannerForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
       <div>
-        <div className="text-sm font-medium">3. Part-specific machine switch</div>
-        <div className="text-xs text-muted-foreground">Move only the selected part/setup to another machine after reviewing that target queue and downstream WIP queues.</div>
+        <div className="text-sm font-medium">3. Part-Specific Machine Switch</div>
+        <div className="text-xs text-muted-foreground">Move Only The Selected Part/Setup To Another Machine After Reviewing That Target Queue And Downstream Wip Queues.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-6">
-        <Field label="Item code">
+        <Field label="Item Code">
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={selectedItem}
@@ -2185,13 +2185,13 @@ function PartMachineSwitchPlannerForm({
               setToMachine("");
             }}
           >
-            <option value="">Select item</option>
+            <option value="">Select Item</option>
             {itemOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
         </Field>
-        <Field label="Job card">
+        <Field label="Job Card">
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={target}
@@ -2203,13 +2203,13 @@ function PartMachineSwitchPlannerForm({
               setToMachine("");
             }}
           >
-            <option value="">Select job card</option>
+            <option value="">Select Job Card</option>
             {jobCardOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
         </Field>
-        <Field label="Setup no.">
+        <Field label="Setup No.">
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={setupNo}
@@ -2220,13 +2220,13 @@ function PartMachineSwitchPlannerForm({
               setToMachine("");
             }}
           >
-            <option value="">Select setup</option>
+            <option value="">Select Setup</option>
             {setupOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
         </Field>
-        <Field label="From machine">
+        <Field label="From Machine">
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={fromMachine}
@@ -2236,36 +2236,36 @@ function PartMachineSwitchPlannerForm({
               setToMachine("");
             }}
           >
-            <option value="">Select source machine</option>
+            <option value="">Select Source Machine</option>
             {fromMachineOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
         </Field>
-        <Field label="Plan on machine">
+        <Field label="Plan On Machine">
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={toMachine}
             required
             onChange={(event) => updateField(setToMachine, event.target.value)}
           >
-            <option value="">Select target machine</option>
+            <option value="">Select Target Machine</option>
             {targetMachineOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
         </Field>
         <Field label="Reason">
-          <Input value={reason} placeholder="Planner approved machine switch" required onChange={(event) => setReason(event.target.value)} />
+          <Input value={reason} placeholder="Planner Approved Machine Switch" required onChange={(event) => setReason(event.target.value)} />
         </Field>
       </div>
       {reviewReady ? (
         <div className="grid gap-2 rounded-md border bg-muted/15 p-3">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{formatNumber(selectedRows.length)} selected setup rows</span>
-            <span>{displayValue(fromMachine)} to {displayValue(toMachine)}</span>
-            <span>{formatNumber(runningRows.length)} source running quantity inputs</span>
-            <span>{formatNumber(targetInterruptionRows.length)} target running blockers</span>
+            <span>{formatNumber(selectedRows.length)} Selected Setup Rows</span>
+            <span>{displayValue(fromMachine)} To {displayValue(toMachine)}</span>
+            <span>{formatNumber(runningRows.length)} Source Running Quantity Inputs</span>
+            <span>{formatNumber(targetInterruptionRows.length)} Target Running Blockers</span>
           </div>
           {selectedRows.length ? (
             <div className="grid max-h-56 gap-2 overflow-y-auto pr-1">
@@ -2280,10 +2280,10 @@ function PartMachineSwitchPlannerForm({
                       <StatusBadge value={needsProducedQty ? "Produced qty required" : "Selected setup"} />
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} Of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} To {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
                     </div>
                     {needsProducedQty ? (
-                      <Field label="Produced qty">
+                      <Field label="Produced Qty">
                         <Input
                           type="number"
                           min="0"
@@ -2301,13 +2301,13 @@ function PartMachineSwitchPlannerForm({
               })}
             </div>
           ) : (
-            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup row matches this job card/part, setup number, and source machine.</div>
+            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No Planned Setup Row Matches This Job Card/Part, Setup Number, And Source Machine.</div>
           )}
           {targetInterruptionRows.length ? (
             <div className="grid gap-2 rounded-md border bg-background p-3">
               <div>
-                <div className="text-sm font-medium">Target machine running setup</div>
-                <div className="text-xs text-muted-foreground">Choose whether to stop the running setup on the target machine before saving this switch.</div>
+                <div className="text-sm font-medium">Target Machine Running Setup</div>
+                <div className="text-xs text-muted-foreground">Choose Whether To Stop The Running Setup On The Target Machine Before Saving This Switch.</div>
               </div>
               {targetInterruptionRows.map((row) => {
                 const rowKey = machineIssueRowKey(row);
@@ -2317,7 +2317,7 @@ function PartMachineSwitchPlannerForm({
                   <div key={rowKey} className="grid gap-2 rounded-md border bg-muted/10 p-2 md:grid-cols-[1fr_auto] md:items-end">
                     <div>
                       <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-                      <div className="text-xs text-muted-foreground">{machineValue(row, "machine")} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}</div>
+                      <div className="text-xs text-muted-foreground">{machineValue(row, "machine")} | Production {displayValue(row.plannedProductionStartDate)} To {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}</div>
                     </div>
                     <div className="flex flex-wrap items-end gap-2">
                       <Button
@@ -2325,10 +2325,10 @@ function PartMachineSwitchPlannerForm({
                         variant={selected ? "default" : "outline"}
                         onClick={() => setSelectedTargetInterruptions((current) => ({ ...current, [rowKey]: !selected }))}
                       >
-                        {selected ? "Stop selected" : "Do not stop / click to stop"}
+                        {selected ? "Stop Selected" : "Do Not Stop / Click To Stop"}
                       </Button>
                       {selected ? (
-                        <Field label="Produced qty">
+                        <Field label="Produced Qty">
                           <Input
                             className="w-28"
                             type="number"
@@ -2359,13 +2359,13 @@ function PartMachineSwitchPlannerForm({
             })}
           />
           {missingTargetFinishedQty ? (
-            <div className="text-xs text-destructive">Enter produced quantity for every target running setup selected to stop.</div>
+            <div className="text-xs text-destructive">Enter Produced Quantity For Every Target Running Setup Selected To Stop.</div>
           ) : null}
           {switchConflicts.length ? (
             <div className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
               <div>
-                <div className="text-sm font-medium text-destructive">Conflicting planner action found</div>
-                <div className="text-xs text-muted-foreground">This switch cannot be saved while another active switch exists for the same setup with a different target or queue position.</div>
+                <div className="text-sm font-medium text-destructive">Conflicting Planner Action Found</div>
+                <div className="text-xs text-muted-foreground">This Switch Cannot Be Saved While Another Active Switch Exists For The Same Setup With A Different Target Or Queue Position.</div>
               </div>
               {switchConflicts.map((conflict, index) => (
                 <div key={`${displayValue(conflict.targetId)}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-2">
@@ -2375,11 +2375,11 @@ function PartMachineSwitchPlannerForm({
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" size="sm" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
-                      Keep existing
+                      Keep Existing
                     </Button>
                     <Button type="button" size="sm" variant="outline" disabled={isSubmitting} onClick={() => void reverseSwitchConflict(conflict)}>
                       <Undo2 className="size-4" />
-                      Reverse existing
+                      Reverse Existing
                     </Button>
                   </div>
                 </div>
@@ -2393,18 +2393,18 @@ function PartMachineSwitchPlannerForm({
               checked={queueReviewConfirmed}
               onChange={(event) => setQueueReviewConfirmed(event.target.checked)}
             />
-            <span>Queue reviewed; save this part-specific machine switch and recalculate planning.</span>
+            <span>Queue Reviewed; Save This Part-Specific Machine Switch And Recalculate Planning.</span>
           </label>
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && !canSave)}>
           <Route className="size-4" />
-          {reviewReady ? "Save machine switch" : "Review switch queue"}
+          {reviewReady ? "Save Machine Switch" : "Review Switch Queue"}
         </Button>
         {reviewReady ? (
           <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
-            Recheck inputs
+            Recheck Inputs
           </Button>
         ) : null}
       </div>
@@ -2430,8 +2430,8 @@ function MachineConstraintQueueReviewPanel({
     <div className="grid gap-2 rounded-md border border-dashed bg-background p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-medium">Replanned queue review</div>
-          {canPlaceTiles ? <div className="text-xs text-muted-foreground">Drag each affected setup tile to the planned position before saving.</div> : null}
+          <div className="text-sm font-medium">Replanned Queue Review</div>
+          {canPlaceTiles ? <div className="text-xs text-muted-foreground">Drag Each Affected Setup Tile To The Planned Position Before Saving.</div> : null}
         </div>
         <StatusBadge value={`${formatNumber(groups.length)} queue groups`} />
       </div>
@@ -2459,7 +2459,7 @@ function MachineConstraintQueueReviewPanel({
           ))}
         </div>
       ) : (
-        <div className="rounded-md border border-dashed bg-background p-2 text-sm text-muted-foreground">No destination or downstream queues were identified from the current plan.</div>
+        <div className="rounded-md border border-dashed bg-background p-2 text-sm text-muted-foreground">No Destination Or Downstream Queues Were Identified From The Current Plan.</div>
       )}
     </div>
   );
@@ -2649,7 +2649,7 @@ function MachineConstraintMoveTile({
       <GripVertical className="size-4 text-primary" aria-hidden="true" />
       <div>
         <div className="text-sm font-semibold">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-        <div className="text-xs text-muted-foreground">Move remaining/planned quantity to {targetMachine} | Current {machineValue(row, "machine")} | Preview {displayValue(previewWindow?.startDate || row.plannedProductionStartDate)} to {displayValue(previewWindow?.endDate || row.plannedProductionEndDate)}</div>
+        <div className="text-xs text-muted-foreground">Move Remaining/Planned Quantity To {targetMachine} | Current {machineValue(row, "machine")} | Preview {displayValue(previewWindow?.startDate || row.plannedProductionStartDate)} To {displayValue(previewWindow?.endDate || row.plannedProductionEndDate)}</div>
       </div>
       <Badge>Move</Badge>
     </div>
@@ -2661,7 +2661,7 @@ function MachineConstraintQueueRowTile({ row }: { row: DashboardPayload }) {
     <div className="grid gap-1 rounded border bg-background px-2 py-1">
       <div className="text-xs font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
       <div className="text-xs text-muted-foreground">
-        {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+        {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} Of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} To {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
       </div>
     </div>
   );
@@ -2715,14 +2715,14 @@ function PlannerActionConflictPanel({
   return (
     <div className="grid gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
       <div>
-        <div className="text-sm font-semibold text-destructive">Planner action conflicts</div>
-        <div className="text-xs text-muted-foreground">Choose which active planner decision should remain. Other conflicting switch rows will be reversed with history preserved.</div>
+        <div className="text-sm font-semibold text-destructive">Planner Action Conflicts</div>
+        <div className="text-xs text-muted-foreground">Choose Which Active Planner Decision Should Remain. Other Conflicting Switch Rows Will Be Reversed With History Preserved.</div>
       </div>
       {conflicts.map((conflict, index) => (
         <div key={`${displayValue(conflict.jcNo)}-${displayValue(conflict.setupNo)}-${index}`} className="grid gap-2 rounded-md border bg-background p-3">
           <div className="text-sm font-medium">{displayValue(conflict.message)}</div>
           <div className="text-xs text-muted-foreground">
-            {displayValue(conflict.partCode)} / {displayValue(conflict.jcNo)} / setup {displayValue(conflict.setupNo)}
+            {displayValue(conflict.partCode)} / {displayValue(conflict.jcNo)} / Setup {displayValue(conflict.setupNo)}
           </div>
           <div className="flex flex-wrap gap-2">
             {asArray(conflict.choices).map((choice, choiceIndex) => {
@@ -2767,10 +2767,10 @@ function PlannerPreSaveConflictReview({
             <div className="text-xs text-muted-foreground">{displayValue(conflict.targetKey)} | {displayValue(conflict.createdAt)}</div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={onKeepExisting}>Keep existing</Button>
+            <Button type="button" size="sm" variant="outline" onClick={onKeepExisting}>Keep Existing</Button>
             <Button type="button" size="sm" variant="outline" onClick={() => void onReverseExisting(conflict)}>
               <Undo2 className="size-4" />
-              Reverse existing
+              Reverse Existing
             </Button>
           </div>
         </div>
@@ -2919,11 +2919,11 @@ function PlannerPriorityForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
       <div>
-        <div className="text-sm font-medium">1. Priority change</div>
-        <div className="text-xs text-muted-foreground">Review the setup-wise machine impact before applying a priority change.</div>
+        <div className="text-sm font-medium">1. Priority Change</div>
+        <div className="text-xs text-muted-foreground">Review The Setup-Wise Machine Impact Before Applying A Priority Change.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
-        <Field label="Item code">
+        <Field label="Item Code">
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={partCode}
@@ -2934,13 +2934,13 @@ function PlannerPriorityForm({
               resetPlanReview();
             }}
           >
-            <option value="">Select item</option>
+            <option value="">Select Item</option>
             {itemOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
         </Field>
-        <Field label="JC number">
+        <Field label="Jc Number">
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={jcNo}
@@ -2949,7 +2949,7 @@ function PlannerPriorityForm({
               resetPlanReview();
             }}
           >
-            <option value="">All JCs for item</option>
+            <option value="">All Jcs For Item</option>
             {jobCardOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
@@ -2970,7 +2970,7 @@ function PlannerPriorityForm({
           </select>
         </Field>
         <Field label="Reason">
-          <Input value={remark} placeholder="Customer urgent / dispatch commitment" onChange={(event) => setRemark(event.target.value)} />
+          <Input value={remark} placeholder="Customer Urgent / Dispatch Commitment" onChange={(event) => setRemark(event.target.value)} />
         </Field>
       </div>
 
@@ -2978,20 +2978,20 @@ function PlannerPriorityForm({
         <div className="grid gap-3 rounded-lg border bg-muted/20 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <div className="text-sm font-medium">Probable priority plan</div>
-              <div className="text-xs text-muted-foreground">{priorityPlan.steps.length} target setup{priorityPlan.steps.length === 1 ? "" : "s"} checked from the current machine queue.</div>
-              <div className="text-xs text-muted-foreground">Confirm each setup in sequence. Later setup dates open only after the previous setup action is confirmed.</div>
+              <div className="text-sm font-medium">Probable Priority Plan</div>
+              <div className="text-xs text-muted-foreground">{priorityPlan.steps.length} Target Setup{priorityPlan.steps.length === 1 ? "" : "s"} Checked From The Current Machine Queue.</div>
+              <div className="text-xs text-muted-foreground">Confirm Each Setup In Sequence. Later Setup Dates Open Only After The Previous Setup Action Is Confirmed.</div>
             </div>
-            <Button type="button" variant="outline" onClick={resetPlanReview}>Recheck inputs</Button>
+            <Button type="button" variant="outline" onClick={resetPlanReview}>Recheck Inputs</Button>
           </div>
           {itemPlanWindow ? (
             <div className="grid gap-1 rounded-md border bg-background p-3">
-              <div className="text-xs font-medium text-muted-foreground">Complete item plan</div>
-              <div className="text-sm font-semibold">{itemPlanWindow.startDate || "-"} to {itemPlanWindow.endDate || "-"}</div>
+              <div className="text-xs font-medium text-muted-foreground">Complete Item Plan</div>
+              <div className="text-sm font-semibold">{itemPlanWindow.startDate || "-"} To {itemPlanWindow.endDate || "-"}</div>
             </div>
           ) : (
             <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
-              Complete item dates will appear after all setup actions are confirmed.
+              Complete Item Dates Will Appear After All Setup Actions Are Confirmed.
             </div>
           )}
           {priorityPlan.steps.length ? (
@@ -3028,15 +3028,15 @@ function PlannerPriorityForm({
               </div>
             </>
           ) : (
-            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">No planned setup was found for this item / JC in the current machine plan.</div>
+            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">No Planned Setup Was Found For This Item / Jc In The Current Machine Plan.</div>
           )}
           {hasSelectedRunningWithoutQty ? (
-            <div className="text-xs text-destructive">Enter finished quantity for every running setup selected to stop.</div>
+            <div className="text-xs text-destructive">Enter Finished Quantity For Every Running Setup Selected To Stop.</div>
           ) : null}
           <PlannerPreSaveConflictReview
             conflicts={priorityConflicts}
-            title="Conflicting priority action found"
-            description="This priority cannot be applied while another active priority decision exists for the same item or job card with different priority or queue choices."
+            title="Conflicting Priority Action Found"
+            description="This Priority Cannot Be Applied While Another Active Priority Decision Exists For The Same Item Or Job Card With Different Priority Or Queue Choices."
             onKeepExisting={resetPlanReview}
             onReverseExisting={reversePriorityConflict}
           />
@@ -3045,7 +3045,7 @@ function PlannerPriorityForm({
 
       <Button className="w-fit" type="submit" disabled={planReady && (priorityPlan.steps.length === 0 || hasSelectedRunningWithoutQty || !allStepsConfirmed || priorityConflicts.length > 0)}>
         <Wrench className="size-4" />
-        {planReady ? "Apply confirmed priority" : "Show probable plan"}
+        {planReady ? "Apply Confirmed Priority" : "Show Probable Plan"}
       </Button>
     </form>
   );
@@ -3064,7 +3064,7 @@ function PrioritySetupPreviewSummary({
 }) {
   return (
     <div className="grid gap-2 rounded-md border bg-background p-3">
-      <div className="text-xs font-medium text-muted-foreground">Probable setup dates</div>
+      <div className="text-xs font-medium text-muted-foreground">Probable Setup Dates</div>
       <div className="grid gap-2 md:grid-cols-3">
         {steps.map((step) => {
           const window = windows.get(step.key) ?? { startDate: step.startDate, endDate: step.endDate };
@@ -3079,7 +3079,7 @@ function PrioritySetupPreviewSummary({
                 <div className="text-sm font-medium">Setup {step.setupNo}</div>
                 <Badge variant={confirmedSteps[step.key] ? "outline" : "secondary"}>{stateLabel}</Badge>
               </div>
-              <div className="text-sm font-semibold">{window.startDate || "-"} to {window.endDate || "-"}</div>
+              <div className="text-sm font-semibold">{window.startDate || "-"} To {window.endDate || "-"}</div>
               <div className="text-xs text-muted-foreground">{step.machine} - {step.itemCode} / {step.jcNo}</div>
             </div>
           );
@@ -3157,7 +3157,7 @@ function PriorityPlanStepReview({
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          <Badge variant={step.blockers.length ? "secondary" : "outline"}>{step.blockers.length ? step.blockers.length + " queue impact" : "No stop needed"}</Badge>
+          <Badge variant={step.blockers.length ? "secondary" : "outline"}>{step.blockers.length ? step.blockers.length + " queue impact" : "No Stop Needed"}</Badge>
           {state === "confirmed" ? <Badge variant="outline">Confirmed</Badge> : null}
           {state === "locked" ? <Badge variant="outline">Locked</Badge> : null}
         </div>
@@ -3165,26 +3165,26 @@ function PriorityPlanStepReview({
 
       {state === "locked" ? (
         <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
-          Confirm {previousSetupLabel || "the previous setup"} before planning this setup.
+          Confirm {previousSetupLabel || "the previous setup"} Before Planning This Setup.
         </div>
       ) : null}
 
       {state === "confirmed" ? (
         <div className="grid gap-2">
           <PriorityScenarioCard
-            title="Confirmed setup plan"
+            title="Confirmed Setup Plan"
             window={plannedWindow}
             detail={planMode}
           />
           <Button type="button" variant="outline" size="sm" className="w-fit" onClick={onEdit}>
-            Edit setup action
+            Edit Setup Action
           </Button>
         </div>
       ) : null}
 
       {state === "active" ? (
         <PriorityScenarioCard
-          title="Probable setup plan"
+          title="Probable Setup Plan"
           window={plannedWindow}
           detail={planMode || "No queue impact"}
         />
@@ -3207,7 +3207,7 @@ function PriorityPlanStepReview({
               <div key={blocker.key} className="grid gap-2 rounded-md border p-2 md:grid-cols-[1fr_auto] md:items-center">
                 <div>
                   <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
-                  <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} to {blocker.endDate} - {blocker.label}</div>
+                  <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} To {blocker.endDate} - {blocker.label}</div>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
                   <Button
@@ -3215,10 +3215,10 @@ function PriorityPlanStepReview({
                     variant={selected ? "default" : "outline"}
                     onClick={() => setSelectedInterruptions((current) => ({ ...current, [blocker.key]: !selected }))}
                   >
-                    {blocker.state === "running" ? (selected ? "Stop selected" : "Stop this setup") : (selected ? "Move approved" : "Approve queue move")}
+                    {blocker.state === "running" ? (selected ? "Stop Selected" : "Stop This Setup") : (selected ? "Move Approved" : "Approve Queue Move")}
                   </Button>
                   {selected && blocker.state === "running" ? (
-                    <Field label="Finished qty">
+                    <Field label="Finished Qty">
                       <Input
                         className="w-28"
                         min="0"
@@ -3238,16 +3238,16 @@ function PriorityPlanStepReview({
       ) : null}
 
       {state === "active" && selectedRunningWithoutQty ? (
-        <div className="text-xs text-destructive">Enter finished quantity for every running setup selected to stop.</div>
+        <div className="text-xs text-destructive">Enter Finished Quantity For Every Running Setup Selected To Stop.</div>
       ) : null}
 
       {state === "active" ? (
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" onClick={onConfirm} disabled={selectedRunningWithoutQty}>
-            Confirm setup action
+            Confirm Setup Action
           </Button>
           <span className="text-xs text-muted-foreground">
-            {runningBlockerCount ? "Leaving running blockers unselected keeps them running." : "No running setup blocks this target."}
+            {runningBlockerCount ? "Leaving Running Blockers Unselected Keeps Them Running." : "No Running Setup Blocks This Target."}
           </span>
         </div>
       ) : null}
@@ -3300,8 +3300,8 @@ function PriorityQueuePlacementBoard({
     <div className="grid gap-2 rounded-md border bg-muted/20 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-xs font-medium text-muted-foreground">{step.machine} queue placement</div>
-          <div className="text-sm font-semibold">{plannedWindow.startDate || "-"} to {plannedWindow.endDate || "-"}</div>
+          <div className="text-xs font-medium text-muted-foreground">{step.machine} Queue Placement</div>
+          <div className="text-sm font-semibold">{plannedWindow.startDate || "-"} To {plannedWindow.endDate || "-"}</div>
         </div>
         <Badge variant="secondary">{placementIndex === 0 ? "Position 1" : `After ${placementIndex} setup${placementIndex === 1 ? "" : "s"}`}</Badge>
       </div>
@@ -3400,7 +3400,7 @@ function PriorityQueuePriorityTile({
       <GripVertical className="size-4 text-primary" aria-hidden="true" />
       <div>
         <div className="text-sm font-semibold">{step.itemCode} / {step.jcNo} / Setup {step.setupNo}</div>
-        <div className="text-xs text-muted-foreground">{step.machine} - {plannedWindow.startDate || "-"} to {plannedWindow.endDate || "-"}</div>
+        <div className="text-xs text-muted-foreground">{step.machine} - {plannedWindow.startDate || "-"} To {plannedWindow.endDate || "-"}</div>
       </div>
       <Badge>Priority</Badge>
     </div>
@@ -3422,15 +3422,15 @@ function PriorityQueueBlockerTile({
     <div className="grid gap-2 rounded-md border bg-background p-2 md:grid-cols-[1fr_auto] md:items-center">
       <div>
         <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
-        <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} to {blocker.endDate}</div>
+        <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} To {blocker.endDate}</div>
       </div>
       <div className="flex items-center gap-2">
-        <Badge variant={keptAhead ? "secondary" : "outline"}>{keptAhead ? "Ahead of priority" : "After priority"}</Badge>
+        <Badge variant={keptAhead ? "secondary" : "outline"}>{keptAhead ? "Ahead Of Priority" : "After Priority"}</Badge>
         <div className="flex gap-1">
-          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority before ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place priority before this setup" onClick={onPlaceBefore}>
+          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority before ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place Priority Before This Setup" onClick={onPlaceBefore}>
             <ArrowUp className="size-3" />
           </Button>
-          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority after ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place priority after this setup" onClick={onPlaceAfter}>
+          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority after ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place Priority After This Setup" onClick={onPlaceAfter}>
             <ArrowDown className="size-3" />
           </Button>
         </div>
@@ -3462,7 +3462,7 @@ function PriorityScenarioCard({
   return (
     <div className="grid gap-1 rounded-md border bg-muted/20 p-3">
       <div className="text-xs font-medium text-muted-foreground">{title}</div>
-      <div className="text-sm font-semibold">{window.startDate || "-"} to {window.endDate || "-"}</div>
+      <div className="text-sm font-semibold">{window.startDate || "-"} To {window.endDate || "-"}</div>
       <div className="text-xs text-muted-foreground">{detail}</div>
     </div>
   );
@@ -3534,12 +3534,12 @@ function RouteChangePlannerForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
       <div>
-        <div className="text-sm font-medium">4. Mid-route change</div>
-        <div className="text-xs text-muted-foreground">Planner selects the new route option and enters remaining setup quantities.</div>
+        <div className="text-sm font-medium">4. Mid-Route Change</div>
+        <div className="text-xs text-muted-foreground">Planner Selects The New Route Option And Enters Remaining Setup Quantities.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
-        <Field label="Job card / part">
-          <Input list="route-change-targets" value={target} placeholder="JC-003 or M6" required onChange={(event) => setTarget(event.target.value)} />
+        <Field label="Job Card / Part">
+          <Input list="route-change-targets" value={target} placeholder="Jc-003 Or M6" required onChange={(event) => setTarget(event.target.value)} />
           <datalist id="route-change-targets">
             {workOrders.map((row) => (
               <option key={`${str(row.jcNo)}-${str(row.partCode)}`} value={str(row.jcNo)}>
@@ -3548,15 +3548,15 @@ function RouteChangePlannerForm({
             ))}
           </datalist>
         </Field>
-        <Field label="New route option">
+        <Field label="New Route Option">
           <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedOption} required onChange={(event) => setNewOption(event.target.value)}>
             {optionNumbers.length ? optionNumbers.map((option) => (
               <option key={option} value={option}>{option}</option>
-            )) : <option value="">Select job card first</option>}
+            )) : <option value="">Select Job Card First</option>}
           </select>
         </Field>
         <Field label="Reason">
-          <Input value={reason} placeholder="Why route is changing" required onChange={(event) => setReason(event.target.value)} />
+          <Input value={reason} placeholder="Why Route Is Changing" required onChange={(event) => setReason(event.target.value)} />
         </Field>
       </div>
       <div className="overflow-x-auto rounded-md border">
@@ -3566,7 +3566,7 @@ function RouteChangePlannerForm({
               <TableHead>Setup</TableHead>
               <TableHead>Machine</TableHead>
               <TableHead>Plan</TableHead>
-              <TableHead>Qty to plan</TableHead>
+              <TableHead>Qty To Plan</TableHead>
               <TableHead>Remark</TableHead>
             </TableRow>
           </TableHeader>
@@ -3605,14 +3605,14 @@ function RouteChangePlannerForm({
                     />
                   </TableCell>
                   <TableCell>
-                    <Input value={state.remark} placeholder="optional" onChange={(event) => updateSetup(setupNo, { remark: event.target.value })} />
+                    <Input value={state.remark} placeholder="Optional" onChange={(event) => updateSetup(setupNo, { remark: event.target.value })} />
                   </TableCell>
                 </TableRow>
               );
             }) : (
               <TableRow>
                 <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
-                  Select a job card and route option to load setups.
+                  Select A Job Card And Route Option To Load Setups.
                 </TableCell>
               </TableRow>
             )}
@@ -3621,7 +3621,7 @@ function RouteChangePlannerForm({
       </div>
       <Button className="w-fit" type="submit" disabled={!target || !selectedOption || !selectedSetups.length}>
         <Route className="size-4" />
-        Save route change plan
+        Save Route Change Plan
       </Button>
     </form>
   );
@@ -3647,30 +3647,30 @@ function JobCardsPanel({
       />
       <Card>
         <CardHeader>
-          <CardTitle>Job card actions</CardTitle>
-          <CardDescription>Setup completion and dispatch approval actions.</CardDescription>
+          <CardTitle>Job Card Actions</CardTitle>
+          <CardDescription>Setup Completion And Dispatch Approval Actions.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 @5xl/main:grid-cols-2">
           <LegacyActionForm
-            title="Mark setup complete"
-            description="Equivalent to the legacy running job-card completion action."
+            title="Mark Setup Complete"
+            description="Equivalent To The Legacy Running Job-Card Completion Action."
             fields={[
-              { name: "jcNo", label: "Job card", placeholder: "JC-1001", required: true },
-              { name: "setupNo", label: "Setup no.", placeholder: "10" },
+              { name: "jcNo", label: "Job Card", placeholder: "JC-1001", required: true },
+              { name: "setupNo", label: "Setup No.", placeholder: "10" },
               { name: "machine", label: "Machine", placeholder: "CNC-01" },
-              { name: "completedBy", label: "Completed by", placeholder: "Name or code", required: true },
-              { name: "remark", label: "Completion remark", placeholder: "Optional" },
+              { name: "completedBy", label: "Completed By", placeholder: "Name or code", required: true },
+              { name: "remark", label: "Completion Remark", placeholder: "Optional" },
             ]}
             buttonLabel="Mark complete"
             onSubmit={(body) => submitAction("mark-complete", body)}
           />
           <LegacyActionForm
-            title="Dispatch approval"
-            description="Only completed job cards should be approved for dispatch."
+            title="Dispatch Approval"
+            description="Only Completed Job Cards Should Be Approved For Dispatch."
             fields={[
-              { name: "jcNo", label: "Job card", placeholder: "JC-1001", required: true },
-              { name: "approvedBy", label: "Approved by", placeholder: "Name or code", required: true },
-              { name: "remark", label: "Dispatch remark", placeholder: "Optional" },
+              { name: "jcNo", label: "Job Card", placeholder: "JC-1001", required: true },
+              { name: "approvedBy", label: "Approved By", placeholder: "Name or code", required: true },
+              { name: "remark", label: "Dispatch Remark", placeholder: "Optional" },
             ]}
             buttonLabel="Approve dispatch"
             onSubmit={(body) => submitAction("dispatch-approval", body)}
@@ -3693,7 +3693,7 @@ function MachineDetailPanel({
         plannedRows={asArray(productionControl.machinePlanDetailRows)}
       />
       <section className="grid gap-4">
-        <DataRowsCard title="Machine unavailable / breakdown" rows={asArray(productionControl.machineConstraintRows)} empty="No machine issues saved yet" />
+        <DataRowsCard title="Machine Unavailable / Breakdown" rows={asArray(productionControl.machineConstraintRows)} empty="No machine issues saved yet" />
       </section>
     </>
   );
@@ -3708,11 +3708,11 @@ type ShopFloorStageId =
   | "item_complete";
 
 const shopFloorStages: Array<{ id: ShopFloorStageId; label: string; role: string; button: string }> = [
-  { id: "raw_material_at_machine", label: "Raw material at the machine", role: "Shop floor", button: "RM at machine" },
-  { id: "presetting", label: "Pre setting started", role: "Assistant machinist", button: "Start pre setting" },
-  { id: "setting", label: "Setting done", role: "Assistant machinist", button: "Setting done" },
-  { id: "quality_approval", label: "Quality approval", role: "Quality", button: "Quality approved" },
-  { id: "operator_started", label: "Operator assigned and machine started", role: "Machinist", button: "Start machine" },
+  { id: "raw_material_at_machine", label: "Raw Material At The Machine", role: "Shop floor", button: "RM at machine" },
+  { id: "presetting", label: "Pre Setting Started", role: "Assistant machinist", button: "Start pre setting" },
+  { id: "setting", label: "Setting Done", role: "Assistant machinist", button: "Setting done" },
+  { id: "quality_approval", label: "Quality Approval", role: "Quality", button: "Quality approved" },
+  { id: "operator_started", label: "Operator Assigned And Machine Started", role: "Machinist", button: "Start machine" },
 ];
 
 type RoleTaskKind = "shopFloor" | "machinist" | "quality";
@@ -3720,17 +3720,17 @@ type RoleTaskKind = "shopFloor" | "machinist" | "quality";
 const roleTaskCopy: Record<RoleTaskKind, { title: string; description: string; empty: string }> = {
   shopFloor: {
     title: "Shop Floor Tasks",
-    description: "Items waiting for raw material to be placed at the planned machine.",
+    description: "Items Waiting For Raw Material To Be Placed At The Planned Machine.",
     empty: "No raw-material placement tasks are pending.",
   },
   machinist: {
     title: "Machinist Tasks",
-    description: "Items waiting for pre setting, setting, or operator assignment after quality approval.",
+    description: "Items Waiting For Pre Setting, Setting, Or Operator Assignment After Quality Approval.",
     empty: "No machinist tasks are pending.",
   },
   quality: {
     title: "Quality Control Tasks",
-    description: "Items waiting for quality approval after setting is complete.",
+    description: "Items Waiting For Quality Approval After Setting Is Complete.",
     empty: "No quality approval tasks are pending.",
   },
 };
@@ -3819,7 +3819,7 @@ function ShopFloorStatusPanel({
     <Card>
       <CardHeader>
         <CardTitle>Shop Floor Status</CardTitle>
-        <CardDescription>Machine-wise current item and next planned setup for floor teams.</CardDescription>
+        <CardDescription>Machine-Wise Current Item And Next Planned Setup For Floor Teams.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
@@ -3834,7 +3834,7 @@ function ShopFloorStatusPanel({
           filters={[
             {
               id: "shop-floor-status-machine",
-              label: "Machine no.",
+              label: "Machine No.",
               value: machineFilter,
               placeholder: "Type or select machine",
               options: machineOptions,
@@ -3842,7 +3842,7 @@ function ShopFloorStatusPanel({
             },
             {
               id: "shop-floor-status-location",
-              label: "Master location",
+              label: "Master Location",
               value: locationFilter,
               placeholder: "Type or select master location",
               options: locationOptions,
@@ -3850,7 +3850,7 @@ function ShopFloorStatusPanel({
             },
             {
               id: "shop-floor-status-current",
-              label: "Current item",
+              label: "Current Item",
               value: currentFilter,
               placeholder: "Type or select current item",
               options: currentOptions,
@@ -3858,7 +3858,7 @@ function ShopFloorStatusPanel({
             },
             {
               id: "shop-floor-status-next",
-              label: "Next item",
+              label: "Next Item",
               value: nextFilter,
               placeholder: "Type or select next item",
               options: nextOptions,
@@ -3879,11 +3879,11 @@ function ShopFloorStatusPanel({
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
-                  <TableHead className="min-w-32">Machine no.</TableHead>
-                  <TableHead className="min-w-36">Master location</TableHead>
-                  <TableHead className="min-w-64">Current item running</TableHead>
-                  <TableHead className="min-w-64">Next item planned</TableHead>
-                  <TableHead className="min-w-80">Status / action</TableHead>
+                  <TableHead className="min-w-32">Machine No.</TableHead>
+                  <TableHead className="min-w-36">Master Location</TableHead>
+                  <TableHead className="min-w-64">Current Item Running</TableHead>
+                  <TableHead className="min-w-64">Next Item Planned</TableHead>
+                  <TableHead className="min-w-80">Status / Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -3898,14 +3898,14 @@ function ShopFloorStatusPanel({
                       {row.current ? (
                         <ShopFloorItemSummary row={row.current} tone="current" productionCardRows={productionCardRows} />
                       ) : (
-                        <EmptyShopFloorSlot label={row.next ? "Setup required" : "No running item"} compact />
+                        <EmptyShopFloorSlot label={row.next ? "Setup Required" : "No Running Item"} compact />
                       )}
                     </TableCell>
                     <TableCell className="align-middle">
                       {row.next ? (
                         <ShopFloorItemSummary row={row.next} tone="next" />
                       ) : (
-                        <EmptyShopFloorSlot label="No next plan" compact />
+                        <EmptyShopFloorSlot label="No Next Plan" compact />
                       )}
                     </TableCell>
                     <TableCell className="align-middle">
@@ -3924,7 +3924,7 @@ function ShopFloorStatusPanel({
             </Table>
           </div>
         ) : (
-          <EmptyRowsMessage>No machines match the current filter</EmptyRowsMessage>
+          <EmptyRowsMessage>No Machines Match The Current Filter</EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
@@ -3953,7 +3953,7 @@ function RoleTaskPanel({
   const copy = enableFirstPieceInspection
     ? {
         title: "First Piece Inspection",
-        description: "Quality approval tasks that require a first-piece inspection report with five piece readings.",
+        description: "Quality Approval Tasks That Require A First-Piece Inspection Report With Five Piece Readings.",
         empty: "No first-piece inspection tasks are pending.",
       }
     : roleTaskCopy[role];
@@ -4073,7 +4073,7 @@ function RoleTaskPanel({
                 window.location.assign(`/dashboard/hourly-quality-check?${params.toString()}`);
               }}>
                 <Gauge className="size-4" />
-                Hourly quality check
+                Hourly Quality Check
               </Button>
             </div>
           ) : null}
@@ -4098,7 +4098,7 @@ function RoleTaskPanel({
             filters={[
               {
                 id: `${role}-machine`,
-                label: "Machine no.",
+                label: "Machine No.",
                 value: machineFilter,
                 placeholder: "Type or select machine",
                 options: machineOptions,
@@ -4106,7 +4106,7 @@ function RoleTaskPanel({
               },
               {
                 id: `${role}-location`,
-                label: "Master location",
+                label: "Master Location",
                 value: locationFilter,
                 placeholder: "Type or select master location",
                 options: locationOptions,
@@ -4114,7 +4114,7 @@ function RoleTaskPanel({
               },
               {
                 id: `${role}-item`,
-                label: "Item setup",
+                label: "Item Setup",
                 value: itemFilter,
                 placeholder: "Type or select setup",
                 options: itemOptions,
@@ -4135,10 +4135,10 @@ function RoleTaskPanel({
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
-                    <TableHead className="min-w-32">Machine no.</TableHead>
-                    <TableHead className="min-w-36">Master location</TableHead>
-                    <TableHead className="min-w-72">Item setup</TableHead>
-                    <TableHead className="min-w-52">Pending task</TableHead>
+                    <TableHead className="min-w-32">Machine No.</TableHead>
+                    <TableHead className="min-w-36">Master Location</TableHead>
+                    <TableHead className="min-w-72">Item Setup</TableHead>
+                    <TableHead className="min-w-52">Pending Task</TableHead>
                     <TableHead className="min-w-80">Entry</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -4160,7 +4160,7 @@ function RoleTaskPanel({
                         {role === "quality" && onStartFirstPieceInspection ? (
                           <Button type="button" size="sm" onClick={() => onStartFirstPieceInspection(row.next)}>
                             <CheckCircle2 className="size-4" />
-                            Start quality approval
+                            Start Quality Approval
                           </Button>
                         ) : (
                           <ShopFloorRowAction
@@ -4187,8 +4187,8 @@ function RoleTaskPanel({
       </Card>
       {enableFirstPieceInspection ? (
         <>
-          <DataRowsCard title="First piece inspection reports" rows={asArray(productionControl.firstPieceInspectionReportRows)} empty="No first-piece reports saved yet" />
-          <DataRowsCard title="Quality inspection parameter master" rows={combinedQualityInspectionMasterRows(productionControl)} empty="No quality inspection parameters saved yet" />
+          <DataRowsCard title="First Piece Inspection Reports" rows={asArray(productionControl.firstPieceInspectionReportRows)} empty="No first-piece reports saved yet" />
+          <DataRowsCard title="Quality Inspection Parameter Master" rows={combinedQualityInspectionMasterRows(productionControl)} empty="No quality inspection parameters saved yet" />
         </>
       ) : null}
     </section>
@@ -4262,7 +4262,7 @@ function FirstPieceInspectionPanel({
   return (
     <section className="grid gap-4">
       <div
-        aria-label="First piece inspection views"
+        aria-label="First Piece Inspection Views"
         className="flex w-fit items-center gap-1 rounded-xl border bg-muted/40 p-1"
         role="tablist"
       >
@@ -4277,7 +4277,7 @@ function FirstPieceInspectionPanel({
           variant={activeView === "tasks" ? "default" : "ghost"}
         >
           <ListChecks className="size-4" />
-          Task list
+          Task List
           <Badge variant="secondary">{tasks.length}</Badge>
         </Button>
         <Button
@@ -4291,7 +4291,7 @@ function FirstPieceInspectionPanel({
           variant={activeView === "reports" ? "default" : "ghost"}
         >
           <FileText className="size-4" />
-          Saved reports
+          Saved Reports
           <Badge variant="secondary">{reportRows.length}</Badge>
         </Button>
       </div>
@@ -4299,9 +4299,9 @@ function FirstPieceInspectionPanel({
       {activeView === "tasks" ? (
         <Card aria-labelledby="first-piece-task-list-title" id="first-piece-task-list" role="tabpanel">
           <CardHeader>
-            <CardTitle id="first-piece-task-list-title">First piece inspection task list</CardTitle>
+            <CardTitle id="first-piece-task-list-title">First Piece Inspection Task List</CardTitle>
             <CardDescription>
-              Open reports stay on this page until they are submitted. Partially completed readings are saved automatically in this browser.
+              Open Reports Stay On This Page Until They Are Submitted. Partially Completed Readings Are Saved Automatically In This Browser.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -4312,11 +4312,11 @@ function FirstPieceInspectionPanel({
                     <TableRow>
                       <TableHead className="w-12"></TableHead>
                       <TableHead>Item</TableHead>
-                      <TableHead>Job card</TableHead>
+                      <TableHead>Job Card</TableHead>
                       <TableHead>Machine</TableHead>
                       <TableHead>Setup</TableHead>
                       <TableHead>Option</TableHead>
-                      <TableHead>Task assigned</TableHead>
+                      <TableHead>Task Assigned</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -4327,7 +4327,7 @@ function FirstPieceInspectionPanel({
                         <Fragment key={taskKey}>
                           <TableRow className="cursor-pointer" onClick={() => setExpandedTaskKey(expanded ? "" : taskKey)}>
                             <TableCell>
-                              <Button type="button" variant="ghost" size="sm" className="size-8 p-0" aria-label={expanded ? "Collapse report" : "Expand report"}>
+                              <Button type="button" variant="ghost" size="sm" className="size-8 p-0" aria-label={expanded ? "Collapse Report" : "Expand Report"}>
                                 {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                               </Button>
                             </TableCell>
@@ -4358,13 +4358,13 @@ function FirstPieceInspectionPanel({
                 </Table>
               </div>
             ) : (
-              <EmptyRowsMessage>Start a quality approval task from the Quality Control tab to open its first-piece report here.</EmptyRowsMessage>
+              <EmptyRowsMessage>Start A Quality Approval Task From The Quality Control Tab To Open Its First-Piece Report Here.</EmptyRowsMessage>
             )}
           </CardContent>
         </Card>
       ) : (
-        <div aria-label="Saved first piece inspection reports" id="first-piece-saved-reports" role="tabpanel">
-          <DataRowsCard title="Saved first piece inspection reports" rows={reportRows} empty="No first-piece reports saved yet" />
+        <div aria-label="Saved First Piece Inspection Reports" id="first-piece-saved-reports" role="tabpanel">
+          <DataRowsCard title="Saved First Piece Inspection Reports" rows={reportRows} empty="No first-piece reports saved yet" />
         </div>
       )}
     </section>
@@ -4391,7 +4391,7 @@ function ShopFloorItemSummary({
         <span>{jobCardNumber(row)}</span>
         <span>Setup {displayValue(row.setupNo)}</span>
         <span>Option {displayValue(row.optionNumber)}</span>
-        <span>RM: {displayValue(row.rmStatus)}</span>
+        <span>Rm: {displayValue(row.rmStatus)}</span>
       </div>
     );
   }
@@ -4403,7 +4403,7 @@ function ShopFloorItemSummary({
       </div>
       <div className="text-xs text-muted-foreground">{jobCardNumber(row)} | Setup {displayValue(row.setupNo)} | Option {displayValue(row.optionNumber)}</div>
       <div className="text-xs text-muted-foreground">Setup: {displayValue(row.setupPlannedDate || row.plannedDate)} | Production: {displayValue(row.plannedProductionStartDate)} - {displayValue(row.plannedProductionEndDate)}</div>
-      <div className="text-xs text-muted-foreground">RM: {displayValue(row.rmStatus)}</div>
+      <div className="text-xs text-muted-foreground">Rm: {displayValue(row.rmStatus)}</div>
     </div>
   );
 }
@@ -4573,14 +4573,14 @@ function ShopFloorRowAction({
 
         <Button type="button" size="sm" variant="outline" className="w-fit" disabled={isSubmitting} onClick={() => void submitCurrentStageComplete()}>
           <CheckCircle2 className="size-4" />
-          Item finished
+          Item Finished
         </Button>
       </div>
     );
   }
 
   if (!next) {
-    return <span className="text-sm text-muted-foreground">No action pending</span>;
+    return <span className="text-sm text-muted-foreground">No Action Pending</span>;
   }
 
   if (nextStage && next.shopFloorTaskReady === false) {
@@ -4602,7 +4602,7 @@ function ShopFloorRowAction({
           <div className="grid gap-2 sm:grid-cols-2">
             <Input className="h-8" value={doneBy} placeholder={`${nextStage.role} name/code`} onChange={(event) => setDoneBy(event.target.value)} />
             {nextStage.id === "operator_started" ? (
-              <Input className="h-8" value={worker} placeholder="Worker name/code" onChange={(event) => setWorker(event.target.value)} />
+              <Input className="h-8" value={worker} placeholder="Worker Name/Code" onChange={(event) => setWorker(event.target.value)} />
             ) : (
               <Input className="h-8" value={remark} placeholder="Remark" onChange={(event) => setRemark(event.target.value)} />
             )}
@@ -4613,16 +4613,16 @@ function ShopFloorRowAction({
           {needsSetupChecklist ? (
             <div className="grid gap-2 rounded-md border bg-background p-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-medium">Setup checklist</div>
+                <div className="text-sm font-medium">Setup Checklist</div>
                 <StatusBadge value={setupChecklistStatus} />
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => { window.location.href = checklistPageHref; }}>
-                  Open checklist
+                  Open Checklist
                 </Button>
                 {checklistPhase === "start" && !activeChecklistMasters.length && openDataEntry ? (
                   <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("setup_checklist_master", setupChecklistMasterDefaults())}>
-                    Add setup checklist
+                    Add Setup Checklist
                   </Button>
                 ) : null}
               </div>
@@ -4667,7 +4667,7 @@ const DEFAULT_REJECTION_REMARK_OPTIONS = [
   { code: "R4", label: "Drawing Error" },
   { code: "R5", label: "Parameter Missed" },
   { code: "R6", label: "Measuring Instrument Issue" },
-  { code: "R7", label: "QC Inspection Error" },
+  { code: "R7", label: "Qc Inspection Error" },
 ];
 
 const DEFAULT_REJECTION_REASON_OPTIONS = [
@@ -4678,38 +4678,38 @@ const DEFAULT_REJECTION_REASON_OPTIONS = [
   { code: "D5", label: "Tap Marks" },
   { code: "D6", label: "Flat Barb" },
   { code: "D7", label: "Hex Bent" },
-  { code: "D8", label: "Step in Hole" },
+  { code: "D8", label: "Step In Hole" },
   { code: "D9", label: "Incomplete Hole" },
-  { code: "D10", label: "Dent on Thread" },
+  { code: "D10", label: "Dent On Thread" },
   { code: "D11", label: "Forging Defect" },
   { code: "D12", label: "Thread Gauge Fail" },
   { code: "D13", label: "Hole Missing" },
-  { code: "D14", label: "Dent on Degree" },
+  { code: "D14", label: "Dent On Degree" },
   { code: "D15", label: "Plating Defect" },
   { code: "D16", label: "Knurling Defect" },
   { code: "D17", label: "Broken Part" },
-  { code: "D18", label: "Dent on Face" },
+  { code: "D18", label: "Dent On Face" },
   { code: "D19", label: "Coating Defect" },
   { code: "D20", label: "Hole Shifted" },
   { code: "D21", label: "Thread Not Straight" },
-  { code: "D22", label: "Vibration on Thread" },
+  { code: "D22", label: "Vibration On Thread" },
   { code: "D23", label: "Incomplete Thread" },
   { code: "D24", label: "Flat Thread" },
   { code: "D25", label: "Face Uneven" },
   { code: "D26", label: "Turning Bent" },
-  { code: "D27", label: "Vibration on Face" },
-  { code: "D28", label: "Dent on Hex" },
-  { code: "D29", label: "Burr on Hex" },
-  { code: "D30", label: "Vibration on Barb" },
-  { code: "D31", label: "Dent on Barb" },
+  { code: "D27", label: "Vibration On Face" },
+  { code: "D28", label: "Dent On Hex" },
+  { code: "D29", label: "Burr On Hex" },
+  { code: "D30", label: "Vibration On Barb" },
+  { code: "D31", label: "Dent On Barb" },
   { code: "D32", label: "Barb Deformed" },
-  { code: "D33", label: "Burr on Barb" },
-  { code: "D34", label: "Dent on Turning" },
-  { code: "D35", label: "Vibration on Turning" },
-  { code: "D36", label: "Burr in Hole" },
-  { code: "D37", label: "Vibration in Hole" },
+  { code: "D33", label: "Burr On Barb" },
+  { code: "D34", label: "Dent On Turning" },
+  { code: "D35", label: "Vibration On Turning" },
+  { code: "D36", label: "Burr In Hole" },
+  { code: "D37", label: "Vibration In Hole" },
   { code: "D38", label: "Die Marks" },
-  { code: "D39", label: "Vibration on Degree" },
+  { code: "D39", label: "Vibration On Degree" },
   { code: "D40", label: "Degree Bent" },
   { code: "D41", label: "Outer Diameter Plus" },
   { code: "D42", label: "Outer Diameter Minus" },
@@ -4729,9 +4729,9 @@ const DEFAULT_REJECTION_REASON_OPTIONS = [
   { code: "D56", label: "Barb Length Minus" },
   { code: "D57", label: "Inner Diameter Plus" },
   { code: "D58", label: "Inner Diameter Minus" },
-  { code: "D59", label: "Electricity failure" },
-  { code: "D60", label: "No raw material" },
-  { code: "D61", label: "No operator" },
+  { code: "D59", label: "Electricity Failure" },
+  { code: "D60", label: "No Raw Material" },
+  { code: "D61", label: "No Operator" },
 ];
 
 function codedMasterOptions(rows: DashboardPayload[], defaults: Array<{ code: string; label: string }>, labelFields: string[]) {
@@ -5045,7 +5045,7 @@ useEffect(() => {
         <div className="min-w-0">
           <div className="text-sm font-medium">{roleLabel}</div>
           <div className="hidden text-[11px] text-muted-foreground sm:block">
-            Select a machine; item and setup details come from the current plan.
+            Select A Machine; Item And Setup Details Come From The Current Plan.
           </div>
         </div>
         {role === "shopFloor" ? <StatusBadge value={isShopFloorProductionEntry && producedPcs > 0 ? `${formatNumber(producedPcs)} pcs` : isShopFloorBulkDowntimeEntry ? `${formatNumber(bulkRows.length)} machines` : "Select entry"} /> : null}
@@ -5054,7 +5054,7 @@ useEffect(() => {
       </div>
 
       {role === "shopFloor" ? (
-        <div aria-label="Shop floor entry type" className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5" role="group">
+        <div aria-label="Shop Floor Entry Type" className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5" role="group">
           <Button
             aria-pressed={shopFloorEntryKind === "production"}
             className={entryTabClass}
@@ -5071,16 +5071,16 @@ useEffect(() => {
             type="button"
             variant={shopFloorEntryKind === "bulkDowntime" ? "default" : "ghost"}
           >
-            Bulk downtime
+            Bulk Downtime
           </Button>
         </div>
       ) : null}
 
       {role !== "shopFloor" ? (
         <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-6">
-          <CompactEntryField className="lg:col-span-2" label="Machine no.">
+          <CompactEntryField className="lg:col-span-2" label="Machine No.">
             <select className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
-              <option value="">Select machine</option>
+              <option value="">Select Machine</option>
               {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
             </select>
           </CompactEntryField>
@@ -5105,9 +5105,9 @@ useEffect(() => {
       {role === "shopFloor" && isShopFloorProductionEntry ? (
         <>
           <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-6">
-            <CompactEntryField className="lg:col-span-2" label="Machine no.">
+            <CompactEntryField className="lg:col-span-2" label="Machine No.">
               <select className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
-                <option value="">Select machine</option>
+                <option value="">Select Machine</option>
                 {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
               </select>
             </CompactEntryField>
@@ -5128,36 +5128,36 @@ useEffect(() => {
             ) : null}
           </div>
           <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
-            <CompactEntryField label="Cycle time sec">
+            <CompactEntryField label="Cycle Time Sec">
               <Input className={compactInputClass} type="number" step="0.01" value={cycleSecondsInput} onChange={(event) => setCycleSecondsByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} />
             </CompactEntryField>
-            <CompactEntryField label="Piece weight gm">
+            <CompactEntryField label="Piece Weight Gm">
               <Input className={compactInputClass} type="number" step="0.01" value={pieceWeightInput} onChange={(event) => setPieceWeightByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} />
             </CompactEntryField>
-            <CompactEntryField label="Operator no.">
+            <CompactEntryField label="Operator No.">
               <Input className={compactInputClass} value={operatorNumber} onChange={(event) => setOperatorNumber(event.target.value)} />
             </CompactEntryField>
-            <CompactEntryField label="Machine start">
-              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />
+            <CompactEntryField label="Machine Start">
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />
             </CompactEntryField>
-            <CompactEntryField label="Machine end">
-              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} />
+            <CompactEntryField label="Machine End">
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} />
             </CompactEntryField>
-            <CompactEntryField label="Gross produced kg">
+            <CompactEntryField label="Gross Produced Kg">
               <Input className={compactInputClass} type="number" step="0.001" value={producedGrossKg} onChange={(event) => setProducedGrossKg(event.target.value)} />
             </CompactEntryField>
-            <CompactEntryField label="Crates used">
+            <CompactEntryField label="Crates Used">
               <Input className={compactInputClass} type="number" step="1" value={cratesUsed} onChange={(event) => setCratesUsed(event.target.value)} />
             </CompactEntryField>
-            <CompactEntryField label="Crate weight kg">
+            <CompactEntryField label="Crate Weight Kg">
               <select className={compactSelectClass} value={crateWeightKg} onChange={(event) => setCrateWeightKg(event.target.value)}>
-                {CRATE_WEIGHT_OPTIONS_KG.map((weight) => <option key={weight} value={String(weight)}>{formatNumber(weight)} kg</option>)}
+                {CRATE_WEIGHT_OPTIONS_KG.map((weight) => <option key={weight} value={String(weight)}>{formatNumber(weight)} Kg</option>)}
               </select>
             </CompactEntryField>
-            <CompactEntryField label="Net produced kg">
+            <CompactEntryField label="Net Produced Kg">
               <Input className={compactInputClass} value={formatNumber(netProducedKg)} readOnly />
             </CompactEntryField>
-            <CompactEntryField label="Produced pcs">
+            <CompactEntryField label="Produced Pcs">
               <Input className={compactInputClass} value={formatNumber(producedPcs)} readOnly />
             </CompactEntryField>
           </div>
@@ -5167,24 +5167,24 @@ useEffect(() => {
       {role === "shopFloor" && isShopFloorBulkDowntimeEntry ? (
         <div className="grid gap-2 rounded-md border bg-background p-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-xs font-medium">Running-machine downtime</div>
+            <div className="text-xs font-medium">Running-Machine Downtime</div>
             <StatusBadge value={`${formatNumber(bulkRows.length)} machines`} />
           </div>
           <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
             <CompactEntryField label="Date">
               <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
             </CompactEntryField>
-            <CompactEntryField label="Downtime code">
+            <CompactEntryField label="Downtime Code">
               <select className={compactSelectClass} value={bulkDowntimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setBulkDowntimeCode(event.target.value)}>
-                <option value="">{downtimeReasonOptions.length ? "Select code" : "Add downtime reason master"}</option>
+                <option value="">{downtimeReasonOptions.length ? "Select Code" : "Add Downtime Reason Master"}</option>
                 {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
               </select>
             </CompactEntryField>
             <CompactEntryField label="Start">
-              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(time24Input(event.target.value))} />
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(time24Input(event.target.value))} />
             </CompactEntryField>
             <CompactEntryField label="End">
-              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeEnd} onChange={(event) => setBulkDowntimeEnd(time24Input(event.target.value))} />
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={bulkDowntimeEnd} onChange={(event) => setBulkDowntimeEnd(time24Input(event.target.value))} />
             </CompactEntryField>
             <CompactEntryField label="Minutes">
               <Input className={compactInputClass} value={formatNumber(bulkDowntimeMinutes)} readOnly />
@@ -5192,13 +5192,13 @@ useEffect(() => {
           </div>
           <Button type="button" size="sm" variant="outline" className="h-7 w-fit px-2.5 text-xs" disabled={!canSaveBulkDowntime || isBulkSaving} onClick={() => void submitBulkDowntime()}>
             <CheckCircle2 className="size-3.5" />
-            Save running-machine downtime
+            Save Running-Machine Downtime
           </Button>
         </div>
       ) : null}
 
       {role === "quality" ? (
-        <div aria-label="Quality entry type" className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5" role="group">
+        <div aria-label="Quality Entry Type" className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5" role="group">
           <Button
             aria-pressed={qualityEntryKind === "downtime"}
             className={entryTabClass}
@@ -5225,17 +5225,17 @@ useEffect(() => {
           <CompactEntryField label="Date">
             <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
           </CompactEntryField>
-          <CompactEntryField label="Downtime code">
+          <CompactEntryField label="Downtime Code">
             <select className={compactSelectClass} value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
-              <option value="">{downtimeReasonOptions.length ? "Select code" : "Add downtime reason master"}</option>
+              <option value="">{downtimeReasonOptions.length ? "Select Code" : "Add Downtime Reason Master"}</option>
               {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
             </select>
           </CompactEntryField>
           <CompactEntryField label="Start">
-            <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />
+            <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />
           </CompactEntryField>
           <CompactEntryField label="End">
-            <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} />
+            <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} />
           </CompactEntryField>
           <CompactEntryField label="Minutes">
             <Input className={compactInputClass} value={formatNumber(downtimeDurationMinutes)} readOnly />
@@ -5245,25 +5245,25 @@ useEffect(() => {
 
       {isRejectionEntry ? (
         <div className="grid gap-1.5 rounded-md border bg-background p-2 sm:grid-cols-2 lg:grid-cols-4">
-          <CompactEntryField label="Rejection type">
+          <CompactEntryField label="Rejection Type">
             <select className={compactSelectClass} value={rejectionTypeCode} onChange={(event) => setRejectionTypeCode(event.target.value)}>
-              <option value="">Select type</option>
+              <option value="">Select Type</option>
               {rejectionTypeOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
             </select>
           </CompactEntryField>
-          <CompactEntryField label="Rejection reason">
+          <CompactEntryField label="Rejection Reason">
             <select className={compactSelectClass} value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}>
-              <option value="">Select reason</option>
+              <option value="">Select Reason</option>
               {rejectionReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
             </select>
           </CompactEntryField>
-          <CompactEntryField label="Rejection remark">
+          <CompactEntryField label="Rejection Remark">
             <select className={compactSelectClass} value={rejectionRemarkCode} onChange={(event) => setRejectionRemarkCode(event.target.value)}>
-              <option value="">Select remark</option>
+              <option value="">Select Remark</option>
               {rejectionRemarkOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
             </select>
           </CompactEntryField>
-          <CompactEntryField label="Rejected pcs">
+          <CompactEntryField label="Rejected Pcs">
             <Input className={compactInputClass} type="number" step="1" min="0" value={rejectedPieces} onChange={(event) => setRejectedPieces(event.target.value)} />
           </CompactEntryField>
         </div>
@@ -5272,7 +5272,7 @@ useEffect(() => {
       {showSaveButton ? (
         <Button type="button" size="sm" className="h-7 w-fit px-2.5 text-xs" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
           <CheckCircle2 className="size-3.5" />
-          {role === "shopFloor" ? "Save production" : isQualityRejectionEntry ? "Save rejection" : "Save downtime"}
+          {role === "shopFloor" ? "Save Production" : isQualityRejectionEntry ? "Save Rejection" : "Save Downtime"}
         </Button>
       ) : null}
     </div>
@@ -5300,11 +5300,11 @@ function SetupChecklistForm({
   if (phase === "start" && !items.length) {
     return (
       <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
-        <div className="font-medium text-amber-900 dark:text-amber-100">Setup checklist missing</div>
-        <div className="text-amber-800 dark:text-amber-200">Create an active setup checklist before pre setting can start.</div>
+        <div className="font-medium text-amber-900 dark:text-amber-100">Setup Checklist Missing</div>
+        <div className="text-amber-800 dark:text-amber-200">Create An Active Setup Checklist Before Pre Setting Can Start.</div>
         {onAddMaster ? (
           <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onAddMaster("setup_checklist_master", defaults)}>
-            Add setup checklist
+            Add Setup Checklist
           </Button>
         ) : null}
       </div>
@@ -5313,7 +5313,7 @@ function SetupChecklistForm({
   if (phase === "end" && !session) {
     return (
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
-        Pre setting checklist session is missing. Start pre setting for this setup before saving setting done.
+        Pre Setting Checklist Session Is Missing. Start Pre Setting For This Setup Before Saving Setting Done.
       </div>
     );
   }
@@ -5322,9 +5322,9 @@ function SetupChecklistForm({
     <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-medium">Setup checklist {phase === "start" ? "start" : "completion"}</div>
+          <div className="text-sm font-medium">Setup Checklist {phase === "start" ? "start" : "completion"}</div>
           <div className="text-xs text-muted-foreground">
-            {itemCode(row)} / JC {jobCardNumber(row)} / Option {displayValue(row.optionNumber)} / Setup {displayValue(row.setupNo)} / Machine {displayValue(row.machine)} / {formatDate(new Date().toISOString())}
+            {itemCode(row)} / Jc {jobCardNumber(row)} / Option {displayValue(row.optionNumber)} / Setup {displayValue(row.setupNo)} / Machine {displayValue(row.machine)} / {formatDate(new Date().toISOString())}
           </div>
         </div>
         <StatusBadge value={`Version ${displayValue(session?.masterVersion || items[0]?.version)}`} />
@@ -5334,7 +5334,7 @@ function SetupChecklistForm({
           <TableHeader>
             <TableRow>
               <TableHead className="min-w-12">Seq</TableHead>
-              <TableHead className="min-w-72">Check point</TableHead>
+              <TableHead className="min-w-72">Check Point</TableHead>
               <TableHead className="min-w-36">Entry</TableHead>
               <TableHead className="min-w-28">Required</TableHead>
             </TableRow>
@@ -5392,11 +5392,11 @@ function FirstPieceInspectionForm({
   if (!masters.length) {
     return (
       <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
-        <div className="font-medium text-amber-900 dark:text-amber-100">First piece inspection master missing</div>
-        <div className="text-amber-800 dark:text-amber-200">Add dimensions for this part, option, and setup before quality approval.</div>
+        <div className="font-medium text-amber-900 dark:text-amber-100">First Piece Inspection Master Missing</div>
+        <div className="text-amber-800 dark:text-amber-200">Add Dimensions For This Part, Option, And Setup Before Quality Approval.</div>
         {onAddMaster ? (
           <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onAddMaster("quality_parameter_master", defaults)}>
-            Add inspection master
+            Add Inspection Master
           </Button>
         ) : null}
       </div>
@@ -5407,17 +5407,17 @@ function FirstPieceInspectionForm({
     <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-medium">First piece inspection report</div>
-          <div className="text-xs text-muted-foreground">Task assigned: {displayValue(row.shopFloorUpdatedAt)}</div>
+          <div className="text-sm font-medium">First Piece Inspection Report</div>
+          <div className="text-xs text-muted-foreground">Task Assigned: {displayValue(row.shopFloorUpdatedAt)}</div>
           {showDraftSaved ? (
             <div className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-              Unfinished readings are saved automatically.
+              Unfinished Readings Are Saved Automatically.
             </div>
           ) : null}
         </div>
         {onAddMaster ? (
           <Button type="button" size="sm" variant="outline" onClick={() => onAddMaster("quality_parameter_master", defaults)}>
-            Add dimension
+            Add Dimension
           </Button>
         ) : null}
       </div>
@@ -5455,8 +5455,8 @@ function FirstPieceInspectionForm({
                         {qualityParameterInputType(master) === "pass_fail" ? (
                           <select className={`h-8 min-w-20 rounded-md border bg-background px-2 text-sm ${qualityReadingInputClass(result)}`} value={value} onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)} required>
                             <option value="">Select</option>
-                            <option value="OK">OK</option>
-                            <option value="Not OK">Not OK</option>
+                            <option value="OK">Ok</option>
+                            <option value="Not OK">Not Ok</option>
                           </select>
                         ) : (
                           <Input
@@ -5519,16 +5519,16 @@ function MasterReadinessPanel({
   return (
     <section className="grid gap-4">
       <WorkOrderGapTable
-        title="Production validation"
-        description="Immediate attention: RM received and at least one planning gap exists."
+        title="Production Validation"
+        description="Immediate Attention: Rm Received And At Least One Planning Gap Exists."
         rows={masterGaps}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
         showFilters={false}
       />
       <WorkOrderGapTable
-        title="Whole work-order missing details"
-        description="Planner view for every work order with missing route option, route master, cycle time, tooling, or machine master."
+        title="Whole Work-Order Missing Details"
+        description="Planner View For Every Work Order With Missing Route Option, Route Master, Cycle Time, Tooling, Or Machine Master."
         rows={allWorkOrderGaps}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
@@ -5571,26 +5571,26 @@ function WorkOrderGapTable({
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{description} {formatNumber(filteredRows.length)} of {formatNumber(rows.length)} rows shown.</CardDescription>
+        <CardDescription>{description} {formatNumber(filteredRows.length)} Of {formatNumber(rows.length)} Rows Shown.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {showFilters ? (
           <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Gap type">
+          <Field label="Gap Type">
             <select className="h-9 rounded-md border bg-background px-3 text-sm" value={gapFilter} onChange={(event) => setGapFilter(event.target.value)}>
-              <option value="all">All gaps</option>
-              <option value="route_option">Route option missing</option>
-              <option value="route_master">Route master missing</option>
-              <option value="cycle_time">Cycle time missing</option>
-              <option value="tooling">Tooling missing</option>
-              <option value="machine_master">Machine master missing</option>
+              <option value="all">All Gaps</option>
+              <option value="route_option">Route Option Missing</option>
+              <option value="route_master">Route Master Missing</option>
+              <option value="cycle_time">Cycle Time Missing</option>
+              <option value="tooling">Tooling Missing</option>
+              <option value="machine_master">Machine Master Missing</option>
             </select>
           </Field>
-          <Field label="RM status">
+          <Field label="Rm Status">
             <select className="h-9 rounded-md border bg-background px-3 text-sm" value={rmFilter} onChange={(event) => setRmFilter(event.target.value)}>
-              <option value="all">All work orders</option>
-              <option value="received">RM received</option>
-              <option value="waiting">Waiting RM</option>
+              <option value="all">All Work Orders</option>
+              <option value="received">Rm Received</option>
+              <option value="waiting">Waiting Rm</option>
             </select>
           </Field>
           </div>
@@ -5599,10 +5599,10 @@ function WorkOrderGapTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Job card</TableHead>
+                <TableHead>Job Card</TableHead>
                 <TableHead>Item</TableHead>
-                <TableHead>RM</TableHead>
-                <TableHead>Missing details</TableHead>
+                <TableHead>Rm</TableHead>
+                <TableHead>Missing Details</TableHead>
                 <TableHead>Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -5619,7 +5619,7 @@ function WorkOrderGapTable({
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                    No work-order gaps match the selected filters
+                    No Work-Order Gaps Match The Selected Filters
                   </TableCell>
                 </TableRow>
               )}
@@ -5670,10 +5670,10 @@ function WorkOrderGapRow({
         <div className="grid gap-2">
           {row.routeSelectionMissing ? (
             <form className="grid gap-1.5" onSubmit={(event) => void submitRoute(event)}>
-              <Label className="text-xs text-muted-foreground">Select option number</Label>
+              <Label className="text-xs text-muted-foreground">Select Option Number</Label>
               <div className="grid gap-2 sm:grid-cols-[minmax(12rem,1fr)_7.5rem]">
                 <select className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm" name="optionNumber" defaultValue="" required>
-                  <option value="">Select option</option>
+                  <option value="">Select Option</option>
                   {options.map((option, optionIndex) => {
                     const record = asRecord(option);
                     const value = str(record.optionNumber || record.option || option) || String(optionIndex + 1);
@@ -5684,22 +5684,22 @@ function WorkOrderGapRow({
                     );
                   })}
                 </select>
-                <Button type="submit" size="sm" className="w-full">Save option</Button>
+                <Button type="submit" size="sm" className="w-full">Save Option</Button>
               </div>
             </form>
           ) : null}
           <div className="grid gap-2 sm:grid-cols-4">
             {row.routeMasterMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("route", dataEntryDefaultsFromGap(row, "route"))}>Add routing</Button>
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("route", dataEntryDefaultsFromGap(row, "route"))}>Add Routing</Button>
             ) : null}
             {row.cycleTimeMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("cycle", dataEntryDefaultsFromGap(row, "cycle"))}>Add cycle time</Button>
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("cycle", dataEntryDefaultsFromGap(row, "cycle"))}>Add Cycle Time</Button>
             ) : null}
             {row.toolingPlanMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("tooling", dataEntryDefaultsFromGap(row, "tooling"))}>Add tooling</Button>
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("tooling", dataEntryDefaultsFromGap(row, "tooling"))}>Add Tooling</Button>
             ) : null}
             {row.machineMasterMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("machine_master", dataEntryDefaultsFromGap(row, "machine_master"))}>Add machine</Button>
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("machine_master", dataEntryDefaultsFromGap(row, "machine_master"))}>Add Machine</Button>
             ) : null}
           </div>
         </div>
@@ -5833,7 +5833,7 @@ function DataEntryPanel({
         <fieldset aria-busy={isImporting} className="contents" disabled={isImporting}>
         <CardContent className="grid gap-4">
           <form className="grid gap-3 @3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]" onSubmit={importEntryTemplate}>
-            <Field label="Select entry form">
+            <Field label="Select Entry Form">
               <select
                 className="h-9 rounded-md border bg-background px-3 text-sm"
                 value={bulkEntryType}
@@ -5846,14 +5846,14 @@ function DataEntryPanel({
                 ))}
               </select>
             </Field>
-            <Field label="Filled CSV template">
+            <Field label="Filled Csv Template">
               <Input name="file" type="file" accept=".csv,text/csv" />
             </Field>
-            <Button className="self-end" type="submit" disabled={isImporting}>{isImporting ? "Importing..." : "Import CSV"}</Button>
+            <Button className="self-end" type="submit" disabled={isImporting}>{isImporting ? "Importing..." : "Import Csv"}</Button>
           </form>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => downloadApi("data-template", bulkEntryType)}>
-              Download template
+              Download Template
             </Button>
           </div>
         </CardContent>
@@ -5904,8 +5904,8 @@ function MasterTablesPanel({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Master tables</CardTitle>
-          <CardDescription>No master definitions are configured.</CardDescription>
+          <CardTitle>Master Tables</CardTitle>
+          <CardDescription>No Master Definitions Are Configured.</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -5915,8 +5915,8 @@ function MasterTablesPanel({
     <section className="grid gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Master tables</CardTitle>
-          <CardDescription>Search saved master data in tabular format. Use Data Entry only when you need to add or edit rows.</CardDescription>
+          <CardTitle>Master Tables</CardTitle>
+          <CardDescription>Search Saved Master Data In Tabular Format. Use Data Entry Only When You Need To Add Or Edit Rows.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(260px,1fr)_auto]">
           <Field label="Master">
@@ -5930,21 +5930,21 @@ function MasterTablesPanel({
               ))}
             </select>
           </Field>
-          <Field label="Search all visible columns">
+          <Field label="Search All Visible Columns">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="pl-9" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search saved rows" />
+              <Input className="pl-9" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search Saved Rows" />
             </div>
           </Field>
           <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); setTableResetKey((current) => current + 1); }}>Clear filters</Button>
+            <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); setTableResetKey((current) => current + 1); }}>Clear Filters</Button>
             <Button type="button" variant="outline" disabled={!filteredRows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, filteredRows, columns)}>
               <Download className="size-4" />
-              Export visible rows
+              Export Visible Rows
             </Button>
             <Button type="button" onClick={() => openDataEntry(selectedSpec.entryType, { __returnTab: "masterTablesTab" })}>
               <Plus className="size-4" />
-              Add row
+              Add Row
             </Button>
           </div>
         </CardContent>
@@ -5957,12 +5957,12 @@ function MasterTablesPanel({
               <CardTitle>{selectedSpec.title}</CardTitle>
               <CardDescription>{selectedSpec.description}</CardDescription>
             </div>
-            <Badge variant="outline">{formatNumber(filteredRows.length)} / {formatNumber(rows.length)} rows</Badge>
+            <Badge variant="outline">{formatNumber(filteredRows.length)} / {formatNumber(rows.length)} Rows</Badge>
           </div>
         </CardHeader>
         <CardContent>
           {!rows.length ? (
-            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No saved rows found for this master.</div>
+            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No Saved Rows Found For This Master.</div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
               <Table key={`${selectedSpec.entryType}-${tableResetKey}`}>
@@ -5992,8 +5992,8 @@ function MasterTablesPanel({
       {summaryRows.length ? (
         <Card>
           <CardHeader>
-            <CardTitle>{selectedSpec.title} summary</CardTitle>
-            <CardDescription>Key summary for the selected master only.</CardDescription>
+            <CardTitle>{selectedSpec.title} Summary</CardTitle>
+            <CardDescription>Key Summary For The Selected Master Only.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto rounded-md border">
@@ -6237,12 +6237,12 @@ function MachineMasterPanel({
         <Card>
           <CardHeader>
             <CardTitle>Machines</CardTitle>
-            <CardDescription>Select a machine to open its maintenance page.</CardDescription>
+            <CardDescription>Select A Machine To Open Its Maintenance Page.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              {!machineRows.length ? <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("machine_master", { status: "Active", __returnTab: "machineMasterTab" })}>Add machine</Button> : <div className="text-xs text-muted-foreground">Showing {formatNumber(filteredMachineRows.length)} of {formatNumber(machineRows.length)} machines</div>}
-              {hasMachineFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setMachineNoFilter(""); setMachineFamilyFilter(""); setMachineNameFilter(""); setMachineTypeFilter(""); setMachineLocationFilter(""); setMachineStatusFilter(""); }}>Clear filters</Button> : null}
+              {!machineRows.length ? <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("machine_master", { status: "Active", __returnTab: "machineMasterTab" })}>Add Machine</Button> : <div className="text-xs text-muted-foreground">Showing {formatNumber(filteredMachineRows.length)} Of {formatNumber(machineRows.length)} Machines</div>}
+              {hasMachineFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setMachineNoFilter(""); setMachineFamilyFilter(""); setMachineNameFilter(""); setMachineTypeFilter(""); setMachineLocationFilter(""); setMachineStatusFilter(""); }}>Clear Filters</Button> : null}
             </div>
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
               <Table>
@@ -6253,7 +6253,7 @@ function MachineMasterPanel({
                 <TableBody>{filteredMachineRows.length ? filteredMachineRows.map((row) => {
                   const machineNo = displayValue(row.machineNo);
                   return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineFamily)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></TableCell></TableRow>;
-                }) : <TableRow><TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">No machines match the selected filters.</TableCell></TableRow>}</TableBody>
+                }) : <TableRow><TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">No Machines Match The Selected Filters.</TableCell></TableRow>}</TableBody>
               </Table>
             </div>
           </CardContent>
@@ -6267,10 +6267,10 @@ function MachineMasterPanel({
       <section className="grid gap-4">
         <Card>
           <CardHeader>
-            <CardTitle>Machine not found</CardTitle>
-            <CardDescription>The selected machine is not available in machine master.</CardDescription>
+            <CardTitle>Machine Not Found</CardTitle>
+            <CardDescription>The Selected Machine Is Not Available In Machine Master.</CardDescription>
           </CardHeader>
-          <CardContent><Button type="button" variant="outline" onClick={closeMachine}>Back to machines</Button></CardContent>
+          <CardContent><Button type="button" variant="outline" onClick={closeMachine}>Back To Machines</Button></CardContent>
         </Card>
       </section>
     );
@@ -6281,61 +6281,61 @@ function MachineMasterPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Machine {displayValue(selectedMachine.machineNo)}</h2>
-          <p className="text-sm text-muted-foreground">Maintenance schedule, history, and reports for this machine.</p>
+          <p className="text-sm text-muted-foreground">Maintenance Schedule, History, And Reports For This Machine.</p>
         </div>
-        <Button type="button" variant="outline" onClick={closeMachine}>Back to machines</Button>
+        <Button type="button" variant="outline" onClick={closeMachine}>Back To Machines</Button>
       </div>
       <TrackingSummary items={[["Schedules", formatNumber(machineSchedules.length)], ["Records", formatNumber(machineHistory.length)], ["Filtered", formatNumber(filteredHistory.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)]]} />
       <Card>
-        <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine maintenance schedules and records.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine Maintenance Schedules And Records.</CardDescription></CardHeader>
         <CardContent><div className="grid gap-3 md:grid-cols-5"><TileField label="Machine Family" value={selectedMachine.machineFamily} important /><TileField label="Machine Type" value={selectedMachine.machineType} /><TileField label="Machine Name" value={selectedMachine.machineName} /><TileField label="Machine Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
       </Card>
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div>
-            <CardTitle>Assigned maintenance schedules</CardTitle>
-            <CardDescription>{machineSchedules.length ? `${formatNumber(filteredMachineSchedules.length)} of ${formatNumber(machineSchedules.length)} schedules shown` : "No schedules assigned yet"}</CardDescription>
+            <CardTitle>Assigned Maintenance Schedules</CardTitle>
+            <CardDescription>{machineSchedules.length ? `${formatNumber(filteredMachineSchedules.length)} of ${formatNumber(machineSchedules.length)} schedules shown` : "No Schedules Assigned Yet"}</CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {hasScheduleFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setScheduleCodeFilter(""); setScheduleTitleFilter(""); setScheduleChecklistFilter(""); setScheduleFrequencyFilter(""); setScheduleFirstDueFilter(""); setScheduleStatusFilter(""); }}>Clear filters</Button> : null}
-            <Button type="button" size="sm" variant={isScheduleFormOpen ? "secondary" : "default"} onClick={() => setIsScheduleFormOpen((open) => !open)}><CalendarDays className="size-4" />{isScheduleFormOpen ? "Close entry" : "Assign schedule"}</Button>
+            {hasScheduleFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setScheduleCodeFilter(""); setScheduleTitleFilter(""); setScheduleChecklistFilter(""); setScheduleFrequencyFilter(""); setScheduleFirstDueFilter(""); setScheduleStatusFilter(""); }}>Clear Filters</Button> : null}
+            <Button type="button" size="sm" variant={isScheduleFormOpen ? "secondary" : "default"} onClick={() => setIsScheduleFormOpen((open) => !open)}><CalendarDays className="size-4" />{isScheduleFormOpen ? "Close Entry" : "Assign Schedule"}</Button>
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
           {isScheduleFormOpen ? (
             <div className="grid gap-4 rounded-lg border p-3">
-              {!maintenanceMasterRows.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No maintenance schedule master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_master", {})}>Add schedule in Data Entry</Button></div> : null}
-              {!checklistOptions.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No maintenance checklist saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_checklist_master", maintenanceChecklistMasterDefaults("machineMasterTab"))}>Open Checklists</Button></div> : null}
+              {!maintenanceMasterRows.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No Maintenance Schedule Master Saved Yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_master", {})}>Add Schedule In Data Entry</Button></div> : null}
+              {!checklistOptions.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No Maintenance Checklist Saved Yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_checklist_master", maintenanceChecklistMasterDefaults("machineMasterTab"))}>Open Checklists</Button></div> : null}
               {selectedChecklistRows.length ? <MaintenanceChecklistPreview rows={selectedChecklistRows} /> : null}
               <form className="grid gap-3" onSubmit={saveSchedule}>
                 <input type="hidden" name="machineNo" value={displayValue(selectedMachine.machineNo)} />
                 <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-                  <Field label="Maintenance schedule">
+                  <Field label="Maintenance Schedule">
                     <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedMaintenanceCode} onChange={(event) => { const code = event.target.value; setSelectedMaintenanceCode(code); const master = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(code)); setSelectedChecklistCode(displayValue(master?.checklistCode) !== "-" ? displayValue(master?.checklistCode) : ""); }} required>
-                      <option value="">Select schedule</option>
+                      <option value="">Select Schedule</option>
                       {maintenanceMasterRows.map((row) => <option key={displayValue(row.maintenanceCode)} value={displayValue(row.maintenanceCode)}>{displayValue(row.maintenanceTitle)}</option>)}
                     </select>
                   </Field>
-                  <Field label="Schedule code"><Input value={displayValue(selectedMaintenance?.maintenanceCode)} readOnly /></Field>
-                  <Field label="Frequency days"><Input value={displayValue(selectedMaintenance?.frequencyDays)} readOnly /></Field>
-                  <Field label="Checklist code"><Input value={displayValue(selectedMaintenance?.checklistCode)} readOnly /></Field>
-                  <Field label="First due date"><Input name="firstDueDate" type="date" defaultValue={todayIsoDate()} required /></Field>
-                  <Field label="Estimated minutes"><Input value={displayValue(selectedMaintenance?.estimatedMinutes)} readOnly /></Field>
+                  <Field label="Schedule Code"><Input value={displayValue(selectedMaintenance?.maintenanceCode)} readOnly /></Field>
+                  <Field label="Frequency Days"><Input value={displayValue(selectedMaintenance?.frequencyDays)} readOnly /></Field>
+                  <Field label="Checklist Code"><Input value={displayValue(selectedMaintenance?.checklistCode)} readOnly /></Field>
+                  <Field label="First Due Date"><Input name="firstDueDate" type="date" defaultValue={todayIsoDate()} required /></Field>
+                  <Field label="Estimated Minutes"><Input value={displayValue(selectedMaintenance?.estimatedMinutes)} readOnly /></Field>
                   <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue="Active"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
                   <Field label="Remark"><Input name="remark" /></Field>
                 </div>
-                <Button type="submit" className="w-fit" disabled={!selectedMaintenance}><CalendarDays className="size-4" />Save schedule</Button>
+                <Button type="submit" className="w-fit" disabled={!selectedMaintenance}><CalendarDays className="size-4" />Save Schedule</Button>
               </form>
             </div>
           ) : null}
-          {machineSchedules.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Code</TableHead><TableHead>Title</TableHead><TableHead>Checklist</TableHead><TableHead>Frequency</TableHead><TableHead>First due</TableHead><TableHead>Status</TableHead></TableRow><TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Code" value={scheduleCodeFilter} onChange={setScheduleCodeFilter} options={scheduleCodeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Title" value={scheduleTitleFilter} onChange={setScheduleTitleFilter} options={scheduleTitleOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Checklist" value={scheduleChecklistFilter} onChange={setScheduleChecklistFilter} options={scheduleChecklistOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Frequency" value={scheduleFrequencyFilter} onChange={setScheduleFrequencyFilter} options={scheduleFrequencyOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="First due" value={scheduleFirstDueFilter} onChange={setScheduleFirstDueFilter} options={scheduleFirstDueOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={scheduleStatusFilter} onChange={setScheduleStatusFilter} options={scheduleStatusOptions} /></TableHead></TableRow></TableHeader><TableBody>{filteredMachineSchedules.length ? filteredMachineSchedules.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell>{displayValue(row.maintenanceCode)}</TableCell><TableCell>{displayValue(row.maintenanceTitle)}</TableCell><TableCell>{displayValue(row.checklistCode)}</TableCell><TableCell>{maintenanceFrequencyLabel(row)}</TableCell><TableCell>{displayValue(row.firstDueDate)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">No machine schedules match the selected filters.</TableCell></TableRow>}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved for this machine.</EmptyRowsMessage>}
+          {machineSchedules.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Code</TableHead><TableHead>Title</TableHead><TableHead>Checklist</TableHead><TableHead>Frequency</TableHead><TableHead>First Due</TableHead><TableHead>Status</TableHead></TableRow><TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Code" value={scheduleCodeFilter} onChange={setScheduleCodeFilter} options={scheduleCodeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Title" value={scheduleTitleFilter} onChange={setScheduleTitleFilter} options={scheduleTitleOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Checklist" value={scheduleChecklistFilter} onChange={setScheduleChecklistFilter} options={scheduleChecklistOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Frequency" value={scheduleFrequencyFilter} onChange={setScheduleFrequencyFilter} options={scheduleFrequencyOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="First Due" value={scheduleFirstDueFilter} onChange={setScheduleFirstDueFilter} options={scheduleFirstDueOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={scheduleStatusFilter} onChange={setScheduleStatusFilter} options={scheduleStatusOptions} /></TableHead></TableRow></TableHeader><TableBody>{filteredMachineSchedules.length ? filteredMachineSchedules.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell>{displayValue(row.maintenanceCode)}</TableCell><TableCell>{displayValue(row.maintenanceTitle)}</TableCell><TableCell>{displayValue(row.checklistCode)}</TableCell><TableCell>{maintenanceFrequencyLabel(row)}</TableCell><TableCell>{displayValue(row.firstDueDate)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">No Machine Schedules Match The Selected Filters.</TableCell></TableRow>}</TableBody></Table></div> : <EmptyRowsMessage>No Maintenance Schedules Saved For This Machine.</EmptyRowsMessage>}
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Maintenance history</CardTitle><CardDescription>Planned and breakdown maintenance saved against this machine.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Maintenance History</CardTitle><CardDescription>Planned And Breakdown Maintenance Saved Against This Machine.</CardDescription></CardHeader>
         <CardContent className="grid gap-4">
-          <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_repeat(3,180px)]"><Label className="grid gap-1 text-xs font-medium text-muted-foreground"><span>Search</span><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={historyQuery} placeholder="Search maintenance report" onChange={(event) => setHistoryQuery(event.target.value)} /></div></Label><FilterSelect label="Type" value={historyTypeFilter} onChange={setHistoryTypeFilter} options={[["", "All types"], ...typeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Code" value={historyCodeFilter} onChange={setHistoryCodeFilter} options={[["", "All codes"], ...codeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Result" value={historyResultFilter} onChange={setHistoryResultFilter} options={[["", "All results"], ...resultOptions.map((value) => [value, value] as [string, string])]} /></div>
-          {filteredHistory.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Maintenance</TableHead><TableHead>Changed parts</TableHead><TableHead>Done by</TableHead><TableHead>Result</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{filteredHistory.map((row) => { const key = maintenanceRecordKey(row); return <TableRow key={key} className={key === selectedReportKey ? "bg-muted/50" : ""}><TableCell>{displayValue(row.completedDate)}</TableCell><TableCell><StatusBadge value={row.maintenanceType || "Planned"} /></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)}</div><div className="text-xs text-muted-foreground">{displayValue(row.maintenanceTitle)}</div></TableCell><TableCell className="max-w-64 truncate">{displayValue(row.partsChanged)}</TableCell><TableCell>{displayValue(row.completedBy)}</TableCell><TableCell><StatusBadge value={row.result} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => setSelectedReportKey(key)}>Report</Button></TableCell></TableRow>; })}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance records match this machine and filter.</EmptyRowsMessage>}
+          <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_repeat(3,180px)]"><Label className="grid gap-1 text-xs font-medium text-muted-foreground"><span>Search</span><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={historyQuery} placeholder="Search Maintenance Report" onChange={(event) => setHistoryQuery(event.target.value)} /></div></Label><FilterSelect label="Type" value={historyTypeFilter} onChange={setHistoryTypeFilter} options={[["", "All types"], ...typeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Code" value={historyCodeFilter} onChange={setHistoryCodeFilter} options={[["", "All codes"], ...codeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Result" value={historyResultFilter} onChange={setHistoryResultFilter} options={[["", "All results"], ...resultOptions.map((value) => [value, value] as [string, string])]} /></div>
+          {filteredHistory.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Maintenance</TableHead><TableHead>Changed Parts</TableHead><TableHead>Done By</TableHead><TableHead>Result</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{filteredHistory.map((row) => { const key = maintenanceRecordKey(row); return <TableRow key={key} className={key === selectedReportKey ? "bg-muted/50" : ""}><TableCell>{displayValue(row.completedDate)}</TableCell><TableCell><StatusBadge value={row.maintenanceType || "Planned"} /></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)}</div><div className="text-xs text-muted-foreground">{displayValue(row.maintenanceTitle)}</div></TableCell><TableCell className="max-w-64 truncate">{displayValue(row.partsChanged)}</TableCell><TableCell>{displayValue(row.completedBy)}</TableCell><TableCell><StatusBadge value={row.result} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => setSelectedReportKey(key)}>Report</Button></TableCell></TableRow>; })}</TableBody></Table></div> : <EmptyRowsMessage>No Maintenance Records Match This Machine And Filter.</EmptyRowsMessage>}
           {selectedReport ? <MaintenanceReportDetail row={selectedReport} /> : null}
         </CardContent>
       </Card>
@@ -6383,12 +6383,12 @@ function MaintenancePanel
     <section className="grid gap-4">
       <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Saved schedules", formatNumber(scheduleRows.length)], ["Due now", formatNumber(dueNowRows.length)], ["Breakdowns", formatNumber(breakdownRows.length)]]} />
       <Card className={dueNowRows.length ? "border-amber-300/80" : ""}>
-        <CardHeader><CardTitle>Maintenance pending tasks</CardTitle><CardDescription>Due and overdue planned maintenance appears here from Machine Master schedules.</CardDescription></CardHeader>
-        <CardContent>{dueRows.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Machine</TableHead><TableHead>Maintenance</TableHead><TableHead>Checklist</TableHead><TableHead>Due date</TableHead><TableHead>Status</TableHead><TableHead>Last done</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{dueRows.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell><div className="font-medium">{displayValue(row.machineNo)}</div><div className="text-xs text-muted-foreground">{displayValue(row.machineType)}</div></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</div><div className="text-xs text-muted-foreground">Every {maintenanceFrequencyLabel(row)}</div></TableCell><TableCell><div>{displayValue(row.checklistCode)}</div><div className="text-xs text-muted-foreground">{formatNumber(asArray(row.checklistSteps).length)} steps</div></TableCell><TableCell><div>{displayValue(row.nextDueDate)}</div>{displayValue(row.dueProgress) !== "-" ? <div className="text-xs text-muted-foreground">{displayValue(row.dueProgress)}</div> : null}</TableCell><TableCell><StatusBadge value={row.status} /></TableCell><TableCell>{displayValue(row.lastCompletedDate)}</TableCell><TableCell><Button type="button" size="sm" variant={row.status === "Upcoming" ? "outline" : "default"} onClick={() => void markMaintenanceDone(row)}><CheckCircle2 className="size-4" />Mark done</Button></TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved yet. Add schedules from Machine Master.</EmptyRowsMessage>}</CardContent>
+        <CardHeader><CardTitle>Maintenance Pending Tasks</CardTitle><CardDescription>Due And Overdue Planned Maintenance Appears Here From Machine Master Schedules.</CardDescription></CardHeader>
+        <CardContent>{dueRows.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Machine</TableHead><TableHead>Maintenance</TableHead><TableHead>Checklist</TableHead><TableHead>Due Date</TableHead><TableHead>Status</TableHead><TableHead>Last Done</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{dueRows.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell><div className="font-medium">{displayValue(row.machineNo)}</div><div className="text-xs text-muted-foreground">{displayValue(row.machineType)}</div></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</div><div className="text-xs text-muted-foreground">Every {maintenanceFrequencyLabel(row)}</div></TableCell><TableCell><div>{displayValue(row.checklistCode)}</div><div className="text-xs text-muted-foreground">{formatNumber(asArray(row.checklistSteps).length)} Steps</div></TableCell><TableCell><div>{displayValue(row.nextDueDate)}</div>{displayValue(row.dueProgress) !== "-" ? <div className="text-xs text-muted-foreground">{displayValue(row.dueProgress)}</div> : null}</TableCell><TableCell><StatusBadge value={row.status} /></TableCell><TableCell>{displayValue(row.lastCompletedDate)}</TableCell><TableCell><Button type="button" size="sm" variant={row.status === "Upcoming" ? "outline" : "default"} onClick={() => void markMaintenanceDone(row)}><CheckCircle2 className="size-4" />Mark Done</Button></TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No Maintenance Schedules Saved Yet. Add Schedules From Machine Master.</EmptyRowsMessage>}</CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Breakdown maintenance entry</CardTitle><CardDescription>Use this for maintenance not against a planned schedule.</CardDescription></CardHeader>
-        <CardContent><form className="grid gap-3" onSubmit={saveBreakdownMaintenance}><div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3"><Field label="Machine no."><select className="h-9 rounded-md border bg-background px-3 text-sm" name="machineNo" required><option value="">Select machine</option>{machineRows.map((row) => <option key={displayValue(row.machineNo)} value={displayValue(row.machineNo)}>{displayValue(row.machineNo)}</option>)}</select></Field><Field label="Date"><Input name="completedDate" type="date" defaultValue={todayIsoDate()} required /></Field><Field label="Completed by"><Input name="completedBy" required /></Field><Field label="Actual minutes"><Input name="actualMinutes" type="number" min="0" /></Field><Field label="Maintenance code"><Input name="maintenanceCode" defaultValue="BREAKDOWN" /></Field><Field label="Maintenance title"><Input name="maintenanceTitle" defaultValue="Breakdown maintenance" /></Field><Field label="Result"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="result" defaultValue="Completed"><option value="Completed">Completed</option><option value="Needs follow up">Needs follow up</option><option value="Skipped">Skipped</option></select></Field><Field label="Breakdown reason"><Input name="breakdownReason" required /></Field><Field label="Parts changed"><Input name="partsChanged" /></Field><Field label="Work done"><Input name="workDone" /></Field><Field label="Remark"><Input name="remark" /></Field></div><Button type="submit" className="w-fit" disabled={!machineRows.length}><Wrench className="size-4" />Save breakdown</Button></form></CardContent>
+        <CardHeader><CardTitle>Breakdown Maintenance Entry</CardTitle><CardDescription>Use This For Maintenance Not Against A Planned Schedule.</CardDescription></CardHeader>
+        <CardContent><form className="grid gap-3" onSubmit={saveBreakdownMaintenance}><div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3"><Field label="Machine No."><select className="h-9 rounded-md border bg-background px-3 text-sm" name="machineNo" required><option value="">Select Machine</option>{machineRows.map((row) => <option key={displayValue(row.machineNo)} value={displayValue(row.machineNo)}>{displayValue(row.machineNo)}</option>)}</select></Field><Field label="Date"><Input name="completedDate" type="date" defaultValue={todayIsoDate()} required /></Field><Field label="Completed By"><Input name="completedBy" required /></Field><Field label="Actual Minutes"><Input name="actualMinutes" type="number" min="0" /></Field><Field label="Maintenance Code"><Input name="maintenanceCode" defaultValue="BREAKDOWN" /></Field><Field label="Maintenance Title"><Input name="maintenanceTitle" defaultValue="Breakdown maintenance" /></Field><Field label="Result"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="result" defaultValue="Completed"><option value="Completed">Completed</option><option value="Needs follow up">Needs Follow Up</option><option value="Skipped">Skipped</option></select></Field><Field label="Breakdown Reason"><Input name="breakdownReason" required /></Field><Field label="Parts Changed"><Input name="partsChanged" /></Field><Field label="Work Done"><Input name="workDone" /></Field><Field label="Remark"><Input name="remark" /></Field></div><Button type="submit" className="w-fit" disabled={!machineRows.length}><Wrench className="size-4" />Save Breakdown</Button></form></CardContent>
       </Card>
     </section>
   );
@@ -6398,8 +6398,8 @@ function MaintenanceReportDetail({ row }: { row: DashboardPayload }) {
   const checklistSteps = asArray(row.checklistSteps);
   return (
     <div className="grid gap-3 rounded-lg border bg-muted/15 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><div className="text-sm font-semibold">Maintenance report</div><div className="text-xs text-muted-foreground">{displayValue(row.machineNo)} / {displayValue(row.completedDate)} / {displayValue(row.maintenanceCode)}</div></div><StatusBadge value={row.maintenanceType || "Planned"} /></div>
-      <div className="grid gap-3 md:grid-cols-4"><TileField label="Maintenance" value={`${displayValue(row.maintenanceCode)} - ${displayValue(row.maintenanceTitle)}`} important /><TileField label="Completed by" value={row.completedBy} /><TileField label="Actual minutes" value={row.actualMinutes} numeric /><TileField label="Result" value={row.result} /><TileField label="Parts changed" value={row.partsChanged} /><TileField label="Breakdown reason" value={row.breakdownReason} /><TileField label="Work done" value={row.workDone} /><TileField label="Next due" value={row.nextDueDate} /></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><div className="text-sm font-semibold">Maintenance Report</div><div className="text-xs text-muted-foreground">{displayValue(row.machineNo)} / {displayValue(row.completedDate)} / {displayValue(row.maintenanceCode)}</div></div><StatusBadge value={row.maintenanceType || "Planned"} /></div>
+      <div className="grid gap-3 md:grid-cols-4"><TileField label="Maintenance" value={`${displayValue(row.maintenanceCode)} - ${displayValue(row.maintenanceTitle)}`} important /><TileField label="Completed By" value={row.completedBy} /><TileField label="Actual Minutes" value={row.actualMinutes} numeric /><TileField label="Result" value={row.result} /><TileField label="Parts Changed" value={row.partsChanged} /><TileField label="Breakdown Reason" value={row.breakdownReason} /><TileField label="Work Done" value={row.workDone} /><TileField label="Next Due" value={row.nextDueDate} /></div>
       {displayValue(row.remark) !== "-" ? <div className="text-sm text-muted-foreground">{displayValue(row.remark)}</div> : null}
       {checklistSteps.length ? <div className="overflow-auto rounded-md border bg-background"><Table><TableHeader><TableRow><TableHead>Step</TableHead><TableHead>Description</TableHead><TableHead>Value</TableHead><TableHead>Result</TableHead></TableRow></TableHeader><TableBody>{checklistSteps.map((step, index) => <TableRow key={`${displayValue(step.sequence)}-${index}`}><TableCell>{displayValue(step.sequence)}</TableCell><TableCell>{displayValue(step.stepDescription)}</TableCell><TableCell>{displayValue(step.value)}</TableCell><TableCell><StatusBadge value={step.result || "Recorded"} /></TableCell></TableRow>)}</TableBody></Table></div> : null}
     </div>
@@ -6419,7 +6419,7 @@ function MaintenanceChecklistPreview({ rows }: { rows: DashboardPayload[] }) {
             <span>{displayValue(row.stepDescription)}</span>
           </div>
         ))}
-        {rows.length > 6 ? <div className="text-xs text-muted-foreground">{formatNumber(rows.length - 6)} more steps</div> : null}
+        {rows.length > 6 ? <div className="text-xs text-muted-foreground">{formatNumber(rows.length - 6)} More Steps</div> : null}
       </div>
     </div>
   );
@@ -6478,25 +6478,25 @@ function PlanningHolidayPanel({
         ]}
       />
       <Card>
-        <CardHeader><CardTitle>Plan a holiday</CardTitle><CardDescription>All factory applies the date to Conventional, CNC, and Forging planning. A department choice affects only that production floor.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Plan A Holiday</CardTitle><CardDescription>All Factory Applies The Date To Conventional, Cnc, And Forging Planning. A Department Choice Affects Only That Production Floor.</CardDescription></CardHeader>
         {isSaving ? <div className="px-6"><ProcessingNotice message="Saving the planning holiday..." /></div> : null}
         <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
         <CardContent>
           <form className="grid gap-3" onSubmit={saveHoliday}>
             <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
-              <Field label="Holiday date"><Input name="date" type="date" required /></Field>
-              <Field label="Reason"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="reason" defaultValue="Plant holiday"><option value="Plant holiday">Plant holiday</option><option value="Vacation">Vacation</option><option value="Maintenance shutdown">Maintenance shutdown</option><option value="Other">Other</option></select></Field>
-              <Field label="Applies to"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="coverage" defaultValue="all"><option value="all">All factory</option>{productionFloors.map((floor) => <option key={floor.code} value={floor.code}>{floor.shortLabel}</option>)}</select></Field>
+              <Field label="Holiday Date"><Input name="date" type="date" required /></Field>
+              <Field label="Reason"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="reason" defaultValue="Plant holiday"><option value="Plant holiday">Plant Holiday</option><option value="Vacation">Vacation</option><option value="Maintenance shutdown">Maintenance Shutdown</option><option value="Other">Other</option></select></Field>
+              <Field label="Applies To"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="coverage" defaultValue="all"><option value="all">All Factory</option>{productionFloors.map((floor) => <option key={floor.code} value={floor.code}>{floor.shortLabel}</option>)}</select></Field>
               <Field label="Remark"><Input name="remark" /></Field>
             </div>
-            <Button className="w-fit" type="submit" disabled={isSaving}><CalendarDays className="size-4" />{isSaving ? "Saving..." : "Save holiday"}</Button>
+            <Button className="w-fit" type="submit" disabled={isSaving}><CalendarDays className="size-4" />{isSaving ? "Saving..." : "Save Holiday"}</Button>
           </form>
         </CardContent>
         </fieldset>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Saved planning holidays</CardTitle><CardDescription>Dates affecting the selected department / production floor.</CardDescription></CardHeader>
-        <CardContent>{holidayRows.length ? <div className="overflow-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Reason</TableHead><TableHead>Applies to</TableHead><TableHead>Remark</TableHead></TableRow></TableHeader><TableBody>{holidayRows.map((row, index) => <TableRow key={`${displayValue(row.dateValue || row.date)}-${index}`}><TableCell>{displayValue(row.date)}</TableCell><TableCell>{displayValue(row.reason)}</TableCell><TableCell>{planningHolidayCoverageLabel(row)}</TableCell><TableCell>{displayValue(row.remark)}</TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No manual planning holidays saved yet.</EmptyRowsMessage>}</CardContent>
+        <CardHeader><CardTitle>Saved Planning Holidays</CardTitle><CardDescription>Dates Affecting The Selected Department / Production Floor.</CardDescription></CardHeader>
+        <CardContent>{holidayRows.length ? <div className="overflow-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Reason</TableHead><TableHead>Applies To</TableHead><TableHead>Remark</TableHead></TableRow></TableHeader><TableBody>{holidayRows.map((row, index) => <TableRow key={`${displayValue(row.dateValue || row.date)}-${index}`}><TableCell>{displayValue(row.date)}</TableCell><TableCell>{displayValue(row.reason)}</TableCell><TableCell>{planningHolidayCoverageLabel(row)}</TableCell><TableCell>{displayValue(row.remark)}</TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No Manual Planning Holidays Saved Yet.</EmptyRowsMessage>}</CardContent>
       </Card>
     </section>
   );
@@ -6546,7 +6546,7 @@ function DataEntryForm({
         <LegacyActionForm
           key={`${spec.entryType}-${defaultsKey}`}
           title={`Save ${spec.title}`}
-          description="Writes the same entry type and payload shape used by the legacy form."
+          description="Writes The Same Entry Type And Payload Shape Used By The Legacy Form."
           fields={spec.fields}
           defaults={resolvedDefaults}
           buttonLabel={`Save ${spec.title}`}
@@ -6688,16 +6688,16 @@ function QualityParameterMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>Maintain one parameter set for an item, option, and setup. The same rows are used by first-piece inspection and hourly quality checks.</CardDescription>
+        <CardDescription>Maintain One Parameter Set For An Item, Option, And Setup. The Same Rows Are Used By First-Piece Inspection And Hourly Quality Checks.</CardDescription>
       </CardHeader>
       {isSaving ? <div className="px-6"><ProcessingNotice message="Saving quality inspection parameters..." /></div> : null}
       <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
       <CardContent className="grid gap-4">
-        {!routeLines.length ? <AlertMessage tone="destructive">Create the item, option, and setup line in Route Master before adding quality inspection parameters.</AlertMessage> : null}
+        {!routeLines.length ? <AlertMessage tone="destructive">Create The Item, Option, And Setup Line In Route Master Before Adding Quality Inspection Parameters.</AlertMessage> : null}
         <div className="grid gap-3 md:grid-cols-3">
-          <Field label="Item code"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.partNo} onChange={(event) => { setSetupFields({ partNo: event.target.value, optionNumber: "", setupNo: "" }); setStatus(null); }} required><option value="">Select Route Master item</option>{itemOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
-          <Field label="Option no."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.optionNumber} onChange={(event) => { setSetupFields((current) => ({ ...current, optionNumber: event.target.value, setupNo: "" })); setStatus(null); }} required disabled={!setupFields.partNo}><option value="">Select option</option>{optionOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
-          <Field label="Setup no."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.setupNo} onChange={(event) => { setSetupFields((current) => ({ ...current, setupNo: event.target.value })); setStatus(null); }} required disabled={!setupFields.optionNumber}><option value="">Select setup</option>{setupNumberOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
+          <Field label="Item Code"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.partNo} onChange={(event) => { setSetupFields({ partNo: event.target.value, optionNumber: "", setupNo: "" }); setStatus(null); }} required><option value="">Select Route Master Item</option>{itemOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
+          <Field label="Option No."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.optionNumber} onChange={(event) => { setSetupFields((current) => ({ ...current, optionNumber: event.target.value, setupNo: "" })); setStatus(null); }} required disabled={!setupFields.partNo}><option value="">Select Option</option>{optionOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
+          <Field label="Setup No."><select className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.setupNo} onChange={(event) => { setSetupFields((current) => ({ ...current, setupNo: event.target.value })); setStatus(null); }} required disabled={!setupFields.optionNumber}><option value="">Select Setup</option>{setupNumberOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>
         </div>
         <div className="overflow-auto rounded-lg border">
           <Table>
@@ -6723,19 +6723,19 @@ function QualityParameterMasterForm({
                   <TableCell><Input className="h-8 min-w-36" value={draft.instrumentUsed} onChange={(event) => updateDraft(draft.draftId, "instrumentUsed", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.tolerancePlus} onChange={(event) => updateDraft(draft.draftId, "tolerancePlus", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.toleranceMinus} onChange={(event) => updateDraft(draft.draftId, "toleranceMinus", event.target.value)} /></TableCell>
-                  <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="number">Number</option><option value="text">Text</option><option value="pass_fail">OK / Not OK</option></select></TableCell>
+                  <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="number">Number</option><option value="text">Text</option><option value="pass_fail">Ok / Not Ok</option></select></TableCell>
                   <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
-                  <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove parameter" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
+                  <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Parameter" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button type="button" variant="outline" onClick={addDraft}><Plus className="size-4" />Add parameter</Button>
+          <Button type="button" variant="outline" onClick={addDraft}><Plus className="size-4" />Add Parameter</Button>
           <div className="flex flex-wrap items-center gap-2">
             {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
-            <Button type="button" disabled={isSaving} onClick={() => void saveParameterSet()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save parameter set"}</Button>
+            <Button type="button" disabled={isSaving} onClick={() => void saveParameterSet()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save Parameter Set"}</Button>
           </div>
         </div>
       </CardContent>
@@ -6813,35 +6813,35 @@ function MaintenanceMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>Create reusable maintenance schedules here, then assign them to machines from Machine Master.</CardDescription>
+        <CardDescription>Create Reusable Maintenance Schedules Here, Then Assign Them To Machines From Machine Master.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
-          <Field label="Maintenance schedule">
+          <Field label="Maintenance Schedule">
             <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => { setSelectedCode(event.target.value); setChecklistCodeOverride(""); }}>
-              <option value={nextMaintenanceMasterCode(savedRows)}>New schedule ({nextMaintenanceMasterCode(savedRows)})</option>
+              <option value={nextMaintenanceMasterCode(savedRows)}>New Schedule ({nextMaintenanceMasterCode(savedRows)})</option>
               {scheduleOptions.map((row) => <option key={displayValue(row.maintenanceCode)} value={displayValue(row.maintenanceCode)}>{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</option>)}
             </select>
           </Field>
-          <TileField label="Saved schedules" value={scheduleOptions.length} numeric />
+          <TileField label="Saved Schedules" value={scheduleOptions.length} numeric />
         </div>
         {previewChecklistRows.length ? <MaintenanceChecklistPreview rows={previewChecklistRows} /> : null}
         <form key={`${spec.entryType}-${selectedCode}`} className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
           <div>
-            <div className="text-sm font-medium">{isExistingSchedule ? "Update maintenance schedule" : "Create maintenance schedule"}</div>
-            <div className="text-xs text-muted-foreground">The generated code identifies this reusable schedule; the title is what users select when assigning it to machines.</div>
+            <div className="text-sm font-medium">{isExistingSchedule ? "Update Maintenance Schedule" : "Create Maintenance Schedule"}</div>
+            <div className="text-xs text-muted-foreground">The Generated Code Identifies This Reusable Schedule; The Title Is What Users Select When Assigning It To Machines.</div>
           </div>
           <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-            <Field label="Maintenance code"><Input name="maintenanceCode" value={selectedCode} readOnly /></Field>
-            <Field label="Maintenance schedule title"><Input name="maintenanceTitle" defaultValue={selectedTitle !== "-" ? selectedTitle : ""} required /></Field>
+            <Field label="Maintenance Code"><Input name="maintenanceCode" value={selectedCode} readOnly /></Field>
+            <Field label="Maintenance Schedule Title"><Input name="maintenanceTitle" defaultValue={selectedTitle !== "-" ? selectedTitle : ""} required /></Field>
             <Field label="Frequency"><Input name="frequencyDays" type="number" min="1" defaultValue={selectedFrequency !== "-" ? selectedFrequency : ""} required /></Field>
-            <Field label="Frequency basis"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="frequencyBasis" defaultValue={selectedFrequencyBasis !== "-" ? selectedFrequencyBasis : "Calendar days"}><option value="Calendar days">Calendar days</option><option value="Running days">Running days</option></select></Field>
-            <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={previewChecklistCode} onChange={(event) => setChecklistCodeOverride(event.target.value)}><option value="">No checklist</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
-            <Field label="Estimated minutes"><Input name="estimatedMinutes" type="number" min="0" defaultValue={selectedEstimatedMinutes !== "-" ? selectedEstimatedMinutes : ""} /></Field>
+            <Field label="Frequency Basis"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="frequencyBasis" defaultValue={selectedFrequencyBasis !== "-" ? selectedFrequencyBasis : "Calendar Days"}><option value="Calendar days">Calendar Days</option><option value="Running days">Running Days</option></select></Field>
+            <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={previewChecklistCode} onChange={(event) => setChecklistCodeOverride(event.target.value)}><option value="">No Checklist</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
+            <Field label="Estimated Minutes"><Input name="estimatedMinutes" type="number" min="0" defaultValue={selectedEstimatedMinutes !== "-" ? selectedEstimatedMinutes : ""} /></Field>
             <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue={selectedStatus !== "-" ? selectedStatus : "Active"}><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
             <Field label="Remark"><Input name="remark" defaultValue={selectedRemark !== "-" ? selectedRemark : ""} /></Field>
           </div>
-          <Button className="w-fit" type="submit"><Wrench className="size-4" />{isExistingSchedule ? "Update schedule" : "Create schedule"}</Button>
+          <Button className="w-fit" type="submit"><Wrench className="size-4" />{isExistingSchedule ? "Update Schedule" : "Create Schedule"}</Button>
         </form>
       </CardContent>
     </Card>
@@ -6963,7 +6963,7 @@ function MaintenanceChecklistMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>Create the checklist once, then add all steps in the table. Step codes are not required.</CardDescription>
+        <CardDescription>Create The Checklist Once, Then Add All Steps In The Table. Step Codes Are Not Required.</CardDescription>
       </CardHeader>
       {isSaving ? <div className="px-6"><ProcessingNotice message="Saving maintenance checklist..." /></div> : null}
       <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
@@ -6971,26 +6971,26 @@ function MaintenanceChecklistMasterForm({
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px_140px]">
           <Field label="Checklist">
             <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}>
-              <option value={nextMaintenanceChecklistCode(savedRows)}>New checklist ({nextMaintenanceChecklistCode(savedRows)})</option>
+              <option value={nextMaintenanceChecklistCode(savedRows)}>New Checklist ({nextMaintenanceChecklistCode(savedRows)})</option>
               {checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}
             </select>
           </Field>
           <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New checklist</Button>
+            <Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New Checklist</Button>
           </div>
           <TileField label="Checklists" value={checklistOptions.length} numeric />
           <TileField label="Steps" value={drafts.filter((draft) => draft.stepDescription.trim()).length} numeric />
         </div>
         <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
-          <Field label="Checklist code"><Input value={selectedCode} readOnly /></Field>
-          <Field label="Checklist title"><Input value={checklistTitle} onChange={(event) => setChecklistTitle(event.target.value)} required /></Field>
+          <Field label="Checklist Code"><Input value={selectedCode} readOnly /></Field>
+          <Field label="Checklist Title"><Input value={checklistTitle} onChange={(event) => setChecklistTitle(event.target.value)} required /></Field>
         </div>
         <div className="overflow-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="min-w-20">Step no.</TableHead>
-                <TableHead className="min-w-80">Step description</TableHead>
+                <TableHead className="min-w-20">Step No.</TableHead>
+                <TableHead className="min-w-80">Step Description</TableHead>
                 <TableHead className="min-w-32">Input</TableHead>
                 <TableHead className="min-w-44">Remark</TableHead>
                 <TableHead className="w-12"></TableHead>
@@ -7003,17 +7003,17 @@ function MaintenanceChecklistMasterForm({
                   <TableCell><Input className="h-8 min-w-72" value={draft.stepDescription} onChange={(event) => updateDraft(draft.draftId, "stepDescription", event.target.value)} /></TableCell>
                   <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></select></TableCell>
                   <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
-                  <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove checklist step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
+                  <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Checklist Step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button type="button" variant="outline" onClick={addDraft}><Plus className="size-4" />Add step</Button>
+          <Button type="button" variant="outline" onClick={addDraft}><Plus className="size-4" />Add Step</Button>
           <div className="flex flex-wrap items-center gap-2">
             {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
-            <Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save checklist"}</Button>
+            <Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save Checklist"}</Button>
           </div>
         </div>
       </CardContent>
@@ -7128,29 +7128,29 @@ function SetupChecklistMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>Create one generated checklist code, then maintain all machinist steps under it.</CardDescription>
+        <CardDescription>Create One Generated Checklist Code, Then Maintain All Machinist Steps Under It.</CardDescription>
       </CardHeader>
       {isSaving ? <div className="px-6"><ProcessingNotice message="Saving setup checklist..." /></div> : null}
       <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px_140px]">
-          <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}><option value={nextSetupChecklistCode(savedRows)}>New checklist ({nextSetupChecklistCode(savedRows)})</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
-          <div className="flex items-end"><Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New checklist</Button></div>
+          <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}><option value={nextSetupChecklistCode(savedRows)}>New Checklist ({nextSetupChecklistCode(savedRows)})</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
+          <div className="flex items-end"><Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New Checklist</Button></div>
           <TileField label="Checklists" value={checklistOptions.length} numeric />
           <TileField label="Steps" value={drafts.filter((draft) => draft.checkPoint.trim()).length} numeric />
         </div>
         <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_180px]">
-          <Field label="Checklist code"><Input value={selectedCode} readOnly /></Field>
-          <Field label="Checklist title"><Input value={checklistTitle} onChange={(event) => setChecklistTitle(event.target.value)} required /></Field>
-          <Field label="Effective from"><Input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></Field>
+          <Field label="Checklist Code"><Input value={selectedCode} readOnly /></Field>
+          <Field label="Checklist Title"><Input value={checklistTitle} onChange={(event) => setChecklistTitle(event.target.value)} required /></Field>
+          <Field label="Effective From"><Input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></Field>
         </div>
         <div className="overflow-auto rounded-lg border">
           <Table>
-            <TableHeader><TableRow><TableHead className="min-w-20">Step</TableHead><TableHead className="min-w-72">Check point</TableHead><TableHead className="min-w-32">Input</TableHead><TableHead className="min-w-28">Required</TableHead><TableHead className="min-w-52">Section</TableHead><TableHead className="min-w-44">Remark</TableHead><TableHead className="w-12"></TableHead></TableRow></TableHeader>
-            <TableBody>{drafts.map((draft, index) => <TableRow key={draft.draftId}><TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-64" value={draft.checkPoint} onChange={(event) => updateDraft(draft.draftId, "checkPoint", event.target.value)} /></TableCell><TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></select></TableCell><TableCell><select className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.required} onChange={(event) => updateDraft(draft.draftId, "required", event.target.value)}><option value="Yes">Yes</option><option value="No">No</option></select></TableCell><TableCell><Input className="h-8 min-w-48" value={draft.section} onChange={(event) => updateDraft(draft.draftId, "section", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell><TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove setup checklist step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell></TableRow>)}</TableBody>
+            <TableHeader><TableRow><TableHead className="min-w-20">Step</TableHead><TableHead className="min-w-72">Check Point</TableHead><TableHead className="min-w-32">Input</TableHead><TableHead className="min-w-28">Required</TableHead><TableHead className="min-w-52">Section</TableHead><TableHead className="min-w-44">Remark</TableHead><TableHead className="w-12"></TableHead></TableRow></TableHeader>
+            <TableBody>{drafts.map((draft, index) => <TableRow key={draft.draftId}><TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-64" value={draft.checkPoint} onChange={(event) => updateDraft(draft.draftId, "checkPoint", event.target.value)} /></TableCell><TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></select></TableCell><TableCell><select className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.required} onChange={(event) => updateDraft(draft.draftId, "required", event.target.value)}><option value="Yes">Yes</option><option value="No">No</option></select></TableCell><TableCell><Input className="h-8 min-w-48" value={draft.section} onChange={(event) => updateDraft(draft.draftId, "section", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell><TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Setup Checklist Step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell></TableRow>)}</TableBody>
           </Table>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2"><Button type="button" variant="outline" onClick={() => setDrafts((current) => [...current, newSetupChecklistDraft(current.length + 1)])}><Plus className="size-4" />Add step</Button><div className="flex flex-wrap items-center gap-2">{status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}<Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save checklist"}</Button></div></div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><Button type="button" variant="outline" onClick={() => setDrafts((current) => [...current, newSetupChecklistDraft(current.length + 1)])}><Plus className="size-4" />Add Step</Button><div className="flex flex-wrap items-center gap-2">{status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}<Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save Checklist"}</Button></div></div>
       </CardContent>
       </fieldset>
     </Card>
@@ -7209,9 +7209,9 @@ function PlannerWorkflowExceptionPanel({
   return (
     <Card className={rows.length ? "border-amber-300/80" : ""}>
       <CardHeader>
-        <CardTitle>Workflow exceptions</CardTitle>
+        <CardTitle>Workflow Exceptions</CardTitle>
         <CardDescription>
-          Raw production exists, but the machinist task workflow has not recorded operator assignment and machine start.
+          Raw Production Exists, But The Machinist Task Workflow Has Not Recorded Operator Assignment And Machine Start.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -7221,8 +7221,8 @@ function PlannerWorkflowExceptionPanel({
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead>Machine</TableHead>
-                  <TableHead>Item setup</TableHead>
-                  <TableHead>Raw production</TableHead>
+                  <TableHead>Item Setup</TableHead>
+                  <TableHead>Raw Production</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -7234,13 +7234,13 @@ function PlannerWorkflowExceptionPanel({
                       <ShopFloorItemSummary row={row} tone="next" />
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm">{formatNumber(numValue(row, "rawRows"))} row{numValue(row, "rawRows") === 1 ? "" : "s"}</div>
+                      <div className="text-sm">{formatNumber(numValue(row, "rawRows"))} Row{numValue(row, "rawRows") === 1 ? "" : "s"}</div>
                       <div className="text-xs text-muted-foreground">Output {displayValue(row.rawOutputQty, true)} / Actual {displayValue(row.rawActualQty, true)}</div>
                     </TableCell>
                     <TableCell>
                       <Button type="button" size="sm" variant="outline" onClick={() => void resolveWorkflow(row)}>
                         <CheckCircle2 className="size-4" />
-                        Resolve workflow
+                        Resolve Workflow
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -7249,7 +7249,7 @@ function PlannerWorkflowExceptionPanel({
             </Table>
           </div>
         ) : (
-          <EmptyRowsMessage>No workflow exceptions found</EmptyRowsMessage>
+          <EmptyRowsMessage>No Workflow Exceptions Found</EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
@@ -7293,7 +7293,7 @@ function CorrectionsPanel({
     <Card>
       <CardHeader>
         <CardTitle>Corrections</CardTitle>
-        <CardDescription>Reverse wrong entries without deleting history. Reversed entries stop affecting live status and task queues.</CardDescription>
+        <CardDescription>Reverse Wrong Entries Without Deleting History. Reversed Entries Stop Affecting Live Status And Task Queues.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
@@ -7308,13 +7308,13 @@ function CorrectionsPanel({
             <span>Search</span>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="pl-9" value={query} placeholder="Search entry, machine, job card, setup, remark..." onChange={(event) => setQuery(event.target.value)} />
+              <Input className="pl-9" value={query} placeholder="Search Entry, Machine, Job Card, Setup, Remark..." onChange={(event) => setQuery(event.target.value)} />
             </div>
           </Label>
           <FilterSelect label="Module" value={tableFilter} onChange={setTableFilter} options={[["", "All modules"], ...tableOptions.map((value) => [value, value] as [string, string])]} />
-          <FilterSelect label="Entry type" value={entryTypeFilter} onChange={setEntryTypeFilter} options={[["", "All entry types"], ...entryTypeOptions.map((value) => [value, value] as [string, string])]} />
-          <Field label="Corrected by">
-            <Input value={correctedBy} placeholder="Planner/admin name" onChange={(event) => setCorrectedBy(event.target.value)} />
+          <FilterSelect label="Entry Type" value={entryTypeFilter} onChange={setEntryTypeFilter} options={[["", "All entry types"], ...entryTypeOptions.map((value) => [value, value] as [string, string])]} />
+          <Field label="Corrected By">
+            <Input value={correctedBy} placeholder="Planner/Admin Name" onChange={(event) => setCorrectedBy(event.target.value)} />
           </Field>
         </div>
         {filteredRows.length ? (
@@ -7345,7 +7345,7 @@ function CorrectionsPanel({
                       </TableCell>
                       <TableCell>{displayValue(row.createdAt)}</TableCell>
                       <TableCell>
-                        <Input value={reason} placeholder="Mandatory correction reason" onChange={(event) => setReasonById((current) => ({ ...current, [targetId]: event.target.value }))} />
+                        <Input value={reason} placeholder="Mandatory Correction Reason" onChange={(event) => setReasonById((current) => ({ ...current, [targetId]: event.target.value }))} />
                       </TableCell>
                       <TableCell>
                         <Button type="button" size="sm" variant="outline" onClick={() => void reverseRow(row)} disabled={!str(reason)}>
@@ -7360,7 +7360,7 @@ function CorrectionsPanel({
             </Table>
           </div>
         ) : (
-          <EmptyRowsMessage>No active entries match the current filters</EmptyRowsMessage>
+          <EmptyRowsMessage>No Active Entries Match The Current Filters</EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
@@ -7371,8 +7371,8 @@ function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Next tool / fixture number</CardTitle>
-        <CardDescription>First missing number, otherwise next new.</CardDescription>
+        <CardTitle>Next Tool / Fixture Number</CardTitle>
+        <CardDescription>First Missing Number, Otherwise Next New.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <section className="grid gap-3 sm:grid-cols-2 @5xl/main:grid-cols-5">
@@ -7381,7 +7381,7 @@ function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
               <div className="truncate text-xs text-muted-foreground">{str(row.category)}</div>
               <div className="text-xl font-semibold tabular-nums">{str(row.recommendedNumber || row.nextNew)}</div>
               <div className="text-xs text-muted-foreground">
-                {str(row.recommendationType || "Next number")} | {formatNumber(numValue(row, "usedCount"))} used
+                {str(row.recommendationType || "Next Number")} | {formatNumber(numValue(row, "usedCount"))} Used
               </div>
             </div>
           ))}
@@ -7482,7 +7482,7 @@ function LegacyActionForm({
 }
 
 function ActionLogTable({ rows }: { rows: DashboardPayload[] }) {
-  return <DataRowsCard title="Planner action log" rows={rows} empty="No planner actions saved yet" />;
+  return <DataRowsCard title="Planner Action Log" rows={rows} empty="No planner actions saved yet" />;
 }
 
 function JobCardTileBoard({
@@ -7544,8 +7544,8 @@ function JobCardTileBoard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Job-card tiles</CardTitle>
-        <CardDescription>{rows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(rows.length)} job cards shown` : "No job-card status rows returned"}</CardDescription>
+        <CardTitle>Job-Card Tiles</CardTitle>
+        <CardDescription>{rows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(rows.length)} job cards shown` : "No Job-Card Status Rows Returned"}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {rows.length ? (
@@ -7588,7 +7588,7 @@ function JobCardTileBoard({
             />
             <div className="grid gap-3 @4xl/main:grid-cols-2">
               <FilterSelect
-                label="RM status"
+                label="Rm Status"
                 value={rmStatusFilter}
                 onChange={setRmStatusFilter}
                 options={[
@@ -7598,7 +7598,7 @@ function JobCardTileBoard({
                 ]}
               />
               <FilterSelect
-                label="Production status"
+                label="Production Status"
                 value={productionStatusFilter}
                 onChange={setProductionStatusFilter}
                 options={[
@@ -7612,7 +7612,7 @@ function JobCardTileBoard({
               filters={[
                 {
                   id: "job-card-filter",
-                  label: "Job card no.",
+                  label: "Job Card No.",
                   value: jobCardFilter,
                   placeholder: "Type or select job card",
                   options: jobCardOptions,
@@ -7620,7 +7620,7 @@ function JobCardTileBoard({
                 },
                 {
                   id: "item-code-filter",
-                  label: "Item code",
+                  label: "Item Code",
                   value: itemCodeFilter,
                   placeholder: "Type or select item code",
                   options: itemCodeOptions,
@@ -7628,7 +7628,7 @@ function JobCardTileBoard({
                 },
                 {
                   id: "job-card-machine-filter",
-                  label: "Machine no.",
+                  label: "Machine No.",
                   value: machineFilter,
                   placeholder: "Type or select planned/running machine",
                   options: machineOptions,
@@ -7638,7 +7638,7 @@ function JobCardTileBoard({
             />
             <div>
               <Button type="button" variant="outline" size="sm" onClick={clearJobCardFilters}>
-                Clear filters
+                Clear Filters
               </Button>
             </div>
             {filteredRows.length ? (
@@ -7652,11 +7652,11 @@ function JobCardTileBoard({
                 ))}
               </div>
             ) : (
-              <EmptyRowsMessage>No job cards match the current filters</EmptyRowsMessage>
+              <EmptyRowsMessage>No Job Cards Match The Current Filters</EmptyRowsMessage>
             )}
           </>
         ) : (
-          <EmptyRowsMessage>No job-card status rows returned</EmptyRowsMessage>
+          <EmptyRowsMessage>No Job-Card Status Rows Returned</EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
@@ -7685,26 +7685,26 @@ function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: Das
       </div>
       <TileField label="Description" value={row.description || row.DESCRIPTION} />
       <div className="grid gap-2 rounded-md border bg-muted/20 p-2 sm:grid-cols-2">
-        <TileField label="Planned production start" value={schedule.plannedStart} />
-        <TileField label="Planned production end" value={schedule.plannedEnd} />
-        <TileField label="Actual production start" value={schedule.actualStart} />
-        <TileField label="Actual production end" value={schedule.actualEnd} />
+        <TileField label="Planned Production Start" value={schedule.plannedStart} />
+        <TileField label="Planned Production End" value={schedule.plannedEnd} />
+        <TileField label="Actual Production Start" value={schedule.actualStart} />
+        <TileField label="Actual Production End" value={schedule.actualEnd} />
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        <TileField label="FG PO" value={row.fgPoNo || row["FG PO NO."]} />
-        <TileField label="Order pcs" value={row.orderPcs || row["ORD. PCS."]} numeric />
-        <TileField label="Route option" value={option} />
-        <TileField label="Option source" value={row.optionSource} />
+        <TileField label="Fg Po" value={row.fgPoNo || row["FG PO NO."]} />
+        <TileField label="Order Pcs" value={row.orderPcs || row["ORD. PCS."]} numeric />
+        <TileField label="Route Option" value={option} />
+        <TileField label="Option Source" value={row.optionSource} />
         <TileField label="Route" value={row.routeStatus} />
         <TileField label="Cycle" value={row.cycleStatus} />
         <TileField label="Tooling" value={row.toolingStatus} />
-        <TileField label="Actual / output" value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`} />
+        <TileField label="Actual / Output" value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`} />
         <TileField label="Rejected" value={row.rawRejectQty} numeric />
-        <TileField label="Raw rows" value={row.rawRows} numeric />
+        <TileField label="Raw Rows" value={row.rawRows} numeric />
       </div>
       {setupRows.length ? (
         <div className="grid gap-2">
-          <div className="text-[11px] font-medium uppercase text-muted-foreground">Setup jobs</div>
+          <div className="text-[11px] font-medium text-muted-foreground">Setup Jobs</div>
           <div className="grid max-h-48 gap-2 overflow-y-auto pr-1">
             {setupRows.map((setup, index) => (
               <div key={`${displayValue(setup.setupNo)}-${displayValue(setup.machine)}-${index}`} className="rounded-md border bg-muted/10 p-2">
@@ -7713,20 +7713,20 @@ function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: Das
                   <StatusBadge value={setup.runningStatus} />
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <TileField label="Setup planned date" value={setup.setupPlannedDate || setup.plannedDate} />
-                  <TileField label="Setup completion date" value={setup.setupCompletionDate || setup.completionDate} />
-                  <TileField label="Plan vs actual" value={setup.planVsActual} />
-                  <TileField label="Planned production start" value={setup.plannedProductionStartDate} />
-                  <TileField label="Planned production end" value={setup.plannedProductionEndDate} />
-                  <TileField label="Actual production start" value={setup.actualProductionStartDate} />
-                  <TileField label="Actual production end" value={setup.actualProductionEndDate} />
+                  <TileField label="Setup Planned Date" value={setup.setupPlannedDate || setup.plannedDate} />
+                  <TileField label="Setup Completion Date" value={setup.setupCompletionDate || setup.completionDate} />
+                  <TileField label="Plan Vs Actual" value={setup.planVsActual} />
+                  <TileField label="Planned Production Start" value={setup.plannedProductionStartDate} />
+                  <TileField label="Planned Production End" value={setup.plannedProductionEndDate} />
+                  <TileField label="Actual Production Start" value={setup.actualProductionStartDate} />
+                  <TileField label="Actual Production End" value={setup.actualProductionEndDate} />
                 </div>
               </div>
             ))}
           </div>
         </div>
       ) : null}
-      <TileField label="Planning action" value={blocker} important />
+      <TileField label="Planning Action" value={blocker} important />
     </article>
   );
 }
@@ -7787,8 +7787,8 @@ function MachinePlanningBoard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Machine planning board</CardTitle>
-        <CardDescription>{boardRows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(boardRows.length)} machines shown` : "No machine planning board rows returned"}</CardDescription>
+        <CardTitle>Machine Planning Board</CardTitle>
+        <CardDescription>{boardRows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(boardRows.length)} machines shown` : "No Machine Planning Board Rows Returned"}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {boardRows.length ? (
@@ -7833,7 +7833,7 @@ function MachinePlanningBoard({
               filters={[
                 {
                   id: "machine-number-filter",
-                  label: "Machine no.",
+                  label: "Machine No.",
                   value: machineFilter,
                   placeholder: "Type or select planned/running machine",
                   options: machineOptions,
@@ -7841,7 +7841,7 @@ function MachinePlanningBoard({
                 },
                 {
                   id: "machine-job-card-filter",
-                  label: "Job card no.",
+                  label: "Job Card No.",
                   value: jobCardFilter,
                   placeholder: "Type or select job card",
                   options: jobCardOptions,
@@ -7849,7 +7849,7 @@ function MachinePlanningBoard({
                 },
                 {
                   id: "machine-item-code-filter",
-                  label: "Item code",
+                  label: "Item Code",
                   value: itemCodeFilter,
                   placeholder: "Type or select item code",
                   options: itemCodeOptions,
@@ -7859,7 +7859,7 @@ function MachinePlanningBoard({
             />
             <div>
               <Button type="button" variant="outline" size="sm" onClick={clearMachineFilters}>
-                Clear filters
+                Clear Filters
               </Button>
             </div>
             {filteredRows.length ? (
@@ -7876,12 +7876,12 @@ function MachinePlanningBoard({
                 ))}
               </div>
             ) : (
-              <EmptyRowsMessage>No machines match the current filters</EmptyRowsMessage>
+              <EmptyRowsMessage>No Machines Match The Current Filters</EmptyRowsMessage>
             )}
             <MachinePlannedPartsPanel machine={selectedMachine} rows={selectedPlans} />
           </>
         ) : (
-          <EmptyRowsMessage>No machine planning board rows returned</EmptyRowsMessage>
+          <EmptyRowsMessage>No Machine Planning Board Rows Returned</EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
@@ -7932,12 +7932,12 @@ function MachinePlanningTile({
         <TileField label="Location" value={row.location || row.LOCATION || row.Location} />
         <TileField label="Capacity" value={row.capacity || row.CAPACITY || row.Capacity} numeric />
         <TileField label="Operator" value={row.operator || row.operatorName || row["OPERATOR NAME"]} />
-        <TileField label="Planned setups" value={plannedCount} numeric />
+        <TileField label="Planned Setups" value={plannedCount} numeric />
         <TileField label="Priority" value={row.priority || row.PRIORITY} />
-        <TileField label={focusIsCurrent ? "Current job card" : "Next job card"} value={focusSetup?.jcNo || row.jcNo || row.jobCard || row.JobCardNo} />
-        <TileField label={focusIsCurrent ? "Current part" : "Next part to setup"} value={focusSetup?.partCode || row.partCode || row["PART CODE"] || row.itemCode} />
+        <TileField label={focusIsCurrent ? "Current Job Card" : "Next Job Card"} value={focusSetup?.jcNo || row.jcNo || row.jobCard || row.JobCardNo} />
+        <TileField label={focusIsCurrent ? "Current Part" : "Next Part To Setup"} value={focusSetup?.partCode || row.partCode || row["PART CODE"] || row.itemCode} />
         <TileField label="Setup" value={focusSetup ? `${displayValue(focusSetup.setupNo)} / Option ${displayValue(focusSetup.optionNumber)}` : "-"} />
-        <TileField label={focusIsCurrent ? "Setup completion date" : "Setup planned date"} value={focusIsCurrent ? focusSetup?.setupCompletionDate || focusSetup?.completionDate : focusSetup?.setupPlannedDate || focusSetup?.plannedDate} />
+        <TileField label={focusIsCurrent ? "Setup Completion Date" : "Setup Planned Date"} value={focusIsCurrent ? focusSetup?.setupCompletionDate || focusSetup?.completionDate : focusSetup?.setupPlannedDate || focusSetup?.plannedDate} />
         <TileField label="Remarks" value={row.remark || row.remarks || row.REMARKS} important />
       </div>
     </button>
@@ -7948,9 +7948,9 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
   return (
     <section className="grid gap-3 rounded-lg border bg-muted/20 p-3">
       <div>
-        <div className="text-sm font-semibold">{machine ? `Planned parts on ${machine}` : "Select a machine to see planned parts"}</div>
+        <div className="text-sm font-semibold">{machine ? `Planned parts on ${machine}` : "Select A Machine To See Planned Parts"}</div>
         <div className="text-xs text-muted-foreground">
-          {machine ? `${formatNumber(rows.length)} planned setup rows` : "Click any machine tile above to open its route-level part plan."}
+          {machine ? `${formatNumber(rows.length)} planned setup rows` : "Click Any Machine Tile Above To Open Its Route-Level Part Plan."}
         </div>
       </div>
       {machine ? (
@@ -7969,19 +7969,19 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
                   </div>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 @6xl/main:grid-cols-4">
-                  <TileField label="Job card" value={row.jcNo} />
-                  <TileField label="FG PO" value={row.fgPoNo} />
+                  <TileField label="Job Card" value={row.jcNo} />
+                  <TileField label="Fg Po" value={row.fgPoNo} />
                   <TileField label="Option" value={row.optionNumber} />
                   <TileField label="Setup" value={`${displayValue(row.setupNo)} ${displayValue(row.setupName) !== "-" ? displayValue(row.setupName) : ""}`} />
-                  <TileField label="Order pcs" value={row.orderPcs} numeric />
-                  <TileField label="Actual / output" value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`} />
-                  <TileField label="Setup planned date" value={row.setupPlannedDate || row.plannedDate} />
-                  <TileField label="Setup completion date" value={row.setupCompletionDate || row.completionDate} />
-                  <TileField label="Planned production start" value={row.plannedProductionStartDate} />
-                  <TileField label="Planned production end" value={row.plannedProductionEndDate} />
-                  <TileField label="Actual production start" value={row.actualProductionStartDate} />
-                  <TileField label="Actual production end" value={row.actualProductionEndDate} />
-                  <TileField label="Plan vs actual" value={row.planVsActual} />
+                  <TileField label="Order Pcs" value={row.orderPcs} numeric />
+                  <TileField label="Actual / Output" value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`} />
+                  <TileField label="Setup Planned Date" value={row.setupPlannedDate || row.plannedDate} />
+                  <TileField label="Setup Completion Date" value={row.setupCompletionDate || row.completionDate} />
+                  <TileField label="Planned Production Start" value={row.plannedProductionStartDate} />
+                  <TileField label="Planned Production End" value={row.plannedProductionEndDate} />
+                  <TileField label="Actual Production Start" value={row.actualProductionStartDate} />
+                  <TileField label="Actual Production End" value={row.actualProductionEndDate} />
+                  <TileField label="Plan Vs Actual" value={row.planVsActual} />
                   <TileField label="Cycle" value={row.cycleStatus} />
                   <TileField label="Tooling" value={row.toolingStatus} />
                 </div>
@@ -7989,7 +7989,7 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
             ))}
           </div>
         ) : (
-          <EmptyRowsMessage>No planned parts found for this machine</EmptyRowsMessage>
+          <EmptyRowsMessage>No Planned Parts Found For This Machine</EmptyRowsMessage>
         )
       ) : null}
     </section>
@@ -8003,7 +8003,7 @@ function TrackingSummary({ items }: { items: Array<[string, string, (() => void)
         const className = "rounded-lg border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-background to-green-100/70 p-2.5 text-left shadow-sm shadow-emerald-950/5 dark:border-emerald-900/50 dark:from-emerald-950/35 dark:via-background dark:to-green-950/25";
         const content = (
           <>
-            <div className="text-[10px] font-medium uppercase text-emerald-800 dark:text-emerald-200">{label}</div>
+            <div className="text-[10px] font-medium text-emerald-800 dark:text-emerald-200">{label}</div>
             <div className="text-base font-semibold tabular-nums">{value}</div>
           </>
         );
@@ -8176,7 +8176,7 @@ function TileField({
   const text = displayValue(value, numeric);
   return (
     <div className="min-w-0">
-      <div className="text-[11px] font-medium uppercase text-muted-foreground">{label}</div>
+      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
       <div className={important ? "break-words text-sm font-medium" : "break-words text-sm"}>{text}</div>
     </div>
   );
@@ -8233,7 +8233,7 @@ function MachineStateBadge({
   }[tone];
   return (
     <Badge variant="outline" className={`gap-1 ${toneClass}`}>
-      <span className="text-[10px] font-semibold uppercase opacity-75">{label}</span>
+      <span className="text-[10px] font-semibold opacity-75">{label}</span>
       <span>{value}</span>
     </Badge>
   );
@@ -9594,7 +9594,7 @@ function ProcessingNotice({ message }: { message: string }) {
       </span>
       <div>
         <div className="font-medium">{message}</div>
-        <div className="text-xs text-muted-foreground">Please wait. Data-entry controls are locked until processing finishes.</div>
+        <div className="text-xs text-muted-foreground">Please Wait. Data-Entry Controls Are Locked Until Processing Finishes.</div>
       </div>
     </div>
   );
@@ -10151,12 +10151,12 @@ function nextMaintenanceMasterCode(rows: DashboardPayload[]) {
 }
 function maintenanceScheduleFields(): LegacyField[] {
   return [
-    { name: "maintenanceCode", label: "Maintenance code", required: true },
-    { name: "maintenanceTitle", label: "Maintenance schedule title", required: true },
-    { name: "checklistCode", label: "Checklist code" },
-    { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
-    { name: "firstDueDate", label: "First due date", type: "date", required: true },
-    { name: "estimatedMinutes", label: "Estimated minutes", type: "number", min: "0" },
+    { name: "maintenanceCode", label: "Maintenance Code", required: true },
+    { name: "maintenanceTitle", label: "Maintenance Schedule Title", required: true },
+    { name: "checklistCode", label: "Checklist Code" },
+    { name: "frequencyDays", label: "Frequency Days", type: "number", min: "1", required: true },
+    { name: "firstDueDate", label: "First Due Date", type: "date", required: true },
+    { name: "estimatedMinutes", label: "Estimated Minutes", type: "number", min: "0" },
     { name: "status", label: "Status" },
     { name: "remark", label: "Remark" },
   ];

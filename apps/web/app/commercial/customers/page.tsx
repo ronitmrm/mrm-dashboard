@@ -68,9 +68,9 @@ export default async function CustomersPage({
       {canWrite ? (
         <Card>
           <CardHeader>
-            <CardTitle>Add customer</CardTitle>
+            <CardTitle>Add Customer</CardTitle>
             <CardDescription>
-              Customer IDs are allocated from the Pricing customer sequence.
+              Customer Ids Are Allocated From The Pricing Customer Sequence.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -78,7 +78,7 @@ export default async function CustomersPage({
               <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <Field>
                   <FieldLabel htmlFor="new-company-name">
-                    Company name
+                    Company Name
                   </FieldLabel>
                   <Input id="new-company-name" name="company_name" required />
                 </Field>
@@ -111,7 +111,7 @@ export default async function CustomersPage({
                 </Field>
               </FieldGroup>
               <Button className="mt-6" type="submit">
-                Add customer
+                Add Customer
               </Button>
             </form>
           </CardContent>
@@ -122,15 +122,15 @@ export default async function CustomersPage({
         <CardHeader>
           <CardTitle>Customers</CardTitle>
           <CardDescription>
-            Canonical customer masters with immutable Pricing source provenance.
+            Canonical Customer Masters With Immutable Pricing Source Provenance.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
             <span>
               Showing {visibleCustomers.length ? bounds.offset + 1 : 0}–
-              {Math.min(bounds.offset + visibleCustomers.length, totalCount)} of{" "}
-              {totalCount} customers
+              {Math.min(bounds.offset + visibleCustomers.length, totalCount)} Of{" "}
+              {totalCount} Customers
             </span>
             <div className="flex items-center gap-2">
               {bounds.page > 1 ? (
@@ -145,7 +145,7 @@ export default async function CustomersPage({
                 </Button>
               )}
               <span>
-                Page {Math.min(bounds.page, totalPages)} of {totalPages}
+                Page {Math.min(bounds.page, totalPages)} Of {totalPages}
               </span>
               {bounds.page < totalPages ? (
                 <Button asChild size="sm" variant="outline">
@@ -164,7 +164,7 @@ export default async function CustomersPage({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Customer ID</TableHead>
+                  <TableHead>Customer Id</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
@@ -198,7 +198,7 @@ export default async function CustomersPage({
                                 className="sr-only"
                                 htmlFor={`${formId}-company`}
                               >
-                                Company name for {customer.customerUid}
+                                Company Name For {customer.customerUid}
                               </FieldLabel>
                               <Input
                                 defaultValue={customer.companyName}
@@ -219,7 +219,7 @@ export default async function CustomersPage({
                                 className="sr-only"
                                 htmlFor={`${formId}-email`}
                               >
-                                Email for {customer.customerUid}
+                                Email For {customer.customerUid}
                               </FieldLabel>
                               <Input
                                 defaultValue={customer.email ?? ""}
@@ -240,7 +240,7 @@ export default async function CustomersPage({
                                 className="sr-only"
                                 htmlFor={`${formId}-phone`}
                               >
-                                Phone for {customer.customerUid}
+                                Phone For {customer.customerUid}
                               </FieldLabel>
                               <Input
                                 defaultValue={customer.phone ?? ""}
@@ -260,7 +260,7 @@ export default async function CustomersPage({
                                 className="sr-only"
                                 htmlFor={`${formId}-country`}
                               >
-                                Country for {customer.customerUid}
+                                Country For {customer.customerUid}
                               </FieldLabel>
                               <Input
                                 defaultValue={customer.country ?? ""}
@@ -280,7 +280,7 @@ export default async function CustomersPage({
                                 className="sr-only"
                                 htmlFor={`${formId}-status`}
                               >
-                                Status for {customer.customerUid}
+                                Status For {customer.customerUid}
                               </FieldLabel>
                               <NativeSelect
                                 className="w-full"
@@ -322,7 +322,7 @@ export default async function CustomersPage({
                       className="h-32 text-center text-muted-foreground"
                       colSpan={canWrite ? 7 : 6}
                     >
-                      No customers have been loaded into PostgreSQL yet.
+                      No Customers Have Been Loaded Into Postgresql Yet.
                     </TableCell>
                   </TableRow>
                 )}

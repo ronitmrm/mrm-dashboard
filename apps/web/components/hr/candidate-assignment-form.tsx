@@ -78,7 +78,7 @@ function AssignmentSubmitButton({
   return (
     <Button disabled={disabled || pending} type="submit">
       {pending
-        ? "Assigning candidates…"
+        ? "Assigning Candidates…"
         : `Assign ${selectedCount || "selected"} candidate${selectedCount === 1 ? "" : "s"} to job`}
     </Button>
   )
@@ -182,7 +182,7 @@ export function CandidateAssignmentForm({
 
       <FieldGroup>
         <Field>
-          <FieldLabel htmlFor={`${fieldId}-job`}>Open job</FieldLabel>
+          <FieldLabel htmlFor={`${fieldId}-job`}>Open Job</FieldLabel>
           {fixedJob ? (
             <Input
               id={`${fieldId}-job`}
@@ -197,7 +197,7 @@ export function CandidateAssignmentForm({
               required
               value={jobId}
             >
-              <NativeSelectOption value="">Select job</NativeSelectOption>
+              <NativeSelectOption value="">Select Job</NativeSelectOption>
               {jobs.map((job) => (
                 <NativeSelectOption key={job.id} value={job.id}>
                   {job.vacancyCode} · {job.title}
@@ -209,8 +209,8 @@ export function CandidateAssignmentForm({
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            {selectedCandidateIds.length} selected. Filter any column, tick the
-            candidates, then assign them together to this job.
+            {selectedCandidateIds.length} Selected. Filter Any Column, Tick The
+            Candidates, Then Assign Them Together To This Job.
           </p>
           <div className="flex gap-2">
             <Button
@@ -224,7 +224,7 @@ export function CandidateAssignmentForm({
               type="button"
               variant="outline"
             >
-              Select all shown
+              Select All Shown
             </Button>
             <Button
               disabled={!selectedCandidateIds.length}
@@ -233,7 +233,7 @@ export function CandidateAssignmentForm({
               type="button"
               variant="ghost"
             >
-              Clear selection
+              Clear Selection
             </Button>
           </div>
         </div>
@@ -273,7 +273,7 @@ export function CandidateAssignmentForm({
                     className="py-10 text-center text-muted-foreground"
                     colSpan={9}
                   >
-                    Select an open job to choose candidates.
+                    Select An Open Job To Choose Candidates.
                   </TableCell>
                 </TableRow>
               ) : visibleCandidates.length ? (
@@ -301,7 +301,7 @@ export function CandidateAssignmentForm({
                       {columns.map(({ key }) => (
                         <TableCell key={key}>
                           {key === "status" && alreadyAssigned
-                            ? "Already assigned"
+                            ? "Already Assigned"
                             : row[key]}
                         </TableCell>
                       ))}
@@ -314,7 +314,7 @@ export function CandidateAssignmentForm({
                     className="py-10 text-center text-muted-foreground"
                     colSpan={9}
                   >
-                    No candidates match the selected filters.
+                    No Candidates Match The Selected Filters.
                   </TableCell>
                 </TableRow>
               )}

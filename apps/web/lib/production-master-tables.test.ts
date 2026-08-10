@@ -108,9 +108,9 @@ describe("Production master table rows", () => {
       "utf8"
     )
 
-    expect(source).not.toContain('Field label="Saved parameter set"')
-    expect(source).toContain('Field label="Item code"')
-    expect(source).toContain('Field label="Option no."')
-    expect(source).toContain('Field label="Setup no."')
+    expect(source).not.toContain('Field label="Saved Parameter Set"')
+    expect(source).toContain('Field label="Item Code"')
+    expect(source).toContain('Field label="Option No."')
+    expect(source).toContain('Field label="Setup No."')
   })
 })

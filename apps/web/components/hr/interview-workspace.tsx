@@ -137,11 +137,11 @@ export function InterviewScheduleBoard({
         items={[
           {
             icon: CalendarClock,
-            label: selectedDate ? "Interviews on selected date" : "All pending interviews",
+            label: selectedDate ? "Interviews On Selected Date" : "All Pending Interviews",
             value: visiblePlanned.length,
           },
-          { icon: ListTodo, label: "Need scheduling", value: awaitingSchedule.length },
-          { icon: ClipboardCheck, label: "All scheduled", value: planned.length },
+          { icon: ListTodo, label: "Need Scheduling", value: awaitingSchedule.length },
+          { icon: ClipboardCheck, label: "All Scheduled", value: planned.length },
           { icon: CheckCircle2, label: "Applications", value: interviews.length },
         ]}
       />
@@ -149,13 +149,13 @@ export function InterviewScheduleBoard({
       <Card>
         <CardHeader className="gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <CardTitle>Interview schedule</CardTitle>
+            <CardTitle>Interview Schedule</CardTitle>
             <CardDescription>
-              Select a date to see exactly how many interviews are planned that day.
+              Select A Date To See Exactly How Many Interviews Are Planned That Day.
             </CardDescription>
           </div>
           <Field className="w-full sm:w-64">
-            <FieldLabel htmlFor="interview-schedule-date">View date</FieldLabel>
+            <FieldLabel htmlFor="interview-schedule-date">View Date</FieldLabel>
             <Input
               id="interview-schedule-date"
               onChange={(event) => setSelectedDate(event.target.value)}
@@ -192,7 +192,7 @@ export function InterviewScheduleBoard({
                           size="sm"
                           type="button"
                         >
-                          Record outcome
+                          Record Outcome
                         </Button>
                       </TableCell>
                     ) : null}
@@ -204,7 +204,7 @@ export function InterviewScheduleBoard({
                     className="py-10 text-center text-muted-foreground"
                     colSpan={canWrite ? 6 : 5}
                   >
-                    No interviews are scheduled for this date.
+                    No Interviews Are Scheduled For This Date.
                   </TableCell>
                 </TableRow>
               )}
@@ -216,7 +216,7 @@ export function InterviewScheduleBoard({
       {selectedInterview ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
           <SheetHeader>
-            <SheetTitle>Interview outcome</SheetTitle>
+            <SheetTitle>Interview Outcome</SheetTitle>
             <SheetDescription>
               {selectedInterview.candidateName} · {selectedInterview.jobTitle} · {selectedInterview.scoreableRound}
             </SheetDescription>
@@ -264,17 +264,17 @@ export function InterviewResultsWorkspace({
     >
       <SummaryCards
         items={[
-          { icon: ClipboardCheck, label: "Completed interviews", value: completed.length },
+          { icon: ClipboardCheck, label: "Completed Interviews", value: completed.length },
           { icon: CheckCircle2, label: "Approved", value: approved.length },
-          { icon: CalendarClock, label: "On hold", value: held.length },
+          { icon: CalendarClock, label: "On Hold", value: held.length },
           { icon: ListTodo, label: "Rejected", value: rejected.length },
         ]}
       />
       <Card>
         <CardHeader>
-          <CardTitle>Interview workspace</CardTitle>
+          <CardTitle>Interview Workspace</CardTitle>
           <CardDescription>
-            Open any completed round to review that candidate’s full result.
+            Open Any Completed Round To Review That Candidate’s Full Result.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -309,7 +309,7 @@ export function InterviewResultsWorkspace({
                         type="button"
                         variant="outline"
                       >
-                        Open result
+                        Open Result
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -317,7 +317,7 @@ export function InterviewResultsWorkspace({
               ) : (
                 <TableRow>
                   <TableCell className="py-10 text-center text-muted-foreground" colSpan={8}>
-                    No interview rounds found.
+                    No Interview Rounds Found.
                   </TableCell>
                 </TableRow>
               )}
@@ -329,7 +329,7 @@ export function InterviewResultsWorkspace({
       {selectedRecord ? (
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           <SheetHeader>
-            <SheetTitle>{selectedRecord.roundName} result</SheetTitle>
+            <SheetTitle>{selectedRecord.roundName} Result</SheetTitle>
             <SheetDescription>
               {selectedRecord.candidateName} · {selectedRecord.jobNumber} · {selectedRecord.jobTitle}
             </SheetDescription>
@@ -341,16 +341,16 @@ export function InterviewResultsWorkspace({
               <p><span className="text-muted-foreground">Outcome:</span> {selectedRecord.status}</p>
               <p><span className="text-muted-foreground">Score:</span> {selectedRecord.score ?? "—"}</p>
               <p><span className="text-muted-foreground">Interviewer:</span> {selectedRecord.interviewerName ?? "—"}</p>
-              <p><span className="text-muted-foreground">Joining date:</span> {selectedRecord.joiningDate ?? "—"}</p>
+              <p><span className="text-muted-foreground">Joining Date:</span> {selectedRecord.joiningDate ?? "—"}</p>
             </div>
             <div className="grid gap-3">
-              <h3 className="font-medium">Round assessment</h3>
+              <h3 className="font-medium">Round Assessment</h3>
               {questions.length ? questions.map((question) => (
                 <div className="flex items-center justify-between gap-4 rounded-lg border p-3" key={question.id}>
                     <span>{question.prompt}</span>
                   <Badge variant="outline">{selectedRecord.questionScores[question.id] ?? "—"}</Badge>
                 </div>
-              )) : <p className="text-sm text-muted-foreground">No scored questions for this record.</p>}
+              )) : <p className="text-sm text-muted-foreground">No Scored Questions For This Record.</p>}
             </div>
             <div>
               <h3 className="font-medium">Comments</h3>

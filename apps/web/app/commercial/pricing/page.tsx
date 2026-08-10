@@ -31,8 +31,8 @@ export default async function PricingPage() {
         <div>
           <CardTitle>Pricing</CardTitle>
           <CardDescription>
-            Current customer prices with immutable product/calculation snapshots
-            and recursive BOM rows.
+            Current Customer Prices With Immutable Product/Calculation Snapshots
+            And Recursive Bom Rows.
           </CardDescription>
         </div>
         <Button asChild variant="outline">

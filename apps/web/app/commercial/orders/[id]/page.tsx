@@ -109,7 +109,7 @@ export default async function PurchaseOrderPage({
                 </Badge>
               </div>
               <CardDescription>
-                {order.companyName} · {order.poDate} · PO total{" "}
+                {order.companyName} · {order.poDate} · Po Total{" "}
                 {money(order.totalAmount)}
               </CardDescription>
             </div>
@@ -123,11 +123,11 @@ export default async function PurchaseOrderPage({
               ) : null}
               <Button asChild variant="outline">
                 <Link href={`/commercial/orders/${order.id}/export.xlsx`}>
-                  Export PO Excel
+                  Export Po Excel
                 </Link>
               </Button>
               <Button asChild variant="outline">
-                <Link href="/commercial/orders">Purchase-order register</Link>
+                <Link href="/commercial/orders">Purchase-Order Register</Link>
               </Button>
             </div>
           </div>
@@ -135,7 +135,7 @@ export default async function PurchaseOrderPage({
         {order.cancellationReason ? (
           <CardContent>
             <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
-              Cancellation reason: {order.cancellationReason}
+              Cancellation Reason: {order.cancellationReason}
             </div>
           </CardContent>
         ) : null}
@@ -145,10 +145,10 @@ export default async function PurchaseOrderPage({
         <div className="grid gap-6 xl:grid-cols-3">
           <Card>
             <CardHeader>
-              <CardTitle>Add PO line</CardTitle>
+              <CardTitle>Add Po Line</CardTitle>
               <CardDescription>
-                The part code is matched only to active sent quotes for this
-                customer. Price decisions retain both PO and system values.
+                The Part Code Is Matched Only To Active Sent Quotes For This
+                Customer. Price Decisions Retain Both Po And System Values.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -159,7 +159,7 @@ export default async function PurchaseOrderPage({
                   value={order.id}
                 />
                 <FieldSet>
-                  <FieldLegend>Manual line</FieldLegend>
+                  <FieldLegend>Manual Line</FieldLegend>
                   <FieldGroup>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <Field>
@@ -175,7 +175,7 @@ export default async function PurchaseOrderPage({
                       </Field>
                       <Field>
                         <FieldLabel htmlFor="customer-part-code">
-                          Customer part code
+                          Customer Part Code
                         </FieldLabel>
                         <Input
                           id="customer-part-code"
@@ -198,7 +198,7 @@ export default async function PurchaseOrderPage({
                       </Field>
                       <Field>
                         <FieldLabel htmlFor="po-price">
-                          PO unit price
+                          Po Unit Price
                         </FieldLabel>
                         <Input
                           id="po-price"
@@ -219,13 +219,13 @@ export default async function PurchaseOrderPage({
                           name="currency_code"
                         >
                           <NativeSelectOption value="USD">
-                            USD
+                            Usd
                           </NativeSelectOption>
                           <NativeSelectOption value="INR">
-                            INR
+                            Inr
                           </NativeSelectOption>
                           <NativeSelectOption value="EUR">
-                            EUR
+                            Eur
                           </NativeSelectOption>
                         </NativeSelect>
                       </Field>
@@ -237,7 +237,7 @@ export default async function PurchaseOrderPage({
                       </Field>
                     </div>
                     <Button className="w-fit" type="submit">
-                      Match and add line
+                      Match And Add Line
                     </Button>
                   </FieldGroup>
                 </FieldSet>
@@ -247,17 +247,17 @@ export default async function PurchaseOrderPage({
 
           <Card>
             <CardHeader>
-              <CardTitle>Excel line import</CardTitle>
+              <CardTitle>Excel Line Import</CardTitle>
               <CardDescription>
-                First worksheet, up to 5 MB. Supported headers include line,
-                customer part code, quantity, unit price, description, and
-                currency. The entire worksheet commits or rolls back together.
+                First Worksheet, Up To 5 Mb. Supported Headers Include Line,
+                Customer Part Code, Quantity, Unit Price, Description, And
+                Currency. The Entire Worksheet Commits Or Rolls Back Together.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Button asChild className="mb-4" size="sm" variant="outline">
                 <Link href="/commercial/orders/template.xlsx">
-                  Download import template
+                  Download Import Template
                 </Link>
               </Button>
               <form action={importPurchaseOrderWorkbookAction}>
@@ -268,7 +268,7 @@ export default async function PurchaseOrderPage({
                 />
                 <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor="po-workbook">PO workbook</FieldLabel>
+                    <FieldLabel htmlFor="po-workbook">Po Workbook</FieldLabel>
                     <Input
                       accept=".xlsx,.xls"
                       id="po-workbook"
@@ -278,7 +278,7 @@ export default async function PurchaseOrderPage({
                     />
                   </Field>
                   <Button className="w-fit" type="submit" variant="secondary">
-                    Import and match worksheet
+                    Import And Match Worksheet
                   </Button>
                 </FieldGroup>
               </form>
@@ -287,11 +287,11 @@ export default async function PurchaseOrderPage({
 
           <Card>
             <CardHeader>
-              <CardTitle>Original PO file</CardTitle>
+              <CardTitle>Original Po File</CardTitle>
               <CardDescription>
-                Retain the customer-supplied PDF, spreadsheet, or document with
-                its checksum and audit trail. Uploading again replaces the
-                current link without deleting retained file evidence.
+                Retain The Customer-Supplied Pdf, Spreadsheet, Or Document With
+                Its Checksum And Audit Trail. Uploading Again Replaces The
+                Current Link Without Deleting Retained File Evidence.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -304,7 +304,7 @@ export default async function PurchaseOrderPage({
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="po-source-file">
-                      Customer PO file
+                      Customer Po File
                     </FieldLabel>
                     <Input
                       id="po-source-file"
@@ -314,7 +314,7 @@ export default async function PurchaseOrderPage({
                     />
                   </Field>
                   <Button className="w-fit" type="submit" variant="secondary">
-                    Retain source file
+                    Retain Source File
                   </Button>
                 </FieldGroup>
               </form>
@@ -325,11 +325,11 @@ export default async function PurchaseOrderPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>PO lines and quote decisions</CardTitle>
+          <CardTitle>Po Lines And Quote Decisions</CardTitle>
           <CardDescription>
-            Ambiguous lineages never auto-match. “Accept PO price” creates a
-            visible costing-revision request; “keep our price” retains the
-            historical system price for the PI.
+            Ambiguous Lineages Never Auto-Match. “Accept Po Price” Creates A
+            Visible Costing-Revision Request; “Keep Our Price” Retains The
+            Historical System Price For The Pi.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -338,11 +338,11 @@ export default async function PurchaseOrderPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Line</TableHead>
-                  <TableHead>Customer part</TableHead>
+                  <TableHead>Customer Part</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">PO price</TableHead>
-                  <TableHead className="text-right">System price</TableHead>
+                  <TableHead className="text-right">Po Price</TableHead>
+                  <TableHead className="text-right">System Price</TableHead>
                   <TableHead>Match</TableHead>
                   <TableHead>Decision</TableHead>
                 </TableRow>
@@ -372,8 +372,8 @@ export default async function PurchaseOrderPage({
                           </Badge>
                           {line.matchEvidence.candidateLineageCount > 1 ? (
                             <span className="text-xs text-muted-foreground">
-                              {line.matchEvidence.candidateLineageCount} active
-                              lineages
+                              {line.matchEvidence.candidateLineageCount} Active
+                              Lineages
                             </span>
                           ) : null}
                         </div>
@@ -400,7 +400,7 @@ export default async function PurchaseOrderPage({
                                 value="Keep Our Price"
                               />
                               <Button size="sm" type="submit">
-                                Keep our price
+                                Keep Our Price
                               </Button>
                             </form>
                             <form action={decidePurchaseOrderLinePriceAction}>
@@ -425,7 +425,7 @@ export default async function PurchaseOrderPage({
                                 value="Customer PO price requires costing revision."
                               />
                               <Button size="sm" type="submit" variant="outline">
-                                Accept PO price
+                                Accept Po Price
                               </Button>
                             </form>
                           </div>
@@ -445,7 +445,7 @@ export default async function PurchaseOrderPage({
                               value={line.id}
                             />
                             <Button size="sm" type="submit" variant="outline">
-                              Create quote request
+                              Create Quote Request
                             </Button>
                           </form>
                         ) : (
@@ -460,7 +460,7 @@ export default async function PurchaseOrderPage({
                       className="h-32 text-center text-muted-foreground"
                       colSpan={8}
                     >
-                      Add a line or import the PO worksheet.
+                      Add A Line Or Import The Po Worksheet.
                     </TableCell>
                   </TableRow>
                 )}
@@ -473,10 +473,10 @@ export default async function PurchaseOrderPage({
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Proforma invoice</CardTitle>
+            <CardTitle>Proforma Invoice</CardTitle>
             <CardDescription>
-              PI lines copy the selected quote revision and price. Once sent,
-              those historical values cannot be edited.
+              Pi Lines Copy The Selected Quote Revision And Price. Once Sent,
+              Those Historical Values Cannot Be Edited.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -503,14 +503,14 @@ export default async function PurchaseOrderPage({
                       href={`/commercial/orders/${order.id}/pi`}
                       target="_blank"
                     >
-                      Open PI PDF
+                      Open Pi Pdf
                     </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
                     <Link
                       href={`/commercial/orders/${order.id}/pi.xlsx`}
                     >
-                      Export PI Excel
+                      Export Pi Excel
                     </Link>
                   </Button>
                 </div>
@@ -526,7 +526,7 @@ export default async function PurchaseOrderPage({
                       type="hidden"
                       value={currentInvoice.id}
                     />
-                    <Button type="submit">Mark PI sent</Button>
+                    <Button type="submit">Mark Pi Sent</Button>
                   </form>
                 ) : null}
                 {currentInvoice.status === "Sent" ? (
@@ -541,7 +541,7 @@ export default async function PurchaseOrderPage({
                       type="hidden"
                       value={currentInvoice.id}
                     />
-                    <Button type="submit">Approve PI and release order</Button>
+                    <Button type="submit">Approve Pi And Release Order</Button>
                   </form>
                 ) : null}
               </div>
@@ -553,11 +553,11 @@ export default async function PurchaseOrderPage({
                   value={order.id}
                 />
                 <Button disabled={!canGeneratePi || closed} type="submit">
-                  Generate PI
+                  Generate Pi
                 </Button>
                 {!canGeneratePi ? (
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Resolve matching and every price decision first.
+                    Resolve Matching And Every Price Decision First.
                   </p>
                 ) : null}
               </form>
@@ -569,8 +569,8 @@ export default async function PurchaseOrderPage({
           <CardHeader>
             <CardTitle>Cancellation</CardTitle>
             <CardDescription>
-              Cancellation never deletes source rows, historical quotes, or
-              audit events. Approved orders cannot be cancelled.
+              Cancellation Never Deletes Source Rows, Historical Quotes, Or
+              Audit Events. Approved Orders Cannot Be Cancelled.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -579,7 +579,7 @@ export default async function PurchaseOrderPage({
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="cancellation-reason">
-                    Cancellation reason
+                    Cancellation Reason
                   </FieldLabel>
                   <Textarea
                     disabled={closed}
@@ -594,7 +594,7 @@ export default async function PurchaseOrderPage({
                   type="submit"
                   variant="destructive"
                 >
-                  Cancel purchase order
+                  Cancel Purchase Order
                 </Button>
               </FieldGroup>
             </form>

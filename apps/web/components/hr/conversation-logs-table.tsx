@@ -163,7 +163,7 @@ export function ConversationLogsTable({
         <CardHeader>
           <CardTitle>{title}</CardTitle>
           <CardDescription>
-            Showing {visibleRows.length} of {events.length} timestamped logs
+            Showing {visibleRows.length} Of {events.length} Timestamped Logs
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -284,7 +284,7 @@ export function ConversationLogsTable({
                     className="py-10 text-center text-muted-foreground"
                     colSpan={columnCount}
                   >
-                    No conversation logs match the selected filters.
+                    No Conversation Logs Match The Selected Filters.
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -309,10 +309,10 @@ export function ConversationLogsTable({
             ) : null}
             <input name="event_id" type="hidden" value={editingEvent.id} />
             <SheetHeader>
-              <SheetTitle>Edit conversation log</SheetTitle>
+              <SheetTitle>Edit Conversation Log</SheetTitle>
               <SheetDescription>
-                Update the type, field, or notes. The original date and time
-                remain unchanged.
+                Update The Type, Field, Or Notes. The Original Date And Time
+                Remain Unchanged.
               </SheetDescription>
             </SheetHeader>
             <div className="grid flex-1 content-start gap-4 px-6">
@@ -373,7 +373,7 @@ export function ConversationLogsTable({
               </Field>
             </div>
             <SheetFooter>
-              <Button type="submit">Save log changes</Button>
+              <Button type="submit">Save Log Changes</Button>
             </SheetFooter>
           </form>
         </SheetContent>

@@ -52,7 +52,7 @@ export function ApprovedPostFields({
           required
           value={departmentCode}
         >
-          <NativeSelectOption value="">Select department</NativeSelectOption>
+          <NativeSelectOption value="">Select Department</NativeSelectOption>
           {departments.map((department) => (
             <NativeSelectOption key={department.id} value={department.code}>
               {department.name}
@@ -70,7 +70,7 @@ export function ApprovedPostFields({
           required
           value={designationCode}
         >
-          <NativeSelectOption value="">Select designation</NativeSelectOption>
+          <NativeSelectOption value="">Select Designation</NativeSelectOption>
           {designations.map((designation) => (
             <NativeSelectOption key={designation.id} value={designation.code}>
               {designation.name}
@@ -79,13 +79,13 @@ export function ApprovedPostFields({
         </NativeSelect>
       </Field>
       <Field>
-        <FieldLabel htmlFor="post-template">Job template</FieldLabel>
+        <FieldLabel htmlFor="post-template">Job Template</FieldLabel>
         <NativeSelect
           className="w-full"
           id="post-template"
           name="requirement_template_code"
         >
-          <NativeSelectOption value="">No template</NativeSelectOption>
+          <NativeSelectOption value="">No Template</NativeSelectOption>
           {templates.map((template) => (
             <NativeSelectOption key={template.id} value={template.templateCode}>
               {template.templateCode} · {template.name}
@@ -95,11 +95,11 @@ export function ApprovedPostFields({
       </Field>
       <Field>
         <FieldLabel htmlFor="generated-post-code">
-          Post code (auto-generated)
+          Post Code (Auto-Generated)
         </FieldLabel>
         <Input
           id="generated-post-code"
-          placeholder="Select department and designation"
+          placeholder="Select Department And Designation"
           readOnly
           value={identity?.postCode ?? ""}
         />

@@ -84,14 +84,14 @@ export default async function CommercialPage() {
     <div className="grid gap-6">
       <section className="grid gap-2">
         <Badge className="w-fit" variant="outline">
-          <Database /> Canonical PostgreSQL analytics
+          <Database /> Canonical Postgresql Analytics
         </Badge>
         <h2 className="font-heading text-2xl font-medium tracking-tight">
-          Commercial workflow dashboard
+          Commercial Workflow Dashboard
         </h2>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Source-equivalent counts, six-month quoting, workflow load, quote mix,
-          material lead time, and customer Pareto—all bounded to MRMPL.
+          Source-Equivalent Counts, Six-Month Quoting, Workflow Load, Quote Mix,
+          Material Lead Time, And Customer Pareto—All Bounded To Mrmpl.
         </p>
       </section>
 
@@ -110,10 +110,10 @@ export default async function CommercialPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="size-4" /> Quoted items — six months
+              <BarChart3 className="size-4" /> Quoted Items — Six Months
             </CardTitle>
             <CardDescription>
-              Sent, non-superseded quote items by source month bucket.
+              Sent, Non-Superseded Quote Items By Source Month Bucket.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -127,9 +127,9 @@ export default async function CommercialPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Workflow load</CardTitle>
+            <CardTitle>Workflow Load</CardTitle>
             <CardDescription>
-              Open work using the source queue definitions.
+              Open Work Using The Source Queue Definitions.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -138,9 +138,9 @@ export default async function CommercialPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Quote mix</CardTitle>
+            <CardTitle>Quote Mix</CardTitle>
             <CardDescription>
-              Purchase, quoted, and in-costing commercial rows.
+              Purchase, Quoted, And In-Costing Commercial Rows.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -149,9 +149,9 @@ export default async function CommercialPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Material lead time</CardTitle>
+            <CardTitle>Material Lead Time</CardTitle>
             <CardDescription>
-              Average days from enquiry receipt to quote send.
+              Average Days From Enquiry Receipt To Quote Send.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -161,7 +161,7 @@ export default async function CommercialPage() {
                   <TableRow>
                     <TableHead>Material</TableHead>
                     <TableHead className="text-right">Quoted</TableHead>
-                    <TableHead className="text-right">Average days</TableHead>
+                    <TableHead className="text-right">Average Days</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -183,7 +183,7 @@ export default async function CommercialPage() {
                         className="h-24 text-center text-muted-foreground"
                         colSpan={3}
                       >
-                        No sent quote lead-time data yet.
+                        No Sent Quote Lead-Time Data Yet.
                       </TableCell>
                     </TableRow>
                   )}
@@ -196,9 +196,9 @@ export default async function CommercialPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Customer quote Pareto</CardTitle>
+          <CardTitle>Customer Quote Pareto</CardTitle>
           <CardDescription>
-            Top eight customers by sent quote items with cumulative share.
+            Top Eight Customers By Sent Quote Items With Cumulative Share.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -207,7 +207,7 @@ export default async function CommercialPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Customer</TableHead>
-                  <TableHead className="text-right">Quoted items</TableHead>
+                  <TableHead className="text-right">Quoted Items</TableHead>
                   <TableHead className="text-right">Cumulative</TableHead>
                 </TableRow>
               </TableHeader>
@@ -230,7 +230,7 @@ export default async function CommercialPage() {
                       className="h-24 text-center text-muted-foreground"
                       colSpan={3}
                     >
-                      No sent quote customer data yet.
+                      No Sent Quote Customer Data Yet.
                     </TableCell>
                   </TableRow>
                 )}

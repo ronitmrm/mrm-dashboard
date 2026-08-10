@@ -86,7 +86,7 @@ export default async function CandidateWorkspacePage({
       <Button asChild className="w-fit" size="sm" variant="ghost">
         <Link href="/hr?panel=candidatesPanel">
           <ArrowLeft data-icon="inline-start" />
-          Back to candidates
+          Back To Candidates
         </Link>
       </Button>
 
@@ -110,7 +110,7 @@ export default async function CandidateWorkspacePage({
               target="_blank"
             >
               <FileText data-icon="inline-start" />
-              View resume
+              View Resume
             </a>
           </Button>
         ) : null}
@@ -120,7 +120,7 @@ export default async function CandidateWorkspacePage({
         {[
           ["Departments", candidate.departments.join(", ") || "—"],
           ["Designation", candidate.preferredDesignation ?? "—"],
-          ["Current company", candidate.currentCompany ?? "—"],
+          ["Current Company", candidate.currentCompany ?? "—"],
           ["Experience", candidate.experience ?? "—"],
           ["Source", candidate.source ?? "—"],
         ].map(([label, value]) => (
@@ -136,10 +136,10 @@ export default async function CandidateWorkspacePage({
       {canWrite ? (
         <Card>
           <CardHeader>
-            <CardTitle>Edit candidate</CardTitle>
+            <CardTitle>Edit Candidate</CardTitle>
             <CardDescription>
-              Update candidate details, department, designation, or replace
-              the resume PDF.
+              Update Candidate Details, Department, Designation, Or Replace
+              The Resume Pdf.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -182,7 +182,7 @@ export default async function CandidateWorkspacePage({
               </Field>
               <Field>
                 <FieldLabel htmlFor="edit-candidate-department">
-                  Preferred department
+                  Preferred Department
                 </FieldLabel>
                 <NativeSelect
                   className="w-full"
@@ -190,7 +190,7 @@ export default async function CandidateWorkspacePage({
                   id="edit-candidate-department"
                   name="department_code"
                 >
-                  <NativeSelectOption value="">Not selected</NativeSelectOption>
+                  <NativeSelectOption value="">Not Selected</NativeSelectOption>
                   {masters.departments.map((department) => (
                     <NativeSelectOption
                       key={department.id}
@@ -211,7 +211,7 @@ export default async function CandidateWorkspacePage({
                   id="edit-candidate-designation"
                   name="designation_code"
                 >
-                  <NativeSelectOption value="">Not selected</NativeSelectOption>
+                  <NativeSelectOption value="">Not Selected</NativeSelectOption>
                   {masters.designations.map((designation) => (
                     <NativeSelectOption
                       key={designation.id}
@@ -224,7 +224,7 @@ export default async function CandidateWorkspacePage({
               </Field>
               <Field>
                 <FieldLabel htmlFor="edit-candidate-company">
-                  Current company
+                  Current Company
                 </FieldLabel>
                 <Input
                   defaultValue={candidate.currentCompany ?? ""}
@@ -252,7 +252,7 @@ export default async function CandidateWorkspacePage({
               </Field>
               <Field>
                 <FieldLabel htmlFor="edit-candidate-resume">
-                  Resume PDF
+                  Resume Pdf
                 </FieldLabel>
                 <Input
                   accept="application/pdf,.pdf"
@@ -263,12 +263,12 @@ export default async function CandidateWorkspacePage({
               </Field>
               <Field className="md:col-span-2 xl:col-span-3">
                 <FieldLabel htmlFor="edit-candidate-notes">
-                  Change note
+                  Change Note
                 </FieldLabel>
                 <Textarea id="edit-candidate-notes" name="notes" />
               </Field>
               <Button className="md:col-span-2 xl:col-span-3" type="submit">
-                Save candidate changes
+                Save Candidate Changes
               </Button>
             </form>
           </CardContent>
@@ -277,9 +277,9 @@ export default async function CandidateWorkspacePage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Job application history</CardTitle>
+          <CardTitle>Job Application History</CardTitle>
           <CardDescription>
-            Every job this candidate has been assigned to.
+            Every Job This Candidate Has Been Assigned To.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -289,7 +289,7 @@ export default async function CandidateWorkspacePage({
                 <TableHead>Job</TableHead>
                 <TableHead>Title</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Interview rounds</TableHead>
+                <TableHead>Interview Rounds</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -319,7 +319,7 @@ export default async function CandidateWorkspacePage({
                     className="py-10 text-center text-muted-foreground"
                     colSpan={4}
                   >
-                    No job applications yet.
+                    No Job Applications Yet.
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -333,7 +333,7 @@ export default async function CandidateWorkspacePage({
         events={events}
         returnCandidateId={candidate.id}
         showCandidate={false}
-        title="Candidate conversation history"
+        title="Candidate Conversation History"
       />
     </div>
   )

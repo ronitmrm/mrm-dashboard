@@ -137,22 +137,22 @@ export default async function MastersPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Master workbook</CardTitle>
+          <CardTitle>Master Workbook</CardTitle>
           <CardDescription>
-            Source-compatible XLS/XLSX sheets, aliases, defaults, and atomic
-            import.
+            Source-Compatible Xls/Xlsx Sheets, Aliases, Defaults, And Atomic
+            Import.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="outline">
               <Link href="/commercial/masters/template.xlsx">
-                Download template
+                Download Template
               </Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/commercial/masters/export.xlsx">
-                Export current masters
+                Export Current Masters
               </Link>
             </Button>
           </div>
@@ -161,7 +161,7 @@ export default async function MastersPage({
               <FieldGroup className="flex flex-col gap-4 sm:flex-row sm:items-end">
                 <Field className="max-w-xl">
                   <FieldLabel htmlFor="masters-file">
-                    Masters workbook
+                    Masters Workbook
                   </FieldLabel>
                   <Input
                     accept=".xlsx,.xls"
@@ -171,7 +171,7 @@ export default async function MastersPage({
                     type="file"
                   />
                 </Field>
-                <Button type="submit">Import atomically</Button>
+                <Button type="submit">Import Atomically</Button>
               </FieldGroup>
             </form>
           ) : null}
@@ -181,9 +181,9 @@ export default async function MastersPage({
       {canWrite ? (
         <Card>
           <CardHeader>
-            <CardTitle>Add or update a master</CardTitle>
+            <CardTitle>Add Or Update A Master</CardTitle>
             <CardDescription>
-              Natural source keys make repeated submissions idempotent.
+              Natural Source Keys Make Repeated Submissions Idempotent.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -197,8 +197,8 @@ export default async function MastersPage({
           <CardHeader>
             <CardTitle>Activation</CardTitle>
             <CardDescription>
-              Activate or retire costing and term options without deleting
-              history.
+              Activate Or Retire Costing And Term Options Without Deleting
+              History.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -237,7 +237,7 @@ export default async function MastersPage({
                   </NativeSelect>
                 </Field>
                 <Button className="md:self-end" type="submit">
-                  Update state
+                  Update State
                 </Button>
               </FieldGroup>
             </form>
@@ -268,7 +268,7 @@ export default async function MastersPage({
                 </ul>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No values loaded.
+                  No Values Loaded.
                 </p>
               )}
             </CardContent>

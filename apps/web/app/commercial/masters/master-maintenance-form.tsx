@@ -111,7 +111,7 @@ export function MasterMaintenanceForm({
           <>
             <NameInput label="Category" />
             <Field>
-              <FieldLabel htmlFor="master-code">Category code</FieldLabel>
+              <FieldLabel htmlFor="master-code">Category Code</FieldLabel>
               <Input id="master-code" name="code" />
             </Field>
           </>
@@ -128,7 +128,7 @@ export function MasterMaintenanceForm({
                 required
               >
                 <NativeSelectOption value="">
-                  Select category
+                  Select Category
                 </NativeSelectOption>
                 {snapshot.categories.map((category) => (
                   <NativeSelectOption key={category.name} value={category.name}>
@@ -140,7 +140,7 @@ export function MasterMaintenanceForm({
             <NameInput label="Subcategory" />
             <Field>
               <FieldLabel htmlFor="master-combination-code">
-                Combination code
+                Combination Code
               </FieldLabel>
               <Input id="master-combination-code" name="combination_code" />
             </Field>
@@ -150,7 +150,7 @@ export function MasterMaintenanceForm({
         {kind === "application" || kind === "certification" ? (
           <>
             <NameInput />
-            <NumberInput label="Sort order" name="sort_order" />
+            <NumberInput label="Sort Order" name="sort_order" />
           </>
         ) : null}
 
@@ -176,8 +176,8 @@ export function MasterMaintenanceForm({
                 ))}
               </NativeSelect>
             </Field>
-            <NameInput label="Dropdown value" />
-            <NumberInput label="Sort order" name="sort_order" />
+            <NameInput label="Dropdown Value" />
+            <NumberInput label="Sort Order" name="sort_order" />
           </>
         ) : null}
 
@@ -191,7 +191,7 @@ export function MasterMaintenanceForm({
                 name="grade"
                 required
               >
-                <NativeSelectOption value="">Select grade</NativeSelectOption>
+                <NativeSelectOption value="">Select Grade</NativeSelectOption>
                 {snapshot.materialGrades.map((grade) => (
                   <NativeSelectOption key={grade.name} value={grade.name}>
                     {grade.name}
@@ -200,7 +200,7 @@ export function MasterMaintenanceForm({
               </NativeSelect>
             </Field>
             <Field>
-              <FieldLabel htmlFor="master-rod-type">Rod type</FieldLabel>
+              <FieldLabel htmlFor="master-rod-type">Rod Type</FieldLabel>
               <NativeSelect
                 className="w-full"
                 id="master-rod-type"
@@ -208,7 +208,7 @@ export function MasterMaintenanceForm({
                 required
               >
                 <NativeSelectOption value="">
-                  Select rod type
+                  Select Rod Type
                 </NativeSelectOption>
                 {snapshot.rodTypes.map((rodType) => (
                   <NativeSelectOption key={rodType.name} value={rodType.name}>
@@ -217,8 +217,8 @@ export function MasterMaintenanceForm({
                 ))}
               </NativeSelect>
             </Field>
-            <NumberInput label="Alloy premium (INR/kg)" name="alloy_premium" />
-            <NumberInput label="Extrusion cost (INR/kg)" name="ext_cost" />
+            <NumberInput label="Alloy Premium (Inr/Kg)" name="alloy_premium" />
+            <NumberInput label="Extrusion Cost (Inr/Kg)" name="ext_cost" />
             <ActiveInput />
           </>
         ) : null}
@@ -226,7 +226,7 @@ export function MasterMaintenanceForm({
         {kind === "shippingTerm" ? (
           <>
             <NameInput />
-            <NumberInput label="Shipping cost" name="shipping_cost" />
+            <NumberInput label="Shipping Cost" name="shipping_cost" />
             <ActiveInput />
           </>
         ) : null}
@@ -234,7 +234,7 @@ export function MasterMaintenanceForm({
         {kind === "packagingOption" ? (
           <>
             <NameInput />
-            <NumberInput label="Packing cost" name="packing_cost" />
+            <NumberInput label="Packing Cost" name="packing_cost" />
             <ActiveInput />
           </>
         ) : null}
@@ -279,13 +279,13 @@ export function MasterMaintenanceForm({
               <FieldLabel htmlFor="master-value">Value</FieldLabel>
               <Input id="master-value" name="value" required />
             </Field>
-            <NumberInput label="Sort order" name="sort_order" />
+            <NumberInput label="Sort Order" name="sort_order" />
             <ActiveInput />
           </>
         ) : null}
       </FieldGroup>
       <Button className="mt-6" type="submit">
-        Add or update master
+        Add Or Update Master
       </Button>
     </form>
   )

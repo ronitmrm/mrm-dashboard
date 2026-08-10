@@ -49,14 +49,14 @@ export default async function QuotesPage() {
       <CardHeader className="gap-3">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <CardTitle>Quote register</CardTitle>
+            <CardTitle>Quote Register</CardTitle>
             <CardDescription>
-              Draft, active, and superseded quote revisions. Sent values are
-              immutable and remain available as historical evidence.
+              Draft, Active, And Superseded Quote Revisions. Sent Values Are
+              Immutable And Remain Available As Historical Evidence.
             </CardDescription>
           </div>
           <Button asChild variant="outline">
-            <Link href="/commercial/costing">Return to costing</Link>
+            <Link href="/commercial/costing">Return To Costing</Link>
           </Button>
         </div>
       </CardHeader>
@@ -70,7 +70,7 @@ export default async function QuotesPage() {
                 <TableHead>Product</TableHead>
                 <TableHead>Revision</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">USD / pc</TableHead>
+                <TableHead className="text-right">Usd / Pc</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -99,7 +99,7 @@ export default async function QuotesPage() {
                           {quote.status}
                         </Badge>
                         {quote.isActive ? (
-                          <Badge variant="outline">Active price</Badge>
+                          <Badge variant="outline">Active Price</Badge>
                         ) : null}
                       </div>
                     </TableCell>
@@ -117,7 +117,7 @@ export default async function QuotesPage() {
                                 "/pdf"
                               }
                             >
-                              PDF
+                              Pdf
                             </Link>
                           </Button>
                         ) : null}
@@ -129,7 +129,7 @@ export default async function QuotesPage() {
                               value={quote.id}
                             />
                             <Button size="sm" type="submit">
-                              Mark sent
+                              Mark Sent
                             </Button>
                           </form>
                         ) : (
@@ -149,7 +149,7 @@ export default async function QuotesPage() {
                     className="h-32 text-center text-muted-foreground"
                     colSpan={7}
                   >
-                    No quotes have been saved yet.
+                    No Quotes Have Been Saved Yet.
                   </TableCell>
                 </TableRow>
               )}

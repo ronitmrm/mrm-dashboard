@@ -14,7 +14,7 @@ export function EmployeeStatusFields() {
   return (
     <>
       <Field>
-        <FieldLabel htmlFor="employee-event">Employment event</FieldLabel>
+        <FieldLabel htmlFor="employee-event">Employment Event</FieldLabel>
         <NativeSelect
           className="w-full"
           id="employee-event"
@@ -24,20 +24,20 @@ export function EmployeeStatusFields() {
           value={event}
         >
           <NativeSelectOption value="Appointed">
-            Appointed — not joined
+            Appointed — Not Joined
           </NativeSelectOption>
           <NativeSelectOption value="Joined">
-            Joined — becomes Occupied
+            Joined — Becomes Occupied
           </NativeSelectOption>
           <NativeSelectOption value="Resigned">Resigned</NativeSelectOption>
           <NativeSelectOption value="Removed">
-            Remove assignment — becomes Vacant
+            Remove Assignment — Becomes Vacant
           </NativeSelectOption>
         </NativeSelect>
       </Field>
       {event === "Resigned" ? (
         <Field>
-          <FieldLabel htmlFor="last-working-date">Last working date</FieldLabel>
+          <FieldLabel htmlFor="last-working-date">Last Working Date</FieldLabel>
           <Input
             id="last-working-date"
             name="last_working_date"
@@ -45,7 +45,7 @@ export function EmployeeStatusFields() {
             type="date"
           />
           <p className="text-xs text-muted-foreground">
-            The approved post becomes vacant after this date.
+            The Approved Post Becomes Vacant After This Date.
           </p>
         </Field>
       ) : null}

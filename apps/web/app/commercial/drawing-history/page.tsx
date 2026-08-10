@@ -64,9 +64,9 @@ export default async function DrawingHistoryPage({
             <div>
               <CardTitle>Drawing History</CardTitle>
               <CardDescription>
-                Revision-keyed production drawing control. Revision 0 rows are
-                created atomically when approved Q products become internal
-                products.
+                Revision-Keyed Production Drawing Control. Revision 0 Rows Are
+                Created Atomically When Approved Q Products Become Internal
+                Products.
               </CardDescription>
             </div>
             <Button asChild variant="outline">
@@ -79,18 +79,18 @@ export default async function DrawingHistoryPage({
         <CardContent>
           <form className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto_auto]">
             <Input
-              aria-label="Search drawing history"
+              aria-label="Search Drawing History"
               defaultValue={filters.q}
               name="q"
-              placeholder="Search UID, drawing or remarks"
+              placeholder="Search Uid, Drawing Or Remarks"
             />
             <Input
-              aria-label="Filter revision"
+              aria-label="Filter Revision"
               defaultValue={filters.revision}
               name="revision"
               placeholder="Revision"
             />
-            <Button type="submit">Apply filters</Button>
+            <Button type="submit">Apply Filters</Button>
             <Button asChild variant="ghost">
               <Link href={drawingHistoryPath}>
                 <RotateCcw /> Reset
@@ -105,8 +105,8 @@ export default async function DrawingHistoryPage({
           <CardHeader>
             <CardTitle>Edit {editing.uid}</CardTitle>
             <CardDescription>
-              Drawing number, revision, effective date, archived laminated
-              quantities, and remarks remain auditable.
+              Drawing Number, Revision, Effective Date, Archived Laminated
+              Quantities, And Remarks Remain Auditable.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -163,7 +163,7 @@ export default async function DrawingHistoryPage({
                   ],
                 ].map(([name, label, defaultValue]) => (
                   <div className="grid gap-2" key={String(name)}>
-                    <Label htmlFor={String(name)}>{label} laminated qty</Label>
+                    <Label htmlFor={String(name)}>{label} Laminated Qty</Label>
                     <Input
                       defaultValue={String(defaultValue)}
                       id={String(name)}
@@ -198,7 +198,7 @@ export default async function DrawingHistoryPage({
         <CardHeader>
           <CardTitle>Production Drawing Control</CardTitle>
           <CardDescription>
-            {rows.length} matching revision rows.
+            {rows.length} Matching Revision Rows.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -208,11 +208,11 @@ export default async function DrawingHistoryPage({
                 <TableRow>
                   <TableHead>Sr. No.</TableHead>
                   <TableHead>Part Name</TableHead>
-                  <TableHead>UID</TableHead>
+                  <TableHead>Uid</TableHead>
                   <TableHead>Drawing No.</TableHead>
                   <TableHead>Revision</TableHead>
                   <TableHead>Rev Date</TableHead>
-                  <TableHead>Laminated B / C / CNC</TableHead>
+                  <TableHead>Laminated B / C / Cnc</TableHead>
                   <TableHead>Remarks</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
@@ -254,7 +254,7 @@ export default async function DrawingHistoryPage({
                       className="h-32 text-center text-muted-foreground"
                       colSpan={9}
                     >
-                      No drawing history rows match these filters.
+                      No Drawing History Rows Match These Filters.
                     </TableCell>
                   </TableRow>
                 )}

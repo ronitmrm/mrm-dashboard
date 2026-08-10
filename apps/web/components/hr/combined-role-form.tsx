@@ -61,10 +61,10 @@ export function CombinedRoleForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Combine approved posts</CardTitle>
+        <CardTitle>Combine Approved Posts</CardTitle>
         <CardDescription>
-          Select at least two Post Codes and choose the primary responsibility.
-          Posts already used by an active combined role are excluded.
+          Select At Least Two Post Codes And Choose The Primary Responsibility.
+          Posts Already Used By An Active Combined Role Are Excluded.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -81,7 +81,7 @@ export function CombinedRoleForm({
           <div className="grid gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="combined-role-name">
-                Combined role name
+                Combined Role Name
               </FieldLabel>
               <Input
                 defaultValue={identity.defaultName}
@@ -92,7 +92,7 @@ export function CombinedRoleForm({
             </Field>
             <Field>
               <FieldLabel htmlFor="combined-role-code">
-                Combined vacancy code (auto-generated)
+                Combined Vacancy Code (Auto-Generated)
               </FieldLabel>
               <Input
                 id="combined-role-code"
@@ -108,14 +108,14 @@ export function CombinedRoleForm({
             <Input
               id="combined-role-search"
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by Post Code, department, or designation"
+              placeholder="Search By Post Code, Department, Or Designation"
               value={search}
             />
           </Field>
           <div className="flex items-center justify-between gap-3 text-sm">
-            <span>{selectedPostIds.size} posts selected</span>
+            <span>{selectedPostIds.size} Posts Selected</span>
             <span className="text-muted-foreground">
-              {primaryPostId ? "Primary selected" : "Choose one primary post"}
+              {primaryPostId ? "Primary Selected" : "Choose One Primary Post"}
             </span>
           </div>
           <div className="max-h-80 overflow-y-auto rounded-md border">
@@ -163,12 +163,12 @@ export function CombinedRoleForm({
               })
             ) : (
               <p className="p-6 text-center text-sm text-muted-foreground">
-                No available Post Codes match this search.
+                No Available Post Codes Match This Search.
               </p>
             )}
           </div>
           <Button disabled={!canSubmit} type="submit">
-            Create combined role
+            Create Combined Role
           </Button>
         </form>
       </CardContent>

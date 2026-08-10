@@ -150,7 +150,7 @@ export function CandidatesTable({
       <CardHeader>
         <CardTitle>Candidates</CardTitle>
         <CardDescription>
-          Showing {visibleRows.length} of {candidates.length} candidate profiles
+          Showing {visibleRows.length} Of {candidates.length} Candidate Profiles
         </CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">
@@ -210,7 +210,7 @@ export function CandidatesTable({
                       </a>
                     </Button>
                   ) : (
-                    "No resume"
+                    "No Resume"
                   )}
                 </TableCell>
                 <TableCell>
@@ -225,7 +225,7 @@ export function CandidatesTable({
                       variant="outline"
                     >
                       <MessageSquareText data-icon="inline-start" />
-                      Log conversation
+                      Log Conversation
                     </Button>
                   </TableCell>
                 ) : null}
@@ -237,7 +237,7 @@ export function CandidatesTable({
                   className="py-10 text-center text-muted-foreground"
                   colSpan={canWrite ? 13 : 12}
                 >
-                  No candidates match the selected filters.
+                  No Candidates Match The Selected Filters.
                 </TableCell>
               </TableRow>
             ) : null}
@@ -251,22 +251,22 @@ export function CandidatesTable({
           <input name="panel" type="hidden" value="candidatesPanel" />
           <input name="candidate_id" type="hidden" value={loggingCandidate.id} />
           <SheetHeader>
-            <SheetTitle>Log conversation</SheetTitle>
+            <SheetTitle>Log Conversation</SheetTitle>
             <SheetDescription>
               {loggingCandidate.name} · {loggingCandidate.phone}
             </SheetDescription>
           </SheetHeader>
           <div className="grid flex-1 content-start gap-4 px-6">
             <Field>
-              <FieldLabel htmlFor="candidate-log-event-type">Conversation type</FieldLabel>
+              <FieldLabel htmlFor="candidate-log-event-type">Conversation Type</FieldLabel>
               <NativeSelect id="candidate-log-event-type" name="event_type" required>
-                {["Phone Call", "WhatsApp", "Email", "In Person", "Interview Follow-up", "Offer / Joining", "Other"].map((option) => (
+                {["Phone Call", "WhatsApp", "Email", "In Person", "Interview Follow-Up", "Offer / Joining", "Other"].map((option) => (
                   <NativeSelectOption key={option} value={option}>{option}</NativeSelectOption>
                 ))}
               </NativeSelect>
             </Field>
             <Field>
-              <FieldLabel htmlFor="candidate-log-title">Conversation field</FieldLabel>
+              <FieldLabel htmlFor="candidate-log-title">Conversation Field</FieldLabel>
               <NativeSelect id="candidate-log-title" name="title" required>
                 {["Initial Contact", "Follow-up", "Interview Scheduling", "Document Request", "Salary Discussion", "Offer Discussion", "Joining Confirmation", "Not Interested", "Other"].map((option) => (
                   <NativeSelectOption key={option} value={option}>{option}</NativeSelectOption>
@@ -279,7 +279,7 @@ export function CandidatesTable({
             </Field>
           </div>
           <SheetFooter>
-            <Button type="submit">Add to candidate timeline</Button>
+            <Button type="submit">Add To Candidate Timeline</Button>
           </SheetFooter>
         </form>
       </SheetContent>
@@ -308,10 +308,10 @@ export function CandidateAssignmentPanel({
   return (
     <Card>
           <CardHeader>
-            <CardTitle>Search candidates for a job</CardTitle>
+            <CardTitle>Search Candidates For A Job</CardTitle>
             <CardDescription>
-              Select one job first, use the column filters to find suitable
-              candidates, then tick one or many candidates for that job.
+              Select One Job First, Use The Column Filters To Find Suitable
+              Candidates, Then Tick One Or Many Candidates For That Job.
             </CardDescription>
           </CardHeader>
           <CardContent>

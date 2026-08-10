@@ -272,43 +272,43 @@ export function toDashboardViewModel(payload: unknown): DashboardViewModel {
   });
 
   return {
-    workbook: str(data.workbook) || str(data.workbookName) || "MRMPL workbook",
+    workbook: str(data.workbook) || str(data.workbookName) || "Mrmpl Workbook",
     updatedAt: str(data.updatedAt) || "",
     metrics: [
       {
-        label: "Total output",
+        label: "Total Output",
         value: formatNumber(totalOutput),
-        detail: `${formatNumber(totalTarget)} target`,
+        detail: `${formatNumber(totalTarget)} Target`,
         tone: "default",
       },
       {
         label: "Target",
         value: formatNumber(totalTarget),
-        detail: "Planned production quantity",
+        detail: "Planned Production Quantity",
         tone: "default",
       },
       {
         label: "Efficiency",
         value: formatPercent(efficiency),
-        detail: "Actual output vs target",
+        detail: "Actual Output Vs Target",
         tone: efficiency >= 0.9 ? "good" : efficiency >= 0.75 ? "default" : "warning",
       },
       {
-        label: "Reject pcs / rate",
+        label: "Reject Pcs / Rate",
         value: `${formatNumber(totalReject)} | ${formatPercent(rejectRate)}`,
-        detail: "Rejected quantity and rejection rate",
+        detail: "Rejected Quantity And Rejection Rate",
         tone: rejectRate > 0.05 ? "warning" : "good",
       },
       {
-        label: "Active operators",
+        label: "Active Operators",
         value: formatNumber(num(summary, ["activeOperators"]) || operators.length),
-        detail: `${formatNumber(num(summary, ["activeMachines"]) || machines.length)} machines tracked`,
+        detail: `${formatNumber(num(summary, ["activeMachines"]) || machines.length)} Machines Tracked`,
         tone: "default",
       },
       {
         label: "Attendance",
-        value: attendancePct ? formatPercent(attendancePct) : "No data",
-        detail: str(summary.attendanceScope) || "Selected attendance scope",
+        value: attendancePct ? formatPercent(attendancePct) : "No Data",
+        detail: str(summary.attendanceScope) || "Selected Attendance Scope",
         tone: attendancePct >= 0.9 ? "good" : attendancePct > 0 ? "warning" : "default",
       },
     ],

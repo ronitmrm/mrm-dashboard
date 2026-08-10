@@ -39,9 +39,9 @@ export function SoftwareProcessingProvider({ children }: { children: ReactNode }
               <LoaderCircle className="size-5" />
             </span>
             <div>
-              <p className="font-medium">Processing your request…</p>
+              <p className="font-medium">Processing Your Request…</p>
               <p className="text-sm text-muted-foreground">
-                Please wait. All software controls are locked until saving or importing finishes.
+                Please Wait. All Software Controls Are Locked Until Saving Or Importing Finishes.
               </p>
             </div>
           </div>

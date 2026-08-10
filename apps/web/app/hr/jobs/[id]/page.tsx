@@ -125,7 +125,7 @@ export default async function JobWorkspacePage({
         <Button asChild className="w-fit" size="sm" variant="ghost">
           <Link href="/hr?panel=jobsPanel">
             <ArrowLeft data-icon="inline-start" />
-            Back to Job Posts
+            Back To Job Posts
           </Link>
         </Button>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -148,7 +148,7 @@ export default async function JobWorkspacePage({
                 href={`/hr?panel=candidateSearchPanel&job=${encodeURIComponent(job.id)}&returnJob=${encodeURIComponent(job.id)}`}
               >
                 <UserPlus data-icon="inline-start" />
-                Assign candidates
+                Assign Candidates
               </Link>
             </Button>
           ) : null}
@@ -169,13 +169,13 @@ export default async function JobWorkspacePage({
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           ["Applicants", String(applications.length)],
-          ["Interview records", String(interviews.length)],
+          ["Interview Records", String(interviews.length)],
           ["Posted", job.postDate],
-          ["Target", job.targetDate ?? "Not set"],
+          ["Target", job.targetDate ?? "Not Set"],
         ].map(([label, value]) => (
           <Card key={label}>
             <CardContent className="p-5">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              <p className="text-xs font-medium tracking-wide text-muted-foreground">
                 {label}
               </p>
               <p className="mt-2 text-xl font-semibold">{value}</p>
@@ -188,10 +188,10 @@ export default async function JobWorkspacePage({
         <section className="grid gap-6 xl:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Schedule interview</CardTitle>
+              <CardTitle>Schedule Interview</CardTitle>
               <CardDescription>
-                Select an assigned candidate and confirm the required next
-                round.
+                Select An Assigned Candidate And Confirm The Required Next
+                Round.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -204,10 +204,10 @@ export default async function JobWorkspacePage({
 
           <Card>
             <CardHeader>
-              <CardTitle>Record interview outcome</CardTitle>
+              <CardTitle>Record Interview Outcome</CardTitle>
               <CardDescription>
-                The required round is locked. Complete every preset question to
-                save a unified assessment.
+                The Required Round Is Locked. Complete Every Preset Question To
+                Save A Unified Assessment.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -226,10 +226,10 @@ export default async function JobWorkspacePage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Applicants for this job</CardTitle>
+          <CardTitle>Applicants For This Job</CardTitle>
           <CardDescription>
-            {applications.length} candidate applications assigned to this
-            recruitment opening.
+            {applications.length} Candidate Applications Assigned To This
+            Recruitment Opening.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -240,8 +240,8 @@ export default async function JobWorkspacePage({
                   <TableHead>Candidate</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Next interview</TableHead>
-                  <TableHead>Required round</TableHead>
+                  <TableHead>Next Interview</TableHead>
+                  <TableHead>Required Round</TableHead>
                   <TableHead className="text-right">Rounds</TableHead>
                 </TableRow>
               </TableHeader>
@@ -254,13 +254,13 @@ export default async function JobWorkspacePage({
                           {application.candidateName}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {application.currentCompany ?? "No current company"}
+                          {application.currentCompany ?? "No Current Company"}
                         </p>
                       </TableCell>
                       <TableCell>
                         <p>{application.candidatePhone}</p>
                         <p className="text-xs text-muted-foreground">
-                          {application.candidateEmail ?? "No email"}
+                          {application.candidateEmail ?? "No Email"}
                         </p>
                       </TableCell>
                       <TableCell>
@@ -272,8 +272,8 @@ export default async function JobWorkspacePage({
                       <TableCell>
                         {application.nextRound ??
                           (application.status === "Approved"
-                            ? "All rounds approved"
-                            : "Application closed")}
+                            ? "All Rounds Approved"
+                            : "Application Closed")}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {application.interviewCount}
@@ -286,7 +286,7 @@ export default async function JobWorkspacePage({
                       className="py-10 text-center text-muted-foreground"
                       colSpan={6}
                     >
-                      Search and assign the first candidate to this job.
+                      Search And Assign The First Candidate To This Job.
                     </TableCell>
                   </TableRow>
                 )}
@@ -298,10 +298,10 @@ export default async function JobWorkspacePage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Complete interview history</CardTitle>
+          <CardTitle>Complete Interview History</CardTitle>
           <CardDescription>
-            Every scheduled round and saved outcome for this recruitment opening
-            is listed here.
+            Every Scheduled Round And Saved Outcome For This Recruitment Opening
+            Is Listed Here.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -356,7 +356,7 @@ export default async function JobWorkspacePage({
                       className="py-10 text-center text-muted-foreground"
                       colSpan={9}
                     >
-                      No interviews have been scheduled for this job.
+                      No Interviews Have Been Scheduled For This Job.
                     </TableCell>
                   </TableRow>
                 )}

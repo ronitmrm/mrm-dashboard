@@ -70,9 +70,9 @@ export default async function AssembliesPage({
     <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
       <Card className="min-w-0">
         <CardHeader>
-          <CardTitle>Assembly / BOM register</CardTitle>
+          <CardTitle>Assembly / Bom Register</CardTitle>
           <CardDescription>
-            Ordered parent/component rows used by Package and Assembly costing.
+            Ordered Parent/Component Rows Used By Package And Assembly Costing.
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -80,9 +80,9 @@ export default async function AssembliesPage({
             <TableHeader>
               <TableRow>
                 <TableHead>Parent</TableHead>
-                <TableHead>Parent description</TableHead>
+                <TableHead>Parent Description</TableHead>
                 <TableHead>Component</TableHead>
-                <TableHead>Component description</TableHead>
+                <TableHead>Component Description</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead>Notes</TableHead>
               </TableRow>
@@ -111,7 +111,7 @@ export default async function AssembliesPage({
                     className="h-28 text-center text-muted-foreground"
                     colSpan={6}
                   >
-                    No BOM lines are available.
+                    No Bom Lines Are Available.
                   </TableCell>
                 </TableRow>
               )}
@@ -122,10 +122,10 @@ export default async function AssembliesPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Add component</CardTitle>
+          <CardTitle>Add Component</CardTitle>
           <CardDescription>
-            Parent products must be Package or Assembly. Cycles and
-            cross-organization links are rejected.
+            Parent Products Must Be Package Or Assembly. Cycles And
+            Cross-Organization Links Are Rejected.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
@@ -133,13 +133,13 @@ export default async function AssembliesPage({
             <>
               <form className="grid gap-2" id="bom-parent-search">
                 <input name="component" type="hidden" value={componentSearch} />
-                <Label htmlFor="bom-parent-query">Find parent product</Label>
+                <Label htmlFor="bom-parent-query">Find Parent Product</Label>
                 <div className="flex gap-2">
                   <Input
                     defaultValue={parentSearch}
                     id="bom-parent-query"
                     name="parent"
-                    placeholder="Product UID or description"
+                    placeholder="Product Uid Or Description"
                   />
                   <Button type="submit" variant="outline">
                     Search
@@ -156,14 +156,14 @@ export default async function AssembliesPage({
               <form className="grid gap-2" id="bom-component-search">
                 <input name="parent" type="hidden" value={parentSearch} />
                 <Label htmlFor="bom-component-query">
-                  Find component product
+                  Find Component Product
                 </Label>
                 <div className="flex gap-2">
                   <Input
                     defaultValue={componentSearch}
                     id="bom-component-query"
                     name="component"
-                    placeholder="Product UID or description"
+                    placeholder="Product Uid Or Description"
                   />
                   <Button type="submit" variant="outline">
                     Search
@@ -179,14 +179,14 @@ export default async function AssembliesPage({
               />
               <form action={addBomLineAction} className="grid gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="parent_item_id">Parent product</Label>
+                  <Label htmlFor="parent_item_id">Parent Product</Label>
                   <select
                     className="h-9 rounded-md border bg-background px-3 text-sm"
                     id="parent_item_id"
                     name="parent_item_id"
                     required
                   >
-                    <option value="">Select parent</option>
+                    <option value="">Select Parent</option>
                     {parentOptions.rows.map((product) => (
                       <option key={product.id} value={product.id}>
                         {product.uid} — {product.description}
@@ -195,14 +195,14 @@ export default async function AssembliesPage({
                   </select>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="component_item_id">Component product</Label>
+                  <Label htmlFor="component_item_id">Component Product</Label>
                   <select
                     className="h-9 rounded-md border bg-background px-3 text-sm"
                     id="component_item_id"
                     name="component_item_id"
                     required
                   >
-                    <option value="">Select component</option>
+                    <option value="">Select Component</option>
                     {componentOptions.rows.map((product) => (
                       <option key={product.id} value={product.id}>
                         {product.uid} — {product.description}
@@ -226,13 +226,13 @@ export default async function AssembliesPage({
                   <Label htmlFor="notes">Notes</Label>
                   <Textarea id="notes" name="notes" />
                 </div>
-                <Button type="submit">Add BOM line</Button>
+                <Button type="submit">Add Bom Line</Button>
               </form>
             </>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Read-only access: BOM changes require Pricing Masters write
-              capability.
+              Read-Only Access: Bom Changes Require Pricing Masters Write
+              Capability.
             </p>
           )}
         </CardContent>

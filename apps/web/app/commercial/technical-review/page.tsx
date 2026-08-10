@@ -70,8 +70,8 @@ export default async function TechnicalReviewPage({
           Technical Review
         </h2>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Handed-over lines appear here unless Sales owns an open clarification.
-          Checklist order and review states match Pricing.
+          Handed-Over Lines Appear Here Unless Sales Owns An Open Clarification.
+          Checklist Order And Review States Match Pricing.
         </p>
         <BoundedResultNotice
           actionHref="/commercial/enquiries/register/export.xlsx"
@@ -85,7 +85,7 @@ export default async function TechnicalReviewPage({
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Technical review queue</CardTitle>
+              <CardTitle>Technical Review Queue</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2">
               {items.map((item) => (
@@ -114,7 +114,7 @@ export default async function TechnicalReviewPage({
                         query: { item: item.enquiryItemId },
                       }}
                     >
-                      Open review
+                      Open Review
                     </Link>
                   </Button>
                 </div>
@@ -140,7 +140,7 @@ export default async function TechnicalReviewPage({
                     </Badge>
                     <Button asChild size="sm" variant="ghost">
                       <Link href={`/commercial/enquiries/${item.enquiryId}`}>
-                        Open enquiry
+                        Open Enquiry
                       </Link>
                     </Button>
                   </div>
@@ -160,7 +160,7 @@ export default async function TechnicalReviewPage({
                   />
                   <FieldGroup>
                     <FieldSet>
-                      <FieldLegend>Technical checklist</FieldLegend>
+                      <FieldLegend>Technical Checklist</FieldLegend>
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         {checklist.map(([key, label]) => (
                           <Field
@@ -189,7 +189,7 @@ export default async function TechnicalReviewPage({
                         <FieldLabel
                           htmlFor={`${item.enquiryItemId}-technical-status`}
                         >
-                          Review status
+                          Review Status
                         </FieldLabel>
                         <NativeSelect
                           id={`${item.enquiryItemId}-technical-status`}
@@ -223,7 +223,7 @@ export default async function TechnicalReviewPage({
                       </Field>
                       <Field>
                         <FieldLabel htmlFor={`${item.enquiryItemId}-missing`}>
-                          Missing information
+                          Missing Information
                         </FieldLabel>
                         <Textarea
                           id={`${item.enquiryItemId}-missing`}
@@ -235,7 +235,7 @@ export default async function TechnicalReviewPage({
                         <FieldLabel
                           htmlFor={`${item.enquiryItemId}-feasibility`}
                         >
-                          Feasibility reason
+                          Feasibility Reason
                         </FieldLabel>
                         <Textarea
                           id={`${item.enquiryItemId}-feasibility`}
@@ -254,7 +254,7 @@ export default async function TechnicalReviewPage({
                       <FieldLabel
                         htmlFor={`${item.enquiryItemId}-technical-remarks`}
                       >
-                        Technical remarks
+                        Technical Remarks
                       </FieldLabel>
                       <Textarea
                         id={`${item.enquiryItemId}-technical-remarks`}
@@ -274,7 +274,7 @@ export default async function TechnicalReviewPage({
       ) : (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            No handed-over lines are waiting for Technical Review.
+            No Handed-Over Lines Are Waiting For Technical Review.
           </CardContent>
         </Card>
       )}

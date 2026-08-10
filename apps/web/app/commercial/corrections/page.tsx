@@ -63,21 +63,21 @@ export default async function CommercialCorrectionsPage() {
       <section className="grid gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-2xl font-semibold tracking-tight">Corrections</h2>
-          <Badge variant="outline">Audited reversals</Badge>
+          <Badge variant="outline">Audited Reversals</Badge>
         </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Safe source reversals are executable. Sent quotes and other historical
-          commercial evidence remain immutable and use quarantine requests.
+          Safe Source Reversals Are Executable. Sent Quotes And Other Historical
+          Commercial Evidence Remain Immutable And Use Quarantine Requests.
         </p>
       </section>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Reverse Design → Costing handoff</CardTitle>
+            <CardTitle>Reverse Design → Costing Handoff</CardTitle>
             <CardDescription>
-              Only a completed design whose costing handoff has just started is
-              eligible. The design dossier is retained.
+              Only A Completed Design Whose Costing Handoff Has Just Started Is
+              Eligible. The Design Dossier Is Retained.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -105,12 +105,12 @@ export default async function CommercialCorrectionsPage() {
                     <FieldLabel>Remarks</FieldLabel>
                     <Textarea name="remarks" />
                   </Field>
-                  <Button type="submit">Return handoff to Not Started</Button>
+                  <Button type="submit">Return Handoff To Not Started</Button>
                 </FieldGroup>
               </form>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No just-started Design → Costing handoff can be reversed.
+                No Just-Started Design → Costing Handoff Can Be Reversed.
               </p>
             )}
           </CardContent>
@@ -118,10 +118,10 @@ export default async function CommercialCorrectionsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Reverse unused quoted product</CardTitle>
+            <CardTitle>Reverse Unused Quoted Product</CardTitle>
             <CardDescription>
-              This deletes only an unused Q/QUOTE product and its parent BOM.
-              Quote, component, and design-match references block deletion.
+              This Deletes Only An Unused Q/Quote Product And Its Parent Bom.
+              Quote, Component, And Design-Match References Block Deletion.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -129,7 +129,7 @@ export default async function CommercialCorrectionsPage() {
               <form action={reverseProductEntryAction}>
                 <FieldGroup>
                   <Field>
-                    <FieldLabel>Quoted product</FieldLabel>
+                    <FieldLabel>Quoted Product</FieldLabel>
                     <NativeSelect name="item_id" required>
                       {candidates.products.map((product) => (
                         <NativeSelectOption
@@ -144,10 +144,10 @@ export default async function CommercialCorrectionsPage() {
                                   ? `${product.blockerCounts.quotes} quote(s)`
                                   : null,
                                 product.blockerCounts.componentBom
-                                  ? "used in BOM"
+                                  ? "Used In Bom"
                                   : null,
                                 product.blockerCounts.matchedDesign
-                                  ? "design match"
+                                  ? "Design Match"
                                   : null,
                               ]
                                 .filter(Boolean)
@@ -157,7 +157,7 @@ export default async function CommercialCorrectionsPage() {
                       ))}
                     </NativeSelect>
                     <FieldDescription>
-                      Eligibility is rechecked under lock before deletion.
+                      Eligibility Is Rechecked Under Lock Before Deletion.
                     </FieldDescription>
                   </Field>
                   <Field>
@@ -169,13 +169,13 @@ export default async function CommercialCorrectionsPage() {
                     type="submit"
                     variant="destructive"
                   >
-                    Delete unused quoted product
+                    Delete Unused Quoted Product
                   </Button>
                 </FieldGroup>
               </form>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No unused quoted product can be reversed.
+                No Unused Quoted Product Can Be Reversed.
               </p>
             )}
           </CardContent>
@@ -184,10 +184,10 @@ export default async function CommercialCorrectionsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Historical correction quarantine</CardTitle>
+          <CardTitle>Historical Correction Quarantine</CardTitle>
           <CardDescription>
-            Destructive sent-price requests stay visible without mutating the
-            historical record.
+            Destructive Sent-Price Requests Stay Visible Without Mutating The
+            Historical Record.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
@@ -200,7 +200,7 @@ export default async function CommercialCorrectionsPage() {
               />
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Field>
-                  <FieldLabel>Historical target</FieldLabel>
+                  <FieldLabel>Historical Target</FieldLabel>
                   <NativeSelect name="target_id" required>
                     {reference.activePrices.map((price) => (
                       <NativeSelectOption key={price.id} value={price.id}>
@@ -210,13 +210,13 @@ export default async function CommercialCorrectionsPage() {
                   </NativeSelect>
                 </Field>
                 <Field>
-                  <FieldLabel>Requested action</FieldLabel>
+                  <FieldLabel>Requested Action</FieldLabel>
                   <NativeSelect name="requested_action" required>
                     <NativeSelectOption value="Delete historical price">
-                      Delete historical price
+                      Delete Historical Price
                     </NativeSelectOption>
                     <NativeSelectOption value="Rewrite historical price">
-                      Rewrite historical price
+                      Rewrite Historical Price
                     </NativeSelectOption>
                   </NativeSelect>
                 </Field>
@@ -225,7 +225,7 @@ export default async function CommercialCorrectionsPage() {
                   <Input name="reason" required />
                 </Field>
                 <Button className="self-end" type="submit" variant="outline">
-                  Quarantine request
+                  Quarantine Request
                 </Button>
               </div>
             </form>
@@ -236,7 +236,7 @@ export default async function CommercialCorrectionsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Target</TableHead>
-                  <TableHead>Requested action</TableHead>
+                  <TableHead>Requested Action</TableHead>
                   <TableHead>Reason</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -261,7 +261,7 @@ export default async function CommercialCorrectionsPage() {
                       className="h-24 text-center text-muted-foreground"
                       colSpan={4}
                     >
-                      No pricing correction requests are quarantined.
+                      No Pricing Correction Requests Are Quarantined.
                     </TableCell>
                   </TableRow>
                 )}

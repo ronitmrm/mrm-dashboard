@@ -78,16 +78,16 @@ export function JobTemplateEditor({
       <SheetHeader>
         <SheetTitle>Edit {template.templateCode}</SheetTitle>
         <SheetDescription>
-          Update the full job requirement form. The template code remains fixed.
+          Update The Full Job Requirement Form. The Template Code Remains Fixed.
         </SheetDescription>
       </SheetHeader>
       <div className="grid flex-1 content-start gap-4 px-6 sm:grid-cols-2">
         <Field>
-          <FieldLabel>Template code</FieldLabel>
+          <FieldLabel>Template Code</FieldLabel>
           <Input readOnly value={template.templateCode} />
         </Field>
         <Field>
-          <FieldLabel htmlFor="edit-template-name">Template name</FieldLabel>
+          <FieldLabel htmlFor="edit-template-name">Template Name</FieldLabel>
           <Input
             defaultValue={template.name}
             id="edit-template-name"
@@ -121,7 +121,7 @@ export function JobTemplateEditor({
         </Field>
         <Field className="sm:col-span-2">
           <FieldLabel htmlFor="edit-template-experience">
-            Experience requirement
+            Experience Requirement
           </FieldLabel>
           <Input
             defaultValue={template.experienceRequirement ?? ""}
@@ -131,7 +131,7 @@ export function JobTemplateEditor({
         </Field>
         <Field>
           <FieldLabel htmlFor="edit-template-minimum-salary">
-            Minimum salary
+            Minimum Salary
           </FieldLabel>
           <Input
             defaultValue={template.minimumSalary ?? ""}
@@ -143,7 +143,7 @@ export function JobTemplateEditor({
         </Field>
         <Field>
           <FieldLabel htmlFor="edit-template-maximum-salary">
-            Maximum salary
+            Maximum Salary
           </FieldLabel>
           <Input
             defaultValue={template.maximumSalary ?? ""}
@@ -155,7 +155,7 @@ export function JobTemplateEditor({
         </Field>
         <Field className="sm:col-span-2">
           <FieldLabel htmlFor="edit-template-responsibilities">
-            Role responsibilities
+            Role Responsibilities
           </FieldLabel>
           <Textarea
             defaultValue={template.roleResponsibilities ?? ""}
@@ -166,7 +166,7 @@ export function JobTemplateEditor({
         </Field>
       </div>
       <SheetFooter>
-        <Button type="submit">Save template changes</Button>
+        <Button type="submit">Save Template Changes</Button>
       </SheetFooter>
     </form>
   )
@@ -223,7 +223,7 @@ export function JobTemplatesTable({
   const filterKeys: Array<{ key: FilterKey; label: string }> = [
     { key: "code", label: "Code" },
     { key: "name", label: "Name" },
-    { key: "department", label: "Department / combined job" },
+    { key: "department", label: "Department / Combined Job" },
     { key: "designation", label: "Designation" },
     { key: "education", label: "Education" },
     { key: "experience", label: "Experience" },
@@ -238,10 +238,10 @@ export function JobTemplatesTable({
     >
       <Card>
         <CardHeader>
-          <CardTitle>Job templates</CardTitle>
+          <CardTitle>Job Templates</CardTitle>
           <CardDescription>
-            Showing {visibleTemplates.length} of {templates.length} reusable
-            profiles
+            Showing {visibleTemplates.length} Of {templates.length} Reusable
+            Profiles
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -304,7 +304,7 @@ export function JobTemplatesTable({
                     className="py-10 text-center text-muted-foreground"
                     colSpan={6}
                   >
-                    No job templates match the selected filters.
+                    No Job Templates Match The Selected Filters.
                   </TableCell>
                 </TableRow>
               ) : null}

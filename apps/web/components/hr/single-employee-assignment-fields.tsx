@@ -105,7 +105,7 @@ export function SingleEmployeeAssignmentFields({
       {showTargetSelector ? (
         <Field className="w-full min-w-0">
           <FieldLabel htmlFor="employee-post">
-            Approved post or combined job
+            Approved Post Or Combined Job
           </FieldLabel>
           <NativeSelect
             className="w-full"
@@ -116,20 +116,20 @@ export function SingleEmployeeAssignmentFields({
             value={postId}
           >
           <NativeSelectOption value="">
-            Select post or combined job
+            Select Post Or Combined Job
           </NativeSelectOption>
           {combinedTargets.length ? (
-            <NativeSelectOptGroup label="Combined jobs">
+            <NativeSelectOptGroup label="Combined Jobs">
               {combinedTargets.map(({ combinedRole, post }) => (
                 <NativeSelectOption key={combinedRole!.id} value={post.id}>
-                  {combinedRole!.vacancyCode} · {combinedRole!.name} · includes{" "}
+                  {combinedRole!.vacancyCode} · {combinedRole!.name} · Includes{" "}
                   {combinedRole!.postCodes.join(", ")}
                 </NativeSelectOption>
               ))}
             </NativeSelectOptGroup>
           ) : null}
           {individualTargets.length ? (
-            <NativeSelectOptGroup label="Individual approved posts">
+            <NativeSelectOptGroup label="Individual Approved Posts">
               {individualTargets.map(({ post }) => (
                 <NativeSelectOption key={post.id} value={post.id}>
                   {post.postCode} · {post.designation} · {post.status}
@@ -140,8 +140,8 @@ export function SingleEmployeeAssignmentFields({
           </NativeSelect>
           {selected?.combinedRole ? (
             <FieldDescription>
-              Included posts: {selected.combinedRole.postCodes.join(", ")}. One
-              employee assignment updates the complete combined job.
+              Included Posts: {selected.combinedRole.postCodes.join(", ")}. One
+              Employee Assignment Updates The Complete Combined Job.
             </FieldDescription>
           ) : null}
         </Field>
@@ -151,7 +151,7 @@ export function SingleEmployeeAssignmentFields({
       {selected ? (
         <Alert className="w-full min-w-0">
           <AlertDescription>
-            Current assignment: {selected.post.employeeName ?? "Unassigned"}
+            Current Assignment: {selected.post.employeeName ?? "Unassigned"}
             {selected.post.employeeCode
               ? ` (${selected.post.employeeCode})`
               : ""}{" "}
@@ -163,7 +163,7 @@ export function SingleEmployeeAssignmentFields({
         </Alert>
       ) : null}
       <Field className="w-full min-w-0">
-        <FieldLabel htmlFor="employee-name">Employee name</FieldLabel>
+        <FieldLabel htmlFor="employee-name">Employee Name</FieldLabel>
         <Input
           id="employee-name"
           name="employee_name"
@@ -173,7 +173,7 @@ export function SingleEmployeeAssignmentFields({
         />
       </Field>
       <Field className="w-full min-w-0">
-        <FieldLabel htmlFor="employee-code">Employee code</FieldLabel>
+        <FieldLabel htmlFor="employee-code">Employee Code</FieldLabel>
         <Input
           id="employee-code"
           name="employee_code"
@@ -183,12 +183,12 @@ export function SingleEmployeeAssignmentFields({
         />
         {occupied ? (
           <FieldDescription>
-            Employee details stay locked until this post is vacated.
+            Employee Details Stay Locked Until This Post Is Vacated.
           </FieldDescription>
         ) : null}
       </Field>
       <Field className="w-full min-w-0">
-        <FieldLabel htmlFor="employee-event">Employment event</FieldLabel>
+        <FieldLabel htmlFor="employee-event">Employment Event</FieldLabel>
         <NativeSelect
           className="w-full"
           id="employee-event"
@@ -197,22 +197,22 @@ export function SingleEmployeeAssignmentFields({
           required
           value={event}
         >
-          <NativeSelectOption value="">Select action</NativeSelectOption>
+          <NativeSelectOption value="">Select Action</NativeSelectOption>
           <NativeSelectOption value="Appointed">
-            Appointed — not joined
+            Appointed — Not Joined
           </NativeSelectOption>
           <NativeSelectOption value="Joined">
-            Joined — becomes Occupied
+            Joined — Becomes Occupied
           </NativeSelectOption>
           <NativeSelectOption value="Resigned">Resigned</NativeSelectOption>
           <NativeSelectOption value="Removed">
-            Remove assignment — becomes Vacant
+            Remove Assignment — Becomes Vacant
           </NativeSelectOption>
         </NativeSelect>
       </Field>
       {event === "Resigned" ? (
         <Field className="w-full min-w-0">
-          <FieldLabel htmlFor="last-working-date">Last working date</FieldLabel>
+          <FieldLabel htmlFor="last-working-date">Last Working Date</FieldLabel>
           <Input
             id="last-working-date"
             name="last_working_date"
@@ -220,7 +220,7 @@ export function SingleEmployeeAssignmentFields({
             type="date"
           />
           <FieldDescription>
-            The approved post becomes vacant after this date.
+            The Approved Post Becomes Vacant After This Date.
           </FieldDescription>
         </Field>
       ) : null}

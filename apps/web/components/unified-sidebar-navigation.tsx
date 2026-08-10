@@ -175,7 +175,7 @@ export function UnifiedSidebarNavigation({
       {visibleHrNavigation.length ? (
         <NavigationSection
           icon={BriefcaseBusiness}
-          label="HR Recruitment"
+          label="Hr Recruitment"
           onOpenChange={(open) => setSectionOpen("hr", open)}
           open={expandedSections.hr}
           submoduleCount={visibleHrNavigation.length}

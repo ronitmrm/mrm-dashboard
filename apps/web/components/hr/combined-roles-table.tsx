@@ -216,21 +216,21 @@ export function CombinedRolesTable({
     >
       <Card>
         <CardHeader>
-          <CardTitle>Combined roles</CardTitle>
+          <CardTitle>Combined Roles</CardTitle>
           <CardDescription>
             {combinedRoles.filter((role) => role.status === "Active").length}{" "}
-            active groups
+            Active Groups
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Combined code</TableHead>
+                <TableHead>Combined Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Post Codes</TableHead>
                 <TableHead>Primary Post</TableHead>
-                <TableHead>Job template</TableHead>
+                <TableHead>Job Template</TableHead>
                 <TableHead>Status</TableHead>
                 {canWrite ? (
                   <TableHead className="text-right">Actions</TableHead>
@@ -315,8 +315,8 @@ export function CombinedRolesTable({
                     colSpan={canWrite ? 7 : 6}
                   >
                     {combinedRoles.length
-                      ? "No combined roles match the selected filters."
-                      : "No combined roles found."}
+                      ? "No Combined Roles Match The Selected Filters."
+                      : "No Combined Roles Found."}
                   </TableCell>
                 </TableRow>
               )}
@@ -347,16 +347,16 @@ export function CombinedRolesTable({
             ))}
             <input name="primary_post_id" type="hidden" value={primaryPostId} />
             <SheetHeader>
-              <SheetTitle>Edit combined role</SheetTitle>
+              <SheetTitle>Edit Combined Role</SheetTitle>
               <SheetDescription>
-                Select its job template and maintain the combined Post Codes.
+                Select Its Job Template And Maintain The Combined Post Codes.
               </SheetDescription>
             </SheetHeader>
             <div className="grid flex-1 content-start gap-4 px-6">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field>
                   <FieldLabel htmlFor="edit-combined-name">
-                    Combined role name
+                    Combined Role Name
                   </FieldLabel>
                   <Input
                     id="edit-combined-name"
@@ -368,7 +368,7 @@ export function CombinedRolesTable({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="edit-combined-code">
-                    Combined vacancy code
+                    Combined Vacancy Code
                   </FieldLabel>
                   <Input
                     id="edit-combined-code"
@@ -379,7 +379,7 @@ export function CombinedRolesTable({
               </div>
               <Field>
                 <FieldLabel htmlFor="edit-combined-template">
-                  Job template
+                  Job Template
                 </FieldLabel>
                 <NativeSelect
                   className="w-full"
@@ -388,7 +388,7 @@ export function CombinedRolesTable({
                   onChange={(event) => setTemplateCode(event.target.value)}
                   value={templateCode}
                 >
-                  <NativeSelectOption value="">No template</NativeSelectOption>
+                  <NativeSelectOption value="">No Template</NativeSelectOption>
                   {templates.map((template) => (
                     <NativeSelectOption
                       key={template.id}
@@ -406,16 +406,16 @@ export function CombinedRolesTable({
                 <Input
                   id="edit-combined-search"
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search by Post Code, department, or designation"
+                  placeholder="Search By Post Code, Department, Or Designation"
                   value={search}
                 />
               </Field>
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span>{selectedPostIds.size} posts selected</span>
+                <span>{selectedPostIds.size} Posts Selected</span>
                 <span className="text-muted-foreground">
                   {primaryPostId
-                    ? "Primary selected"
-                    : "Choose one primary post"}
+                    ? "Primary Selected"
+                    : "Choose One Primary Post"}
                 </span>
               </div>
               <div className="max-h-[50vh] overflow-y-auto rounded-md border">
@@ -463,14 +463,14 @@ export function CombinedRolesTable({
                   })
                 ) : (
                   <p className="p-6 text-center text-sm text-muted-foreground">
-                    No available Post Codes match this search.
+                    No Available Post Codes Match This Search.
                   </p>
                 )}
               </div>
             </div>
             <SheetFooter>
               <Button disabled={!canSubmit} type="submit">
-                Save combined role
+                Save Combined Role
               </Button>
             </SheetFooter>
           </form>

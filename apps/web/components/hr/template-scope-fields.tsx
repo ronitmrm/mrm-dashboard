@@ -40,7 +40,7 @@ export function TemplateScopeFields({
   return (
     <>
       <Field>
-        <FieldLabel htmlFor={`${prefix}-scope`}>Template for</FieldLabel>
+        <FieldLabel htmlFor={`${prefix}-scope`}>Template For</FieldLabel>
         <NativeSelect
           className="w-full"
           id={`${prefix}-scope`}
@@ -48,15 +48,15 @@ export function TemplateScopeFields({
           value={scope}
         >
           <NativeSelectOption value="department">
-            Individual department job
+            Individual Department Job
           </NativeSelectOption>
-          <NativeSelectOption value="combined">Combined job</NativeSelectOption>
+          <NativeSelectOption value="combined">Combined Job</NativeSelectOption>
         </NativeSelect>
       </Field>
       {scope === "combined" ? (
         <Field>
           <FieldLabel htmlFor={`${prefix}-combined-role`}>
-            Combined job
+            Combined Job
           </FieldLabel>
           <NativeSelect
             className="w-full"
@@ -66,17 +66,17 @@ export function TemplateScopeFields({
             required
           >
             <NativeSelectOption value="">
-              Select combined job
+              Select Combined Job
             </NativeSelectOption>
             {activeCombinedRoles.map((role) => (
               <NativeSelectOption key={role.id} value={role.id}>
-                {role.vacancyCode} · {role.name} · includes{" "}
+                {role.vacancyCode} · {role.name} · Includes{" "}
                 {role.postCodes.join(", ")}
               </NativeSelectOption>
             ))}
           </NativeSelect>
           <FieldDescription>
-            This creates one job template for the complete combined role.
+            This Creates One Job Template For The Complete Combined Role.
           </FieldDescription>
         </Field>
       ) : (
@@ -89,7 +89,7 @@ export function TemplateScopeFields({
             name="department_code"
             required
           >
-            <NativeSelectOption value="">Select department</NativeSelectOption>
+            <NativeSelectOption value="">Select Department</NativeSelectOption>
             {masters.departments.map((department) => (
               <NativeSelectOption key={department.id} value={department.code}>
                 {department.name}
@@ -107,7 +107,7 @@ export function TemplateScopeFields({
           name="designation_code"
           required
         >
-          <NativeSelectOption value="">Select designation</NativeSelectOption>
+          <NativeSelectOption value="">Select Designation</NativeSelectOption>
           {masters.designations.map((designation) => (
             <NativeSelectOption key={designation.id} value={designation.code}>
               {designation.name}

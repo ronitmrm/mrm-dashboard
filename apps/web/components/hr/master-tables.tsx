@@ -52,7 +52,7 @@ function MasterTable({
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>
-          Showing {visibleRows.length} of {rows.length} active records
+          Showing {visibleRows.length} Of {rows.length} Active Records
         </CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">
@@ -94,7 +94,7 @@ function MasterTable({
                   className="py-10 text-center text-muted-foreground"
                   colSpan={2}
                 >
-                  No records match the selected filters.
+                  No Records Match The Selected Filters.
                 </TableCell>
               </TableRow>
             ) : null}

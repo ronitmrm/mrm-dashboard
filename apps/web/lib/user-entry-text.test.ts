@@ -7,6 +7,7 @@ describe("user entry text normalization", () => {
     expect(properCaseUserText("  mACHINE   mASTER loCATION ")).toBe("Machine Master Location");
     expect(properCaseUserText("PRE-SETTING / FINAL CHECK")).toBe("Pre-Setting / Final Check");
     expect(properCaseUserText("O'NEIL TOOL ROOM")).toBe("O'Neil Tool Room");
+    expect(properCaseUserText("DON'T CHANGE OPERATOR'S CODE")).toBe("Don't Change Operator's Code");
   });
 
   it("normalizes human text recursively without changing other value types", () => {

@@ -30,22 +30,22 @@ export function RecruitablePostFields({ posts }: { posts: RecruitablePost[] }) {
   const individualPosts = posts.filter((post) => !post.combinedRoleId)
   return (
     <Field className="md:col-span-2 xl:col-span-3">
-      <FieldLabel htmlFor="job-post">Vacant post or combined job</FieldLabel>
+      <FieldLabel htmlFor="job-post">Vacant Post Or Combined Job</FieldLabel>
       <NativeSelect className="w-full" id="job-post" name="post_id" required>
-        <NativeSelectOption value="">Select one vacancy</NativeSelectOption>
+        <NativeSelectOption value="">Select One Vacancy</NativeSelectOption>
         {combinedJobs.length ? (
-          <NativeSelectOptGroup label="Combined jobs — one candidate fills the complete role">
+          <NativeSelectOptGroup label="Combined Jobs — One Candidate Fills The Complete Role">
             {combinedJobs.map((post) => (
               <NativeSelectOption key={post.id} value={post.id}>
                 {post.combinedVacancyCode ?? post.vacancyCode} ·{" "}
-                {post.combinedRoleName} · includes{" "}
+                {post.combinedRoleName} · Includes{" "}
                 {post.combinedPostCodes.join(", ")}
               </NativeSelectOption>
             ))}
           </NativeSelectOptGroup>
         ) : null}
         {individualPosts.length ? (
-          <NativeSelectOptGroup label="Individual approved posts">
+          <NativeSelectOptGroup label="Individual Approved Posts">
             {individualPosts.map((post) => (
               <NativeSelectOption key={post.id} value={post.id}>
                 {post.postCode} · {post.department} · {post.designation} ·{" "}
@@ -56,8 +56,8 @@ export function RecruitablePostFields({ posts }: { posts: RecruitablePost[] }) {
         ) : null}
       </NativeSelect>
       <FieldDescription>
-        A combined selection shows every included Post Code. It creates one job
-        opening and its member posts are not offered separately.
+        A Combined Selection Shows Every Included Post Code. It Creates One Job
+        Opening And Its Member Posts Are Not Offered Separately.
       </FieldDescription>
     </Field>
   )

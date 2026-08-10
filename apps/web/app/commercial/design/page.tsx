@@ -141,9 +141,9 @@ export default async function DesignPage({
       <section className="grid gap-2">
         <h2 className="text-2xl font-semibold tracking-tight">Design</h2>
         <p className="max-w-4xl text-sm text-muted-foreground">
-          Feasible Technical lines arrive here for portfolio matching or a
-          controlled Q/C design. Package children may nest only below Assembly
-          rows; identifiers are allocated atomically when the dossier is saved.
+          Feasible Technical Lines Arrive Here For Portfolio Matching Or A
+          Controlled Q/C Design. Package Children May Nest Only Below Assembly
+          Rows; Identifiers Are Allocated Atomically When The Dossier Is Saved.
         </p>
         <BoundedResultNotice
           actionHref="/commercial/enquiries/register/export.xlsx"
@@ -163,13 +163,13 @@ export default async function DesignPage({
             />
             <Field className="max-w-md flex-1">
               <FieldLabel htmlFor="design-product-query">
-                Find portfolio product
+                Find Portfolio Product
               </FieldLabel>
               <Input
                 defaultValue={productSearch}
                 id="design-product-query"
                 name="product"
-                placeholder="Product UID or description"
+                placeholder="Product Uid Or Description"
               />
             </Field>
             <Button type="submit" variant="outline">
@@ -190,7 +190,7 @@ export default async function DesignPage({
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Design queue</CardTitle>
+              <CardTitle>Design Queue</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2">
               {items.map((item) => (
@@ -222,7 +222,7 @@ export default async function DesignPage({
                         },
                       }}
                     >
-                      Open design
+                      Open Design
                     </Link>
                   </Button>
                 </div>
@@ -253,7 +253,7 @@ export default async function DesignPage({
                       <Badge variant="outline">{item.nextStageStatus}</Badge>
                       <Button asChild size="sm" variant="ghost">
                         <Link href={"/commercial/enquiries/" + item.enquiryId}>
-                          Open enquiry
+                          Open Enquiry
                         </Link>
                       </Button>
                     </div>
@@ -262,7 +262,7 @@ export default async function DesignPage({
                 <CardContent className="grid gap-6">
                   {item.latestClarificationMessage ? (
                     <p className="rounded-2xl border bg-muted/40 p-3 text-sm">
-                      Product Costing requested:{" "}
+                      Product Costing Requested:{" "}
                       {item.latestClarificationMessage}
                     </p>
                   ) : null}
@@ -285,15 +285,15 @@ export default async function DesignPage({
                     />
                     <fieldset className="grid gap-6" disabled={!editable}>
                       <FieldSet>
-                        <FieldLegend>Portfolio and allocation</FieldLegend>
+                        <FieldLegend>Portfolio And Allocation</FieldLegend>
                         <FieldDescription>
-                          Existing matches must be ordered internal products.
-                          New List and Package work receives Q and C numbers.
+                          Existing Matches Must Be Ordered Internal Products.
+                          New List And Package Work Receives Q And C Numbers.
                         </FieldDescription>
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                           <ChoiceField
                             defaultValue={item.portfolioMatchStatus}
-                            label="Portfolio decision"
+                            label="Portfolio Decision"
                             name="portfolio_match_status"
                             options={[
                               "New Design Required",
@@ -302,14 +302,14 @@ export default async function DesignPage({
                           />
                           <Field>
                             <FieldLabel>
-                              Matched product
+                              Matched Product
                               {editable ? (
                                 <NativeSelect
                                   name="matched_product_id"
                                   defaultValue={item.matchedProductId ?? ""}
                                 >
                                   <NativeSelectOption value="">
-                                    No portfolio match
+                                    No Portfolio Match
                                   </NativeSelectOption>
                                   {products.map((product) => (
                                     <NativeSelectOption
@@ -334,24 +334,24 @@ export default async function DesignPage({
                           </Field>
                           <ChoiceField
                             defaultValue={item.itemType}
-                            label="Item type"
+                            label="Item Type"
                             name="item_type"
                             options={["List", "Package"]}
                           />
                           <TextField
                             defaultValue={item.quotedPartUid ?? ""}
-                            label="Allocated Q / C number"
+                            label="Allocated Q / C Number"
                             name="quoted_part_uid"
                           />
                         </div>
                       </FieldSet>
 
                       <FieldSet>
-                        <FieldLegend>Design dossier</FieldLegend>
+                        <FieldLegend>Design Dossier</FieldLegend>
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                           <ChoiceField
                             defaultValue={item.designStatus}
-                            label="Design status"
+                            label="Design Status"
                             name="design_status"
                             options={[
                               "Pending Design",
@@ -368,7 +368,7 @@ export default async function DesignPage({
                           />
                           <TextField
                             defaultValue={item.targetCompletionDate ?? ""}
-                            label="Target completion"
+                            label="Target Completion"
                             name="target_completion_date"
                             type="date"
                           />
@@ -379,59 +379,59 @@ export default async function DesignPage({
                           />
                           <TextField
                             defaultValue={item.internalPartSize ?? ""}
-                            label="Internal part size"
+                            label="Internal Part Size"
                             name="internal_part_size"
                           />
                           <TextField
                             defaultValue={item.internalPartSubCategory ?? ""}
-                            label="Internal subcategory"
+                            label="Internal Subcategory"
                             name="internal_part_sub_category"
                           />
                           <TextField
                             defaultValue={item.internalPartCategory ?? ""}
-                            label="Internal category"
+                            label="Internal Category"
                             name="internal_part_category"
                           />
                           <TextField
                             defaultValue={item.manufacturingProcess ?? ""}
-                            label="Manufacturing process"
+                            label="Manufacturing Process"
                             name="manufacturing_process"
                           />
                           <TextField
                             defaultValue={item.packageProcessRequired ?? ""}
-                            label="Package process"
+                            label="Package Process"
                             name="package_process_required"
                           />
                           {(
                             [
                               [
                                 "design_bom_required",
-                                "BOM required",
+                                "Bom Required",
                                 item.designBomRequired,
                               ],
                               [
                                 "design_bom_completed",
-                                "BOM complete",
+                                "Bom Complete",
                                 item.designBomCompleted,
                               ],
                               [
                                 "assembly_required",
-                                "Assembly required",
+                                "Assembly Required",
                                 item.assemblyRequired,
                               ],
                               [
                                 "tooling_required",
-                                "Tooling required",
+                                "Tooling Required",
                                 item.toolingRequired,
                               ],
                               [
                                 "fixture_required",
-                                "Fixture required",
+                                "Fixture Required",
                                 item.fixtureRequired,
                               ],
                               [
                                 "gauges_required",
-                                "Gauges required",
+                                "Gauges Required",
                                 item.gaugesRequired,
                               ],
                             ] as const
@@ -446,30 +446,30 @@ export default async function DesignPage({
                           ))}
                           <TextField
                             defaultValue={item.componentsRequired ?? ""}
-                            label="Components required"
+                            label="Components Required"
                             name="components_required"
                           />
                           <TextField
                             defaultValue={item.toolingApproxCost}
-                            label="Tooling approximate cost"
+                            label="Tooling Approximate Cost"
                             name="tooling_approx_cost"
                             type="number"
                           />
                           <TextField
                             defaultValue={item.fixtureApproxCost}
-                            label="Fixture approximate cost"
+                            label="Fixture Approximate Cost"
                             name="fixture_approx_cost"
                             type="number"
                           />
                           <TextField
                             defaultValue={item.inspectionApproxCost}
-                            label="Inspection approximate cost"
+                            label="Inspection Approximate Cost"
                             name="inspection_approx_cost"
                             type="number"
                           />
                           <TextField
                             defaultValue={item.checkedBy ?? ""}
-                            label="Checked by"
+                            label="Checked By"
                             name="checked_by"
                           />
                           <ChoiceField
@@ -482,7 +482,7 @@ export default async function DesignPage({
                         <div className="grid gap-4 md:grid-cols-2">
                           <Field>
                             <FieldLabel>
-                              Operation notes
+                              Operation Notes
                               <Textarea
                                 name="operation_notes"
                                 defaultValue={item.operationNotes ?? ""}
@@ -491,7 +491,7 @@ export default async function DesignPage({
                           </Field>
                           <Field>
                             <FieldLabel>
-                              Design remarks
+                              Design Remarks
                               <Textarea
                                 name="design_remarks"
                                 defaultValue={item.designRemarks ?? ""}
@@ -502,10 +502,10 @@ export default async function DesignPage({
                       </FieldSet>
 
                       <FieldSet>
-                        <FieldLegend>Package / Assembly BOM</FieldLegend>
+                        <FieldLegend>Package / Assembly Bom</FieldLegend>
                         <FieldDescription>
-                          Parent lines must be Assembly rows. Existing rows must
-                          select an ordered internal product.
+                          Parent Lines Must Be Assembly Rows. Existing Rows Must
+                          Select An Ordered Internal Product.
                         </FieldDescription>
                         <div className="grid gap-3">
                           {rows.map((row, index) => (
@@ -521,7 +521,7 @@ export default async function DesignPage({
                               />
                               <TextField
                                 defaultValue={row?.parentLineNumber ?? ""}
-                                label="Parent line"
+                                label="Parent Line"
                                 name="bom_parent_line_number"
                                 type="number"
                               />
@@ -539,7 +539,7 @@ export default async function DesignPage({
                               />
                               <Field>
                                 <FieldLabel>
-                                  Existing product
+                                  Existing Product
                                   <NativeSelect
                                     name="bom_existing_product_id"
                                     defaultValue={row?.existingProductId ?? ""}
@@ -560,7 +560,7 @@ export default async function DesignPage({
                               </Field>
                               <TextField
                                 defaultValue={row?.componentCode ?? ""}
-                                label="Component code"
+                                label="Component Code"
                                 name="bom_component_code"
                               />
                               <TextField
@@ -572,7 +572,7 @@ export default async function DesignPage({
                               <div className="xl:col-span-3">
                                 <TextField
                                   defaultValue={row?.packagePart ?? ""}
-                                  label="Part / BOM item"
+                                  label="Part / Bom Item"
                                   name="bom_package_part"
                                 />
                               </div>
@@ -582,12 +582,12 @@ export default async function DesignPage({
                       </FieldSet>
 
                       <FieldSet>
-                        <FieldLegend>Design files</FieldLegend>
+                        <FieldLegend>Design Files</FieldLegend>
                         <div className="grid gap-4 md:grid-cols-3">
                           {[
-                            ["internal_drawing_file", "Internal drawing"],
-                            ["customer_marked_file", "Customer marked drawing"],
-                            ["cad_file", "CAD file"],
+                            ["internal_drawing_file", "Internal Drawing"],
+                            ["customer_marked_file", "Customer Marked Drawing"],
+                            ["cad_file", "Cad File"],
                           ].map(([name, label]) => (
                             <Field key={name}>
                               <FieldLabel>
@@ -599,7 +599,7 @@ export default async function DesignPage({
                         </div>
                       </FieldSet>
                       <Button className="w-fit" type="submit">
-                        Save Design dossier
+                        Save Design Dossier
                       </Button>
                     </fieldset>
                   </form>
@@ -649,7 +649,7 @@ export default async function DesignPage({
                       <FieldGroup>
                         <Field>
                           <FieldLabel>
-                            Ask Technical for clarification
+                            Ask Technical For Clarification
                             <Textarea name="message" required />
                           </FieldLabel>
                         </Field>
@@ -658,7 +658,7 @@ export default async function DesignPage({
                           type="submit"
                           variant="outline"
                         >
-                          Return to Technical
+                          Return To Technical
                         </Button>
                       </FieldGroup>
                     </form>
@@ -691,7 +691,7 @@ export default async function DesignPage({
       ) : (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            No Technical Review lines are waiting for Design.
+            No Technical Review Lines Are Waiting For Design.
           </CardContent>
         </Card>
       )}

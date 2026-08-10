@@ -76,7 +76,7 @@ function ScheduleFields({
   return (
     <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <Field>
-        <FieldLabel htmlFor="schedule-job">Post / job</FieldLabel>
+        <FieldLabel htmlFor="schedule-job">Post / Job</FieldLabel>
         {fixedJobLabel ? (
           <>
             <Input id="schedule-job" readOnly value={fixedJobLabel} />
@@ -91,7 +91,7 @@ function ScheduleFields({
             required
             value={jobId}
           >
-            <NativeSelectOption value="">Select post / job</NativeSelectOption>
+            <NativeSelectOption value="">Select Post / Job</NativeSelectOption>
             {jobs.map(([optionJobId, label]) => (
               <NativeSelectOption key={optionJobId} value={optionJobId}>
                 {label}
@@ -112,7 +112,7 @@ function ScheduleFields({
           value={applicationId}
         >
           <NativeSelectOption value="">
-            {jobId ? "Select assigned candidate" : "Select post / job first"}
+            {jobId ? "Select Assigned Candidate" : "Select Post / Job First"}
           </NativeSelectOption>
           {candidates.map((application) => (
             <NativeSelectOption
@@ -125,7 +125,7 @@ function ScheduleFields({
         </NativeSelect>
       </Field>
       <Field>
-        <FieldLabel htmlFor="schedule-round">Interview round</FieldLabel>
+        <FieldLabel htmlFor="schedule-round">Interview Round</FieldLabel>
         <NativeSelect
           className="w-full"
           disabled={!selectedApplication}
@@ -137,8 +137,8 @@ function ScheduleFields({
         >
           <NativeSelectOption value="">
             {selectedApplication
-              ? "Select required round"
-              : "Select candidate first"}
+              ? "Select Required Round"
+              : "Select Candidate First"}
           </NativeSelectOption>
           {selectedApplication ? (
             <NativeSelectOption value={selectedApplication.nextRound}>
@@ -148,7 +148,7 @@ function ScheduleFields({
         </NativeSelect>
       </Field>
       <Field>
-        <FieldLabel htmlFor="schedule-interview-date">Interview date</FieldLabel>
+        <FieldLabel htmlFor="schedule-interview-date">Interview Date</FieldLabel>
         <Input
           id="schedule-interview-date"
           name="interview_date"
@@ -157,7 +157,7 @@ function ScheduleFields({
         />
       </Field>
       <Field>
-        <FieldLabel htmlFor="schedule-interview-time">Interview time</FieldLabel>
+        <FieldLabel htmlFor="schedule-interview-time">Interview Time</FieldLabel>
         <Input
           id="schedule-interview-time"
           name="interview_time"
@@ -170,7 +170,7 @@ function ScheduleFields({
         disabled={!jobId || !applicationId || !roundName}
         type="submit"
       >
-        Schedule interview
+        Schedule Interview
       </Button>
     </FieldGroup>
   )
@@ -198,9 +198,9 @@ export function InterviewScheduleForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Schedule interview</CardTitle>
+        <CardTitle>Schedule Interview</CardTitle>
         <CardDescription>
-          Select the post first, then its assigned candidate and required round.
+          Select The Post First, Then Its Assigned Candidate And Required Round.
         </CardDescription>
       </CardHeader>
       <CardContent>

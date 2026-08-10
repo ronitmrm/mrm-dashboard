@@ -63,7 +63,7 @@ export function CommercialShell({
           <Link className="flex items-center px-2 py-2" href="/">
             <Image
               src="/mrm-green.svg"
-              alt="MRMPL"
+              alt="Mrmpl"
               width={792}
               height={176}
               priority
@@ -93,12 +93,12 @@ export function CommercialShell({
               {current.label}
             </h1>
             <p className="truncate text-xs text-muted-foreground">
-              Unified MRMPL workflow
+              Unified Mrmpl Workflow
             </p>
           </div>
           <Badge variant="outline">
             <Settings2 />
-            PostgreSQL
+            Postgresql
           </Badge>
         </header>
         <main className="@container/main flex flex-1 flex-col gap-6 p-4 lg:p-6">

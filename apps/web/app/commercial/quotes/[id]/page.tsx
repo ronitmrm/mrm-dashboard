@@ -67,7 +67,7 @@ export default async function QuoteDetailPage({
                   {quote.status}
                 </Badge>
                 {quote.isActive ? (
-                  <Badge variant="outline">Active price</Badge>
+                  <Badge variant="outline">Active Price</Badge>
                 ) : null}
               </div>
               <CardTitle>{quote.quoteNumber}</CardTitle>
@@ -77,12 +77,12 @@ export default async function QuoteDetailPage({
             </div>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline">
-                <Link href="/commercial/quotes">Quote register</Link>
+                <Link href="/commercial/quotes">Quote Register</Link>
               </Button>
               {quote.status === "Draft" ? (
                 <form action={sendQuoteAction}>
                   <input name="quote_item_id" type="hidden" value={quote.id} />
-                  <Button type="submit">Mark sent</Button>
+                  <Button type="submit">Mark Sent</Button>
                 </form>
               ) : null}
             </div>
@@ -91,24 +91,24 @@ export default async function QuoteDetailPage({
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-2xl border p-4">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Rate before rejection
+              <p className="text-xs font-medium tracking-wide text-muted-foreground">
+                Rate Before Rejection
               </p>
               <p className="mt-2 text-xl font-semibold tabular-nums">
                 ₹ {money(quote.rateInr)}
               </p>
             </div>
             <div className="rounded-2xl border p-4">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Total INR
+              <p className="text-xs font-medium tracking-wide text-muted-foreground">
+                Total Inr
               </p>
               <p className="mt-2 text-xl font-semibold tabular-nums">
                 ₹ {money(quote.totalRateInr)}
               </p>
             </div>
             <div className="rounded-2xl border p-4">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Approved USD / pc
+              <p className="text-xs font-medium tracking-wide text-muted-foreground">
+                Approved Usd / Pc
               </p>
               <p className="mt-2 text-xl font-semibold tabular-nums">
                 $ {money(quote.approvedPriceUsd)}
@@ -120,10 +120,10 @@ export default async function QuoteDetailPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Immediate component snapshot</CardTitle>
+          <CardTitle>Immediate Component Snapshot</CardTitle>
           <CardDescription>
-            Nested packages point to their own child quote snapshots, preserving
-            the original hierarchy.
+            Nested Packages Point To Their Own Child Quote Snapshots, Preserving
+            The Original Hierarchy.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -134,8 +134,8 @@ export default async function QuoteDetailPage({
                   <TableHead>Component</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead className="text-right">Quantity</TableHead>
-                  <TableHead className="text-right">Unit INR</TableHead>
-                  <TableHead className="text-right">Extended INR</TableHead>
+                  <TableHead className="text-right">Unit Inr</TableHead>
+                  <TableHead className="text-right">Extended Inr</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -174,7 +174,7 @@ export default async function QuoteDetailPage({
                       className="h-24 text-center text-muted-foreground"
                       colSpan={5}
                     >
-                      This is a leaf-product quote.
+                      This Is A Leaf-Product Quote.
                     </TableCell>
                   </TableRow>
                 )}

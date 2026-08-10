@@ -45,7 +45,7 @@ describe("unified navigation", () => {
     expect(
       dashboardNavigation.find(({ id }) => id === "setupChecklistMasterTab")
     ).toMatchObject({
-      subtitle: "setup and maintenance",
+      subtitle: "Setup And Maintenance",
       title: "Checklists",
     })
     expect(commercialNavigation).toHaveLength(17)

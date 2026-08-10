@@ -78,7 +78,7 @@ export function PricingTable({
                 className="h-32 text-center text-muted-foreground"
                 colSpan={pricingHeaders.length}
               >
-                No pricing rows match this view.
+                No Pricing Rows Match This View.
               </TableCell>
             </TableRow>
           )}

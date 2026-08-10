@@ -116,23 +116,23 @@ export default async function SalesPage({
         <section className="grid gap-2">
           <h2 className="text-2xl font-semibold tracking-tight">Sales</h2>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Clarification matching, Technical handover, quote readiness, sent
-            history, and due follow-ups share one source-equivalent queue.
+            Clarification Matching, Technical Handover, Quote Readiness, Sent
+            History, And Due Follow-Ups Share One Source-Equivalent Queue.
           </p>
           <div className="flex flex-wrap gap-2 pt-2">
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/sales/history/export.xlsx">
-                Export Sales history
+                Export Sales History
               </Link>
             </Button>
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/sales/history/followups/export.xlsx">
-                Export follow-ups
+                Export Follow-Ups
               </Link>
             </Button>
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/sales/history/sent-quotes/export.xlsx">
-                Export sent quotes
+                Export Sent Quotes
               </Link>
             </Button>
           </div>
@@ -146,10 +146,10 @@ export default async function SalesPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Sales clarification</CardTitle>
+            <CardTitle>Sales Clarification</CardTitle>
             <CardDescription>
-              Choose new work, a commercial requote, or a technical revision.
-              Quote candidates are scoped to the same customer.
+              Choose New Work, A Commercial Requote, Or A Technical Revision.
+              Quote Candidates Are Scoped To The Same Customer.
             </CardDescription>
             <BoundedResultNotice
               actionHref="/commercial/sales/history/export.xlsx"
@@ -171,7 +171,7 @@ export default async function SalesPage({
                 />
                 <Field>
                   <FieldLabel htmlFor="candidate-item">
-                    Clarification line
+                    Clarification Line
                   </FieldLabel>
                   <NativeSelect
                     defaultValue={candidateItemId}
@@ -190,13 +190,13 @@ export default async function SalesPage({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="candidate-query">
-                    Find quote candidate
+                    Find Quote Candidate
                   </FieldLabel>
                   <Input
                     defaultValue={candidateSearch}
                     id="candidate-query"
                     name="candidate"
-                    placeholder="Part, quote number, UID, or description"
+                    placeholder="Part, Quote Number, Uid, Or Description"
                   />
                 </Field>
                 <Button type="submit" variant="outline">
@@ -237,7 +237,7 @@ export default async function SalesPage({
                           },
                         }}
                       >
-                        Open clarification
+                        Open Clarification
                       </Link>
                     </Button>
                   </div>
@@ -341,7 +341,7 @@ export default async function SalesPage({
                         <FieldLabel
                           htmlFor={`${task.enquiryItemId}-sales-target`}
                         >
-                          Target price
+                          Target Price
                         </FieldLabel>
                         <Input
                           id={`${task.enquiryItemId}-sales-target`}
@@ -356,7 +356,7 @@ export default async function SalesPage({
                         <FieldLabel
                           htmlFor={`${task.enquiryItemId}-sales-drawing-ref`}
                         >
-                          Drawing reference
+                          Drawing Reference
                         </FieldLabel>
                         <Input
                           id={`${task.enquiryItemId}-sales-drawing-ref`}
@@ -368,7 +368,7 @@ export default async function SalesPage({
                         <FieldLabel
                           htmlFor={`${task.enquiryItemId}-sales-drawing`}
                         >
-                          Replacement drawing
+                          Replacement Drawing
                         </FieldLabel>
                         <Input
                           id={`${task.enquiryItemId}-sales-drawing`}
@@ -381,7 +381,7 @@ export default async function SalesPage({
                         <FieldLabel
                           htmlFor={`${task.enquiryItemId}-sales-decision`}
                         >
-                          Match decision
+                          Match Decision
                         </FieldLabel>
                         <NativeSelect
                           id={`${task.enquiryItemId}-sales-decision`}
@@ -389,7 +389,7 @@ export default async function SalesPage({
                           defaultValue="new"
                         >
                           <NativeSelectOption value="new">
-                            New item — return to Technical
+                            New Item — Return To Technical
                           </NativeSelectOption>
                           {candidatesFor(task.enquiryItemId).flatMap(
                             (candidate) => [
@@ -404,7 +404,7 @@ export default async function SalesPage({
                                 key={`technical:${candidate.quoteItemId}`}
                                 value={`technical:${candidate.quoteItemId}`}
                               >
-                                Technical revision · {candidate.productUid} ·{" "}
+                                Technical Revision · {candidate.productUid} ·{" "}
                                 {candidate.quoteNumber}
                               </NativeSelectOption>,
                             ]
@@ -414,7 +414,7 @@ export default async function SalesPage({
                     </div>
                     <BoundedResultNotice
                       actionHref="#sales-candidate-search"
-                      actionLabel="Search quote candidates"
+                      actionLabel="Search Quote Candidates"
                       coverage={
                         task.enquiryItemId === candidateItemId &&
                         searchedCandidates
@@ -433,7 +433,7 @@ export default async function SalesPage({
                       <FieldLabel
                         htmlFor={`${task.enquiryItemId}-sales-remarks`}
                       >
-                        Line remarks
+                        Line Remarks
                       </FieldLabel>
                       <Textarea
                         id={`${task.enquiryItemId}-sales-remarks`}
@@ -444,7 +444,7 @@ export default async function SalesPage({
                       <FieldLabel
                         htmlFor={`${task.enquiryItemId}-sales-response`}
                       >
-                        Sales response
+                        Sales Response
                       </FieldLabel>
                       <Textarea
                         id={`${task.enquiryItemId}-sales-response`}
@@ -453,14 +453,14 @@ export default async function SalesPage({
                       />
                     </Field>
                     <Button className="w-fit" type="submit">
-                      Complete clarification
+                      Complete Clarification
                     </Button>
                   </FieldGroup>
                 </form>
               ))
             ) : (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                No Sales clarifications are open.
+                No Sales Clarifications Are Open.
               </p>
             )}
           </CardContent>
@@ -469,9 +469,9 @@ export default async function SalesPage({
         <div className="grid gap-6 xl:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Technical handover</CardTitle>
+              <CardTitle>Technical Handover</CardTitle>
               <CardDescription>
-                Draft enquiries with at least one line.
+                Draft Enquiries With At Least One Line.
               </CardDescription>
               <BoundedResultNotice
                 actionHref="/commercial/sales/history/export.xlsx"
@@ -498,7 +498,7 @@ export default async function SalesPage({
                     <div>
                       <p className="font-medium">{task.enquiryNumber}</p>
                       <p className="text-sm text-muted-foreground">
-                        {task.companyName} · {task.totalLines} lines
+                        {task.companyName} · {task.totalLines} Lines
                         {missing.length
                           ? ` · Missing ${missing.join(", ")}`
                           : ""}
@@ -515,7 +515,7 @@ export default async function SalesPage({
                         size="sm"
                         disabled={missing.length > 0 || task.salesHoldLines > 0}
                       >
-                        Hand over
+                        Hand Over
                       </Button>
                     </form>
                   </div>
@@ -523,7 +523,7 @@ export default async function SalesPage({
               })}
               {!handoverTasks.length ? (
                 <p className="text-sm text-muted-foreground">
-                  No enquiries are waiting for handover.
+                  No Enquiries Are Waiting For Handover.
                 </p>
               ) : null}
             </CardContent>
@@ -531,9 +531,9 @@ export default async function SalesPage({
 
           <Card>
             <CardHeader>
-              <CardTitle>Quote-ready</CardTitle>
+              <CardTitle>Quote-Ready</CardTitle>
               <CardDescription>
-                Every feasible line is costed; not-feasible lines are omitted.
+                Every Feasible Line Is Costed; Not-Feasible Lines Are Omitted.
               </CardDescription>
               <BoundedResultNotice
                 actionHref="/commercial/sales/history/export.xlsx"
@@ -551,18 +551,18 @@ export default async function SalesPage({
                   <div>
                     <p className="font-medium">{task.enquiryNumber}</p>
                     <p className="text-sm text-muted-foreground">
-                      {task.quotedLines} quoted · {task.notQuotedLines} not
-                      feasible · {task.currency}
+                      {task.quotedLines} Quoted · {task.notQuotedLines} Not
+                      Feasible · {task.currency}
                     </p>
                   </div>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="/commercial/quotes">Open quote register</Link>
+                    <Link href="/commercial/quotes">Open Quote Register</Link>
                   </Button>
                 </div>
               ))}
               {!quoteReadyTasks.length ? (
                 <p className="text-sm text-muted-foreground">
-                  No complete draft quotes are waiting.
+                  No Complete Draft Quotes Are Waiting.
                 </p>
               ) : null}
             </CardContent>
@@ -571,9 +571,9 @@ export default async function SalesPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Manual follow-up</CardTitle>
+            <CardTitle>Manual Follow-Up</CardTitle>
             <CardDescription>
-              Create a Sales follow-up independently of quote send.
+              Create A Sales Follow-Up Independently Of Quote Send.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -588,7 +588,7 @@ export default async function SalesPage({
                 <FieldGroup>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <Field>
-                      <FieldLabel htmlFor="followup-enquiry">ENQ</FieldLabel>
+                      <FieldLabel htmlFor="followup-enquiry">Enq</FieldLabel>
                       <NativeSelect
                         id="followup-enquiry"
                         name="enquiry_id"
@@ -605,7 +605,7 @@ export default async function SalesPage({
                       </NativeSelect>
                     </Field>
                     <Field>
-                      <FieldLabel htmlFor="followup-due">Due on</FieldLabel>
+                      <FieldLabel htmlFor="followup-due">Due On</FieldLabel>
                       <Input
                         id="followup-due"
                         name="due_on"
@@ -637,13 +637,13 @@ export default async function SalesPage({
                     </Field>
                   </div>
                   <Button className="w-fit" type="submit">
-                    Create follow-up
+                    Create Follow-Up
                   </Button>
                 </FieldGroup>
               </form>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No enquiries are available.
+                No Enquiries Are Available.
               </p>
             )}
           </CardContent>
@@ -651,10 +651,10 @@ export default async function SalesPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Follow-up history</CardTitle>
+            <CardTitle>Follow-Up History</CardTitle>
             <CardDescription>
-              Pending work is due when its local calendar date is today or
-              earlier. Completion may chain the next reminder.
+              Pending Work Is Due When Its Local Calendar Date Is Today Or
+              Earlier. Completion May Chain The Next Reminder.
             </CardDescription>
             <BoundedResultNotice
               actionHref="/commercial/sales/history/followups/export.xlsx"
@@ -669,11 +669,11 @@ export default async function SalesPage({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Due</TableHead>
-                    <TableHead>ENQ</TableHead>
+                    <TableHead>Enq</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Channel</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Notes / completion</TableHead>
+                    <TableHead>Notes / Completion</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -704,12 +704,12 @@ export default async function SalesPage({
                               <Input
                                 name="note"
                                 defaultValue={followup.note}
-                                aria-label="Completion notes"
+                                aria-label="Completion Notes"
                               />
                               <NativeSelect
                                 name="channel"
                                 defaultValue={followup.channel}
-                                aria-label="Next channel"
+                                aria-label="Next Channel"
                               >
                                 {["Email", "Phone", "WhatsApp"].map(
                                   (channel) => (
@@ -725,12 +725,12 @@ export default async function SalesPage({
                               <Input
                                 name="next_due_on"
                                 type="date"
-                                aria-label="Next due date"
+                                aria-label="Next Due Date"
                               />
                               <Input
                                 name="next_note"
-                                placeholder="Next reminder"
-                                aria-label="Next notes"
+                                placeholder="Next Reminder"
+                                aria-label="Next Notes"
                               />
                             </div>
                             <Button className="mt-2" size="sm" type="submit">
@@ -750,7 +750,7 @@ export default async function SalesPage({
                                 },
                               }}
                             >
-                              Open follow-up
+                              Open Follow-Up
                             </Link>
                           </Button>
                         ) : (
@@ -767,9 +767,9 @@ export default async function SalesPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Sent quotes</CardTitle>
+            <CardTitle>Sent Quotes</CardTitle>
             <CardDescription>
-              Sent quote rows and follow-up coverage.
+              Sent Quote Rows And Follow-Up Coverage.
             </CardDescription>
             <BoundedResultNotice
               actionHref="/commercial/sales/history/sent-quotes/export.xlsx"
@@ -787,12 +787,12 @@ export default async function SalesPage({
                 <div>
                   <p className="font-medium">{task.enquiryNumber}</p>
                   <p className="text-sm text-muted-foreground">
-                    {task.companyName} · {task.sentQuoteItems} sent · Next{" "}
-                    {task.nextFollowupDue ?? "not scheduled"}
+                    {task.companyName} · {task.sentQuoteItems} Sent · Next{" "}
+                    {task.nextFollowupDue ?? "Not Scheduled"}
                   </p>
                 </div>
                 <Badge variant="secondary">
-                  {task.pendingFollowups} pending
+                  {task.pendingFollowups} Pending
                 </Badge>
               </div>
             ))}

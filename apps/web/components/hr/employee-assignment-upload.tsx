@@ -15,7 +15,7 @@ function EmployeeAssignmentUploadFields() {
     <>
       <Field>
         <FieldLabel htmlFor="employee-assignments-file">
-          Completed Excel workbook
+          Completed Excel Workbook
         </FieldLabel>
         <Input
           accept=".xlsx,.xls"
@@ -33,7 +33,7 @@ function EmployeeAssignmentUploadFields() {
             Uploading…
           </>
         ) : (
-          "Upload assignments"
+          "Upload Assignments"
         )}
       </Button>
       {pending ? (
@@ -45,11 +45,11 @@ function EmployeeAssignmentUploadFields() {
           <div className="grid max-w-md justify-items-center gap-3 rounded-xl border bg-card p-8 text-center shadow-xl">
             <LoaderCircle className="size-10 animate-spin text-primary" />
             <p className="text-lg font-semibold">
-              Uploading employee assignments…
+              Uploading Employee Assignments…
             </p>
             <p className="text-sm text-muted-foreground">
-              Please wait. Do not press another button or close this screen. You
-              can continue when the upload finishes.
+              Please Wait. Do Not Press Another Button Or Close This Screen. You
+              Can Continue When The Upload Finishes.
             </p>
           </div>
         </div>

@@ -8,8 +8,8 @@ import { cn } from "@workspace/ui/lib/utils";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MRMPL Dashboard",
-  description: "MRMPL production dashboard",
+  title: "Mrmpl Dashboard",
+  description: "Mrmpl Production Dashboard",
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {

@@ -53,16 +53,16 @@ export default async function ProductsPage({
       <CardHeader>
         <CardTitle>Products</CardTitle>
         <CardDescription>
-          Canonical product identities and Pricing calculation inputs. Exact
-          source aliases remain separate from item identity.
+          Canonical Product Identities And Pricing Calculation Inputs. Exact
+          Source Aliases Remain Separate From Item Identity.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
           <span>
             Showing {products.length ? bounds.offset + 1 : 0}–
-            {Math.min(bounds.offset + products.length, totalCount)} of{" "}
-            {totalCount} products
+            {Math.min(bounds.offset + products.length, totalCount)} Of{" "}
+            {totalCount} Products
           </span>
           <div className="flex items-center gap-2">
             {bounds.page > 1 ? (
@@ -77,7 +77,7 @@ export default async function ProductsPage({
               </Button>
             )}
             <span>
-              Page {Math.min(bounds.page, totalPages)} of {totalPages}
+              Page {Math.min(bounds.page, totalPages)} Of {totalPages}
             </span>
             {bounds.page < totalPages ? (
               <Button asChild size="sm" variant="outline">
@@ -96,12 +96,12 @@ export default async function ProductsPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Product UID</TableHead>
+                <TableHead>Product Uid</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Production</TableHead>
-                <TableHead className="text-right">Pieces / kg</TableHead>
-                <TableHead className="text-right">Product cost</TableHead>
+                <TableHead className="text-right">Pieces / Kg</TableHead>
+                <TableHead className="text-right">Product Cost</TableHead>
                 <TableHead>Source</TableHead>
               </TableRow>
             </TableHeader>
@@ -132,7 +132,7 @@ export default async function ProductsPage({
                     className="h-32 text-center text-muted-foreground"
                     colSpan={7}
                   >
-                    No products have been loaded into PostgreSQL yet.
+                    No Products Have Been Loaded Into Postgresql Yet.
                   </TableCell>
                 </TableRow>
               )}

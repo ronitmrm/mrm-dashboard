@@ -15,7 +15,7 @@ export default async function SignInPage({
       <div className="grid w-full max-w-md gap-8">
         <Image
           src="/mrm-green.svg"
-          alt="MRMPL"
+          alt="Mrmpl"
           width={792}
           height={176}
           priority

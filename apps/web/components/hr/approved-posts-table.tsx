@@ -185,7 +185,7 @@ function ApprovedPostColumnFilter({
           aria-label={`Search ${label} values`}
           className="h-8 text-xs"
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search values..."
+          placeholder="Search Values..."
           value={query}
         />
         <label className="flex cursor-pointer items-center gap-2 rounded-md border-b px-1 pb-2 text-xs font-medium">
@@ -201,7 +201,7 @@ function ApprovedPostColumnFilter({
               toggleVisibleOptions(checked === true)
             }
           />
-          Select all{query ? " matching" : ""}
+          Select All{query ? " Matching" : ""}
         </label>
         <div className="min-h-20 flex-1 space-y-1 overflow-y-auto pr-1">
           {visibleOptions.length ? (
@@ -223,7 +223,7 @@ function ApprovedPostColumnFilter({
             ))
           ) : (
             <p className="py-4 text-center text-xs text-muted-foreground">
-              No values found.
+              No Values Found.
             </p>
           )}
         </div>
@@ -237,7 +237,7 @@ function ApprovedPostColumnFilter({
             type="button"
             variant="ghost"
           >
-            Clear filter
+            Clear Filter
           </Button>
           <Button
             onClick={() => {
@@ -367,7 +367,7 @@ export function ApprovedPostsTable({
       <Card>
         <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1.5">
-            <CardTitle>Approved posts</CardTitle>
+            <CardTitle>Approved Posts</CardTitle>
             <CardDescription>
               {hasFilters
                 ? `Showing ${filteredPosts.length} of ${posts.length} sanctioned staffing positions`
@@ -384,8 +384,8 @@ export function ApprovedPostsTable({
         <CardContent className="space-y-3">
           <div className="flex min-h-8 items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
-              Open a column filter, tick one or more values, then Apply. Filters
-              from different columns work together.
+              Open A Column Filter, Tick One Or More Values, Then Apply. Filters
+              From Different Columns Work Together.
             </p>
             <div className="flex items-center gap-2">
             {employeeManagement ? (
@@ -396,7 +396,7 @@ export function ApprovedPostsTable({
                 type="button"
               >
                 <UserRoundCog data-icon="inline-start" />
-                Update selected employee
+                Update Selected Employee
               </Button>
             ) : null}
             {hasFilters ? (
@@ -407,7 +407,7 @@ export function ApprovedPostsTable({
                 variant="outline"
               >
                 <FilterX data-icon="inline-start" />
-                Clear filters
+                Clear Filters
               </Button>
             ) : null}
             </div>
@@ -417,14 +417,14 @@ export function ApprovedPostsTable({
               <TableHeader>
                 <TableRow>
                   {employeeManagement ? <TableHead>Select</TableHead> : null}
-                  <TableHead>Post code</TableHead>
-                  <TableHead>Vacancy code</TableHead>
+                  <TableHead>Post Code</TableHead>
+                  <TableHead>Vacancy Code</TableHead>
                   <TableHead>Department</TableHead>
                   <TableHead>Designation</TableHead>
                   <TableHead>Template</TableHead>
-                  <TableHead>Employee name</TableHead>
-                  <TableHead>Employee code</TableHead>
-                  <TableHead>Last working date</TableHead>
+                  <TableHead>Employee Name</TableHead>
+                  <TableHead>Employee Code</TableHead>
+                  <TableHead>Last Working Date</TableHead>
                   <TableHead>Status</TableHead>
                   {showActions ? (
                     <TableHead className="text-right">Actions</TableHead>
@@ -435,7 +435,7 @@ export function ApprovedPostsTable({
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="postCode"
-                      label="Post code"
+                      label="Post Code"
                       onApply={(value) => updateFilter("postCode", value)}
                       options={filterOptions.postCode}
                       selected={filters.postCode}
@@ -444,7 +444,7 @@ export function ApprovedPostsTable({
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="vacancyCode"
-                      label="Vacancy code"
+                      label="Vacancy Code"
                       onApply={(value) => updateFilter("vacancyCode", value)}
                       options={filterOptions.vacancyCode}
                       selected={filters.vacancyCode}
@@ -480,7 +480,7 @@ export function ApprovedPostsTable({
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="employeeName"
-                      label="Employee name"
+                      label="Employee Name"
                       onApply={(value) => updateFilter("employeeName", value)}
                       options={filterOptions.employeeName}
                       selected={filters.employeeName}
@@ -489,7 +489,7 @@ export function ApprovedPostsTable({
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="employeeCode"
-                      label="Employee code"
+                      label="Employee Code"
                       onApply={(value) => updateFilter("employeeCode", value)}
                       options={filterOptions.employeeCode}
                       selected={filters.employeeCode}
@@ -498,7 +498,7 @@ export function ApprovedPostsTable({
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="lastWorkingDate"
-                      label="Last working date"
+                      label="Last Working Date"
                       onApply={(value) =>
                         updateFilter("lastWorkingDate", value)
                       }
@@ -591,7 +591,7 @@ export function ApprovedPostsTable({
                                 />
                                 <Button size="sm" type="submit">
                                   <BriefcaseBusiness data-icon="inline-start" />
-                                  Create job
+                                  Create Job
                                 </Button>
                               </form>
                             ) : null}
@@ -650,8 +650,8 @@ export function ApprovedPostsTable({
                       colSpan={columnCount}
                     >
                       {posts.length
-                        ? "No approved posts match the selected filters."
-                        : "No approved posts found."}
+                        ? "No Approved Posts Match The Selected Filters."
+                        : "No Approved Posts Found."}
                     </TableCell>
                   </TableRow>
                 )}
@@ -667,16 +667,16 @@ export function ApprovedPostsTable({
             <input name="panel" type="hidden" value="approvedPostPanel" />
             <input name="post_id" type="hidden" value={editingPost.id} />
             <SheetHeader>
-              <SheetTitle>Edit approved post</SheetTitle>
+              <SheetTitle>Edit Approved Post</SheetTitle>
               <SheetDescription>
-                Update the job template linked to {editingPost.postCode}.
-                Department and designation remain locked because they form the
-                software-generated Post Code.
+                Update The Job Template Linked To {editingPost.postCode}.
+                Department And Designation Remain Locked Because They Form The
+                Software-Generated Post Code.
               </SheetDescription>
             </SheetHeader>
             <div className="grid flex-1 content-start gap-4 px-6">
               <Field>
-                <FieldLabel htmlFor="edit-post-code">Post code</FieldLabel>
+                <FieldLabel htmlFor="edit-post-code">Post Code</FieldLabel>
                 <Input
                   id="edit-post-code"
                   readOnly
@@ -705,7 +705,7 @@ export function ApprovedPostsTable({
               </Field>
               <Field>
                 <FieldLabel htmlFor="edit-post-template">
-                  Job template
+                  Job Template
                 </FieldLabel>
                 <NativeSelect
                   className="w-full"
@@ -713,7 +713,7 @@ export function ApprovedPostsTable({
                   id="edit-post-template"
                   name="requirement_template_code"
                 >
-                  <NativeSelectOption value="">No template</NativeSelectOption>
+                  <NativeSelectOption value="">No Template</NativeSelectOption>
                   {templates.map((template) => (
                     <NativeSelectOption
                       key={template.id}
@@ -726,7 +726,7 @@ export function ApprovedPostsTable({
               </Field>
             </div>
             <SheetFooter>
-              <Button type="submit">Save changes</Button>
+              <Button type="submit">Save Changes</Button>
             </SheetFooter>
           </form>
         </SheetContent>
@@ -741,7 +741,7 @@ export function ApprovedPostsTable({
           <form action={assignEmployeeAction} className="flex min-h-full flex-col">
             <input name="panel" type="hidden" value="employeeMasterPanel" />
             <SheetHeader>
-              <SheetTitle>Update employee status</SheetTitle>
+              <SheetTitle>Update Employee Status</SheetTitle>
               <SheetDescription>
                 {selectedEmployeePost.postCode} · {selectedEmployeePost.designation}
               </SheetDescription>
@@ -756,7 +756,7 @@ export function ApprovedPostsTable({
               />
             </div>
             <SheetFooter>
-              <Button type="submit">Update employee status</Button>
+              <Button type="submit">Update Employee Status</Button>
             </SheetFooter>
           </form>
         </SheetContent>

@@ -170,14 +170,14 @@ describe("toDashboardViewModel", () => {
 
     expect(view.workbook).toBe("MRMPL.xlsx");
     expect(view.metrics[0]).toMatchObject({
-      label: "Total output",
+      label: "Total Output",
       value: "1,500",
-      detail: "2,000 target",
+      detail: "2,000 Target",
     });
     expect(view.metrics.find((metric) => metric.label === "Target")?.value).toBe("2,000");
     expect(view.metrics.find((metric) => metric.label === "Efficiency")?.value).toBe("75%");
-    expect(view.metrics.find((metric) => metric.label === "Reject pcs / rate")?.value).toBe("30 | 2%");
-    expect(view.metrics.find((metric) => metric.label === "Attendance")?.value).toBe("No data");
+    expect(view.metrics.find((metric) => metric.label === "Reject Pcs / Rate")?.value).toBe("30 | 2%");
+    expect(view.metrics.find((metric) => metric.label === "Attendance")?.value).toBe("No Data");
     expect(view.trend).toHaveLength(2);
     expect(view.machines[0]!.label).toBe("CNC-1");
   });

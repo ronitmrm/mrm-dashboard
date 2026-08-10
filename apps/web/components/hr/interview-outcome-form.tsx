@@ -76,7 +76,7 @@ export function InterviewOutcomeForm({
               required
               value={applicationId}
             >
-              <NativeSelectOption value="">Select applicant</NativeSelectOption>
+              <NativeSelectOption value="">Select Applicant</NativeSelectOption>
               {availableApplications.map((application) => (
                 <NativeSelectOption key={application.id} value={application.id}>
                   {application.candidateName} · {application.scoreableRound}
@@ -85,13 +85,13 @@ export function InterviewOutcomeForm({
             </NativeSelect>
           </Field>
           <Field>
-            <FieldLabel htmlFor={`${fieldId}-round`}>Required round</FieldLabel>
+            <FieldLabel htmlFor={`${fieldId}-round`}>Required Round</FieldLabel>
             <div className="relative">
               <LockKeyhole className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
                 id={`${fieldId}-round`}
-                placeholder="Select an applicant"
+                placeholder="Select An Applicant"
                 readOnly
                 value={round?.name ?? ""}
               />
@@ -103,10 +103,10 @@ export function InterviewOutcomeForm({
           <div className="grid gap-4 rounded-2xl border bg-muted/20 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="font-medium">Preset assessment</p>
+                <p className="font-medium">Preset Assessment</p>
                 <p className="text-sm text-muted-foreground">
-                  Mark every question from 1 to 5. The overall score is
-                  calculated automatically.
+                  Mark Every Question From 1 To 5. The Overall Score Is
+                  Calculated Automatically.
                 </p>
               </div>
               <Badge>{round.name}</Badge>
@@ -124,7 +124,7 @@ export function InterviewOutcomeForm({
                     required
                   >
                     <NativeSelectOption value="">
-                      Select score
+                      Select Score
                     </NativeSelectOption>
                     {scoreOptions.map(([value, label]) => (
                       <NativeSelectOption key={value} value={value}>
@@ -139,8 +139,8 @@ export function InterviewOutcomeForm({
         ) : (
           <Alert>
             <AlertDescription>
-              Schedule the required interview first, then select the applicant
-              to score the locked round.
+              Schedule The Required Interview First, Then Select The Applicant
+              To Score The Locked Round.
             </AlertDescription>
           </Alert>
         )}
@@ -174,7 +174,7 @@ export function InterviewOutcomeForm({
           {round?.name === "HR Round" ? (
             <Field>
               <FieldLabel htmlFor={`${fieldId}-joining-date`}>
-                Joining date
+                Joining Date
               </FieldLabel>
               <Input
                 id={`${fieldId}-joining-date`}
@@ -190,7 +190,7 @@ export function InterviewOutcomeForm({
           <Textarea id={`${fieldId}-comments`} name="comments" />
         </Field>
         <Button disabled={!round} type="submit">
-          Save interview outcome
+          Save Interview Outcome
         </Button>
       </FieldGroup>
     </form>

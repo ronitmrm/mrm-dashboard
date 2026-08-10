@@ -68,7 +68,7 @@ export async function loadQuoteMarketContext(
       }))
       .catch(() => ({ copper: "-", zinc: "-" })),
     currency === "INR"
-      ? Promise.resolve({ label: "INR Exchange Rate", value: "1.00" })
+      ? Promise.resolve({ label: "Inr Exchange Rate", value: "1.00" })
       : adapters
           .fetchJson(
             "https://api.frankfurter.app/latest?from=" +

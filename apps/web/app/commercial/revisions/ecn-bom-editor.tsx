@@ -33,7 +33,7 @@ export function EcnBomEditor({
       <div className="rounded-2xl border border-dashed p-3">
         <input name="bom_mode" type="hidden" value="preserve" />
         <p className="text-sm text-muted-foreground">
-          The current normalized BOM will be preserved.
+          The Current Normalized Bom Will Be Preserved.
         </p>
         <Button
           className="mt-2"
@@ -42,7 +42,7 @@ export function EcnBomEditor({
           type="button"
           variant="outline"
         >
-          Edit or replace BOM
+          Edit Or Replace Bom
         </Button>
       </div>
     )
@@ -53,9 +53,9 @@ export function EcnBomEditor({
       <input name="bom_mode" type="hidden" value="replace" />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-medium">Replacement BOM</p>
+          <p className="text-sm font-medium">Replacement Bom</p>
           <p className="text-xs text-muted-foreground">
-            Save zero rows to clear the BOM. Components must stay unique.
+            Save Zero Rows To Clear The Bom. Components Must Stay Unique.
           </p>
         </div>
         <div className="flex gap-2">
@@ -67,7 +67,7 @@ export function EcnBomEditor({
             type="button"
             variant="outline"
           >
-            Add component
+            Add Component
           </Button>
           <Button
             onClick={() => {
@@ -78,7 +78,7 @@ export function EcnBomEditor({
             type="button"
             variant="ghost"
           >
-            Preserve current BOM
+            Preserve Current Bom
           </Button>
         </div>
       </div>
