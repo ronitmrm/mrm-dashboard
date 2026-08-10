@@ -1,12 +1,14 @@
 "use client"
 
-import { useSyncExternalStore } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import {
   BriefcaseBusiness,
   Calculator,
   ChevronRight,
   Factory,
+  Search,
+  X,
 } from "lucide-react"
 import {
   defaultProductionFloorCode,
@@ -23,7 +25,6 @@ import {
 import {
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -31,6 +32,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@workspace/ui/components/sidebar"
+import { Input } from "@workspace/ui/components/input"
 
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
@@ -143,6 +145,8 @@ export function UnifiedSidebarNavigation({
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [menuSearch, setMenuSearch] = useState("")
   const storedSections = useSyncExternalStore(
     subscribeToExpandedSections,
     expandedSectionsSnapshot,
@@ -163,6 +167,45 @@ export function UnifiedSidebarNavigation({
   const visibleHrNavigation = hrNavigation.filter((item) =>
     navigationAccess.hrHrefs.includes(item.href)
   )
+  const normalizedMenuSearch = menuSearch.trim().toLowerCase()
+  const filteredCommercialNavigation = filterNavigationItems(
+    visibleCommercialNavigation,
+    normalizedMenuSearch,
+    "costing commercial"
+  )
+  const filteredHrNavigation = filterNavigationItems(
+    visibleHrNavigation,
+    normalizedMenuSearch,
+    "hr recruitment"
+  )
+  const filteredProductionNavigation = navigationAccess.operations
+    ? productionFloors
+        .map((floor) => ({
+          floor,
+          items: filterProductionItems(
+            dashboardNavigation,
+            normalizedMenuSearch,
+            `${floor.label} ${floor.shortLabel} production`.toLowerCase()
+          ),
+        }))
+        .filter(({ items }) => items.length)
+    : []
+  const administrationMatchesSearch =
+    navigationAccess.administration &&
+    (!normalizedMenuSearch ||
+      "administration access".includes(normalizedMenuSearch))
+
+  useEffect(() => {
+    function focusMenuSearch(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+
+    window.addEventListener("keydown", focusMenuSearch)
+    return () => window.removeEventListener("keydown", focusMenuSearch)
+  }, [])
 
   function setSectionOpen(section: SectionId, open: boolean) {
     const next = { ...expandedSections, [section]: open }
@@ -172,19 +215,58 @@ export function UnifiedSidebarNavigation({
 
   return (
     <>
-      {visibleHrNavigation.length ? (
+      <div className="sticky top-0 z-10 bg-sidebar px-3 pb-2 pt-1">
+        <div className="relative">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            aria-label="Search navigation menu"
+            className="h-10 rounded-lg border-sidebar-border bg-background pl-9 pr-16 shadow-none"
+            onChange={(event) => setMenuSearch(event.target.value)}
+            placeholder="Search menu..."
+            ref={searchInputRef}
+            type="search"
+            value={menuSearch}
+          />
+          {menuSearch ? (
+            <button
+              aria-label="Clear menu search"
+              className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+              onClick={() => {
+                setMenuSearch("")
+                searchInputRef.current?.focus()
+              }}
+              type="button"
+            >
+              <X className="size-3.5" />
+            </button>
+          ) : (
+            <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-sidebar-border bg-sidebar-accent/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              Ctrl K
+            </kbd>
+          )}
+        </div>
+      </div>
+
+      {filteredHrNavigation.length ? (
         <NavigationSection
           icon={BriefcaseBusiness}
-          label="Hr Recruitment"
-          onOpenChange={(open) => setSectionOpen("hr", open)}
-          open={expandedSections.hr}
-          submoduleCount={visibleHrNavigation.length}
+          isActive={visibleHrNavigation.some((item) =>
+            navigationHrefMatches(pathname, searchParams, item.href)
+          )}
+          label="HR & Recruitment"
+          onOpenChange={(open) => {
+            if (!normalizedMenuSearch) setSectionOpen("hr", open)
+          }}
+          open={normalizedMenuSearch ? true : expandedSections.hr}
         >
-          {visibleHrNavigation.map((item) => (
+          {filteredHrNavigation.map((item) => (
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-primary/15 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/20 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
+                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -192,7 +274,10 @@ export function UnifiedSidebarNavigation({
                 )}
               >
                 <a href={item.href}>
-                  <item.icon />
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
+                  />
                   <span>{item.label}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -201,19 +286,23 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
-      {visibleCommercialNavigation.length ? (
+      {filteredCommercialNavigation.length ? (
         <NavigationSection
           icon={Calculator}
+          isActive={visibleCommercialNavigation.some((item) =>
+            navigationHrefMatches(pathname, searchParams, item.href)
+          )}
           label="Costing"
-          onOpenChange={(open) => setSectionOpen("costing", open)}
-          open={expandedSections.costing}
-          submoduleCount={visibleCommercialNavigation.length}
+          onOpenChange={(open) => {
+            if (!normalizedMenuSearch) setSectionOpen("costing", open)
+          }}
+          open={normalizedMenuSearch ? true : expandedSections.costing}
         >
-          {visibleCommercialNavigation.map((item) => (
+          {filteredCommercialNavigation.map((item) => (
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-primary/15 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/20 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
+                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -221,7 +310,10 @@ export function UnifiedSidebarNavigation({
                 )}
               >
                 <a href={item.href}>
-                  <item.icon />
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
+                  />
                   <span>{item.label}</span>
                 </a>
               </SidebarMenuSubButton>
@@ -230,61 +322,70 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
-      {navigationAccess.operations ? (
-        productionFloors.map((floor) => {
-          const sectionId = productionSectionIds[floor.code]
-          return (
-            <NavigationSection
-              icon={Factory}
-              key={floor.code}
-              label={floor.label}
-              onOpenChange={(open) => setSectionOpen(sectionId, open)}
-              open={expandedSections[sectionId]}
-              submoduleCount={dashboardNavigation.length}
-            >
-              {dashboardNavigation.map((item) => (
-                <SidebarMenuSubItem key={`${floor.code}:${item.id}`}>
-                  <SidebarMenuSubButton
-                    asChild
-                    className="h-8 rounded-lg px-2.5 text-sidebar-foreground/75 hover:bg-sidebar-primary/15 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/20 data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary"
-                    isActive={
-                      floor.code === activeProductionFloor &&
-                      item.id === activeDashboardTab
-                    }
-                  >
-                    {onDashboardTabSelect ? (
-                      <button
-                        onClick={() =>
-                          onDashboardTabSelect(item.id, floor.code)
-                        }
-                        type="button"
-                      >
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </button>
-                    ) : (
-                      <a href={dashboardTabHref(item.id, floor.code)}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </a>
-                    )}
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              ))}
-            </NavigationSection>
-          )
-        })
-      ) : null}
+      {filteredProductionNavigation.map(({ floor, items }) => {
+        const sectionId = productionSectionIds[floor.code]
+        return (
+          <NavigationSection
+            icon={Factory}
+            isActive={
+              activeDashboardTab !== undefined &&
+              floor.code === activeProductionFloor
+            }
+            key={floor.code}
+            label={floor.label}
+            onOpenChange={(open) => {
+              if (!normalizedMenuSearch) setSectionOpen(sectionId, open)
+            }}
+            open={normalizedMenuSearch ? true : expandedSections[sectionId]}
+          >
+            {items.map((item) => (
+              <SidebarMenuSubItem key={`${floor.code}:${item.id}`}>
+                <SidebarMenuSubButton
+                  asChild
+                  className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                  isActive={
+                    floor.code === activeProductionFloor &&
+                    item.id === activeDashboardTab
+                  }
+                >
+                  {onDashboardTabSelect ? (
+                    <button
+                      onClick={() =>
+                        onDashboardTabSelect(item.id, floor.code)
+                      }
+                      type="button"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
+                      />
+                      <span>{item.title}</span>
+                    </button>
+                  ) : (
+                    <a href={dashboardTabHref(item.id, floor.code)}>
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
+                      />
+                      <span>{item.title}</span>
+                    </a>
+                  )}
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
+          </NavigationSection>
+        )
+      })}
 
-      {navigationAccess.administration ? (
-        <SidebarGroup className="py-1">
-          <SidebarGroupLabel>Administration</SidebarGroupLabel>
+      {administrationMatchesSearch ? (
+        <SidebarGroup className="px-3 py-0.5">
           <SidebarGroupContent>
             <SidebarMenu>
               {administrationNavigation.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
+                    className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
                     isActive={navigationHrefMatches(
                       pathname,
                       searchParams,
@@ -302,50 +403,75 @@ export function UnifiedSidebarNavigation({
           </SidebarGroupContent>
         </SidebarGroup>
       ) : null}
+
+      {normalizedMenuSearch &&
+      !filteredHrNavigation.length &&
+      !filteredCommercialNavigation.length &&
+      !filteredProductionNavigation.length &&
+      !administrationMatchesSearch ? (
+        <p className="px-6 py-8 text-center text-sm text-muted-foreground">
+          No menu items found.
+        </p>
+      ) : null}
     </>
+  )
+}
+
+function filterNavigationItems<T extends { label: string }>(
+  items: readonly T[],
+  query: string,
+  sectionSearchText: string
+) {
+  if (!query || sectionSearchText.includes(query)) return items
+  return items.filter((item) => item.label.toLowerCase().includes(query))
+}
+
+function filterProductionItems<T extends { subtitle: string; title: string }>(
+  items: readonly T[],
+  query: string,
+  sectionSearchText: string
+) {
+  if (!query || sectionSearchText.includes(query)) return items
+  return items.filter((item) =>
+    [item.title, item.subtitle].some((value) =>
+      value.toLowerCase().includes(query)
+    )
   )
 }
 
 function NavigationSection({
   children,
   icon: Icon,
+  isActive,
   label,
   onOpenChange,
   open,
-  submoduleCount,
 }: {
   children: React.ReactNode
   icon: typeof Factory
+  isActive: boolean
   label: string
   onOpenChange: (open: boolean) => void
   open: boolean
-  submoduleCount: number
 }) {
   return (
     <Collapsible
-      className="group/collapsible px-2 py-1"
+      className="group/collapsible px-3 py-0.5"
       onOpenChange={onOpenChange}
       open={open}
     >
       <SidebarGroup className="p-0">
         <SidebarMenu>
-          <SidebarMenuItem className="overflow-hidden rounded-xl border border-sidebar-border/70 bg-sidebar/70 transition-colors group-data-[state=open]/collapsible:bg-sidebar-accent/25">
+          <SidebarMenuItem className="overflow-hidden rounded-lg transition-colors group-data-[state=open]/collapsible:bg-sidebar-primary/[0.07]">
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
-                className="h-11 rounded-xl px-2.5 font-semibold hover:bg-sidebar-primary/15 hover:text-sidebar-primary"
+                className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary group-data-[state=open]/collapsible:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                isActive={isActive}
                 type="button"
               >
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary/10 text-sidebar-primary ring-1 ring-sidebar-primary/15">
-                  <Icon className="size-4" />
-                </span>
-                <span className="truncate text-[13px]">{label}</span>
-                <span
-                  aria-hidden="true"
-                  className="ml-auto min-w-6 rounded-md border border-sidebar-border/70 bg-background/70 px-1.5 py-0.5 text-center text-[10px] font-semibold tabular-nums text-muted-foreground"
-                >
-                  {submoduleCount}
-                </span>
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90">
+                <Icon className="size-[18px]" />
+                <span className="truncate">{label}</span>
+                <span className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[state=open]/collapsible:text-sidebar-primary">
                   <ChevronRight className="size-3.5" />
                 </span>
               </SidebarMenuButton>
@@ -353,7 +479,7 @@ function NavigationSection({
             <CollapsibleContent>
               <SidebarMenuSub
                 aria-label={`${label} submodules`}
-                className="mx-3 mb-2 mt-0 gap-0.5 border-sidebar-border/80 px-2 py-1"
+                className="mx-5 mb-1 mt-0 gap-0 border-sidebar-primary/30 px-2 py-1"
               >
                 {children}
               </SidebarMenuSub>

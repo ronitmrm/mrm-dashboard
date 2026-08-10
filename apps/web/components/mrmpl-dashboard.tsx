@@ -1284,8 +1284,8 @@ function DashboardShell({
         } as React.CSSProperties
       }
     >
-      <Sidebar variant="inset">
-        <SidebarHeader>
+      <Sidebar variant="sidebar">
+        <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
           <Link
             className="flex items-center px-2 py-2"
             href={dashboardTabHref("productionControlTab", activeProductionFloor)}
@@ -1308,10 +1308,15 @@ function DashboardShell({
             onDashboardTabSelect={selectDashboardDestination}
           />
         </SidebarContent>
-        <SidebarFooter>
-          <div className="grid gap-0.5 px-2 py-2">
-            <span className="truncate text-sm font-medium">{user.name}</span>
-            <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+        <SidebarFooter className="border-t border-sidebar-border p-3">
+          <div className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/12 text-sm font-semibold text-sidebar-primary">
+              {(user.name || user.email).trim().charAt(0).toUpperCase()}
+            </span>
+            <span className="grid min-w-0 flex-1 gap-0.5">
+              <span className="truncate text-sm font-semibold">{user.name}</span>
+              <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+            </span>
           </div>
         </SidebarFooter>
         <SidebarRail />
