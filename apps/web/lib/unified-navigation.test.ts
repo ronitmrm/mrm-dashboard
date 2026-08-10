@@ -23,7 +23,10 @@ describe("unified navigation", () => {
     const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
     expect(nativeLinks).toHaveLength(3)
-    expect(source).toContain("<a href={dashboardTabHref(item.id, floor.code)}>")
+    expect(source).toContain(
+      "<a href={productionNavigationHref(item.id, floor.code)}>"
+    )
+    expect(source).toContain("/dashboard/first-piece-inspection")
     expect(source).not.toContain('from "next/link"')
     expect(source).not.toContain("router.prefetch")
   })

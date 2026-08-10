@@ -225,15 +225,15 @@ export function UnifiedSidebarNavigation({
 
   return (
     <>
-      <div className="sticky top-0 z-10 bg-sidebar px-3 pb-2 pt-1">
+      <div className="sticky top-0 z-10 bg-sidebar px-3 pt-1 pb-2">
         <div className="relative">
           <Search
             aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
           />
           <Input
             aria-label="Search navigation menu"
-            className="h-10 rounded-lg border-sidebar-border bg-background pl-9 pr-16 shadow-none"
+            className="h-10 rounded-lg border-sidebar-border bg-background pr-16 pl-9 shadow-none"
             onChange={(event) => setMenuSearch(event.target.value)}
             placeholder="Search menu..."
             ref={searchInputRef}
@@ -243,7 +243,7 @@ export function UnifiedSidebarNavigation({
           {menuSearch ? (
             <button
               aria-label="Clear menu search"
-              className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+              className="absolute top-1/2 right-2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
               onClick={() => {
                 setMenuSearch("")
                 searchInputRef.current?.focus()
@@ -253,7 +253,7 @@ export function UnifiedSidebarNavigation({
               <X className="size-3.5" />
             </button>
           ) : (
-            <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-sidebar-border bg-sidebar-accent/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <kbd className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-sidebar-border bg-sidebar-accent/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
               Ctrl K
             </kbd>
           )}
@@ -381,8 +381,7 @@ export function UnifiedSidebarNavigation({
             isActive={
               productionFloorNavigation.some(
                 (item) => item.id === activeDashboardTab
-              ) &&
-              floor.code === activeProductionFloor
+              ) && floor.code === activeProductionFloor
             }
             key={floor.code}
             label={floor.label}
@@ -403,9 +402,7 @@ export function UnifiedSidebarNavigation({
                 >
                   {onDashboardTabSelect ? (
                     <button
-                      onClick={() =>
-                        onDashboardTabSelect(item.id, floor.code)
-                      }
+                      onClick={() => onDashboardTabSelect(item.id, floor.code)}
                       type="button"
                     >
                       <span
@@ -415,7 +412,7 @@ export function UnifiedSidebarNavigation({
                       <span>{item.title}</span>
                     </button>
                   ) : (
-                    <a href={dashboardTabHref(item.id, floor.code)}>
+                    <a href={productionNavigationHref(item.id, floor.code)}>
                       <span
                         aria-hidden="true"
                         className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
@@ -480,6 +477,17 @@ function filterNavigationItems<T extends { label: string }>(
   return items.filter((item) => item.label.toLowerCase().includes(query))
 }
 
+function productionNavigationHref(
+  tab: DashboardTabId,
+  floor: ProductionFloorCode
+) {
+  if (tab === "firstPieceInspectionTab") {
+    const params = new URLSearchParams({ floor })
+    return `/dashboard/first-piece-inspection?${params.toString()}`
+  }
+  return dashboardTabHref(tab, floor)
+}
+
 function filterProductionItems<T extends { subtitle: string; title: string }>(
   items: readonly T[],
   query: string,
@@ -519,7 +527,7 @@ function NavigationSection({
           <SidebarMenuItem className="overflow-hidden rounded-lg transition-colors group-data-[state=open]/collapsible:bg-sidebar-primary/[0.07]">
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
-                className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary group-data-[state=open]/collapsible:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                className="h-10 rounded-lg px-3 font-medium group-data-[state=open]/collapsible:text-sidebar-primary hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
                 isActive={isActive}
                 type="button"
               >
@@ -533,7 +541,7 @@ function NavigationSection({
             <CollapsibleContent>
               <SidebarMenuSub
                 aria-label={`${label} submodules`}
-                className="mx-5 mb-1 mt-0 gap-0 border-sidebar-primary/30 px-2 py-1"
+                className="mx-5 mt-0 mb-1 gap-0 border-sidebar-primary/30 px-2 py-1"
               >
                 {children}
               </SidebarMenuSub>

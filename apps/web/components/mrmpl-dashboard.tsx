@@ -604,6 +604,167 @@ export function HourlyQualityCheckPage({
   );
 }
 
+export function FirstPieceInspectionPage({
+  productionFloorCode = defaultProductionFloorCode,
+}: {
+  productionFloorCode?: ProductionFloorCode;
+}) {
+  return <FirstPieceInspectionShell productionFloorCode={productionFloorCode} />;
+}
+
+function FirstPieceInspectionShell({
+  productionFloorCode,
+}: {
+  productionFloorCode: ProductionFloorCode;
+}) {
+  const { state: dashboardDeliveryState } = useDashboardDelivery({ floor: productionFloorCode });
+  const [storedTasks, setStoredTasks] = useState<DashboardPayload[]>([]);
+  const [completedTaskKeys, setCompletedTaskKeys] = useState<Set<string>>(() => new Set());
+  const [showExample, setShowExample] = useState(true);
+  const [processingAction, setProcessingAction] = useState<string | null>(null);
+  const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
+  const dashboardPayload = dashboardPayloadFromState(dashboardDeliveryState.data ?? undefined);
+  const payload = useMemo(() => dashboardDeliveryState.data === null
+    ? ({} as DashboardPayload)
+    : dashboardPayloadForProductionFloor(dashboardPayload, productionFloorCode),
+  [dashboardDeliveryState.data, dashboardPayload, productionFloorCode]);
+  const productionControl = asRecord(payload.productionControl);
+  const liveTasks = useMemo(() => shopFloorQueueRows(productionControl)
+    .filter((row) => roleTaskMatches(row, "quality"))
+    .map((row) => row.next), [productionControl]);
+  const tasks = useMemo(() => mergeFirstPieceInspectionTasks(liveTasks, storedTasks)
+    .filter((task) => !completedTaskKeys.has(shopFloorPlanKey(task))),
+  [completedTaskKeys, liveTasks, storedTasks]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setStoredTasks(readStoredFirstPieceInspectionTasks()), 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  async function submitAction(path: string, body: Record<string, unknown>) {
+    const normalizedBody = normalizeUserEnteredPayload(body);
+    setProcessingAction(dashboardActionProcessingMessage(path, normalizedBody));
+    setActionStatus(null);
+    try {
+      const result = await postDashboardApi(path, normalizedBody);
+      setActionStatus({ tone: "default", message: result.message });
+    } catch (error) {
+      const actionError = error instanceof Error ? error : new Error("Inspection save failed.");
+      setActionStatus({ tone: "destructive", message: actionError.message });
+      throw actionError;
+    } finally {
+      setProcessingAction(null);
+    }
+  }
+
+  function completeTask(row: DashboardPayload) {
+    const taskKey = shopFloorPlanKey(row);
+    setCompletedTaskKeys((current) => new Set(current).add(taskKey));
+    setStoredTasks((current) => {
+      const remaining = current.filter((task) => shopFloorPlanKey(task) !== taskKey);
+      writeStoredFirstPieceInspectionTasks(remaining);
+      return remaining;
+    });
+  }
+
+  const isLoading = dashboardDeliveryState.data === null && dashboardDeliveryState.request !== "error";
+
+  return (
+    <section className="mx-auto grid w-full max-w-6xl gap-4 text-foreground">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">First Piece Inspection</h1>
+          <p className="text-sm text-muted-foreground">Select A Pending Setup, Enter Five Readings, Then Approve It. Works On Tablet And Computer.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => setShowExample((current) => !current)}>
+            <FileText className="size-4" />
+            {showExample ? "Hide Example" : "Show Example"}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => window.location.assign(dashboardTabHref("qualityControlTasksTab", productionFloorCode))}>
+            <LayoutDashboard className="size-4" />
+            Quality Control
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MetricCard label="Pending Reports" value={formatNumber(tasks.length)} />
+        <MetricCard label="Inspection Parameters" value={formatNumber(combinedQualityInspectionMasterRows(productionControl).length)} />
+        <MetricCard label="Required Readings" value="5 Per Dimension" />
+      </div>
+
+      {showExample ? <FirstPieceInspectionExample /> : null}
+      {processingAction ? <ProcessingNotice message={processingAction} /> : null}
+      {actionStatus ? <AlertMessage tone={actionStatus.tone}>{actionStatus.message}</AlertMessage> : null}
+      {isLoading ? <Skeleton className="h-64 w-full" /> : null}
+      {dashboardDeliveryState.request === "error" ? (
+        <AlertMessage tone="destructive">Live Inspection Tasks Could Not Be Loaded. Refresh And Try Again.</AlertMessage>
+      ) : null}
+      {!isLoading ? (
+        <FirstPieceInspectionPanel
+          tasks={tasks}
+          productionControl={productionControl}
+          submitAction={submitAction}
+          openDataEntry={() => window.location.assign(dashboardTabHref("qualityMastersTab", productionFloorCode))}
+          onTaskComplete={completeTask}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function FirstPieceInspectionExample() {
+  const task: DashboardPayload = {
+    jcNo: "JC-DEMO-101",
+    machine: "CNC-04",
+    machineType: "CNC Turning",
+    optionNumber: "1",
+    partCode: "DEMO-SHAFT-25",
+    setupName: "Finish Turning",
+    setupNo: "20",
+    shopFloorStage: "setting",
+    shopFloorUpdatedAt: "10 Aug 2026, 10:15 AM",
+  };
+  const masters: DashboardPayload[] = [
+    { code: "DIM-01", inputType: "number", instrumentUsed: "Outside Micrometer", optionNumber: "1", parameterName: "Outer Diameter", partNo: "DEMO-SHAFT-25", setupNo: "20", specification: "25.000", toleranceMinus: "0.020", tolerancePlus: "0.020" },
+    { code: "DIM-02", inputType: "number", instrumentUsed: "Vernier Caliper", optionNumber: "1", parameterName: "Overall Length", partNo: "DEMO-SHAFT-25", setupNo: "20", specification: "82.000", toleranceMinus: "0.100", tolerancePlus: "0.100" },
+  ];
+  const readings = {
+    [firstPieceMasterKey(masters[0]!)]: ["25.004", "25.006", "25.003", "25.005", "25.004"],
+    [firstPieceMasterKey(masters[1]!)]: ["82.02", "82.01", "82.03", "82.02", "82.01"],
+  };
+
+  return (
+    <Card className="border-emerald-300 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/10">
+      <CardHeader>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">Example Only</Badge>
+          <CardTitle className="text-base">Filled Dummy Inspection</CardTitle>
+        </div>
+        <CardDescription>This Shows The Finished Entry. It Is Not Real Production Data And Cannot Be Saved.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+          <TileField label="Item Code" value={task.partCode} />
+          <TileField label="Jc No." value={task.jcNo} />
+          <TileField label="Machine" value={task.machine} />
+          <TileField label="Setup" value={task.setupNo} />
+          <TileField label="Option" value={task.optionNumber} />
+          <TileField label="Result" value="All Within Limit" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <TileField label="Approved By" value="QC-014 / Ramesh" />
+          <TileField label="Remark" value="First piece accepted for production." />
+        </div>
+        <fieldset className="contents" disabled>
+          <FirstPieceInspectionForm row={task} masters={masters} readings={readings} onReadingChange={() => undefined} />
+        </fieldset>
+      </CardContent>
+    </Card>
+  );
+}
+
 function HourlyQualityCheckShell({
   productionFloorCode,
 }: {
@@ -1198,13 +1359,17 @@ function DashboardShell({
       writeStoredFirstPieceInspectionTasks(nextTasks);
       return nextTasks;
     });
-    setActiveTab("firstPieceInspectionTab");
+    window.location.assign(`/dashboard/first-piece-inspection?${new URLSearchParams({ floor: activeProductionFloor }).toString()}`);
   }
 
   function selectDashboardDestination(
     tab: DashboardTabId,
     productionFloorCode: ProductionFloorCode,
   ) {
+    if (tab === "firstPieceInspectionTab") {
+      window.location.assign(`/dashboard/first-piece-inspection?${new URLSearchParams({ floor: productionFloorCode }).toString()}`);
+      return;
+    }
     if (productionFloorCode !== activeProductionFloor) {
       window.location.assign(dashboardTabHref(tab, productionFloorCode));
       return;
@@ -4300,17 +4465,17 @@ function FirstPieceInspectionPanel({
           </CardHeader>
           <CardContent className="grid gap-4">
             {tasks.length ? (
-              <div className="overflow-hidden rounded-md border">
+              <div className="overflow-x-auto rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-12"></TableHead>
+                      <TableHead className="w-14"></TableHead>
                       <TableHead>Item</TableHead>
                       <TableHead>Job Card</TableHead>
-                      <TableHead>Machine</TableHead>
-                      <TableHead>Setup</TableHead>
-                      <TableHead>Option</TableHead>
-                      <TableHead>Task Assigned</TableHead>
+                      <TableHead className="hidden sm:table-cell">Machine</TableHead>
+                      <TableHead className="hidden md:table-cell">Setup</TableHead>
+                      <TableHead className="hidden lg:table-cell">Option</TableHead>
+                      <TableHead className="hidden xl:table-cell">Task Assigned</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -4321,16 +4486,16 @@ function FirstPieceInspectionPanel({
                         <Fragment key={taskKey}>
                           <TableRow className="cursor-pointer" onClick={() => setExpandedTaskKey(expanded ? "" : taskKey)}>
                             <TableCell>
-                              <Button type="button" variant="ghost" size="sm" className="size-8 p-0" aria-label={expanded ? "Collapse Report" : "Expand Report"}>
+                              <Button type="button" variant="ghost" size="sm" className="size-10 p-0" aria-label={expanded ? "Collapse Report" : "Expand Report"}>
                                 {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                               </Button>
                             </TableCell>
                             <TableCell className="font-medium">{itemCode(task)}</TableCell>
                             <TableCell>{jobCardNumber(task)}</TableCell>
-                            <TableCell>{displayValue(task.machine)}</TableCell>
-                            <TableCell>{displayValue(task.setupNo)}</TableCell>
-                            <TableCell>{displayValue(task.optionNumber)}</TableCell>
-                            <TableCell>{displayValue(task.shopFloorUpdatedAt)}</TableCell>
+                            <TableCell className="hidden sm:table-cell">{displayValue(task.machine)}</TableCell>
+                            <TableCell className="hidden md:table-cell">{displayValue(task.setupNo)}</TableCell>
+                            <TableCell className="hidden lg:table-cell">{displayValue(task.optionNumber)}</TableCell>
+                            <TableCell className="hidden xl:table-cell">{displayValue(task.shopFloorUpdatedAt)}</TableCell>
                           </TableRow>
                           {expanded ? (
                             <TableRow>
@@ -5415,7 +5580,32 @@ function FirstPieceInspectionForm({
           </Button>
         ) : null}
       </div>
-      <div className="overflow-auto">
+      <div className="grid gap-3 lg:hidden">
+        {masters.map((master) => (
+          <div className="grid gap-3 rounded-lg border bg-background p-3" key={`mobile-${firstPieceMasterKey(master)}`}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <div className="font-medium">{qualityParameterName(master)}</div>
+                <div className="text-xs text-muted-foreground">{qualityParameterCode(master)} / {displayValue(master.instrumentUsed)}</div>
+              </div>
+              <Badge variant="outline">{displayValue(master.specification)} ({qualityParameterTolerance(master)})</Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {[0, 1, 2, 3, 4].map((pieceIndex) => (
+                <label className="grid gap-1 text-xs font-medium" key={pieceIndex}>
+                  Piece {pieceIndex + 1}
+                  <FirstPieceReadingControl
+                    master={master}
+                    value={firstPieceReadingsFor(readings, master)[pieceIndex] ?? ""}
+                    onChange={(value) => onReadingChange(master, pieceIndex, value)}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="hidden overflow-auto lg:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -5442,28 +5632,9 @@ function FirstPieceInspectionForm({
                 <TableCell>{displayValue(master.toleranceMinus)}</TableCell>
                 {[0, 1, 2, 3, 4].map((pieceIndex) => {
                   const value = firstPieceReadingsFor(readings, master)[pieceIndex] ?? "";
-                  const result = qualityReadingResult(master, value);
                   return (
-                    <TableCell key={pieceIndex} className={qualityResultTone(result) === "bad" ? "bg-red-50/70 dark:bg-red-950/20" : ""}>
-                      <div className="grid gap-1">
-                        {qualityParameterInputType(master) === "pass_fail" ? (
-                          <SearchableSelect className={`h-8 min-w-20 rounded-md border bg-background px-2 text-sm ${qualityReadingInputClass(result)}`} value={value} onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)} required>
-                            <option value="">Select</option>
-                            <option value="OK">Ok</option>
-                            <option value="Not OK">Not Ok</option>
-                          </SearchableSelect>
-                        ) : (
-                          <Input
-                            className={`h-8 min-w-20 ${qualityReadingInputClass(result)}`}
-                            type={qualityParameterInputType(master) === "number" ? "number" : "text"}
-                            step="0.001"
-                            value={value}
-                            onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)}
-                            required
-                          />
-                        )}
-                        <StatusBadge value={result || "Pending"} />
-                      </div>
+                    <TableCell key={pieceIndex}>
+                      <FirstPieceReadingControl master={master} value={value} onChange={(nextValue) => onReadingChange(master, pieceIndex, nextValue)} />
                     </TableCell>
                   );
                 })}
@@ -5472,6 +5643,40 @@ function FirstPieceInspectionForm({
           </TableBody>
         </Table>
       </div>
+    </div>
+  );
+}
+
+function FirstPieceReadingControl({
+  master,
+  onChange,
+  value,
+}: {
+  master: DashboardPayload;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  const result = qualityReadingResult(master, value);
+  return (
+    <div className={`grid gap-1 rounded-md ${qualityResultTone(result) === "bad" ? "bg-red-50/70 dark:bg-red-950/20" : ""}`}>
+      {qualityParameterInputType(master) === "pass_fail" ? (
+        <SearchableSelect className={`h-11 min-w-20 rounded-md border bg-background px-2 text-sm lg:h-8 ${qualityReadingInputClass(result)}`} value={value} onChange={(event) => onChange(event.target.value)} required>
+          <option value="">Select</option>
+          <option value="OK">Ok</option>
+          <option value="Not OK">Not Ok</option>
+        </SearchableSelect>
+      ) : (
+        <Input
+          className={`h-11 min-w-20 lg:h-8 ${qualityReadingInputClass(result)}`}
+          type={qualityParameterInputType(master) === "number" ? "number" : "text"}
+          inputMode={qualityParameterInputType(master) === "number" ? "decimal" : undefined}
+          step="0.001"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          required
+        />
+      )}
+      <StatusBadge value={result || "Pending"} />
     </div>
   );
 }

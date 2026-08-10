@@ -16,4 +16,24 @@ describe("Production operational page loading", () => {
     expect(loader).toContain("setResult({ data: body, url })")
     expect(loader).not.toContain("mergeDashboardStateResponse")
   })
+
+  it("makes first-piece inspection device-independent without persisting the example", () => {
+    const source = readFileSync(
+      new URL("./mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
+    const firstPiecePage = source.slice(
+      source.indexOf("export function FirstPieceInspectionPage"),
+      source.indexOf("function HourlyQualityCheckShell")
+    )
+
+    expect(firstPiecePage).toContain("shopFloorQueueRows(productionControl)")
+    expect(firstPiecePage).toContain('roleTaskMatches(row, "quality")')
+    expect(firstPiecePage).toContain("readStoredFirstPieceInspectionTasks()")
+    expect(firstPiecePage).toContain("Example Only")
+    expect(firstPiecePage).toContain("Cannot Be Saved")
+    expect(firstPiecePage).not.toContain(
+      'entryType: "first_piece_inspection_report"'
+    )
+  })
 })

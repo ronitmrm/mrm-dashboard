@@ -38,6 +38,10 @@ const productionPageNavigation: Record<
   string,
   { label: string; parentTab: DashboardTabId }
 > = {
+  "/dashboard/first-piece-inspection": {
+    label: "First Piece Inspection",
+    parentTab: "firstPieceInspectionTab",
+  },
   "/dashboard/hourly-quality-check": {
     label: "Hourly Quality Check",
     parentTab: "qualityControlTasksTab",
@@ -69,7 +73,8 @@ export function CommercialShell({
   const activeProductionFloor = normalizeProductionFloorCode(
     searchParams.get("floor") ?? defaultProductionFloorCode
   )
-  const current = productionPage ??
+  const current =
+    productionPage ??
     [
       ...commercialNavigation,
       ...hrNavigation,
@@ -114,7 +119,9 @@ export function CommercialShell({
               {(user.name || user.email).trim().charAt(0).toUpperCase()}
             </span>
             <span className="grid min-w-0 flex-1 gap-0.5">
-              <span className="truncate text-sm font-semibold">{user.name}</span>
+              <span className="truncate text-sm font-semibold">
+                {user.name}
+              </span>
               <span className="truncate text-xs text-muted-foreground">
                 {user.email}
               </span>
