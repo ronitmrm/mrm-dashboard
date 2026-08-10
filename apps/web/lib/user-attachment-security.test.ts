@@ -7,11 +7,39 @@ import {
 
 const bytes = (...values: number[]) => Buffer.from(values)
 
-const zipWithEntry = (entry: string) =>
-  Buffer.concat([
-    bytes(0x50, 0x4b, 0x03, 0x04),
-    Buffer.from(`[Content_Types].xml\0${entry}`),
-  ])
+function zipWithEntry(entry: string) {
+  const names = ["[Content_Types].xml", entry]
+  const localParts: Buffer[] = []
+  const centralParts: Buffer[] = []
+  let localOffset = 0
+
+  for (const name of names) {
+    const nameBytes = Buffer.from(name)
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0)
+    local.writeUInt16LE(20, 4)
+    local.writeUInt16LE(nameBytes.length, 26)
+    localParts.push(local, nameBytes)
+
+    const central = Buffer.alloc(46)
+    central.writeUInt32LE(0x02014b50, 0)
+    central.writeUInt16LE(20, 4)
+    central.writeUInt16LE(20, 6)
+    central.writeUInt16LE(nameBytes.length, 28)
+    central.writeUInt32LE(localOffset, 42)
+    centralParts.push(central, nameBytes)
+    localOffset += local.length + nameBytes.length
+  }
+
+  const centralDirectory = Buffer.concat(centralParts)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0)
+  end.writeUInt16LE(names.length, 8)
+  end.writeUInt16LE(names.length, 10)
+  end.writeUInt32LE(centralDirectory.length, 12)
+  end.writeUInt32LE(localOffset, 16)
+  return Buffer.concat([...localParts, centralDirectory, end])
+}
 
 describe("user attachment security", () => {
   it.each([
@@ -27,12 +55,17 @@ describe("user attachment security", () => {
     ["purchase-order", "source.pdf", Buffer.from("%PDF-1.7\n")],
     ["purchase-order", "source.xlsx", zipWithEntry("xl/workbook.xml")],
     ["purchase-order", "source.docx", zipWithEntry("word/document.xml")],
-  ] as const)("accepts a valid %s attachment named %s", (purpose, name, data) => {
-    expect(validateUserAttachment({ bytes: data, fileName: name, purpose })).toEqual({
-      fileName: name,
-      mediaType: "application/octet-stream",
-    })
-  })
+  ] as const)(
+    "accepts a valid %s attachment named %s",
+    (purpose, name, data) => {
+      expect(
+        validateUserAttachment({ bytes: data, fileName: name, purpose })
+      ).toEqual({
+        fileName: name,
+        mediaType: "application/octet-stream",
+      })
+    }
+  )
 
   it("rejects disallowed extensions and mismatched signatures", () => {
     expect(() =>
@@ -55,6 +88,17 @@ describe("user attachment security", () => {
       validateUserAttachment({
         bytes: zipWithEntry("word/document.xml"),
         fileName: "source.xlsx",
+        purpose: "purchase-order",
+      })
+    ).toThrow("does not match its extension")
+
+    expect(() =>
+      validateUserAttachment({
+        bytes: Buffer.concat([
+          bytes(0x50, 0x4b, 0x03, 0x04),
+          Buffer.from("[Content_Types].xml xl/workbook.xml"),
+        ]),
+        fileName: "spoofed.xlsx",
         purpose: "purchase-order",
       })
     ).toThrow("does not match its extension")

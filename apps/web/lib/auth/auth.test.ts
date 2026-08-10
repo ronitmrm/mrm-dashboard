@@ -283,6 +283,25 @@ describe("PostgreSQL Better Auth", () => {
       })
 
       await expect(
+        pool.query<{ actor_user_id: string; reason: string }>(
+          `SELECT actor_user_id, reason
+           FROM audit.events
+           WHERE event_type = 'access.user.status_changed'
+             AND target_id = $1
+           ORDER BY occurred_at DESC
+           LIMIT 1`,
+          [staff.user.id]
+        )
+      ).resolves.toMatchObject({
+        rows: [
+          {
+            actor_user_id: administrator.user.id,
+            reason: "Authorization freshness test",
+          },
+        ],
+      })
+
+      await expect(
         secondInstance.auth.api.getSession({
           headers: new Headers({ cookie: cookie(staffSignIn.headers) }),
         })

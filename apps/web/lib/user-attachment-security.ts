@@ -23,12 +23,51 @@ function startsWith(bytes: Buffer, signature: number[]) {
   return signature.every((value, index) => bytes[index] === value)
 }
 
+function zipEntryNames(bytes: Buffer) {
+  const minimumEocdSize = 22
+  const earliestEocd = Math.max(0, bytes.length - 65_557)
+  let eocdOffset = -1
+  for (
+    let offset = bytes.length - minimumEocdSize;
+    offset >= earliestEocd;
+    offset--
+  ) {
+    if (bytes.readUInt32LE(offset) === 0x06054b50) {
+      eocdOffset = offset
+      break
+    }
+  }
+  if (eocdOffset < 0) return []
+
+  const entryCount = bytes.readUInt16LE(eocdOffset + 10)
+  const directorySize = bytes.readUInt32LE(eocdOffset + 12)
+  const directoryOffset = bytes.readUInt32LE(eocdOffset + 16)
+  if (directoryOffset + directorySize > eocdOffset) return []
+
+  const names: string[] = []
+  let offset = directoryOffset
+  for (let index = 0; index < entryCount; index++) {
+    if (offset + 46 > eocdOffset || bytes.readUInt32LE(offset) !== 0x02014b50) {
+      return []
+    }
+    const nameLength = bytes.readUInt16LE(offset + 28)
+    const extraLength = bytes.readUInt16LE(offset + 30)
+    const commentLength = bytes.readUInt16LE(offset + 32)
+    const nextOffset = offset + 46 + nameLength + extraLength + commentLength
+    if (nextOffset > eocdOffset) return []
+    names.push(
+      bytes.subarray(offset + 46, offset + 46 + nameLength).toString("utf8")
+    )
+    offset = nextOffset
+  }
+  return offset === directoryOffset + directorySize ? names : []
+}
+
 function hasOoxmlEntry(bytes: Buffer, directory: "word/" | "xl/") {
-  if (!startsWith(bytes, [0x50, 0x4b, 0x03, 0x04])) return false
-  const archiveText = bytes.toString("latin1")
+  const entries = zipEntryNames(bytes)
   return (
-    archiveText.includes("[Content_Types].xml") &&
-    archiveText.includes(directory)
+    entries.includes("[Content_Types].xml") &&
+    entries.some((entry) => entry.startsWith(directory))
   )
 }
 
@@ -47,9 +86,7 @@ function signatureMatches(extension: string, bytes: Buffer) {
         .trimStart()
         .startsWith("0\nSECTION")
     case ".png":
-      return startsWith(bytes, [
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ])
+      return startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     case ".jpg":
     case ".jpeg":
       return startsWith(bytes, [0xff, 0xd8, 0xff])

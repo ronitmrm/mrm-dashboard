@@ -1,8 +1,21 @@
-"use client";
+"use client"
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type DragEvent, type FormEvent, type ReactNode, type SetStateAction } from "react";
-import Image from "next/image";
-import Link from "next/link";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type Dispatch,
+  type DragEvent,
+  type FormEvent,
+  type ReactNode,
+  type SetStateAction,
+} from "react"
+import Image from "next/image"
+import Link from "next/link"
 import {
   ArrowDown,
   ArrowUp,
@@ -27,20 +40,20 @@ import {
   Trash2,
   Undo2,
   Wrench,
-} from "lucide-react";
+} from "lucide-react"
 
-import { Badge } from "@workspace/ui/components/badge";
-import { Button } from "@workspace/ui/components/button";
+import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@workspace/ui/components/card";
-import { Input } from "@workspace/ui/components/input";
-import { Label } from "@workspace/ui/components/label";
-import { Separator } from "@workspace/ui/components/separator";
+} from "@workspace/ui/components/card"
+import { Input } from "@workspace/ui/components/input"
+import { Label } from "@workspace/ui/components/label"
+import { Separator } from "@workspace/ui/components/separator"
 import {
   Sidebar,
   SidebarContent,
@@ -50,8 +63,8 @@ import {
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
-} from "@workspace/ui/components/sidebar";
-import { Skeleton } from "@workspace/ui/components/skeleton";
+} from "@workspace/ui/components/sidebar"
+import { Skeleton } from "@workspace/ui/components/skeleton"
 import {
   Table,
   TableBody,
@@ -59,14 +72,14 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@workspace/ui/components/table";
+} from "@workspace/ui/components/table"
 
 import {
   dashboardConnectionLabel,
   dashboardCoverageNotice,
   dashboardDeliveryNotice,
-} from "@/lib/dashboard-delivery-client";
-import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery";
+} from "@/lib/dashboard-delivery-client"
+import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery"
 import {
   dashboardPayloadFromState,
   dashboardPayloadForProductionFloor,
@@ -80,20 +93,20 @@ import {
   productionFloors,
   toDashboardViewModel,
   type ProductionFloorCode,
-} from "@/lib/dashboard-view-model";
-import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
+} from "@/lib/dashboard-view-model"
+import { nextDashboardPollDelay } from "@/lib/dashboard-polling"
 import {
   columnsForProductionMaster,
   dataEntryRowsForProductionMaster,
   productionMasterRowSources,
   rowsForProductionMaster,
-} from "@/lib/production-master-tables";
+} from "@/lib/production-master-tables"
 import {
   dashboardStateRequestUrl,
   refreshLockFromStatus,
   refreshLockHasSettled,
   type PlanningRefreshLock,
-} from "@/lib/dashboard-live-state";
+} from "@/lib/dashboard-live-state"
 import {
   mergeFirstPieceInspectionTasks as mergeStoredFirstPieceInspectionTasks,
   readFirstPieceInspectionDraft as readFirstPieceInspectionDraftFromStorage,
@@ -102,90 +115,107 @@ import {
   writeFirstPieceInspectionDraft as writeFirstPieceInspectionDraftToStorage,
   writeFirstPieceInspectionTasks as writeFirstPieceInspectionTasksToStorage,
   type FirstPieceInspectionDraft,
-} from "@/lib/first-piece-inspection-draft";
-import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
-import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
-import { shopFloorNoPendingActionLabel } from "@/lib/shop-floor-workflow";
-import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
-import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
+} from "@/lib/first-piece-inspection-draft"
+import {
+  compatibleDestinationMachineOptions,
+  machineConstraintQueueReview,
+  type MachineConstraintQueueReviewGroup,
+} from "@/lib/machine-constraint-review"
+import {
+  planningRefreshStatusMessage,
+  shouldQueuePlanningRefresh,
+  shouldRefreshStalePlanningSnapshot,
+  stalePlanningRefreshKey,
+} from "@/lib/planning-refresh-policy"
+import { shopFloorNoPendingActionLabel } from "@/lib/shop-floor-workflow"
+import {
+  priorityChangePlan,
+  priorityPlanHeldBlockers,
+  priorityPlanQueueBeforeSetups,
+  priorityPlanStepWindows,
+  type PriorityPlanStep,
+} from "@/lib/priority-change-plan"
+import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios"
 import {
   applyShopFloorStatusPatches,
   retainUnconfirmedShopFloorStatusPatches,
   shopFloorStatusPatchFromAction,
   upsertShopFloorStatusPatch,
   type ShopFloorStatusPatch,
-} from "@/lib/shop-floor-optimistic";
-import { useTheme } from "@/components/theme-provider";
-import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation";
-import { authClient } from "@/lib/auth/auth-client";
-import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access";
+} from "@/lib/shop-floor-optimistic"
+import { useTheme } from "@/components/theme-provider"
+import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation"
+import { authClient } from "@/lib/auth/auth-client"
+import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
   dashboardNavigation as navItems,
   dashboardTabHref,
   type DashboardTabId,
-} from "@/lib/unified-navigation";
+} from "@/lib/unified-navigation"
 
-type DashboardPayload = Record<string, unknown>;
+type DashboardPayload = Record<string, unknown>
 
 type ActionStatus = {
-  tone: "default" | "destructive";
-  message: string;
-} | null;
+  tone: "default" | "destructive"
+  message: string
+} | null
 
 type DashboardApiResult = {
-  message: string;
-  queued?: boolean;
-  skipped?: boolean;
-};
+  message: string
+  queued?: boolean
+  skipped?: boolean
+}
 
 type DataEntrySpec = {
-  entryType: string;
-  title: string;
-  description: string;
-  fields: LegacyField[];
-};
+  entryType: string
+  title: string
+  description: string
+  fields: LegacyField[]
+}
 type QualityParameterDraft = {
-  draftId: string;
-  persisted?: boolean;
-  sequence: string;
-  parameterName: string;
-  specification: string;
-  instrumentUsed: string;
-  tolerancePlus: string;
-  toleranceMinus: string;
-  inputType: string;
-  remark: string;
-};
+  draftId: string
+  persisted?: boolean
+  sequence: string
+  parameterName: string
+  specification: string
+  instrumentUsed: string
+  tolerancePlus: string
+  toleranceMinus: string
+  inputType: string
+  remark: string
+}
 
 type MaintenanceChecklistStepDraft = {
-  draftId: string;
-  persisted?: boolean;
-  sequence: string;
-  stepDescription: string;
-  inputType: string;
-  remark: string;
-};
+  draftId: string
+  persisted?: boolean
+  sequence: string
+  stepDescription: string
+  inputType: string
+  remark: string
+}
 
 function productionFloorFromLocation(): ProductionFloorCode {
-  if (typeof window === "undefined") return defaultProductionFloorCode;
+  if (typeof window === "undefined") return defaultProductionFloorCode
   return normalizeProductionFloorCode(
-    new URLSearchParams(window.location.search).get("floor"),
-  );
+    new URLSearchParams(window.location.search).get("floor")
+  )
 }
 
 function dashboardReturnHref(defaultTab: DashboardTabId) {
   if (typeof window === "undefined") {
-    return dashboardTabHref(defaultTab, defaultProductionFloorCode);
+    return dashboardTabHref(defaultTab, defaultProductionFloorCode)
   }
-  const returnTab = new URLSearchParams(window.location.search).get("returnTab") as DashboardTabId | null;
+  const returnTab = new URLSearchParams(window.location.search).get(
+    "returnTab"
+  ) as DashboardTabId | null
   return dashboardTabHref(
     validDashboardTab(returnTab) ?? defaultTab,
-    productionFloorFromLocation(),
-  );
+    productionFloorFromLocation()
+  )
 }
 
 function validDashboardTab(tab: DashboardTabId | null) {
-  return tab && navItems.some((item) => item.id === tab) ? tab : undefined;
+  return tab && navItems.some((item) => item.id === tab) ? tab : undefined
 }
 const dataEntrySpecs: DataEntrySpec[] = [
   {
@@ -200,7 +230,12 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "setupName", label: "Setup name" },
       { name: "machineUsed", label: "Machine family" },
       { name: "machineType", label: "Machine type" },
-      { name: "stageWeight", label: "Stage weight gram", type: "number", step: "0.01" },
+      {
+        name: "stageWeight",
+        label: "Stage weight gram",
+        type: "number",
+        step: "0.01",
+      },
       { name: "rodSize", label: "Rod size" },
       { name: "cuttingLength", label: "Cutting length" },
       { name: "finishedGoodsLength", label: "FG length" },
@@ -216,9 +251,26 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "setupNo", label: "Setup no.", required: true },
       { name: "setupName", label: "Setup name" },
       { name: "machineUsed", label: "Machine family" },
-      { name: "operationWeight", label: "Operation weight gram", type: "number", step: "0.01" },
-      { name: "cycleTime", label: "Cycle time sec", type: "number", step: "0.01", required: true },
-      { name: "loadingUnloading", label: "Loading/unloading sec", type: "number", step: "0.01", required: true },
+      {
+        name: "operationWeight",
+        label: "Operation weight gram",
+        type: "number",
+        step: "0.01",
+      },
+      {
+        name: "cycleTime",
+        label: "Cycle time sec",
+        type: "number",
+        step: "0.01",
+        required: true,
+      },
+      {
+        name: "loadingUnloading",
+        label: "Loading/unloading sec",
+        type: "number",
+        step: "0.01",
+        required: true,
+      },
     ],
   },
   {
@@ -254,10 +306,20 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "orderKg", label: "Order kg", type: "number", step: "0.01" },
       { name: "numberOfSetups", label: "No. of setup", type: "number" },
       { name: "optionNumber", label: "Selected option" },
-      { name: "rmInwardKg", label: "RM inward kg", type: "number", step: "0.01" },
+      {
+        name: "rmInwardKg",
+        label: "RM inward kg",
+        type: "number",
+        step: "0.01",
+      },
       { name: "rmInwardDate", label: "RM inward date", type: "date" },
       { name: "deliveryDate", label: "Delivery date", type: "date" },
-      { name: "plannerPriority", label: "Priority", options: ["", "Urgent", "High", "Low"], defaultValue: "" },
+      {
+        name: "plannerPriority",
+        label: "Priority",
+        options: ["", "Urgent", "High", "Low"],
+        defaultValue: "",
+      },
       { name: "description", label: "Description" },
       { name: "deliveryRemark", label: "Remark" },
     ],
@@ -268,8 +330,18 @@ const dataEntrySpecs: DataEntrySpec[] = [
     description: "Raw-material inward status against job card.",
     fields: [
       { name: "jcNo", label: "JC no.", required: true },
-      { name: "rmInwardDate", label: "RM inward date", type: "date", required: true },
-      { name: "rmInwardKg", label: "RM inward kg", type: "number", step: "0.01" },
+      {
+        name: "rmInwardDate",
+        label: "RM inward date",
+        type: "date",
+        required: true,
+      },
+      {
+        name: "rmInwardKg",
+        label: "RM inward kg",
+        type: "number",
+        step: "0.01",
+      },
       { name: "status", label: "Status" },
       { name: "remark", label: "Remark" },
     ],
@@ -285,59 +357,119 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "location", label: "Location" },
       { name: "doj", label: "DOJ", type: "date" },
       { name: "terminatedDate", label: "Terminated date", type: "date" },
-      { name: "status", label: "Status", options: ["Active", "Inactive", "Terminated"], defaultValue: "Active" },
+      {
+        name: "status",
+        label: "Status",
+        options: ["Active", "Inactive", "Terminated"],
+        defaultValue: "Active",
+      },
     ],
   },
   {
     entryType: "machine_master",
     title: "Machine master",
-    description: "Machine number, type, location, and active status used by planning and machine filters.",
+    description:
+      "Machine number, type, location, and active status used by planning and machine filters.",
     fields: [
       { name: "machineNo", label: "Machine no.", required: true },
       { name: "machineType", label: "Machine type", required: true },
       { name: "machineName", label: "Machine name" },
       { name: "location", label: "Location" },
       { name: "capacity", label: "Capacity", type: "number", step: "0.01" },
-      { name: "status", label: "Status", options: ["Active", "Inactive", "Maintenance"], defaultValue: "Active" },
+      {
+        name: "status",
+        label: "Status",
+        options: ["Active", "Inactive", "Maintenance"],
+        defaultValue: "Active",
+      },
       { name: "remarks", label: "Remarks" },
     ],
   },
   {
     entryType: "maintenance_master",
     title: "Maintenance schedule master",
-    description: "Reusable weekly, monthly, or custom maintenance schedules. Machine numbers are assigned later from Machine Master.",
+    description:
+      "Reusable weekly, monthly, or custom maintenance schedules. Machine numbers are assigned later from Machine Master.",
     fields: [
       { name: "maintenanceCode", label: "Maintenance code", required: true },
-      { name: "maintenanceTitle", label: "Maintenance schedule title", required: true },
-      { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
-      { name: "frequencyBasis", label: "Frequency basis", options: ["Calendar days", "Running days"], defaultValue: "Calendar days" },
+      {
+        name: "maintenanceTitle",
+        label: "Maintenance schedule title",
+        required: true,
+      },
+      {
+        name: "frequencyDays",
+        label: "Frequency days",
+        type: "number",
+        min: "1",
+        required: true,
+      },
+      {
+        name: "frequencyBasis",
+        label: "Frequency basis",
+        options: ["Calendar days", "Running days"],
+        defaultValue: "Calendar days",
+      },
       { name: "checklistCode", label: "Checklist code" },
-      { name: "estimatedMinutes", label: "Estimated minutes", type: "number", min: "0" },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      {
+        name: "estimatedMinutes",
+        label: "Estimated minutes",
+        type: "number",
+        min: "0",
+      },
+      {
+        name: "status",
+        label: "Status",
+        options: ["Active", "Inactive"],
+        defaultValue: "Active",
+      },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "maintenance_checklist_master",
     title: "Maintenance checklist master",
-    description: "Reusable maintenance checklist steps assigned to machine maintenance schedules.",
+    description:
+      "Reusable maintenance checklist steps assigned to machine maintenance schedules.",
     fields: [
       { name: "checklistCode", label: "Checklist code", required: true },
       { name: "checklistTitle", label: "Checklist title", required: true },
-      { name: "sequence", label: "Step no.", type: "number", min: "1", required: true },
+      {
+        name: "sequence",
+        label: "Step no.",
+        type: "number",
+        min: "1",
+        required: true,
+      },
       { name: "stepDescription", label: "Step description", required: true },
-      { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
+      {
+        name: "inputType",
+        label: "Input type",
+        options: ["checkbox", "text", "number"],
+        defaultValue: "checkbox",
+      },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "planning_holiday",
     title: "Planning holiday",
-    description: "Plant shutdown dates and vacation days that planning should skip.",
+    description:
+      "Plant shutdown dates and vacation days that planning should skip.",
     fields: [
       { name: "date", label: "Holiday date", type: "date", required: true },
-      { name: "reason", label: "Reason", options: ["Plant holiday", "Vacation", "Maintenance shutdown", "Other"], defaultValue: "Plant holiday" },
-      { name: "scope", label: "Scope", options: ["Plant", "Machine", "Department"], defaultValue: "Plant" },
+      {
+        name: "reason",
+        label: "Reason",
+        options: ["Plant holiday", "Vacation", "Maintenance shutdown", "Other"],
+        defaultValue: "Plant holiday",
+      },
+      {
+        name: "scope",
+        label: "Scope",
+        options: ["Plant", "Machine", "Department"],
+        defaultValue: "Plant",
+      },
       { name: "machine", label: "Machine no." },
       { name: "department", label: "Department" },
       { name: "remark", label: "Remark" },
@@ -346,16 +478,36 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "setup_checklist_master",
     title: "Setup checklist master",
-    description: "Versioned machinist checklist used from pre setting start through setting completion.",
+    description:
+      "Versioned machinist checklist used from pre setting start through setting completion.",
     fields: [
       { name: "version", label: "Version", required: true },
       { name: "sequence", label: "Sequence", type: "number", required: true },
       { name: "checkPoint", label: "Check point", required: true },
-      { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
-      { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
-      { name: "section", label: "Section", defaultValue: "Pre setting / setting" },
+      {
+        name: "inputType",
+        label: "Input type",
+        options: ["checkbox", "text", "number"],
+        defaultValue: "checkbox",
+      },
+      {
+        name: "required",
+        label: "Required",
+        options: ["Yes", "No"],
+        defaultValue: "Yes",
+      },
+      {
+        name: "section",
+        label: "Section",
+        defaultValue: "Pre setting / setting",
+      },
       { name: "effectiveFrom", label: "Effective from", type: "date" },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      {
+        name: "status",
+        label: "Status",
+        options: ["Active", "Inactive"],
+        defaultValue: "Active",
+      },
       { name: "remark", label: "Remark" },
     ],
   },
@@ -366,7 +518,12 @@ const dataEntrySpecs: DataEntrySpec[] = [
     fields: [
       { name: "code", label: "Code", required: true },
       { name: "typeOfRejection", label: "Type of rejection", required: true },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      {
+        name: "status",
+        label: "Status",
+        options: ["Active", "Inactive"],
+        defaultValue: "Active",
+      },
       { name: "remark", label: "Remark" },
     ],
   },
@@ -377,25 +534,41 @@ const dataEntrySpecs: DataEntrySpec[] = [
     fields: [
       { name: "code", label: "Code", required: true },
       { name: "rejectionRemark", label: "Rejection remark", required: true },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      {
+        name: "status",
+        label: "Status",
+        options: ["Active", "Inactive"],
+        defaultValue: "Active",
+      },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "rejection_reason_master",
     title: "Defect / downtime reason master",
-    description: "Shared defect and downtime reason codes used by QC rejection and downtime entries.",
+    description:
+      "Shared defect and downtime reason codes used by QC rejection and downtime entries.",
     fields: [
       { name: "code", label: "Code", required: true },
-      { name: "rejectionReason", label: "Defect / downtime reason", required: true },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
+      {
+        name: "rejectionReason",
+        label: "Defect / downtime reason",
+        required: true,
+      },
+      {
+        name: "status",
+        label: "Status",
+        options: ["Active", "Inactive"],
+        defaultValue: "Active",
+      },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "quality_parameter_master",
     title: "Quality inspection parameter master",
-    description: "Shared FPIR and hourly quality check parameters by item, option, and setup.",
+    description:
+      "Shared FPIR and hourly quality check parameters by item, option, and setup.",
     fields: [
       { name: "partNo", label: "Part no.", required: true },
       { name: "optionNumber", label: "Option no.", required: true },
@@ -404,9 +577,24 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "parameterName", label: "Parameter name", required: true },
       { name: "specification", label: "Specification", required: true },
       { name: "instrumentUsed", label: "Instrument used" },
-      { name: "tolerancePlus", label: "Tolerance +", type: "number", step: "0.001" },
-      { name: "toleranceMinus", label: "Tolerance -", type: "number", step: "0.001" },
-      { name: "inputType", label: "Input type", options: ["number", "text", "pass_fail"], defaultValue: "number" },
+      {
+        name: "tolerancePlus",
+        label: "Tolerance +",
+        type: "number",
+        step: "0.001",
+      },
+      {
+        name: "toleranceMinus",
+        label: "Tolerance -",
+        type: "number",
+        step: "0.001",
+      },
+      {
+        name: "inputType",
+        label: "Input type",
+        options: ["number", "text", "pass_fail"],
+        defaultValue: "number",
+      },
       { name: "remark", label: "Remark" },
     ],
   },
@@ -415,7 +603,12 @@ const dataEntrySpecs: DataEntrySpec[] = [
     title: "Software production output",
     description: "Daily production rows from the shop-floor software.",
     fields: [
-      { name: "prodDate", label: "Production date", type: "date", required: true },
+      {
+        name: "prodDate",
+        label: "Production date",
+        type: "date",
+        required: true,
+      },
       { name: "operatorId", label: "Operator ID", required: true },
       { name: "operatorName", label: "Operator name" },
       { name: "machineType", label: "Machine type" },
@@ -423,7 +616,12 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "partCode", label: "Part code", required: true },
       { name: "jobCard", label: "JC no." },
       { name: "setupNo", label: "Setup no." },
-      { name: "outputQty", label: "Output qty", type: "number", required: true },
+      {
+        name: "outputQty",
+        label: "Output qty",
+        type: "number",
+        required: true,
+      },
       { name: "actualQty", label: "Actual qty", type: "number" },
       { name: "targetQty", label: "Target qty", type: "number" },
       { name: "rejectQty", label: "Reject qty", type: "number" },
@@ -433,7 +631,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "downtimeReason", label: "Downtime reason" },
     ],
   },
-];
+]
 const masterTableEntryTypes = [
   "route",
   "cycle",
@@ -448,102 +646,110 @@ const masterTableEntryTypes = [
   "rejection_remark_master",
   "rejection_reason_master",
   "quality_parameter_master",
-] as const;
+] as const
 
 function masterTableSpecs() {
-  const allowed = new Set<string>(masterTableEntryTypes);
-  return dataEntrySpecs.filter((spec) => allowed.has(spec.entryType));
+  const allowed = new Set<string>(masterTableEntryTypes)
+  return dataEntrySpecs.filter((spec) => allowed.has(spec.entryType))
 }
-const subscribeToHydration = () => () => {};
-const clientHydrationSnapshot = () => true;
-const serverHydrationSnapshot = () => false;
+const subscribeToHydration = () => () => {}
+const clientHydrationSnapshot = () => true
+const serverHydrationSnapshot = () => false
 
 function usePostgresDashboardPage(
   url: string | null,
   pollIntervalMs = 0,
   onData?: (data: DashboardPayload) => void,
   activePollIntervalMs = pollIntervalMs,
-  reloadKey = 0,
+  reloadKey = 0
 ) {
   const [result, setResult] = useState<{
-    data?: DashboardPayload;
-    error?: string;
-    url: string;
-  }>({ url: "" });
-  const latestDataRef = useRef<DashboardPayload | undefined>(undefined);
+    data?: DashboardPayload
+    error?: string
+    url: string
+  }>({ url: "" })
+  const latestDataRef = useRef<DashboardPayload | undefined>(undefined)
 
   useEffect(() => {
-    if (!url) return;
-    const controller = new AbortController();
-    let nextLoad: number | undefined;
-    let loading = false;
+    if (!url) return
+    const controller = new AbortController()
+    let nextLoad: number | undefined
+    let loading = false
     const load = async () => {
-      if (loading || document.visibilityState === "hidden") return;
-      loading = true;
-      let nextPollIntervalMs = pollIntervalMs;
+      if (loading || document.visibilityState === "hidden") return
+      loading = true
+      let nextPollIntervalMs = pollIntervalMs
       try {
         const response = await fetch(
           dashboardStateRequestUrl(url, latestDataRef.current),
           {
-          cache: "no-store",
-          credentials: "same-origin",
-          signal: controller.signal,
-          },
-        );
-        const body = asRecord(await response.json().catch(() => ({})));
+            cache: "no-store",
+            credentials: "same-origin",
+            signal: controller.signal,
+          }
+        )
+        const body = asRecord(await response.json().catch(() => ({})))
         if (!response.ok) {
-          throw new Error(str(body.error) || "Dashboard data could not be loaded.");
+          throw new Error(
+            str(body.error) || "Dashboard data could not be loaded."
+          )
         }
         const nextData = mergeDashboardStateResponse(
           latestDataRef.current,
           body,
-          new URL(url, window.location.origin).searchParams.get("floor"),
-        );
-        latestDataRef.current = nextData;
-        setResult({ data: nextData, url });
-        onData?.(nextData);
+          new URL(url, window.location.origin).searchParams.get("floor")
+        )
+        latestDataRef.current = nextData
+        setResult({ data: nextData, url })
+        onData?.(nextData)
         if (asRecord(body.status).isRefreshing === true) {
-          nextPollIntervalMs = activePollIntervalMs;
+          nextPollIntervalMs = activePollIntervalMs
         }
       } catch (error: unknown) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) return
         setResult({
-          error: error instanceof Error ? error.message : "Dashboard data could not be loaded.",
+          error:
+            error instanceof Error
+              ? error.message
+              : "Dashboard data could not be loaded.",
           url,
-        });
+        })
       } finally {
-        loading = false;
+        loading = false
         const nextDelay = nextDashboardPollDelay(
           nextPollIntervalMs,
-          document.visibilityState,
-        );
+          document.visibilityState
+        )
         if (!controller.signal.aborted && nextDelay !== null) {
-          nextLoad = window.setTimeout(load, nextDelay);
+          nextLoad = window.setTimeout(load, nextDelay)
         }
       }
-    };
+    }
     const handleVisibilityChange = () => {
       if (document.visibilityState !== "visible") {
-        if (nextLoad !== undefined) window.clearTimeout(nextLoad);
-        nextLoad = undefined;
-        return;
+        if (nextLoad !== undefined) window.clearTimeout(nextLoad)
+        nextLoad = undefined
+        return
       }
-      void load();
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    void load();
+      void load()
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    void load()
     return () => {
-      controller.abort();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      if (nextLoad !== undefined) window.clearTimeout(nextLoad);
-    };
-  }, [activePollIntervalMs, onData, pollIntervalMs, reloadKey, url]);
+      controller.abort()
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      if (nextLoad !== undefined) window.clearTimeout(nextLoad)
+    }
+  }, [activePollIntervalMs, onData, pollIntervalMs, reloadKey, url])
 
-  return result.url === url ? result : { url: url ?? "" };
+  return result.url === url ? result : { url: url ?? "" }
 }
 
-async function savePostgresDashboardEntry(entryType: string, payload: DashboardPayload) {
-  const productionFloorCode = productionFloorFromLocation();
+async function savePostgresDashboardEntry(
+  entryType: string,
+  payload: DashboardPayload
+) {
+  const productionFloorCode = productionFloorFromLocation()
   const response = await fetch("/api/data-entry", {
     body: JSON.stringify({
       entryType,
@@ -553,12 +759,12 @@ async function savePostgresDashboardEntry(entryType: string, payload: DashboardP
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     method: "POST",
-  });
-  const body = asRecord(await response.json().catch(() => ({})));
+  })
+  const body = asRecord(await response.json().catch(() => ({})))
   if (!response.ok) {
-    throw new Error(str(body.error) || "Dashboard entry could not be saved.");
+    throw new Error(str(body.error) || "Dashboard entry could not be saved.")
   }
-  return body;
+  return body
 }
 
 export function MrmplDashboard({
@@ -567,10 +773,10 @@ export function MrmplDashboard({
   navigationAccess,
   user,
 }: {
-  initialDashboardTab?: DashboardTabId;
-  initialProductionFloor?: ProductionFloorCode;
-  navigationAccess: UnifiedNavigationAccess;
-  user: { email: string; name: string };
+  initialDashboardTab?: DashboardTabId
+  initialProductionFloor?: ProductionFloorCode
+  navigationAccess: UnifiedNavigationAccess
+  user: { email: string; name: string }
 }) {
   return (
     <DashboardShell
@@ -579,106 +785,152 @@ export function MrmplDashboard({
       navigationAccess={navigationAccess}
       user={user}
     />
-  );
+  )
 }
-
 
 export function HourlyQualityCheckPage({
   productionFloorCode = defaultProductionFloorCode,
 }: {
-  productionFloorCode?: ProductionFloorCode;
+  productionFloorCode?: ProductionFloorCode
 }) {
-  return (
-    <HourlyQualityCheckShell productionFloorCode={productionFloorCode} />
-  );
+  return <HourlyQualityCheckShell productionFloorCode={productionFloorCode} />
 }
 
 function HourlyQualityCheckShell({
   productionFloorCode,
 }: {
-  productionFloorCode: ProductionFloorCode;
+  productionFloorCode: ProductionFloorCode
 }) {
   const hourlyQualityPage = usePostgresDashboardPage(
-    `/api/hourly-quality?floor=${encodeURIComponent(productionFloorCode)}`,
-  );
-  const hourlyQualityPageData = hourlyQualityPage.data;
-  const [prodDate, setProdDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [shift, setShift] = useState("Day");
-  const [hourSlot, setHourSlot] = useState(() => currentHourSlot());
-  const [selectedKey, setSelectedKey] = useState("");
-  const [readings, setReadings] = useState<Record<string, string>>({});
-  const [remarks, setRemarks] = useState<Record<string, string>>({});
-  const [isSaving, setIsSaving] = useState(false);
-  const [status, setStatus] = useState<ActionStatus>(null);
+    `/api/hourly-quality?floor=${encodeURIComponent(productionFloorCode)}`
+  )
+  const hourlyQualityPageData = hourlyQualityPage.data
+  const [prodDate, setProdDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  )
+  const [shift, setShift] = useState("Day")
+  const [hourSlot, setHourSlot] = useState(() => currentHourSlot())
+  const [selectedKey, setSelectedKey] = useState("")
+  const [readings, setReadings] = useState<Record<string, string>>({})
+  const [remarks, setRemarks] = useState<Record<string, string>>({})
+  const [isSaving, setIsSaving] = useState(false)
+  const [status, setStatus] = useState<ActionStatus>(null)
 
-  const hourlyQualityPageRecord = asRecord(hourlyQualityPageData);
-  const currentDashboardUserRecord = asRecord(hourlyQualityPageRecord.currentDashboardUser);
-  const performerId = str(currentDashboardUserRecord.userId);
-  const performerDisplay = str(currentDashboardUserRecord.displayId || currentDashboardUserRecord.email || currentDashboardUserRecord.name || performerId);
-  const runningRows = useMemo(() => asArray(hourlyQualityPageRecord.runningRows), [hourlyQualityPageRecord.runningRows]);
-  const selectedRow = useMemo(() => runningRows.find((row) => shopFloorPlanKey(row) === selectedKey), [runningRows, selectedKey]);
-  const qualityParameterRows = useMemo(() => asArray(hourlyQualityPageRecord.qualityParameterMasterRows), [hourlyQualityPageRecord.qualityParameterMasterRows]);
+  const hourlyQualityPageRecord = asRecord(hourlyQualityPageData)
+  const currentDashboardUserRecord = asRecord(
+    hourlyQualityPageRecord.currentDashboardUser
+  )
+  const performerId = str(currentDashboardUserRecord.userId)
+  const performerDisplay = str(
+    currentDashboardUserRecord.displayId ||
+      currentDashboardUserRecord.email ||
+      currentDashboardUserRecord.name ||
+      performerId
+  )
+  const runningRows = useMemo(
+    () => asArray(hourlyQualityPageRecord.runningRows),
+    [hourlyQualityPageRecord.runningRows]
+  )
+  const selectedRow = useMemo(
+    () => runningRows.find((row) => shopFloorPlanKey(row) === selectedKey),
+    [runningRows, selectedKey]
+  )
+  const qualityParameterRows = useMemo(
+    () => asArray(hourlyQualityPageRecord.qualityParameterMasterRows),
+    [hourlyQualityPageRecord.qualityParameterMasterRows]
+  )
 
   const parameters = useMemo(
-    () => selectedRow ? sortQualityParameterRows(qualityParameterRows.filter((row) => qualityParameterMatchesSetup(row, selectedRow))) : [],
-    [qualityParameterRows, selectedRow],
-  );
-  const selectedCheckKey = selectedRow ? hourlyQualityCheckId(selectedRow, prodDate, shift, hourSlot) : "";
+    () =>
+      selectedRow
+        ? sortQualityParameterRows(
+            qualityParameterRows.filter((row) =>
+              qualityParameterMatchesSetup(row, selectedRow)
+            )
+          )
+        : [],
+    [qualityParameterRows, selectedRow]
+  )
+  const selectedCheckKey = selectedRow
+    ? hourlyQualityCheckId(selectedRow, prodDate, shift, hourSlot)
+    : ""
   const existingCheckPage = usePostgresDashboardPage(
     selectedCheckKey
       ? `/api/hourly-quality?checkKey=${encodeURIComponent(selectedCheckKey)}&floor=${encodeURIComponent(productionFloorCode)}`
-      : null,
-  );
+      : null
+  )
   const existingCheck = selectedCheckKey
-    ? existingCheckPage.data?.existingCheck as DashboardPayload | null | undefined
-    : undefined;
+    ? (existingCheckPage.data?.existingCheck as
+        | DashboardPayload
+        | null
+        | undefined)
+    : undefined
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       if (!existingCheck) {
-        setReadings({});
-        setRemarks({});
-        return;
+        setReadings({})
+        setRemarks({})
+        return
       }
-      const nextReadings: Record<string, string> = {};
-      const nextRemarks: Record<string, string> = {};
+      const nextReadings: Record<string, string> = {}
+      const nextRemarks: Record<string, string> = {}
       for (const reading of asArray(existingCheck.readings)) {
-        const code = qualityParameterCode(reading);
-        if (!code) continue;
-        nextReadings[code] = normalizeQualityReadingInput(reading.actualReading || reading.value);
-        nextRemarks[code] = str(reading.remark);
+        const code = qualityParameterCode(reading)
+        if (!code) continue
+        nextReadings[code] = normalizeQualityReadingInput(
+          reading.actualReading || reading.value
+        )
+        nextRemarks[code] = str(reading.remark)
       }
-      setReadings(nextReadings);
-      setRemarks(nextRemarks);
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [existingCheck]);
+      setReadings(nextReadings)
+      setRemarks(nextRemarks)
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [existingCheck])
 
   async function saveHourlyCheck() {
-    if (!selectedRow || !performerId || !parameters.length) return;
-    const payload = hourlyQualityCheckPayload(selectedRow, parameters, readings, remarks, {
-      prodDate,
-      shift,
-      hourSlot,
-      checkedBy: performerId,
-    });
-    setIsSaving(true);
-    setStatus(null);
+    if (!selectedRow || !performerId || !parameters.length) return
+    const payload = hourlyQualityCheckPayload(
+      selectedRow,
+      parameters,
+      readings,
+      remarks,
+      {
+        prodDate,
+        shift,
+        hourSlot,
+        checkedBy: performerId,
+      }
+    )
+    setIsSaving(true)
+    setStatus(null)
     try {
-      await savePostgresDashboardEntry("hourly_quality_check", payload);
-      setStatus({ tone: "default", message: "Hourly quality check saved." });
-      window.location.assign(dashboardReturnHref("qualityControlTasksTab"));
+      await savePostgresDashboardEntry("hourly_quality_check", payload)
+      setStatus({ tone: "default", message: "Hourly quality check saved." })
+      window.location.assign(dashboardReturnHref("qualityControlTasksTab"))
     } catch (err) {
-      setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Hourly quality check save failed." });
+      setStatus({
+        tone: "destructive",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Hourly quality check save failed.",
+      })
     } finally {
-      setIsSaving(false);
+      setIsSaving(false)
     }
   }
 
-  const canSave = Boolean(selectedRow && performerId && parameters.length && parameters.every((parameter) => {
-    if (str(parameter.required).toLowerCase() === "no") return true;
-    return str(readings[qualityParameterCode(parameter)]);
-  }));
+  const canSave = Boolean(
+    selectedRow &&
+    performerId &&
+    parameters.length &&
+    parameters.every((parameter) => {
+      if (str(parameter.required).toLowerCase() === "no") return true
+      return str(readings[qualityParameterCode(parameter)])
+    })
+  )
 
   return (
     <main className="min-h-screen bg-background p-4 text-foreground md:p-6">
@@ -686,26 +938,66 @@ function HourlyQualityCheckShell({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">Hourly quality check</h1>
-            <p className="text-sm text-muted-foreground">Select the running machine, then record the hourly inspection against the active item, option, and setup.</p>
+            <p className="text-sm text-muted-foreground">
+              Select the running machine, then record the hourly inspection
+              against the active item, option, and setup.
+            </p>
           </div>
-          <Button type="button" variant="outline" onClick={() => { window.location.assign(dashboardReturnHref("qualityControlTasksTab")); }}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              window.location.assign(
+                dashboardReturnHref("qualityControlTasksTab")
+              )
+            }}
+          >
             <LayoutDashboard className="size-4" />
             Quality Control
           </Button>
         </div>
         <Card>
           <CardContent className="grid gap-3 pt-4 md:grid-cols-5">
-            <LabeledInput label="Date" value={prodDate} onChange={setProdDate} type="date" />
-            <LabeledSelect label="Shift" value={shift} onChange={setShift} options={["Day", "Night"]} />
-            <LabeledSelect label="Machine no." value={selectedKey} onChange={setSelectedKey} options={runningRows.map((row) => ({ value: shopFloorPlanKey(row), label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}` }))} placeholder="Select machine" />
-            <LabeledSelect label="Hour slot" value={hourSlot} onChange={setHourSlot} options={hourSlotOptions()} />
-            <label className="grid gap-1 text-xs font-medium text-muted-foreground">Checked by<Input value={performerDisplay || "Loading user..."} readOnly /></label>
+            <LabeledInput
+              label="Date"
+              value={prodDate}
+              onChange={setProdDate}
+              type="date"
+            />
+            <LabeledSelect
+              label="Shift"
+              value={shift}
+              onChange={setShift}
+              options={["Day", "Night"]}
+            />
+            <LabeledSelect
+              label="Machine no."
+              value={selectedKey}
+              onChange={setSelectedKey}
+              options={runningRows.map((row) => ({
+                value: shopFloorPlanKey(row),
+                label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}`,
+              }))}
+              placeholder="Select machine"
+            />
+            <LabeledSelect
+              label="Hour slot"
+              value={hourSlot}
+              onChange={setHourSlot}
+              options={hourSlotOptions()}
+            />
+            <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              Checked by
+              <Input value={performerDisplay || "Loading user..."} readOnly />
+            </label>
           </CardContent>
         </Card>
         {selectedRow ? (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">{displayValue(selectedRow.machine)} running details</CardTitle>
+              <CardTitle className="text-base">
+                {displayValue(selectedRow.machine)} running details
+              </CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2 text-sm md:grid-cols-5">
               <TileField label="Item code" value={itemCode(selectedRow)} />
@@ -719,7 +1011,11 @@ function HourlyQualityCheckShell({
         <Card>
           <CardHeader>
             <CardTitle>Inspection readings</CardTitle>
-            <CardDescription>{existingCheck ? "Existing hourly card loaded for editing." : "Readings are saved against the selected date, shift, hour, machine, item, and setup."}</CardDescription>
+            <CardDescription>
+              {existingCheck
+                ? "Existing hourly card loaded for editing."
+                : "Readings are saved against the selected date, shift, hour, machine, item, and setup."}
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             {selectedRow && existingCheck === undefined && selectedCheckKey ? (
@@ -741,47 +1037,116 @@ function HourlyQualityCheckShell({
                   </TableHeader>
                   <TableBody>
                     {parameters.map((parameter) => {
-                      const code = qualityParameterCode(parameter);
-                      const result = qualityReadingResult(parameter, readings[code]);
-                      const resultTone = qualityResultTone(result);
-                      const readingClass = qualityReadingInputClass(result);
+                      const code = qualityParameterCode(parameter)
+                      const result = qualityReadingResult(
+                        parameter,
+                        readings[code]
+                      )
+                      const resultTone = qualityResultTone(result)
+                      const readingClass = qualityReadingInputClass(result)
                       return (
-                        <TableRow key={code || qualityParameterName(parameter)} className={resultTone === "bad" ? "bg-red-50/70 dark:bg-red-950/20" : ""}>
+                        <TableRow
+                          key={code || qualityParameterName(parameter)}
+                          className={
+                            resultTone === "bad"
+                              ? "bg-red-50/70 dark:bg-red-950/20"
+                              : ""
+                          }
+                        >
                           <TableCell className="font-medium">{code}</TableCell>
-                          <TableCell>{qualityParameterName(parameter)}</TableCell>
-                          <TableCell>{displayValue(parameter.specification)}</TableCell>
-                          <TableCell>{qualityParameterTolerance(parameter)}</TableCell>
-                          <TableCell>{displayValue(parameter.instrumentUsed)}</TableCell>
                           <TableCell>
-                            {qualityParameterInputType(parameter) === "pass_fail" ? (
-                              <select className={`h-9 w-full rounded-md border bg-background px-3 text-sm ${readingClass}`} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))}>
+                            {qualityParameterName(parameter)}
+                          </TableCell>
+                          <TableCell>
+                            {displayValue(parameter.specification)}
+                          </TableCell>
+                          <TableCell>
+                            {qualityParameterTolerance(parameter)}
+                          </TableCell>
+                          <TableCell>
+                            {displayValue(parameter.instrumentUsed)}
+                          </TableCell>
+                          <TableCell>
+                            {qualityParameterInputType(parameter) ===
+                            "pass_fail" ? (
+                              <select
+                                className={`h-9 w-full rounded-md border bg-background px-3 text-sm ${readingClass}`}
+                                value={readings[code] ?? ""}
+                                onChange={(event) =>
+                                  setReadings((current) => ({
+                                    ...current,
+                                    [code]: event.target.value,
+                                  }))
+                                }
+                              >
                                 <option value="">Select</option>
                                 <option value="OK">OK</option>
                                 <option value="Not OK">Not OK</option>
                               </select>
                             ) : (
-                              <Input className={readingClass} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))} type={qualityParameterInputType(parameter) === "number" ? "number" : "text"} step="0.001" />
+                              <Input
+                                className={readingClass}
+                                value={readings[code] ?? ""}
+                                onChange={(event) =>
+                                  setReadings((current) => ({
+                                    ...current,
+                                    [code]: event.target.value,
+                                  }))
+                                }
+                                type={
+                                  qualityParameterInputType(parameter) ===
+                                  "number"
+                                    ? "number"
+                                    : "text"
+                                }
+                                step="0.001"
+                              />
                             )}
                           </TableCell>
-                          <TableCell><StatusBadge value={result || "Pending"} /></TableCell>
-                          <TableCell><Input value={remarks[code] ?? ""} onChange={(event) => setRemarks((current) => ({ ...current, [code]: event.target.value }))} /></TableCell>
+                          <TableCell>
+                            <StatusBadge value={result || "Pending"} />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={remarks[code] ?? ""}
+                              onChange={(event) =>
+                                setRemarks((current) => ({
+                                  ...current,
+                                  [code]: event.target.value,
+                                }))
+                              }
+                            />
+                          </TableCell>
                         </TableRow>
-                      );
+                      )
                     })}
                   </TableBody>
                 </Table>
               </div>
             ) : selectedRow ? (
-              <EmptyRowsMessage>No active quality parameter master rows match this item, option, and setup.</EmptyRowsMessage>
+              <EmptyRowsMessage>
+                No active quality parameter master rows match this item, option,
+                and setup.
+              </EmptyRowsMessage>
             ) : (
-              <EmptyRowsMessage>Select a machine to start the hourly check.</EmptyRowsMessage>
+              <EmptyRowsMessage>
+                Select a machine to start the hourly check.
+              </EmptyRowsMessage>
             )}
             {hourlyQualityPage.error || existingCheckPage.error ? (
-              <AlertMessage tone="destructive">{hourlyQualityPage.error || existingCheckPage.error}</AlertMessage>
+              <AlertMessage tone="destructive">
+                {hourlyQualityPage.error || existingCheckPage.error}
+              </AlertMessage>
             ) : null}
-            {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
+            {status ? (
+              <AlertMessage tone={status.tone}>{status.message}</AlertMessage>
+            ) : null}
             <div className="flex justify-end">
-              <Button type="button" disabled={!canSave || isSaving} onClick={saveHourlyCheck}>
+              <Button
+                type="button"
+                disabled={!canSave || isSaving}
+                onClick={saveHourlyCheck}
+              >
                 <CheckCircle2 className="size-4" />
                 {isSaving ? "Saving" : "Save hourly check"}
               </Button>
@@ -790,21 +1155,21 @@ function HourlyQualityCheckShell({
         </Card>
       </div>
     </main>
-  );
+  )
 }
-
 
 export function SetupChecklistPage({
   productionFloorCode = defaultProductionFloorCode,
 }: {
-  productionFloorCode?: ProductionFloorCode;
+  productionFloorCode?: ProductionFloorCode
 }) {
-  return <SetupChecklistShell productionFloorCode={productionFloorCode} />;
+  return <SetupChecklistShell productionFloorCode={productionFloorCode} />
 }
 
 function setupChecklistQueryFromLocation() {
-  if (typeof window === "undefined") return { sessionId: "", phase: "", row: {} as DashboardPayload };
-  const params = new URLSearchParams(window.location.search);
+  if (typeof window === "undefined")
+    return { sessionId: "", phase: "", row: {} as DashboardPayload }
+  const params = new URLSearchParams(window.location.search)
   return {
     sessionId: params.get("sessionId") ?? "",
     phase: params.get("phase") ?? "",
@@ -819,75 +1184,116 @@ function setupChecklistQueryFromLocation() {
       machine: params.get("machine") ?? "",
       machineType: params.get("machineType") ?? "",
     } as DashboardPayload,
-  };
+  }
 }
 
 function SetupChecklistShell({
   productionFloorCode,
 }: {
-  productionFloorCode: ProductionFloorCode;
+  productionFloorCode: ProductionFloorCode
 }) {
-  const isClientHydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
-  const { sessionId, phase, row } = isClientHydrated ? setupChecklistQueryFromLocation() : { sessionId: "", phase: "", row: {} as DashboardPayload };
+  const isClientHydrated = useSyncExternalStore(
+    subscribeToHydration,
+    clientHydrationSnapshot,
+    serverHydrationSnapshot
+  )
+  const { sessionId, phase, row } = isClientHydrated
+    ? setupChecklistQueryFromLocation()
+    : { sessionId: "", phase: "", row: {} as DashboardPayload }
   const checklistPage = usePostgresDashboardPage(
     sessionId
       ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}&floor=${encodeURIComponent(productionFloorCode)}`
-      : null,
-  );
-  const checklistPageData = checklistPage.data;
-  const [localChecklistSession, setLocalChecklistSession] = useState<DashboardPayload | undefined>(undefined);
-  const [doneBy, setDoneBy] = useState("");
-  const [remark, setRemark] = useState("");
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [isSaving, setIsSaving] = useState(false);
-  const [status, setStatus] = useState<ActionStatus>(null);
+      : null
+  )
+  const checklistPageData = checklistPage.data
+  const [localChecklistSession, setLocalChecklistSession] = useState<
+    DashboardPayload | undefined
+  >(undefined)
+  const [doneBy, setDoneBy] = useState("")
+  const [remark, setRemark] = useState("")
+  const [values, setValues] = useState<Record<string, string>>({})
+  const [isSaving, setIsSaving] = useState(false)
+  const [status, setStatus] = useState<ActionStatus>(null)
 
-  const pageRecord = asRecord(checklistPageData);
-  const activeChecklistMasters = useMemo(() => activeSetupChecklistMasterRows(asArray(pageRecord.setupChecklistMasterRows)), [pageRecord.setupChecklistMasterRows]);
-  const snapshotChecklistSessionRecord = asRecord(pageRecord.setupChecklistSession);
-  const snapshotChecklistSession = Object.keys(snapshotChecklistSessionRecord).length ? snapshotChecklistSessionRecord : undefined;
-  const currentChecklistSession = localChecklistSession ?? snapshotChecklistSession;
+  const pageRecord = asRecord(checklistPageData)
+  const activeChecklistMasters = useMemo(
+    () =>
+      activeSetupChecklistMasterRows(
+        asArray(pageRecord.setupChecklistMasterRows)
+      ),
+    [pageRecord.setupChecklistMasterRows]
+  )
+  const snapshotChecklistSessionRecord = asRecord(
+    pageRecord.setupChecklistSession
+  )
+  const snapshotChecklistSession = Object.keys(snapshotChecklistSessionRecord)
+    .length
+    ? snapshotChecklistSessionRecord
+    : undefined
+  const currentChecklistSession =
+    localChecklistSession ?? snapshotChecklistSession
   const checklistItems = Array.isArray(currentChecklistSession?.items)
-    ? currentChecklistSession.items as DashboardPayload[]
-    : setupChecklistItemsFromMaster(activeChecklistMasters);
-  const canSave = Boolean(sessionId && (phase === "start" || phase === "end") && checklistItems.length)
-    && (phase === "start" || Boolean(currentChecklistSession));
-  const isComplete = canSave && setupChecklistValuesComplete(checklistItems, values, phase);
+    ? (currentChecklistSession.items as DashboardPayload[])
+    : setupChecklistItemsFromMaster(activeChecklistMasters)
+  const canSave =
+    Boolean(
+      sessionId &&
+      (phase === "start" || phase === "end") &&
+      checklistItems.length
+    ) &&
+    (phase === "start" || Boolean(currentChecklistSession))
+  const isComplete =
+    canSave && setupChecklistValuesComplete(checklistItems, values, phase)
 
   useEffect(() => {
-    if (!isClientHydrated || !sessionId) return;
+    if (!isClientHydrated || !sessionId) return
     const timeout = window.setTimeout(() => {
-      setLocalChecklistSession(readStoredSetupChecklistSession(sessionId));
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [isClientHydrated, sessionId]);
+      setLocalChecklistSession(readStoredSetupChecklistSession(sessionId))
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [isClientHydrated, sessionId])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       if (!currentChecklistSession) {
-        setValues({});
-        setDoneBy("");
-        setRemark("");
-        return;
+        setValues({})
+        setDoneBy("")
+        setRemark("")
+        return
       }
-      const nextValues: Record<string, string> = {};
+      const nextValues: Record<string, string> = {}
       for (const item of asArray(currentChecklistSession.items)) {
-        nextValues[setupChecklistItemKey(item)] = setupChecklistExistingValue(item, phase);
+        nextValues[setupChecklistItemKey(item)] = setupChecklistExistingValue(
+          item,
+          phase
+        )
       }
-      setValues(nextValues);
-      setDoneBy(str(phase === "start" ? currentChecklistSession.startedBy : currentChecklistSession.endedBy));
-      setRemark(str(phase === "start" ? currentChecklistSession.startRemark : currentChecklistSession.endRemark));
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [currentChecklistSession, phase]);
+      setValues(nextValues)
+      setDoneBy(
+        str(
+          phase === "start"
+            ? currentChecklistSession.startedBy
+            : currentChecklistSession.endedBy
+        )
+      )
+      setRemark(
+        str(
+          phase === "start"
+            ? currentChecklistSession.startRemark
+            : currentChecklistSession.endRemark
+        )
+      )
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [currentChecklistSession, phase])
 
   function updateValue(item: DashboardPayload, value: string) {
-    const itemKey = setupChecklistItemKey(item);
-    setValues((currentValues) => ({ ...currentValues, [itemKey]: value }));
+    const itemKey = setupChecklistItemKey(item)
+    setValues((currentValues) => ({ ...currentValues, [itemKey]: value }))
   }
 
   async function saveProgress() {
-    if (!row || !canSave || isSaving) return;
+    if (!row || !canSave || isSaving) return
     const session = setupChecklistSessionForStage({
       row,
       phase,
@@ -898,20 +1304,23 @@ function SetupChecklistShell({
       doneBy,
       remark,
       completedAt: new Date().toISOString(),
-    });
-    const payload = setupChecklistSessionPayload(row, session);
-    setIsSaving(true);
-    setStatus(null);
+    })
+    const payload = setupChecklistSessionPayload(row, session)
+    setIsSaving(true)
+    setStatus(null)
     try {
-      await savePostgresDashboardEntry("setup_checklist_session", payload);
-      setLocalChecklistSession(payload);
-      writeStoredSetupChecklistSession(payload);
-      setStatus({ tone: "default", message: "Checklist progress saved." });
-      window.location.assign(dashboardReturnHref("machinistTasksTab"));
+      await savePostgresDashboardEntry("setup_checklist_session", payload)
+      setLocalChecklistSession(payload)
+      writeStoredSetupChecklistSession(payload)
+      setStatus({ tone: "default", message: "Checklist progress saved." })
+      window.location.assign(dashboardReturnHref("machinistTasksTab"))
     } catch (err) {
-      setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Checklist save failed." });
+      setStatus({
+        tone: "destructive",
+        message: err instanceof Error ? err.message : "Checklist save failed.",
+      })
     } finally {
-      setIsSaving(false);
+      setIsSaving(false)
     }
   }
 
@@ -921,9 +1330,18 @@ function SetupChecklistShell({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">Setup checklist</h1>
-            <p className="text-sm text-muted-foreground">Save pre setting and setting checklist progress outside the machinist task list.</p>
+            <p className="text-sm text-muted-foreground">
+              Save pre setting and setting checklist progress outside the
+              machinist task list.
+            </p>
           </div>
-          <Button type="button" variant="outline" onClick={() => { window.location.assign(dashboardReturnHref("machinistTasksTab")); }}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              window.location.assign(dashboardReturnHref("machinistTasksTab"))
+            }}
+          >
             <LayoutDashboard className="size-4" />
             Machinist
           </Button>
@@ -932,7 +1350,9 @@ function SetupChecklistShell({
           <>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">{phase === "end" ? "Setting completion" : "Pre setting start"}</CardTitle>
+                <CardTitle className="text-base">
+                  {phase === "end" ? "Setting completion" : "Pre setting start"}
+                </CardTitle>
                 <CardDescription>Running setup details</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3">
@@ -942,11 +1362,22 @@ function SetupChecklistShell({
                   <TileField label="Option" value={row.optionNumber} />
                   <TileField label="Setup no." value={row.setupNo} />
                   <TileField label="Machine" value={row.machine} />
-                  <TileField label="Phase" value={phase === "end" ? "Completion" : "Start"} />
+                  <TileField
+                    label="Phase"
+                    value={phase === "end" ? "Completion" : "Start"}
+                  />
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <LabeledInput label={phase === "end" ? "Completed by" : "Started by"} value={doneBy} onChange={setDoneBy} />
-                  <LabeledInput label="Remark" value={remark} onChange={setRemark} />
+                  <LabeledInput
+                    label={phase === "end" ? "Completed by" : "Started by"}
+                    value={doneBy}
+                    onChange={setDoneBy}
+                  />
+                  <LabeledInput
+                    label="Remark"
+                    value={remark}
+                    onChange={setRemark}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -962,11 +1393,25 @@ function SetupChecklistShell({
                 onValueChange={updateValue}
               />
             )}
-            {checklistPage.error ? <AlertMessage tone="destructive">{checklistPage.error}</AlertMessage> : null}
-            {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
+            {checklistPage.error ? (
+              <AlertMessage tone="destructive">
+                {checklistPage.error}
+              </AlertMessage>
+            ) : null}
+            {status ? (
+              <AlertMessage tone={status.tone}>{status.message}</AlertMessage>
+            ) : null}
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <StatusBadge value={isComplete ? "Checklist complete" : "Progress can be saved"} />
-              <Button type="button" disabled={!canSave || isSaving} onClick={() => void saveProgress()}>
+              <StatusBadge
+                value={
+                  isComplete ? "Checklist complete" : "Progress can be saved"
+                }
+              />
+              <Button
+                type="button"
+                disabled={!canSave || isSaving}
+                onClick={() => void saveProgress()}
+              >
                 <CheckCircle2 className="size-4" />
                 {isSaving ? "Saving" : "Save checklist progress"}
               </Button>
@@ -975,13 +1420,16 @@ function SetupChecklistShell({
         ) : (
           <Card>
             <CardContent className="pt-6">
-              <EmptyRowsMessage>Checklist setup was not found. Open this page from a machinist task row.</EmptyRowsMessage>
+              <EmptyRowsMessage>
+                Checklist setup was not found. Open this page from a machinist
+                task row.
+              </EmptyRowsMessage>
             </CardContent>
           </Card>
         )}
       </div>
     </main>
-  );
+  )
 }
 
 function DashboardShell({
@@ -990,33 +1438,47 @@ function DashboardShell({
   navigationAccess,
   user,
 }: {
-  initialDashboardTab: DashboardTabId;
-  initialProductionFloor: ProductionFloorCode;
-  navigationAccess: UnifiedNavigationAccess;
-  user: { email: string; name: string };
+  initialDashboardTab: DashboardTabId
+  initialProductionFloor: ProductionFloorCode
+  navigationAccess: UnifiedNavigationAccess
+  user: { email: string; name: string }
 }) {
-  const [activeTab, setActiveTab] = useState<DashboardTabId>(initialDashboardTab);
+  const [activeTab, setActiveTab] =
+    useState<DashboardTabId>(initialDashboardTab)
   const [activeProductionFloor] = useState<ProductionFloorCode>(
-    initialProductionFloor,
-  );
-  const [preferredDataEntryType, setPreferredDataEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
-  const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
-  const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
-  const [optimisticShopFloorStatuses, setOptimisticShopFloorStatuses] = useState<ShopFloorStatusPatch[]>([]);
-  const [optimisticSetupChecklistSessions, setOptimisticSetupChecklistSessions] = useState<DashboardPayload[]>([]);
-  const [optimisticProductionCards, setOptimisticProductionCards] = useState<DashboardPayload[]>([]);
-  const [planningRefreshLock, setPlanningRefreshLock] = useState<PlanningRefreshLock | null>(null);
-  const lastStalePlanningRefreshKeyRef = useRef<string | undefined>(undefined);
-  const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
-  const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
-  const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
-  const [dashboardReloadKey, setDashboardReloadKey] = useState(0);
+    initialProductionFloor
+  )
+  const [preferredDataEntryType, setPreferredDataEntryType] = useState(
+    dataEntrySpecs[0]?.entryType ?? "route"
+  )
+  const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<
+    Record<string, unknown>
+  >({})
+  const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<
+    DashboardPayload[]
+  >([])
+  const [optimisticShopFloorStatuses, setOptimisticShopFloorStatuses] =
+    useState<ShopFloorStatusPatch[]>([])
+  const [
+    optimisticSetupChecklistSessions,
+    setOptimisticSetupChecklistSessions,
+  ] = useState<DashboardPayload[]>([])
+  const [optimisticProductionCards, setOptimisticProductionCards] = useState<
+    DashboardPayload[]
+  >([])
+  const [planningRefreshLock, setPlanningRefreshLock] =
+    useState<PlanningRefreshLock | null>(null)
+  const lastStalePlanningRefreshKeyRef = useRef<string | undefined>(undefined)
+  const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined)
+  const [actionStatus, setActionStatus] = useState<ActionStatus>(null)
+  const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false)
+  const [dashboardReloadKey, setDashboardReloadKey] = useState(0)
   const handleDashboardStateData = useCallback((state: DashboardPayload) => {
-    const status = asRecord(state.status);
+    const status = asRecord(state.status)
     setPlanningRefreshLock((current) =>
-      current && refreshLockHasSettled(current, status) ? null : current,
-    );
-  }, []);
+      current && refreshLockHasSettled(current, status) ? null : current
+    )
+  }, [])
   const {
     refreshFailed: markDashboardRefreshFailed,
     refreshRequested: markDashboardRefreshRequested,
@@ -1025,223 +1487,280 @@ function DashboardShell({
   } = useDashboardDelivery({
     floor: activeProductionFloor,
     onData: handleDashboardStateData,
-  });
+  })
   const correctionCandidatesPage = usePostgresDashboardPage(
-    activeTab === "correctionsTab" ? "/api/correction-candidates?limit=200" : null,
+    activeTab === "correctionsTab"
+      ? "/api/correction-candidates?limit=200"
+      : null,
     5_000,
     undefined,
     5_000,
-    dashboardReloadKey,
-  );
-  const dashboardPayload = dashboardPayloadFromState(dashboardDeliveryState.data ?? undefined);
+    dashboardReloadKey
+  )
+  const dashboardPayload = dashboardPayloadFromState(
+    dashboardDeliveryState.data ?? undefined
+  )
   const dashboardRefreshStatus = dashboardRefreshStatusFromState(
-    dashboardDeliveryState.data ?? undefined,
-  );
-  const correctionCandidates = asArray(correctionCandidatesPage.data?.rows);
+    dashboardDeliveryState.data ?? undefined
+  )
+  const correctionCandidates = asArray(correctionCandidatesPage.data?.rows)
   const isPlanningRefreshLockActive = planningRefreshLock
     ? !refreshLockHasSettled(planningRefreshLock, dashboardRefreshStatus)
-    : false;
+    : false
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setFirstPieceInspectionTasks((currentTasks) =>
-        mergeFirstPieceInspectionTasks(readStoredFirstPieceInspectionTasks(), currentTasks)
-      );
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, []);
+        mergeFirstPieceInspectionTasks(
+          readStoredFirstPieceInspectionTasks(),
+          currentTasks
+        )
+      )
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [])
 
   useEffect(() => {
-    const dashboardRecord = asRecord(dashboardPayload);
-    if (!shouldRefreshStalePlanningSnapshot(dashboardRecord)) return;
-    if (isPlanningRefreshLockActive || dashboardRefreshStatus?.isRefreshing) return;
-    const staleRefreshKey = stalePlanningRefreshKey(dashboardRecord);
-    if (lastStalePlanningRefreshKeyRef.current === staleRefreshKey) return;
-    lastStalePlanningRefreshKeyRef.current = staleRefreshKey;
+    const dashboardRecord = asRecord(dashboardPayload)
+    if (!shouldRefreshStalePlanningSnapshot(dashboardRecord)) return
+    if (isPlanningRefreshLockActive || dashboardRefreshStatus?.isRefreshing)
+      return
+    const staleRefreshKey = stalePlanningRefreshKey(dashboardRecord)
+    if (lastStalePlanningRefreshKeyRef.current === staleRefreshKey) return
+    lastStalePlanningRefreshKeyRef.current = staleRefreshKey
     void postDashboardApi("dashboard-refresh", {})
       .then(() => markDashboardRefreshRequested())
       .catch((error: unknown) =>
         markDashboardRefreshFailed(
           error instanceof Error
             ? error.message
-            : "Planning recalculation could not be queued.",
-        ),
-      );
-  }, [dashboardPayload, dashboardRefreshStatus?.isRefreshing, isPlanningRefreshLockActive, markDashboardRefreshFailed, markDashboardRefreshRequested]);
+            : "Planning recalculation could not be queued."
+        )
+      )
+  }, [
+    dashboardPayload,
+    dashboardRefreshStatus?.isRefreshing,
+    isPlanningRefreshLockActive,
+    markDashboardRefreshFailed,
+    markDashboardRefreshRequested,
+  ])
 
   async function refreshDashboardSnapshot(force = true) {
-    setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus));
-    setIsRefreshingSnapshot(true);
-    setActionStatus(null);
+    setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus))
+    setIsRefreshingSnapshot(true)
+    setActionStatus(null)
     try {
-      const result = await postDashboardApi("dashboard-refresh", { force });
-      setDashboardReloadKey((current) => current + 1);
-      markDashboardRefreshRequested();
+      const result = await postDashboardApi("dashboard-refresh", { force })
+      setDashboardReloadKey((current) => current + 1)
+      markDashboardRefreshRequested()
       setActionStatus({
         tone: "default",
         message: result.queued
           ? "Planning recalculation queued."
           : result.skipped
-          ? "Planning is already up to date."
-          : "Planning recalculated from latest data.",
-      });
+            ? "Planning is already up to date."
+            : "Planning recalculated from latest data.",
+      })
       if (!result.skipped) {
-        setOptimisticShopFloorStatuses((current) => retainUnconfirmedShopFloorStatusPatches(basePayload, current));
-        setOptimisticSetupChecklistSessions([]);
-        setOptimisticProductionCards([]);
+        setOptimisticShopFloorStatuses((current) =>
+          retainUnconfirmedShopFloorStatusPatches(basePayload, current)
+        )
+        setOptimisticSetupChecklistSessions([])
+        setOptimisticProductionCards([])
       }
-      if (result.skipped) setPlanningRefreshLock(null);
+      if (result.skipped) setPlanningRefreshLock(null)
     } catch (err) {
-      setPlanningRefreshLock(null);
+      setPlanningRefreshLock(null)
       markDashboardRefreshFailed(
-        err instanceof Error ? err.message : "Snapshot refresh failed.",
-      );
+        err instanceof Error ? err.message : "Snapshot refresh failed."
+      )
       setActionStatus({
         tone: "destructive",
-        message: err instanceof Error ? err.message : "Snapshot refresh failed.",
-      });
+        message:
+          err instanceof Error ? err.message : "Snapshot refresh failed.",
+      })
     } finally {
-      setIsRefreshingSnapshot(false);
+      setIsRefreshingSnapshot(false)
     }
   }
 
   async function submitAction(path: string, body: Record<string, unknown>) {
-    setActionStatus(null);
-    const queuePlanningRefresh = shouldQueuePlanningRefresh(path, body);
+    setActionStatus(null)
+    const queuePlanningRefresh = shouldQueuePlanningRefresh(path, body)
     if (queuePlanningRefresh) {
-      setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus));
+      setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus))
     }
     try {
-      const apiResult = await postDashboardApi(path, body);
-      const message = apiResult.message;
-      const shopFloorPatch = shopFloorStatusPatchFromAction(path, body);
+      const apiResult = await postDashboardApi(path, body)
+      const message = apiResult.message
+      const shopFloorPatch = shopFloorStatusPatchFromAction(path, body)
       if (shopFloorPatch) {
-        setOptimisticShopFloorStatuses((current) => upsertShopFloorStatusPatch(current, shopFloorPatch));
+        setOptimisticShopFloorStatuses((current) =>
+          upsertShopFloorStatusPatch(current, shopFloorPatch)
+        )
       }
-      const setupChecklistSessionPatch = setupChecklistSessionPatchFromAction(path, body);
+      const setupChecklistSessionPatch = setupChecklistSessionPatchFromAction(
+        path,
+        body
+      )
       if (setupChecklistSessionPatch) {
-        setOptimisticSetupChecklistSessions((current) => upsertSetupChecklistSessionPatch(current, setupChecklistSessionPatch));
+        setOptimisticSetupChecklistSessions((current) =>
+          upsertSetupChecklistSessionPatch(current, setupChecklistSessionPatch)
+        )
       }
-      const productionCardPatch = productionCardPatchFromAction(path, body);
+      const productionCardPatch = productionCardPatchFromAction(path, body)
       if (productionCardPatch) {
-        setOptimisticProductionCards((current) => upsertProductionCardPatch(current, productionCardPatch));
+        setOptimisticProductionCards((current) =>
+          upsertProductionCardPatch(current, productionCardPatch)
+        )
       }
       setActionStatus({
         tone: "default",
         message: `${message} ${planningRefreshStatusMessage(queuePlanningRefresh, path, body)}`,
-      });
-      if (queuePlanningRefresh) markDashboardRefreshRequested();
-      const returnTab = str(body.returnTab) as DashboardTabId;
+      })
+      if (queuePlanningRefresh) markDashboardRefreshRequested()
+      const returnTab = str(body.returnTab) as DashboardTabId
       if (returnTab && navItems.some((item) => item.id === returnTab)) {
-        setActiveTab(returnTab);
+        setActiveTab(returnTab)
       }
     } catch (err) {
-      if (queuePlanningRefresh) setPlanningRefreshLock(null);
+      if (queuePlanningRefresh) setPlanningRefreshLock(null)
       setActionStatus({
         tone: "destructive",
         message: err instanceof Error ? err.message : "Action failed.",
-      });
+      })
     }
   }
 
-  function openDataEntry(entryType: string, defaults: Record<string, unknown> = {}) {
-    setPreferredDataEntryType(entryType);
-    setPreferredDataEntryDefaults(defaults);
-    setActiveTab("dataEntryTab");
+  function openDataEntry(
+    entryType: string,
+    defaults: Record<string, unknown> = {}
+  ) {
+    setPreferredDataEntryType(entryType)
+    setPreferredDataEntryDefaults(defaults)
+    setActiveTab("dataEntryTab")
   }
 
   function openMasterReadiness() {
-    setActiveTab("masterGapsTab");
+    setActiveTab("masterGapsTab")
   }
 
   function openFirstPieceInspection(row: DashboardPayload) {
     const scopedRow = {
       ...row,
       productionFloorCode: activeProductionFloor,
-    };
+    }
     setFirstPieceInspectionTasks((openTasks) => {
-      const key = shopFloorPlanKey(scopedRow);
-      if (openTasks.some((task) => shopFloorPlanKey(task) === key)) return openTasks;
-      const nextTasks = [...openTasks, scopedRow];
-      writeStoredFirstPieceInspectionTasks(nextTasks);
-      return nextTasks;
-    });
-    setActiveTab("firstPieceInspectionTab");
+      const key = shopFloorPlanKey(scopedRow)
+      if (openTasks.some((task) => shopFloorPlanKey(task) === key))
+        return openTasks
+      const nextTasks = [...openTasks, scopedRow]
+      writeStoredFirstPieceInspectionTasks(nextTasks)
+      return nextTasks
+    })
+    setActiveTab("firstPieceInspectionTab")
   }
 
   function selectDashboardDestination(
     tab: DashboardTabId,
-    productionFloorCode: ProductionFloorCode,
+    productionFloorCode: ProductionFloorCode
   ) {
     if (productionFloorCode !== activeProductionFloor) {
-      window.location.assign(dashboardTabHref(tab, productionFloorCode));
-      return;
+      window.location.assign(dashboardTabHref(tab, productionFloorCode))
+      return
     }
-    setActiveTab(tab);
+    setActiveTab(tab)
     window.history.replaceState(
       {},
       "",
-      dashboardTabHref(tab, productionFloorCode),
-    );
+      dashboardTabHref(tab, productionFloorCode)
+    )
   }
 
   function closeFirstPieceInspection(row: DashboardPayload) {
-    const key = shopFloorPlanKey(row);
+    const key = shopFloorPlanKey(row)
     setFirstPieceInspectionTasks((openTasks) => {
-      const nextTasks = openTasks.filter((task) => shopFloorPlanKey(task) !== key);
-      writeStoredFirstPieceInspectionTasks(nextTasks);
-      return nextTasks;
-    });
+      const nextTasks = openTasks.filter(
+        (task) => shopFloorPlanKey(task) !== key
+      )
+      writeStoredFirstPieceInspectionTasks(nextTasks)
+      return nextTasks
+    })
   }
 
-  const hasDashboardData = dashboardDeliveryState.data !== null;
-  const isDashboardLoading = !hasDashboardData && dashboardDeliveryState.request !== "error";
-  const isDashboardUnavailable = !hasDashboardData && dashboardDeliveryState.request === "error";
+  const hasDashboardData = dashboardDeliveryState.data !== null
+  const isDashboardLoading =
+    !hasDashboardData && dashboardDeliveryState.request !== "error"
+  const isDashboardUnavailable =
+    !hasDashboardData && dashboardDeliveryState.request === "error"
   const basePayload = useMemo(
-    () => (
+    () =>
       !hasDashboardData
         ? ({} as DashboardPayload)
         : dashboardPayloadForProductionFloor(
             dashboardPayload,
-            activeProductionFloor,
-          )
-    ),
-    [activeProductionFloor, dashboardPayload, hasDashboardData],
-  );
-  const snapshotUpdatedAt = str(basePayload.updatedAt);
-  const planningRecalculatedAt = str(basePayload.snapshotCacheUpdatedAt)
-    || (typeof dashboardRefreshStatus?.completedAtMs === "number" ? new Date(dashboardRefreshStatus.completedAtMs).toISOString() : "");
+            activeProductionFloor
+          ),
+    [activeProductionFloor, dashboardPayload, hasDashboardData]
+  )
+  const snapshotUpdatedAt = str(basePayload.updatedAt)
+  const planningRecalculatedAt =
+    str(basePayload.snapshotCacheUpdatedAt) ||
+    (typeof dashboardRefreshStatus?.completedAtMs === "number"
+      ? new Date(dashboardRefreshStatus.completedAtMs).toISOString()
+      : "")
   useEffect(() => {
-    if (!snapshotUpdatedAt || lastSnapshotUpdatedAtRef.current === snapshotUpdatedAt) return;
-    lastSnapshotUpdatedAtRef.current = snapshotUpdatedAt;
-    setOptimisticShopFloorStatuses((current) => retainUnconfirmedShopFloorStatusPatches(basePayload, current));
-    setOptimisticSetupChecklistSessions((current) => current.length ? [] : current);
-    setOptimisticProductionCards((current) => current.length ? [] : current);
-  }, [basePayload, snapshotUpdatedAt]);
+    if (
+      !snapshotUpdatedAt ||
+      lastSnapshotUpdatedAtRef.current === snapshotUpdatedAt
+    )
+      return
+    lastSnapshotUpdatedAtRef.current = snapshotUpdatedAt
+    setOptimisticShopFloorStatuses((current) =>
+      retainUnconfirmedShopFloorStatusPatches(basePayload, current)
+    )
+    setOptimisticSetupChecklistSessions((current) =>
+      current.length ? [] : current
+    )
+    setOptimisticProductionCards((current) => (current.length ? [] : current))
+  }, [basePayload, snapshotUpdatedAt])
 
   const payload = useMemo(
-    () => applyProductionCardPatches(applySetupChecklistSessionPatches(applyShopFloorStatusPatches(basePayload, optimisticShopFloorStatuses), optimisticSetupChecklistSessions), optimisticProductionCards),
-    [basePayload, optimisticShopFloorStatuses, optimisticSetupChecklistSessions, optimisticProductionCards],
-  );
-  const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
-  const selectedProductionFloor = productionFloors.find(
-    (floor) => floor.code === activeProductionFloor,
-  ) ?? productionFloors[0];
-  const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
-  const dashboardStatusLabel = dashboardConnectionLabel(dashboardDeliveryState);
-  const dashboardStatusNotice = dashboardDeliveryNotice(dashboardDeliveryState);
+    () =>
+      applyProductionCardPatches(
+        applySetupChecklistSessionPatches(
+          applyShopFloorStatusPatches(basePayload, optimisticShopFloorStatuses),
+          optimisticSetupChecklistSessions
+        ),
+        optimisticProductionCards
+      ),
+    [
+      basePayload,
+      optimisticShopFloorStatuses,
+      optimisticSetupChecklistSessions,
+      optimisticProductionCards,
+    ]
+  )
+  const selectedTab =
+    navItems.find((item) => item.id === activeTab) ?? navItems[0]!
+  const selectedProductionFloor =
+    productionFloors.find((floor) => floor.code === activeProductionFloor) ??
+    productionFloors[0]
+  const isSnapshotRefreshActive =
+    isRefreshingSnapshot ||
+    dashboardRefreshStatus?.isRefreshing === true ||
+    isPlanningRefreshLockActive
+  const dashboardStatusLabel = dashboardConnectionLabel(dashboardDeliveryState)
+  const dashboardStatusNotice = dashboardDeliveryNotice(dashboardDeliveryState)
   const dashboardPartialCoverageNotice =
     activeTab === "masterTablesTab"
       ? null
       : dashboardCoverageNotice(
           dashboardDeliveryState.data,
-          selectedProductionFloor.shortLabel,
-        );
+          selectedProductionFloor.shortLabel
+        )
 
-  const view = useMemo(
-    () => toDashboardViewModel(payload),
-    [payload],
-  );
+  const view = useMemo(() => toDashboardViewModel(payload), [payload])
 
   return (
     <SidebarProvider
@@ -1256,7 +1775,10 @@ function DashboardShell({
         <SidebarHeader>
           <Link
             className="flex items-center px-2 py-2"
-            href={dashboardTabHref("productionControlTab", activeProductionFloor)}
+            href={dashboardTabHref(
+              "productionControlTab",
+              activeProductionFloor
+            )}
           >
             <Image
               src="/mrm-green.svg"
@@ -1279,7 +1801,9 @@ function DashboardShell({
         <SidebarFooter>
           <div className="grid gap-0.5 px-2 py-2">
             <span className="truncate text-sm font-medium">{user.name}</span>
-            <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {user.email}
+            </span>
           </div>
         </SidebarFooter>
         <SidebarRail />
@@ -1289,18 +1813,27 @@ function DashboardShell({
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-5" />
           <div className="min-w-0 flex-1">
-           <h1 className="truncate text-base font-semibold">{selectedTab.title}</h1>
+            <h1 className="truncate text-base font-semibold">
+              {selectedTab.title}
+            </h1>
             <p className="truncate text-xs text-muted-foreground">
-              <span>{selectedProductionFloor.label} · {planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live PostgreSQL records"}</span>
-              {planningRecalculatedAt && view.updatedAt ? <span> - Workbook updated {formatDate(view.updatedAt)}</span> : null}
+              <span>
+                {selectedProductionFloor.label} ·{" "}
+                {planningRecalculatedAt
+                  ? `Planning recalculated ${formatDate(planningRecalculatedAt)}`
+                  : view.updatedAt
+                    ? `Workbook updated ${formatDate(view.updatedAt)}`
+                    : "Live PostgreSQL records"}
+              </span>
+              {planningRecalculatedAt && view.updatedAt ? (
+                <span> - Workbook updated {formatDate(view.updatedAt)}</span>
+              ) : null}
             </p>
           </div>
           <Badge className="hidden sm:inline-flex" variant="outline">
             {selectedProductionFloor.shortLabel}
           </Badge>
-          <Badge variant="outline">
-            {dashboardStatusLabel}
-          </Badge>
+          <Badge variant="outline">{dashboardStatusLabel}</Badge>
           <HeaderActions
             canRefreshSnapshot={hasDashboardData}
             isRefreshingSnapshot={isSnapshotRefreshActive}
@@ -1309,7 +1842,12 @@ function DashboardShell({
         </header>
         <main className="@container/main flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
           {actionStatus ? (
-            <Badge variant={actionStatus.tone === "destructive" ? "destructive" : "outline"} className="w-fit">
+            <Badge
+              variant={
+                actionStatus.tone === "destructive" ? "destructive" : "outline"
+              }
+              className="w-fit"
+            >
               {actionStatus.message}
             </Badge>
           ) : null}
@@ -1323,11 +1861,18 @@ function DashboardShell({
               <div className="min-w-0 flex-1 space-y-1">
                 {dashboardStatusNotice ? <p>{dashboardStatusNotice}</p> : null}
                 {dashboardPartialCoverageNotice ? (
-                  <p className="text-muted-foreground">{dashboardPartialCoverageNotice}</p>
+                  <p className="text-muted-foreground">
+                    {dashboardPartialCoverageNotice}
+                  </p>
                 ) : null}
               </div>
               {dashboardDeliveryState.lastError ? (
-                <Button type="button" variant="outline" size="sm" onClick={retryDashboardDelivery}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={retryDashboardDelivery}
+                >
                   Retry
                 </Button>
               ) : null}
@@ -1338,7 +1883,8 @@ function DashboardShell({
               <CardHeader>
                 <CardTitle>Dashboard unavailable</CardTitle>
                 <CardDescription>
-                  {dashboardDeliveryState.lastError ?? "Dashboard data could not be loaded."}
+                  {dashboardDeliveryState.lastError ??
+                    "Dashboard data could not be loaded."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1367,112 +1913,142 @@ function DashboardShell({
         </main>
       </SidebarInset>
     </SidebarProvider>
-  );
+  )
 }
 
-function setupChecklistSessionPatchFromAction(path: string, body: Record<string, unknown>) {
-  if (path !== "data-entry") return undefined;
-  if (str(body.entryType) !== "setup_checklist_session") return undefined;
-  const payload = asRecord(body.payload);
-  return setupChecklistSessionPatchKey(payload) ? payload : undefined;
+function setupChecklistSessionPatchFromAction(
+  path: string,
+  body: Record<string, unknown>
+) {
+  if (path !== "data-entry") return undefined
+  if (str(body.entryType) !== "setup_checklist_session") return undefined
+  const payload = asRecord(body.payload)
+  return setupChecklistSessionPatchKey(payload) ? payload : undefined
 }
 
-function upsertSetupChecklistSessionPatch(current: DashboardPayload[], patch: DashboardPayload) {
-  const patchKey = setupChecklistSessionPatchKey(patch);
+function upsertSetupChecklistSessionPatch(
+  current: DashboardPayload[],
+  patch: DashboardPayload
+) {
+  const patchKey = setupChecklistSessionPatchKey(patch)
   return [
-    ...current.filter((item) => setupChecklistSessionPatchKey(item) !== patchKey),
+    ...current.filter(
+      (item) => setupChecklistSessionPatchKey(item) !== patchKey
+    ),
     patch,
-  ];
+  ]
 }
 
-function applySetupChecklistSessionPatches(payload: DashboardPayload, patches: DashboardPayload[]) {
-  if (!patches.length) return payload;
-  const productionControl = asRecord(payload.productionControl);
-  if (!Object.keys(productionControl).length) return payload;
-  const rows = asArray(productionControl.setupChecklistSessionRows);
-  const rowsByKey = new Map(rows.map((row) => [setupChecklistSessionPatchKey(row), row]));
-  let changed = false;
+function applySetupChecklistSessionPatches(
+  payload: DashboardPayload,
+  patches: DashboardPayload[]
+) {
+  if (!patches.length) return payload
+  const productionControl = asRecord(payload.productionControl)
+  if (!Object.keys(productionControl).length) return payload
+  const rows = asArray(productionControl.setupChecklistSessionRows)
+  const rowsByKey = new Map(
+    rows.map((row) => [setupChecklistSessionPatchKey(row), row])
+  )
+  let changed = false
   for (const patch of patches) {
-    const patchKey = setupChecklistSessionPatchKey(patch);
-    if (!patchKey) continue;
-    rowsByKey.set(patchKey, patch);
-    changed = true;
+    const patchKey = setupChecklistSessionPatchKey(patch)
+    if (!patchKey) continue
+    rowsByKey.set(patchKey, patch)
+    changed = true
   }
-  if (!changed) return payload;
+  if (!changed) return payload
   return {
     ...payload,
     productionControl: {
       ...productionControl,
       setupChecklistSessionRows: [...rowsByKey.values()],
     },
-  };
+  }
 }
 
-function productionCardPatchFromAction(path: string, body: Record<string, unknown>) {
-  if (path !== "data-entry") return undefined;
-  if (str(body.entryType) !== "production_card") return undefined;
-  const payload = asRecord(body.payload);
-  return productionCardPatchKey(payload) ? payload : undefined;
+function productionCardPatchFromAction(
+  path: string,
+  body: Record<string, unknown>
+) {
+  if (path !== "data-entry") return undefined
+  if (str(body.entryType) !== "production_card") return undefined
+  const payload = asRecord(body.payload)
+  return productionCardPatchKey(payload) ? payload : undefined
 }
 
 function productionCardPatchKey(row: DashboardPayload) {
-  return optionalText(row.cardId) || dataEntryKey("production_card", row);
+  return optionalText(row.cardId) || dataEntryKey("production_card", row)
 }
 
-function upsertProductionCardPatch(current: DashboardPayload[], patch: DashboardPayload) {
-  const patchKey = productionCardPatchKey(patch);
+function upsertProductionCardPatch(
+  current: DashboardPayload[],
+  patch: DashboardPayload
+) {
+  const patchKey = productionCardPatchKey(patch)
   return [
     ...current.filter((item) => productionCardPatchKey(item) !== patchKey),
     patch,
-  ];
+  ]
 }
 
-function applyProductionCardPatches(payload: DashboardPayload, patches: DashboardPayload[]) {
-  if (!patches.length) return payload;
-  const productionControl = asRecord(payload.productionControl);
-  if (!Object.keys(productionControl).length) return payload;
-  const rows = asArray(productionControl.productionCardRows);
-  const rowsByKey = new Map(rows.map((row) => [productionCardPatchKey(row), row]));
-  let changed = false;
+function applyProductionCardPatches(
+  payload: DashboardPayload,
+  patches: DashboardPayload[]
+) {
+  if (!patches.length) return payload
+  const productionControl = asRecord(payload.productionControl)
+  if (!Object.keys(productionControl).length) return payload
+  const rows = asArray(productionControl.productionCardRows)
+  const rowsByKey = new Map(
+    rows.map((row) => [productionCardPatchKey(row), row])
+  )
+  let changed = false
   for (const patch of patches) {
-    const patchKey = productionCardPatchKey(patch);
-    if (!patchKey) continue;
-    rowsByKey.set(patchKey, { ...(rowsByKey.get(patchKey) ?? {}), ...patch });
-    changed = true;
+    const patchKey = productionCardPatchKey(patch)
+    if (!patchKey) continue
+    rowsByKey.set(patchKey, { ...(rowsByKey.get(patchKey) ?? {}), ...patch })
+    changed = true
   }
-  if (!changed) return payload;
+  if (!changed) return payload
   return {
     ...payload,
     productionControl: {
       ...productionControl,
       productionCardRows: [...rowsByKey.values()],
     },
-  };
+  }
 }
 function setupChecklistSessionPatchKey(row: DashboardPayload) {
-  const sessionId = str(row.sessionId);
-  if (sessionId) return sessionId.toLowerCase();
+  const sessionId = str(row.sessionId)
+  if (sessionId) return sessionId.toLowerCase()
   const parts = [
     row.jcNo || row.jobCard,
     row.partCode || row.partNo,
     row.optionNumber,
     row.setupNo,
     row.machine || row.machineNo,
-  ].map((value) => displayValue(value).toLowerCase()).filter((value) => value && value !== "-");
-  return parts.length >= 5 ? parts.join("|") : "";
+  ]
+    .map((value) => displayValue(value).toLowerCase())
+    .filter((value) => value && value !== "-")
+  return parts.length >= 5 ? parts.join("|") : ""
 }
 function HeaderActions({
   canRefreshSnapshot,
   isRefreshingSnapshot,
   onRefreshSnapshot,
 }: {
-  canRefreshSnapshot: boolean;
-  isRefreshingSnapshot: boolean;
-  onRefreshSnapshot: () => void;
+  canRefreshSnapshot: boolean
+  isRefreshingSnapshot: boolean
+  onRefreshSnapshot: () => void
 }) {
-  const { resolvedTheme, setTheme } = useTheme();
-  const mounted = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
-  const isDark = mounted && resolvedTheme === "dark";
+  const { resolvedTheme, setTheme } = useTheme()
+  const mounted = useSyncExternalStore(
+    subscribeToHydration,
+    clientHydrationSnapshot,
+    serverHydrationSnapshot
+  )
+  const isDark = mounted && resolvedTheme === "dark"
 
   return (
     <div className="flex shrink-0 items-center gap-2">
@@ -1484,8 +2060,12 @@ function HeaderActions({
         disabled={!canRefreshSnapshot || isRefreshingSnapshot}
         onClick={onRefreshSnapshot}
       >
-        <RefreshCw className={`size-4${isRefreshingSnapshot ? " animate-spin" : ""}`} />
-        <span className="hidden sm:inline">{isRefreshingSnapshot ? "Recalculating" : "Recalculate planning"}</span>
+        <RefreshCw
+          className={`size-4${isRefreshingSnapshot ? "animate-spin" : ""}`}
+        />
+        <span className="hidden sm:inline">
+          {isRefreshingSnapshot ? "Recalculating" : "Recalculate planning"}
+        </span>
       </Button>
       <Button
         type="button"
@@ -1502,13 +2082,17 @@ function HeaderActions({
         variant="outline"
         size="sm"
         className="gap-2"
-        onClick={() => void authClient.signOut().then(() => window.location.assign("/sign-in"))}
+        onClick={() =>
+          void authClient
+            .signOut()
+            .then(() => window.location.assign("/sign-in"))
+        }
       >
         <LogOut className="size-4" />
         <span className="hidden sm:inline">Sign out</span>
       </Button>
     </div>
-  );
+  )
 }
 
 function DashboardContent({
@@ -1524,70 +2108,142 @@ function DashboardContent({
   preferredDataEntryType,
   preferredDataEntryDefaults,
 }: {
-  activeTab: DashboardTabId;
-  payload: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  correctionCandidates: DashboardPayload[];
-  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
-  openMasterReadiness: () => void;
-  openFirstPieceInspection: (row: DashboardPayload) => void;
-  closeFirstPieceInspection: (row: DashboardPayload) => void;
-  firstPieceInspectionTasks: DashboardPayload[];
-  preferredDataEntryType: string;
-  preferredDataEntryDefaults: Record<string, unknown>;
+  activeTab: DashboardTabId
+  payload: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  correctionCandidates: DashboardPayload[]
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
+  openMasterReadiness: () => void
+  openFirstPieceInspection: (row: DashboardPayload) => void
+  closeFirstPieceInspection: (row: DashboardPayload) => void
+  firstPieceInspectionTasks: DashboardPayload[]
+  preferredDataEntryType: string
+  preferredDataEntryDefaults: Record<string, unknown>
 }) {
-  const productionControl = asRecord(payload.productionControl);
+  const productionControl = asRecord(payload.productionControl)
 
   if (activeTab === "jobCardStatusTab") {
-    return <JobCardsPanel productionControl={productionControl} submitAction={submitAction} openMasterReadiness={openMasterReadiness} />;
+    return (
+      <JobCardsPanel
+        productionControl={productionControl}
+        submitAction={submitAction}
+        openMasterReadiness={openMasterReadiness}
+      />
+    )
   }
 
   if (activeTab === "machineDetailTab") {
-    return <MachineDetailPanel productionControl={productionControl} />;
+    return <MachineDetailPanel productionControl={productionControl} />
   }
 
   if (activeTab === "machineMasterTab") {
-    return <MachineMasterPanel productionControl={productionControl} submitAction={submitAction} openDataEntry={openDataEntry} />;
+    return (
+      <MachineMasterPanel
+        productionControl={productionControl}
+        submitAction={submitAction}
+        openDataEntry={openDataEntry}
+      />
+    )
   }
 
   if (activeTab === "masterGapsTab") {
-    return <MasterReadinessPanel productionControl={productionControl} submitAction={submitAction} openDataEntry={openDataEntry} />;
+    return (
+      <MasterReadinessPanel
+        productionControl={productionControl}
+        submitAction={submitAction}
+        openDataEntry={openDataEntry}
+      />
+    )
   }
 
   if (activeTab === "dataEntryTab") {
-    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} />;
+    return (
+      <DataEntryPanel
+        key={preferredDataEntryType}
+        payload={payload}
+        submitAction={submitAction}
+        preferredEntryType={preferredDataEntryType}
+        preferredDefaults={preferredDataEntryDefaults}
+      />
+    )
   }
 
   if (activeTab === "masterTablesTab") {
-    return <MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} />;
+    return (
+      <MasterTablesPanel
+        payload={payload}
+        productionControl={productionControl}
+        openDataEntry={openDataEntry}
+      />
+    )
   }
 
   if (activeTab === "planningHolidayTab") {
-    return <PlanningHolidayPanel productionControl={productionControl} submitAction={submitAction} />;
+    return (
+      <PlanningHolidayPanel
+        productionControl={productionControl}
+        submitAction={submitAction}
+      />
+    )
   }
 
   if (activeTab === "maintenanceTab") {
-    return <MaintenancePanel productionControl={productionControl} submitAction={submitAction} />;
+    return (
+      <MaintenancePanel
+        productionControl={productionControl}
+        submitAction={submitAction}
+      />
+    )
   }
 
   if (activeTab === "planningControlTab") {
-    return <PlanningControlPanel payload={payload} productionControl={productionControl} submitAction={submitAction} />;
+    return (
+      <PlanningControlPanel
+        payload={payload}
+        productionControl={productionControl}
+        submitAction={submitAction}
+      />
+    )
   }
 
   if (activeTab === "shopFloorStatusTab") {
-    return <ShopFloorStatusPanel productionControl={productionControl} submitAction={submitAction} />;
+    return (
+      <ShopFloorStatusPanel
+        productionControl={productionControl}
+        submitAction={submitAction}
+      />
+    )
   }
 
   if (activeTab === "shopFloorTasksTab") {
-    return <RoleTaskPanel productionControl={productionControl} submitAction={submitAction} role="shopFloor" />;
+    return (
+      <RoleTaskPanel
+        productionControl={productionControl}
+        submitAction={submitAction}
+        role="shopFloor"
+      />
+    )
   }
 
   if (activeTab === "machinistTasksTab") {
-    return <RoleTaskPanel productionControl={productionControl} submitAction={submitAction} role="machinist" />;
+    return (
+      <RoleTaskPanel
+        productionControl={productionControl}
+        submitAction={submitAction}
+        role="machinist"
+      />
+    )
   }
 
   if (activeTab === "qualityControlTasksTab") {
-    return <RoleTaskPanel productionControl={productionControl} submitAction={submitAction} role="quality" onStartFirstPieceInspection={openFirstPieceInspection} />;
+    return (
+      <RoleTaskPanel
+        productionControl={productionControl}
+        submitAction={submitAction}
+        role="quality"
+        onStartFirstPieceInspection={openFirstPieceInspection}
+      />
+    )
   }
 
   if (activeTab === "firstPieceInspectionTab") {
@@ -1599,174 +2255,281 @@ function DashboardContent({
         openDataEntry={openDataEntry}
         onTaskComplete={closeFirstPieceInspection}
       />
-    );
+    )
   }
 
   if (activeTab === "correctionsTab") {
-    return <CorrectionsPanel rows={correctionCandidates} submitAction={submitAction} />;
+    return (
+      <CorrectionsPanel
+        rows={correctionCandidates}
+        submitAction={submitAction}
+      />
+    )
   }
 
-  return <ProductionControlPanel productionControl={productionControl} submitAction={submitAction} />;
+  return (
+    <ProductionControlPanel
+      productionControl={productionControl}
+      submitAction={submitAction}
+    />
+  )
 }
 
 function ProductionControlPanel({
   productionControl,
   submitAction,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
   return (
     <>
-      <PlannerDecisionConsole productionControl={productionControl} submitAction={submitAction} />
+      <PlannerDecisionConsole
+        productionControl={productionControl}
+        submitAction={submitAction}
+      />
       <ActionLogTable rows={asArray(productionControl.plannerActionLog)} />
       <section className="grid gap-4">
-        <DataRowsCard title="Machine issues" rows={asArray(productionControl.machineConstraintRows)} empty="No machine constraints yet" />
+        <DataRowsCard
+          title="Machine issues"
+          rows={asArray(productionControl.machineConstraintRows)}
+          empty="No machine constraints yet"
+        />
       </section>
     </>
-  );
+  )
 }
 
 function PlannerDecisionConsole({
   productionControl,
   submitAction,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Planner decision console</CardTitle>
-        <CardDescription>Priority changes, machine breakdowns, part-specific machine switches, and mid-route changes.</CardDescription>
+        <CardDescription>
+          Priority changes, machine breakdowns, part-specific machine switches,
+          and mid-route changes.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <PlannerActionConflictPanel productionControl={productionControl} submitAction={submitAction} />
-        <PlannerPriorityForm productionControl={productionControl} submitAction={submitAction} />
-        <MachineConstraintPlannerForm productionControl={productionControl} submitAction={submitAction} />
-        <PartMachineSwitchPlannerForm productionControl={productionControl} submitAction={submitAction} />
-        <RouteChangePlannerForm productionControl={productionControl} submitAction={submitAction} />
-        <Button type="button" variant="outline" onClick={() => void submitAction("reschedule", {})}>
+        <PlannerActionConflictPanel
+          productionControl={productionControl}
+          submitAction={submitAction}
+        />
+        <PlannerPriorityForm
+          productionControl={productionControl}
+          submitAction={submitAction}
+        />
+        <MachineConstraintPlannerForm
+          productionControl={productionControl}
+          submitAction={submitAction}
+        />
+        <PartMachineSwitchPlannerForm
+          productionControl={productionControl}
+          submitAction={submitAction}
+        />
+        <RouteChangePlannerForm
+          productionControl={productionControl}
+          submitAction={submitAction}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void submitAction("reschedule", {})}
+        >
           <Settings2 className="size-4" />
           Reschedule
         </Button>
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function MachineConstraintPlannerForm({
   productionControl,
   submitAction,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const plannedRows = asArray(productionControl.machinePlanDetailRows);
-  const machineRows = asArray(productionControl.machinePlanningRows);
-  const machineOptions = useMemo(() => plannedMachineOptions(plannedRows, machineBoardRows(machineRows, plannedRows)), [machineRows, plannedRows]);
-  const [machineNo, setMachineNo] = useState("");
-  const [unavailableFrom, setUnavailableFrom] = useState("");
-  const [unavailableTo, setUnavailableTo] = useState("");
-  const [rescheduleAction, setRescheduleAction] = useState("shift_required");
-  const [planningMode, setPlanningMode] = useState("system_recalculate");
-  const [reason, setReason] = useState("");
-  const [reviewReady, setReviewReady] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [resolvedMachineConflictIds, setResolvedMachineConflictIds] = useState<Set<string>>(() => new Set());
-  const [producedQtyByRow, setProducedQtyByRow] = useState<Record<string, string>>({});
-  const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false);
-  const [queueAfterByRow, setQueueAfterByRow] = useState<Record<string, string>>({});
-  const affectedRows = useMemo(() => machineIssueAffectedRows(plannedRows, {
-    machineNo,
-    unavailableFrom,
-    unavailableTo,
-  }), [machineNo, plannedRows, unavailableFrom, unavailableTo]);
-  const queueReviewGroups = useMemo(() => machineConstraintQueueReview({
-    plannedRows,
-    machineRows,
-    affectedRows,
-    machineNo,
-    rescheduleAction,
-    includeSameMachineLater: machineKey(rescheduleAction) === "delay",
-    includeDownstream: false,
-  }), [affectedRows, machineNo, machineRows, plannedRows, rescheduleAction]);
-  const runningRows = affectedRows.filter(machineIssueRowNeedsProducedQty);
-  const lockedCount = affectedRows.filter(machineIssueRowIsLocked).length;
-  const plannedCount = affectedRows.length - lockedCount;
+  const plannedRows = asArray(productionControl.machinePlanDetailRows)
+  const machineRows = asArray(productionControl.machinePlanningRows)
+  const machineOptions = useMemo(
+    () =>
+      plannedMachineOptions(
+        plannedRows,
+        machineBoardRows(machineRows, plannedRows)
+      ),
+    [machineRows, plannedRows]
+  )
+  const [machineNo, setMachineNo] = useState("")
+  const [unavailableFrom, setUnavailableFrom] = useState("")
+  const [unavailableTo, setUnavailableTo] = useState("")
+  const [rescheduleAction, setRescheduleAction] = useState("shift_required")
+  const [planningMode, setPlanningMode] = useState("system_recalculate")
+  const [reason, setReason] = useState("")
+  const [reviewReady, setReviewReady] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [resolvedMachineConflictIds, setResolvedMachineConflictIds] = useState<
+    Set<string>
+  >(() => new Set())
+  const [producedQtyByRow, setProducedQtyByRow] = useState<
+    Record<string, string>
+  >({})
+  const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false)
+  const [queueAfterByRow, setQueueAfterByRow] = useState<
+    Record<string, string>
+  >({})
+  const affectedRows = useMemo(
+    () =>
+      machineIssueAffectedRows(plannedRows, {
+        machineNo,
+        unavailableFrom,
+        unavailableTo,
+      }),
+    [machineNo, plannedRows, unavailableFrom, unavailableTo]
+  )
+  const queueReviewGroups = useMemo(
+    () =>
+      machineConstraintQueueReview({
+        plannedRows,
+        machineRows,
+        affectedRows,
+        machineNo,
+        rescheduleAction,
+        includeSameMachineLater: machineKey(rescheduleAction) === "delay",
+        includeDownstream: false,
+      }),
+    [affectedRows, machineNo, machineRows, plannedRows, rescheduleAction]
+  )
+  const runningRows = affectedRows.filter(machineIssueRowNeedsProducedQty)
+  const lockedCount = affectedRows.filter(machineIssueRowIsLocked).length
+  const plannedCount = affectedRows.length - lockedCount
   const missingProducedQty = runningRows.some((row) => {
-    const rawValue = producedQtyByRow[machineIssueRowKey(row)]?.trim() ?? "";
-    const value = Number(rawValue);
-    const orderQty = Number(row.totalOrderPcs || row.orderPcs);
-    return rawValue === "" || !Number.isFinite(value) || value < 0 || (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty);
-  });
-  const queueReviewRequired = planningMode === "review_then_plan";
+    const rawValue = producedQtyByRow[machineIssueRowKey(row)]?.trim() ?? ""
+    const value = Number(rawValue)
+    const orderQty = Number(row.totalOrderPcs || row.orderPcs)
+    return (
+      rawValue === "" ||
+      !Number.isFinite(value) ||
+      value < 0 ||
+      (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty)
+    )
+  })
+  const queueReviewRequired = planningMode === "review_then_plan"
   const movableAffectedRows = useMemo(
     () => machineConstraintMovableRows(affectedRows, rescheduleAction),
-    [affectedRows, rescheduleAction],
-  );
-  const proposedMachineQueuePlacements = useMemo(() => machineConstraintQueuePlacements(queueReviewGroups, movableAffectedRows, queueAfterByRow), [movableAffectedRows, queueAfterByRow, queueReviewGroups]);
-  const machineConstraintConflicts = useMemo(() => machineConstraintPreSaveConflicts(asArray(productionControl.machineConstraintRows), {
-    machineNo,
-    unavailableFrom,
-    unavailableTo,
-    rescheduleAction,
-    planningMode,
-    queuePlacements: proposedMachineQueuePlacements,
-    resolvedIds: resolvedMachineConflictIds,
-  }), [machineNo, planningMode, productionControl.machineConstraintRows, proposedMachineQueuePlacements, resolvedMachineConflictIds, rescheduleAction, unavailableFrom, unavailableTo]);
-  const canReview = Boolean(machineNo.trim() && unavailableFrom);
-  const canSave = canReview && Boolean(reason.trim()) && reviewReady && !missingProducedQty && !machineConstraintConflicts.length && (!queueReviewRequired || queueReviewConfirmed);
+    [affectedRows, rescheduleAction]
+  )
+  const proposedMachineQueuePlacements = useMemo(
+    () =>
+      machineConstraintQueuePlacements(
+        queueReviewGroups,
+        movableAffectedRows,
+        queueAfterByRow
+      ),
+    [movableAffectedRows, queueAfterByRow, queueReviewGroups]
+  )
+  const machineConstraintConflicts = useMemo(
+    () =>
+      machineConstraintPreSaveConflicts(
+        asArray(productionControl.machineConstraintRows),
+        {
+          machineNo,
+          unavailableFrom,
+          unavailableTo,
+          rescheduleAction,
+          planningMode,
+          queuePlacements: proposedMachineQueuePlacements,
+          resolvedIds: resolvedMachineConflictIds,
+        }
+      ),
+    [
+      machineNo,
+      planningMode,
+      productionControl.machineConstraintRows,
+      proposedMachineQueuePlacements,
+      resolvedMachineConflictIds,
+      rescheduleAction,
+      unavailableFrom,
+      unavailableTo,
+    ]
+  )
+  const canReview = Boolean(machineNo.trim() && unavailableFrom)
+  const canSave =
+    canReview &&
+    Boolean(reason.trim()) &&
+    reviewReady &&
+    !missingProducedQty &&
+    !machineConstraintConflicts.length &&
+    (!queueReviewRequired || queueReviewConfirmed)
 
-  function updateField(setter: Dispatch<SetStateAction<string>>, value: string) {
-    setter(value);
-    setReviewReady(false);
-    setQueueReviewConfirmed(false);
-    setQueueAfterByRow({});
-    setResolvedMachineConflictIds(new Set());
+  function updateField(
+    setter: Dispatch<SetStateAction<string>>,
+    value: string
+  ) {
+    setter(value)
+    setReviewReady(false)
+    setQueueReviewConfirmed(false)
+    setQueueAfterByRow({})
+    setResolvedMachineConflictIds(new Set())
   }
 
-  function updatePlanningInput(setter: Dispatch<SetStateAction<string>>, value: string) {
-    setter(value);
-    setQueueReviewConfirmed(false);
-    setQueueAfterByRow({});
-    setResolvedMachineConflictIds(new Set());
+  function updatePlanningInput(
+    setter: Dispatch<SetStateAction<string>>,
+    value: string
+  ) {
+    setter(value)
+    setQueueReviewConfirmed(false)
+    setQueueAfterByRow({})
+    setResolvedMachineConflictIds(new Set())
   }
 
   function updateProducedQty(row: DashboardPayload, value: string) {
-    const key = machineIssueRowKey(row);
-    setProducedQtyByRow((current) => ({ ...current, [key]: value }));
+    const key = machineIssueRowKey(row)
+    setProducedQtyByRow((current) => ({ ...current, [key]: value }))
   }
 
   async function reverseMachineConstraintConflict(conflict: DashboardPayload) {
-    const targetId = displayValue(conflict.targetId);
-    if (!targetId || targetId === "-") return;
+    const targetId = displayValue(conflict.targetId)
+    if (!targetId || targetId === "-") return
     await submitAction("reverse-entry", {
       targetTable: "machineConstraints",
       targetId,
-      targetKey: displayValue(conflict.targetKey) !== "-" ? displayValue(conflict.targetKey) : "",
-      targetLabel: displayValue(conflict.targetLabel) !== "-" ? displayValue(conflict.targetLabel) : "",
+      targetKey:
+        displayValue(conflict.targetKey) !== "-"
+          ? displayValue(conflict.targetKey)
+          : "",
+      targetLabel:
+        displayValue(conflict.targetLabel) !== "-"
+          ? displayValue(conflict.targetLabel)
+          : "",
       reason: `Planner replacing conflicting machine unavailable action for ${machineNo}`,
       correctedBy: "Planner",
-    });
-    setResolvedMachineConflictIds((current) => new Set([...current, targetId]));
+    })
+    setResolvedMachineConflictIds((current) => new Set([...current, targetId]))
   }
   async function saveMachineIssue(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+    event.preventDefault()
     if (!reviewReady) {
-      setReviewReady(true);
-      return;
+      setReviewReady(true)
+      return
     }
-    if (!canSave || isSubmitting) return;
-    setIsSubmitting(true);
+    if (!canSave || isSubmitting) return
+    setIsSubmitting(true)
     try {
       const interruptedSetups = runningRows.map((row) => ({
         jcNo: jobCardNumber(row),
         setupNo: displayValue(row.setupNo),
         machine: machineValue(row, "machine"),
         finishedQty: Number(producedQtyByRow[machineIssueRowKey(row)] ?? 0),
-      }));
-      const queuePlacements = proposedMachineQueuePlacements;
+      }))
+      const queuePlacements = proposedMachineQueuePlacements
       await submitAction("machine-constraint", {
         machineNo,
         unavailableFrom,
@@ -1777,27 +2540,35 @@ function MachineConstraintPlannerForm({
         queuePlacements,
         reason,
         remark: `Reviewed ${affectedRows.length} affected setup rows; ${lockedCount} locked; ${plannedCount} planned; ${runningRows.length} running rows captured with produced quantity; ${queueReviewGroups.length} queue review groups; ${queuePlacements.length} queue placements; ${planningMode}`,
-      });
-      setMachineNo("");
-      setUnavailableFrom("");
-      setUnavailableTo("");
-      setRescheduleAction("shift_required");
-      setPlanningMode("system_recalculate");
-      setReason("");
-      setProducedQtyByRow({});
-      setQueueAfterByRow({});
-      setQueueReviewConfirmed(false);
-      setReviewReady(false);
+      })
+      setMachineNo("")
+      setUnavailableFrom("")
+      setUnavailableTo("")
+      setRescheduleAction("shift_required")
+      setPlanningMode("system_recalculate")
+      setReason("")
+      setProducedQtyByRow({})
+      setQueueAfterByRow({})
+      setQueueReviewConfirmed(false)
+      setReviewReady(false)
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
   }
 
   return (
-    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={saveMachineIssue}>
+    <form
+      className="grid gap-3 rounded-xl border bg-background p-3"
+      onSubmit={saveMachineIssue}
+    >
       <div>
-        <div className="text-sm font-medium">2. Machine unavailable / breakdown</div>
-        <div className="text-xs text-muted-foreground">Running rows need produced quantity before remaining quantity is planned elsewhere.</div>
+        <div className="text-sm font-medium">
+          2. Machine unavailable / breakdown
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Running rows need produced quantity before remaining quantity is
+          planned elsewhere.
+        </div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
         <Field label="Machine unavailable">
@@ -1809,31 +2580,65 @@ function MachineConstraintPlannerForm({
           >
             <option value="">Select machine</option>
             {machineOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </select>
         </Field>
         <Field label="From">
-          <Input type="date" value={unavailableFrom} required onChange={(event) => updateField(setUnavailableFrom, event.target.value)} />
+          <Input
+            type="date"
+            value={unavailableFrom}
+            required
+            onChange={(event) =>
+              updateField(setUnavailableFrom, event.target.value)
+            }
+          />
         </Field>
         <Field label="To">
-          <Input type="date" value={unavailableTo} onChange={(event) => updateField(setUnavailableTo, event.target.value)} />
+          <Input
+            type="date"
+            value={unavailableTo}
+            onChange={(event) =>
+              updateField(setUnavailableTo, event.target.value)
+            }
+          />
         </Field>
         <Field label="Plan action">
-          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={rescheduleAction} onChange={(event) => updateField(setRescheduleAction, event.target.value)}>
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={rescheduleAction}
+            onChange={(event) =>
+              updateField(setRescheduleAction, event.target.value)
+            }
+          >
             <option value="shift_required">shift required</option>
             <option value="shift_all">shift all</option>
             <option value="delay">delay plan</option>
           </select>
         </Field>
         <Field label="Planning confirmation">
-          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={planningMode} onChange={(event) => updatePlanningInput(setPlanningMode, event.target.value)}>
-            <option value="system_recalculate">System recalculation (all planning rules)</option>
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={planningMode}
+            onChange={(event) =>
+              updatePlanningInput(setPlanningMode, event.target.value)
+            }
+          >
+            <option value="system_recalculate">
+              System recalculation (all planning rules)
+            </option>
             <option value="review_then_plan">Review queue before saving</option>
           </select>
         </Field>
         <Field label="Reason">
-          <Input value={reason} placeholder="Breakdown / quality hold" required onChange={(event) => setReason(event.target.value)} />
+          <Input
+            value={reason}
+            placeholder="Breakdown / quality hold"
+            required
+            onChange={(event) => setReason(event.target.value)}
+          />
         </Field>
       </div>
       {reviewReady ? (
@@ -1842,49 +2647,81 @@ function MachineConstraintPlannerForm({
             <span>{formatNumber(affectedRows.length)} affected setup rows</span>
             <span>{formatNumber(lockedCount)} locked on machine</span>
             <span>{formatNumber(plannedCount)} planned/unlocked</span>
-            <span>{formatNumber(runningRows.length)} running quantity inputs</span>
+            <span>
+              {formatNumber(runningRows.length)} running quantity inputs
+            </span>
           </div>
           {affectedRows.length ? (
             <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
               {affectedRows.map((row, index) => {
-                const needsProducedQty = machineIssueRowNeedsProducedQty(row);
-                const producedKey = machineIssueRowKey(row);
-                const orderQty = Number(row.totalOrderPcs || row.orderPcs);
+                const needsProducedQty = machineIssueRowNeedsProducedQty(row)
+                const producedKey = machineIssueRowKey(row)
+                const orderQty = Number(row.totalOrderPcs || row.orderPcs)
                 return (
-                  <div key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`} className="grid gap-2 rounded-md border bg-background p-2">
+                  <div
+                    key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`}
+                    className="grid gap-2 rounded-md border bg-background p-2"
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-                      <StatusBadge value={needsProducedQty ? "Produced qty required" : machineIssueRowIsLocked(row) ? "Delay locked setup" : "Shift if alternate exists"} />
+                      <div className="text-sm font-medium">
+                        {itemCode(row)} / {jobCardNumber(row)} / Setup{" "}
+                        {displayValue(row.setupNo)}
+                      </div>
+                      <StatusBadge
+                        value={
+                          needsProducedQty
+                            ? "Produced qty required"
+                            : machineIssueRowIsLocked(row)
+                              ? "Delay locked setup"
+                              : "Shift if alternate exists"
+                        }
+                      />
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+                      {machineValue(row, "machine")} | Order{" "}
+                      {displayValue(row.orderPcs, true)} of{" "}
+                      {displayValue(row.totalOrderPcs || row.orderPcs, true)} |
+                      Production {displayValue(row.plannedProductionStartDate)}{" "}
+                      to {displayValue(row.plannedProductionEndDate)} |{" "}
+                      {displayValue(row.runningStatus)}
                     </div>
                     {needsProducedQty ? (
                       <Field label="Produced qty">
                         <Input
                           type="number"
                           min="0"
-                          max={Number.isFinite(orderQty) && orderQty > 0 ? orderQty : undefined}
+                          max={
+                            Number.isFinite(orderQty) && orderQty > 0
+                              ? orderQty
+                              : undefined
+                          }
                           step="1"
                           value={producedQtyByRow[producedKey] ?? ""}
                           placeholder="0"
                           required
-                          onChange={(event) => updateProducedQty(row, event.target.value)}
+                          onChange={(event) =>
+                            updateProducedQty(row, event.target.value)
+                          }
                         />
                       </Field>
                     ) : null}
                   </div>
-                );
+                )
               })}
             </div>
           ) : (
-            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup rows overlap this unavailable window.</div>
+            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">
+              No planned setup rows overlap this unavailable window.
+            </div>
           )}
           <PlannerPreSaveConflictReview
             conflicts={machineConstraintConflicts}
             title="Conflicting machine action found"
             description="This machine action cannot be saved while another active unavailable/breakdown decision overlaps the same machine with a different action or queue choice."
-            onKeepExisting={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}
+            onKeepExisting={() => {
+              setReviewReady(false)
+              setQueueReviewConfirmed(false)
+            }}
             onReverseExisting={reverseMachineConstraintConflict}
           />
           {queueReviewRequired ? (
@@ -1893,192 +2730,325 @@ function MachineConstraintPlannerForm({
                 groups={queueReviewGroups}
                 movableRows={movableAffectedRows}
                 queueAfterByRow={queueAfterByRow}
-                onQueueAfterChange={(rowKey, value) => setQueueAfterByRow((current) => {
-                  const next = { ...current };
-                  if (value) next[rowKey] = value;
-                  else delete next[rowKey];
-                  return next;
-                })}
+                onQueueAfterChange={(rowKey, value) =>
+                  setQueueAfterByRow((current) => {
+                    const next = { ...current }
+                    if (value) next[rowKey] = value
+                    else delete next[rowKey]
+                    return next
+                  })
+                }
               />
               <label className="flex items-start gap-2 rounded-md border bg-background p-2 text-sm">
                 <input
                   className="mt-1"
                   type="checkbox"
                   checked={queueReviewConfirmed}
-                  onChange={(event) => setQueueReviewConfirmed(event.target.checked)}
+                  onChange={(event) =>
+                    setQueueReviewConfirmed(event.target.checked)
+                  }
                 />
-                <span>Queue reviewed; save this breakdown and recalculate planning.</span>
+                <span>
+                  Queue reviewed; save this breakdown and recalculate planning.
+                </span>
               </label>
             </>
           ) : null}
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && !canSave)}>
+        <Button
+          className="w-fit"
+          type="submit"
+          disabled={!canReview || isSubmitting || (reviewReady && !canSave)}
+        >
           <Wrench className="size-4" />
-          {reviewReady ? queueReviewRequired ? "Save after queue review" : "Save and replan remaining qty" : "Review affected queue"}
+          {reviewReady
+            ? queueReviewRequired
+              ? "Save after queue review"
+              : "Save and replan remaining qty"
+            : "Review affected queue"}
         </Button>
         {reviewReady ? (
-          <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSubmitting}
+            onClick={() => {
+              setReviewReady(false)
+              setQueueReviewConfirmed(false)
+            }}
+          >
             Recheck inputs
           </Button>
         ) : null}
       </div>
     </form>
-  );
+  )
 }
 function PartMachineSwitchPlannerForm({
   productionControl,
   submitAction,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const plannedRows = asArray(productionControl.machinePlanDetailRows);
-  const machineRows = asArray(productionControl.machinePlanningRows);
-  const itemOptions = useMemo(() => uniqueValues(plannedRows
-    .map((row) => itemCode(row))
-    .filter((value) => value !== "-")), [plannedRows]);
-  const [selectedItem, setSelectedItem] = useState("");
-  const [target, setTarget] = useState("");
-  const [setupNo, setSetupNo] = useState("");
-  const [fromMachine, setFromMachine] = useState("");
-  const [toMachine, setToMachine] = useState("");
-  const [reason, setReason] = useState("");
-  const [reviewReady, setReviewReady] = useState(false);
-  const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false);
-  const [producedQtyByRow, setProducedQtyByRow] = useState<Record<string, string>>({});
-  const [queueAfterByRow, setQueueAfterByRow] = useState<Record<string, string>>({});
-  const [selectedTargetInterruptions, setSelectedTargetInterruptions] = useState<Record<string, boolean>>({});
-  const [targetFinishedQtyByRow, setTargetFinishedQtyByRow] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [resolvedConflictIds, setResolvedConflictIds] = useState<Set<string>>(() => new Set());
-  const jobCardOptions = useMemo(() => uniqueValues(plannedRows
-    .filter((row) => machineKey(itemCode(row)) === machineKey(selectedItem))
-    .map((row) => jobCardNumber(row))
-    .filter((value) => value !== "-")), [plannedRows, selectedItem]);
-  const setupOptions = useMemo(() => uniqueValues(plannedRows
-    .filter((row) => partMachineSwitchTargetMatches(row, target))
-    .map((row) => displayValue(row.setupNo))
-    .filter((value) => value !== "-")), [plannedRows, target]);
-  const fromMachineOptions = useMemo(() => uniqueValues(plannedRows
-    .filter((row) => partMachineSwitchTargetMatches(row, target))
-    .filter((row) => !setupNo.trim() || machineKey(displayValue(row.setupNo)) === machineKey(setupNo))
-    .map((row) => machineValue(row, "machine"))
-    .filter((value) => value !== "-")), [plannedRows, setupNo, target]);
-  const selectedRows = useMemo(() => partMachineSwitchAffectedRows(plannedRows, {
-    target,
-    setupNo,
-    fromMachine,
-  }), [fromMachine, plannedRows, setupNo, target]);
-  const targetMachineOptions = useMemo(() => compatibleDestinationMachineOptions({
-    affectedRows: selectedRows,
-    machineRows,
-    plannedRows,
-    sourceMachine: fromMachine,
-  }), [fromMachine, machineRows, plannedRows, selectedRows]);
-  const runningRows = selectedRows.filter(machineIssueRowNeedsProducedQty);
+  const plannedRows = asArray(productionControl.machinePlanDetailRows)
+  const machineRows = asArray(productionControl.machinePlanningRows)
+  const itemOptions = useMemo(
+    () =>
+      uniqueValues(
+        plannedRows.map((row) => itemCode(row)).filter((value) => value !== "-")
+      ),
+    [plannedRows]
+  )
+  const [selectedItem, setSelectedItem] = useState("")
+  const [target, setTarget] = useState("")
+  const [setupNo, setSetupNo] = useState("")
+  const [fromMachine, setFromMachine] = useState("")
+  const [toMachine, setToMachine] = useState("")
+  const [reason, setReason] = useState("")
+  const [reviewReady, setReviewReady] = useState(false)
+  const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false)
+  const [producedQtyByRow, setProducedQtyByRow] = useState<
+    Record<string, string>
+  >({})
+  const [queueAfterByRow, setQueueAfterByRow] = useState<
+    Record<string, string>
+  >({})
+  const [selectedTargetInterruptions, setSelectedTargetInterruptions] =
+    useState<Record<string, boolean>>({})
+  const [targetFinishedQtyByRow, setTargetFinishedQtyByRow] = useState<
+    Record<string, string>
+  >({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [resolvedConflictIds, setResolvedConflictIds] = useState<Set<string>>(
+    () => new Set()
+  )
+  const jobCardOptions = useMemo(
+    () =>
+      uniqueValues(
+        plannedRows
+          .filter(
+            (row) => machineKey(itemCode(row)) === machineKey(selectedItem)
+          )
+          .map((row) => jobCardNumber(row))
+          .filter((value) => value !== "-")
+      ),
+    [plannedRows, selectedItem]
+  )
+  const setupOptions = useMemo(
+    () =>
+      uniqueValues(
+        plannedRows
+          .filter((row) => partMachineSwitchTargetMatches(row, target))
+          .map((row) => displayValue(row.setupNo))
+          .filter((value) => value !== "-")
+      ),
+    [plannedRows, target]
+  )
+  const fromMachineOptions = useMemo(
+    () =>
+      uniqueValues(
+        plannedRows
+          .filter((row) => partMachineSwitchTargetMatches(row, target))
+          .filter(
+            (row) =>
+              !setupNo.trim() ||
+              machineKey(displayValue(row.setupNo)) === machineKey(setupNo)
+          )
+          .map((row) => machineValue(row, "machine"))
+          .filter((value) => value !== "-")
+      ),
+    [plannedRows, setupNo, target]
+  )
+  const selectedRows = useMemo(
+    () =>
+      partMachineSwitchAffectedRows(plannedRows, {
+        target,
+        setupNo,
+        fromMachine,
+      }),
+    [fromMachine, plannedRows, setupNo, target]
+  )
+  const targetMachineOptions = useMemo(
+    () =>
+      compatibleDestinationMachineOptions({
+        affectedRows: selectedRows,
+        machineRows,
+        plannedRows,
+        sourceMachine: fromMachine,
+      }),
+    [fromMachine, machineRows, plannedRows, selectedRows]
+  )
+  const runningRows = selectedRows.filter(machineIssueRowNeedsProducedQty)
   const missingProducedQty = runningRows.some((row) => {
-    const rawValue = producedQtyByRow[machineIssueRowKey(row)]?.trim() ?? "";
-    const value = Number(rawValue);
-    const orderQty = Number(row.totalOrderPcs || row.orderPcs);
-    return rawValue === "" || !Number.isFinite(value) || value < 0 || (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty);
-  });
-  const queueReviewGroups = useMemo(() => machineConstraintQueueReview({
-    plannedRows,
-    machineRows,
-    affectedRows: selectedRows,
-    machineNo: fromMachine,
-    rescheduleAction: "shift_required",
-    explicitDestinationMachines: toMachine.trim() ? [toMachine] : [],
-    includeSameMachineLater: false,
-    includeDownstream: false,
-  }), [fromMachine, machineRows, plannedRows, selectedRows, toMachine]);
-  const proposedQueuePlacements = useMemo(() => machineConstraintQueuePlacements(queueReviewGroups, selectedRows, queueAfterByRow), [queueAfterByRow, queueReviewGroups, selectedRows]);
-  const switchConflicts = useMemo(() => partMachineSwitchPreSaveConflicts(asArray(productionControl.planOverrideRows), {
-    target,
-    setupNo,
-    selectedItem,
-    toMachine,
-    queuePlacements: proposedQueuePlacements,
-    resolvedIds: resolvedConflictIds,
-  }), [productionControl.planOverrideRows, proposedQueuePlacements, resolvedConflictIds, selectedItem, setupNo, target, toMachine]);
-  const targetInterruptionRows = useMemo(() => partMachineSwitchTargetInterruptionRows(queueReviewGroups, selectedRows), [queueReviewGroups, selectedRows]);
+    const rawValue = producedQtyByRow[machineIssueRowKey(row)]?.trim() ?? ""
+    const value = Number(rawValue)
+    const orderQty = Number(row.totalOrderPcs || row.orderPcs)
+    return (
+      rawValue === "" ||
+      !Number.isFinite(value) ||
+      value < 0 ||
+      (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty)
+    )
+  })
+  const queueReviewGroups = useMemo(
+    () =>
+      machineConstraintQueueReview({
+        plannedRows,
+        machineRows,
+        affectedRows: selectedRows,
+        machineNo: fromMachine,
+        rescheduleAction: "shift_required",
+        explicitDestinationMachines: toMachine.trim() ? [toMachine] : [],
+        includeSameMachineLater: false,
+        includeDownstream: false,
+      }),
+    [fromMachine, machineRows, plannedRows, selectedRows, toMachine]
+  )
+  const proposedQueuePlacements = useMemo(
+    () =>
+      machineConstraintQueuePlacements(
+        queueReviewGroups,
+        selectedRows,
+        queueAfterByRow
+      ),
+    [queueAfterByRow, queueReviewGroups, selectedRows]
+  )
+  const switchConflicts = useMemo(
+    () =>
+      partMachineSwitchPreSaveConflicts(
+        asArray(productionControl.planOverrideRows),
+        {
+          target,
+          setupNo,
+          selectedItem,
+          toMachine,
+          queuePlacements: proposedQueuePlacements,
+          resolvedIds: resolvedConflictIds,
+        }
+      ),
+    [
+      productionControl.planOverrideRows,
+      proposedQueuePlacements,
+      resolvedConflictIds,
+      selectedItem,
+      setupNo,
+      target,
+      toMachine,
+    ]
+  )
+  const targetInterruptionRows = useMemo(
+    () =>
+      partMachineSwitchTargetInterruptionRows(queueReviewGroups, selectedRows),
+    [queueReviewGroups, selectedRows]
+  )
   const missingTargetFinishedQty = targetInterruptionRows.some((row) => {
-    const rowKey = machineIssueRowKey(row);
-    if (!selectedTargetInterruptions[rowKey]) return false;
-    const rawValue = targetFinishedQtyByRow[rowKey]?.trim() ?? "";
-    const value = Number(rawValue);
-    const orderQty = Number(row.totalOrderPcs || row.orderPcs);
-    return rawValue === "" || !Number.isFinite(value) || value <= 0 || (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty);
-  });
-  const canReview = Boolean(selectedItem.trim() && target.trim() && setupNo.trim() && fromMachine.trim() && toMachine.trim())
-    && machineKey(fromMachine) !== machineKey(toMachine);
-  const canSave = canReview && Boolean(reason.trim()) && reviewReady && selectedRows.length > 0 && !missingProducedQty && !missingTargetFinishedQty && !switchConflicts.length && queueReviewConfirmed;
+    const rowKey = machineIssueRowKey(row)
+    if (!selectedTargetInterruptions[rowKey]) return false
+    const rawValue = targetFinishedQtyByRow[rowKey]?.trim() ?? ""
+    const value = Number(rawValue)
+    const orderQty = Number(row.totalOrderPcs || row.orderPcs)
+    return (
+      rawValue === "" ||
+      !Number.isFinite(value) ||
+      value <= 0 ||
+      (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty)
+    )
+  })
+  const canReview =
+    Boolean(
+      selectedItem.trim() &&
+      target.trim() &&
+      setupNo.trim() &&
+      fromMachine.trim() &&
+      toMachine.trim()
+    ) && machineKey(fromMachine) !== machineKey(toMachine)
+  const canSave =
+    canReview &&
+    Boolean(reason.trim()) &&
+    reviewReady &&
+    selectedRows.length > 0 &&
+    !missingProducedQty &&
+    !missingTargetFinishedQty &&
+    !switchConflicts.length &&
+    queueReviewConfirmed
 
-  function updateField(setter: Dispatch<SetStateAction<string>>, value: string) {
-    setter(value);
-    setReviewReady(false);
-    setQueueReviewConfirmed(false);
-    setQueueAfterByRow({});
-    setSelectedTargetInterruptions({});
-    setTargetFinishedQtyByRow({});
-    setResolvedConflictIds(new Set());
+  function updateField(
+    setter: Dispatch<SetStateAction<string>>,
+    value: string
+  ) {
+    setter(value)
+    setReviewReady(false)
+    setQueueReviewConfirmed(false)
+    setQueueAfterByRow({})
+    setSelectedTargetInterruptions({})
+    setTargetFinishedQtyByRow({})
+    setResolvedConflictIds(new Set())
   }
 
   function updateProducedQty(row: DashboardPayload, value: string) {
-    const key = machineIssueRowKey(row);
-    setProducedQtyByRow((current) => ({ ...current, [key]: value }));
+    const key = machineIssueRowKey(row)
+    setProducedQtyByRow((current) => ({ ...current, [key]: value }))
   }
 
   function updateTargetFinishedQty(row: DashboardPayload, value: string) {
-    const key = machineIssueRowKey(row);
-    setTargetFinishedQtyByRow((current) => ({ ...current, [key]: value }));
+    const key = machineIssueRowKey(row)
+    setTargetFinishedQtyByRow((current) => ({ ...current, [key]: value }))
   }
 
   async function reverseSwitchConflict(conflict: DashboardPayload) {
-    const targetId = displayValue(conflict.targetId);
-    if (!targetId || targetId === "-" || isSubmitting) return;
-    setIsSubmitting(true);
+    const targetId = displayValue(conflict.targetId)
+    if (!targetId || targetId === "-" || isSubmitting) return
+    setIsSubmitting(true)
     try {
       await submitAction("reverse-entry", {
         targetTable: "planOverrides",
         targetId,
-        targetKey: displayValue(conflict.targetKey) !== "-" ? displayValue(conflict.targetKey) : "",
-        targetLabel: displayValue(conflict.targetLabel) !== "-" ? displayValue(conflict.targetLabel) : "",
+        targetKey:
+          displayValue(conflict.targetKey) !== "-"
+            ? displayValue(conflict.targetKey)
+            : "",
+        targetLabel:
+          displayValue(conflict.targetLabel) !== "-"
+            ? displayValue(conflict.targetLabel)
+            : "",
         reason: `Planner replacing conflicting machine switch with ${target} setup ${setupNo} to ${toMachine}`,
         correctedBy: "Planner",
-      });
-      setResolvedConflictIds((current) => new Set([...current, targetId]));
+      })
+      setResolvedConflictIds((current) => new Set([...current, targetId]))
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+    event.preventDefault()
     if (!reviewReady) {
-      setReviewReady(true);
-      return;
+      setReviewReady(true)
+      return
     }
-    if (!canSave || isSubmitting) return;
-    setIsSubmitting(true);
+    if (!canSave || isSubmitting) return
+    setIsSubmitting(true)
     try {
       const sourceInterruptions = runningRows.map((row) => ({
         jcNo: jobCardNumber(row),
         setupNo: displayValue(row.setupNo),
         machine: machineValue(row, "machine"),
         finishedQty: Number(producedQtyByRow[machineIssueRowKey(row)] ?? 0),
-      }));
+      }))
       const targetInterruptions = targetInterruptionRows
         .filter((row) => selectedTargetInterruptions[machineIssueRowKey(row)])
         .map((row) => ({
           jcNo: jobCardNumber(row),
           setupNo: displayValue(row.setupNo),
           machine: machineValue(row, "machine"),
-          finishedQty: Number(targetFinishedQtyByRow[machineIssueRowKey(row)] ?? 0),
-        }));
-      const interruptedSetups = [...sourceInterruptions, ...targetInterruptions];
-      const queuePlacements = proposedQueuePlacements;
+          finishedQty: Number(
+            targetFinishedQtyByRow[machineIssueRowKey(row)] ?? 0
+          ),
+        }))
+      const interruptedSetups = [...sourceInterruptions, ...targetInterruptions]
+      const queuePlacements = proposedQueuePlacements
       await submitAction("plan-override", {
         target,
         setupNo,
@@ -2087,30 +3057,38 @@ function PartMachineSwitchPlannerForm({
         interruptedSetups,
         queuePlacements,
         reason,
-      });
-      setSelectedItem("");
-      setTarget("");
-      setSetupNo("");
-      setFromMachine("");
-      setToMachine("");
-      setReason("");
-      setProducedQtyByRow({});
-      setQueueAfterByRow({});
-      setSelectedTargetInterruptions({});
-      setTargetFinishedQtyByRow({});
-    setResolvedConflictIds(new Set());
-      setReviewReady(false);
-      setQueueReviewConfirmed(false);
+      })
+      setSelectedItem("")
+      setTarget("")
+      setSetupNo("")
+      setFromMachine("")
+      setToMachine("")
+      setReason("")
+      setProducedQtyByRow({})
+      setQueueAfterByRow({})
+      setSelectedTargetInterruptions({})
+      setTargetFinishedQtyByRow({})
+      setResolvedConflictIds(new Set())
+      setReviewReady(false)
+      setQueueReviewConfirmed(false)
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
   }
 
   return (
-    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+    <form
+      className="grid gap-3 rounded-xl border bg-background p-3"
+      onSubmit={submit}
+    >
       <div>
-        <div className="text-sm font-medium">3. Part-specific machine switch</div>
-        <div className="text-xs text-muted-foreground">Move only the selected part/setup to another machine after reviewing that target queue and downstream WIP queues.</div>
+        <div className="text-sm font-medium">
+          3. Part-specific machine switch
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Move only the selected part/setup to another machine after reviewing
+          that target queue and downstream WIP queues.
+        </div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-6">
         <Field label="Item code">
@@ -2119,16 +3097,18 @@ function PartMachineSwitchPlannerForm({
             value={selectedItem}
             required
             onChange={(event) => {
-              updateField(setSelectedItem, event.target.value);
-              setTarget("");
-              setSetupNo("");
-              setFromMachine("");
-              setToMachine("");
+              updateField(setSelectedItem, event.target.value)
+              setTarget("")
+              setSetupNo("")
+              setFromMachine("")
+              setToMachine("")
             }}
           >
             <option value="">Select item</option>
             {itemOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </select>
         </Field>
@@ -2138,15 +3118,17 @@ function PartMachineSwitchPlannerForm({
             value={target}
             required
             onChange={(event) => {
-              updateField(setTarget, event.target.value);
-              setSetupNo("");
-              setFromMachine("");
-              setToMachine("");
+              updateField(setTarget, event.target.value)
+              setSetupNo("")
+              setFromMachine("")
+              setToMachine("")
             }}
           >
             <option value="">Select job card</option>
             {jobCardOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </select>
         </Field>
@@ -2156,14 +3138,16 @@ function PartMachineSwitchPlannerForm({
             value={setupNo}
             required
             onChange={(event) => {
-              updateField(setSetupNo, event.target.value);
-              setFromMachine("");
-              setToMachine("");
+              updateField(setSetupNo, event.target.value)
+              setFromMachine("")
+              setToMachine("")
             }}
           >
             <option value="">Select setup</option>
             {setupOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </select>
         </Field>
@@ -2173,13 +3157,15 @@ function PartMachineSwitchPlannerForm({
             value={fromMachine}
             required
             onChange={(event) => {
-              updateField(setFromMachine, event.target.value);
-              setToMachine("");
+              updateField(setFromMachine, event.target.value)
+              setToMachine("")
             }}
           >
             <option value="">Select source machine</option>
             {fromMachineOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </select>
         </Field>
@@ -2192,81 +3178,144 @@ function PartMachineSwitchPlannerForm({
           >
             <option value="">Select target machine</option>
             {targetMachineOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </select>
         </Field>
         <Field label="Reason">
-          <Input value={reason} placeholder="Planner approved machine switch" required onChange={(event) => setReason(event.target.value)} />
+          <Input
+            value={reason}
+            placeholder="Planner approved machine switch"
+            required
+            onChange={(event) => setReason(event.target.value)}
+          />
         </Field>
       </div>
       {reviewReady ? (
         <div className="grid gap-2 rounded-md border bg-muted/15 p-3">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{formatNumber(selectedRows.length)} selected setup rows</span>
-            <span>{displayValue(fromMachine)} to {displayValue(toMachine)}</span>
-            <span>{formatNumber(runningRows.length)} source running quantity inputs</span>
-            <span>{formatNumber(targetInterruptionRows.length)} target running blockers</span>
+            <span>
+              {displayValue(fromMachine)} to {displayValue(toMachine)}
+            </span>
+            <span>
+              {formatNumber(runningRows.length)} source running quantity inputs
+            </span>
+            <span>
+              {formatNumber(targetInterruptionRows.length)} target running
+              blockers
+            </span>
           </div>
           {selectedRows.length ? (
             <div className="grid max-h-56 gap-2 overflow-y-auto pr-1">
               {selectedRows.map((row, index) => {
-                const needsProducedQty = machineIssueRowNeedsProducedQty(row);
-                const producedKey = machineIssueRowKey(row);
-                const orderQty = Number(row.totalOrderPcs || row.orderPcs);
+                const needsProducedQty = machineIssueRowNeedsProducedQty(row)
+                const producedKey = machineIssueRowKey(row)
+                const orderQty = Number(row.totalOrderPcs || row.orderPcs)
                 return (
-                  <div key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${machineValue(row, "machine")}-${index}`} className="grid gap-2 rounded-md border bg-background p-2">
+                  <div
+                    key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${machineValue(row, "machine")}-${index}`}
+                    className="grid gap-2 rounded-md border bg-background p-2"
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-                      <StatusBadge value={needsProducedQty ? "Produced qty required" : "Selected setup"} />
+                      <div className="text-sm font-medium">
+                        {itemCode(row)} / {jobCardNumber(row)} / Setup{" "}
+                        {displayValue(row.setupNo)}
+                      </div>
+                      <StatusBadge
+                        value={
+                          needsProducedQty
+                            ? "Produced qty required"
+                            : "Selected setup"
+                        }
+                      />
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+                      {machineValue(row, "machine")} | Order{" "}
+                      {displayValue(row.orderPcs, true)} of{" "}
+                      {displayValue(row.totalOrderPcs || row.orderPcs, true)} |
+                      Production {displayValue(row.plannedProductionStartDate)}{" "}
+                      to {displayValue(row.plannedProductionEndDate)} |{" "}
+                      {displayValue(row.runningStatus)}
                     </div>
                     {needsProducedQty ? (
                       <Field label="Produced qty">
                         <Input
                           type="number"
                           min="0"
-                          max={Number.isFinite(orderQty) && orderQty > 0 ? orderQty : undefined}
+                          max={
+                            Number.isFinite(orderQty) && orderQty > 0
+                              ? orderQty
+                              : undefined
+                          }
                           step="1"
                           value={producedQtyByRow[producedKey] ?? ""}
                           placeholder="0"
                           required
-                          onChange={(event) => updateProducedQty(row, event.target.value)}
+                          onChange={(event) =>
+                            updateProducedQty(row, event.target.value)
+                          }
                         />
                       </Field>
                     ) : null}
                   </div>
-                );
+                )
               })}
             </div>
           ) : (
-            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup row matches this job card/part, setup number, and source machine.</div>
+            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">
+              No planned setup row matches this job card/part, setup number, and
+              source machine.
+            </div>
           )}
           {targetInterruptionRows.length ? (
             <div className="grid gap-2 rounded-md border bg-background p-3">
               <div>
-                <div className="text-sm font-medium">Target machine running setup</div>
-                <div className="text-xs text-muted-foreground">Choose whether to stop the running setup on the target machine before saving this switch.</div>
+                <div className="text-sm font-medium">
+                  Target machine running setup
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Choose whether to stop the running setup on the target machine
+                  before saving this switch.
+                </div>
               </div>
               {targetInterruptionRows.map((row) => {
-                const rowKey = machineIssueRowKey(row);
-                const selected = Boolean(selectedTargetInterruptions[rowKey]);
-                const orderQty = Number(row.totalOrderPcs || row.orderPcs);
+                const rowKey = machineIssueRowKey(row)
+                const selected = Boolean(selectedTargetInterruptions[rowKey])
+                const orderQty = Number(row.totalOrderPcs || row.orderPcs)
                 return (
-                  <div key={rowKey} className="grid gap-2 rounded-md border bg-muted/10 p-2 md:grid-cols-[1fr_auto] md:items-end">
+                  <div
+                    key={rowKey}
+                    className="grid gap-2 rounded-md border bg-muted/10 p-2 md:grid-cols-[1fr_auto] md:items-end"
+                  >
                     <div>
-                      <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-                      <div className="text-xs text-muted-foreground">{machineValue(row, "machine")} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}</div>
+                      <div className="text-sm font-medium">
+                        {itemCode(row)} / {jobCardNumber(row)} / Setup{" "}
+                        {displayValue(row.setupNo)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {machineValue(row, "machine")} | Production{" "}
+                        {displayValue(row.plannedProductionStartDate)} to{" "}
+                        {displayValue(row.plannedProductionEndDate)} |{" "}
+                        {displayValue(row.runningStatus)}
+                      </div>
                     </div>
                     <div className="flex flex-wrap items-end gap-2">
                       <Button
                         type="button"
                         variant={selected ? "default" : "outline"}
-                        onClick={() => setSelectedTargetInterruptions((current) => ({ ...current, [rowKey]: !selected }))}
+                        onClick={() =>
+                          setSelectedTargetInterruptions((current) => ({
+                            ...current,
+                            [rowKey]: !selected,
+                          }))
+                        }
                       >
-                        {selected ? "Stop selected" : "Do not stop / click to stop"}
+                        {selected
+                          ? "Stop selected"
+                          : "Do not stop / click to stop"}
                       </Button>
                       {selected ? (
                         <Field label="Produced qty">
@@ -2274,17 +3323,23 @@ function PartMachineSwitchPlannerForm({
                             className="w-28"
                             type="number"
                             min="0"
-                            max={Number.isFinite(orderQty) && orderQty > 0 ? orderQty : undefined}
+                            max={
+                              Number.isFinite(orderQty) && orderQty > 0
+                                ? orderQty
+                                : undefined
+                            }
                             step="1"
                             value={targetFinishedQtyByRow[rowKey] ?? ""}
                             required
-                            onChange={(event) => updateTargetFinishedQty(row, event.target.value)}
+                            onChange={(event) =>
+                              updateTargetFinishedQty(row, event.target.value)
+                            }
                           />
                         </Field>
                       ) : null}
                     </div>
                   </div>
-                );
+                )
               })}
             </div>
           ) : null}
@@ -2292,33 +3347,66 @@ function PartMachineSwitchPlannerForm({
             groups={queueReviewGroups}
             movableRows={selectedRows}
             queueAfterByRow={queueAfterByRow}
-            onQueueAfterChange={(rowKey, value) => setQueueAfterByRow((current) => {
-              const next = { ...current };
-              if (value) next[rowKey] = value;
-              else delete next[rowKey];
-              return next;
-            })}
+            onQueueAfterChange={(rowKey, value) =>
+              setQueueAfterByRow((current) => {
+                const next = { ...current }
+                if (value) next[rowKey] = value
+                else delete next[rowKey]
+                return next
+              })
+            }
           />
           {missingTargetFinishedQty ? (
-            <div className="text-xs text-destructive">Enter produced quantity for every target running setup selected to stop.</div>
+            <div className="text-xs text-destructive">
+              Enter produced quantity for every target running setup selected to
+              stop.
+            </div>
           ) : null}
           {switchConflicts.length ? (
             <div className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
               <div>
-                <div className="text-sm font-medium text-destructive">Conflicting planner action found</div>
-                <div className="text-xs text-muted-foreground">This switch cannot be saved while another active switch exists for the same setup with a different target or queue position.</div>
+                <div className="text-sm font-medium text-destructive">
+                  Conflicting planner action found
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  This switch cannot be saved while another active switch exists
+                  for the same setup with a different target or queue position.
+                </div>
               </div>
               {switchConflicts.map((conflict, index) => (
-                <div key={`${displayValue(conflict.targetId)}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-2">
+                <div
+                  key={`${displayValue(conflict.targetId)}-${index}`}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-2"
+                >
                   <div>
-                    <div className="text-sm font-medium">{displayValue(conflict.targetLabel)}</div>
-                    <div className="text-xs text-muted-foreground">{displayValue(conflict.targetKey)} | {displayValue(conflict.createdAt)}</div>
+                    <div className="text-sm font-medium">
+                      {displayValue(conflict.targetLabel)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {displayValue(conflict.targetKey)} |{" "}
+                      {displayValue(conflict.createdAt)}
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isSubmitting}
+                      onClick={() => {
+                        setReviewReady(false)
+                        setQueueReviewConfirmed(false)
+                      }}
+                    >
                       Keep existing
                     </Button>
-                    <Button type="button" size="sm" variant="outline" disabled={isSubmitting} onClick={() => void reverseSwitchConflict(conflict)}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isSubmitting}
+                      onClick={() => void reverseSwitchConflict(conflict)}
+                    >
                       <Undo2 className="size-4" />
                       Reverse existing
                     </Button>
@@ -2332,25 +3420,42 @@ function PartMachineSwitchPlannerForm({
               className="mt-1"
               type="checkbox"
               checked={queueReviewConfirmed}
-              onChange={(event) => setQueueReviewConfirmed(event.target.checked)}
+              onChange={(event) =>
+                setQueueReviewConfirmed(event.target.checked)
+              }
             />
-            <span>Queue reviewed; save this part-specific machine switch and recalculate planning.</span>
+            <span>
+              Queue reviewed; save this part-specific machine switch and
+              recalculate planning.
+            </span>
           </label>
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && !canSave)}>
+        <Button
+          className="w-fit"
+          type="submit"
+          disabled={!canReview || isSubmitting || (reviewReady && !canSave)}
+        >
           <Route className="size-4" />
           {reviewReady ? "Save machine switch" : "Review switch queue"}
         </Button>
         {reviewReady ? (
-          <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSubmitting}
+            onClick={() => {
+              setReviewReady(false)
+              setQueueReviewConfirmed(false)
+            }}
+          >
             Recheck inputs
           </Button>
         ) : null}
       </div>
     </form>
-  );
+  )
 }
 function MachineConstraintQueueReviewPanel({
   groups,
@@ -2358,34 +3463,58 @@ function MachineConstraintQueueReviewPanel({
   queueAfterByRow = {},
   onQueueAfterChange,
 }: {
-  groups: MachineConstraintQueueReviewGroup[];
-  movableRows?: DashboardPayload[];
-  queueAfterByRow?: Record<string, string>;
-  onQueueAfterChange?: (rowKey: string, value: string) => void;
+  groups: MachineConstraintQueueReviewGroup[]
+  movableRows?: DashboardPayload[]
+  queueAfterByRow?: Record<string, string>
+  onQueueAfterChange?: (rowKey: string, value: string) => void
 }) {
-  const destinationGroups = groups.filter((group) => group.kind === "destination");
-  const defaultDestinationMachine = destinationGroups[0]?.machine ?? "";
-  const canPlaceTiles = Boolean(onQueueAfterChange && movableRows.length && destinationGroups.length);
+  const destinationGroups = groups.filter(
+    (group) => group.kind === "destination"
+  )
+  const defaultDestinationMachine = destinationGroups[0]?.machine ?? ""
+  const canPlaceTiles = Boolean(
+    onQueueAfterChange && movableRows.length && destinationGroups.length
+  )
 
   return (
     <div className="grid gap-2 rounded-md border border-dashed bg-background p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="text-sm font-medium">Replanned queue review</div>
-          {canPlaceTiles ? <div className="text-xs text-muted-foreground">Drag each affected setup tile to the planned position before saving.</div> : null}
+          {canPlaceTiles ? (
+            <div className="text-xs text-muted-foreground">
+              Drag each affected setup tile to the planned position before
+              saving.
+            </div>
+          ) : null}
         </div>
         <StatusBadge value={`${formatNumber(groups.length)} queue groups`} />
       </div>
       {groups.length ? (
         <div className="grid gap-2">
           {groups.map((group) => (
-            <div key={`${group.kind}-${group.machine}`} className="grid gap-2 rounded-md border bg-muted/10 p-2">
+            <div
+              key={`${group.kind}-${group.machine}`}
+              className="grid gap-2 rounded-md border bg-muted/10 p-2"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-medium">{group.title}</div>
-                <StatusBadge value={group.kind === "destination" ? "Destination queue" : group.kind === "downstream" ? "Downstream WIP queue" : "Same machine queue"} />
+                <StatusBadge
+                  value={
+                    group.kind === "destination"
+                      ? "Destination queue"
+                      : group.kind === "downstream"
+                        ? "Downstream WIP queue"
+                        : "Same machine queue"
+                  }
+                />
               </div>
-              <div className="text-xs text-muted-foreground">{group.description}</div>
-              {canPlaceTiles && group.kind === "destination" && onQueueAfterChange ? (
+              <div className="text-xs text-muted-foreground">
+                {group.description}
+              </div>
+              {canPlaceTiles &&
+              group.kind === "destination" &&
+              onQueueAfterChange ? (
                 <MachineConstraintQueuePlacementBoard
                   group={group}
                   movableRows={movableRows}
@@ -2400,10 +3529,13 @@ function MachineConstraintQueueReviewPanel({
           ))}
         </div>
       ) : (
-        <div className="rounded-md border border-dashed bg-background p-2 text-sm text-muted-foreground">No destination or downstream queues were identified from the current plan.</div>
+        <div className="rounded-md border border-dashed bg-background p-2 text-sm text-muted-foreground">
+          No destination or downstream queues were identified from the current
+          plan.
+        </div>
       )}
     </div>
-  );
+  )
 }
 
 function MachineConstraintQueuePlacementBoard({
@@ -2413,45 +3545,67 @@ function MachineConstraintQueuePlacementBoard({
   defaultDestinationMachine,
   onQueueAfterChange,
 }: {
-  group: MachineConstraintQueueReviewGroup;
-  movableRows: DashboardPayload[];
-  queueAfterByRow: Record<string, string>;
-  defaultDestinationMachine: string;
-  onQueueAfterChange: (rowKey: string, value: string) => void;
+  group: MachineConstraintQueueReviewGroup
+  movableRows: DashboardPayload[]
+  queueAfterByRow: Record<string, string>
+  defaultDestinationMachine: string
+  onQueueAfterChange: (rowKey: string, value: string) => void
 }) {
-  const groupMachineKey = machineKey(group.machine);
-  const movableKeys = new Set(movableRows.map(machineIssueRowKey));
+  const groupMachineKey = machineKey(group.machine)
+  const movableKeys = new Set(movableRows.map(machineIssueRowKey))
   const placedRows = movableRows.filter((row) => {
-    const placement = machineConstraintPlacementParts(queueAfterByRow[machineIssueRowKey(row)], defaultDestinationMachine);
-    return placement.machineKey === groupMachineKey;
-  });
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+    const placement = machineConstraintPlacementParts(
+      queueAfterByRow[machineIssueRowKey(row)],
+      defaultDestinationMachine
+    )
+    return placement.machineKey === groupMachineKey
+  })
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
   function placeRow(rowKey: string, index: number) {
-    const boundedIndex = Math.max(0, Math.min(index, group.rows.length));
-    const afterKey = boundedIndex > 0 ? machineConstraintQueueRowKey(group.rows[boundedIndex - 1]!) : "";
-    onQueueAfterChange(rowKey, machineConstraintPlacementValue(group.machine, afterKey));
+    const boundedIndex = Math.max(0, Math.min(index, group.rows.length))
+    const afterKey =
+      boundedIndex > 0
+        ? machineConstraintQueueRowKey(group.rows[boundedIndex - 1]!)
+        : ""
+    onQueueAfterChange(
+      rowKey,
+      machineConstraintPlacementValue(group.machine, afterKey)
+    )
   }
 
   function allowDrop(event: DragEvent<HTMLButtonElement>, index: number) {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    setDragOverIndex(index);
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "move"
+    setDragOverIndex(index)
   }
 
   function dropMoveTile(event: DragEvent<HTMLButtonElement>, index: number) {
-    event.preventDefault();
-    const sourceKey = event.dataTransfer.getData("text/plain");
-    setDragOverIndex(null);
-    if (!sourceKey || !movableKeys.has(sourceKey)) return;
-    placeRow(sourceKey, index);
+    event.preventDefault()
+    const sourceKey = event.dataTransfer.getData("text/plain")
+    setDragOverIndex(null)
+    if (!sourceKey || !movableKeys.has(sourceKey)) return
+    placeRow(sourceKey, index)
   }
 
   return (
     <div className="grid gap-1 rounded-md border bg-background p-2">
       {Array.from({ length: group.rows.length + 1 }, (_, index) => {
-        const slotRows = placedRows.filter((row) => machineConstraintQueuePlacementIndex(group.rows, machineConstraintPlacementParts(queueAfterByRow[machineIssueRowKey(row)], defaultDestinationMachine).afterKey) === index);
-        const slotPreviewWindows = machineConstraintSlotPreviewWindows(group.rows, slotRows, index);
+        const slotRows = placedRows.filter(
+          (row) =>
+            machineConstraintQueuePlacementIndex(
+              group.rows,
+              machineConstraintPlacementParts(
+                queueAfterByRow[machineIssueRowKey(row)],
+                defaultDestinationMachine
+              ).afterKey
+            ) === index
+        )
+        const slotPreviewWindows = machineConstraintSlotPreviewWindows(
+          group.rows,
+          slotRows,
+          index
+        )
         return (
           <Fragment key={`${group.machine}-slot-${index}`}>
             <PriorityQueueDropZone
@@ -2460,7 +3614,11 @@ function MachineConstraintQueuePlacementBoard({
               label={machineConstraintQueueDropLabel(index, group.rows)}
               onClick={() => undefined}
               onDragOver={(event) => allowDrop(event, index)}
-              onDragLeave={() => setDragOverIndex((current) => current === index ? null : current)}
+              onDragLeave={() =>
+                setDragOverIndex((current) =>
+                  current === index ? null : current
+                )
+              }
               onDrop={(event) => dropMoveTile(event, index)}
             />
             {slotRows.map((row) => (
@@ -2470,8 +3628,11 @@ function MachineConstraintQueuePlacementBoard({
                 targetMachine={group.machine}
                 previewWindow={slotPreviewWindows.get(machineIssueRowKey(row))}
                 onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData("text/plain", machineIssueRowKey(row));
+                  event.dataTransfer.effectAllowed = "move"
+                  event.dataTransfer.setData(
+                    "text/plain",
+                    machineIssueRowKey(row)
+                  )
                 }}
                 onDragEnd={() => setDragOverIndex(null)}
               />
@@ -2480,63 +3641,115 @@ function MachineConstraintQueuePlacementBoard({
               <MachineConstraintQueueRowTile row={group.rows[index]!} />
             ) : null}
           </Fragment>
-        );
+        )
       })}
     </div>
-  );
+  )
 }
 
-function machineConstraintSlotPreviewWindows(rows: DashboardPayload[], slotRows: DashboardPayload[], slotIndex: number) {
-  const windows = new Map<string, { startDate: string; endDate: string }>();
-  let nextStart = slotIndex > 0
-    ? nextCalendarDateLabelForReview(rows[slotIndex - 1]?.plannedProductionEndDate || rows[slotIndex - 1]?.setupPlannedDate || rows[slotIndex - 1]?.plannedDate)
-    : "";
+function machineConstraintSlotPreviewWindows(
+  rows: DashboardPayload[],
+  slotRows: DashboardPayload[],
+  slotIndex: number
+) {
+  const windows = new Map<string, { startDate: string; endDate: string }>()
+  let nextStart =
+    slotIndex > 0
+      ? nextCalendarDateLabelForReview(
+          rows[slotIndex - 1]?.plannedProductionEndDate ||
+            rows[slotIndex - 1]?.setupPlannedDate ||
+            rows[slotIndex - 1]?.plannedDate
+        )
+      : ""
 
   for (const row of slotRows) {
-    const originalStart = parseReviewDateLabel(row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
-    const originalEnd = parseReviewDateLabel(row.plannedProductionEndDate || row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
-    const durationDays = originalStart && originalEnd
-      ? Math.max(1, Math.round((originalEnd.getTime() - originalStart.getTime()) / 86400000) + 1)
-      : 1;
-    const startDate = nextStart || displayValue(row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
-    const endDate = addCalendarDaysLabelForReview(startDate, durationDays - 1) || displayValue(row.plannedProductionEndDate || row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
-    windows.set(machineIssueRowKey(row), { startDate, endDate });
-    nextStart = nextCalendarDateLabelForReview(endDate);
+    const originalStart = parseReviewDateLabel(
+      row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate
+    )
+    const originalEnd = parseReviewDateLabel(
+      row.plannedProductionEndDate ||
+        row.plannedProductionStartDate ||
+        row.setupPlannedDate ||
+        row.plannedDate
+    )
+    const durationDays =
+      originalStart && originalEnd
+        ? Math.max(
+            1,
+            Math.round(
+              (originalEnd.getTime() - originalStart.getTime()) / 86400000
+            ) + 1
+          )
+        : 1
+    const startDate =
+      nextStart ||
+      displayValue(
+        row.plannedProductionStartDate ||
+          row.setupPlannedDate ||
+          row.plannedDate
+      )
+    const endDate =
+      addCalendarDaysLabelForReview(startDate, durationDays - 1) ||
+      displayValue(
+        row.plannedProductionEndDate ||
+          row.plannedProductionStartDate ||
+          row.setupPlannedDate ||
+          row.plannedDate
+      )
+    windows.set(machineIssueRowKey(row), { startDate, endDate })
+    nextStart = nextCalendarDateLabelForReview(endDate)
   }
 
-  return windows;
+  return windows
 }
 
 function nextCalendarDateLabelForReview(value: unknown) {
-  return addCalendarDaysLabelForReview(value, 1);
+  return addCalendarDaysLabelForReview(value, 1)
 }
 
 function addCalendarDaysLabelForReview(value: unknown, days: number) {
-  const date = parseReviewDateLabel(value);
-  if (!date) return "";
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return formatReviewDateLabel(next);
+  const date = parseReviewDateLabel(value)
+  if (!date) return ""
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return formatReviewDateLabel(next)
 }
 
 function parseReviewDateLabel(value: unknown) {
-  const textValue = str(value);
-  if (!textValue || textValue === "-") return undefined;
-  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(textValue);
-  if (iso?.[1] && iso[2] && iso[3]) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
-  const dashboard = /^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/.exec(textValue);
+  const textValue = str(value)
+  if (!textValue || textValue === "-") return undefined
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(textValue)
+  if (iso?.[1] && iso[2] && iso[3])
+    return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
+  const dashboard = /^(\d{1,2})-([A-Za-z]+)-(\d{2,4})$/.exec(textValue)
   if (dashboard?.[1] && dashboard[2] && dashboard[3]) {
-    const month = reviewMonthNumber(dashboard[2]);
-    const year = Number(dashboard[3].length === 2 ? `20${dashboard[3]}` : dashboard[3]);
-    if (month) return new Date(year, month - 1, Number(dashboard[1]));
+    const month = reviewMonthNumber(dashboard[2])
+    const year = Number(
+      dashboard[3].length === 2 ? `20${dashboard[3]}` : dashboard[3]
+    )
+    if (month) return new Date(year, month - 1, Number(dashboard[1]))
   }
-  const parsed = new Date(textValue);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  const parsed = new Date(textValue)
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed
 }
 
 function formatReviewDateLabel(date: Date) {
-  const month = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][date.getMonth()] ?? "";
-  return `${date.getDate()}-${month}-${String(date.getFullYear()).slice(-2)}`;
+  const month =
+    [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ][date.getMonth()] ?? ""
+  return `${date.getDate()}-${month}-${String(date.getFullYear()).slice(-2)}`
 }
 
 function reviewMonthNumber(value: string) {
@@ -2564,8 +3777,8 @@ function reviewMonthNumber(value: string) {
     nov: 11,
     december: 12,
     dec: 12,
-  };
-  return months[value.toLowerCase()] ?? 0;
+  }
+  return months[value.toLowerCase()] ?? 0
 }
 function MachineConstraintMoveTile({
   row,
@@ -2574,11 +3787,11 @@ function MachineConstraintMoveTile({
   onDragStart,
   onDragEnd,
 }: {
-  row: DashboardPayload;
-  targetMachine: string;
-  previewWindow?: { startDate: string; endDate: string };
-  onDragStart: (event: DragEvent<HTMLDivElement>) => void;
-  onDragEnd: () => void;
+  row: DashboardPayload
+  targetMachine: string
+  previewWindow?: { startDate: string; endDate: string }
+  onDragStart: (event: DragEvent<HTMLDivElement>) => void
+  onDragEnd: () => void
 }) {
   return (
     <div
@@ -2589,97 +3802,159 @@ function MachineConstraintMoveTile({
     >
       <GripVertical className="size-4 text-primary" aria-hidden="true" />
       <div>
-        <div className="text-sm font-semibold">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-        <div className="text-xs text-muted-foreground">Move remaining/planned quantity to {targetMachine} | Current {machineValue(row, "machine")} | Preview {displayValue(previewWindow?.startDate || row.plannedProductionStartDate)} to {displayValue(previewWindow?.endDate || row.plannedProductionEndDate)}</div>
+        <div className="text-sm font-semibold">
+          {itemCode(row)} / {jobCardNumber(row)} / Setup{" "}
+          {displayValue(row.setupNo)}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Move remaining/planned quantity to {targetMachine} | Current{" "}
+          {machineValue(row, "machine")} | Preview{" "}
+          {displayValue(
+            previewWindow?.startDate || row.plannedProductionStartDate
+          )}{" "}
+          to{" "}
+          {displayValue(previewWindow?.endDate || row.plannedProductionEndDate)}
+        </div>
       </div>
       <Badge>Move</Badge>
     </div>
-  );
+  )
 }
 
 function MachineConstraintQueueRowTile({ row }: { row: DashboardPayload }) {
   return (
     <div className="grid gap-1 rounded border bg-background px-2 py-1">
-      <div className="text-xs font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
+      <div className="text-xs font-medium">
+        {itemCode(row)} / {jobCardNumber(row)} / Setup{" "}
+        {displayValue(row.setupNo)}
+      </div>
       <div className="text-xs text-muted-foreground">
-        {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+        {machineValue(row, "machine")} | Order{" "}
+        {displayValue(row.orderPcs, true)} of{" "}
+        {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production{" "}
+        {displayValue(row.plannedProductionStartDate)} to{" "}
+        {displayValue(row.plannedProductionEndDate)} |{" "}
+        {displayValue(row.runningStatus)}
       </div>
     </div>
-  );
+  )
 }
 
-function MachineConstraintStaticQueueRows({ group }: { group: MachineConstraintQueueReviewGroup }) {
+function MachineConstraintStaticQueueRows({
+  group,
+}: {
+  group: MachineConstraintQueueReviewGroup
+}) {
   return group.rows.length ? (
     <div className="grid gap-1">
       {group.rows.map((row, index) => (
-        <MachineConstraintQueueRowTile key={`${group.machine}-${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`} row={row} />
+        <MachineConstraintQueueRowTile
+          key={`${group.machine}-${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`}
+          row={row}
+        />
       ))}
     </div>
   ) : (
-    <div className="rounded border border-dashed bg-background px-2 py-1 text-xs text-muted-foreground">{group.emptyMessage || "No current planned rows in this queue."}</div>
-  );
+    <div className="rounded border border-dashed bg-background px-2 py-1 text-xs text-muted-foreground">
+      {group.emptyMessage || "No current planned rows in this queue."}
+    </div>
+  )
 }
 function PlannerActionConflictPanel({
   productionControl,
   submitAction,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const conflicts = asArray(productionControl.plannerActionConflicts);
-  const [resolvingKey, setResolvingKey] = useState("");
-  if (!conflicts.length) return null;
+  const conflicts = asArray(productionControl.plannerActionConflicts)
+  const [resolvingKey, setResolvingKey] = useState("")
+  if (!conflicts.length) return null
 
-  async function keepChoice(conflict: DashboardPayload, choice: DashboardPayload) {
-    const choices = asArray(conflict.choices);
-    const keepId = displayValue(choice.targetId);
-    if (!keepId || keepId === "-") return;
-    setResolvingKey(`${displayValue(conflict.jcNo)}-${displayValue(conflict.setupNo)}-${keepId}`);
+  async function keepChoice(
+    conflict: DashboardPayload,
+    choice: DashboardPayload
+  ) {
+    const choices = asArray(conflict.choices)
+    const keepId = displayValue(choice.targetId)
+    if (!keepId || keepId === "-") return
+    setResolvingKey(
+      `${displayValue(conflict.jcNo)}-${displayValue(conflict.setupNo)}-${keepId}`
+    )
     try {
       for (const other of choices) {
-        const targetId = displayValue(other.targetId);
-        if (!targetId || targetId === "-" || targetId === keepId) continue;
+        const targetId = displayValue(other.targetId)
+        if (!targetId || targetId === "-" || targetId === keepId) continue
         await submitAction("reverse-entry", {
-          targetTable: displayValue(other.targetTable) !== "-" ? displayValue(other.targetTable) : "planOverrides",
+          targetTable:
+            displayValue(other.targetTable) !== "-"
+              ? displayValue(other.targetTable)
+              : "planOverrides",
           targetId,
-          targetKey: displayValue(other.targetKey) !== "-" ? displayValue(other.targetKey) : "",
-          targetLabel: displayValue(other.targetLabel) !== "-" ? displayValue(other.targetLabel) : "",
+          targetKey:
+            displayValue(other.targetKey) !== "-"
+              ? displayValue(other.targetKey)
+              : "",
+          targetLabel:
+            displayValue(other.targetLabel) !== "-"
+              ? displayValue(other.targetLabel)
+              : "",
           reason: `Planner resolved conflicting machine switch and kept ${displayValue(choice.targetLabel)}`,
           correctedBy: "Planner",
-        });
+        })
       }
     } finally {
-      setResolvingKey("");
+      setResolvingKey("")
     }
   }
 
   return (
     <div className="grid gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
       <div>
-        <div className="text-sm font-semibold text-destructive">Planner action conflicts</div>
-        <div className="text-xs text-muted-foreground">Choose which active planner decision should remain. Other conflicting switch rows will be reversed with history preserved.</div>
+        <div className="text-sm font-semibold text-destructive">
+          Planner action conflicts
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Choose which active planner decision should remain. Other conflicting
+          switch rows will be reversed with history preserved.
+        </div>
       </div>
       {conflicts.map((conflict, index) => (
-        <div key={`${displayValue(conflict.jcNo)}-${displayValue(conflict.setupNo)}-${index}`} className="grid gap-2 rounded-md border bg-background p-3">
-          <div className="text-sm font-medium">{displayValue(conflict.message)}</div>
+        <div
+          key={`${displayValue(conflict.jcNo)}-${displayValue(conflict.setupNo)}-${index}`}
+          className="grid gap-2 rounded-md border bg-background p-3"
+        >
+          <div className="text-sm font-medium">
+            {displayValue(conflict.message)}
+          </div>
           <div className="text-xs text-muted-foreground">
-            {displayValue(conflict.partCode)} / {displayValue(conflict.jcNo)} / setup {displayValue(conflict.setupNo)}
+            {displayValue(conflict.partCode)} / {displayValue(conflict.jcNo)} /
+            setup {displayValue(conflict.setupNo)}
           </div>
           <div className="flex flex-wrap gap-2">
             {asArray(conflict.choices).map((choice, choiceIndex) => {
-              const key = `${displayValue(conflict.jcNo)}-${displayValue(conflict.setupNo)}-${displayValue(choice.targetId)}`;
+              const key = `${displayValue(conflict.jcNo)}-${displayValue(conflict.setupNo)}-${displayValue(choice.targetId)}`
               return (
-                <Button key={`${displayValue(choice.targetId)}-${choiceIndex}`} type="button" size="sm" variant="outline" onClick={() => void keepChoice(conflict, choice)} disabled={Boolean(resolvingKey)}>
+                <Button
+                  key={`${displayValue(choice.targetId)}-${choiceIndex}`}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void keepChoice(conflict, choice)}
+                  disabled={Boolean(resolvingKey)}
+                >
                   <CheckCircle2 className="size-4" />
-                  {resolvingKey === key ? "Resolving" : displayValue(choice.targetLabel)}
+                  {resolvingKey === key
+                    ? "Resolving"
+                    : displayValue(choice.targetLabel)}
                 </Button>
-              );
+              )
             })}
           </div>
         </div>
       ))}
     </div>
-  );
+  )
 }
 function PlannerPreSaveConflictReview({
   conflicts,
@@ -2688,13 +3963,13 @@ function PlannerPreSaveConflictReview({
   onKeepExisting,
   onReverseExisting,
 }: {
-  conflicts: DashboardPayload[];
-  title: string;
-  description: string;
-  onKeepExisting: () => void;
-  onReverseExisting: (conflict: DashboardPayload) => void | Promise<void>;
+  conflicts: DashboardPayload[]
+  title: string
+  description: string
+  onKeepExisting: () => void
+  onReverseExisting: (conflict: DashboardPayload) => void | Promise<void>
 }) {
-  if (!conflicts.length) return null;
+  if (!conflicts.length) return null
   return (
     <div className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
       <div>
@@ -2702,14 +3977,34 @@ function PlannerPreSaveConflictReview({
         <div className="text-xs text-muted-foreground">{description}</div>
       </div>
       {conflicts.map((conflict, index) => (
-        <div key={`${displayValue(conflict.targetId)}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-2">
+        <div
+          key={`${displayValue(conflict.targetId)}-${index}`}
+          className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-2"
+        >
           <div>
-            <div className="text-sm font-medium">{displayValue(conflict.targetLabel)}</div>
-            <div className="text-xs text-muted-foreground">{displayValue(conflict.targetKey)} | {displayValue(conflict.createdAt)}</div>
+            <div className="text-sm font-medium">
+              {displayValue(conflict.targetLabel)}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {displayValue(conflict.targetKey)} |{" "}
+              {displayValue(conflict.createdAt)}
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={onKeepExisting}>Keep existing</Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => void onReverseExisting(conflict)}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onKeepExisting}
+            >
+              Keep existing
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void onReverseExisting(conflict)}
+            >
               <Undo2 className="size-4" />
               Reverse existing
             </Button>
@@ -2717,127 +4012,233 @@ function PlannerPreSaveConflictReview({
         </div>
       ))}
     </div>
-  );
+  )
 }
 function PlannerPriorityForm({
   productionControl,
   submitAction,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const workOrders = asArray(productionControl.workOrders);
-  const itemOptions = useMemo(() => uniqueValues(workOrders.map(itemCode).filter((value) => value !== "-")), [workOrders]);
-  const [partCode, setPartCode] = useState("");
-  const [jcNo, setJcNo] = useState("");
-  const [priority, setPriority] = useState("High");
-  const [remark, setRemark] = useState("");
-  const [planReady, setPlanReady] = useState(false);
-  const [selectedInterruptions, setSelectedInterruptions] = useState<Record<string, boolean>>({});
-  const [queueAfterByStep, setQueueAfterByStep] = useState<Record<string, string>>({});
-  const [finishedQtyByInterruption, setFinishedQtyByInterruption] = useState<Record<string, string>>({});
-  const [confirmedPrioritySteps, setConfirmedPrioritySteps] = useState<Record<string, boolean>>({});
-  const [resolvedPriorityConflictIds, setResolvedPriorityConflictIds] = useState<Set<string>>(() => new Set());
-  const jobCardOptions = useMemo(() => uniqueValues(workOrders
-    .filter((row) => !partCode || machineKey(itemCode(row)) === machineKey(partCode))
-    .map(jobCardNumber)
-    .filter((value) => value !== "-")), [partCode, workOrders]);
-  const selectedPart = partCode || itemOptions[0] || "";
-  const selectedJc = jcNo && jobCardOptions.includes(jcNo) ? jcNo : "";
-  const priorityPlan = useMemo(() => priorityChangePlan(productionControl, selectedPart, selectedJc), [productionControl, selectedPart, selectedJc]);
-  const priorityStepWindows = useMemo(() => priorityPlanStepWindows(priorityPlan.steps, selectedInterruptions, queueAfterByStep), [priorityPlan.steps, selectedInterruptions, queueAfterByStep]);
+  const workOrders = asArray(productionControl.workOrders)
+  const itemOptions = useMemo(
+    () =>
+      uniqueValues(workOrders.map(itemCode).filter((value) => value !== "-")),
+    [workOrders]
+  )
+  const [partCode, setPartCode] = useState("")
+  const [jcNo, setJcNo] = useState("")
+  const [priority, setPriority] = useState("High")
+  const [remark, setRemark] = useState("")
+  const [planReady, setPlanReady] = useState(false)
+  const [selectedInterruptions, setSelectedInterruptions] = useState<
+    Record<string, boolean>
+  >({})
+  const [queueAfterByStep, setQueueAfterByStep] = useState<
+    Record<string, string>
+  >({})
+  const [finishedQtyByInterruption, setFinishedQtyByInterruption] = useState<
+    Record<string, string>
+  >({})
+  const [confirmedPrioritySteps, setConfirmedPrioritySteps] = useState<
+    Record<string, boolean>
+  >({})
+  const [resolvedPriorityConflictIds, setResolvedPriorityConflictIds] =
+    useState<Set<string>>(() => new Set())
+  const jobCardOptions = useMemo(
+    () =>
+      uniqueValues(
+        workOrders
+          .filter(
+            (row) =>
+              !partCode || machineKey(itemCode(row)) === machineKey(partCode)
+          )
+          .map(jobCardNumber)
+          .filter((value) => value !== "-")
+      ),
+    [partCode, workOrders]
+  )
+  const selectedPart = partCode || itemOptions[0] || ""
+  const selectedJc = jcNo && jobCardOptions.includes(jcNo) ? jcNo : ""
+  const priorityPlan = useMemo(
+    () => priorityChangePlan(productionControl, selectedPart, selectedJc),
+    [productionControl, selectedPart, selectedJc]
+  )
+  const priorityStepWindows = useMemo(
+    () =>
+      priorityPlanStepWindows(
+        priorityPlan.steps,
+        selectedInterruptions,
+        queueAfterByStep
+      ),
+    [priorityPlan.steps, selectedInterruptions, queueAfterByStep]
+  )
   const selectedBlockers = priorityPlan.steps
     .flatMap((step) => step.blockers)
-    .filter((blocker) => selectedInterruptions[blocker.key]);
-  const hasSelectedRunningWithoutQty = selectedBlockers.some((blocker) =>
-    blocker.state === "running" && Number(finishedQtyByInterruption[blocker.key] || 0) <= 0,
-  );
-  const confirmedSteps = priorityPlan.steps.filter((step) => confirmedPrioritySteps[step.key]);
-  const firstUnconfirmedStepIndex = priorityPlan.steps.findIndex((step) => !confirmedPrioritySteps[step.key]);
-  const allStepsConfirmed = priorityPlan.steps.length > 0 && firstUnconfirmedStepIndex === -1;
-  const activeStepIndex = allStepsConfirmed ? -1 : firstUnconfirmedStepIndex;
+    .filter((blocker) => selectedInterruptions[blocker.key])
+  const hasSelectedRunningWithoutQty = selectedBlockers.some(
+    (blocker) =>
+      blocker.state === "running" &&
+      Number(finishedQtyByInterruption[blocker.key] || 0) <= 0
+  )
+  const confirmedSteps = priorityPlan.steps.filter(
+    (step) => confirmedPrioritySteps[step.key]
+  )
+  const firstUnconfirmedStepIndex = priorityPlan.steps.findIndex(
+    (step) => !confirmedPrioritySteps[step.key]
+  )
+  const allStepsConfirmed =
+    priorityPlan.steps.length > 0 && firstUnconfirmedStepIndex === -1
+  const activeStepIndex = allStepsConfirmed ? -1 : firstUnconfirmedStepIndex
   const confirmedWindows = confirmedSteps
     .map((step) => priorityStepWindows.get(step.key))
-    .filter((window): window is PriorityPlanWindow => Boolean(window));
-  const itemPlanWindow = allStepsConfirmed && confirmedWindows.length
-    ? { startDate: confirmedWindows[0]?.startDate ?? "", endDate: confirmedWindows.at(-1)?.endDate ?? "" }
-    : undefined;
-  const priorityConflicts = useMemo(() => plannerPriorityPreSaveConflicts(asArray(productionControl.plannerActionLog).filter((row) => displayValue(row.actionType) === "Priority"), {
-    target: selectedJc || selectedPart,
-    jcNo: selectedJc,
-    partCode: selectedPart,
-    priority,
-    queueBeforeSetups: priorityPlanQueueBeforeSetups(priorityPlan.steps, queueAfterByStep),
-    resolvedIds: resolvedPriorityConflictIds,
-  }), [productionControl.plannerActionLog, priority, priorityPlan.steps, queueAfterByStep, resolvedPriorityConflictIds, selectedJc, selectedPart]);
+    .filter((window): window is PriorityPlanWindow => Boolean(window))
+  const itemPlanWindow =
+    allStepsConfirmed && confirmedWindows.length
+      ? {
+          startDate: confirmedWindows[0]?.startDate ?? "",
+          endDate: confirmedWindows.at(-1)?.endDate ?? "",
+        }
+      : undefined
+  const priorityConflicts = useMemo(
+    () =>
+      plannerPriorityPreSaveConflicts(
+        asArray(productionControl.plannerActionLog).filter(
+          (row) => displayValue(row.actionType) === "Priority"
+        ),
+        {
+          target: selectedJc || selectedPart,
+          jcNo: selectedJc,
+          partCode: selectedPart,
+          priority,
+          queueBeforeSetups: priorityPlanQueueBeforeSetups(
+            priorityPlan.steps,
+            queueAfterByStep
+          ),
+          resolvedIds: resolvedPriorityConflictIds,
+        }
+      ),
+    [
+      productionControl.plannerActionLog,
+      priority,
+      priorityPlan.steps,
+      queueAfterByStep,
+      resolvedPriorityConflictIds,
+      selectedJc,
+      selectedPart,
+    ]
+  )
 
   function resetPlanReview() {
-    setPlanReady(false);
-    setSelectedInterruptions({});
-    setQueueAfterByStep({});
-    setFinishedQtyByInterruption({});
-    setConfirmedPrioritySteps({});
-    setResolvedPriorityConflictIds(new Set());
+    setPlanReady(false)
+    setSelectedInterruptions({})
+    setQueueAfterByStep({})
+    setFinishedQtyByInterruption({})
+    setConfirmedPrioritySteps({})
+    setResolvedPriorityConflictIds(new Set())
   }
 
   function confirmPriorityStep(stepKey: string) {
-    setConfirmedPrioritySteps((current) => ({ ...current, [stepKey]: true }));
+    setConfirmedPrioritySteps((current) => ({ ...current, [stepKey]: true }))
   }
 
   function editPriorityStep(stepKey: string) {
-    const stepIndex = priorityPlan.steps.findIndex((step) => step.key === stepKey);
-    if (stepIndex < 0) return;
-    const keepKeys = new Set(priorityPlan.steps.slice(0, stepIndex).map((step) => step.key));
-    const downstreamBlockerKeys = new Set(priorityPlan.steps
-      .slice(stepIndex + 1)
-      .flatMap((step) => step.blockers.map((blocker) => blocker.key)));
-    setConfirmedPrioritySteps((current) => Object.fromEntries(
-      Object.entries(current).filter(([key, confirmed]) => confirmed && keepKeys.has(key)),
-    ));
-    setSelectedInterruptions((current) => Object.fromEntries(
-      Object.entries(current).filter(([key]) => !downstreamBlockerKeys.has(key)),
-    ));
-    setQueueAfterByStep((current) => Object.fromEntries(
-      Object.entries(current).filter(([key]) => keepKeys.has(key)),
-    ));
-    setFinishedQtyByInterruption((current) => Object.fromEntries(
-      Object.entries(current).filter(([key]) => !downstreamBlockerKeys.has(key)),
-    ));
+    const stepIndex = priorityPlan.steps.findIndex(
+      (step) => step.key === stepKey
+    )
+    if (stepIndex < 0) return
+    const keepKeys = new Set(
+      priorityPlan.steps.slice(0, stepIndex).map((step) => step.key)
+    )
+    const downstreamBlockerKeys = new Set(
+      priorityPlan.steps
+        .slice(stepIndex + 1)
+        .flatMap((step) => step.blockers.map((blocker) => blocker.key))
+    )
+    setConfirmedPrioritySteps((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(
+          ([key, confirmed]) => confirmed && keepKeys.has(key)
+        )
+      )
+    )
+    setSelectedInterruptions((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(
+          ([key]) => !downstreamBlockerKeys.has(key)
+        )
+      )
+    )
+    setQueueAfterByStep((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([key]) => keepKeys.has(key))
+      )
+    )
+    setFinishedQtyByInterruption((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(
+          ([key]) => !downstreamBlockerKeys.has(key)
+        )
+      )
+    )
   }
 
   async function reversePriorityConflict(conflict: DashboardPayload) {
-    const targetId = displayValue(conflict.targetId);
-    if (!targetId || targetId === "-") return;
+    const targetId = displayValue(conflict.targetId)
+    if (!targetId || targetId === "-") return
     await submitAction("reverse-entry", {
       targetTable: "plannerPriorities",
       targetId,
-      targetKey: displayValue(conflict.targetKey) !== "-" ? displayValue(conflict.targetKey) : "",
-      targetLabel: displayValue(conflict.targetLabel) !== "-" ? displayValue(conflict.targetLabel) : "",
+      targetKey:
+        displayValue(conflict.targetKey) !== "-"
+          ? displayValue(conflict.targetKey)
+          : "",
+      targetLabel:
+        displayValue(conflict.targetLabel) !== "-"
+          ? displayValue(conflict.targetLabel)
+          : "",
       reason: `Planner replacing conflicting priority action with ${selectedJc || selectedPart} ${priority}`,
       correctedBy: "Planner",
-    });
-    setResolvedPriorityConflictIds((current) => new Set([...current, targetId]));
+    })
+    setResolvedPriorityConflictIds((current) => new Set([...current, targetId]))
   }
   function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+    event.preventDefault()
     if (!planReady) {
-      setPlanReady(true);
-      return;
+      setPlanReady(true)
+      return
     }
-    if ((!selectedPart && !selectedJc) || hasSelectedRunningWithoutQty || !allStepsConfirmed || priorityConflicts.length > 0) return;
-    const queueBeforeSetups = priorityPlanQueueBeforeSetups(priorityPlan.steps, queueAfterByStep);
+    if (
+      (!selectedPart && !selectedJc) ||
+      hasSelectedRunningWithoutQty ||
+      !allStepsConfirmed ||
+      priorityConflicts.length > 0
+    )
+      return
+    const queueBeforeSetups = priorityPlanQueueBeforeSetups(
+      priorityPlan.steps,
+      queueAfterByStep
+    )
     const interruptedSetups = selectedBlockers.map((blocker) => ({
       jcNo: blocker.jcNo,
       setupNo: blocker.setupNo,
       machine: blocker.machine,
-      finishedQty: blocker.state === "running" ? Number(finishedQtyByInterruption[blocker.key] || 0) : undefined,
-    }));
-    const firstInterruption = interruptedSetups[0];
-    const approvalMode = selectedBlockers.some((blocker) => blocker.state === "running")
+      finishedQty:
+        blocker.state === "running"
+          ? Number(finishedQtyByInterruption[blocker.key] || 0)
+          : undefined,
+    }))
+    const firstInterruption = interruptedSetups[0]
+    const approvalMode = selectedBlockers.some(
+      (blocker) => blocker.state === "running"
+    )
       ? "allow_stop_running"
-      : selectedBlockers.some((blocker) => blocker.state === "started_not_running")
+      : selectedBlockers.some(
+            (blocker) => blocker.state === "started_not_running"
+          )
         ? "allow_started_not_running"
-        : "idle_queue_only";
+        : "idle_queue_only"
 
     submitAction("planner-priority", {
       target: selectedJc || selectedPart,
@@ -2852,16 +4253,22 @@ function PlannerPriorityForm({
       interruptedSetups,
       queueBeforeSetups,
       remark,
-    });
-    setRemark("");
-    resetPlanReview();
+    })
+    setRemark("")
+    resetPlanReview()
   }
 
   return (
-    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+    <form
+      className="grid gap-3 rounded-xl border bg-background p-3"
+      onSubmit={submit}
+    >
       <div>
         <div className="text-sm font-medium">1. Priority change</div>
-        <div className="text-xs text-muted-foreground">Review the setup-wise machine impact before applying a priority change.</div>
+        <div className="text-xs text-muted-foreground">
+          Review the setup-wise machine impact before applying a priority
+          change.
+        </div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
         <Field label="Item code">
@@ -2870,14 +4277,16 @@ function PlannerPriorityForm({
             value={partCode}
             required
             onChange={(event) => {
-              setPartCode(event.target.value);
-              setJcNo("");
-              resetPlanReview();
+              setPartCode(event.target.value)
+              setJcNo("")
+              resetPlanReview()
             }}
           >
             <option value="">Select item</option>
             {itemOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </select>
         </Field>
@@ -2886,13 +4295,15 @@ function PlannerPriorityForm({
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={jcNo}
             onChange={(event) => {
-              setJcNo(event.target.value);
-              resetPlanReview();
+              setJcNo(event.target.value)
+              resetPlanReview()
             }}
           >
             <option value="">All JCs for item</option>
             {jobCardOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </select>
         </Field>
@@ -2901,17 +4312,23 @@ function PlannerPriorityForm({
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={priority}
             onChange={(event) => {
-              setPriority(event.target.value);
-              resetPlanReview();
+              setPriority(event.target.value)
+              resetPlanReview()
             }}
           >
             {["Urgent", "High", "Normal", "Low"].map((option) => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
           </select>
         </Field>
         <Field label="Reason">
-          <Input value={remark} placeholder="Customer urgent / dispatch commitment" onChange={(event) => setRemark(event.target.value)} />
+          <Input
+            value={remark}
+            placeholder="Customer urgent / dispatch commitment"
+            onChange={(event) => setRemark(event.target.value)}
+          />
         </Field>
       </div>
 
@@ -2920,19 +4337,34 @@ function PlannerPriorityForm({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-sm font-medium">Probable priority plan</div>
-              <div className="text-xs text-muted-foreground">{priorityPlan.steps.length} target setup{priorityPlan.steps.length === 1 ? "" : "s"} checked from the current machine queue.</div>
-              <div className="text-xs text-muted-foreground">Confirm each setup in sequence. Later setup dates open only after the previous setup action is confirmed.</div>
+              <div className="text-xs text-muted-foreground">
+                {priorityPlan.steps.length} target setup
+                {priorityPlan.steps.length === 1 ? "" : "s"} checked from the
+                current machine queue.
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Confirm each setup in sequence. Later setup dates open only
+                after the previous setup action is confirmed.
+              </div>
             </div>
-            <Button type="button" variant="outline" onClick={resetPlanReview}>Recheck inputs</Button>
+            <Button type="button" variant="outline" onClick={resetPlanReview}>
+              Recheck inputs
+            </Button>
           </div>
           {itemPlanWindow ? (
             <div className="grid gap-1 rounded-md border bg-background p-3">
-              <div className="text-xs font-medium text-muted-foreground">Complete item plan</div>
-              <div className="text-sm font-semibold">{itemPlanWindow.startDate || "-"} to {itemPlanWindow.endDate || "-"}</div>
+              <div className="text-xs font-medium text-muted-foreground">
+                Complete item plan
+              </div>
+              <div className="text-sm font-semibold">
+                {itemPlanWindow.startDate || "-"} to{" "}
+                {itemPlanWindow.endDate || "-"}
+              </div>
             </div>
           ) : (
             <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
-              Complete item dates will appear after all setup actions are confirmed.
+              Complete item dates will appear after all setup actions are
+              confirmed.
             </div>
           )}
           {priorityPlan.steps.length ? (
@@ -2941,38 +4373,64 @@ function PlannerPriorityForm({
                 steps={priorityPlan.steps}
                 windows={priorityStepWindows}
                 confirmedSteps={confirmedPrioritySteps}
-                activeStepKey={activeStepIndex >= 0 ? priorityPlan.steps[activeStepIndex]?.key ?? "" : ""}
+                activeStepKey={
+                  activeStepIndex >= 0
+                    ? (priorityPlan.steps[activeStepIndex]?.key ?? "")
+                    : ""
+                }
               />
               <div className="grid gap-2">
-              {priorityPlan.steps.map((step, index) => (
-                <PriorityPlanStepReview
-                  key={step.key}
-                  step={step}
-                  state={confirmedPrioritySteps[step.key] ? "confirmed" : index === activeStepIndex ? "active" : "locked"}
-                  previousSetupLabel={index > 0 ? `Setup ${priorityPlan.steps[index - 1]?.setupNo}` : ""}
-                  plannedWindow={priorityStepWindows.get(step.key) ?? { startDate: step.startDate, endDate: step.endDate }}
-                  selectedInterruptions={selectedInterruptions}
-                  queueAfterKey={queueAfterByStep[step.key] ?? ""}
-                  finishedQtyByInterruption={finishedQtyByInterruption}
-                  setSelectedInterruptions={setSelectedInterruptions}
-                  onQueueAfterChange={(value) => setQueueAfterByStep((current) => {
-                    const next = { ...current };
-                    if (value) next[step.key] = value;
-                    else delete next[step.key];
-                    return next;
-                  })}
-                  setFinishedQtyByInterruption={setFinishedQtyByInterruption}
-                  onConfirm={() => confirmPriorityStep(step.key)}
-                  onEdit={() => editPriorityStep(step.key)}
-                />
-              ))}
+                {priorityPlan.steps.map((step, index) => (
+                  <PriorityPlanStepReview
+                    key={step.key}
+                    step={step}
+                    state={
+                      confirmedPrioritySteps[step.key]
+                        ? "confirmed"
+                        : index === activeStepIndex
+                          ? "active"
+                          : "locked"
+                    }
+                    previousSetupLabel={
+                      index > 0
+                        ? `Setup ${priorityPlan.steps[index - 1]?.setupNo}`
+                        : ""
+                    }
+                    plannedWindow={
+                      priorityStepWindows.get(step.key) ?? {
+                        startDate: step.startDate,
+                        endDate: step.endDate,
+                      }
+                    }
+                    selectedInterruptions={selectedInterruptions}
+                    queueAfterKey={queueAfterByStep[step.key] ?? ""}
+                    finishedQtyByInterruption={finishedQtyByInterruption}
+                    setSelectedInterruptions={setSelectedInterruptions}
+                    onQueueAfterChange={(value) =>
+                      setQueueAfterByStep((current) => {
+                        const next = { ...current }
+                        if (value) next[step.key] = value
+                        else delete next[step.key]
+                        return next
+                      })
+                    }
+                    setFinishedQtyByInterruption={setFinishedQtyByInterruption}
+                    onConfirm={() => confirmPriorityStep(step.key)}
+                    onEdit={() => editPriorityStep(step.key)}
+                  />
+                ))}
               </div>
             </>
           ) : (
-            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">No planned setup was found for this item / JC in the current machine plan.</div>
+            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
+              No planned setup was found for this item / JC in the current
+              machine plan.
+            </div>
           )}
           {hasSelectedRunningWithoutQty ? (
-            <div className="text-xs text-destructive">Enter finished quantity for every running setup selected to stop.</div>
+            <div className="text-xs text-destructive">
+              Enter finished quantity for every running setup selected to stop.
+            </div>
           ) : null}
           <PlannerPreSaveConflictReview
             conflicts={priorityConflicts}
@@ -2984,12 +4442,22 @@ function PlannerPriorityForm({
         </div>
       ) : null}
 
-      <Button className="w-fit" type="submit" disabled={planReady && (priorityPlan.steps.length === 0 || hasSelectedRunningWithoutQty || !allStepsConfirmed || priorityConflicts.length > 0)}>
+      <Button
+        className="w-fit"
+        type="submit"
+        disabled={
+          planReady &&
+          (priorityPlan.steps.length === 0 ||
+            hasSelectedRunningWithoutQty ||
+            !allStepsConfirmed ||
+            priorityConflicts.length > 0)
+        }
+      >
         <Wrench className="size-4" />
         {planReady ? "Apply confirmed priority" : "Show probable plan"}
       </Button>
     </form>
-  );
+  )
 }
 
 function PrioritySetupPreviewSummary({
@@ -2998,36 +4466,52 @@ function PrioritySetupPreviewSummary({
   confirmedSteps,
   activeStepKey,
 }: {
-  steps: PriorityPlanStep[];
-  windows: Map<string, PriorityPlanWindow>;
-  confirmedSteps: Record<string, boolean>;
-  activeStepKey: string;
+  steps: PriorityPlanStep[]
+  windows: Map<string, PriorityPlanWindow>
+  confirmedSteps: Record<string, boolean>
+  activeStepKey: string
 }) {
   return (
     <div className="grid gap-2 rounded-md border bg-background p-3">
-      <div className="text-xs font-medium text-muted-foreground">Probable setup dates</div>
+      <div className="text-xs font-medium text-muted-foreground">
+        Probable setup dates
+      </div>
       <div className="grid gap-2 md:grid-cols-3">
         {steps.map((step) => {
-          const window = windows.get(step.key) ?? { startDate: step.startDate, endDate: step.endDate };
+          const window = windows.get(step.key) ?? {
+            startDate: step.startDate,
+            endDate: step.endDate,
+          }
           const stateLabel = confirmedSteps[step.key]
             ? "Confirmed"
             : step.key === activeStepKey
               ? "Editing"
-              : "Queued preview";
+              : "Queued preview"
           return (
-            <div key={step.key} className="grid gap-1 rounded-md border bg-muted/20 p-2">
+            <div
+              key={step.key}
+              className="grid gap-1 rounded-md border bg-muted/20 p-2"
+            >
               <div className="flex items-center justify-between gap-2">
                 <div className="text-sm font-medium">Setup {step.setupNo}</div>
-                <Badge variant={confirmedSteps[step.key] ? "outline" : "secondary"}>{stateLabel}</Badge>
+                <Badge
+                  variant={confirmedSteps[step.key] ? "outline" : "secondary"}
+                >
+                  {stateLabel}
+                </Badge>
               </div>
-              <div className="text-sm font-semibold">{window.startDate || "-"} to {window.endDate || "-"}</div>
-              <div className="text-xs text-muted-foreground">{step.machine} - {step.itemCode} / {step.jcNo}</div>
+              <div className="text-sm font-semibold">
+                {window.startDate || "-"} to {window.endDate || "-"}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {step.machine} - {step.itemCode} / {step.jcNo}
+              </div>
             </div>
-          );
+          )
         })}
       </div>
     </div>
-  );
+  )
 }
 function PriorityPlanStepReview({
   step,
@@ -3043,32 +4527,44 @@ function PriorityPlanStepReview({
   onConfirm,
   onEdit,
 }: {
-  step: PriorityPlanStep;
-  state: "active" | "confirmed" | "locked";
-  previousSetupLabel: string;
-  plannedWindow: PriorityPlanWindow;
-  selectedInterruptions: Record<string, boolean>;
-  queueAfterKey: string;
-  finishedQtyByInterruption: Record<string, string>;
-  setSelectedInterruptions: Dispatch<SetStateAction<Record<string, boolean>>>;
-  onQueueAfterChange: (value: string) => void;
-  setFinishedQtyByInterruption: Dispatch<SetStateAction<Record<string, string>>>;
-  onConfirm: () => void;
-  onEdit: () => void;
+  step: PriorityPlanStep
+  state: "active" | "confirmed" | "locked"
+  previousSetupLabel: string
+  plannedWindow: PriorityPlanWindow
+  selectedInterruptions: Record<string, boolean>
+  queueAfterKey: string
+  finishedQtyByInterruption: Record<string, string>
+  setSelectedInterruptions: Dispatch<SetStateAction<Record<string, boolean>>>
+  onQueueAfterChange: (value: string) => void
+  setFinishedQtyByInterruption: Dispatch<SetStateAction<Record<string, string>>>
+  onConfirm: () => void
+  onEdit: () => void
 }) {
   const selectedRunningKeys = step.blockers
-    .filter((blocker) => blocker.state === "running" && selectedInterruptions[blocker.key])
-    .map((blocker) => blocker.key);
-  const selectedRunningCount = selectedRunningKeys.length;
-  const runningBlockerCount = step.blockers.filter((blocker) => blocker.state === "running").length;
-  const selectedRunningWithoutQty = step.blockers.some((blocker) =>
-    blocker.state === "running" && selectedInterruptions[blocker.key] && Number(finishedQtyByInterruption[blocker.key] || 0) <= 0,
-  );
-  const selectedStartedCount = step.blockers.filter((blocker) =>
-    blocker.state === "started_not_running" && selectedInterruptions[blocker.key],
-  ).length;
-  const queuedBlockers = step.blockers.filter((blocker) => blocker.state === "queued");
-  const heldQueueBlockers = priorityPlanHeldBlockers(step, queueAfterKey);
+    .filter(
+      (blocker) =>
+        blocker.state === "running" && selectedInterruptions[blocker.key]
+    )
+    .map((blocker) => blocker.key)
+  const selectedRunningCount = selectedRunningKeys.length
+  const runningBlockerCount = step.blockers.filter(
+    (blocker) => blocker.state === "running"
+  ).length
+  const selectedRunningWithoutQty = step.blockers.some(
+    (blocker) =>
+      blocker.state === "running" &&
+      selectedInterruptions[blocker.key] &&
+      Number(finishedQtyByInterruption[blocker.key] || 0) <= 0
+  )
+  const selectedStartedCount = step.blockers.filter(
+    (blocker) =>
+      blocker.state === "started_not_running" &&
+      selectedInterruptions[blocker.key]
+  ).length
+  const queuedBlockers = step.blockers.filter(
+    (blocker) => blocker.state === "queued"
+  )
+  const heldQueueBlockers = priorityPlanHeldBlockers(step, queueAfterKey)
 
   const interruptMode = selectedRunningCount
     ? `Stop ${selectedRunningCount} running setup${selectedRunningCount === 1 ? "" : "s"}`
@@ -3076,21 +4572,23 @@ function PriorityPlanStepReview({
       ? `Move ${selectedStartedCount} started setup${selectedStartedCount === 1 ? "" : "s"}`
       : runningBlockerCount
         ? "Do not stop running machine"
-        : "";
+        : ""
   const queueMode = queuedBlockers.length
     ? heldQueueBlockers.length === 0
       ? "Position 1 on queued machine work"
       : heldQueueBlockers.length === queuedBlockers.length
         ? "Current queue position"
         : `After ${heldQueueBlockers.length} queued setup${heldQueueBlockers.length === 1 ? "" : "s"}`
-    : "No queued setup ahead";
-  const planMode = [interruptMode, queueMode].filter(Boolean).join("; ");
+    : "No queued setup ahead"
+  const planMode = [interruptMode, queueMode].filter(Boolean).join("; ")
 
   return (
     <div className="grid gap-2 rounded-lg border bg-background p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <div className="text-sm font-medium">{step.itemCode} / {step.jcNo} / Setup {step.setupNo}</div>
+          <div className="text-sm font-medium">
+            {step.itemCode} / {step.jcNo} / Setup {step.setupNo}
+          </div>
           <div className="text-xs text-muted-foreground">
             {state === "confirmed"
               ? `Confirmed on ${step.machine} - ${plannedWindow.startDate || "-"} to ${plannedWindow.endDate || "-"}`
@@ -3098,15 +4596,22 @@ function PriorityPlanStepReview({
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          <Badge variant={step.blockers.length ? "secondary" : "outline"}>{step.blockers.length ? step.blockers.length + " queue impact" : "No stop needed"}</Badge>
-          {state === "confirmed" ? <Badge variant="outline">Confirmed</Badge> : null}
+          <Badge variant={step.blockers.length ? "secondary" : "outline"}>
+            {step.blockers.length
+              ? step.blockers.length + " queue impact"
+              : "No stop needed"}
+          </Badge>
+          {state === "confirmed" ? (
+            <Badge variant="outline">Confirmed</Badge>
+          ) : null}
           {state === "locked" ? <Badge variant="outline">Locked</Badge> : null}
         </div>
       </div>
 
       {state === "locked" ? (
         <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
-          Confirm {previousSetupLabel || "the previous setup"} before planning this setup.
+          Confirm {previousSetupLabel || "the previous setup"} before planning
+          this setup.
         </div>
       ) : null}
 
@@ -3117,7 +4622,13 @@ function PriorityPlanStepReview({
             window={plannedWindow}
             detail={planMode}
           />
-          <Button type="button" variant="outline" size="sm" className="w-fit" onClick={onEdit}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-fit"
+            onClick={onEdit}
+          >
             Edit setup action
           </Button>
         </div>
@@ -3140,62 +4651,98 @@ function PriorityPlanStepReview({
         />
       ) : null}
 
-      {state === "active" && step.blockers.some((blocker) => blocker.requiresApproval) ? (
+      {state === "active" &&
+      step.blockers.some((blocker) => blocker.requiresApproval) ? (
         <div className="grid gap-2">
-          {step.blockers.filter((blocker) => blocker.requiresApproval).map((blocker) => {
-            const selected = Boolean(selectedInterruptions[blocker.key]);
-            return (
-              <div key={blocker.key} className="grid gap-2 rounded-md border p-2 md:grid-cols-[1fr_auto] md:items-center">
-                <div>
-                  <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
-                  <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} to {blocker.endDate} - {blocker.label}</div>
+          {step.blockers
+            .filter((blocker) => blocker.requiresApproval)
+            .map((blocker) => {
+              const selected = Boolean(selectedInterruptions[blocker.key])
+              return (
+                <div
+                  key={blocker.key}
+                  className="grid gap-2 rounded-md border p-2 md:grid-cols-[1fr_auto] md:items-center"
+                >
+                  <div>
+                    <div className="text-sm font-medium">
+                      {blocker.itemCode} / {blocker.jcNo} / Setup{" "}
+                      {blocker.setupNo}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {blocker.machine} - {blocker.startDate} to{" "}
+                      {blocker.endDate} - {blocker.label}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <Button
+                      type="button"
+                      variant={selected ? "default" : "outline"}
+                      onClick={() =>
+                        setSelectedInterruptions((current) => ({
+                          ...current,
+                          [blocker.key]: !selected,
+                        }))
+                      }
+                    >
+                      {blocker.state === "running"
+                        ? selected
+                          ? "Stop selected"
+                          : "Stop this setup"
+                        : selected
+                          ? "Move approved"
+                          : "Approve queue move"}
+                    </Button>
+                    {selected && blocker.state === "running" ? (
+                      <Field label="Finished qty">
+                        <Input
+                          className="w-28"
+                          min="0"
+                          step="1"
+                          type="number"
+                          value={finishedQtyByInterruption[blocker.key] ?? ""}
+                          required
+                          onChange={(event) =>
+                            setFinishedQtyByInterruption((current) => ({
+                              ...current,
+                              [blocker.key]: event.target.value,
+                            }))
+                          }
+                        />
+                      </Field>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-end gap-2">
-                  <Button
-                    type="button"
-                    variant={selected ? "default" : "outline"}
-                    onClick={() => setSelectedInterruptions((current) => ({ ...current, [blocker.key]: !selected }))}
-                  >
-                    {blocker.state === "running" ? (selected ? "Stop selected" : "Stop this setup") : (selected ? "Move approved" : "Approve queue move")}
-                  </Button>
-                  {selected && blocker.state === "running" ? (
-                    <Field label="Finished qty">
-                      <Input
-                        className="w-28"
-                        min="0"
-                        step="1"
-                        type="number"
-                        value={finishedQtyByInterruption[blocker.key] ?? ""}
-                        required
-                        onChange={(event) => setFinishedQtyByInterruption((current) => ({ ...current, [blocker.key]: event.target.value }))}
-                      />
-                    </Field>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
+              )
+            })}
         </div>
       ) : null}
 
       {state === "active" && selectedRunningWithoutQty ? (
-        <div className="text-xs text-destructive">Enter finished quantity for every running setup selected to stop.</div>
+        <div className="text-xs text-destructive">
+          Enter finished quantity for every running setup selected to stop.
+        </div>
       ) : null}
 
       {state === "active" ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" onClick={onConfirm} disabled={selectedRunningWithoutQty}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={onConfirm}
+            disabled={selectedRunningWithoutQty}
+          >
             Confirm setup action
           </Button>
           <span className="text-xs text-muted-foreground">
-            {runningBlockerCount ? "Leaving running blockers unselected keeps them running." : "No running setup blocks this target."}
+            {runningBlockerCount
+              ? "Leaving running blockers unselected keeps them running."
+              : "No running setup blocks this target."}
           </span>
         </div>
       ) : null}
     </div>
-  );
+  )
 }
-
 
 function PriorityQueuePlacementBoard({
   step,
@@ -3203,48 +4750,62 @@ function PriorityQueuePlacementBoard({
   plannedWindow,
   onQueueAfterChange,
 }: {
-  step: PriorityPlanStep;
-  queueAfterKey: string;
-  plannedWindow: PriorityPlanWindow;
-  onQueueAfterChange: (value: string) => void;
+  step: PriorityPlanStep
+  queueAfterKey: string
+  plannedWindow: PriorityPlanWindow
+  onQueueAfterChange: (value: string) => void
 }) {
-  const queuedBlockers = step.blockers.filter((blocker) => blocker.state === "queued");
-  const placementIndex = priorityQueuePlacementIndex(queuedBlockers, queueAfterKey);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const queuedBlockers = step.blockers.filter(
+    (blocker) => blocker.state === "queued"
+  )
+  const placementIndex = priorityQueuePlacementIndex(
+    queuedBlockers,
+    queueAfterKey
+  )
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
   function placeAt(index: number) {
-    const boundedIndex = Math.max(0, Math.min(index, queuedBlockers.length));
-    const afterKey = boundedIndex > 0 ? queuedBlockers[boundedIndex - 1]?.key ?? "" : "";
-    onQueueAfterChange(afterKey);
+    const boundedIndex = Math.max(0, Math.min(index, queuedBlockers.length))
+    const afterKey =
+      boundedIndex > 0 ? (queuedBlockers[boundedIndex - 1]?.key ?? "") : ""
+    onQueueAfterChange(afterKey)
   }
 
   function dragPriority(event: DragEvent<HTMLDivElement>) {
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", step.key);
+    event.dataTransfer.effectAllowed = "move"
+    event.dataTransfer.setData("text/plain", step.key)
   }
 
   function allowDrop(event: DragEvent<HTMLButtonElement>, index: number) {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    setDragOverIndex(index);
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "move"
+    setDragOverIndex(index)
   }
 
   function dropPriority(event: DragEvent<HTMLButtonElement>, index: number) {
-    event.preventDefault();
-    const sourceKey = event.dataTransfer.getData("text/plain");
-    setDragOverIndex(null);
-    if (sourceKey && sourceKey !== step.key) return;
-    placeAt(index);
+    event.preventDefault()
+    const sourceKey = event.dataTransfer.getData("text/plain")
+    setDragOverIndex(null)
+    if (sourceKey && sourceKey !== step.key) return
+    placeAt(index)
   }
 
   return (
     <div className="grid gap-2 rounded-md border bg-muted/20 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-xs font-medium text-muted-foreground">{step.machine} queue placement</div>
-          <div className="text-sm font-semibold">{plannedWindow.startDate || "-"} to {plannedWindow.endDate || "-"}</div>
+          <div className="text-xs font-medium text-muted-foreground">
+            {step.machine} queue placement
+          </div>
+          <div className="text-sm font-semibold">
+            {plannedWindow.startDate || "-"} to {plannedWindow.endDate || "-"}
+          </div>
         </div>
-        <Badge variant="secondary">{placementIndex === 0 ? "Position 1" : `After ${placementIndex} setup${placementIndex === 1 ? "" : "s"}`}</Badge>
+        <Badge variant="secondary">
+          {placementIndex === 0
+            ? "Position 1"
+            : `After ${placementIndex} setup${placementIndex === 1 ? "" : "s"}`}
+        </Badge>
       </div>
       <div className="grid gap-1">
         {Array.from({ length: queuedBlockers.length + 1 }, (_, index) => (
@@ -3255,7 +4816,11 @@ function PriorityQueuePlacementBoard({
               label={priorityQueueDropLabel(index, queuedBlockers)}
               onClick={() => placeAt(index)}
               onDragOver={(event) => allowDrop(event, index)}
-              onDragLeave={() => setDragOverIndex((current) => current === index ? null : current)}
+              onDragLeave={() =>
+                setDragOverIndex((current) =>
+                  current === index ? null : current
+                )
+              }
               onDrop={(event) => dropPriority(event, index)}
             />
             {placementIndex === index ? (
@@ -3278,7 +4843,7 @@ function PriorityQueuePlacementBoard({
         ))}
       </div>
     </div>
-  );
+  )
 }
 
 function PriorityQueueDropZone({
@@ -3290,19 +4855,23 @@ function PriorityQueueDropZone({
   onDragLeave,
   onDrop,
 }: {
-  active: boolean;
-  current: boolean;
-  label: string;
-  onClick: () => void;
-  onDragOver: (event: DragEvent<HTMLButtonElement>) => void;
-  onDragLeave: () => void;
-  onDrop: (event: DragEvent<HTMLButtonElement>) => void;
+  active: boolean
+  current: boolean
+  label: string
+  onClick: () => void
+  onDragOver: (event: DragEvent<HTMLButtonElement>) => void
+  onDragLeave: () => void
+  onDrop: (event: DragEvent<HTMLButtonElement>) => void
 }) {
   const className = [
     "h-3 rounded-full border transition-colors",
-    current ? "border-primary bg-primary/25" : "border-dashed border-transparent bg-transparent hover:border-primary/50 hover:bg-primary/10",
+    current
+      ? "border-primary bg-primary/25"
+      : "border-dashed border-transparent bg-transparent hover:border-primary/50 hover:bg-primary/10",
     active ? "border-primary bg-primary/20" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ")
 
   return (
     <button
@@ -3317,7 +4886,7 @@ function PriorityQueueDropZone({
     >
       <span className="sr-only">{label}</span>
     </button>
-  );
+  )
 }
 
 function PriorityQueuePriorityTile({
@@ -3326,10 +4895,10 @@ function PriorityQueuePriorityTile({
   onDragStart,
   onDragEnd,
 }: {
-  step: PriorityPlanStep;
-  plannedWindow: PriorityPlanWindow;
-  onDragStart: (event: DragEvent<HTMLDivElement>) => void;
-  onDragEnd: () => void;
+  step: PriorityPlanStep
+  plannedWindow: PriorityPlanWindow
+  onDragStart: (event: DragEvent<HTMLDivElement>) => void
+  onDragEnd: () => void
 }) {
   return (
     <div
@@ -3340,12 +4909,17 @@ function PriorityQueuePriorityTile({
     >
       <GripVertical className="size-4 text-primary" aria-hidden="true" />
       <div>
-        <div className="text-sm font-semibold">{step.itemCode} / {step.jcNo} / Setup {step.setupNo}</div>
-        <div className="text-xs text-muted-foreground">{step.machine} - {plannedWindow.startDate || "-"} to {plannedWindow.endDate || "-"}</div>
+        <div className="text-sm font-semibold">
+          {step.itemCode} / {step.jcNo} / Setup {step.setupNo}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {step.machine} - {plannedWindow.startDate || "-"} to{" "}
+          {plannedWindow.endDate || "-"}
+        </div>
       </div>
       <Badge>Priority</Badge>
     </div>
-  );
+  )
 }
 
 function PriorityQueueBlockerTile({
@@ -3354,150 +4928,257 @@ function PriorityQueueBlockerTile({
   onPlaceBefore,
   onPlaceAfter,
 }: {
-  blocker: PriorityPlanStep["blockers"][number];
-  keptAhead: boolean;
-  onPlaceBefore: () => void;
-  onPlaceAfter: () => void;
+  blocker: PriorityPlanStep["blockers"][number]
+  keptAhead: boolean
+  onPlaceBefore: () => void
+  onPlaceAfter: () => void
 }) {
   return (
     <div className="grid gap-2 rounded-md border bg-background p-2 md:grid-cols-[1fr_auto] md:items-center">
       <div>
-        <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
-        <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} to {blocker.endDate}</div>
+        <div className="text-sm font-medium">
+          {blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {blocker.machine} - {blocker.startDate} to {blocker.endDate}
+        </div>
       </div>
       <div className="flex items-center gap-2">
-        <Badge variant={keptAhead ? "secondary" : "outline"}>{keptAhead ? "Ahead of priority" : "After priority"}</Badge>
+        <Badge variant={keptAhead ? "secondary" : "outline"}>
+          {keptAhead ? "Ahead of priority" : "After priority"}
+        </Badge>
         <div className="flex gap-1">
-          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority before ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place priority before this setup" onClick={onPlaceBefore}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-xs"
+            aria-label={`Place priority before ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`}
+            title="Place priority before this setup"
+            onClick={onPlaceBefore}
+          >
             <ArrowUp className="size-3" />
           </Button>
-          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority after ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place priority after this setup" onClick={onPlaceAfter}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-xs"
+            aria-label={`Place priority after ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`}
+            title="Place priority after this setup"
+            onClick={onPlaceAfter}
+          >
             <ArrowDown className="size-3" />
           </Button>
         </div>
       </div>
     </div>
-  );
+  )
 }
 
-function priorityQueuePlacementIndex(queuedBlockers: PriorityPlanStep["blockers"], queueAfterKey: string) {
-  if (!queueAfterKey) return 0;
-  const blockerIndex = queuedBlockers.findIndex((blocker) => blocker.key === queueAfterKey);
-  return blockerIndex < 0 ? 0 : blockerIndex + 1;
+function priorityQueuePlacementIndex(
+  queuedBlockers: PriorityPlanStep["blockers"],
+  queueAfterKey: string
+) {
+  if (!queueAfterKey) return 0
+  const blockerIndex = queuedBlockers.findIndex(
+    (blocker) => blocker.key === queueAfterKey
+  )
+  return blockerIndex < 0 ? 0 : blockerIndex + 1
 }
 
-function priorityQueueDropLabel(index: number, queuedBlockers: PriorityPlanStep["blockers"]) {
-  if (index === 0) return "Place priority at position 1";
-  const blocker = queuedBlockers[index - 1];
-  return blocker ? `Place priority after ${blocker.itemCode} / ${blocker.jcNo} / setup ${blocker.setupNo}` : "Place priority at current queue position";
+function priorityQueueDropLabel(
+  index: number,
+  queuedBlockers: PriorityPlanStep["blockers"]
+) {
+  if (index === 0) return "Place priority at position 1"
+  const blocker = queuedBlockers[index - 1]
+  return blocker
+    ? `Place priority after ${blocker.itemCode} / ${blocker.jcNo} / setup ${blocker.setupNo}`
+    : "Place priority at current queue position"
 }
 function PriorityScenarioCard({
   title,
   window,
   detail,
 }: {
-  title: string;
-  window: PriorityPlanWindow;
-  detail: string;
+  title: string
+  window: PriorityPlanWindow
+  detail: string
 }) {
   return (
     <div className="grid gap-1 rounded-md border bg-muted/20 p-3">
       <div className="text-xs font-medium text-muted-foreground">{title}</div>
-      <div className="text-sm font-semibold">{window.startDate || "-"} to {window.endDate || "-"}</div>
+      <div className="text-sm font-semibold">
+        {window.startDate || "-"} to {window.endDate || "-"}
+      </div>
       <div className="text-xs text-muted-foreground">{detail}</div>
     </div>
-  );
+  )
 }
 
 function RouteChangePlannerForm({
   productionControl,
   submitAction,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const workOrders = asArray(productionControl.workOrders);
-  const routeRows = asArray(productionControl.routeMasterRows);
-  const [target, setTarget] = useState("");
-  const [newOption, setNewOption] = useState("");
-  const [reason, setReason] = useState("");
-  const [setupPlan, setSetupPlan] = useState<Record<string, { plan: boolean; quantity: string; remark: string }>>({});
+  const workOrders = asArray(productionControl.workOrders)
+  const routeRows = asArray(productionControl.routeMasterRows)
+  const [target, setTarget] = useState("")
+  const [newOption, setNewOption] = useState("")
+  const [reason, setReason] = useState("")
+  const [setupPlan, setSetupPlan] = useState<
+    Record<string, { plan: boolean; quantity: string; remark: string }>
+  >({})
 
   const selectedWorkOrder = useMemo(() => {
-    const targetKey = target.toLowerCase();
-    return workOrders.find((row) => str(row.jcNo).toLowerCase() === targetKey || str(row.partCode).toLowerCase() === targetKey);
-  }, [target, workOrders]);
-  const partCode = str(selectedWorkOrder?.partCode);
-  const defaultOrderQty = str(selectedWorkOrder?.orderPcs);
-  const optionRows = useMemo(() => routeRows.filter((row) => str(row.partNo).toLowerCase() === partCode.toLowerCase()), [partCode, routeRows]);
-  const optionNumbers = useMemo(() => uniqueValues(optionRows.map((row) => str(row.optionNumber))), [optionRows]);
-  const selectedOption = optionNumbers.includes(newOption) ? newOption : optionNumbers[0] || "";
-  const selectedSetups = useMemo(() => optionRows
-    .filter((row) => str(row.optionNumber) === selectedOption)
-    .sort((a, b) => str(a.displaySetupNo || a.setupNo).localeCompare(str(b.displaySetupNo || b.setupNo), undefined, { numeric: true })), [optionRows, selectedOption]);
+    const targetKey = target.toLowerCase()
+    return workOrders.find(
+      (row) =>
+        str(row.jcNo).toLowerCase() === targetKey ||
+        str(row.partCode).toLowerCase() === targetKey
+    )
+  }, [target, workOrders])
+  const partCode = str(selectedWorkOrder?.partCode)
+  const defaultOrderQty = str(selectedWorkOrder?.orderPcs)
+  const optionRows = useMemo(
+    () =>
+      routeRows.filter(
+        (row) => str(row.partNo).toLowerCase() === partCode.toLowerCase()
+      ),
+    [partCode, routeRows]
+  )
+  const optionNumbers = useMemo(
+    () => uniqueValues(optionRows.map((row) => str(row.optionNumber))),
+    [optionRows]
+  )
+  const selectedOption = optionNumbers.includes(newOption)
+    ? newOption
+    : optionNumbers[0] || ""
+  const selectedSetups = useMemo(
+    () =>
+      optionRows
+        .filter((row) => str(row.optionNumber) === selectedOption)
+        .sort((a, b) =>
+          str(a.displaySetupNo || a.setupNo).localeCompare(
+            str(b.displaySetupNo || b.setupNo),
+            undefined,
+            { numeric: true }
+          )
+        ),
+    [optionRows, selectedOption]
+  )
   const selectedSetupPlan = useMemo(() => {
-    const next: Record<string, { plan: boolean; quantity: string; remark: string }> = {};
+    const next: Record<
+      string,
+      { plan: boolean; quantity: string; remark: string }
+    > = {}
     for (const setup of selectedSetups) {
-      const setupNo = str(setup.displaySetupNo || setup.setupNo);
-      next[setupNo] = setupPlan[setupNo] ?? { plan: true, quantity: defaultOrderQty, remark: "" };
+      const setupNo = str(setup.displaySetupNo || setup.setupNo)
+      next[setupNo] = setupPlan[setupNo] ?? {
+        plan: true,
+        quantity: defaultOrderQty,
+        remark: "",
+      }
     }
-    return next;
-  }, [defaultOrderQty, selectedSetups, setupPlan]);
+    return next
+  }, [defaultOrderQty, selectedSetups, setupPlan])
 
-  function updateSetup(setupNo: string, patch: Partial<{ plan: boolean; quantity: string; remark: string }>) {
+  function updateSetup(
+    setupNo: string,
+    patch: Partial<{ plan: boolean; quantity: string; remark: string }>
+  ) {
     setSetupPlan((current) => ({
       ...current,
-      [setupNo]: { ...(current[setupNo] ?? { plan: true, quantity: "", remark: "" }), ...patch },
-    }));
+      [setupNo]: {
+        ...(current[setupNo] ?? { plan: true, quantity: "", remark: "" }),
+        ...patch,
+      },
+    }))
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+    event.preventDefault()
     const remainingSetups = selectedSetups.map((setup) => {
-      const setupNo = str(setup.displaySetupNo || setup.setupNo);
-      const state = selectedSetupPlan[setupNo] ?? { plan: false, quantity: "", remark: "" };
+      const setupNo = str(setup.displaySetupNo || setup.setupNo)
+      const state = selectedSetupPlan[setupNo] ?? {
+        plan: false,
+        quantity: "",
+        remark: "",
+      }
       return {
         setupNo,
         plan: state.plan,
         quantity: state.plan ? Number(state.quantity) || 0 : 0,
         remark: state.remark || undefined,
-      };
-    });
+      }
+    })
     await submitAction("route-change", {
       target,
       newOption: selectedOption,
       remainingSetups,
       reason,
-    });
-    setReason("");
+    })
+    setReason("")
   }
 
   return (
-    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+    <form
+      className="grid gap-3 rounded-xl border bg-background p-3"
+      onSubmit={submit}
+    >
       <div>
         <div className="text-sm font-medium">4. Mid-route change</div>
-        <div className="text-xs text-muted-foreground">Planner selects the new route option and enters remaining setup quantities.</div>
+        <div className="text-xs text-muted-foreground">
+          Planner selects the new route option and enters remaining setup
+          quantities.
+        </div>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="Job card / part">
-          <Input list="route-change-targets" value={target} placeholder="JC-003 or M6" required onChange={(event) => setTarget(event.target.value)} />
+          <Input
+            list="route-change-targets"
+            value={target}
+            placeholder="JC-003 or M6"
+            required
+            onChange={(event) => setTarget(event.target.value)}
+          />
           <datalist id="route-change-targets">
             {workOrders.map((row) => (
-              <option key={`${str(row.jcNo)}-${str(row.partCode)}`} value={str(row.jcNo)}>
+              <option
+                key={`${str(row.jcNo)}-${str(row.partCode)}`}
+                value={str(row.jcNo)}
+              >
                 {str(row.partCode)}
               </option>
             ))}
           </datalist>
         </Field>
         <Field label="New route option">
-          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedOption} required onChange={(event) => setNewOption(event.target.value)}>
-            {optionNumbers.length ? optionNumbers.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            )) : <option value="">Select job card first</option>}
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={selectedOption}
+            required
+            onChange={(event) => setNewOption(event.target.value)}
+          >
+            {optionNumbers.length ? (
+              optionNumbers.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))
+            ) : (
+              <option value="">Select job card first</option>
+            )}
           </select>
         </Field>
         <Field label="Reason">
-          <Input value={reason} placeholder="Why route is changing" required onChange={(event) => setReason(event.target.value)} />
+          <Input
+            value={reason}
+            placeholder="Why route is changing"
+            required
+            onChange={(event) => setReason(event.target.value)}
+          />
         </Field>
       </div>
       <div className="overflow-x-auto rounded-md border">
@@ -3512,47 +5193,70 @@ function RouteChangePlannerForm({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {selectedSetups.length ? selectedSetups.map((setup) => {
-              const setupNo = str(setup.displaySetupNo || setup.setupNo);
-              const state = selectedSetupPlan[setupNo] ?? { plan: true, quantity: str(selectedWorkOrder?.orderPcs), remark: "" };
-              return (
-                <TableRow key={setupNo}>
-                  <TableCell>
-                    <div className="font-medium">{setupNo}</div>
-                    <div className="text-xs text-muted-foreground">{displayValue(setup.setupName)}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div>{displayValue(setup.machineUsed)}</div>
-                    <div className="text-xs text-muted-foreground">{displayValue(setup.machineType)}</div>
-                  </TableCell>
-                  <TableCell>
-                    <input
-                      className="size-4"
-                      type="checkbox"
-                      checked={state.plan}
-                      onChange={(event) => updateSetup(setupNo, { plan: event.target.checked })}
-                      aria-label={`Plan setup ${setupNo}`}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      className="w-28"
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={state.quantity}
-                      disabled={!state.plan}
-                      onChange={(event) => updateSetup(setupNo, { quantity: event.target.value })}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input value={state.remark} placeholder="optional" onChange={(event) => updateSetup(setupNo, { remark: event.target.value })} />
-                  </TableCell>
-                </TableRow>
-              );
-            }) : (
+            {selectedSetups.length ? (
+              selectedSetups.map((setup) => {
+                const setupNo = str(setup.displaySetupNo || setup.setupNo)
+                const state = selectedSetupPlan[setupNo] ?? {
+                  plan: true,
+                  quantity: str(selectedWorkOrder?.orderPcs),
+                  remark: "",
+                }
+                return (
+                  <TableRow key={setupNo}>
+                    <TableCell>
+                      <div className="font-medium">{setupNo}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {displayValue(setup.setupName)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>{displayValue(setup.machineUsed)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {displayValue(setup.machineType)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        className="size-4"
+                        type="checkbox"
+                        checked={state.plan}
+                        onChange={(event) =>
+                          updateSetup(setupNo, { plan: event.target.checked })
+                        }
+                        aria-label={`Plan setup ${setupNo}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        className="w-28"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={state.quantity}
+                        disabled={!state.plan}
+                        onChange={(event) =>
+                          updateSetup(setupNo, { quantity: event.target.value })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={state.remark}
+                        placeholder="optional"
+                        onChange={(event) =>
+                          updateSetup(setupNo, { remark: event.target.value })
+                        }
+                      />
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            ) : (
               <TableRow>
-                <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
+                <TableCell
+                  colSpan={5}
+                  className="py-6 text-center text-sm text-muted-foreground"
+                >
                   Select a job card and route option to load setups.
                 </TableCell>
               </TableRow>
@@ -3560,12 +5264,16 @@ function RouteChangePlannerForm({
           </TableBody>
         </Table>
       </div>
-      <Button className="w-fit" type="submit" disabled={!target || !selectedOption || !selectedSetups.length}>
+      <Button
+        className="w-fit"
+        type="submit"
+        disabled={!target || !selectedOption || !selectedSetups.length}
+      >
         <Route className="size-4" />
         Save route change plan
       </Button>
     </form>
-  );
+  )
 }
 
 function JobCardsPanel({
@@ -3573,9 +5281,9 @@ function JobCardsPanel({
   submitAction,
   openMasterReadiness,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  openMasterReadiness: () => void;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  openMasterReadiness: () => void
 }) {
   return (
     <section className="grid gap-4">
@@ -3589,18 +5297,34 @@ function JobCardsPanel({
       <Card>
         <CardHeader>
           <CardTitle>Job card actions</CardTitle>
-          <CardDescription>Setup completion and dispatch approval actions.</CardDescription>
+          <CardDescription>
+            Setup completion and dispatch approval actions.
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 @5xl/main:grid-cols-2">
           <LegacyActionForm
             title="Mark setup complete"
             description="Equivalent to the legacy running job-card completion action."
             fields={[
-              { name: "jcNo", label: "Job card", placeholder: "JC-1001", required: true },
+              {
+                name: "jcNo",
+                label: "Job card",
+                placeholder: "JC-1001",
+                required: true,
+              },
               { name: "setupNo", label: "Setup no.", placeholder: "10" },
               { name: "machine", label: "Machine", placeholder: "CNC-01" },
-              { name: "completedBy", label: "Completed by", placeholder: "Name or code", required: true },
-              { name: "remark", label: "Completion remark", placeholder: "Optional" },
+              {
+                name: "completedBy",
+                label: "Completed by",
+                placeholder: "Name or code",
+                required: true,
+              },
+              {
+                name: "remark",
+                label: "Completion remark",
+                placeholder: "Optional",
+              },
             ]}
             buttonLabel="Mark complete"
             onSubmit={(body) => submitAction("mark-complete", body)}
@@ -3609,9 +5333,23 @@ function JobCardsPanel({
             title="Dispatch approval"
             description="Only completed job cards should be approved for dispatch."
             fields={[
-              { name: "jcNo", label: "Job card", placeholder: "JC-1001", required: true },
-              { name: "approvedBy", label: "Approved by", placeholder: "Name or code", required: true },
-              { name: "remark", label: "Dispatch remark", placeholder: "Optional" },
+              {
+                name: "jcNo",
+                label: "Job card",
+                placeholder: "JC-1001",
+                required: true,
+              },
+              {
+                name: "approvedBy",
+                label: "Approved by",
+                placeholder: "Name or code",
+                required: true,
+              },
+              {
+                name: "remark",
+                label: "Dispatch remark",
+                placeholder: "Optional",
+              },
             ]}
             buttonLabel="Approve dispatch"
             onSubmit={(body) => submitAction("dispatch-approval", body)}
@@ -3619,13 +5357,13 @@ function JobCardsPanel({
         </CardContent>
       </Card>
     </section>
-  );
+  )
 }
 
 function MachineDetailPanel({
   productionControl,
 }: {
-  productionControl: DashboardPayload;
+  productionControl: DashboardPayload
 }) {
   return (
     <>
@@ -3634,10 +5372,14 @@ function MachineDetailPanel({
         plannedRows={asArray(productionControl.machinePlanDetailRows)}
       />
       <section className="grid gap-4">
-        <DataRowsCard title="Machine unavailable / breakdown" rows={asArray(productionControl.machineConstraintRows)} empty="No machine issues saved yet" />
+        <DataRowsCard
+          title="Machine unavailable / breakdown"
+          rows={asArray(productionControl.machineConstraintRows)}
+          empty="No machine issues saved yet"
+        />
       </section>
     </>
-  );
+  )
 }
 
 type ShopFloorStageId =
@@ -3646,81 +5388,198 @@ type ShopFloorStageId =
   | "setting"
   | "quality_approval"
   | "operator_started"
-  | "item_complete";
+  | "item_complete"
 
-const shopFloorStages: Array<{ id: ShopFloorStageId; label: string; role: string; button: string }> = [
-  { id: "raw_material_at_machine", label: "Raw material at the machine", role: "Shop floor", button: "RM at machine" },
-  { id: "presetting", label: "Pre setting started", role: "Assistant machinist", button: "Start pre setting" },
-  { id: "setting", label: "Setting done", role: "Assistant machinist", button: "Setting done" },
-  { id: "quality_approval", label: "Quality approval", role: "Quality", button: "Quality approved" },
-  { id: "operator_started", label: "Operator assigned and machine started", role: "Machinist", button: "Start machine" },
-];
+const shopFloorStages: Array<{
+  id: ShopFloorStageId
+  label: string
+  role: string
+  button: string
+}> = [
+  {
+    id: "raw_material_at_machine",
+    label: "Raw material at the machine",
+    role: "Shop floor",
+    button: "RM at machine",
+  },
+  {
+    id: "presetting",
+    label: "Pre setting started",
+    role: "Assistant machinist",
+    button: "Start pre setting",
+  },
+  {
+    id: "setting",
+    label: "Setting done",
+    role: "Assistant machinist",
+    button: "Setting done",
+  },
+  {
+    id: "quality_approval",
+    label: "Quality approval",
+    role: "Quality",
+    button: "Quality approved",
+  },
+  {
+    id: "operator_started",
+    label: "Operator assigned and machine started",
+    role: "Machinist",
+    button: "Start machine",
+  },
+]
 
-type RoleTaskKind = "shopFloor" | "machinist" | "quality";
+type RoleTaskKind = "shopFloor" | "machinist" | "quality"
 
-const roleTaskCopy: Record<RoleTaskKind, { title: string; description: string; empty: string }> = {
+const roleTaskCopy: Record<
+  RoleTaskKind,
+  { title: string; description: string; empty: string }
+> = {
   shopFloor: {
     title: "Shop Floor Tasks",
-    description: "Items waiting for raw material to be placed at the planned machine.",
+    description:
+      "Items waiting for raw material to be placed at the planned machine.",
     empty: "No raw-material placement tasks are pending.",
   },
   machinist: {
     title: "Machinist Tasks",
-    description: "Items waiting for pre setting, setting, or operator assignment after quality approval.",
+    description:
+      "Items waiting for pre setting, setting, or operator assignment after quality approval.",
     empty: "No machinist tasks are pending.",
   },
   quality: {
     title: "Quality Control Tasks",
-    description: "Items waiting for quality approval after setting is complete.",
+    description:
+      "Items waiting for quality approval after setting is complete.",
     empty: "No quality approval tasks are pending.",
   },
-};
+}
 
 function ShopFloorStatusPanel({
   productionControl,
   submitAction,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const [machineFilter, setMachineFilter] = useState("");
-  const [locationFilter, setLocationFilter] = useState("");
-  const [currentFilter, setCurrentFilter] = useState("");
-  const [nextFilter, setNextFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const plannedRows = asArray(productionControl.machinePlanDetailRows);
-  const boardRows = useMemo(() => machineBoardRows(asArray(productionControl.machinePlanningRows), plannedRows), [plannedRows, productionControl.machinePlanningRows]);
-  const productionCardRows = useMemo(() => asArray(productionControl.productionCardRows), [productionControl.productionCardRows]);
-  const plannedByMachine = useMemo(() => groupPlannedRowsByMachine(plannedRows), [plannedRows]);
-  const machineOptions = useMemo(() => plannedMachineOptions(plannedRows, boardRows), [boardRows, plannedRows]);
-  const locationOptions = useMemo(() => uniqueValues(boardRows.map(machineMasterLocationValue).filter((value) => value !== "-")), [boardRows]);
-  const floorRows = useMemo(() => boardRows
-    .map((machineRow) => {
-      const machine = machineValue(machineRow, "machine");
-      const plans = plannedByMachine.get(machineKey(machine)) ?? [];
-      const current = currentShopFloorStatusItem(plans, productionCardRows);
-      const next = nextShopFloorStatusItem(plans, current, productionCardRows);
-      const actionCurrent = current && (shopFloorItemIsProductionCurrent(current) || shopFloorItemHasActiveProductionCard(current, productionCardRows)) ? current : undefined;
-      const actionNext = actionCurrent ? next : (current ?? next);
-      const status = shopFloorRowStatus(current, next, productionCardRows);
-      return { machineRow, machine, location: machineMasterLocationValue(machineRow), current, next, actionCurrent, actionNext, status };
-    })
-    .filter((row) =>
-      typedFilterMatches(row.machine, machineFilter) &&
-      typedFilterMatches(row.location, locationFilter) &&
-      shopFloorItemMatchesFilter(row.current, currentFilter) &&
-      shopFloorItemMatchesFilter(row.next, nextFilter) &&
-      typedFilterMatches(row.status, statusFilter),
-    ), [boardRows, currentFilter, locationFilter, machineFilter, nextFilter, plannedByMachine, productionCardRows, statusFilter]);
-  const currentOptions = useMemo(() => uniqueValues(floorRows.map((row) => row.current ? shopFloorItemLabel(row.current) : "Empty")), [floorRows]);
-  const nextOptions = useMemo(() => uniqueValues(floorRows.map((row) => row.next ? shopFloorItemLabel(row.next) : "No plan")), [floorRows]);
-  const statusOptions = useMemo(() => uniqueValues(floorRows.map((row) => row.status)), [floorRows]);
-  const currentCount = floorRows.filter((row) => row.current).length;
-  const nextCount = floorRows.filter((row) => row.next).length;
-  const waitingSetupCount = floorRows.filter((row) => !row.current && row.next).length;
+  const [machineFilter, setMachineFilter] = useState("")
+  const [locationFilter, setLocationFilter] = useState("")
+  const [currentFilter, setCurrentFilter] = useState("")
+  const [nextFilter, setNextFilter] = useState("")
+  const [statusFilter, setStatusFilter] = useState("")
+  const plannedRows = asArray(productionControl.machinePlanDetailRows)
+  const boardRows = useMemo(
+    () =>
+      machineBoardRows(
+        asArray(productionControl.machinePlanningRows),
+        plannedRows
+      ),
+    [plannedRows, productionControl.machinePlanningRows]
+  )
+  const productionCardRows = useMemo(
+    () => asArray(productionControl.productionCardRows),
+    [productionControl.productionCardRows]
+  )
+  const plannedByMachine = useMemo(
+    () => groupPlannedRowsByMachine(plannedRows),
+    [plannedRows]
+  )
+  const machineOptions = useMemo(
+    () => plannedMachineOptions(plannedRows, boardRows),
+    [boardRows, plannedRows]
+  )
+  const locationOptions = useMemo(
+    () =>
+      uniqueValues(
+        boardRows
+          .map(machineMasterLocationValue)
+          .filter((value) => value !== "-")
+      ),
+    [boardRows]
+  )
+  const floorRows = useMemo(
+    () =>
+      boardRows
+        .map((machineRow) => {
+          const machine = machineValue(machineRow, "machine")
+          const plans = plannedByMachine.get(machineKey(machine)) ?? []
+          const current = currentShopFloorStatusItem(plans, productionCardRows)
+          const next = nextShopFloorStatusItem(
+            plans,
+            current,
+            productionCardRows
+          )
+          const actionCurrent =
+            current &&
+            (shopFloorItemIsProductionCurrent(current) ||
+              shopFloorItemHasActiveProductionCard(current, productionCardRows))
+              ? current
+              : undefined
+          const actionNext = actionCurrent ? next : (current ?? next)
+          const status = shopFloorRowStatus(current, next, productionCardRows)
+          return {
+            machineRow,
+            machine,
+            location: machineMasterLocationValue(machineRow),
+            current,
+            next,
+            actionCurrent,
+            actionNext,
+            status,
+          }
+        })
+        .filter(
+          (row) =>
+            typedFilterMatches(row.machine, machineFilter) &&
+            typedFilterMatches(row.location, locationFilter) &&
+            shopFloorItemMatchesFilter(row.current, currentFilter) &&
+            shopFloorItemMatchesFilter(row.next, nextFilter) &&
+            typedFilterMatches(row.status, statusFilter)
+        ),
+    [
+      boardRows,
+      currentFilter,
+      locationFilter,
+      machineFilter,
+      nextFilter,
+      plannedByMachine,
+      productionCardRows,
+      statusFilter,
+    ]
+  )
+  const currentOptions = useMemo(
+    () =>
+      uniqueValues(
+        floorRows.map((row) =>
+          row.current ? shopFloorItemLabel(row.current) : "Empty"
+        )
+      ),
+    [floorRows]
+  )
+  const nextOptions = useMemo(
+    () =>
+      uniqueValues(
+        floorRows.map((row) =>
+          row.next ? shopFloorItemLabel(row.next) : "No plan"
+        )
+      ),
+    [floorRows]
+  )
+  const statusOptions = useMemo(
+    () => uniqueValues(floorRows.map((row) => row.status)),
+    [floorRows]
+  )
+  const currentCount = floorRows.filter((row) => row.current).length
+  const nextCount = floorRows.filter((row) => row.next).length
+  const waitingSetupCount = floorRows.filter(
+    (row) => !row.current && row.next
+  ).length
 
-  async function saveStage(row: DashboardPayload, stage: ShopFloorStageId, extra: Record<string, unknown> = {}) {
-    const stageSpec = shopFloorStages.find((item) => item.id === stage);
+  async function saveStage(
+    row: DashboardPayload,
+    stage: ShopFloorStageId,
+    extra: Record<string, unknown> = {}
+  ) {
+    const stageSpec = shopFloorStages.find((item) => item.id === stage)
     const payload = {
       jcNo: jobCardNumber(row),
       partCode: itemCode(row),
@@ -3737,30 +5596,33 @@ function ShopFloorStatusPanel({
       remark: "",
       completedAt: new Date().toISOString(),
       ...extra,
-    };
+    }
     await submitAction("data-entry", {
       entryType: "shop_floor_status",
       key: dataEntryKey("shop_floor_status", payload),
       payload,
-    });
+    })
   }
 
-
-
-  async function saveSetupChecklistSession(row: DashboardPayload, session: DashboardPayload) {
-    const payload = setupChecklistSessionPayload(row, session);
+  async function saveSetupChecklistSession(
+    row: DashboardPayload,
+    session: DashboardPayload
+  ) {
+    const payload = setupChecklistSessionPayload(row, session)
     await submitAction("data-entry", {
       entryType: "setup_checklist_session",
       key: dataEntryKey("setup_checklist_session", payload),
       payload,
-    });
+    })
   }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Shop Floor Status</CardTitle>
-        <CardDescription>Machine-wise current item and next planned setup for floor teams.</CardDescription>
+        <CardDescription>
+          Machine-wise current item and next planned setup for floor teams.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
@@ -3822,24 +5684,46 @@ function ShopFloorStatusPanel({
                 <TableRow>
                   <TableHead className="min-w-32">Machine no.</TableHead>
                   <TableHead className="min-w-36">Master location</TableHead>
-                  <TableHead className="min-w-64">Current item running</TableHead>
+                  <TableHead className="min-w-64">
+                    Current item running
+                  </TableHead>
                   <TableHead className="min-w-64">Next item planned</TableHead>
                   <TableHead className="min-w-80">Status / action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {floorRows.map((row) => (
-                  <TableRow key={row.machine} className={!row.current && row.next ? "bg-amber-50/45 dark:bg-amber-950/15" : ""}>
+                  <TableRow
+                    key={row.machine}
+                    className={
+                      !row.current && row.next
+                        ? "bg-amber-50/45 dark:bg-amber-950/15"
+                        : ""
+                    }
+                  >
                     <TableCell className="align-middle">
                       <div className="font-semibold">{row.machine}</div>
-                      <div className="text-xs text-muted-foreground">{machineValue(row.machineRow, "machineType")}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {machineValue(row.machineRow, "machineType")}
+                      </div>
                     </TableCell>
-                    <TableCell className="align-middle text-sm">{row.location}</TableCell>
+                    <TableCell className="align-middle text-sm">
+                      {row.location}
+                    </TableCell>
                     <TableCell className="align-middle">
                       {row.current ? (
-                        <ShopFloorItemSummary row={row.current} tone="current" productionCardRows={productionCardRows} />
+                        <ShopFloorItemSummary
+                          row={row.current}
+                          tone="current"
+                          productionCardRows={productionCardRows}
+                        />
                       ) : (
-                        <EmptyShopFloorSlot label={row.next ? "Setup required" : "No running item"} compact />
+                        <EmptyShopFloorSlot
+                          label={
+                            row.next ? "Setup required" : "No running item"
+                          }
+                          compact
+                        />
                       )}
                     </TableCell>
                     <TableCell className="align-middle">
@@ -3855,8 +5739,12 @@ function ShopFloorStatusPanel({
                         next={row.actionNext}
                         onSaveStage={saveStage}
                         onSaveSetupChecklistSession={saveSetupChecklistSession}
-                        setupChecklistMasters={asArray(productionControl.setupChecklistMasterRows)}
-                        setupChecklistSessions={asArray(productionControl.setupChecklistSessionRows)}
+                        setupChecklistMasters={asArray(
+                          productionControl.setupChecklistMasterRows
+                        )}
+                        setupChecklistSessions={asArray(
+                          productionControl.setupChecklistSessionRows
+                        )}
                       />
                     </TableCell>
                   </TableRow>
@@ -3865,11 +5753,13 @@ function ShopFloorStatusPanel({
             </Table>
           </div>
         ) : (
-          <EmptyRowsMessage>No machines match the current filter</EmptyRowsMessage>
+          <EmptyRowsMessage>
+            No machines match the current filter
+          </EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function RoleTaskPanel({
@@ -3880,46 +5770,89 @@ function RoleTaskPanel({
   onStartFirstPieceInspection,
   role,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  openDataEntry?: (entryType: string, defaults?: Record<string, unknown>) => void;
-  enableFirstPieceInspection?: boolean;
-  onStartFirstPieceInspection?: (row: DashboardPayload) => void;
-  role: RoleTaskKind;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  openDataEntry?: (
+    entryType: string,
+    defaults?: Record<string, unknown>
+  ) => void
+  enableFirstPieceInspection?: boolean
+  onStartFirstPieceInspection?: (row: DashboardPayload) => void
+  role: RoleTaskKind
 }) {
-  const [machineFilter, setMachineFilter] = useState("");
-  const [locationFilter, setLocationFilter] = useState("");
-  const [itemFilter, setItemFilter] = useState("");
-  const [taskFilter, setTaskFilter] = useState("");
+  const [machineFilter, setMachineFilter] = useState("")
+  const [locationFilter, setLocationFilter] = useState("")
+  const [itemFilter, setItemFilter] = useState("")
+  const [taskFilter, setTaskFilter] = useState("")
   const copy = enableFirstPieceInspection
     ? {
         title: "First Piece Inspection",
-        description: "Quality approval tasks that require a first-piece inspection report with five piece readings.",
+        description:
+          "Quality approval tasks that require a first-piece inspection report with five piece readings.",
         empty: "No first-piece inspection tasks are pending.",
       }
-    : roleTaskCopy[role];
-  const queueRows = useMemo(() => shopFloorQueueRows(productionControl), [productionControl]);
-  const roleRows = useMemo(() => queueRows.filter((row) => roleTaskMatches(row, role)), [queueRows, role]);
-  const runningRows = useMemo(() => currentShopFloorRows(productionControl), [productionControl]);
-  const existingProductionCardRows = useMemo(() => asArray(productionControl.productionCardRows), [productionControl]);
+    : roleTaskCopy[role]
+  const queueRows = useMemo(
+    () => shopFloorQueueRows(productionControl),
+    [productionControl]
+  )
+  const roleRows = useMemo(
+    () => queueRows.filter((row) => roleTaskMatches(row, role)),
+    [queueRows, role]
+  )
+  const runningRows = useMemo(
+    () => currentShopFloorRows(productionControl),
+    [productionControl]
+  )
+  const existingProductionCardRows = useMemo(
+    () => asArray(productionControl.productionCardRows),
+    [productionControl]
+  )
   const productionCardRows = useMemo(() => {
-    const taskRows = roleRows.map((row) => row.next).filter((row): row is DashboardPayload => Boolean(row));
-    if (role === "shopFloor" || role === "quality" || role === "machinist") return runningRows;
-    return taskRows;
-  }, [role, roleRows, runningRows]);
-  const filteredRows = useMemo(() => roleRows.filter((row) =>
-    typedFilterMatches(row.machine, machineFilter) &&
-    typedFilterMatches(row.location, locationFilter) &&
-    shopFloorItemMatchesFilter(row.next, itemFilter) &&
-    typedFilterMatches(pendingTaskLabel(row.next), taskFilter),
-  ), [itemFilter, locationFilter, machineFilter, roleRows, taskFilter]);
-  const machineOptions = useMemo(() => uniqueValues(roleRows.map((row) => row.machine)), [roleRows]);
-  const locationOptions = useMemo(() => uniqueValues(roleRows.map((row) => row.location).filter((value) => value !== "-")), [roleRows]);
-  const itemOptions = useMemo(() => uniqueValues(roleRows.map((row) => shopFloorItemLabel(row.next))), [roleRows]);
-  const taskOptions = useMemo(() => uniqueValues(roleRows.map((row) => pendingTaskLabel(row.next))), [roleRows]);
+    const taskRows = roleRows
+      .map((row) => row.next)
+      .filter((row): row is DashboardPayload => Boolean(row))
+    if (role === "shopFloor" || role === "quality" || role === "machinist")
+      return runningRows
+    return taskRows
+  }, [role, roleRows, runningRows])
+  const filteredRows = useMemo(
+    () =>
+      roleRows.filter(
+        (row) =>
+          typedFilterMatches(row.machine, machineFilter) &&
+          typedFilterMatches(row.location, locationFilter) &&
+          shopFloorItemMatchesFilter(row.next, itemFilter) &&
+          typedFilterMatches(pendingTaskLabel(row.next), taskFilter)
+      ),
+    [itemFilter, locationFilter, machineFilter, roleRows, taskFilter]
+  )
+  const machineOptions = useMemo(
+    () => uniqueValues(roleRows.map((row) => row.machine)),
+    [roleRows]
+  )
+  const locationOptions = useMemo(
+    () =>
+      uniqueValues(
+        roleRows.map((row) => row.location).filter((value) => value !== "-")
+      ),
+    [roleRows]
+  )
+  const itemOptions = useMemo(
+    () => uniqueValues(roleRows.map((row) => shopFloorItemLabel(row.next))),
+    [roleRows]
+  )
+  const taskOptions = useMemo(
+    () => uniqueValues(roleRows.map((row) => pendingTaskLabel(row.next))),
+    [roleRows]
+  )
 
-  async function saveStage(row: DashboardPayload, stage: ShopFloorStageId, extra: Record<string, unknown> = {}) {
-    const stageSpec = shopFloorStages.find((item) => item.id === stage);
+  async function saveStage(
+    row: DashboardPayload,
+    stage: ShopFloorStageId,
+    extra: Record<string, unknown> = {}
+  ) {
+    const stageSpec = shopFloorStages.find((item) => item.id === stage)
     const payload = {
       jcNo: jobCardNumber(row),
       partCode: itemCode(row),
@@ -3936,15 +5869,18 @@ function RoleTaskPanel({
       remark: "",
       completedAt: new Date().toISOString(),
       ...extra,
-    };
+    }
     await submitAction("data-entry", {
       entryType: "shop_floor_status",
       key: dataEntryKey("shop_floor_status", payload),
       payload,
-    });
+    })
   }
 
-  async function saveFirstPieceReport(row: DashboardPayload, report: DashboardPayload) {
+  async function saveFirstPieceReport(
+    row: DashboardPayload,
+    report: DashboardPayload
+  ) {
     const payload = {
       ...report,
       jcNo: jobCardNumber(row),
@@ -3954,46 +5890,51 @@ function RoleTaskPanel({
       setupName: displayValue(row.setupName),
       machine: displayValue(row.machine),
       machineType: displayValue(row.machineType),
-    };
+    }
     await submitAction("data-entry", {
       entryType: "first_piece_inspection_report",
       key: dataEntryKey("first_piece_inspection_report", payload),
       payload,
-    });
+    })
   }
 
-
-  async function saveProductionCard(row: DashboardPayload, card: DashboardPayload) {
-    const payload = productionCardPayload(row, card);
+  async function saveProductionCard(
+    row: DashboardPayload,
+    card: DashboardPayload
+  ) {
+    const payload = productionCardPayload(row, card)
     await submitAction("data-entry", {
       entryType: "production_card",
       key: dataEntryKey("production_card", payload),
       payload,
-    });
+    })
     if (card.writeProductionOutput) {
       await submitAction("data-entry", {
         entryType: "software_raw",
         key: dataEntryKey("software_raw", payload),
         payload,
-      });
+      })
       if (productionCycleMasterChanged(row, card)) {
-        const cyclePayload = productionCycleMasterPayload(row, card);
+        const cyclePayload = productionCycleMasterPayload(row, card)
         await submitAction("data-entry", {
           entryType: "cycle",
           key: dataEntryKey("cycle", cyclePayload),
           payload: cyclePayload,
-        });
+        })
       }
     }
   }
 
-  async function saveSetupChecklistSession(row: DashboardPayload, session: DashboardPayload) {
-    const payload = setupChecklistSessionPayload(row, session);
+  async function saveSetupChecklistSession(
+    row: DashboardPayload,
+    session: DashboardPayload
+  ) {
+    const payload = setupChecklistSessionPayload(row, session)
     await submitAction("data-entry", {
       entryType: "setup_checklist_session",
       key: dataEntryKey("setup_checklist_session", payload),
       payload,
-    });
+    })
   }
 
   return (
@@ -4006,13 +5947,20 @@ function RoleTaskPanel({
         <CardContent className="grid gap-4">
           {role === "quality" ? (
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => {
-                const params = new URLSearchParams({
-                  floor: productionFloorFromLocation(),
-                  returnTab: "qualityControlTasksTab",
-                });
-                window.location.assign(`/dashboard/hourly-quality-check?${params.toString()}`);
-              }}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const params = new URLSearchParams({
+                    floor: productionFloorFromLocation(),
+                    returnTab: "qualityControlTasksTab",
+                  })
+                  window.location.assign(
+                    `/dashboard/hourly-quality-check?${params.toString()}`
+                  )
+                }}
+              >
                 <Gauge className="size-4" />
                 Hourly quality check
               </Button>
@@ -4023,16 +5971,36 @@ function RoleTaskPanel({
             rows={productionCardRows}
             existingCardRows={existingProductionCardRows}
             onSaveProductionCard={saveProductionCard}
-            rejectionTypeRows={asArray(productionControl.rejectionTypeMasterRows)}
-            rejectionReasonRows={asArray(productionControl.rejectionReasonMasterRows)}
-            rejectionRemarkRows={asArray(productionControl.rejectionRemarkMasterRows)}
+            rejectionTypeRows={asArray(
+              productionControl.rejectionTypeMasterRows
+            )}
+            rejectionReasonRows={asArray(
+              productionControl.rejectionReasonMasterRows
+            )}
+            rejectionRemarkRows={asArray(
+              productionControl.rejectionRemarkMasterRows
+            )}
             bulkRows={role === "shopFloor" ? runningRows : []}
           />
           <TrackingSummary
             items={[
               ["Pending", formatNumber(filteredRows.length)],
-              ["Machines", formatNumber(uniqueValues(filteredRows.map((row) => row.machine)).length)],
-              ["Locations", formatNumber(uniqueValues(filteredRows.map((row) => row.location).filter((value) => value !== "-")).length)],
+              [
+                "Machines",
+                formatNumber(
+                  uniqueValues(filteredRows.map((row) => row.machine)).length
+                ),
+              ],
+              [
+                "Locations",
+                formatNumber(
+                  uniqueValues(
+                    filteredRows
+                      .map((row) => row.location)
+                      .filter((value) => value !== "-")
+                  ).length
+                ),
+              ],
             ]}
           />
           <ExcelStyleFilters
@@ -4085,12 +6053,18 @@ function RoleTaskPanel({
                 </TableHeader>
                 <TableBody>
                   {filteredRows.map((row) => (
-                    <TableRow key={`${row.machine}-${shopFloorPlanKey(row.next)}`}>
+                    <TableRow
+                      key={`${row.machine}-${shopFloorPlanKey(row.next)}`}
+                    >
                       <TableCell className="align-middle">
                         <div className="font-semibold">{row.machine}</div>
-                        <div className="text-xs text-muted-foreground">{machineValue(row.machineRow, "machineType")}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {machineValue(row.machineRow, "machineType")}
+                        </div>
                       </TableCell>
-                      <TableCell className="align-middle text-sm">{row.location}</TableCell>
+                      <TableCell className="align-middle text-sm">
+                        {row.location}
+                      </TableCell>
                       <TableCell className="align-middle">
                         <ShopFloorItemSummary row={row.next} tone="next" />
                       </TableCell>
@@ -4099,7 +6073,13 @@ function RoleTaskPanel({
                       </TableCell>
                       <TableCell className="align-middle">
                         {role === "quality" && onStartFirstPieceInspection ? (
-                          <Button type="button" size="sm" onClick={() => onStartFirstPieceInspection(row.next)}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() =>
+                              onStartFirstPieceInspection(row.next)
+                            }
+                          >
                             <CheckCircle2 className="size-4" />
                             Start quality approval
                           </Button>
@@ -4107,11 +6087,27 @@ function RoleTaskPanel({
                           <ShopFloorRowAction
                             next={row.next}
                             onSaveStage={saveStage}
-                            onSaveFirstPieceReport={enableFirstPieceInspection ? saveFirstPieceReport : undefined}
-                            inspectionMasters={enableFirstPieceInspection ? combinedQualityInspectionMasterRows(productionControl) : []}
-                            setupChecklistMasters={asArray(productionControl.setupChecklistMasterRows)}
-                            setupChecklistSessions={asArray(productionControl.setupChecklistSessionRows)}
-                            onSaveSetupChecklistSession={saveSetupChecklistSession}
+                            onSaveFirstPieceReport={
+                              enableFirstPieceInspection
+                                ? saveFirstPieceReport
+                                : undefined
+                            }
+                            inspectionMasters={
+                              enableFirstPieceInspection
+                                ? combinedQualityInspectionMasterRows(
+                                    productionControl
+                                  )
+                                : []
+                            }
+                            setupChecklistMasters={asArray(
+                              productionControl.setupChecklistMasterRows
+                            )}
+                            setupChecklistSessions={asArray(
+                              productionControl.setupChecklistSessionRows
+                            )}
+                            onSaveSetupChecklistSession={
+                              saveSetupChecklistSession
+                            }
                             openDataEntry={openDataEntry}
                           />
                         )}
@@ -4128,12 +6124,20 @@ function RoleTaskPanel({
       </Card>
       {enableFirstPieceInspection ? (
         <>
-          <DataRowsCard title="First piece inspection reports" rows={asArray(productionControl.firstPieceInspectionReportRows)} empty="No first-piece reports saved yet" />
-          <DataRowsCard title="Quality inspection parameter master" rows={combinedQualityInspectionMasterRows(productionControl)} empty="No quality inspection parameters saved yet" />
+          <DataRowsCard
+            title="First piece inspection reports"
+            rows={asArray(productionControl.firstPieceInspectionReportRows)}
+            empty="No first-piece reports saved yet"
+          />
+          <DataRowsCard
+            title="Quality inspection parameter master"
+            rows={combinedQualityInspectionMasterRows(productionControl)}
+            empty="No quality inspection parameters saved yet"
+          />
         </>
       ) : null}
     </section>
-  );
+  )
 }
 
 function FirstPieceInspectionPanel({
@@ -4143,21 +6147,25 @@ function FirstPieceInspectionPanel({
   openDataEntry,
   onTaskComplete,
 }: {
-  tasks: DashboardPayload[];
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
-  onTaskComplete: (row: DashboardPayload) => void;
+  tasks: DashboardPayload[]
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
+  onTaskComplete: (row: DashboardPayload) => void
 }) {
-  const masters = combinedQualityInspectionMasterRows(productionControl);
-  const reportRows = asArray(productionControl.firstPieceInspectionReportRows);
-  const [activeView, setActiveView] = useState<"tasks" | "reports">("tasks");
-  const [expandedTaskKey, setExpandedTaskKey] = useState<string | null>(null);
-  const defaultExpandedTaskKey = tasks[0] ? shopFloorPlanKey(tasks[0]) : "";
-  const activeExpandedTaskKey = expandedTaskKey ?? defaultExpandedTaskKey;
+  const masters = combinedQualityInspectionMasterRows(productionControl)
+  const reportRows = asArray(productionControl.firstPieceInspectionReportRows)
+  const [activeView, setActiveView] = useState<"tasks" | "reports">("tasks")
+  const [expandedTaskKey, setExpandedTaskKey] = useState<string | null>(null)
+  const defaultExpandedTaskKey = tasks[0] ? shopFloorPlanKey(tasks[0]) : ""
+  const activeExpandedTaskKey = expandedTaskKey ?? defaultExpandedTaskKey
 
-  async function saveStage(row: DashboardPayload, stage: ShopFloorStageId, extra: Record<string, unknown> = {}) {
-    const stageSpec = shopFloorStages.find((item) => item.id === stage);
+  async function saveStage(
+    row: DashboardPayload,
+    stage: ShopFloorStageId,
+    extra: Record<string, unknown> = {}
+  ) {
+    const stageSpec = shopFloorStages.find((item) => item.id === stage)
     const payload = {
       jcNo: jobCardNumber(row),
       partCode: itemCode(row),
@@ -4174,16 +6182,19 @@ function FirstPieceInspectionPanel({
       remark: "",
       completedAt: new Date().toISOString(),
       ...extra,
-    };
+    }
     await submitAction("data-entry", {
       entryType: "shop_floor_status",
       key: dataEntryKey("shop_floor_status", payload),
       payload,
-    });
-    if (stage === "quality_approval") onTaskComplete(row);
+    })
+    if (stage === "quality_approval") onTaskComplete(row)
   }
 
-  async function saveFirstPieceReport(row: DashboardPayload, report: DashboardPayload) {
+  async function saveFirstPieceReport(
+    row: DashboardPayload,
+    report: DashboardPayload
+  ) {
     const payload = {
       ...report,
       jcNo: jobCardNumber(row),
@@ -4193,12 +6204,12 @@ function FirstPieceInspectionPanel({
       setupName: displayValue(row.setupName),
       machine: displayValue(row.machine),
       machineType: displayValue(row.machineType),
-    };
+    }
     await submitAction("data-entry", {
       entryType: "first_piece_inspection_report",
       key: dataEntryKey("first_piece_inspection_report", payload),
       payload,
-    });
+    })
   }
   return (
     <section className="grid gap-4">
@@ -4238,11 +6249,18 @@ function FirstPieceInspectionPanel({
       </div>
 
       {activeView === "tasks" ? (
-        <Card aria-labelledby="first-piece-task-list-title" id="first-piece-task-list" role="tabpanel">
+        <Card
+          aria-labelledby="first-piece-task-list-title"
+          id="first-piece-task-list"
+          role="tabpanel"
+        >
           <CardHeader>
-            <CardTitle id="first-piece-task-list-title">First piece inspection task list</CardTitle>
+            <CardTitle id="first-piece-task-list-title">
+              First piece inspection task list
+            </CardTitle>
             <CardDescription>
-              Open reports stay on this page until they are submitted. Partially completed readings are saved automatically in this browser.
+              Open reports stay on this page until they are submitted. Partially
+              completed readings are saved automatically in this browser.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -4262,26 +6280,52 @@ function FirstPieceInspectionPanel({
                   </TableHeader>
                   <TableBody>
                     {tasks.map((task) => {
-                      const taskKey = shopFloorPlanKey(task);
-                      const expanded = activeExpandedTaskKey === taskKey;
+                      const taskKey = shopFloorPlanKey(task)
+                      const expanded = activeExpandedTaskKey === taskKey
                       return (
                         <Fragment key={taskKey}>
-                          <TableRow className="cursor-pointer" onClick={() => setExpandedTaskKey(expanded ? "" : taskKey)}>
+                          <TableRow
+                            className="cursor-pointer"
+                            onClick={() =>
+                              setExpandedTaskKey(expanded ? "" : taskKey)
+                            }
+                          >
                             <TableCell>
-                              <Button type="button" variant="ghost" size="sm" className="size-8 p-0" aria-label={expanded ? "Collapse report" : "Expand report"}>
-                                {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="size-8 p-0"
+                                aria-label={
+                                  expanded ? "Collapse report" : "Expand report"
+                                }
+                              >
+                                {expanded ? (
+                                  <ChevronDown className="size-4" />
+                                ) : (
+                                  <ChevronRight className="size-4" />
+                                )}
                               </Button>
                             </TableCell>
-                            <TableCell className="font-medium">{itemCode(task)}</TableCell>
+                            <TableCell className="font-medium">
+                              {itemCode(task)}
+                            </TableCell>
                             <TableCell>{jobCardNumber(task)}</TableCell>
                             <TableCell>{displayValue(task.machine)}</TableCell>
                             <TableCell>{displayValue(task.setupNo)}</TableCell>
-                            <TableCell>{displayValue(task.optionNumber)}</TableCell>
-                            <TableCell>{displayValue(task.shopFloorUpdatedAt)}</TableCell>
+                            <TableCell>
+                              {displayValue(task.optionNumber)}
+                            </TableCell>
+                            <TableCell>
+                              {displayValue(task.shopFloorUpdatedAt)}
+                            </TableCell>
                           </TableRow>
                           {expanded ? (
                             <TableRow>
-                              <TableCell colSpan={7} className="bg-muted/15 p-4">
+                              <TableCell
+                                colSpan={7}
+                                className="bg-muted/15 p-4"
+                              >
                                 <ShopFloorRowAction
                                   next={task}
                                   onSaveStage={saveStage}
@@ -4293,23 +6337,34 @@ function FirstPieceInspectionPanel({
                             </TableRow>
                           ) : null}
                         </Fragment>
-                      );
+                      )
                     })}
                   </TableBody>
                 </Table>
               </div>
             ) : (
-              <EmptyRowsMessage>Start a quality approval task from the Quality Control tab to open its first-piece report here.</EmptyRowsMessage>
+              <EmptyRowsMessage>
+                Start a quality approval task from the Quality Control tab to
+                open its first-piece report here.
+              </EmptyRowsMessage>
             )}
           </CardContent>
         </Card>
       ) : (
-        <div aria-label="Saved first piece inspection reports" id="first-piece-saved-reports" role="tabpanel">
-          <DataRowsCard title="Saved first piece inspection reports" rows={reportRows} empty="No first-piece reports saved yet" />
+        <div
+          aria-label="Saved first piece inspection reports"
+          id="first-piece-saved-reports"
+          role="tabpanel"
+        >
+          <DataRowsCard
+            title="Saved first piece inspection reports"
+            rows={reportRows}
+            empty="No first-piece reports saved yet"
+          />
         </div>
       )}
     </section>
-  );
+  )
 }
 
 function ShopFloorItemSummary({
@@ -4318,23 +6373,28 @@ function ShopFloorItemSummary({
   compact = false,
   productionCardRows = [],
 }: {
-  row: DashboardPayload;
-  tone: "current" | "next";
-  compact?: boolean;
-  productionCardRows?: DashboardPayload[];
+  row: DashboardPayload
+  tone: "current" | "next"
+  compact?: boolean
+  productionCardRows?: DashboardPayload[]
 }) {
-  const statusLabel = tone === "current" ? shopFloorCurrentStatusLabel(row, productionCardRows) : (str(row.shopFloorStageLabel) || "Planned");
+  const statusLabel =
+    tone === "current"
+      ? shopFloorCurrentStatusLabel(row, productionCardRows)
+      : str(row.shopFloorStageLabel) || "Planned"
   if (compact) {
     return (
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span className="text-sm font-medium text-foreground">{itemCode(row)}</span>
+        <span className="text-sm font-medium text-foreground">
+          {itemCode(row)}
+        </span>
         <StatusBadge value={statusLabel} />
         <span>{jobCardNumber(row)}</span>
         <span>Setup {displayValue(row.setupNo)}</span>
         <span>Option {displayValue(row.optionNumber)}</span>
         <span>RM: {displayValue(row.rmStatus)}</span>
       </div>
-    );
+    )
   }
   return (
     <div className="grid gap-1.5">
@@ -4342,11 +6402,20 @@ function ShopFloorItemSummary({
         <span className="font-medium">{itemCode(row)}</span>
         <StatusBadge value={statusLabel} />
       </div>
-      <div className="text-xs text-muted-foreground">{jobCardNumber(row)} | Setup {displayValue(row.setupNo)} | Option {displayValue(row.optionNumber)}</div>
-      <div className="text-xs text-muted-foreground">Setup: {displayValue(row.setupPlannedDate || row.plannedDate)} | Production: {displayValue(row.plannedProductionStartDate)} - {displayValue(row.plannedProductionEndDate)}</div>
-      <div className="text-xs text-muted-foreground">RM: {displayValue(row.rmStatus)}</div>
+      <div className="text-xs text-muted-foreground">
+        {jobCardNumber(row)} | Setup {displayValue(row.setupNo)} | Option{" "}
+        {displayValue(row.optionNumber)}
+      </div>
+      <div className="text-xs text-muted-foreground">
+        Setup: {displayValue(row.setupPlannedDate || row.plannedDate)} |
+        Production: {displayValue(row.plannedProductionStartDate)} -{" "}
+        {displayValue(row.plannedProductionEndDate)}
+      </div>
+      <div className="text-xs text-muted-foreground">
+        RM: {displayValue(row.rmStatus)}
+      </div>
     </div>
-  );
+  )
 }
 
 function ShopFloorRowAction({
@@ -4360,98 +6429,176 @@ function ShopFloorRowAction({
   setupChecklistSessions = [],
   openDataEntry,
 }: {
-  current?: DashboardPayload;
-  next?: DashboardPayload;
-  onSaveStage: (row: DashboardPayload, stage: ShopFloorStageId, extra?: Record<string, unknown>) => Promise<void>;
-  onSaveFirstPieceReport?: (row: DashboardPayload, report: DashboardPayload) => Promise<void>;
-  onSaveSetupChecklistSession?: (row: DashboardPayload, session: DashboardPayload) => Promise<void>;
-  inspectionMasters?: DashboardPayload[];
-  setupChecklistMasters?: DashboardPayload[];
-  setupChecklistSessions?: DashboardPayload[];
-  openDataEntry?: (entryType: string, defaults?: Record<string, unknown>) => void;
+  current?: DashboardPayload
+  next?: DashboardPayload
+  onSaveStage: (
+    row: DashboardPayload,
+    stage: ShopFloorStageId,
+    extra?: Record<string, unknown>
+  ) => Promise<void>
+  onSaveFirstPieceReport?: (
+    row: DashboardPayload,
+    report: DashboardPayload
+  ) => Promise<void>
+  onSaveSetupChecklistSession?: (
+    row: DashboardPayload,
+    session: DashboardPayload
+  ) => Promise<void>
+  inspectionMasters?: DashboardPayload[]
+  setupChecklistMasters?: DashboardPayload[]
+  setupChecklistSessions?: DashboardPayload[]
+  openDataEntry?: (
+    entryType: string,
+    defaults?: Record<string, unknown>
+  ) => void
 }) {
-  const [doneBy, setDoneBy] = useState("");
-  const [worker, setWorker] = useState("");
-  const [remark, setRemark] = useState("");
-  const [inspectionReadings, setInspectionReadings] = useState<Record<string, string[]>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const row = next ?? current;
-  const stage = str(row?.shopFloorStage) as ShopFloorStageId;
-  const stageIndex = shopFloorStageIndex(stage);
-  const nextStage = next ? shopFloorStages.find((_, index) => index === stageIndex + 1) : undefined;
-  const checklistSessionId = next ? setupChecklistSessionId(next) : "";
-  const snapshotChecklistSession = useMemo(() => next ? setupChecklistSessionForRow(setupChecklistSessions, next) : undefined, [next, setupChecklistSessions]);
-  const [localChecklistSession, setLocalChecklistSession] = useState<DashboardPayload | undefined>(undefined);
+  const [doneBy, setDoneBy] = useState("")
+  const [worker, setWorker] = useState("")
+  const [remark, setRemark] = useState("")
+  const [inspectionReadings, setInspectionReadings] = useState<
+    Record<string, string[]>
+  >({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const row = next ?? current
+  const stage = str(row?.shopFloorStage) as ShopFloorStageId
+  const stageIndex = shopFloorStageIndex(stage)
+  const nextStage = next
+    ? shopFloorStages.find((_, index) => index === stageIndex + 1)
+    : undefined
+  const checklistSessionId = next ? setupChecklistSessionId(next) : ""
+  const snapshotChecklistSession = useMemo(
+    () =>
+      next
+        ? setupChecklistSessionForRow(setupChecklistSessions, next)
+        : undefined,
+    [next, setupChecklistSessions]
+  )
+  const [localChecklistSession, setLocalChecklistSession] = useState<
+    DashboardPayload | undefined
+  >(undefined)
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      setLocalChecklistSession(checklistSessionId ? readStoredSetupChecklistSession(checklistSessionId) : undefined);
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [checklistSessionId]);
-  const matchingLocalChecklistSession = str(localChecklistSession?.sessionId) === checklistSessionId ? localChecklistSession : undefined;
-  const currentChecklistSession = mostCompleteSetupChecklistSession(snapshotChecklistSession, matchingLocalChecklistSession, nextStage?.id);
-  const activeChecklistMasters = useMemo(() => activeSetupChecklistMasterRows(setupChecklistMasters), [setupChecklistMasters]);
-  const checklistPhase = nextStage?.id === "presetting" ? "start" : nextStage?.id === "setting" ? "end" : "";
-  const needsSetupChecklist = Boolean(checklistPhase && onSaveSetupChecklistSession);
-  const setupChecklistReady = !needsSetupChecklist
-    || (Boolean(currentChecklistSession) && setupChecklistValuesComplete(asArray(currentChecklistSession?.items), {}, checklistPhase));
-  const checklistPageHref = next && checklistPhase ? setupChecklistPageHref(next, checklistPhase) : "";
+      setLocalChecklistSession(
+        checklistSessionId
+          ? readStoredSetupChecklistSession(checklistSessionId)
+          : undefined
+      )
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [checklistSessionId])
+  const matchingLocalChecklistSession =
+    str(localChecklistSession?.sessionId) === checklistSessionId
+      ? localChecklistSession
+      : undefined
+  const currentChecklistSession = mostCompleteSetupChecklistSession(
+    snapshotChecklistSession,
+    matchingLocalChecklistSession,
+    nextStage?.id
+  )
+  const activeChecklistMasters = useMemo(
+    () => activeSetupChecklistMasterRows(setupChecklistMasters),
+    [setupChecklistMasters]
+  )
+  const checklistPhase =
+    nextStage?.id === "presetting"
+      ? "start"
+      : nextStage?.id === "setting"
+        ? "end"
+        : ""
+  const needsSetupChecklist = Boolean(
+    checklistPhase && onSaveSetupChecklistSession
+  )
+  const setupChecklistReady =
+    !needsSetupChecklist ||
+    (Boolean(currentChecklistSession) &&
+      setupChecklistValuesComplete(
+        asArray(currentChecklistSession?.items),
+        {},
+        checklistPhase
+      ))
+  const checklistPageHref =
+    next && checklistPhase ? setupChecklistPageHref(next, checklistPhase) : ""
   const setupChecklistStatus = !needsSetupChecklist
     ? "Not required"
     : setupChecklistReady
-      ? checklistPhase === "end" ? "Completion saved" : "Start saved"
+      ? checklistPhase === "end"
+        ? "Completion saved"
+        : "Start saved"
       : currentChecklistSession
         ? "Saved progress"
-        : "Checklist pending";
-  const firstPieceMasters = useMemo(() => next && nextStage?.id === "quality_approval"
-    ? matchingFirstPieceInspectionMasters(inspectionMasters, next)
-    : [], [inspectionMasters, next, nextStage?.id]);
-  const needsFirstPieceInspection = nextStage?.id === "quality_approval" && Boolean(onSaveFirstPieceReport);
-  const firstPieceDraftKey = needsFirstPieceInspection && next ? firstPieceReportKey(next) : "";
-  const [loadedFirstPieceDraftKey, setLoadedFirstPieceDraftKey] = useState("");
-  const canSubmitInspection = !needsFirstPieceInspection
-    || (firstPieceMasters.length > 0 && firstPieceMasters.every((master) => firstPieceReadingsFor(inspectionReadings, master).every(Boolean)));
+        : "Checklist pending"
+  const firstPieceMasters = useMemo(
+    () =>
+      next && nextStage?.id === "quality_approval"
+        ? matchingFirstPieceInspectionMasters(inspectionMasters, next)
+        : [],
+    [inspectionMasters, next, nextStage?.id]
+  )
+  const needsFirstPieceInspection =
+    nextStage?.id === "quality_approval" && Boolean(onSaveFirstPieceReport)
+  const firstPieceDraftKey =
+    needsFirstPieceInspection && next ? firstPieceReportKey(next) : ""
+  const [loadedFirstPieceDraftKey, setLoadedFirstPieceDraftKey] = useState("")
+  const canSubmitInspection =
+    !needsFirstPieceInspection ||
+    (firstPieceMasters.length > 0 &&
+      firstPieceMasters.every((master) =>
+        firstPieceReadingsFor(inspectionReadings, master).every(Boolean)
+      ))
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       if (!firstPieceDraftKey) {
-        setLoadedFirstPieceDraftKey("");
-        return;
+        setLoadedFirstPieceDraftKey("")
+        return
       }
-      const draft = readStoredFirstPieceInspectionDraft(firstPieceDraftKey);
-      setDoneBy(draft?.approvedBy ?? "");
-      setRemark(draft?.remark ?? "");
-      setInspectionReadings(draft?.readings ?? {});
-      setLoadedFirstPieceDraftKey(firstPieceDraftKey);
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [firstPieceDraftKey]);
+      const draft = readStoredFirstPieceInspectionDraft(firstPieceDraftKey)
+      setDoneBy(draft?.approvedBy ?? "")
+      setRemark(draft?.remark ?? "")
+      setInspectionReadings(draft?.readings ?? {})
+      setLoadedFirstPieceDraftKey(firstPieceDraftKey)
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [firstPieceDraftKey])
 
   useEffect(() => {
-    if (!firstPieceDraftKey || loadedFirstPieceDraftKey !== firstPieceDraftKey) return;
+    if (!firstPieceDraftKey || loadedFirstPieceDraftKey !== firstPieceDraftKey)
+      return
     writeStoredFirstPieceInspectionDraft(firstPieceDraftKey, {
       approvedBy: doneBy,
       readings: inspectionReadings,
       remark,
-    });
-  }, [doneBy, firstPieceDraftKey, inspectionReadings, loadedFirstPieceDraftKey, remark]);
+    })
+  }, [
+    doneBy,
+    firstPieceDraftKey,
+    inspectionReadings,
+    loadedFirstPieceDraftKey,
+    remark,
+  ])
 
-  function updateInspectionReading(master: DashboardPayload, pieceIndex: number, value: string) {
-    const masterKey = firstPieceMasterKey(master);
+  function updateInspectionReading(
+    master: DashboardPayload,
+    pieceIndex: number,
+    value: string
+  ) {
+    const masterKey = firstPieceMasterKey(master)
     setInspectionReadings((currentReadings) => {
-      const readings = [...(currentReadings[masterKey] ?? Array.from({ length: 5 }, () => ""))];
-      readings[pieceIndex] = value;
-      return { ...currentReadings, [masterKey]: readings };
-    });
+      const readings = [
+        ...(currentReadings[masterKey] ?? Array.from({ length: 5 }, () => "")),
+      ]
+      readings[pieceIndex] = value
+      return { ...currentReadings, [masterKey]: readings }
+    })
   }
 
   async function submitNextStage() {
-    if (!next || !nextStage || isSubmitting) return;
-    if (nextStage.id === "quality_approval" && !canSubmitInspection) return;
-    if (needsSetupChecklist && !setupChecklistReady) return;
-    setIsSubmitting(true);
+    if (!next || !nextStage || isSubmitting) return
+    if (nextStage.id === "quality_approval" && !canSubmitInspection) return
+    if (needsSetupChecklist && !setupChecklistReady) return
+    setIsSubmitting(true)
     try {
-      const taskCompletedAt = new Date().toISOString();
+      const taskCompletedAt = new Date().toISOString()
       const firstPieceInspection = needsFirstPieceInspection
         ? {
             reportId: firstPieceReportKey(next),
@@ -4465,42 +6612,51 @@ function ShopFloorRowAction({
               specification: str(master.specification),
               tolerancePlus: optionalNumber(master.tolerancePlus),
               toleranceMinus: optionalNumber(master.toleranceMinus),
-              readings: firstPieceReadingsFor(inspectionReadings, master).map((value) => optionalNumber(value) ?? value),
+              readings: firstPieceReadingsFor(inspectionReadings, master).map(
+                (value) => optionalNumber(value) ?? value
+              ),
             })),
-        }
-        : undefined;
-      if (needsFirstPieceInspection && firstPieceInspection && onSaveFirstPieceReport) {
+          }
+        : undefined
+      if (
+        needsFirstPieceInspection &&
+        firstPieceInspection &&
+        onSaveFirstPieceReport
+      ) {
         await onSaveFirstPieceReport(next, {
           ...firstPieceInspection,
           approvedBy: doneBy,
           remark,
-        });
+        })
       }
-      const setupChecklist = needsSetupChecklist ? currentChecklistSession : undefined;
+      const setupChecklist = needsSetupChecklist
+        ? currentChecklistSession
+        : undefined
       await onSaveStage(next, nextStage.id, {
         doneBy,
         worker: nextStage.id === "operator_started" ? worker : "",
         remark,
         firstPieceInspection,
         setupChecklist,
-      });
-      if (firstPieceDraftKey) removeStoredFirstPieceInspectionDraft(firstPieceDraftKey);
-      setDoneBy("");
-      setWorker("");
-      setRemark("");
-      setInspectionReadings({});
+      })
+      if (firstPieceDraftKey)
+        removeStoredFirstPieceInspectionDraft(firstPieceDraftKey)
+      setDoneBy("")
+      setWorker("")
+      setRemark("")
+      setInspectionReadings({})
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
   }
 
   async function submitCurrentStageComplete() {
-    if (!current || isSubmitting) return;
-    setIsSubmitting(true);
+    if (!current || isSubmitting) return
+    setIsSubmitting(true)
     try {
-      await onSaveStage(current, "item_complete");
+      await onSaveStage(current, "item_complete")
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
   }
 
@@ -4509,19 +6665,30 @@ function ShopFloorRowAction({
       <div className="grid gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge value="Running" />
-          <span className="text-sm text-muted-foreground">Worker: {displayValue(current.shopFloorWorker)}</span>
+          <span className="text-sm text-muted-foreground">
+            Worker: {displayValue(current.shopFloorWorker)}
+          </span>
         </div>
 
-        <Button type="button" size="sm" variant="outline" className="w-fit" disabled={isSubmitting} onClick={() => void submitCurrentStageComplete()}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-fit"
+          disabled={isSubmitting}
+          onClick={() => void submitCurrentStageComplete()}
+        >
           <CheckCircle2 className="size-4" />
           Item finished
         </Button>
       </div>
-    );
+    )
   }
 
   if (!next) {
-    return <span className="text-sm text-muted-foreground">No action pending</span>;
+    return (
+      <span className="text-sm text-muted-foreground">No action pending</span>
+    )
   }
 
   if (nextStage && next.shopFloorTaskReady === false) {
@@ -4529,9 +6696,12 @@ function ShopFloorRowAction({
       <div className="grid gap-2">
         <ShopFloorProgress activeIndex={stageIndex} />
         <StatusBadge value="Task not ready" />
-        <div className="text-sm text-muted-foreground">{displayValue(next.shopFloorTaskBlocker) || "Previous setup WIP buffer is not ready"}</div>
+        <div className="text-sm text-muted-foreground">
+          {displayValue(next.shopFloorTaskBlocker) ||
+            "Previous setup WIP buffer is not ready"}
+        </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -4541,15 +6711,35 @@ function ShopFloorRowAction({
         <>
           <div className="text-sm font-medium">{nextStage.label}</div>
           <div className="grid gap-2 sm:grid-cols-2">
-            <Input className="h-8" value={doneBy} placeholder={`${nextStage.role} name/code`} onChange={(event) => setDoneBy(event.target.value)} />
+            <Input
+              className="h-8"
+              value={doneBy}
+              placeholder={`${nextStage.role} name/code`}
+              onChange={(event) => setDoneBy(event.target.value)}
+            />
             {nextStage.id === "operator_started" ? (
-              <Input className="h-8" value={worker} placeholder="Worker name/code" onChange={(event) => setWorker(event.target.value)} />
+              <Input
+                className="h-8"
+                value={worker}
+                placeholder="Worker name/code"
+                onChange={(event) => setWorker(event.target.value)}
+              />
             ) : (
-              <Input className="h-8" value={remark} placeholder="Remark" onChange={(event) => setRemark(event.target.value)} />
+              <Input
+                className="h-8"
+                value={remark}
+                placeholder="Remark"
+                onChange={(event) => setRemark(event.target.value)}
+              />
             )}
           </div>
           {nextStage.id === "operator_started" ? (
-            <Input className="h-8" value={remark} placeholder="Remark" onChange={(event) => setRemark(event.target.value)} />
+            <Input
+              className="h-8"
+              value={remark}
+              placeholder="Remark"
+              onChange={(event) => setRemark(event.target.value)}
+            />
           ) : null}
           {needsSetupChecklist ? (
             <div className="grid gap-2 rounded-md border bg-background p-2.5">
@@ -4558,11 +6748,32 @@ function ShopFloorRowAction({
                 <StatusBadge value={setupChecklistStatus} />
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => { window.location.href = checklistPageHref; }}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="w-fit"
+                  onClick={() => {
+                    window.location.href = checklistPageHref
+                  }}
+                >
                   Open checklist
                 </Button>
-                {checklistPhase === "start" && !activeChecklistMasters.length && openDataEntry ? (
-                  <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("setup_checklist_master", setupChecklistMasterDefaults())}>
+                {checklistPhase === "start" &&
+                !activeChecklistMasters.length &&
+                openDataEntry ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="w-fit"
+                    onClick={() =>
+                      openDataEntry(
+                        "setup_checklist_master",
+                        setupChecklistMasterDefaults()
+                      )
+                    }
+                  >
                     Add checklist master
                   </Button>
                 ) : null}
@@ -4579,27 +6790,37 @@ function ShopFloorRowAction({
               showDraftSaved={loadedFirstPieceDraftKey === firstPieceDraftKey}
             />
           ) : null}
-          <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection || !setupChecklistReady || isSubmitting} onClick={() => void submitNextStage()}>
+          <Button
+            type="button"
+            size="sm"
+            className="w-fit"
+            disabled={
+              !canSubmitInspection || !setupChecklistReady || isSubmitting
+            }
+            onClick={() => void submitNextStage()}
+          >
             <CheckCircle2 className="size-4" />
             {nextStage.button}
           </Button>
         </>
       ) : (
-        <div className="text-sm text-muted-foreground">{shopFloorNoPendingActionLabel(next.shopFloorStage)}</div>
+        <div className="text-sm text-muted-foreground">
+          {shopFloorNoPendingActionLabel(next.shopFloorStage)}
+        </div>
       )}
     </div>
-  );
+  )
 }
 
-const DEFAULT_CRATE_WEIGHT_KG = 1.1;
-const CRATE_WEIGHT_OPTIONS_KG = [1.1, 1.25, 1.5, 2];
+const DEFAULT_CRATE_WEIGHT_KG = 1.1
+const CRATE_WEIGHT_OPTIONS_KG = [1.1, 1.25, 1.5, 2]
 
 const DEFAULT_REJECTION_TYPE_OPTIONS = [
   { code: "T1", label: "Quality Process Rejection" },
   { code: "T2", label: "Quality Control Rejection" },
   { code: "T3", label: "Setup Rejection" },
   { code: "T4", label: "In Process Setup Rejection" },
-];
+]
 
 const DEFAULT_REJECTION_REMARK_OPTIONS = [
   { code: "R1", label: "Machine Malfunction" },
@@ -4609,7 +6830,7 @@ const DEFAULT_REJECTION_REMARK_OPTIONS = [
   { code: "R5", label: "Parameter Missed" },
   { code: "R6", label: "Measuring Instrument Issue" },
   { code: "R7", label: "QC Inspection Error" },
-];
+]
 
 const DEFAULT_REJECTION_REASON_OPTIONS = [
   { code: "D1", label: "Length Short" },
@@ -4673,22 +6894,32 @@ const DEFAULT_REJECTION_REASON_OPTIONS = [
   { code: "D59", label: "Electricity failure" },
   { code: "D60", label: "No raw material" },
   { code: "D61", label: "No operator" },
-];
+]
 
-function codedMasterOptions(rows: DashboardPayload[], defaults: Array<{ code: string; label: string }>, labelFields: string[]) {
-  const options = new Map(defaults.map((option) => [option.code, option]));
+function codedMasterOptions(
+  rows: DashboardPayload[],
+  defaults: Array<{ code: string; label: string }>,
+  labelFields: string[]
+) {
+  const options = new Map(defaults.map((option) => [option.code, option]))
   for (const row of rows) {
-    if (displayValue(row.status).toLowerCase() === "inactive") continue;
-    const code = displayValue(row.code);
-    if (!code || code === "-") continue;
-    const label = labelFields.map((field) => displayValue(row[field])).find((value) => value && value !== "-") ?? code;
-    options.set(code, { code, label });
+    if (displayValue(row.status).toLowerCase() === "inactive") continue
+    const code = displayValue(row.code)
+    if (!code || code === "-") continue
+    const label =
+      labelFields
+        .map((field) => displayValue(row[field]))
+        .find((value) => value && value !== "-") ?? code
+    options.set(code, { code, label })
   }
-  return [...options.values()];
+  return [...options.values()]
 }
 
-function codedMasterLabel(options: Array<{ code: string; label: string }>, code: string) {
-  return options.find((option) => option.code === code)?.label ?? code;
+function codedMasterLabel(
+  options: Array<{ code: string; label: string }>,
+  code: string
+) {
+  return options.find((option) => option.code === code)?.label ?? code
 }
 
 function CompactEntryField({
@@ -4696,16 +6927,18 @@ function CompactEntryField({
   children,
   className = "",
 }: {
-  label: string;
-  children: ReactNode;
-  className?: string;
+  label: string
+  children: ReactNode
+  className?: string
 }) {
   return (
-    <Label className={`grid min-w-0 gap-0.5 text-[11px] font-medium text-muted-foreground ${className}`}>
+    <Label
+      className={`grid min-w-0 gap-0.5 text-[11px] font-medium text-muted-foreground ${className}`}
+    >
       <span>{label}</span>
       {children}
     </Label>
-  );
+  )
 }
 
 function ProductionCardRoleEntryForm({
@@ -4718,163 +6951,351 @@ function ProductionCardRoleEntryForm({
   rejectionRemarkRows = [],
   onSaveProductionCard,
 }: {
-  role: RoleTaskKind;
-  rows: DashboardPayload[];
-  existingCardRows?: DashboardPayload[];
-  bulkRows?: DashboardPayload[];
-  rejectionTypeRows?: DashboardPayload[];
-  rejectionReasonRows?: DashboardPayload[];
-  rejectionRemarkRows?: DashboardPayload[];
-  onSaveProductionCard: (row: DashboardPayload, card: DashboardPayload) => Promise<void>;
+  role: RoleTaskKind
+  rows: DashboardPayload[]
+  existingCardRows?: DashboardPayload[]
+  bulkRows?: DashboardPayload[]
+  rejectionTypeRows?: DashboardPayload[]
+  rejectionReasonRows?: DashboardPayload[]
+  rejectionRemarkRows?: DashboardPayload[]
+  onSaveProductionCard: (
+    row: DashboardPayload,
+    card: DashboardPayload
+  ) => Promise<void>
 }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [selectedKey, setSelectedKey] = useState("");
-  const [prodDate, setProdDate] = useState(today);
-  const [shift, setShift] = useState("Day");
-  const [operatorNumber, setOperatorNumber] = useState("");
+  const today = new Date().toISOString().slice(0, 10)
+  const [selectedKey, setSelectedKey] = useState("")
+  const [prodDate, setProdDate] = useState(today)
+  const [shift, setShift] = useState("Day")
+  const [operatorNumber, setOperatorNumber] = useState("")
 
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [cycleSecondsByKey, setCycleSecondsByKey] = useState<Record<string, string>>({});
-  const [pieceWeightByKey, setPieceWeightByKey] = useState<Record<string, string>>({});
-  const [producedGrossKg, setProducedGrossKg] = useState("");
-  const [cratesUsed, setCratesUsed] = useState("");
-  const [crateWeightKg, setCrateWeightKg] = useState("1.1");
-  const [downtimeCode, setDowntimeCode] = useState("");
-  const [bulkDowntimeCode, setBulkDowntimeCode] = useState("");
-  const [bulkDowntimeStart, setBulkDowntimeStart] = useState("");
-  const [bulkDowntimeEnd, setBulkDowntimeEnd] = useState("");
-  const [shopFloorEntryKind, setShopFloorEntryKind] = useState<"" | "production" | "bulkDowntime">("");
-  const [qualityEntryKind, setQualityEntryKind] = useState<"" | "downtime" | "rejection">("");
-  const [rejectionTypeCode, setRejectionTypeCode] = useState("");
-  const [rejectionReasonCode, setRejectionReasonCode] = useState("");
-  const [rejectionRemarkCode, setRejectionRemarkCode] = useState("");
-  const [rejectedPieces, setRejectedPieces] = useState("");
+  const [startTime, setStartTime] = useState("")
+  const [endTime, setEndTime] = useState("")
+  const [cycleSecondsByKey, setCycleSecondsByKey] = useState<
+    Record<string, string>
+  >({})
+  const [pieceWeightByKey, setPieceWeightByKey] = useState<
+    Record<string, string>
+  >({})
+  const [producedGrossKg, setProducedGrossKg] = useState("")
+  const [cratesUsed, setCratesUsed] = useState("")
+  const [crateWeightKg, setCrateWeightKg] = useState("1.1")
+  const [downtimeCode, setDowntimeCode] = useState("")
+  const [bulkDowntimeCode, setBulkDowntimeCode] = useState("")
+  const [bulkDowntimeStart, setBulkDowntimeStart] = useState("")
+  const [bulkDowntimeEnd, setBulkDowntimeEnd] = useState("")
+  const [shopFloorEntryKind, setShopFloorEntryKind] = useState<
+    "" | "production" | "bulkDowntime"
+  >("")
+  const [qualityEntryKind, setQualityEntryKind] = useState<
+    "" | "downtime" | "rejection"
+  >("")
+  const [rejectionTypeCode, setRejectionTypeCode] = useState("")
+  const [rejectionReasonCode, setRejectionReasonCode] = useState("")
+  const [rejectionRemarkCode, setRejectionRemarkCode] = useState("")
+  const [rejectedPieces, setRejectedPieces] = useState("")
 
-
-
-
-
-  const [remarks, setRemarks] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [isBulkSaving, setIsBulkSaving] = useState(false);
-  const hydratedProductionCardKeyRef = useRef("");
-  const rowOptions = useMemo(() => rows.map((row) => ({
-    key: shopFloorPlanKey(row),
-    label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}`,
-  })), [rows]);
-  const rejectionTypeOptions = useMemo(() => codedMasterOptions(rejectionTypeRows, DEFAULT_REJECTION_TYPE_OPTIONS, ["typeOfRejection", "rejectionType", "name"]), [rejectionTypeRows]);
-  const rejectionReasonOptions = useMemo(() => codedMasterOptions(rejectionReasonRows, DEFAULT_REJECTION_REASON_OPTIONS, ["rejectionReason", "reason", "name", "downtimeReason", "description"]), [rejectionReasonRows]);
-  const downtimeReasonOptions = useMemo(() => rejectionReasonOptions.map((option) => ({ code: option.code, reason: option.label, label: `${option.code} - ${option.label}` })).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })), [rejectionReasonOptions]);
-  const downtimeReasonByCode = useMemo(() => new Map(downtimeReasonOptions.map((row) => [row.code, row.reason])), [downtimeReasonOptions]);
-  const rejectionRemarkOptions = useMemo(() => codedMasterOptions(rejectionRemarkRows, DEFAULT_REJECTION_REMARK_OPTIONS, ["rejectionRemark", "remark", "name"]), [rejectionRemarkRows]);
-  const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey);
-  const selectedOptionKey = selectedRow ? shopFloorPlanKey(selectedRow) : "";
-  const selectedCardKind = role === "shopFloor"
-    ? shopFloorEntryKind === "production" ? "production" : shopFloorEntryKind === "bulkDowntime" ? "bulk_downtime" : ""
-    : role === "quality" ? qualityEntryKind : "downtime";
+  const [remarks, setRemarks] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const [isBulkSaving, setIsBulkSaving] = useState(false)
+  const hydratedProductionCardKeyRef = useRef("")
+  const rowOptions = useMemo(
+    () =>
+      rows.map((row) => ({
+        key: shopFloorPlanKey(row),
+        label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}`,
+      })),
+    [rows]
+  )
+  const rejectionTypeOptions = useMemo(
+    () =>
+      codedMasterOptions(rejectionTypeRows, DEFAULT_REJECTION_TYPE_OPTIONS, [
+        "typeOfRejection",
+        "rejectionType",
+        "name",
+      ]),
+    [rejectionTypeRows]
+  )
+  const rejectionReasonOptions = useMemo(
+    () =>
+      codedMasterOptions(
+        rejectionReasonRows,
+        DEFAULT_REJECTION_REASON_OPTIONS,
+        ["rejectionReason", "reason", "name", "downtimeReason", "description"]
+      ),
+    [rejectionReasonRows]
+  )
+  const downtimeReasonOptions = useMemo(
+    () =>
+      rejectionReasonOptions
+        .map((option) => ({
+          code: option.code,
+          reason: option.label,
+          label: `${option.code} - ${option.label}`,
+        }))
+        .sort((a, b) =>
+          a.code.localeCompare(b.code, undefined, { numeric: true })
+        ),
+    [rejectionReasonOptions]
+  )
+  const downtimeReasonByCode = useMemo(
+    () => new Map(downtimeReasonOptions.map((row) => [row.code, row.reason])),
+    [downtimeReasonOptions]
+  )
+  const rejectionRemarkOptions = useMemo(
+    () =>
+      codedMasterOptions(
+        rejectionRemarkRows,
+        DEFAULT_REJECTION_REMARK_OPTIONS,
+        ["rejectionRemark", "remark", "name"]
+      ),
+    [rejectionRemarkRows]
+  )
+  const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey)
+  const selectedOptionKey = selectedRow ? shopFloorPlanKey(selectedRow) : ""
+  const selectedCardKind =
+    role === "shopFloor"
+      ? shopFloorEntryKind === "production"
+        ? "production"
+        : shopFloorEntryKind === "bulkDowntime"
+          ? "bulk_downtime"
+          : ""
+      : role === "quality"
+        ? qualityEntryKind
+        : "downtime"
   const existingProductionCard = useMemo(() => {
-    if (!selectedCardKind || selectedCardKind === "bulk_downtime" || !selectedRow) return undefined;
+    if (
+      !selectedCardKind ||
+      selectedCardKind === "bulk_downtime" ||
+      !selectedRow
+    )
+      return undefined
     return existingCardRows
-      .filter((card) => productionCardMatchesSelection(card, selectedRow, role, selectedCardKind, prodDate, shift))
-      .sort((left, right) => str(right.savedAt).localeCompare(str(left.savedAt)))[0];
-  }, [existingCardRows, prodDate, role, selectedCardKind, selectedRow, shift]);
-  const defaultCycleSeconds = selectedRow ? productionCycleSeconds(selectedRow) : 0;
-  const defaultPieceWeightGram = selectedRow ? productionPieceWeightGrams(selectedRow) : 0;
-  const cycleSecondsInput = cycleSecondsByKey[selectedOptionKey] ?? (defaultCycleSeconds ? String(defaultCycleSeconds) : "");
-  const pieceWeightInput = pieceWeightByKey[selectedOptionKey] ?? (defaultPieceWeightGram ? String(defaultPieceWeightGram) : "");
-  const cycleSeconds = numeric(cycleSecondsInput) || defaultCycleSeconds;
-  const pieceWeightGram = numeric(pieceWeightInput) || defaultPieceWeightGram;
-  const grossKg = numeric(producedGrossKg);
-  const crateCount = numeric(cratesUsed);
-  const crateTareKg = numeric(crateWeightKg) || DEFAULT_CRATE_WEIGHT_KG;
-  const netProducedKg = Math.max(grossKg - (crateCount * crateTareKg), 0);
-  const producedPcs = pieceWeightGram > 0 ? Math.floor((netProducedKg * 1000) / pieceWeightGram) : 0;
-  const shopFloorRuntimeMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
-  const downtimeDurationMinutes = productionCardRuntimeMinutes(prodDate, startTime, endTime);
-  const bulkDowntimeMinutes = productionCardRuntimeMinutes(prodDate, bulkDowntimeStart, bulkDowntimeEnd);
-  const roleLabel = role === "shopFloor" ? "Shop floor production entry" : role === "quality" ? "Quality control entry" : "Machinist downtime entry";
-  const hasEditedCycleSeconds = cycleSecondsByKey[selectedOptionKey] !== undefined && cycleSecondsInput !== "";
-  const hasEditedPieceWeight = pieceWeightByKey[selectedOptionKey] !== undefined && pieceWeightInput !== "";
-  const hasChangedCrateWeight = crateWeightKg !== String(DEFAULT_CRATE_WEIGHT_KG);
-  const hasShopFloorProductionEntry = Boolean(operatorNumber.trim() || startTime || endTime || producedGrossKg || cratesUsed || hasEditedCycleSeconds || hasEditedPieceWeight || hasChangedCrateWeight);
-  const hasShopFloorProductionOutput = grossKg > 0 && pieceWeightGram > 0 && producedPcs > 0;
-  const selectedDowntimeReason = downtimeReasonByCode.get(downtimeCode) ?? downtimeCode;
-  const selectedBulkDowntimeReason = downtimeReasonByCode.get(bulkDowntimeCode) ?? bulkDowntimeCode;
-  const selectedRejectionType = codedMasterLabel(rejectionTypeOptions, rejectionTypeCode);
-  const selectedRejectionReason = codedMasterLabel(rejectionReasonOptions, rejectionReasonCode);
-  const selectedRejectionRemark = codedMasterLabel(rejectionRemarkOptions, rejectionRemarkCode);
-  const rejectQty = numeric(rejectedPieces);
-  const isShopFloorProductionEntry = role === "shopFloor" && shopFloorEntryKind === "production";
-  const isShopFloorBulkDowntimeEntry = role === "shopFloor" && shopFloorEntryKind === "bulkDowntime";
-  const isQualityDowntimeEntry = role === "quality" && qualityEntryKind === "downtime";
-  const isQualityRejectionEntry = role === "quality" && qualityEntryKind === "rejection";
-  const isDowntimeEntry = role === "machinist" || isQualityDowntimeEntry;
-  const isRejectionEntry = isQualityRejectionEntry;
-  const hasDowntimeDetails = Boolean(downtimeCode && startTime && endTime && downtimeDurationMinutes > 0);
-  const hasQualityRejectionDetails = role === "quality" && Boolean(rejectionTypeCode && rejectionReasonCode && rejectionRemarkCode && rejectQty > 0);
+      .filter((card) =>
+        productionCardMatchesSelection(
+          card,
+          selectedRow,
+          role,
+          selectedCardKind,
+          prodDate,
+          shift
+        )
+      )
+      .sort((left, right) =>
+        str(right.savedAt).localeCompare(str(left.savedAt))
+      )[0]
+  }, [existingCardRows, prodDate, role, selectedCardKind, selectedRow, shift])
+  const defaultCycleSeconds = selectedRow
+    ? productionCycleSeconds(selectedRow)
+    : 0
+  const defaultPieceWeightGram = selectedRow
+    ? productionPieceWeightGrams(selectedRow)
+    : 0
+  const cycleSecondsInput =
+    cycleSecondsByKey[selectedOptionKey] ??
+    (defaultCycleSeconds ? String(defaultCycleSeconds) : "")
+  const pieceWeightInput =
+    pieceWeightByKey[selectedOptionKey] ??
+    (defaultPieceWeightGram ? String(defaultPieceWeightGram) : "")
+  const cycleSeconds = numeric(cycleSecondsInput) || defaultCycleSeconds
+  const pieceWeightGram = numeric(pieceWeightInput) || defaultPieceWeightGram
+  const grossKg = numeric(producedGrossKg)
+  const crateCount = numeric(cratesUsed)
+  const crateTareKg = numeric(crateWeightKg) || DEFAULT_CRATE_WEIGHT_KG
+  const netProducedKg = Math.max(grossKg - crateCount * crateTareKg, 0)
+  const producedPcs =
+    pieceWeightGram > 0
+      ? Math.floor((netProducedKg * 1000) / pieceWeightGram)
+      : 0
+  const shopFloorRuntimeMinutes = productionCardRuntimeMinutes(
+    prodDate,
+    startTime,
+    endTime
+  )
+  const downtimeDurationMinutes = productionCardRuntimeMinutes(
+    prodDate,
+    startTime,
+    endTime
+  )
+  const bulkDowntimeMinutes = productionCardRuntimeMinutes(
+    prodDate,
+    bulkDowntimeStart,
+    bulkDowntimeEnd
+  )
+  const roleLabel =
+    role === "shopFloor"
+      ? "Shop floor production entry"
+      : role === "quality"
+        ? "Quality control entry"
+        : "Machinist downtime entry"
+  const hasEditedCycleSeconds =
+    cycleSecondsByKey[selectedOptionKey] !== undefined &&
+    cycleSecondsInput !== ""
+  const hasEditedPieceWeight =
+    pieceWeightByKey[selectedOptionKey] !== undefined && pieceWeightInput !== ""
+  const hasChangedCrateWeight =
+    crateWeightKg !== String(DEFAULT_CRATE_WEIGHT_KG)
+  const hasShopFloorProductionEntry = Boolean(
+    operatorNumber.trim() ||
+    startTime ||
+    endTime ||
+    producedGrossKg ||
+    cratesUsed ||
+    hasEditedCycleSeconds ||
+    hasEditedPieceWeight ||
+    hasChangedCrateWeight
+  )
+  const hasShopFloorProductionOutput =
+    grossKg > 0 && pieceWeightGram > 0 && producedPcs > 0
+  const selectedDowntimeReason =
+    downtimeReasonByCode.get(downtimeCode) ?? downtimeCode
+  const selectedBulkDowntimeReason =
+    downtimeReasonByCode.get(bulkDowntimeCode) ?? bulkDowntimeCode
+  const selectedRejectionType = codedMasterLabel(
+    rejectionTypeOptions,
+    rejectionTypeCode
+  )
+  const selectedRejectionReason = codedMasterLabel(
+    rejectionReasonOptions,
+    rejectionReasonCode
+  )
+  const selectedRejectionRemark = codedMasterLabel(
+    rejectionRemarkOptions,
+    rejectionRemarkCode
+  )
+  const rejectQty = numeric(rejectedPieces)
+  const isShopFloorProductionEntry =
+    role === "shopFloor" && shopFloorEntryKind === "production"
+  const isShopFloorBulkDowntimeEntry =
+    role === "shopFloor" && shopFloorEntryKind === "bulkDowntime"
+  const isQualityDowntimeEntry =
+    role === "quality" && qualityEntryKind === "downtime"
+  const isQualityRejectionEntry =
+    role === "quality" && qualityEntryKind === "rejection"
+  const isDowntimeEntry = role === "machinist" || isQualityDowntimeEntry
+  const isRejectionEntry = isQualityRejectionEntry
+  const hasDowntimeDetails = Boolean(
+    downtimeCode && startTime && endTime && downtimeDurationMinutes > 0
+  )
+  const hasQualityRejectionDetails =
+    role === "quality" &&
+    Boolean(
+      rejectionTypeCode &&
+      rejectionReasonCode &&
+      rejectionRemarkCode &&
+      rejectQty > 0
+    )
 
-  const canSave = Boolean(selectedRow)
-    && (role === "shopFloor" ? isShopFloorProductionEntry && hasShopFloorProductionEntry : role === "quality" ? (isQualityDowntimeEntry ? hasDowntimeDetails : isQualityRejectionEntry ? hasQualityRejectionDetails : false) : hasDowntimeDetails);
-  const canSaveBulkDowntime = isShopFloorBulkDowntimeEntry && bulkRows.length > 0 && Boolean(bulkDowntimeCode && bulkDowntimeStart && bulkDowntimeEnd && bulkDowntimeMinutes > 0);
-  const showSaveButton = role === "shopFloor" ? isShopFloorProductionEntry : role === "quality" ? Boolean(qualityEntryKind) : true;
+  const canSave =
+    Boolean(selectedRow) &&
+    (role === "shopFloor"
+      ? isShopFloorProductionEntry && hasShopFloorProductionEntry
+      : role === "quality"
+        ? isQualityDowntimeEntry
+          ? hasDowntimeDetails
+          : isQualityRejectionEntry
+            ? hasQualityRejectionDetails
+            : false
+        : hasDowntimeDetails)
+  const canSaveBulkDowntime =
+    isShopFloorBulkDowntimeEntry &&
+    bulkRows.length > 0 &&
+    Boolean(
+      bulkDowntimeCode &&
+      bulkDowntimeStart &&
+      bulkDowntimeEnd &&
+      bulkDowntimeMinutes > 0
+    )
+  const showSaveButton =
+    role === "shopFloor"
+      ? isShopFloorProductionEntry
+      : role === "quality"
+        ? Boolean(qualityEntryKind)
+        : true
 
-useEffect(() => {
-    if (!selectedCardKind || selectedCardKind === "bulk_downtime" || !selectedOptionKey) return;
+  useEffect(() => {
+    if (
+      !selectedCardKind ||
+      selectedCardKind === "bulk_downtime" ||
+      !selectedOptionKey
+    )
+      return
     const hydrationKey = existingProductionCard
       ? `${productionCardPatchKey(existingProductionCard)}|${optionalText(existingProductionCard.savedAt)}`
-      : `${role}|${selectedCardKind}|${prodDate}|${shift}|${selectedOptionKey}|empty`;
-    if (hydratedProductionCardKeyRef.current === hydrationKey) return;
-    hydratedProductionCardKeyRef.current = hydrationKey;
-    const savedOperator = optionalText(existingProductionCard?.operatorId) ?? "";
-    const savedStartTime = optionalText(existingProductionCard?.startTime) ?? "";
-    const savedEndTime = optionalText(existingProductionCard?.endTime) ?? "";
-    const savedGrossWeight = optionalNumber(existingProductionCard?.grossWeight) ?? 0;
-    const savedCratesUsed = optionalNumber(existingProductionCard?.cratesUsed) ?? 0;
-    const savedCrateWeight = optionalNumber(existingProductionCard?.crateWeightKg) ?? DEFAULT_CRATE_WEIGHT_KG;
-    const savedCycleTime = optionalNumber(existingProductionCard?.cycleTime) ?? 0;
-    const savedPieceWeight = optionalNumber(existingProductionCard?.pieceWeight) ?? 0;
-    const savedDowntimeCode = optionalText(existingProductionCard?.downtimeCode) ?? "";
-    const savedRejectionTypeCode = optionalText(existingProductionCard?.rejectionTypeCode) ?? "";
-    const savedRejectionReasonCode = optionalText(existingProductionCard?.rejectionReasonCode) ?? "";
-    const savedRejectionRemarkCode = optionalText(existingProductionCard?.rejectionRemarkCode) ?? "";
-    const savedRejectQty = optionalNumber(existingProductionCard?.rejectQty) ?? 0;
-    const savedRemarks = optionalText(existingProductionCard?.remarks) ?? "";
-    let cancelled = false;
+      : `${role}|${selectedCardKind}|${prodDate}|${shift}|${selectedOptionKey}|empty`
+    if (hydratedProductionCardKeyRef.current === hydrationKey) return
+    hydratedProductionCardKeyRef.current = hydrationKey
+    const savedOperator = optionalText(existingProductionCard?.operatorId) ?? ""
+    const savedStartTime = optionalText(existingProductionCard?.startTime) ?? ""
+    const savedEndTime = optionalText(existingProductionCard?.endTime) ?? ""
+    const savedGrossWeight =
+      optionalNumber(existingProductionCard?.grossWeight) ?? 0
+    const savedCratesUsed =
+      optionalNumber(existingProductionCard?.cratesUsed) ?? 0
+    const savedCrateWeight =
+      optionalNumber(existingProductionCard?.crateWeightKg) ??
+      DEFAULT_CRATE_WEIGHT_KG
+    const savedCycleTime =
+      optionalNumber(existingProductionCard?.cycleTime) ?? 0
+    const savedPieceWeight =
+      optionalNumber(existingProductionCard?.pieceWeight) ?? 0
+    const savedDowntimeCode =
+      optionalText(existingProductionCard?.downtimeCode) ?? ""
+    const savedRejectionTypeCode =
+      optionalText(existingProductionCard?.rejectionTypeCode) ?? ""
+    const savedRejectionReasonCode =
+      optionalText(existingProductionCard?.rejectionReasonCode) ?? ""
+    const savedRejectionRemarkCode =
+      optionalText(existingProductionCard?.rejectionRemarkCode) ?? ""
+    const savedRejectQty =
+      optionalNumber(existingProductionCard?.rejectQty) ?? 0
+    const savedRemarks = optionalText(existingProductionCard?.remarks) ?? ""
+    let cancelled = false
     queueMicrotask(() => {
-      if (cancelled) return;
-      setOperatorNumber(savedOperator === "Unassigned" ? "" : savedOperator);
-      setStartTime(savedStartTime);
-      setEndTime(savedEndTime);
-      setProducedGrossKg(savedGrossWeight > 0 ? String(savedGrossWeight) : "");
-      setCratesUsed(savedCratesUsed > 0 ? String(savedCratesUsed) : "");
-      setCrateWeightKg(String(savedCrateWeight));
-      setCycleSecondsByKey((current) => savedCycleTime > 0
-        ? { ...current, [selectedOptionKey]: String(savedCycleTime) }
-        : omitRecordKey(current, selectedOptionKey));
-      setPieceWeightByKey((current) => savedPieceWeight > 0
-        ? { ...current, [selectedOptionKey]: String(savedPieceWeight) }
-        : omitRecordKey(current, selectedOptionKey));
-      setDowntimeCode(savedDowntimeCode);
-      setRejectionTypeCode(savedRejectionTypeCode);
-      setRejectionReasonCode(savedRejectionReasonCode);
-      setRejectionRemarkCode(savedRejectionRemarkCode);
-      setRejectedPieces(savedRejectQty > 0 ? String(savedRejectQty) : "");
-      setRemarks(savedRemarks === "Bulk downtime" ? "" : savedRemarks);
-    });
+      if (cancelled) return
+      setOperatorNumber(savedOperator === "Unassigned" ? "" : savedOperator)
+      setStartTime(savedStartTime)
+      setEndTime(savedEndTime)
+      setProducedGrossKg(savedGrossWeight > 0 ? String(savedGrossWeight) : "")
+      setCratesUsed(savedCratesUsed > 0 ? String(savedCratesUsed) : "")
+      setCrateWeightKg(String(savedCrateWeight))
+      setCycleSecondsByKey((current) =>
+        savedCycleTime > 0
+          ? { ...current, [selectedOptionKey]: String(savedCycleTime) }
+          : omitRecordKey(current, selectedOptionKey)
+      )
+      setPieceWeightByKey((current) =>
+        savedPieceWeight > 0
+          ? { ...current, [selectedOptionKey]: String(savedPieceWeight) }
+          : omitRecordKey(current, selectedOptionKey)
+      )
+      setDowntimeCode(savedDowntimeCode)
+      setRejectionTypeCode(savedRejectionTypeCode)
+      setRejectionReasonCode(savedRejectionReasonCode)
+      setRejectionRemarkCode(savedRejectionRemarkCode)
+      setRejectedPieces(savedRejectQty > 0 ? String(savedRejectQty) : "")
+      setRemarks(savedRemarks === "Bulk downtime" ? "" : savedRemarks)
+    })
     return () => {
-      cancelled = true;
-    };
-  }, [existingProductionCard, prodDate, role, selectedCardKind, selectedOptionKey, shift]);
-
+      cancelled = true
+    }
+  }, [
+    existingProductionCard,
+    prodDate,
+    role,
+    selectedCardKind,
+    selectedOptionKey,
+    shift,
+  ])
 
   async function submitProductionCard() {
-    if (!selectedRow || !canSave || isSaving) return;
-    setIsSaving(true);
+    if (!selectedRow || !canSave || isSaving) return
+    setIsSaving(true)
     try {
       await onSaveProductionCard(selectedRow, {
         cardRole: role,
-        writeProductionOutput: role === "shopFloor" && hasShopFloorProductionOutput,
+        writeProductionOutput:
+          role === "shopFloor" && hasShopFloorProductionOutput,
         prodDate,
         shift,
         operatorId: role === "shopFloor" ? operatorNumber : "",
@@ -4884,14 +7305,26 @@ useEffect(() => {
         loadingUnloading: 0,
         startTime,
         endTime,
-        runtimeMinutes: role === "shopFloor" ? shopFloorRuntimeMinutes : isDowntimeEntry && hasDowntimeDetails ? downtimeDurationMinutes : 0,
+        runtimeMinutes:
+          role === "shopFloor"
+            ? shopFloorRuntimeMinutes
+            : isDowntimeEntry && hasDowntimeDetails
+              ? downtimeDurationMinutes
+              : 0,
         breakMinutes: 0,
-        downtimeMinutes: isDowntimeEntry && hasDowntimeDetails ? downtimeDurationMinutes : 0,
-        downtimeReason: isDowntimeEntry && hasDowntimeDetails ? selectedDowntimeReason : "",
+        downtimeMinutes:
+          isDowntimeEntry && hasDowntimeDetails ? downtimeDurationMinutes : 0,
+        downtimeReason:
+          isDowntimeEntry && hasDowntimeDetails ? selectedDowntimeReason : "",
         downtimeCode: isDowntimeEntry && hasDowntimeDetails ? downtimeCode : "",
         outputQty: role === "shopFloor" ? producedPcs : 0,
         actualQty: role === "shopFloor" ? producedPcs : 0,
-        targetQty: role === "shopFloor" && cycleSeconds > 0 && shopFloorRuntimeMinutes > 0 ? Math.floor((shopFloorRuntimeMinutes * 60) / cycleSeconds) : 0,
+        targetQty:
+          role === "shopFloor" &&
+          cycleSeconds > 0 &&
+          shopFloorRuntimeMinutes > 0
+            ? Math.floor((shopFloorRuntimeMinutes * 60) / cycleSeconds)
+            : 0,
         rejectQty: isRejectionEntry ? rejectQty : 0,
         rejectionType: isRejectionEntry ? selectedRejectionType : "",
         rejectionTypeCode: isRejectionEntry ? rejectionTypeCode : "",
@@ -4911,25 +7344,25 @@ useEffect(() => {
         qcApproval: "",
         remarks,
         efficiency: 0,
-      });
-      setRemarks("");
+      })
+      setRemarks("")
       if (role === "quality" || role === "machinist") {
-        setDowntimeCode("");
-        setStartTime("");
-        setEndTime("");
-        setRejectionTypeCode("");
-        setRejectionReasonCode("");
-        setRejectionRemarkCode("");
-        setRejectedPieces("");
+        setDowntimeCode("")
+        setStartTime("")
+        setEndTime("")
+        setRejectionTypeCode("")
+        setRejectionReasonCode("")
+        setRejectionRemarkCode("")
+        setRejectedPieces("")
       }
     } finally {
-      setIsSaving(false);
+      setIsSaving(false)
     }
   }
 
   async function submitBulkDowntime() {
-    if (!canSaveBulkDowntime || isBulkSaving) return;
-    setIsBulkSaving(true);
+    if (!canSaveBulkDowntime || isBulkSaving) return
+    setIsBulkSaving(true)
     try {
       for (const row of bulkRows) {
         await onSaveProductionCard(row, {
@@ -4966,19 +7399,20 @@ useEffect(() => {
           qcApproval: "",
           remarks: "Bulk downtime",
           efficiency: 0,
-        });
+        })
       }
-      setBulkDowntimeCode("");
-      setBulkDowntimeStart("");
-      setBulkDowntimeEnd("");
+      setBulkDowntimeCode("")
+      setBulkDowntimeStart("")
+      setBulkDowntimeEnd("")
     } finally {
-      setIsBulkSaving(false);
+      setIsBulkSaving(false)
     }
   }
 
-  const entryTabClass = "h-7 rounded px-3 text-xs shadow-none";
-  const compactInputClass = "h-8 text-xs";
-  const compactSelectClass = "h-8 w-full min-w-0 rounded-md border bg-background px-2 text-xs";
+  const entryTabClass = "h-7 rounded px-3 text-xs shadow-none"
+  const compactInputClass = "h-8 text-xs"
+  const compactSelectClass =
+    "h-8 w-full min-w-0 rounded-md border bg-background px-2 text-xs"
 
   return (
     <div className="grid gap-2 rounded-md border bg-muted/10 p-2">
@@ -4989,13 +7423,47 @@ useEffect(() => {
             Select a machine; item and setup details come from the current plan.
           </div>
         </div>
-        {role === "shopFloor" ? <StatusBadge value={isShopFloorProductionEntry && producedPcs > 0 ? `${formatNumber(producedPcs)} pcs` : isShopFloorBulkDowntimeEntry ? `${formatNumber(bulkRows.length)} machines` : "Select entry"} /> : null}
-        {role === "quality" ? <StatusBadge value={isQualityRejectionEntry && rejectQty > 0 ? `${formatNumber(rejectQty)} rejected pcs` : isQualityDowntimeEntry && downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : qualityEntryKind ? "Quality pending" : "Select entry"} /> : null}
-        {role === "machinist" ? <StatusBadge value={downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Downtime pending"} /> : null}
+        {role === "shopFloor" ? (
+          <StatusBadge
+            value={
+              isShopFloorProductionEntry && producedPcs > 0
+                ? `${formatNumber(producedPcs)} pcs`
+                : isShopFloorBulkDowntimeEntry
+                  ? `${formatNumber(bulkRows.length)} machines`
+                  : "Select entry"
+            }
+          />
+        ) : null}
+        {role === "quality" ? (
+          <StatusBadge
+            value={
+              isQualityRejectionEntry && rejectQty > 0
+                ? `${formatNumber(rejectQty)} rejected pcs`
+                : isQualityDowntimeEntry && downtimeDurationMinutes > 0
+                  ? `${formatNumber(downtimeDurationMinutes)} min downtime`
+                  : qualityEntryKind
+                    ? "Quality pending"
+                    : "Select entry"
+            }
+          />
+        ) : null}
+        {role === "machinist" ? (
+          <StatusBadge
+            value={
+              downtimeDurationMinutes > 0
+                ? `${formatNumber(downtimeDurationMinutes)} min downtime`
+                : "Downtime pending"
+            }
+          />
+        ) : null}
       </div>
 
       {role === "shopFloor" ? (
-        <div aria-label="Shop floor entry type" className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5" role="group">
+        <div
+          aria-label="Shop floor entry type"
+          className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5"
+          role="group"
+        >
           <Button
             aria-pressed={shopFloorEntryKind === "production"}
             className={entryTabClass}
@@ -5010,7 +7478,9 @@ useEffect(() => {
             className={entryTabClass}
             onClick={() => setShopFloorEntryKind("bulkDowntime")}
             type="button"
-            variant={shopFloorEntryKind === "bulkDowntime" ? "default" : "ghost"}
+            variant={
+              shopFloorEntryKind === "bulkDowntime" ? "default" : "ghost"
+            }
           >
             Bulk downtime
           </Button>
@@ -5020,16 +7490,33 @@ useEffect(() => {
       {role !== "shopFloor" ? (
         <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-6">
           <CompactEntryField className="lg:col-span-2" label="Machine no.">
-            <select className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+            <select
+              className={compactSelectClass}
+              value={selectedOptionKey}
+              onChange={(event) => setSelectedKey(event.target.value)}
+            >
               <option value="">Select machine</option>
-              {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+              {rowOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </CompactEntryField>
           <CompactEntryField label="Date">
-            <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+            <Input
+              className={compactInputClass}
+              type="date"
+              value={prodDate}
+              onChange={(event) => setProdDate(event.target.value)}
+            />
           </CompactEntryField>
           <CompactEntryField label="Shift">
-            <select className={compactSelectClass} value={shift} onChange={(event) => setShift(event.target.value)}>
+            <select
+              className={compactSelectClass}
+              value={shift}
+              onChange={(event) => setShift(event.target.value)}
+            >
               <option value="Day">Day</option>
               <option value="Night">Night</option>
               <option value="General">General</option>
@@ -5047,16 +7534,33 @@ useEffect(() => {
         <>
           <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-6">
             <CompactEntryField className="lg:col-span-2" label="Machine no.">
-              <select className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+              <select
+                className={compactSelectClass}
+                value={selectedOptionKey}
+                onChange={(event) => setSelectedKey(event.target.value)}
+              >
                 <option value="">Select machine</option>
-                {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+                {rowOptions.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </CompactEntryField>
             <CompactEntryField label="Date">
-              <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+              <Input
+                className={compactInputClass}
+                type="date"
+                value={prodDate}
+                onChange={(event) => setProdDate(event.target.value)}
+              />
             </CompactEntryField>
             <CompactEntryField label="Shift">
-              <select className={compactSelectClass} value={shift} onChange={(event) => setShift(event.target.value)}>
+              <select
+                className={compactSelectClass}
+                value={shift}
+                onChange={(event) => setShift(event.target.value)}
+              >
                 <option value="Day">Day</option>
                 <option value="Night">Night</option>
                 <option value="General">General</option>
@@ -5064,42 +7568,122 @@ useEffect(() => {
             </CompactEntryField>
             {selectedRow ? (
               <div className="flex min-h-8 items-center rounded-md border bg-background px-2 sm:col-span-2 lg:col-span-2">
-                <ShopFloorItemSummary row={selectedRow} tone="current" compact />
+                <ShopFloorItemSummary
+                  row={selectedRow}
+                  tone="current"
+                  compact
+                />
               </div>
             ) : null}
           </div>
           <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
             <CompactEntryField label="Cycle time sec">
-              <Input className={compactInputClass} type="number" step="0.01" value={cycleSecondsInput} onChange={(event) => setCycleSecondsByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} />
+              <Input
+                className={compactInputClass}
+                type="number"
+                step="0.01"
+                value={cycleSecondsInput}
+                onChange={(event) =>
+                  setCycleSecondsByKey((current) => ({
+                    ...current,
+                    [selectedOptionKey]: event.target.value,
+                  }))
+                }
+              />
             </CompactEntryField>
             <CompactEntryField label="Piece weight gm">
-              <Input className={compactInputClass} type="number" step="0.01" value={pieceWeightInput} onChange={(event) => setPieceWeightByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} />
+              <Input
+                className={compactInputClass}
+                type="number"
+                step="0.01"
+                value={pieceWeightInput}
+                onChange={(event) =>
+                  setPieceWeightByKey((current) => ({
+                    ...current,
+                    [selectedOptionKey]: event.target.value,
+                  }))
+                }
+              />
             </CompactEntryField>
             <CompactEntryField label="Operator no.">
-              <Input className={compactInputClass} value={operatorNumber} onChange={(event) => setOperatorNumber(event.target.value)} />
+              <Input
+                className={compactInputClass}
+                value={operatorNumber}
+                onChange={(event) => setOperatorNumber(event.target.value)}
+              />
             </CompactEntryField>
             <CompactEntryField label="Machine start">
-              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />
+              <Input
+                className={compactInputClass}
+                type="text"
+                inputMode="numeric"
+                placeholder="HH:mm"
+                pattern="[0-2][0-9]:[0-5][0-9]"
+                title="Use 24-hour time as HH:mm"
+                value={startTime}
+                onChange={(event) =>
+                  setStartTime(time24Input(event.target.value))
+                }
+              />
             </CompactEntryField>
             <CompactEntryField label="Machine end">
-              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} />
+              <Input
+                className={compactInputClass}
+                type="text"
+                inputMode="numeric"
+                placeholder="HH:mm"
+                pattern="[0-2][0-9]:[0-5][0-9]"
+                title="Use 24-hour time as HH:mm"
+                value={endTime}
+                onChange={(event) =>
+                  setEndTime(time24Input(event.target.value))
+                }
+              />
             </CompactEntryField>
             <CompactEntryField label="Gross produced kg">
-              <Input className={compactInputClass} type="number" step="0.001" value={producedGrossKg} onChange={(event) => setProducedGrossKg(event.target.value)} />
+              <Input
+                className={compactInputClass}
+                type="number"
+                step="0.001"
+                value={producedGrossKg}
+                onChange={(event) => setProducedGrossKg(event.target.value)}
+              />
             </CompactEntryField>
             <CompactEntryField label="Crates used">
-              <Input className={compactInputClass} type="number" step="1" value={cratesUsed} onChange={(event) => setCratesUsed(event.target.value)} />
+              <Input
+                className={compactInputClass}
+                type="number"
+                step="1"
+                value={cratesUsed}
+                onChange={(event) => setCratesUsed(event.target.value)}
+              />
             </CompactEntryField>
             <CompactEntryField label="Crate weight kg">
-              <select className={compactSelectClass} value={crateWeightKg} onChange={(event) => setCrateWeightKg(event.target.value)}>
-                {CRATE_WEIGHT_OPTIONS_KG.map((weight) => <option key={weight} value={String(weight)}>{formatNumber(weight)} kg</option>)}
+              <select
+                className={compactSelectClass}
+                value={crateWeightKg}
+                onChange={(event) => setCrateWeightKg(event.target.value)}
+              >
+                {CRATE_WEIGHT_OPTIONS_KG.map((weight) => (
+                  <option key={weight} value={String(weight)}>
+                    {formatNumber(weight)} kg
+                  </option>
+                ))}
               </select>
             </CompactEntryField>
             <CompactEntryField label="Net produced kg">
-              <Input className={compactInputClass} value={formatNumber(netProducedKg)} readOnly />
+              <Input
+                className={compactInputClass}
+                value={formatNumber(netProducedKg)}
+                readOnly
+              />
             </CompactEntryField>
             <CompactEntryField label="Produced pcs">
-              <Input className={compactInputClass} value={formatNumber(producedPcs)} readOnly />
+              <Input
+                className={compactInputClass}
+                value={formatNumber(producedPcs)}
+                readOnly
+              />
             </CompactEntryField>
           </div>
         </>
@@ -5113,25 +7697,76 @@ useEffect(() => {
           </div>
           <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
             <CompactEntryField label="Date">
-              <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+              <Input
+                className={compactInputClass}
+                type="date"
+                value={prodDate}
+                onChange={(event) => setProdDate(event.target.value)}
+              />
             </CompactEntryField>
             <CompactEntryField label="Downtime code">
-              <select className={compactSelectClass} value={bulkDowntimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setBulkDowntimeCode(event.target.value)}>
-                <option value="">{downtimeReasonOptions.length ? "Select code" : "Add downtime reason master"}</option>
-                {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+              <select
+                className={compactSelectClass}
+                value={bulkDowntimeCode}
+                disabled={!downtimeReasonOptions.length}
+                onChange={(event) => setBulkDowntimeCode(event.target.value)}
+              >
+                <option value="">
+                  {downtimeReasonOptions.length
+                    ? "Select code"
+                    : "Add downtime reason master"}
+                </option>
+                {downtimeReasonOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </CompactEntryField>
             <CompactEntryField label="Start">
-              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(time24Input(event.target.value))} />
+              <Input
+                className={compactInputClass}
+                type="text"
+                inputMode="numeric"
+                placeholder="HH:mm"
+                pattern="[0-2][0-9]:[0-5][0-9]"
+                title="Use 24-hour time as HH:mm"
+                value={bulkDowntimeStart}
+                onChange={(event) =>
+                  setBulkDowntimeStart(time24Input(event.target.value))
+                }
+              />
             </CompactEntryField>
             <CompactEntryField label="End">
-              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeEnd} onChange={(event) => setBulkDowntimeEnd(time24Input(event.target.value))} />
+              <Input
+                className={compactInputClass}
+                type="text"
+                inputMode="numeric"
+                placeholder="HH:mm"
+                pattern="[0-2][0-9]:[0-5][0-9]"
+                title="Use 24-hour time as HH:mm"
+                value={bulkDowntimeEnd}
+                onChange={(event) =>
+                  setBulkDowntimeEnd(time24Input(event.target.value))
+                }
+              />
             </CompactEntryField>
             <CompactEntryField label="Minutes">
-              <Input className={compactInputClass} value={formatNumber(bulkDowntimeMinutes)} readOnly />
+              <Input
+                className={compactInputClass}
+                value={formatNumber(bulkDowntimeMinutes)}
+                readOnly
+              />
             </CompactEntryField>
           </div>
-          <Button type="button" size="sm" variant="outline" className="h-7 w-fit px-2.5 text-xs" disabled={!canSaveBulkDowntime || isBulkSaving} onClick={() => void submitBulkDowntime()}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 w-fit px-2.5 text-xs"
+            disabled={!canSaveBulkDowntime || isBulkSaving}
+            onClick={() => void submitBulkDowntime()}
+          >
             <CheckCircle2 className="size-3.5" />
             Save running-machine downtime
           </Button>
@@ -5139,7 +7774,11 @@ useEffect(() => {
       ) : null}
 
       {role === "quality" ? (
-        <div aria-label="Quality entry type" className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5" role="group">
+        <div
+          aria-label="Quality entry type"
+          className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5"
+          role="group"
+        >
           <Button
             aria-pressed={qualityEntryKind === "downtime"}
             className={entryTabClass}
@@ -5164,22 +7803,64 @@ useEffect(() => {
       {isDowntimeEntry ? (
         <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           <CompactEntryField label="Date">
-            <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+            <Input
+              className={compactInputClass}
+              type="date"
+              value={prodDate}
+              onChange={(event) => setProdDate(event.target.value)}
+            />
           </CompactEntryField>
           <CompactEntryField label="Downtime code">
-            <select className={compactSelectClass} value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
-              <option value="">{downtimeReasonOptions.length ? "Select code" : "Add downtime reason master"}</option>
-              {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+            <select
+              className={compactSelectClass}
+              value={downtimeCode}
+              disabled={!downtimeReasonOptions.length}
+              onChange={(event) => setDowntimeCode(event.target.value)}
+            >
+              <option value="">
+                {downtimeReasonOptions.length
+                  ? "Select code"
+                  : "Add downtime reason master"}
+              </option>
+              {downtimeReasonOptions.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </CompactEntryField>
           <CompactEntryField label="Start">
-            <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />
+            <Input
+              className={compactInputClass}
+              type="text"
+              inputMode="numeric"
+              placeholder="HH:mm"
+              pattern="[0-2][0-9]:[0-5][0-9]"
+              title="Use 24-hour time as HH:mm"
+              value={startTime}
+              onChange={(event) =>
+                setStartTime(time24Input(event.target.value))
+              }
+            />
           </CompactEntryField>
           <CompactEntryField label="End">
-            <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} />
+            <Input
+              className={compactInputClass}
+              type="text"
+              inputMode="numeric"
+              placeholder="HH:mm"
+              pattern="[0-2][0-9]:[0-5][0-9]"
+              title="Use 24-hour time as HH:mm"
+              value={endTime}
+              onChange={(event) => setEndTime(time24Input(event.target.value))}
+            />
           </CompactEntryField>
           <CompactEntryField label="Minutes">
-            <Input className={compactInputClass} value={formatNumber(downtimeDurationMinutes)} readOnly />
+            <Input
+              className={compactInputClass}
+              value={formatNumber(downtimeDurationMinutes)}
+              readOnly
+            />
           </CompactEntryField>
         </div>
       ) : null}
@@ -5187,37 +7868,78 @@ useEffect(() => {
       {isRejectionEntry ? (
         <div className="grid gap-1.5 rounded-md border bg-background p-2 sm:grid-cols-2 lg:grid-cols-4">
           <CompactEntryField label="Rejection type">
-            <select className={compactSelectClass} value={rejectionTypeCode} onChange={(event) => setRejectionTypeCode(event.target.value)}>
+            <select
+              className={compactSelectClass}
+              value={rejectionTypeCode}
+              onChange={(event) => setRejectionTypeCode(event.target.value)}
+            >
               <option value="">Select type</option>
-              {rejectionTypeOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+              {rejectionTypeOptions.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.code} - {option.label}
+                </option>
+              ))}
             </select>
           </CompactEntryField>
           <CompactEntryField label="Rejection reason">
-            <select className={compactSelectClass} value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}>
+            <select
+              className={compactSelectClass}
+              value={rejectionReasonCode}
+              onChange={(event) => setRejectionReasonCode(event.target.value)}
+            >
               <option value="">Select reason</option>
-              {rejectionReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+              {rejectionReasonOptions.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.code} - {option.label}
+                </option>
+              ))}
             </select>
           </CompactEntryField>
           <CompactEntryField label="Rejection remark">
-            <select className={compactSelectClass} value={rejectionRemarkCode} onChange={(event) => setRejectionRemarkCode(event.target.value)}>
+            <select
+              className={compactSelectClass}
+              value={rejectionRemarkCode}
+              onChange={(event) => setRejectionRemarkCode(event.target.value)}
+            >
               <option value="">Select remark</option>
-              {rejectionRemarkOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+              {rejectionRemarkOptions.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.code} - {option.label}
+                </option>
+              ))}
             </select>
           </CompactEntryField>
           <CompactEntryField label="Rejected pcs">
-            <Input className={compactInputClass} type="number" step="1" min="0" value={rejectedPieces} onChange={(event) => setRejectedPieces(event.target.value)} />
+            <Input
+              className={compactInputClass}
+              type="number"
+              step="1"
+              min="0"
+              value={rejectedPieces}
+              onChange={(event) => setRejectedPieces(event.target.value)}
+            />
           </CompactEntryField>
         </div>
       ) : null}
 
       {showSaveButton ? (
-        <Button type="button" size="sm" className="h-7 w-fit px-2.5 text-xs" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 w-fit px-2.5 text-xs"
+          disabled={!canSave || isSaving}
+          onClick={() => void submitProductionCard()}
+        >
           <CheckCircle2 className="size-3.5" />
-          {role === "shopFloor" ? "Save production" : isQualityRejectionEntry ? "Save rejection" : "Save downtime"}
+          {role === "shopFloor"
+            ? "Save production"
+            : isQualityRejectionEntry
+              ? "Save rejection"
+              : "Save downtime"}
         </Button>
       ) : null}
     </div>
-  );
+  )
 }
 
 function SetupChecklistForm({
@@ -5229,46 +7951,64 @@ function SetupChecklistForm({
   onValueChange,
   onAddMaster,
 }: {
-  row: DashboardPayload;
-  phase: string;
-  items: DashboardPayload[];
-  session?: DashboardPayload;
-  values: Record<string, string>;
-  onValueChange: (item: DashboardPayload, value: string) => void;
-  onAddMaster?: (entryType: string, defaults?: Record<string, unknown>) => void;
+  row: DashboardPayload
+  phase: string
+  items: DashboardPayload[]
+  session?: DashboardPayload
+  values: Record<string, string>
+  onValueChange: (item: DashboardPayload, value: string) => void
+  onAddMaster?: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
-  const defaults = setupChecklistMasterDefaults();
+  const defaults = setupChecklistMasterDefaults()
   if (phase === "start" && !items.length) {
     return (
       <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
-        <div className="font-medium text-amber-900 dark:text-amber-100">Setup checklist master missing</div>
-        <div className="text-amber-800 dark:text-amber-200">Add active checklist master rows before pre setting can start.</div>
+        <div className="font-medium text-amber-900 dark:text-amber-100">
+          Setup checklist master missing
+        </div>
+        <div className="text-amber-800 dark:text-amber-200">
+          Add active checklist master rows before pre setting can start.
+        </div>
         {onAddMaster ? (
-          <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onAddMaster("setup_checklist_master", defaults)}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-fit"
+            onClick={() => onAddMaster("setup_checklist_master", defaults)}
+          >
             Add checklist master
           </Button>
         ) : null}
       </div>
-    );
+    )
   }
   if (phase === "end" && !session) {
     return (
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
-        Pre setting checklist session is missing. Start pre setting for this setup before saving setting done.
+        Pre setting checklist session is missing. Start pre setting for this
+        setup before saving setting done.
       </div>
-    );
+    )
   }
 
   return (
     <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-medium">Setup checklist {phase === "start" ? "start" : "completion"}</div>
+          <div className="text-sm font-medium">
+            Setup checklist {phase === "start" ? "start" : "completion"}
+          </div>
           <div className="text-xs text-muted-foreground">
-            {itemCode(row)} / JC {jobCardNumber(row)} / Option {displayValue(row.optionNumber)} / Setup {displayValue(row.setupNo)} / Machine {displayValue(row.machine)} / {formatDate(new Date().toISOString())}
+            {itemCode(row)} / JC {jobCardNumber(row)} / Option{" "}
+            {displayValue(row.optionNumber)} / Setup {displayValue(row.setupNo)}{" "}
+            / Machine {displayValue(row.machine)} /{" "}
+            {formatDate(new Date().toISOString())}
           </div>
         </div>
-        <StatusBadge value={`Version ${displayValue(session?.masterVersion || items[0]?.version)}`} />
+        <StatusBadge
+          value={`Version ${displayValue(session?.masterVersion || items[0]?.version)}`}
+        />
       </div>
       <div className="overflow-auto">
         <Table>
@@ -5282,37 +8022,58 @@ function SetupChecklistForm({
           </TableHeader>
           <TableBody>
             {items.map((item, index) => {
-              const itemKey = setupChecklistItemKey(item, index);
-              const inputType = str(item.inputType || "checkbox").toLowerCase();
-              const existingValue = setupChecklistExistingValue(item, phase);
-              const value = values[itemKey] ?? existingValue;
+              const itemKey = setupChecklistItemKey(item, index)
+              const inputType = str(item.inputType || "checkbox").toLowerCase()
+              const existingValue = setupChecklistExistingValue(item, phase)
+              const value = values[itemKey] ?? existingValue
               return (
                 <TableRow key={itemKey}>
-                  <TableCell>{displayValue(item.sequence || index + 1)}</TableCell>
                   <TableCell>
-                    <div className="font-medium">{displayValue(item.checkPoint)}</div>
-                    <div className="text-xs text-muted-foreground">{displayValue(item.section)}</div>
+                    {displayValue(item.sequence || index + 1)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-medium">
+                      {displayValue(item.checkPoint)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {displayValue(item.section)}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {inputType === "checkbox" ? (
-                      <select className="h-8 rounded-md border bg-background px-2 text-sm" value={value} onChange={(event) => onValueChange(item, event.target.value)}>
+                      <select
+                        className="h-8 rounded-md border bg-background px-2 text-sm"
+                        value={value}
+                        onChange={(event) =>
+                          onValueChange(item, event.target.value)
+                        }
+                      >
                         <option value="">Select</option>
                         <option value="Yes">Yes</option>
                         <option value="No">No</option>
                       </select>
                     ) : (
-                      <Input className="h-8 min-w-28" type={inputType === "number" ? "number" : "text"} value={value} onChange={(event) => onValueChange(item, event.target.value)} />
+                      <Input
+                        className="h-8 min-w-28"
+                        type={inputType === "number" ? "number" : "text"}
+                        value={value}
+                        onChange={(event) =>
+                          onValueChange(item, event.target.value)
+                        }
+                      />
                     )}
                   </TableCell>
-                  <TableCell>{setupChecklistItemRequired(item) ? "Yes" : "No"}</TableCell>
+                  <TableCell>
+                    {setupChecklistItemRequired(item) ? "Yes" : "No"}
+                  </TableCell>
                 </TableRow>
-              );
+              )
             })}
           </TableBody>
         </Table>
       </div>
     </div>
-  );
+  )
 }
 function FirstPieceInspectionForm({
   row,
@@ -5322,34 +8083,53 @@ function FirstPieceInspectionForm({
   onAddMaster,
   showDraftSaved = false,
 }: {
-  row: DashboardPayload;
-  masters: DashboardPayload[];
-  readings: Record<string, string[]>;
-  onReadingChange: (master: DashboardPayload, pieceIndex: number, value: string) => void;
-  onAddMaster?: (entryType: string, defaults?: Record<string, unknown>) => void;
-  showDraftSaved?: boolean;
+  row: DashboardPayload
+  masters: DashboardPayload[]
+  readings: Record<string, string[]>
+  onReadingChange: (
+    master: DashboardPayload,
+    pieceIndex: number,
+    value: string
+  ) => void
+  onAddMaster?: (entryType: string, defaults?: Record<string, unknown>) => void
+  showDraftSaved?: boolean
 }) {
-  const defaults = firstPieceMasterDefaults(row);
+  const defaults = firstPieceMasterDefaults(row)
   if (!masters.length) {
     return (
       <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
-        <div className="font-medium text-amber-900 dark:text-amber-100">First piece inspection master missing</div>
-        <div className="text-amber-800 dark:text-amber-200">Add dimensions for this part, option, and setup before quality approval.</div>
+        <div className="font-medium text-amber-900 dark:text-amber-100">
+          First piece inspection master missing
+        </div>
+        <div className="text-amber-800 dark:text-amber-200">
+          Add dimensions for this part, option, and setup before quality
+          approval.
+        </div>
         {onAddMaster ? (
-          <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onAddMaster("quality_parameter_master", defaults)}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-fit"
+            onClick={() => onAddMaster("quality_parameter_master", defaults)}
+          >
             Add inspection master
           </Button>
         ) : null}
       </div>
-    );
+    )
   }
 
   return (
     <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-medium">First piece inspection report</div>
-          <div className="text-xs text-muted-foreground">Task assigned: {displayValue(row.shopFloorUpdatedAt)}</div>
+          <div className="text-sm font-medium">
+            First piece inspection report
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Task assigned: {displayValue(row.shopFloorUpdatedAt)}
+          </div>
           {showDraftSaved ? (
             <div className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
               Unfinished readings are saved automatically.
@@ -5357,7 +8137,12 @@ function FirstPieceInspectionForm({
           ) : null}
         </div>
         {onAddMaster ? (
-          <Button type="button" size="sm" variant="outline" onClick={() => onAddMaster("quality_parameter_master", defaults)}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onAddMaster("quality_parameter_master", defaults)}
+          >
             Add dimension
           </Button>
         ) : null}
@@ -5372,7 +8157,9 @@ function FirstPieceInspectionForm({
               <TableHead className="min-w-24">Tol +</TableHead>
               <TableHead className="min-w-24">Tol -</TableHead>
               {[1, 2, 3, 4, 5].map((piece) => (
-                <TableHead key={piece} className="min-w-24">P{piece}</TableHead>
+                <TableHead key={piece} className="min-w-24">
+                  P{piece}
+                </TableHead>
               ))}
             </TableRow>
           </TableHeader>
@@ -5380,21 +8167,44 @@ function FirstPieceInspectionForm({
             {masters.map((master) => (
               <TableRow key={firstPieceMasterKey(master)}>
                 <TableCell>
-                  <div className="font-medium">{qualityParameterCode(master) || displayValue(master.uid)}</div>
-                  <div className="text-xs text-muted-foreground">{qualityParameterName(master)}</div>
+                  <div className="font-medium">
+                    {qualityParameterCode(master) || displayValue(master.uid)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {qualityParameterName(master)}
+                  </div>
                 </TableCell>
                 <TableCell>{displayValue(master.instrumentUsed)}</TableCell>
                 <TableCell>{displayValue(master.specification)}</TableCell>
                 <TableCell>{displayValue(master.tolerancePlus)}</TableCell>
                 <TableCell>{displayValue(master.toleranceMinus)}</TableCell>
                 {[0, 1, 2, 3, 4].map((pieceIndex) => {
-                  const value = firstPieceReadingsFor(readings, master)[pieceIndex] ?? "";
-                  const result = qualityReadingResult(master, value);
+                  const value =
+                    firstPieceReadingsFor(readings, master)[pieceIndex] ?? ""
+                  const result = qualityReadingResult(master, value)
                   return (
-                    <TableCell key={pieceIndex} className={qualityResultTone(result) === "bad" ? "bg-red-50/70 dark:bg-red-950/20" : ""}>
+                    <TableCell
+                      key={pieceIndex}
+                      className={
+                        qualityResultTone(result) === "bad"
+                          ? "bg-red-50/70 dark:bg-red-950/20"
+                          : ""
+                      }
+                    >
                       <div className="grid gap-1">
                         {qualityParameterInputType(master) === "pass_fail" ? (
-                          <select className={`h-8 min-w-20 rounded-md border bg-background px-2 text-sm ${qualityReadingInputClass(result)}`} value={value} onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)} required>
+                          <select
+                            className={`h-8 min-w-20 rounded-md border bg-background px-2 text-sm ${qualityReadingInputClass(result)}`}
+                            value={value}
+                            onChange={(event) =>
+                              onReadingChange(
+                                master,
+                                pieceIndex,
+                                event.target.value
+                              )
+                            }
+                            required
+                          >
                             <option value="">Select</option>
                             <option value="OK">OK</option>
                             <option value="Not OK">Not OK</option>
@@ -5402,17 +8212,27 @@ function FirstPieceInspectionForm({
                         ) : (
                           <Input
                             className={`h-8 min-w-20 ${qualityReadingInputClass(result)}`}
-                            type={qualityParameterInputType(master) === "number" ? "number" : "text"}
+                            type={
+                              qualityParameterInputType(master) === "number"
+                                ? "number"
+                                : "text"
+                            }
                             step="0.001"
                             value={value}
-                            onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)}
+                            onChange={(event) =>
+                              onReadingChange(
+                                master,
+                                pieceIndex,
+                                event.target.value
+                              )
+                            }
                             required
                           />
                         )}
                         <StatusBadge value={result || "Pending"} />
                       </div>
                     </TableCell>
-                  );
+                  )
                 })}
               </TableRow>
             ))}
@@ -5420,30 +8240,46 @@ function FirstPieceInspectionForm({
         </Table>
       </div>
     </div>
-  );
+  )
 }
 
 function ShopFloorProgress({ activeIndex }: { activeIndex: number }) {
   return (
     <div className="flex flex-wrap gap-1">
       {shopFloorStages.map((stage, index) => {
-        const done = index <= activeIndex;
+        const done = index <= activeIndex
         return (
-          <Badge key={stage.id} variant="outline" className={done ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "text-muted-foreground"}>
+          <Badge
+            key={stage.id}
+            variant="outline"
+            className={
+              done
+                ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                : "text-muted-foreground"
+            }
+          >
             {index + 1}
           </Badge>
-        );
+        )
       })}
     </div>
-  );
+  )
 }
 
-function EmptyShopFloorSlot({ label, compact }: { label: string; compact?: boolean }) {
+function EmptyShopFloorSlot({
+  label,
+  compact,
+}: {
+  label: string
+  compact?: boolean
+}) {
   return (
-    <div className={`grid place-items-center rounded-lg border border-dashed bg-muted/20 p-3 text-center text-sm text-muted-foreground ${compact ? "min-h-16" : "min-h-32"}`}>
+    <div
+      className={`grid place-items-center rounded-lg border border-dashed bg-muted/20 p-3 text-center text-sm text-muted-foreground ${compact ? "min-h-16" : "min-h-32"}`}
+    >
       {label}
     </div>
-  );
+  )
 }
 
 function MasterReadinessPanel({
@@ -5451,12 +8287,12 @@ function MasterReadinessPanel({
   submitAction,
   openDataEntry,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
-  const masterGaps = asArray(productionControl.masterGaps);
-  const allWorkOrderGaps = asArray(productionControl.allWorkOrderGaps);
+  const masterGaps = asArray(productionControl.masterGaps)
+  const allWorkOrderGaps = asArray(productionControl.allWorkOrderGaps)
   return (
     <section className="grid gap-4">
       <WorkOrderGapTable
@@ -5476,7 +8312,7 @@ function MasterReadinessPanel({
         showFilters
       />
     </section>
-  );
+  )
 }
 
 function WorkOrderGapTable({
@@ -5487,53 +8323,66 @@ function WorkOrderGapTable({
   openDataEntry,
   showFilters,
 }: {
-  title: string;
-  description: string;
-  rows: DashboardPayload[];
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
-  showFilters: boolean;
+  title: string
+  description: string
+  rows: DashboardPayload[]
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
+  showFilters: boolean
 }) {
-  const [gapFilter, setGapFilter] = useState("all");
-  const [rmFilter, setRmFilter] = useState("all");
+  const [gapFilter, setGapFilter] = useState("all")
+  const [rmFilter, setRmFilter] = useState("all")
   const filteredRows = rows.filter((row) => {
-    const matchesGap = gapFilter === "all"
-      || (gapFilter === "route_option" && Boolean(row.routeSelectionMissing))
-      || (gapFilter === "route_master" && Boolean(row.routeMasterMissing))
-      || (gapFilter === "cycle_time" && Boolean(row.cycleTimeMissing))
-      || (gapFilter === "tooling" && Boolean(row.toolingPlanMissing))
-      || (gapFilter === "machine_master" && Boolean(row.machineMasterMissing));
-    const matchesRm = rmFilter === "all"
-      || (rmFilter === "received" && str(row.rmStatus) === "Received")
-      || (rmFilter === "waiting" && str(row.rmStatus) !== "Received");
-    return matchesGap && matchesRm;
-  });
+    const matchesGap =
+      gapFilter === "all" ||
+      (gapFilter === "route_option" && Boolean(row.routeSelectionMissing)) ||
+      (gapFilter === "route_master" && Boolean(row.routeMasterMissing)) ||
+      (gapFilter === "cycle_time" && Boolean(row.cycleTimeMissing)) ||
+      (gapFilter === "tooling" && Boolean(row.toolingPlanMissing)) ||
+      (gapFilter === "machine_master" && Boolean(row.machineMasterMissing))
+    const matchesRm =
+      rmFilter === "all" ||
+      (rmFilter === "received" && str(row.rmStatus) === "Received") ||
+      (rmFilter === "waiting" && str(row.rmStatus) !== "Received")
+    return matchesGap && matchesRm
+  })
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{description} {formatNumber(filteredRows.length)} of {formatNumber(rows.length)} rows shown.</CardDescription>
+        <CardDescription>
+          {description} {formatNumber(filteredRows.length)} of{" "}
+          {formatNumber(rows.length)} rows shown.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {showFilters ? (
           <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Gap type">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={gapFilter} onChange={(event) => setGapFilter(event.target.value)}>
-              <option value="all">All gaps</option>
-              <option value="route_option">Route option missing</option>
-              <option value="route_master">Route master missing</option>
-              <option value="cycle_time">Cycle time missing</option>
-              <option value="tooling">Tooling missing</option>
-              <option value="machine_master">Machine master missing</option>
-            </select>
-          </Field>
-          <Field label="RM status">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={rmFilter} onChange={(event) => setRmFilter(event.target.value)}>
-              <option value="all">All work orders</option>
-              <option value="received">RM received</option>
-              <option value="waiting">Waiting RM</option>
-            </select>
-          </Field>
+            <Field label="Gap type">
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                value={gapFilter}
+                onChange={(event) => setGapFilter(event.target.value)}
+              >
+                <option value="all">All gaps</option>
+                <option value="route_option">Route option missing</option>
+                <option value="route_master">Route master missing</option>
+                <option value="cycle_time">Cycle time missing</option>
+                <option value="tooling">Tooling missing</option>
+                <option value="machine_master">Machine master missing</option>
+              </select>
+            </Field>
+            <Field label="RM status">
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                value={rmFilter}
+                onChange={(event) => setRmFilter(event.target.value)}
+              >
+                <option value="all">All work orders</option>
+                <option value="received">RM received</option>
+                <option value="waiting">Waiting RM</option>
+              </select>
+            </Field>
           </div>
         ) : null}
         <div className="overflow-hidden rounded-md border">
@@ -5559,7 +8408,10 @@ function WorkOrderGapTable({
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={5}
+                    className="h-24 text-center text-muted-foreground"
+                  >
                     No work-order gaps match the selected filters
                   </TableCell>
                 </TableRow>
@@ -5569,7 +8421,7 @@ function WorkOrderGapTable({
         </div>
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function WorkOrderGapRow({
@@ -5577,19 +8429,21 @@ function WorkOrderGapRow({
   submitAction,
   openDataEntry,
 }: {
-  row: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  row: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
-  const jcNo = str(row.jcNo || row.jobCard);
-  const options = asArray(row.availableOptions);
-  const gaps = workOrderGapLabels(row);
+  const jcNo = str(row.jcNo || row.jobCard)
+  const options = asArray(row.availableOptions)
+  const gaps = workOrderGapLabels(row)
 
   async function submitRoute(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const optionNumber = String(new FormData(event.currentTarget).get("optionNumber") || "").trim();
-    if (!jcNo || !optionNumber) return;
-    await submitAction("route-selection", { jcNo, optionNumber });
+    event.preventDefault()
+    const optionNumber = String(
+      new FormData(event.currentTarget).get("optionNumber") || ""
+    ).trim()
+    if (!jcNo || !optionNumber) return
+    await submitAction("route-selection", { jcNo, optionNumber })
   }
 
   return (
@@ -5597,56 +8451,120 @@ function WorkOrderGapRow({
       <TableCell className="min-w-32 font-medium">{jcNo || "-"}</TableCell>
       <TableCell className="min-w-40">
         <div>{itemCode(row)}</div>
-        <div className="text-xs text-muted-foreground">{displayValue(row.description)}</div>
+        <div className="text-xs text-muted-foreground">
+          {displayValue(row.description)}
+        </div>
       </TableCell>
       <TableCell>{displayValue(row.rmStatus)}</TableCell>
       <TableCell className="min-w-44">
         <div className="flex flex-wrap gap-1.5">
           {gaps.map((gap) => (
-            <Badge key={gap} variant="outline">{gap}</Badge>
+            <Badge key={gap} variant="outline">
+              {gap}
+            </Badge>
           ))}
         </div>
       </TableCell>
       <TableCell className="min-w-80">
         <div className="grid gap-2">
           {row.routeSelectionMissing ? (
-            <form className="grid gap-1.5" onSubmit={(event) => void submitRoute(event)}>
-              <Label className="text-xs text-muted-foreground">Select option number</Label>
+            <form
+              className="grid gap-1.5"
+              onSubmit={(event) => void submitRoute(event)}
+            >
+              <Label className="text-xs text-muted-foreground">
+                Select option number
+              </Label>
               <div className="grid gap-2 sm:grid-cols-[minmax(12rem,1fr)_7.5rem]">
-                <select className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm" name="optionNumber" defaultValue="" required>
+                <select
+                  className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm"
+                  name="optionNumber"
+                  defaultValue=""
+                  required
+                >
                   <option value="">Select option</option>
                   {options.map((option, optionIndex) => {
-                    const record = asRecord(option);
-                    const value = str(record.optionNumber || record.option || option) || String(optionIndex + 1);
+                    const record = asRecord(option)
+                    const value =
+                      str(record.optionNumber || record.option || option) ||
+                      String(optionIndex + 1)
                     return (
                       <option key={`${jcNo}-${value}`} value={value}>
                         {routeOptionText(record, value)}
                       </option>
-                    );
+                    )
                   })}
                 </select>
-                <Button type="submit" size="sm" className="w-full">Save option</Button>
+                <Button type="submit" size="sm" className="w-full">
+                  Save option
+                </Button>
               </div>
             </form>
           ) : null}
           <div className="grid gap-2 sm:grid-cols-4">
             {row.routeMasterMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("route", dataEntryDefaultsFromGap(row, "route"))}>Add routing</Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() =>
+                  openDataEntry("route", dataEntryDefaultsFromGap(row, "route"))
+                }
+              >
+                Add routing
+              </Button>
             ) : null}
             {row.cycleTimeMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("cycle", dataEntryDefaultsFromGap(row, "cycle"))}>Add cycle time</Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() =>
+                  openDataEntry("cycle", dataEntryDefaultsFromGap(row, "cycle"))
+                }
+              >
+                Add cycle time
+              </Button>
             ) : null}
             {row.toolingPlanMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("tooling", dataEntryDefaultsFromGap(row, "tooling"))}>Add tooling</Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() =>
+                  openDataEntry(
+                    "tooling",
+                    dataEntryDefaultsFromGap(row, "tooling")
+                  )
+                }
+              >
+                Add tooling
+              </Button>
             ) : null}
             {row.machineMasterMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("machine_master", dataEntryDefaultsFromGap(row, "machine_master"))}>Add machine</Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() =>
+                  openDataEntry(
+                    "machine_master",
+                    dataEntryDefaultsFromGap(row, "machine_master")
+                  )
+                }
+              >
+                Add machine
+              </Button>
             ) : null}
           </div>
         </div>
       </TableCell>
     </TableRow>
-  );
+  )
 }
 
 function workOrderGapLabels(row: DashboardPayload) {
@@ -5656,37 +8574,45 @@ function workOrderGapLabels(row: DashboardPayload) {
     row.cycleTimeMissing ? "Cycle time" : "",
     row.toolingPlanMissing ? "Tooling" : "",
     row.machineMasterMissing ? "Machine master" : "",
-  ].filter(Boolean);
+  ].filter(Boolean)
 }
 
-function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "cycle" | "tooling" | "machine_master") {
-  const optionNumber = str(row.optionNumber || row.selectedOption);
-  const setupNo = str(row.missingSetupNo || row.setupNo);
-  const setupName = str(row.setupName || row.missingSetupName);
-  const machineUsed = str(row.machineUsed || row.routeMachine || row.machineFamily || row.machineType);
+function dataEntryDefaultsFromGap(
+  row: DashboardPayload,
+  entryType: "route" | "cycle" | "tooling" | "machine_master"
+) {
+  const optionNumber = str(row.optionNumber || row.selectedOption)
+  const setupNo = str(row.missingSetupNo || row.setupNo)
+  const setupName = str(row.setupName || row.missingSetupName)
+  const machineUsed = str(
+    row.machineUsed || row.routeMachine || row.machineFamily || row.machineType
+  )
   if (entryType === "machine_master") {
     return {
       machineNo: "",
       machineType: str(row.machineType),
       status: "Active",
-      remarks: machineUsed ? `Active machine required for route family ${machineUsed}` : "Active machine required for route family",
+      remarks: machineUsed
+        ? `Active machine required for route family ${machineUsed}`
+        : "Active machine required for route family",
       __returnTab: "masterGapsTab",
-    };
+    }
   }
   const defaults: Record<string, unknown> = {
     partNo: itemCode(row) !== "-" ? itemCode(row) : "",
-    optionNumber: optionNumber && optionNumber !== "Not selected" ? optionNumber : "",
+    optionNumber:
+      optionNumber && optionNumber !== "Not selected" ? optionNumber : "",
     setupNo,
     setupName,
     machineUsed,
-  };
+  }
 
   if (entryType === "route") {
     return {
       ...defaults,
       machineType: str(row.machineType),
       numberOfSetups: str(row.numberOfSetups),
-    };
+    }
   }
 
   if (entryType === "cycle") {
@@ -5695,7 +8621,7 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
       operationWeight: row.operationWeight || row.stageWeight || "",
       cycleTime: "",
       loadingUnloading: "",
-    };
+    }
   }
 
   return {
@@ -5707,7 +8633,7 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
     foamTool: "",
     foamToolQty: "",
     remarks: "",
-  };
+  }
 }
 
 function DataEntryPanel({
@@ -5716,23 +8642,31 @@ function DataEntryPanel({
   preferredEntryType,
   preferredDefaults,
 }: {
-  payload: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  preferredEntryType: string;
-  preferredDefaults: Record<string, unknown>;
+  payload: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  preferredEntryType: string
+  preferredDefaults: Record<string, unknown>
 }) {
-  const dataEntry = asRecord(payload.dataEntry);
-  const [bulkEntryType, setBulkEntryType] = useState(preferredEntryType || dataEntrySpecs[0]?.entryType || "route");
-  const selectedSpec = dataEntrySpecs.find((spec) => spec.entryType === bulkEntryType) ?? dataEntrySpecs[0];
+  const dataEntry = asRecord(payload.dataEntry)
+  const [bulkEntryType, setBulkEntryType] = useState(
+    preferredEntryType || dataEntrySpecs[0]?.entryType || "route"
+  )
+  const selectedSpec =
+    dataEntrySpecs.find((spec) => spec.entryType === bulkEntryType) ??
+    dataEntrySpecs[0]
 
   async function importEntryTemplate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const file = new FormData(form).get("file");
-    if (!(file instanceof File) || !file.name) return;
-    const fileBase64 = await readFileAsDataUrl(file);
-    await submitAction("data-import", { entryType: bulkEntryType, fileName: file.name, fileBase64 });
-    if (typeof form.reset === "function") form.reset();
+    event.preventDefault()
+    const form = event.currentTarget
+    const file = new FormData(form).get("file")
+    if (!(file instanceof File) || !file.name) return
+    const fileBase64 = await readFileAsDataUrl(file)
+    await submitAction("data-import", {
+      entryType: bulkEntryType,
+      fileName: file.name,
+      fileBase64,
+    })
+    if (typeof form.reset === "function") form.reset()
   }
 
   return (
@@ -5740,10 +8674,17 @@ function DataEntryPanel({
       <Card>
         <CardHeader>
           <CardTitle>Production data entry</CardTitle>
-          <CardDescription>Manual entries write through authenticated Convex mutations. Upload filled CSV templates here for small targeted imports; use the local script only for large full-workbook uploads.</CardDescription>
+          <CardDescription>
+            Manual entries write through authenticated Convex mutations. Upload
+            filled CSV templates here for small targeted imports; use the local
+            script only for large full-workbook uploads.
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <form className="grid gap-3 @3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]" onSubmit={importEntryTemplate}>
+          <form
+            className="grid gap-3 @3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]"
+            onSubmit={importEntryTemplate}
+          >
             <Field label="Select entry form">
               <select
                 className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -5760,10 +8701,16 @@ function DataEntryPanel({
             <Field label="Filled CSV template">
               <Input name="file" type="file" accept=".csv,text/csv" />
             </Field>
-            <Button className="self-end" type="submit">Import CSV</Button>
+            <Button className="self-end" type="submit">
+              Import CSV
+            </Button>
           </form>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => downloadApi("data-template", bulkEntryType)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => downloadApi("data-template", bulkEntryType)}
+            >
               Download template
             </Button>
           </div>
@@ -5774,12 +8721,16 @@ function DataEntryPanel({
           key={selectedSpec.entryType}
           spec={selectedSpec}
           submitAction={submitAction}
-          defaults={selectedSpec.entryType === preferredEntryType ? preferredDefaults : {}}
+          defaults={
+            selectedSpec.entryType === preferredEntryType
+              ? preferredDefaults
+              : {}
+          }
           dataEntry={dataEntry}
         />
       ) : null}
     </section>
-  );
+  )
 }
 
 function MasterTablesPanel({
@@ -5787,36 +8738,52 @@ function MasterTablesPanel({
   productionControl,
   openDataEntry,
 }: {
-  payload: DashboardPayload;
-  productionControl: DashboardPayload;
-  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  payload: DashboardPayload
+  productionControl: DashboardPayload
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
-  const specs = useMemo(() => masterTableSpecs(), []);
-  const [entryType, setEntryType] = useState(() => specs[0]?.entryType ?? "");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [tableResetKey, setTableResetKey] = useState(0);
-  const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
-  const dataEntry = asRecord(payload.dataEntry);
-  const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [], [payload, productionControl, selectedSpec]);
-  const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec, rows) : [], [selectedSpec, rows]);
+  const specs = useMemo(() => masterTableSpecs(), [])
+  const [entryType, setEntryType] = useState(() => specs[0]?.entryType ?? "")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [tableResetKey, setTableResetKey] = useState(0)
+  const selectedSpec =
+    specs.find((spec) => spec.entryType === entryType) ?? specs[0]
+  const dataEntry = asRecord(payload.dataEntry)
+  const rows = useMemo(
+    () =>
+      selectedSpec
+        ? masterTableRows(selectedSpec.entryType, payload, productionControl)
+        : [],
+    [payload, productionControl, selectedSpec]
+  )
+  const columns = useMemo(
+    () => (selectedSpec ? masterTableColumns(selectedSpec, rows) : []),
+    [selectedSpec, rows]
+  )
   const filteredRows = useMemo(
-    () => rows.filter((row) => masterTableRowMatches(row, columns, searchQuery)),
-    [rows, columns, searchQuery],
-  );
+    () =>
+      rows.filter((row) => masterTableRowMatches(row, columns, searchQuery)),
+    [rows, columns, searchQuery]
+  )
   const summaryRows = useMemo(
-    () => selectedSpec ? masterTableKeySummaryRows(selectedSpec, dataEntry, rows, filteredRows) : [],
-    [selectedSpec, dataEntry, rows, filteredRows],
-  );
+    () =>
+      selectedSpec
+        ? masterTableKeySummaryRows(selectedSpec, dataEntry, rows, filteredRows)
+        : [],
+    [selectedSpec, dataEntry, rows, filteredRows]
+  )
 
   if (!selectedSpec) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Master tables</CardTitle>
-          <CardDescription>No master definitions are configured.</CardDescription>
+          <CardDescription>
+            No master definitions are configured.
+          </CardDescription>
         </CardHeader>
       </Card>
-    );
+    )
   }
 
   return (
@@ -5824,33 +8791,70 @@ function MasterTablesPanel({
       <Card>
         <CardHeader>
           <CardTitle>Master tables</CardTitle>
-          <CardDescription>Search saved master data in tabular format. Use Data Entry only when you need to add or edit rows.</CardDescription>
+          <CardDescription>
+            Search saved master data in tabular format. Use Data Entry only when
+            you need to add or edit rows.
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(260px,1fr)_auto]">
           <Field label="Master">
             <select
               className="h-9 rounded-md border bg-background px-3 text-sm"
               value={selectedSpec.entryType}
-              onChange={(event) => { setEntryType(event.target.value); setSearchQuery(""); setTableResetKey((current) => current + 1); }}
+              onChange={(event) => {
+                setEntryType(event.target.value)
+                setSearchQuery("")
+                setTableResetKey((current) => current + 1)
+              }}
             >
               {specs.map((spec) => (
-                <option key={spec.entryType} value={spec.entryType}>{spec.title}</option>
+                <option key={spec.entryType} value={spec.entryType}>
+                  {spec.title}
+                </option>
               ))}
             </select>
           </Field>
           <Field label="Search all visible columns">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="pl-9" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search saved rows" />
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search saved rows"
+              />
             </div>
           </Field>
           <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); setTableResetKey((current) => current + 1); }}>Clear filters</Button>
-            <Button type="button" variant="outline" disabled={!filteredRows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, filteredRows, columns)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setSearchQuery("")
+                setTableResetKey((current) => current + 1)
+              }}
+            >
+              Clear filters
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!filteredRows.length || !columns.length}
+              onClick={() =>
+                downloadMasterTableCsv(selectedSpec, filteredRows, columns)
+              }
+            >
               <Download className="size-4" />
               Export visible rows
             </Button>
-            <Button type="button" onClick={() => openDataEntry(selectedSpec.entryType, { __returnTab: "masterTablesTab" })}>
+            <Button
+              type="button"
+              onClick={() =>
+                openDataEntry(selectedSpec.entryType, {
+                  __returnTab: "masterTablesTab",
+                })
+              }
+            >
               <Plus className="size-4" />
               Add row
             </Button>
@@ -5865,27 +8869,46 @@ function MasterTablesPanel({
               <CardTitle>{selectedSpec.title}</CardTitle>
               <CardDescription>{selectedSpec.description}</CardDescription>
             </div>
-            <Badge variant="outline">{formatNumber(filteredRows.length)} / {formatNumber(rows.length)} rows</Badge>
+            <Badge variant="outline">
+              {formatNumber(filteredRows.length)} / {formatNumber(rows.length)}{" "}
+              rows
+            </Badge>
           </div>
         </CardHeader>
         <CardContent>
           {!rows.length ? (
-            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No saved rows found for this master.</div>
+            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+              No saved rows found for this master.
+            </div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
               <Table key={`${selectedSpec.entryType}-${tableResetKey}`}>
                 <TableHeader>
                   <TableRow>
                     {columns.map((column) => (
-                      <TableHead key={column.key} className="h-10 min-w-28 px-2 py-1 text-xs">{column.label}</TableHead>
+                      <TableHead
+                        key={column.key}
+                        className="h-10 min-w-28 px-2 py-1 text-xs"
+                      >
+                        {column.label}
+                      </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredRows.map((row, index) => (
-                    <TableRow key={masterTableRowKey(selectedSpec.entryType, row, index)}>
+                    <TableRow
+                      key={masterTableRowKey(
+                        selectedSpec.entryType,
+                        row,
+                        index
+                      )}
+                    >
                       {columns.map((column) => (
-                        <TableCell key={column.key} className="max-w-64 whitespace-normal px-2 py-1.5 align-top text-xs leading-5">
+                        <TableCell
+                          key={column.key}
+                          className="max-w-64 px-2 py-1.5 align-top text-xs leading-5 whitespace-normal"
+                        >
                           {masterTableCellText(row, column.key)}
                         </TableCell>
                       ))}
@@ -5901,7 +8924,9 @@ function MasterTablesPanel({
         <Card>
           <CardHeader>
             <CardTitle>{selectedSpec.title} summary</CardTitle>
-            <CardDescription>Key summary for the selected master only.</CardDescription>
+            <CardDescription>
+              Key summary for the selected master only.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto rounded-md border">
@@ -5909,15 +8934,21 @@ function MasterTablesPanel({
                 <TableHeader>
                   <TableRow>
                     {tableColumns(summaryRows).map((column) => (
-                      <TableHead key={column}>{humanizeMasterTableColumn(column)}</TableHead>
+                      <TableHead key={column}>
+                        {humanizeMasterTableColumn(column)}
+                      </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {summaryRows.map((row, index) => (
-                    <TableRow key={`${selectedSpec.entryType}-summary-${index}`}>
+                    <TableRow
+                      key={`${selectedSpec.entryType}-summary-${index}`}
+                    >
                       {tableColumns(summaryRows).map((column) => (
-                        <TableCell key={column} className="text-xs">{formatCell(row[column])}</TableCell>
+                        <TableCell key={column} className="text-xs">
+                          {formatCell(row[column])}
+                        </TableCell>
                       ))}
                     </TableRow>
                   ))}
@@ -5928,242 +8959,675 @@ function MasterTablesPanel({
         </Card>
       ) : null}
     </section>
-  );
+  )
 }
 
 type MasterTableColumn = {
-  key: string;
-  label: string;
-};
-
-function masterTableKeySummaryRows(spec: DataEntrySpec, dataEntry: DashboardPayload, rows: DashboardPayload[], filteredRows: DashboardPayload[]) {
-  const existingRows = asArray(dataEntry.keySummary).filter((row) => {
-    const rowType = str(row.entryType || row.type || row.master || row.table || row.name);
-    return rowType.toLowerCase() === spec.entryType.toLowerCase() || rowType.toLowerCase() === spec.title.toLowerCase();
-  });
-  if (existingRows.length) return existingRows;
-  return [{
-    master: spec.title,
-    entryType: spec.entryType,
-    totalRows: rows.length,
-    filteredRows: filteredRows.length,
-    uniqueKeys: uniqueValues(rows.map((row, index) => dataEntryKey(spec.entryType, row) || masterTableRowKey(spec.entryType, row, index))).length,
-  }];
+  key: string
+  label: string
 }
-function masterTableRows(entryType: string, payload: DashboardPayload, productionControl: DashboardPayload, directRows?: DashboardPayload[]) {
-  const dataEntry = asRecord(payload.dataEntry);
-  const rows: DashboardPayload[] = [];
+
+function masterTableKeySummaryRows(
+  spec: DataEntrySpec,
+  dataEntry: DashboardPayload,
+  rows: DashboardPayload[],
+  filteredRows: DashboardPayload[]
+) {
+  const existingRows = asArray(dataEntry.keySummary).filter((row) => {
+    const rowType = str(
+      row.entryType || row.type || row.master || row.table || row.name
+    )
+    return (
+      rowType.toLowerCase() === spec.entryType.toLowerCase() ||
+      rowType.toLowerCase() === spec.title.toLowerCase()
+    )
+  })
+  if (existingRows.length) return existingRows
+  return [
+    {
+      master: spec.title,
+      entryType: spec.entryType,
+      totalRows: rows.length,
+      filteredRows: filteredRows.length,
+      uniqueKeys: uniqueValues(
+        rows.map(
+          (row, index) =>
+            dataEntryKey(spec.entryType, row) ||
+            masterTableRowKey(spec.entryType, row, index)
+        )
+      ).length,
+    },
+  ]
+}
+function masterTableRows(
+  entryType: string,
+  payload: DashboardPayload,
+  productionControl: DashboardPayload,
+  directRows?: DashboardPayload[]
+) {
+  const dataEntry = asRecord(payload.dataEntry)
+  const rows: DashboardPayload[] = []
   if (directRows) {
-    rows.push(...directRows);
+    rows.push(...directRows)
   } else {
     for (const source of productionMasterRowSources[entryType] ?? []) {
-      rows.push(...asArray(productionControl[source]));
-      rows.push(...asArray(dataEntry[source]));
+      rows.push(...asArray(productionControl[source]))
+      rows.push(...asArray(dataEntry[source]))
     }
-    rows.push(...dataEntryRowsForProductionMaster(entryType, dataEntry));
+    rows.push(...dataEntryRowsForProductionMaster(entryType, dataEntry))
   }
 
-  const matchingRows = rowsForProductionMaster(entryType, rows);
-  if (entryType === "quality_parameter_master") return mergeQualityParameterRows(matchingRows);
-  if (entryType === "maintenance_master") return activeMaintenanceMasterRows(dedupeMasterTableRows(entryType, matchingRows));
-  if (entryType === "maintenance_checklist_master") return mergeMaintenanceChecklistRows(matchingRows);
-  return dedupeMasterTableRows(entryType, matchingRows);
+  const matchingRows = rowsForProductionMaster(entryType, rows)
+  if (entryType === "quality_parameter_master")
+    return mergeQualityParameterRows(matchingRows)
+  if (entryType === "maintenance_master")
+    return activeMaintenanceMasterRows(
+      dedupeMasterTableRows(entryType, matchingRows)
+    )
+  if (entryType === "maintenance_checklist_master")
+    return mergeMaintenanceChecklistRows(matchingRows)
+  return dedupeMasterTableRows(entryType, matchingRows)
 }
 
 function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
-  const byKey = new Map<string, DashboardPayload>();
+  const byKey = new Map<string, DashboardPayload>()
   rows.forEach((row, index) => {
-    const key = dataEntryKey(entryType, row) || JSON.stringify(row) || String(index);
-    byKey.set(key, row);
-  });
-  return [...byKey.values()].sort((a, b) => masterTableRowKey(entryType, a, 0).localeCompare(masterTableRowKey(entryType, b, 0), undefined, { numeric: true }));
+    const key =
+      dataEntryKey(entryType, row) || JSON.stringify(row) || String(index)
+    byKey.set(key, row)
+  })
+  return [...byKey.values()].sort((a, b) =>
+    masterTableRowKey(entryType, a, 0).localeCompare(
+      masterTableRowKey(entryType, b, 0),
+      undefined,
+      { numeric: true }
+    )
+  )
 }
 
-function masterTableColumns(spec: DataEntrySpec, rows: DashboardPayload[]): MasterTableColumn[] {
-  return columnsForProductionMaster(spec.fields, rows);
+function masterTableColumns(
+  spec: DataEntrySpec,
+  rows: DashboardPayload[]
+): MasterTableColumn[] {
+  return columnsForProductionMaster(spec.fields, rows)
 }
 
 function humanizeMasterTableColumn(key: string) {
   return key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function masterTableCellText(row: DashboardPayload, key: string) {
-  return displayValue(row[key]);
+  return displayValue(row[key])
 }
 
-
-function downloadMasterTableCsv(spec: DataEntrySpec, rows: DashboardPayload[], columns: MasterTableColumn[]) {
-  const header = columns.map((column) => csvCell(column.label)).join(",");
-  const body = rows.map((row) => columns.map((column) => csvCell(masterTableCellText(row, column.key))).join(","));
-  const blob = new Blob(["\ufeff", [header, ...body].join("\r\n"), "\r\n"], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${safeExportFileName(spec.title)}-${new Date().toISOString().slice(0, 10)}-visible-rows.csv`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+function downloadMasterTableCsv(
+  spec: DataEntrySpec,
+  rows: DashboardPayload[],
+  columns: MasterTableColumn[]
+) {
+  const header = columns.map((column) => csvCell(column.label)).join(",")
+  const body = rows.map((row) =>
+    columns
+      .map((column) => csvCell(masterTableCellText(row, column.key)))
+      .join(",")
+  )
+  const blob = new Blob(["\ufeff", [header, ...body].join("\r\n"), "\r\n"], {
+    type: "text/csv;charset=utf-8",
+  })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = `${safeExportFileName(spec.title)}-${new Date().toISOString().slice(0, 10)}-visible-rows.csv`
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
 
 function csvCell(value: unknown) {
-  const textValue = str(value);
-  const doubleQuote = String.fromCharCode(34);
-  const escaped = textValue.replaceAll(doubleQuote, `${doubleQuote}${doubleQuote}`);
-  return /[",\r\n]/.test(textValue) ? `${doubleQuote}${escaped}${doubleQuote}` : textValue;
+  const textValue = str(value)
+  const doubleQuote = String.fromCharCode(34)
+  const escaped = textValue.replaceAll(
+    doubleQuote,
+    `${doubleQuote}${doubleQuote}`
+  )
+  return /[",\r\n]/.test(textValue)
+    ? `${doubleQuote}${escaped}${doubleQuote}`
+    : textValue
 }
 
 function safeExportFileName(value: unknown) {
-  return str(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "master-table";
+  return (
+    str(value)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "master-table"
+  )
 }
-function masterTableRowMatches(row: DashboardPayload, columns: MasterTableColumn[], searchQuery: string) {
-  const query = searchQuery.trim().toLowerCase();
-  return !query || columns.some((column) => masterTableCellText(row, column.key).toLowerCase().includes(query));
+function masterTableRowMatches(
+  row: DashboardPayload,
+  columns: MasterTableColumn[],
+  searchQuery: string
+) {
+  const query = searchQuery.trim().toLowerCase()
+  return (
+    !query ||
+    columns.some((column) =>
+      masterTableCellText(row, column.key).toLowerCase().includes(query)
+    )
+  )
 }
 
-function masterTableRowKey(entryType: string, row: DashboardPayload, index: number) {
-  return `${entryType}|${dataEntryKey(entryType, row) || JSON.stringify(row) || index}`;
+function masterTableRowKey(
+  entryType: string,
+  row: DashboardPayload,
+  index: number
+) {
+  return `${entryType}|${dataEntryKey(entryType, row) || JSON.stringify(row) || index}`
 }
 function MachineMasterPanel({
   productionControl,
   submitAction,
   openDataEntry,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void
 }) {
-  const machineRows = useMemo(() => maintenanceMachineRows(asArray(productionControl.machinePlanningRows)), [productionControl.machinePlanningRows]);
-  const scheduleRows = useMemo(() => asArray(productionControl.maintenanceScheduleRows), [productionControl.maintenanceScheduleRows]);
-  const completionRows = asArray(productionControl.maintenanceTaskRows);
-  const maintenanceMasterRows = useMemo(() => activeMaintenanceMasterRows(asArray(productionControl.maintenanceMasterRows)), [productionControl.maintenanceMasterRows]);
-  const checklistRows = asArray(productionControl.maintenanceChecklistMasterRows);
-  const activeChecklistRows = useMemo(() => activeMaintenanceChecklistRows(checklistRows), [checklistRows]);
-  const checklistOptions = useMemo(() => maintenanceChecklistOptions(activeChecklistRows), [activeChecklistRows]);
-  const [selectedMaintenanceCode, setSelectedMaintenanceCode] = useState("");
-  const [selectedMachineNo] = useState(() => typeof window === "undefined" ? "" : str(new URLSearchParams(window.location.search).get("machine")));
-  const [selectedChecklistCode, setSelectedChecklistCode] = useState("");
-  const [historyQuery, setHistoryQuery] = useState("");
-  const [historyTypeFilter, setHistoryTypeFilter] = useState("");
-  const [historyCodeFilter, setHistoryCodeFilter] = useState("");
-  const [historyResultFilter, setHistoryResultFilter] = useState("");
-  const [selectedReportKey, setSelectedReportKey] = useState("");
-  const [machineNoFilter, setMachineNoFilter] = useState("");
-  const [machineNameFilter, setMachineNameFilter] = useState("");
-  const [machineTypeFilter, setMachineTypeFilter] = useState("");
-  const [machineLocationFilter, setMachineLocationFilter] = useState("");
-  const [machineStatusFilter, setMachineStatusFilter] = useState("");
-  const [isScheduleFormOpen, setIsScheduleFormOpen] = useState(false);
-  const [scheduleCodeFilter, setScheduleCodeFilter] = useState("");
-  const [scheduleTitleFilter, setScheduleTitleFilter] = useState("");
-  const [scheduleChecklistFilter, setScheduleChecklistFilter] = useState("");
-  const [scheduleFrequencyFilter, setScheduleFrequencyFilter] = useState("");
-  const [scheduleFirstDueFilter, setScheduleFirstDueFilter] = useState("");
-  const [scheduleStatusFilter, setScheduleStatusFilter] = useState("");
+  const machineRows = useMemo(
+    () =>
+      maintenanceMachineRows(asArray(productionControl.machinePlanningRows)),
+    [productionControl.machinePlanningRows]
+  )
+  const scheduleRows = useMemo(
+    () => asArray(productionControl.maintenanceScheduleRows),
+    [productionControl.maintenanceScheduleRows]
+  )
+  const completionRows = asArray(productionControl.maintenanceTaskRows)
+  const maintenanceMasterRows = useMemo(
+    () =>
+      activeMaintenanceMasterRows(
+        asArray(productionControl.maintenanceMasterRows)
+      ),
+    [productionControl.maintenanceMasterRows]
+  )
+  const checklistRows = asArray(
+    productionControl.maintenanceChecklistMasterRows
+  )
+  const activeChecklistRows = useMemo(
+    () => activeMaintenanceChecklistRows(checklistRows),
+    [checklistRows]
+  )
+  const checklistOptions = useMemo(
+    () => maintenanceChecklistOptions(activeChecklistRows),
+    [activeChecklistRows]
+  )
+  const [selectedMaintenanceCode, setSelectedMaintenanceCode] = useState("")
+  const [selectedMachineNo] = useState(() =>
+    typeof window === "undefined"
+      ? ""
+      : str(new URLSearchParams(window.location.search).get("machine"))
+  )
+  const [selectedChecklistCode, setSelectedChecklistCode] = useState("")
+  const [historyQuery, setHistoryQuery] = useState("")
+  const [historyTypeFilter, setHistoryTypeFilter] = useState("")
+  const [historyCodeFilter, setHistoryCodeFilter] = useState("")
+  const [historyResultFilter, setHistoryResultFilter] = useState("")
+  const [selectedReportKey, setSelectedReportKey] = useState("")
+  const [machineNoFilter, setMachineNoFilter] = useState("")
+  const [machineNameFilter, setMachineNameFilter] = useState("")
+  const [machineTypeFilter, setMachineTypeFilter] = useState("")
+  const [machineLocationFilter, setMachineLocationFilter] = useState("")
+  const [machineStatusFilter, setMachineStatusFilter] = useState("")
+  const [isScheduleFormOpen, setIsScheduleFormOpen] = useState(false)
+  const [scheduleCodeFilter, setScheduleCodeFilter] = useState("")
+  const [scheduleTitleFilter, setScheduleTitleFilter] = useState("")
+  const [scheduleChecklistFilter, setScheduleChecklistFilter] = useState("")
+  const [scheduleFrequencyFilter, setScheduleFrequencyFilter] = useState("")
+  const [scheduleFirstDueFilter, setScheduleFirstDueFilter] = useState("")
+  const [scheduleStatusFilter, setScheduleStatusFilter] = useState("")
 
-  const machineNoOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineNo)).filter((value) => value !== "-")), [machineRows]);
-  const machineNameOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineName)).filter((value) => value !== "-")), [machineRows]);
-  const machineTypeOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineType)).filter((value) => value !== "-")), [machineRows]);
-  const machineLocationOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.location)).filter((value) => value !== "-")), [machineRows]);
-  const machineStatusOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.status || "Active")).filter((value) => value !== "-")), [machineRows]);
-  const hasMachineFilters = Boolean(machineNoFilter || machineNameFilter || machineTypeFilter || machineLocationFilter || machineStatusFilter);
+  const machineNoOptions = useMemo(
+    () =>
+      uniqueValues(
+        machineRows
+          .map((row) => displayValue(row.machineNo))
+          .filter((value) => value !== "-")
+      ),
+    [machineRows]
+  )
+  const machineNameOptions = useMemo(
+    () =>
+      uniqueValues(
+        machineRows
+          .map((row) => displayValue(row.machineName))
+          .filter((value) => value !== "-")
+      ),
+    [machineRows]
+  )
+  const machineTypeOptions = useMemo(
+    () =>
+      uniqueValues(
+        machineRows
+          .map((row) => displayValue(row.machineType))
+          .filter((value) => value !== "-")
+      ),
+    [machineRows]
+  )
+  const machineLocationOptions = useMemo(
+    () =>
+      uniqueValues(
+        machineRows
+          .map((row) => displayValue(row.location))
+          .filter((value) => value !== "-")
+      ),
+    [machineRows]
+  )
+  const machineStatusOptions = useMemo(
+    () =>
+      uniqueValues(
+        machineRows
+          .map((row) => displayValue(row.status || "Active"))
+          .filter((value) => value !== "-")
+      ),
+    [machineRows]
+  )
+  const hasMachineFilters = Boolean(
+    machineNoFilter ||
+    machineNameFilter ||
+    machineTypeFilter ||
+    machineLocationFilter ||
+    machineStatusFilter
+  )
   const filteredMachineRows = useMemo(
-    () => machineRows.filter((row) => machineMasterMatches(row, machineNoFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter)),
-    [machineRows, machineNoFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter],
-  );
+    () =>
+      machineRows.filter((row) =>
+        machineMasterMatches(
+          row,
+          machineNoFilter,
+          machineNameFilter,
+          machineTypeFilter,
+          machineLocationFilter,
+          machineStatusFilter
+        )
+      ),
+    [
+      machineRows,
+      machineNoFilter,
+      machineNameFilter,
+      machineTypeFilter,
+      machineLocationFilter,
+      machineStatusFilter,
+    ]
+  )
 
-  const selectedMaintenance = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(selectedMaintenanceCode));
-  const selectedMachine = machineRows.find((row) => machineKey(row.machineNo) === machineKey(selectedMachineNo));
-  const machineSchedules = useMemo(() => selectedMachineNo ? maintenanceSchedulesForMachine(scheduleRows, selectedMachineNo) : [], [scheduleRows, selectedMachineNo]);
-  const scheduleCodeOptions = useMemo(() => uniqueValues(machineSchedules.map((row) => displayValue(row.maintenanceCode)).filter((value) => value !== "-")), [machineSchedules]);
-  const scheduleTitleOptions = useMemo(() => uniqueValues(machineSchedules.map((row) => displayValue(row.maintenanceTitle)).filter((value) => value !== "-")), [machineSchedules]);
-  const scheduleChecklistOptions = useMemo(() => uniqueValues(machineSchedules.map((row) => displayValue(row.checklistCode)).filter((value) => value !== "-")), [machineSchedules]);
-  const scheduleFrequencyOptions = useMemo(() => uniqueValues(machineSchedules.map((row) => displayValue(row.frequencyDays)).filter((value) => value !== "-")), [machineSchedules]);
-  const scheduleFirstDueOptions = useMemo(() => uniqueValues(machineSchedules.map((row) => displayValue(row.firstDueDate)).filter((value) => value !== "-")), [machineSchedules]);
-  const scheduleStatusOptions = useMemo(() => uniqueValues(machineSchedules.map((row) => displayValue(row.status || "Active")).filter((value) => value !== "-")), [machineSchedules]);
-  const hasScheduleFilters = Boolean(scheduleCodeFilter || scheduleTitleFilter || scheduleChecklistFilter || scheduleFrequencyFilter || scheduleFirstDueFilter || scheduleStatusFilter);
+  const selectedMaintenance = maintenanceMasterRows.find(
+    (row) =>
+      machineKey(row.maintenanceCode) === machineKey(selectedMaintenanceCode)
+  )
+  const selectedMachine = machineRows.find(
+    (row) => machineKey(row.machineNo) === machineKey(selectedMachineNo)
+  )
+  const machineSchedules = useMemo(
+    () =>
+      selectedMachineNo
+        ? maintenanceSchedulesForMachine(scheduleRows, selectedMachineNo)
+        : [],
+    [scheduleRows, selectedMachineNo]
+  )
+  const scheduleCodeOptions = useMemo(
+    () =>
+      uniqueValues(
+        machineSchedules
+          .map((row) => displayValue(row.maintenanceCode))
+          .filter((value) => value !== "-")
+      ),
+    [machineSchedules]
+  )
+  const scheduleTitleOptions = useMemo(
+    () =>
+      uniqueValues(
+        machineSchedules
+          .map((row) => displayValue(row.maintenanceTitle))
+          .filter((value) => value !== "-")
+      ),
+    [machineSchedules]
+  )
+  const scheduleChecklistOptions = useMemo(
+    () =>
+      uniqueValues(
+        machineSchedules
+          .map((row) => displayValue(row.checklistCode))
+          .filter((value) => value !== "-")
+      ),
+    [machineSchedules]
+  )
+  const scheduleFrequencyOptions = useMemo(
+    () =>
+      uniqueValues(
+        machineSchedules
+          .map((row) => displayValue(row.frequencyDays))
+          .filter((value) => value !== "-")
+      ),
+    [machineSchedules]
+  )
+  const scheduleFirstDueOptions = useMemo(
+    () =>
+      uniqueValues(
+        machineSchedules
+          .map((row) => displayValue(row.firstDueDate))
+          .filter((value) => value !== "-")
+      ),
+    [machineSchedules]
+  )
+  const scheduleStatusOptions = useMemo(
+    () =>
+      uniqueValues(
+        machineSchedules
+          .map((row) => displayValue(row.status || "Active"))
+          .filter((value) => value !== "-")
+      ),
+    [machineSchedules]
+  )
+  const hasScheduleFilters = Boolean(
+    scheduleCodeFilter ||
+    scheduleTitleFilter ||
+    scheduleChecklistFilter ||
+    scheduleFrequencyFilter ||
+    scheduleFirstDueFilter ||
+    scheduleStatusFilter
+  )
   const filteredMachineSchedules = useMemo(
-    () => machineSchedules.filter((row) => maintenanceScheduleMatches(row, scheduleCodeFilter, scheduleTitleFilter, scheduleChecklistFilter, scheduleFrequencyFilter, scheduleFirstDueFilter, scheduleStatusFilter)),
-    [machineSchedules, scheduleCodeFilter, scheduleTitleFilter, scheduleChecklistFilter, scheduleFrequencyFilter, scheduleFirstDueFilter, scheduleStatusFilter],
-  );
-  const machineHistory = selectedMachineNo ? maintenanceHistoryRowsForMachine(completionRows, selectedMachineNo) : [];
-  const filteredHistory = machineHistory.filter((row) => maintenanceHistoryMatches(row, historyQuery, historyTypeFilter, historyCodeFilter, historyResultFilter));
-  const selectedReport = filteredHistory.find((row) => maintenanceRecordKey(row) === selectedReportKey) ?? machineHistory.find((row) => maintenanceRecordKey(row) === selectedReportKey);
-  const selectedChecklistRows = selectedChecklistCode ? maintenanceChecklistRowsForCode(activeChecklistRows, selectedChecklistCode) : [];
-  const typeOptions = uniqueValues(machineHistory.map((row) => displayValue(row.maintenanceType || "Planned")));
-  const codeOptions = uniqueValues(machineHistory.map((row) => displayValue(row.maintenanceCode)).filter((value) => value !== "-"));
-  const resultOptions = uniqueValues(machineHistory.map((row) => displayValue(row.result)).filter((value) => value !== "-"));
+    () =>
+      machineSchedules.filter((row) =>
+        maintenanceScheduleMatches(
+          row,
+          scheduleCodeFilter,
+          scheduleTitleFilter,
+          scheduleChecklistFilter,
+          scheduleFrequencyFilter,
+          scheduleFirstDueFilter,
+          scheduleStatusFilter
+        )
+      ),
+    [
+      machineSchedules,
+      scheduleCodeFilter,
+      scheduleTitleFilter,
+      scheduleChecklistFilter,
+      scheduleFrequencyFilter,
+      scheduleFirstDueFilter,
+      scheduleStatusFilter,
+    ]
+  )
+  const machineHistory = selectedMachineNo
+    ? maintenanceHistoryRowsForMachine(completionRows, selectedMachineNo)
+    : []
+  const filteredHistory = machineHistory.filter((row) =>
+    maintenanceHistoryMatches(
+      row,
+      historyQuery,
+      historyTypeFilter,
+      historyCodeFilter,
+      historyResultFilter
+    )
+  )
+  const selectedReport =
+    filteredHistory.find(
+      (row) => maintenanceRecordKey(row) === selectedReportKey
+    ) ??
+    machineHistory.find(
+      (row) => maintenanceRecordKey(row) === selectedReportKey
+    )
+  const selectedChecklistRows = selectedChecklistCode
+    ? maintenanceChecklistRowsForCode(
+        activeChecklistRows,
+        selectedChecklistCode
+      )
+    : []
+  const typeOptions = uniqueValues(
+    machineHistory.map((row) => displayValue(row.maintenanceType || "Planned"))
+  )
+  const codeOptions = uniqueValues(
+    machineHistory
+      .map((row) => displayValue(row.maintenanceCode))
+      .filter((value) => value !== "-")
+  )
+  const resultOptions = uniqueValues(
+    machineHistory
+      .map((row) => displayValue(row.result))
+      .filter((value) => value !== "-")
+  )
 
   function openMachine(machineNo: string) {
-    window.location.assign(`${dashboardTabHref("machineMasterTab", productionFloorFromLocation())}&machine=${encodeURIComponent(machineNo)}`);
+    window.location.assign(
+      `${dashboardTabHref("machineMasterTab", productionFloorFromLocation())}&machine=${encodeURIComponent(machineNo)}`
+    )
   }
 
   function closeMachine() {
-    window.location.assign(dashboardTabHref("machineMasterTab", productionFloorFromLocation()));
+    window.location.assign(
+      dashboardTabHref("machineMasterTab", productionFloorFromLocation())
+    )
   }
 
   async function saveSchedule(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedMachine) return;
-    const form = event.currentTarget;
-    const body = formPayload(new FormData(form), maintenanceScheduleFields());
-    if (!selectedMaintenance) return;
-    const checklistCode = displayValue(selectedMaintenance.checklistCode) !== "-" ? displayValue(selectedMaintenance.checklistCode) : "";
+    event.preventDefault()
+    if (!selectedMachine) return
+    const form = event.currentTarget
+    const body = formPayload(new FormData(form), maintenanceScheduleFields())
+    if (!selectedMaintenance) return
+    const checklistCode =
+      displayValue(selectedMaintenance.checklistCode) !== "-"
+        ? displayValue(selectedMaintenance.checklistCode)
+        : ""
     const payload = {
       ...body,
       machineNo: displayValue(selectedMachine.machineNo),
       maintenanceCode: displayValue(selectedMaintenance.maintenanceCode),
       maintenanceTitle: displayValue(selectedMaintenance.maintenanceTitle),
       checklistCode,
-      checklistTitle: maintenanceChecklistTitle(activeChecklistRows, checklistCode),
-      frequencyDays: optionalNumber(selectedMaintenance.frequencyDays) ?? displayValue(selectedMaintenance.frequencyDays),
-      frequencyBasis: displayValue(selectedMaintenance.frequencyBasis) !== "-" ? displayValue(selectedMaintenance.frequencyBasis) : "Calendar days",
-      estimatedMinutes: optionalNumber(selectedMaintenance.estimatedMinutes) ?? displayValue(selectedMaintenance.estimatedMinutes),
-      machineType: displayValue(selectedMachine.machineType) !== "-" ? displayValue(selectedMachine.machineType) : "",
-      machineName: displayValue(selectedMachine.machineName) !== "-" ? displayValue(selectedMachine.machineName) : "",
-      location: displayValue(selectedMachine.location) !== "-" ? displayValue(selectedMachine.location) : "",
+      checklistTitle: maintenanceChecklistTitle(
+        activeChecklistRows,
+        checklistCode
+      ),
+      frequencyDays:
+        optionalNumber(selectedMaintenance.frequencyDays) ??
+        displayValue(selectedMaintenance.frequencyDays),
+      frequencyBasis:
+        displayValue(selectedMaintenance.frequencyBasis) !== "-"
+          ? displayValue(selectedMaintenance.frequencyBasis)
+          : "Calendar days",
+      estimatedMinutes:
+        optionalNumber(selectedMaintenance.estimatedMinutes) ??
+        displayValue(selectedMaintenance.estimatedMinutes),
+      machineType:
+        displayValue(selectedMachine.machineType) !== "-"
+          ? displayValue(selectedMachine.machineType)
+          : "",
+      machineName:
+        displayValue(selectedMachine.machineName) !== "-"
+          ? displayValue(selectedMachine.machineName)
+          : "",
+      location:
+        displayValue(selectedMachine.location) !== "-"
+          ? displayValue(selectedMachine.location)
+          : "",
       updatedAt: new Date().toISOString(),
-    };
-    await submitAction("data-entry", { entryType: "maintenance_schedule", key: dataEntryKey("maintenance_schedule", payload), payload });
-    form.reset();
-    setSelectedMaintenanceCode("");
-    setSelectedChecklistCode("");
-    setIsScheduleFormOpen(false);
+    }
+    await submitAction("data-entry", {
+      entryType: "maintenance_schedule",
+      key: dataEntryKey("maintenance_schedule", payload),
+      payload,
+    })
+    form.reset()
+    setSelectedMaintenanceCode("")
+    setSelectedChecklistCode("")
+    setIsScheduleFormOpen(false)
   }
 
   if (!selectedMachineNo) {
     return (
       <section className="grid gap-4">
-        <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Filtered", formatNumber(filteredMachineRows.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)]]} />
+        <TrackingSummary
+          items={[
+            ["Machines", formatNumber(machineRows.length)],
+            ["Filtered", formatNumber(filteredMachineRows.length)],
+            ["Schedule master", formatNumber(maintenanceMasterRows.length)],
+            ["Schedules", formatNumber(scheduleRows.length)],
+            ["Records", formatNumber(completionRows.length)],
+          ]}
+        />
         <Card>
           <CardHeader>
             <CardTitle>Machines</CardTitle>
-            <CardDescription>Select a machine to open its maintenance page.</CardDescription>
+            <CardDescription>
+              Select a machine to open its maintenance page.
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              {!machineRows.length ? <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("machine_master", { status: "Active", __returnTab: "machineMasterTab" })}>Add machine</Button> : <div className="text-xs text-muted-foreground">Showing {formatNumber(filteredMachineRows.length)} of {formatNumber(machineRows.length)} machines</div>}
-              {hasMachineFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setMachineNoFilter(""); setMachineNameFilter(""); setMachineTypeFilter(""); setMachineLocationFilter(""); setMachineStatusFilter(""); }}>Clear filters</Button> : null}
+              {!machineRows.length ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="w-fit"
+                  onClick={() =>
+                    openDataEntry("machine_master", {
+                      status: "Active",
+                      __returnTab: "machineMasterTab",
+                    })
+                  }
+                >
+                  Add machine
+                </Button>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  Showing {formatNumber(filteredMachineRows.length)} of{" "}
+                  {formatNumber(machineRows.length)} machines
+                </div>
+              )}
+              {hasMachineFilters ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setMachineNoFilter("")
+                    setMachineNameFilter("")
+                    setMachineTypeFilter("")
+                    setMachineLocationFilter("")
+                    setMachineStatusFilter("")
+                  }}
+                >
+                  Clear filters
+                </Button>
+              ) : null}
             </div>
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow><TableHead>Machine</TableHead><TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Location</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow>
-                  <TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Machine" value={machineNoFilter} onChange={setMachineNoFilter} options={machineNoOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Name" value={machineNameFilter} onChange={setMachineNameFilter} options={machineNameOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Type" value={machineTypeFilter} onChange={setMachineTypeFilter} options={machineTypeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Location" value={machineLocationFilter} onChange={setMachineLocationFilter} options={machineLocationOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={machineStatusFilter} onChange={setMachineStatusFilter} options={machineStatusOptions} /></TableHead><TableHead></TableHead></TableRow>
+                  <TableRow>
+                    <TableHead>Machine</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                  <TableRow className="bg-muted/40">
+                    <TableHead>
+                      <MachineMasterColumnFilter
+                        label="Machine"
+                        value={machineNoFilter}
+                        onChange={setMachineNoFilter}
+                        options={machineNoOptions}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <MachineMasterColumnFilter
+                        label="Name"
+                        value={machineNameFilter}
+                        onChange={setMachineNameFilter}
+                        options={machineNameOptions}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <MachineMasterColumnFilter
+                        label="Type"
+                        value={machineTypeFilter}
+                        onChange={setMachineTypeFilter}
+                        options={machineTypeOptions}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <MachineMasterColumnFilter
+                        label="Location"
+                        value={machineLocationFilter}
+                        onChange={setMachineLocationFilter}
+                        options={machineLocationOptions}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <MachineMasterColumnFilter
+                        label="Status"
+                        value={machineStatusFilter}
+                        onChange={setMachineStatusFilter}
+                        options={machineStatusOptions}
+                      />
+                    </TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
                 </TableHeader>
-                <TableBody>{filteredMachineRows.length ? filteredMachineRows.map((row) => {
-                  const machineNo = displayValue(row.machineNo);
-                  return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></TableCell></TableRow>;
-                }) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">No machines match the selected filters.</TableCell></TableRow>}</TableBody>
+                <TableBody>
+                  {filteredMachineRows.length ? (
+                    filteredMachineRows.map((row) => {
+                      const machineNo = displayValue(row.machineNo)
+                      return (
+                        <TableRow key={machineNo}>
+                          <TableCell className="font-medium">
+                            {machineNo}
+                          </TableCell>
+                          <TableCell>{displayValue(row.machineName)}</TableCell>
+                          <TableCell>{displayValue(row.machineType)}</TableCell>
+                          <TableCell>{displayValue(row.location)}</TableCell>
+                          <TableCell>
+                            <StatusBadge value={row.status || "Active"} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openMachine(machineNo)}
+                            >
+                              Open
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="h-24 text-center text-sm text-muted-foreground"
+                      >
+                        No machines match the selected filters.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
               </Table>
             </div>
           </CardContent>
         </Card>
       </section>
-    );
+    )
   }
 
   if (!selectedMachine) {
@@ -6172,172 +9636,923 @@ function MachineMasterPanel({
         <Card>
           <CardHeader>
             <CardTitle>Machine not found</CardTitle>
-            <CardDescription>The selected machine is not available in machine master.</CardDescription>
+            <CardDescription>
+              The selected machine is not available in machine master.
+            </CardDescription>
           </CardHeader>
-          <CardContent><Button type="button" variant="outline" onClick={closeMachine}>Back to machines</Button></CardContent>
+          <CardContent>
+            <Button type="button" variant="outline" onClick={closeMachine}>
+              Back to machines
+            </Button>
+          </CardContent>
         </Card>
       </section>
-    );
+    )
   }
 
   return (
     <section className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight">Machine {displayValue(selectedMachine.machineNo)}</h2>
-          <p className="text-sm text-muted-foreground">Maintenance schedule, history, and reports for this machine.</p>
+          <h2 className="text-xl font-semibold tracking-tight">
+            Machine {displayValue(selectedMachine.machineNo)}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Maintenance schedule, history, and reports for this machine.
+          </p>
         </div>
-        <Button type="button" variant="outline" onClick={closeMachine}>Back to machines</Button>
+        <Button type="button" variant="outline" onClick={closeMachine}>
+          Back to machines
+        </Button>
       </div>
-      <TrackingSummary items={[["Schedules", formatNumber(machineSchedules.length)], ["Records", formatNumber(machineHistory.length)], ["Filtered", formatNumber(filteredHistory.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)]]} />
+      <TrackingSummary
+        items={[
+          ["Schedules", formatNumber(machineSchedules.length)],
+          ["Records", formatNumber(machineHistory.length)],
+          ["Filtered", formatNumber(filteredHistory.length)],
+          ["Schedule master", formatNumber(maintenanceMasterRows.length)],
+        ]}
+      />
       <Card>
-        <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine maintenance schedules and records.</CardDescription></CardHeader>
-        <CardContent><div className="grid gap-3 md:grid-cols-4"><TileField label="Machine type" value={selectedMachine.machineType} important /><TileField label="Machine name" value={selectedMachine.machineName} /><TileField label="Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
+        <CardHeader>
+          <CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle>
+          <CardDescription>
+            Machine maintenance schedules and records.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-4">
+            <TileField
+              label="Machine type"
+              value={selectedMachine.machineType}
+              important
+            />
+            <TileField
+              label="Machine name"
+              value={selectedMachine.machineName}
+            />
+            <TileField label="Location" value={selectedMachine.location} />
+            <TileField label="Records" value={machineHistory.length} numeric />
+          </div>
+        </CardContent>
       </Card>
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div>
             <CardTitle>Assigned maintenance schedules</CardTitle>
-            <CardDescription>{machineSchedules.length ? `${formatNumber(filteredMachineSchedules.length)} of ${formatNumber(machineSchedules.length)} schedules shown` : "No schedules assigned yet"}</CardDescription>
+            <CardDescription>
+              {machineSchedules.length
+                ? `${formatNumber(filteredMachineSchedules.length)} of ${formatNumber(machineSchedules.length)} schedules shown`
+                : "No schedules assigned yet"}
+            </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {hasScheduleFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setScheduleCodeFilter(""); setScheduleTitleFilter(""); setScheduleChecklistFilter(""); setScheduleFrequencyFilter(""); setScheduleFirstDueFilter(""); setScheduleStatusFilter(""); }}>Clear filters</Button> : null}
-            <Button type="button" size="sm" variant={isScheduleFormOpen ? "secondary" : "default"} onClick={() => setIsScheduleFormOpen((open) => !open)}><CalendarDays className="size-4" />{isScheduleFormOpen ? "Close entry" : "Assign schedule"}</Button>
+            {hasScheduleFilters ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setScheduleCodeFilter("")
+                  setScheduleTitleFilter("")
+                  setScheduleChecklistFilter("")
+                  setScheduleFrequencyFilter("")
+                  setScheduleFirstDueFilter("")
+                  setScheduleStatusFilter("")
+                }}
+              >
+                Clear filters
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant={isScheduleFormOpen ? "secondary" : "default"}
+              onClick={() => setIsScheduleFormOpen((open) => !open)}
+            >
+              <CalendarDays className="size-4" />
+              {isScheduleFormOpen ? "Close entry" : "Assign schedule"}
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
           {isScheduleFormOpen ? (
             <div className="grid gap-4 rounded-lg border p-3">
-              {!maintenanceMasterRows.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No maintenance schedule master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_master", {})}>Add schedule in Data Entry</Button></div> : null}
-              {!checklistOptions.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No checklist master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_checklist_master", maintenanceChecklistMasterDefaults("machineMasterTab"))}>Add checklist in Data Entry</Button></div> : null}
-              {selectedChecklistRows.length ? <MaintenanceChecklistPreview rows={selectedChecklistRows} /> : null}
+              {!maintenanceMasterRows.length ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+                  <span>No maintenance schedule master saved yet.</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openDataEntry("maintenance_master", {})}
+                  >
+                    Add schedule in Data Entry
+                  </Button>
+                </div>
+              ) : null}
+              {!checklistOptions.length ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+                  <span>No checklist master saved yet.</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      openDataEntry(
+                        "maintenance_checklist_master",
+                        maintenanceChecklistMasterDefaults("machineMasterTab")
+                      )
+                    }
+                  >
+                    Add checklist in Data Entry
+                  </Button>
+                </div>
+              ) : null}
+              {selectedChecklistRows.length ? (
+                <MaintenanceChecklistPreview rows={selectedChecklistRows} />
+              ) : null}
               <form className="grid gap-3" onSubmit={saveSchedule}>
-                <input type="hidden" name="machineNo" value={displayValue(selectedMachine.machineNo)} />
+                <input
+                  type="hidden"
+                  name="machineNo"
+                  value={displayValue(selectedMachine.machineNo)}
+                />
                 <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
                   <Field label="Maintenance schedule">
-                    <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedMaintenanceCode} onChange={(event) => { const code = event.target.value; setSelectedMaintenanceCode(code); const master = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(code)); setSelectedChecklistCode(displayValue(master?.checklistCode) !== "-" ? displayValue(master?.checklistCode) : ""); }} required>
+                    <select
+                      className="h-9 rounded-md border bg-background px-3 text-sm"
+                      value={selectedMaintenanceCode}
+                      onChange={(event) => {
+                        const code = event.target.value
+                        setSelectedMaintenanceCode(code)
+                        const master = maintenanceMasterRows.find(
+                          (row) =>
+                            machineKey(row.maintenanceCode) === machineKey(code)
+                        )
+                        setSelectedChecklistCode(
+                          displayValue(master?.checklistCode) !== "-"
+                            ? displayValue(master?.checklistCode)
+                            : ""
+                        )
+                      }}
+                      required
+                    >
                       <option value="">Select schedule</option>
-                      {maintenanceMasterRows.map((row) => <option key={displayValue(row.maintenanceCode)} value={displayValue(row.maintenanceCode)}>{displayValue(row.maintenanceTitle)}</option>)}
+                      {maintenanceMasterRows.map((row) => (
+                        <option
+                          key={displayValue(row.maintenanceCode)}
+                          value={displayValue(row.maintenanceCode)}
+                        >
+                          {displayValue(row.maintenanceTitle)}
+                        </option>
+                      ))}
                     </select>
                   </Field>
-                  <Field label="Schedule code"><Input value={displayValue(selectedMaintenance?.maintenanceCode)} readOnly /></Field>
-                  <Field label="Frequency days"><Input value={displayValue(selectedMaintenance?.frequencyDays)} readOnly /></Field>
-                  <Field label="Checklist code"><Input value={displayValue(selectedMaintenance?.checklistCode)} readOnly /></Field>
-                  <Field label="First due date"><Input name="firstDueDate" type="date" defaultValue={todayIsoDate()} required /></Field>
-                  <Field label="Estimated minutes"><Input value={displayValue(selectedMaintenance?.estimatedMinutes)} readOnly /></Field>
-                  <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue="Active"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
-                  <Field label="Remark"><Input name="remark" /></Field>
+                  <Field label="Schedule code">
+                    <Input
+                      value={displayValue(selectedMaintenance?.maintenanceCode)}
+                      readOnly
+                    />
+                  </Field>
+                  <Field label="Frequency days">
+                    <Input
+                      value={displayValue(selectedMaintenance?.frequencyDays)}
+                      readOnly
+                    />
+                  </Field>
+                  <Field label="Checklist code">
+                    <Input
+                      value={displayValue(selectedMaintenance?.checklistCode)}
+                      readOnly
+                    />
+                  </Field>
+                  <Field label="First due date">
+                    <Input
+                      name="firstDueDate"
+                      type="date"
+                      defaultValue={todayIsoDate()}
+                      required
+                    />
+                  </Field>
+                  <Field label="Estimated minutes">
+                    <Input
+                      value={displayValue(
+                        selectedMaintenance?.estimatedMinutes
+                      )}
+                      readOnly
+                    />
+                  </Field>
+                  <Field label="Status">
+                    <select
+                      className="h-9 rounded-md border bg-background px-3 text-sm"
+                      name="status"
+                      defaultValue="Active"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </Field>
+                  <Field label="Remark">
+                    <Input name="remark" />
+                  </Field>
                 </div>
-                <Button type="submit" className="w-fit" disabled={!selectedMaintenance}><CalendarDays className="size-4" />Save schedule</Button>
+                <Button
+                  type="submit"
+                  className="w-fit"
+                  disabled={!selectedMaintenance}
+                >
+                  <CalendarDays className="size-4" />
+                  Save schedule
+                </Button>
               </form>
             </div>
           ) : null}
-          {machineSchedules.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Code</TableHead><TableHead>Title</TableHead><TableHead>Checklist</TableHead><TableHead>Frequency</TableHead><TableHead>First due</TableHead><TableHead>Status</TableHead></TableRow><TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Code" value={scheduleCodeFilter} onChange={setScheduleCodeFilter} options={scheduleCodeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Title" value={scheduleTitleFilter} onChange={setScheduleTitleFilter} options={scheduleTitleOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Checklist" value={scheduleChecklistFilter} onChange={setScheduleChecklistFilter} options={scheduleChecklistOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Frequency" value={scheduleFrequencyFilter} onChange={setScheduleFrequencyFilter} options={scheduleFrequencyOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="First due" value={scheduleFirstDueFilter} onChange={setScheduleFirstDueFilter} options={scheduleFirstDueOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={scheduleStatusFilter} onChange={setScheduleStatusFilter} options={scheduleStatusOptions} /></TableHead></TableRow></TableHeader><TableBody>{filteredMachineSchedules.length ? filteredMachineSchedules.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell>{displayValue(row.maintenanceCode)}</TableCell><TableCell>{displayValue(row.maintenanceTitle)}</TableCell><TableCell>{displayValue(row.checklistCode)}</TableCell><TableCell>{maintenanceFrequencyLabel(row)}</TableCell><TableCell>{displayValue(row.firstDueDate)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">No machine schedules match the selected filters.</TableCell></TableRow>}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved for this machine.</EmptyRowsMessage>}
+          {machineSchedules.length ? (
+            <div className="overflow-auto rounded-lg border">
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Checklist</TableHead>
+                    <TableHead>Frequency</TableHead>
+                    <TableHead>First due</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                  <TableRow className="bg-muted/40">
+                    <TableHead>
+                      <MachineMasterColumnFilter
+                        label="Code"
+                        value={scheduleCodeFilter}
+                        onChange={setScheduleCodeFilter}
+                        options={scheduleCodeOptions}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <MachineMasterColumnFilter
+                        label="Title"
+                        value={scheduleTitleFilter}
+                        onChange={setScheduleTitleFilter}
+                        options={scheduleTitleOptions}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <MachineMasterColumnFilter
+                        label="Checklist"
+                        value={scheduleChecklistFilter}
+                        onChange={setScheduleChecklistFilter}
+                        options={scheduleChecklistOptions}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <MachineMasterColumnFilter
+                        label="Frequency"
+                        value={scheduleFrequencyFilter}
+                        onChange={setScheduleFrequencyFilter}
+                        options={scheduleFrequencyOptions}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <MachineMasterColumnFilter
+                        label="First due"
+                        value={scheduleFirstDueFilter}
+                        onChange={setScheduleFirstDueFilter}
+                        options={scheduleFirstDueOptions}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <MachineMasterColumnFilter
+                        label="Status"
+                        value={scheduleStatusFilter}
+                        onChange={setScheduleStatusFilter}
+                        options={scheduleStatusOptions}
+                      />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredMachineSchedules.length ? (
+                    filteredMachineSchedules.map((row) => (
+                      <TableRow key={maintenanceScheduleKey(row)}>
+                        <TableCell>
+                          {displayValue(row.maintenanceCode)}
+                        </TableCell>
+                        <TableCell>
+                          {displayValue(row.maintenanceTitle)}
+                        </TableCell>
+                        <TableCell>{displayValue(row.checklistCode)}</TableCell>
+                        <TableCell>{maintenanceFrequencyLabel(row)}</TableCell>
+                        <TableCell>{displayValue(row.firstDueDate)}</TableCell>
+                        <TableCell>
+                          <StatusBadge value={row.status || "Active"} />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="h-24 text-center text-sm text-muted-foreground"
+                      >
+                        No machine schedules match the selected filters.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <EmptyRowsMessage>
+              No maintenance schedules saved for this machine.
+            </EmptyRowsMessage>
+          )}
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Maintenance history</CardTitle><CardDescription>Planned and breakdown maintenance saved against this machine.</CardDescription></CardHeader>
+        <CardHeader>
+          <CardTitle>Maintenance history</CardTitle>
+          <CardDescription>
+            Planned and breakdown maintenance saved against this machine.
+          </CardDescription>
+        </CardHeader>
         <CardContent className="grid gap-4">
-          <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_repeat(3,180px)]"><Label className="grid gap-1 text-xs font-medium text-muted-foreground"><span>Search</span><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={historyQuery} placeholder="Search maintenance report" onChange={(event) => setHistoryQuery(event.target.value)} /></div></Label><FilterSelect label="Type" value={historyTypeFilter} onChange={setHistoryTypeFilter} options={[["", "All types"], ...typeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Code" value={historyCodeFilter} onChange={setHistoryCodeFilter} options={[["", "All codes"], ...codeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Result" value={historyResultFilter} onChange={setHistoryResultFilter} options={[["", "All results"], ...resultOptions.map((value) => [value, value] as [string, string])]} /></div>
-          {filteredHistory.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Maintenance</TableHead><TableHead>Changed parts</TableHead><TableHead>Done by</TableHead><TableHead>Result</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{filteredHistory.map((row) => { const key = maintenanceRecordKey(row); return <TableRow key={key} className={key === selectedReportKey ? "bg-muted/50" : ""}><TableCell>{displayValue(row.completedDate)}</TableCell><TableCell><StatusBadge value={row.maintenanceType || "Planned"} /></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)}</div><div className="text-xs text-muted-foreground">{displayValue(row.maintenanceTitle)}</div></TableCell><TableCell className="max-w-64 truncate">{displayValue(row.partsChanged)}</TableCell><TableCell>{displayValue(row.completedBy)}</TableCell><TableCell><StatusBadge value={row.result} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => setSelectedReportKey(key)}>Report</Button></TableCell></TableRow>; })}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance records match this machine and filter.</EmptyRowsMessage>}
-          {selectedReport ? <MaintenanceReportDetail row={selectedReport} /> : null}
+          <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_repeat(3,180px)]">
+            <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              <span>Search</span>
+              <div className="relative">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  value={historyQuery}
+                  placeholder="Search maintenance report"
+                  onChange={(event) => setHistoryQuery(event.target.value)}
+                />
+              </div>
+            </Label>
+            <FilterSelect
+              label="Type"
+              value={historyTypeFilter}
+              onChange={setHistoryTypeFilter}
+              options={[
+                ["", "All types"],
+                ...typeOptions.map(
+                  (value) => [value, value] as [string, string]
+                ),
+              ]}
+            />
+            <FilterSelect
+              label="Code"
+              value={historyCodeFilter}
+              onChange={setHistoryCodeFilter}
+              options={[
+                ["", "All codes"],
+                ...codeOptions.map(
+                  (value) => [value, value] as [string, string]
+                ),
+              ]}
+            />
+            <FilterSelect
+              label="Result"
+              value={historyResultFilter}
+              onChange={setHistoryResultFilter}
+              options={[
+                ["", "All results"],
+                ...resultOptions.map(
+                  (value) => [value, value] as [string, string]
+                ),
+              ]}
+            />
+          </div>
+          {filteredHistory.length ? (
+            <div className="overflow-auto rounded-lg border">
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Maintenance</TableHead>
+                    <TableHead>Changed parts</TableHead>
+                    <TableHead>Done by</TableHead>
+                    <TableHead>Result</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredHistory.map((row) => {
+                    const key = maintenanceRecordKey(row)
+                    return (
+                      <TableRow
+                        key={key}
+                        className={
+                          key === selectedReportKey ? "bg-muted/50" : ""
+                        }
+                      >
+                        <TableCell>{displayValue(row.completedDate)}</TableCell>
+                        <TableCell>
+                          <StatusBadge
+                            value={row.maintenanceType || "Planned"}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">
+                            {displayValue(row.maintenanceCode)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {displayValue(row.maintenanceTitle)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-64 truncate">
+                          {displayValue(row.partsChanged)}
+                        </TableCell>
+                        <TableCell>{displayValue(row.completedBy)}</TableCell>
+                        <TableCell>
+                          <StatusBadge value={row.result} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedReportKey(key)}
+                          >
+                            Report
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <EmptyRowsMessage>
+              No maintenance records match this machine and filter.
+            </EmptyRowsMessage>
+          )}
+          {selectedReport ? (
+            <MaintenanceReportDetail row={selectedReport} />
+          ) : null}
         </CardContent>
       </Card>
     </section>
-  );
+  )
 }
 
-function MaintenancePanel
-({ productionControl, submitAction }: { productionControl: DashboardPayload; submitAction: (path: string, body: Record<string, unknown>) => Promise<void> }) {
-  const machineRows = useMemo(() => maintenanceMachineRows(asArray(productionControl.machinePlanningRows)), [productionControl.machinePlanningRows]);
-  const scheduleRows = useMemo(() => asArray(productionControl.maintenanceScheduleRows), [productionControl.maintenanceScheduleRows]);
-  const completionRows = asArray(productionControl.maintenanceTaskRows);
-  const checklistRows = asArray(productionControl.maintenanceChecklistMasterRows);
-  const activeChecklistRows = useMemo(() => activeMaintenanceChecklistRows(checklistRows), [checklistRows]);
-  const productionRunRows = useMemo(() => asArray(productionControl.productionRunRows), [productionControl.productionRunRows]);
-  const dueRows = useMemo(() => maintenanceDueRows(scheduleRows, completionRows, machineRows, activeChecklistRows, productionRunRows), [scheduleRows, completionRows, machineRows, activeChecklistRows, productionRunRows]);
-  const dueNowRows = dueRows.filter((row) => row.status !== "Upcoming");
-  const breakdownRows = completionRows.filter((row) => str(row.maintenanceType).toLowerCase() === "breakdown");
+function MaintenancePanel({
+  productionControl,
+  submitAction,
+}: {
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+}) {
+  const machineRows = useMemo(
+    () =>
+      maintenanceMachineRows(asArray(productionControl.machinePlanningRows)),
+    [productionControl.machinePlanningRows]
+  )
+  const scheduleRows = useMemo(
+    () => asArray(productionControl.maintenanceScheduleRows),
+    [productionControl.maintenanceScheduleRows]
+  )
+  const completionRows = asArray(productionControl.maintenanceTaskRows)
+  const checklistRows = asArray(
+    productionControl.maintenanceChecklistMasterRows
+  )
+  const activeChecklistRows = useMemo(
+    () => activeMaintenanceChecklistRows(checklistRows),
+    [checklistRows]
+  )
+  const productionRunRows = useMemo(
+    () => asArray(productionControl.productionRunRows),
+    [productionControl.productionRunRows]
+  )
+  const dueRows = useMemo(
+    () =>
+      maintenanceDueRows(
+        scheduleRows,
+        completionRows,
+        machineRows,
+        activeChecklistRows,
+        productionRunRows
+      ),
+    [
+      scheduleRows,
+      completionRows,
+      machineRows,
+      activeChecklistRows,
+      productionRunRows,
+    ]
+  )
+  const dueNowRows = dueRows.filter((row) => row.status !== "Upcoming")
+  const breakdownRows = completionRows.filter(
+    (row) => str(row.maintenanceType).toLowerCase() === "breakdown"
+  )
 
   async function markMaintenanceDone(row: DashboardPayload) {
-    const completedBy = window.prompt("Completed by")?.trim();
-    if (!completedBy) return;
-    const actualMinutesText = window.prompt("Actual minutes", displayValue(row.estimatedMinutes) !== "-" ? displayValue(row.estimatedMinutes) : "")?.trim() ?? "";
-    const partsChanged = window.prompt("Parts changed", "")?.trim() ?? "";
-    const workDone = window.prompt("Work done / remarks", "")?.trim() ?? "";
-    const completedDate = todayIsoDate();
-    const frequencyDays = optionalNumber(row.frequencyDays) ?? 0;
-    const payload = { taskId: maintenanceTaskId(row, completedDate), maintenanceType: "Planned", scheduleKey: maintenanceScheduleKey(row), machineNo: displayValue(row.machineNo), machineType: displayValue(row.machineType) !== "-" ? displayValue(row.machineType) : "", maintenanceCode: displayValue(row.maintenanceCode), maintenanceTitle: displayValue(row.maintenanceTitle), frequencyBasis: maintenanceFrequencyBasis(row), checklistCode: displayValue(row.checklistCode) !== "-" ? displayValue(row.checklistCode) : "", checklistTitle: displayValue(row.checklistTitle) !== "-" ? displayValue(row.checklistTitle) : "", checklistSteps: maintenanceChecklistCompletionSteps(row, activeChecklistRows), completedDate, completedAt: new Date().toISOString(), completedBy, actualMinutes: optionalNumber(actualMinutesText) ?? actualMinutesText, result: "Completed", partsChanged, workDone, nextDueDate: maintenanceFrequencyBasis(row) === "running" ? "" : (frequencyDays > 0 ? addIsoDays(completedDate, frequencyDays) : ""), remark: workDone || "Completed from maintenance task list." };
-    await submitAction("data-entry", { entryType: "maintenance_task", key: dataEntryKey("maintenance_task", payload), payload });
+    const completedBy = window.prompt("Completed by")?.trim()
+    if (!completedBy) return
+    const actualMinutesText =
+      window
+        .prompt(
+          "Actual minutes",
+          displayValue(row.estimatedMinutes) !== "-"
+            ? displayValue(row.estimatedMinutes)
+            : ""
+        )
+        ?.trim() ?? ""
+    const partsChanged = window.prompt("Parts changed", "")?.trim() ?? ""
+    const workDone = window.prompt("Work done / remarks", "")?.trim() ?? ""
+    const completedDate = todayIsoDate()
+    const frequencyDays = optionalNumber(row.frequencyDays) ?? 0
+    const payload = {
+      taskId: maintenanceTaskId(row, completedDate),
+      maintenanceType: "Planned",
+      scheduleKey: maintenanceScheduleKey(row),
+      machineNo: displayValue(row.machineNo),
+      machineType:
+        displayValue(row.machineType) !== "-"
+          ? displayValue(row.machineType)
+          : "",
+      maintenanceCode: displayValue(row.maintenanceCode),
+      maintenanceTitle: displayValue(row.maintenanceTitle),
+      frequencyBasis: maintenanceFrequencyBasis(row),
+      checklistCode:
+        displayValue(row.checklistCode) !== "-"
+          ? displayValue(row.checklistCode)
+          : "",
+      checklistTitle:
+        displayValue(row.checklistTitle) !== "-"
+          ? displayValue(row.checklistTitle)
+          : "",
+      checklistSteps: maintenanceChecklistCompletionSteps(
+        row,
+        activeChecklistRows
+      ),
+      completedDate,
+      completedAt: new Date().toISOString(),
+      completedBy,
+      actualMinutes: optionalNumber(actualMinutesText) ?? actualMinutesText,
+      result: "Completed",
+      partsChanged,
+      workDone,
+      nextDueDate:
+        maintenanceFrequencyBasis(row) === "running"
+          ? ""
+          : frequencyDays > 0
+            ? addIsoDays(completedDate, frequencyDays)
+            : "",
+      remark: workDone || "Completed from maintenance task list.",
+    }
+    await submitAction("data-entry", {
+      entryType: "maintenance_task",
+      key: dataEntryKey("maintenance_task", payload),
+      payload,
+    })
   }
 
   async function saveBreakdownMaintenance(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const machineNo = str(formData.get("machineNo"));
-    const machine = machineRows.find((row) => machineKey(row.machineNo) === machineKey(machineNo));
-    const completedDate = str(formData.get("completedDate")) || todayIsoDate();
-    const payload = { taskId: breakdownMaintenanceTaskId(machineNo, completedDate), maintenanceType: "Breakdown", machineNo, machineType: displayValue(machine?.machineType) !== "-" ? displayValue(machine?.machineType) : "", machineName: displayValue(machine?.machineName) !== "-" ? displayValue(machine?.machineName) : "", location: displayValue(machine?.location) !== "-" ? displayValue(machine?.location) : "", maintenanceCode: str(formData.get("maintenanceCode")) || "BREAKDOWN", maintenanceTitle: str(formData.get("maintenanceTitle")) || "Breakdown maintenance", completedDate, completedAt: new Date().toISOString(), completedBy: str(formData.get("completedBy")), actualMinutes: optionalNumber(formData.get("actualMinutes")) ?? str(formData.get("actualMinutes")), result: str(formData.get("result")) || "Completed", breakdownReason: str(formData.get("breakdownReason")), workDone: str(formData.get("workDone")), partsChanged: str(formData.get("partsChanged")), remark: str(formData.get("remark")) };
-    await submitAction("data-entry", { entryType: "maintenance_task", key: dataEntryKey("maintenance_task", payload), payload });
-    form.reset();
+    event.preventDefault()
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    const machineNo = str(formData.get("machineNo"))
+    const machine = machineRows.find(
+      (row) => machineKey(row.machineNo) === machineKey(machineNo)
+    )
+    const completedDate = str(formData.get("completedDate")) || todayIsoDate()
+    const payload = {
+      taskId: breakdownMaintenanceTaskId(machineNo, completedDate),
+      maintenanceType: "Breakdown",
+      machineNo,
+      machineType:
+        displayValue(machine?.machineType) !== "-"
+          ? displayValue(machine?.machineType)
+          : "",
+      machineName:
+        displayValue(machine?.machineName) !== "-"
+          ? displayValue(machine?.machineName)
+          : "",
+      location:
+        displayValue(machine?.location) !== "-"
+          ? displayValue(machine?.location)
+          : "",
+      maintenanceCode: str(formData.get("maintenanceCode")) || "BREAKDOWN",
+      maintenanceTitle:
+        str(formData.get("maintenanceTitle")) || "Breakdown maintenance",
+      completedDate,
+      completedAt: new Date().toISOString(),
+      completedBy: str(formData.get("completedBy")),
+      actualMinutes:
+        optionalNumber(formData.get("actualMinutes")) ??
+        str(formData.get("actualMinutes")),
+      result: str(formData.get("result")) || "Completed",
+      breakdownReason: str(formData.get("breakdownReason")),
+      workDone: str(formData.get("workDone")),
+      partsChanged: str(formData.get("partsChanged")),
+      remark: str(formData.get("remark")),
+    }
+    await submitAction("data-entry", {
+      entryType: "maintenance_task",
+      key: dataEntryKey("maintenance_task", payload),
+      payload,
+    })
+    form.reset()
   }
 
   return (
     <section className="grid gap-4">
-      <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Saved schedules", formatNumber(scheduleRows.length)], ["Due now", formatNumber(dueNowRows.length)], ["Breakdowns", formatNumber(breakdownRows.length)]]} />
+      <TrackingSummary
+        items={[
+          ["Machines", formatNumber(machineRows.length)],
+          ["Saved schedules", formatNumber(scheduleRows.length)],
+          ["Due now", formatNumber(dueNowRows.length)],
+          ["Breakdowns", formatNumber(breakdownRows.length)],
+        ]}
+      />
       <Card className={dueNowRows.length ? "border-amber-300/80" : ""}>
-        <CardHeader><CardTitle>Maintenance pending tasks</CardTitle><CardDescription>Due and overdue planned maintenance appears here from Machine Master schedules.</CardDescription></CardHeader>
-        <CardContent>{dueRows.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Machine</TableHead><TableHead>Maintenance</TableHead><TableHead>Checklist</TableHead><TableHead>Due date</TableHead><TableHead>Status</TableHead><TableHead>Last done</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{dueRows.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell><div className="font-medium">{displayValue(row.machineNo)}</div><div className="text-xs text-muted-foreground">{displayValue(row.machineType)}</div></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</div><div className="text-xs text-muted-foreground">Every {maintenanceFrequencyLabel(row)}</div></TableCell><TableCell><div>{displayValue(row.checklistCode)}</div><div className="text-xs text-muted-foreground">{formatNumber(asArray(row.checklistSteps).length)} steps</div></TableCell><TableCell><div>{displayValue(row.nextDueDate)}</div>{displayValue(row.dueProgress) !== "-" ? <div className="text-xs text-muted-foreground">{displayValue(row.dueProgress)}</div> : null}</TableCell><TableCell><StatusBadge value={row.status} /></TableCell><TableCell>{displayValue(row.lastCompletedDate)}</TableCell><TableCell><Button type="button" size="sm" variant={row.status === "Upcoming" ? "outline" : "default"} onClick={() => void markMaintenanceDone(row)}><CheckCircle2 className="size-4" />Mark done</Button></TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved yet. Add schedules from Machine Master.</EmptyRowsMessage>}</CardContent>
+        <CardHeader>
+          <CardTitle>Maintenance pending tasks</CardTitle>
+          <CardDescription>
+            Due and overdue planned maintenance appears here from Machine Master
+            schedules.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {dueRows.length ? (
+            <div className="overflow-auto rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Machine</TableHead>
+                    <TableHead>Maintenance</TableHead>
+                    <TableHead>Checklist</TableHead>
+                    <TableHead>Due date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Last done</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dueRows.map((row) => (
+                    <TableRow key={maintenanceScheduleKey(row)}>
+                      <TableCell>
+                        <div className="font-medium">
+                          {displayValue(row.machineNo)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {displayValue(row.machineType)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">
+                          {displayValue(row.maintenanceCode)} -{" "}
+                          {displayValue(row.maintenanceTitle)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Every {maintenanceFrequencyLabel(row)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>{displayValue(row.checklistCode)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatNumber(asArray(row.checklistSteps).length)}{" "}
+                          steps
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>{displayValue(row.nextDueDate)}</div>
+                        {displayValue(row.dueProgress) !== "-" ? (
+                          <div className="text-xs text-muted-foreground">
+                            {displayValue(row.dueProgress)}
+                          </div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge value={row.status} />
+                      </TableCell>
+                      <TableCell>
+                        {displayValue(row.lastCompletedDate)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={
+                            row.status === "Upcoming" ? "outline" : "default"
+                          }
+                          onClick={() => void markMaintenanceDone(row)}
+                        >
+                          <CheckCircle2 className="size-4" />
+                          Mark done
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <EmptyRowsMessage>
+              No maintenance schedules saved yet. Add schedules from Machine
+              Master.
+            </EmptyRowsMessage>
+          )}
+        </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Breakdown maintenance entry</CardTitle><CardDescription>Use this for maintenance not against a planned schedule.</CardDescription></CardHeader>
-        <CardContent><form className="grid gap-3" onSubmit={saveBreakdownMaintenance}><div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3"><Field label="Machine no."><select className="h-9 rounded-md border bg-background px-3 text-sm" name="machineNo" required><option value="">Select machine</option>{machineRows.map((row) => <option key={displayValue(row.machineNo)} value={displayValue(row.machineNo)}>{displayValue(row.machineNo)}</option>)}</select></Field><Field label="Date"><Input name="completedDate" type="date" defaultValue={todayIsoDate()} required /></Field><Field label="Completed by"><Input name="completedBy" required /></Field><Field label="Actual minutes"><Input name="actualMinutes" type="number" min="0" /></Field><Field label="Maintenance code"><Input name="maintenanceCode" defaultValue="BREAKDOWN" /></Field><Field label="Maintenance title"><Input name="maintenanceTitle" defaultValue="Breakdown maintenance" /></Field><Field label="Result"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="result" defaultValue="Completed"><option value="Completed">Completed</option><option value="Needs follow up">Needs follow up</option><option value="Skipped">Skipped</option></select></Field><Field label="Breakdown reason"><Input name="breakdownReason" required /></Field><Field label="Parts changed"><Input name="partsChanged" /></Field><Field label="Work done"><Input name="workDone" /></Field><Field label="Remark"><Input name="remark" /></Field></div><Button type="submit" className="w-fit" disabled={!machineRows.length}><Wrench className="size-4" />Save breakdown</Button></form></CardContent>
+        <CardHeader>
+          <CardTitle>Breakdown maintenance entry</CardTitle>
+          <CardDescription>
+            Use this for maintenance not against a planned schedule.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="grid gap-3" onSubmit={saveBreakdownMaintenance}>
+            <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+              <Field label="Machine no.">
+                <select
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  name="machineNo"
+                  required
+                >
+                  <option value="">Select machine</option>
+                  {machineRows.map((row) => (
+                    <option
+                      key={displayValue(row.machineNo)}
+                      value={displayValue(row.machineNo)}
+                    >
+                      {displayValue(row.machineNo)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Date">
+                <Input
+                  name="completedDate"
+                  type="date"
+                  defaultValue={todayIsoDate()}
+                  required
+                />
+              </Field>
+              <Field label="Completed by">
+                <Input name="completedBy" required />
+              </Field>
+              <Field label="Actual minutes">
+                <Input name="actualMinutes" type="number" min="0" />
+              </Field>
+              <Field label="Maintenance code">
+                <Input name="maintenanceCode" defaultValue="BREAKDOWN" />
+              </Field>
+              <Field label="Maintenance title">
+                <Input
+                  name="maintenanceTitle"
+                  defaultValue="Breakdown maintenance"
+                />
+              </Field>
+              <Field label="Result">
+                <select
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  name="result"
+                  defaultValue="Completed"
+                >
+                  <option value="Completed">Completed</option>
+                  <option value="Needs follow up">Needs follow up</option>
+                  <option value="Skipped">Skipped</option>
+                </select>
+              </Field>
+              <Field label="Breakdown reason">
+                <Input name="breakdownReason" required />
+              </Field>
+              <Field label="Parts changed">
+                <Input name="partsChanged" />
+              </Field>
+              <Field label="Work done">
+                <Input name="workDone" />
+              </Field>
+              <Field label="Remark">
+                <Input name="remark" />
+              </Field>
+            </div>
+            <Button
+              type="submit"
+              className="w-fit"
+              disabled={!machineRows.length}
+            >
+              <Wrench className="size-4" />
+              Save breakdown
+            </Button>
+          </form>
+        </CardContent>
       </Card>
     </section>
-  );
+  )
 }
 
 function MaintenanceReportDetail({ row }: { row: DashboardPayload }) {
-  const checklistSteps = asArray(row.checklistSteps);
+  const checklistSteps = asArray(row.checklistSteps)
   return (
     <div className="grid gap-3 rounded-lg border bg-muted/15 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><div className="text-sm font-semibold">Maintenance report</div><div className="text-xs text-muted-foreground">{displayValue(row.machineNo)} / {displayValue(row.completedDate)} / {displayValue(row.maintenanceCode)}</div></div><StatusBadge value={row.maintenanceType || "Planned"} /></div>
-      <div className="grid gap-3 md:grid-cols-4"><TileField label="Maintenance" value={`${displayValue(row.maintenanceCode)} - ${displayValue(row.maintenanceTitle)}`} important /><TileField label="Completed by" value={row.completedBy} /><TileField label="Actual minutes" value={row.actualMinutes} numeric /><TileField label="Result" value={row.result} /><TileField label="Parts changed" value={row.partsChanged} /><TileField label="Breakdown reason" value={row.breakdownReason} /><TileField label="Work done" value={row.workDone} /><TileField label="Next due" value={row.nextDueDate} /></div>
-      {displayValue(row.remark) !== "-" ? <div className="text-sm text-muted-foreground">{displayValue(row.remark)}</div> : null}
-      {checklistSteps.length ? <div className="overflow-auto rounded-md border bg-background"><Table><TableHeader><TableRow><TableHead>Step</TableHead><TableHead>Description</TableHead><TableHead>Value</TableHead><TableHead>Result</TableHead></TableRow></TableHeader><TableBody>{checklistSteps.map((step, index) => <TableRow key={`${displayValue(step.sequence)}-${index}`}><TableCell>{displayValue(step.sequence)}</TableCell><TableCell>{displayValue(step.stepDescription)}</TableCell><TableCell>{displayValue(step.value)}</TableCell><TableCell><StatusBadge value={step.result || "Recorded"} /></TableCell></TableRow>)}</TableBody></Table></div> : null}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold">Maintenance report</div>
+          <div className="text-xs text-muted-foreground">
+            {displayValue(row.machineNo)} / {displayValue(row.completedDate)} /{" "}
+            {displayValue(row.maintenanceCode)}
+          </div>
+        </div>
+        <StatusBadge value={row.maintenanceType || "Planned"} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-4">
+        <TileField
+          label="Maintenance"
+          value={`${displayValue(row.maintenanceCode)} - ${displayValue(row.maintenanceTitle)}`}
+          important
+        />
+        <TileField label="Completed by" value={row.completedBy} />
+        <TileField label="Actual minutes" value={row.actualMinutes} numeric />
+        <TileField label="Result" value={row.result} />
+        <TileField label="Parts changed" value={row.partsChanged} />
+        <TileField label="Breakdown reason" value={row.breakdownReason} />
+        <TileField label="Work done" value={row.workDone} />
+        <TileField label="Next due" value={row.nextDueDate} />
+      </div>
+      {displayValue(row.remark) !== "-" ? (
+        <div className="text-sm text-muted-foreground">
+          {displayValue(row.remark)}
+        </div>
+      ) : null}
+      {checklistSteps.length ? (
+        <div className="overflow-auto rounded-md border bg-background">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Step</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Value</TableHead>
+                <TableHead>Result</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {checklistSteps.map((step, index) => (
+                <TableRow key={`${displayValue(step.sequence)}-${index}`}>
+                  <TableCell>{displayValue(step.sequence)}</TableCell>
+                  <TableCell>{displayValue(step.stepDescription)}</TableCell>
+                  <TableCell>{displayValue(step.value)}</TableCell>
+                  <TableCell>
+                    <StatusBadge value={step.result || "Recorded"} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
     </div>
-  );
+  )
 }
 function MaintenanceChecklistPreview({ rows }: { rows: DashboardPayload[] }) {
   return (
     <div className="grid gap-2 rounded-md border bg-muted/15 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-medium">{displayValue(rows[0]?.checklistCode)} - {displayValue(rows[0]?.checklistTitle)}</div>
+        <div className="text-sm font-medium">
+          {displayValue(rows[0]?.checklistCode)} -{" "}
+          {displayValue(rows[0]?.checklistTitle)}
+        </div>
         <StatusBadge value={`${formatNumber(rows.length)} steps`} />
       </div>
       <div className="grid gap-1 text-sm">
         {rows.slice(0, 6).map((row) => (
-          <div key={maintenanceChecklistStepKey(row)} className="flex gap-2 text-muted-foreground">
-            <span className="min-w-10 font-medium text-foreground">{displayValue(row.sequence)}</span>
+          <div
+            key={maintenanceChecklistStepKey(row)}
+            className="flex gap-2 text-muted-foreground"
+          >
+            <span className="min-w-10 font-medium text-foreground">
+              {displayValue(row.sequence)}
+            </span>
             <span>{displayValue(row.stepDescription)}</span>
           </div>
         ))}
-        {rows.length > 6 ? <div className="text-xs text-muted-foreground">{formatNumber(rows.length - 6)} more steps</div> : null}
+        {rows.length > 6 ? (
+          <div className="text-xs text-muted-foreground">
+            {formatNumber(rows.length - 6)} more steps
+          </div>
+        ) : null}
       </div>
     </div>
-  );
+  )
 }
 function PlanningHolidayPanel({
   productionControl,
   submitAction,
 }: {
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const spec = dataEntrySpecs.find((item) => item.entryType === "planning_holiday");
-  const holidayRows = asArray(productionControl.planningHolidayRows);
-  const calendar = asRecord(productionControl.planningCalendar);
+  const spec = dataEntrySpecs.find(
+    (item) => item.entryType === "planning_holiday"
+  )
+  const holidayRows = asArray(productionControl.planningHolidayRows)
+  const calendar = asRecord(productionControl.planningCalendar)
 
   return (
     <section className="grid gap-4">
@@ -6349,11 +10564,23 @@ function PlanningHolidayPanel({
         ]}
       />
       {spec ? (
-        <DataEntryForm spec={spec} submitAction={submitAction} defaults={{ scope: "Plant", reason: "Plant holiday", __returnTab: "planningHolidayTab" }} />
+        <DataEntryForm
+          spec={spec}
+          submitAction={submitAction}
+          defaults={{
+            scope: "Plant",
+            reason: "Plant holiday",
+            __returnTab: "planningHolidayTab",
+          }}
+        />
       ) : null}
-      <DataRowsCard title="Saved planning holidays" rows={holidayRows} empty="No manual planning holidays saved yet" />
+      <DataRowsCard
+        title="Saved planning holidays"
+        rows={holidayRows}
+        empty="No manual planning holidays saved yet"
+      />
     </section>
-  );
+  )
 }
 
 function DataEntryForm({
@@ -6362,20 +10589,40 @@ function DataEntryForm({
   defaults,
   dataEntry,
 }: {
-  spec: DataEntrySpec;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  defaults: Record<string, unknown>;
-  dataEntry?: DashboardPayload;
+  spec: DataEntrySpec
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  defaults: Record<string, unknown>
+  dataEntry?: DashboardPayload
 }) {
-  const defaultsKey = JSON.stringify(defaults);
+  const defaultsKey = JSON.stringify(defaults)
   if (spec.entryType === "maintenance_master") {
-    return <MaintenanceMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} />;
+    return (
+      <MaintenanceMasterForm
+        spec={spec}
+        submitAction={submitAction}
+        defaults={defaults}
+        dataEntry={dataEntry}
+      />
+    )
   }
   if (spec.entryType === "maintenance_checklist_master") {
-    return <MaintenanceChecklistMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} />;
+    return (
+      <MaintenanceChecklistMasterForm
+        spec={spec}
+        submitAction={submitAction}
+        defaults={defaults}
+        dataEntry={dataEntry}
+      />
+    )
   }
   if (spec.entryType === "quality_parameter_master") {
-    return <QualityParameterMasterForm spec={spec} defaults={defaults} dataEntry={dataEntry} />;
+    return (
+      <QualityParameterMasterForm
+        spec={spec}
+        defaults={defaults}
+        dataEntry={dataEntry}
+      />
+    )
   }
   return (
     <Card>
@@ -6391,17 +10638,19 @@ function DataEntryForm({
           fields={spec.fields}
           defaults={defaults}
           buttonLabel={`Save ${spec.title}`}
-          onSubmit={(body) => void submitAction("data-entry", {
-            entryType: spec.entryType,
-            id: defaults.__entryId,
-            key: defaults.__entryKey,
-            returnTab: defaults.__returnTab,
-            payload: body,
-          })}
+          onSubmit={(body) =>
+            void submitAction("data-entry", {
+              entryType: spec.entryType,
+              id: defaults.__entryId,
+              key: defaults.__entryKey,
+              returnTab: defaults.__returnTab,
+              payload: body,
+            })
+          }
         />
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function QualityParameterMasterForm({
@@ -6409,107 +10658,235 @@ function QualityParameterMasterForm({
   defaults,
   dataEntry,
 }: {
-  spec: DataEntrySpec;
-  defaults: Record<string, unknown>;
-  dataEntry?: DashboardPayload;
+  spec: DataEntrySpec
+  defaults: Record<string, unknown>
+  dataEntry?: DashboardPayload
 }) {
-  const hourlyQualityPageData = usePostgresDashboardPage("/api/hourly-quality", 5_000).data;
-  const hourlyQualityPageRecord = asRecord(hourlyQualityPageData);
-  const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
-  const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([]);
-  const [status, setStatus] = useState<ActionStatus>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const hourlyQualityPageData = usePostgresDashboardPage(
+    "/api/hourly-quality",
+    5_000
+  ).data
+  const hourlyQualityPageRecord = asRecord(hourlyQualityPageData)
+  const [localRows, setLocalRows] = useState<DashboardPayload[]>([])
+  const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([])
+  const [status, setStatus] = useState<ActionStatus>(null)
+  const [isSaving, setIsSaving] = useState(false)
   const persistedRows = useMemo(() => {
     return mergeQualityParameterRows([
       ...qualityParameterRowsFromDataEntry(dataEntry),
       ...asArray(hourlyQualityPageRecord.qualityParameterMasterRows),
-    ]);
-  }, [dataEntry, hourlyQualityPageRecord.qualityParameterMasterRows]);
-  const savedRows = useMemo(() => mergeQualityParameterRows([...persistedRows, ...localRows]), [persistedRows, localRows]);
-  const setupOptions = useMemo(() => qualityParameterSetupOptions(savedRows), [savedRows]);
-  const defaultSetupKey = qualityParameterSetupKey(defaults);
-  const [selectedSetupKey, setSelectedSetupKey] = useState(defaultSetupKey || setupOptions[0]?.key || "");
-  const selectedOption = setupOptions.find((option) => option.key === selectedSetupKey);
-  const selectedRows = useMemo(() => selectedSetupKey ? sortQualityParameterRows(savedRows.filter((row) => qualityParameterSetupKey(row) === selectedSetupKey && str(row.status || "Active").toLowerCase() !== "inactive")) : [], [savedRows, selectedSetupKey]);
+    ])
+  }, [dataEntry, hourlyQualityPageRecord.qualityParameterMasterRows])
+  const savedRows = useMemo(
+    () => mergeQualityParameterRows([...persistedRows, ...localRows]),
+    [persistedRows, localRows]
+  )
+  const setupOptions = useMemo(
+    () => qualityParameterSetupOptions(savedRows),
+    [savedRows]
+  )
+  const defaultSetupKey = qualityParameterSetupKey(defaults)
+  const [selectedSetupKey, setSelectedSetupKey] = useState(
+    defaultSetupKey || setupOptions[0]?.key || ""
+  )
+  const selectedOption = setupOptions.find(
+    (option) => option.key === selectedSetupKey
+  )
+  const selectedRows = useMemo(
+    () =>
+      selectedSetupKey
+        ? sortQualityParameterRows(
+            savedRows.filter(
+              (row) =>
+                qualityParameterSetupKey(row) === selectedSetupKey &&
+                str(row.status || "Active").toLowerCase() !== "inactive"
+            )
+          )
+        : [],
+    [savedRows, selectedSetupKey]
+  )
   const [setupFields, setSetupFields] = useState(() => ({
     partNo: str(defaults.partNo || selectedOption?.partNo),
     optionNumber: str(defaults.optionNumber || selectedOption?.optionNumber),
     setupNo: str(defaults.setupNo || selectedOption?.setupNo),
-  }));
-  const [drafts, setDrafts] = useState<QualityParameterDraft[]>(() => selectedRows.map(qualityParameterDraftFromRow));
+  }))
+  const [drafts, setDrafts] = useState<QualityParameterDraft[]>(() =>
+    selectedRows.map(qualityParameterDraftFromRow)
+  )
 
   useEffect(() => {
-    const firstSetupKey = setupOptions[0]?.key;
-    if (selectedSetupKey || !firstSetupKey) return;
-    const timeout = window.setTimeout(() => setSelectedSetupKey(firstSetupKey), 0);
-    return () => window.clearTimeout(timeout);
-  }, [selectedSetupKey, setupOptions]);
+    const firstSetupKey = setupOptions[0]?.key
+    if (selectedSetupKey || !firstSetupKey) return
+    const timeout = window.setTimeout(
+      () => setSelectedSetupKey(firstSetupKey),
+      0
+    )
+    return () => window.clearTimeout(timeout)
+  }, [selectedSetupKey, setupOptions])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      const option = setupOptions.find((item) => item.key === selectedSetupKey);
-      const nextRows = selectedSetupKey ? sortQualityParameterRows(savedRows.filter((row) => qualityParameterSetupKey(row) === selectedSetupKey && str(row.status || "Active").toLowerCase() !== "inactive")) : [];
+      const option = setupOptions.find((item) => item.key === selectedSetupKey)
+      const nextRows = selectedSetupKey
+        ? sortQualityParameterRows(
+            savedRows.filter(
+              (row) =>
+                qualityParameterSetupKey(row) === selectedSetupKey &&
+                str(row.status || "Active").toLowerCase() !== "inactive"
+            )
+          )
+        : []
       setSetupFields({
         partNo: str(defaults.partNo || option?.partNo),
         optionNumber: str(defaults.optionNumber || option?.optionNumber),
         setupNo: str(defaults.setupNo || option?.setupNo),
-      });
-      setDrafts(nextRows.length ? nextRows.map(qualityParameterDraftFromRow) : [newQualityParameterDraft(1)]);
-      setRemovedRows([]);
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [defaults.partNo, defaults.optionNumber, defaults.setupNo, savedRows, selectedSetupKey, setupOptions]);
+      })
+      setDrafts(
+        nextRows.length
+          ? nextRows.map(qualityParameterDraftFromRow)
+          : [newQualityParameterDraft(1)]
+      )
+      setRemovedRows([])
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [
+    defaults.partNo,
+    defaults.optionNumber,
+    defaults.setupNo,
+    savedRows,
+    selectedSetupKey,
+    setupOptions,
+  ])
 
-  const datalistValues = useMemo(() => ({
-    partNos: uniqueValues(savedRows.map((row) => displayValue(row.partNo || row.partCode)).filter((value) => value !== "-")),
-    optionNumbers: uniqueValues(savedRows.map((row) => displayValue(row.optionNumber)).filter((value) => value !== "-")),
-    setupNos: uniqueValues(savedRows.map((row) => displayValue(row.setupNo)).filter((value) => value !== "-")),
-  }), [savedRows]);
+  const datalistValues = useMemo(
+    () => ({
+      partNos: uniqueValues(
+        savedRows
+          .map((row) => displayValue(row.partNo || row.partCode))
+          .filter((value) => value !== "-")
+      ),
+      optionNumbers: uniqueValues(
+        savedRows
+          .map((row) => displayValue(row.optionNumber))
+          .filter((value) => value !== "-")
+      ),
+      setupNos: uniqueValues(
+        savedRows
+          .map((row) => displayValue(row.setupNo))
+          .filter((value) => value !== "-")
+      ),
+    }),
+    [savedRows]
+  )
 
-  function updateDraft(draftId: string, field: keyof QualityParameterDraft, value: string) {
-    setDrafts((current) => current.map((draft) => draft.draftId === draftId ? { ...draft, [field]: value } : draft));
+  function updateDraft(
+    draftId: string,
+    field: keyof QualityParameterDraft,
+    value: string
+  ) {
+    setDrafts((current) =>
+      current.map((draft) =>
+        draft.draftId === draftId ? { ...draft, [field]: value } : draft
+      )
+    )
   }
 
   function addDraft() {
-    setDrafts((current) => [...current, newQualityParameterDraft(current.length + 1)]);
+    setDrafts((current) => [
+      ...current,
+      newQualityParameterDraft(current.length + 1),
+    ])
   }
 
   function removeDraft(draft: QualityParameterDraft) {
-    if (draft.persisted) setRemovedRows((current) => [...current, qualityParameterPayload(draft, setupFields, "Inactive")]);
-    setDrafts((current) => current.filter((item) => item.draftId !== draft.draftId));
+    if (draft.persisted)
+      setRemovedRows((current) => [
+        ...current,
+        qualityParameterPayload(draft, setupFields, "Inactive"),
+      ])
+    setDrafts((current) =>
+      current.filter((item) => item.draftId !== draft.draftId)
+    )
   }
 
   async function saveParameterSet() {
-    const activeDrafts = drafts.filter((draft) => draft.parameterName.trim());
-    const duplicateSequences = activeDrafts.map((draft, index) => str(optionalNumber(draft.sequence) ?? index + 1)).filter((sequence, index, sequences) => sequence && sequences.indexOf(sequence) !== index);
-    if (!setupFields.partNo.trim() || !setupFields.optionNumber.trim() || !setupFields.setupNo.trim()) {
-      setStatus({ tone: "destructive", message: "Item, option, and setup are required." });
-      return;
+    const activeDrafts = drafts.filter((draft) => draft.parameterName.trim())
+    const duplicateSequences = activeDrafts
+      .map((draft, index) => str(optionalNumber(draft.sequence) ?? index + 1))
+      .filter(
+        (sequence, index, sequences) =>
+          sequence && sequences.indexOf(sequence) !== index
+      )
+    if (
+      !setupFields.partNo.trim() ||
+      !setupFields.optionNumber.trim() ||
+      !setupFields.setupNo.trim()
+    ) {
+      setStatus({
+        tone: "destructive",
+        message: "Item, option, and setup are required.",
+      })
+      return
     }
     if (!activeDrafts.length) {
-      setStatus({ tone: "destructive", message: "Add at least one parameter row." });
-      return;
+      setStatus({
+        tone: "destructive",
+        message: "Add at least one parameter row.",
+      })
+      return
     }
     if (duplicateSequences.length) {
-      setStatus({ tone: "destructive", message: "Step numbers must be unique for this item, option, and setup." });
-      return;
+      setStatus({
+        tone: "destructive",
+        message:
+          "Step numbers must be unique for this item, option, and setup.",
+      })
+      return
     }
-    setIsSaving(true);
-    setStatus(null);
+    setIsSaving(true)
+    setStatus(null)
     try {
-      const activePayloads = activeDrafts.map((draft, index) => qualityParameterPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, setupFields, "Active"));
-      const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
+      const activePayloads = activeDrafts.map((draft, index) =>
+        qualityParameterPayload(
+          { ...draft, sequence: draft.sequence || String(index + 1) },
+          setupFields,
+          "Active"
+        )
+      )
+      const inactivePayloads = removedRows.filter(
+        (row) =>
+          !activePayloads.some(
+            (payload) =>
+              dataEntryKey(spec.entryType, payload) ===
+              dataEntryKey(spec.entryType, row)
+          )
+      )
       for (const payload of [...activePayloads, ...inactivePayloads]) {
-        await savePostgresDashboardEntry(spec.entryType, payload);
+        await savePostgresDashboardEntry(spec.entryType, payload)
       }
-      setLocalRows((current) => mergeQualityParameterRows([...current, ...activePayloads, ...inactivePayloads]));
-      setRemovedRows([]);
-      setSelectedSetupKey(qualityParameterSetupKey(activePayloads[0] ?? setupFields));
-      setStatus({ tone: "default", message: "Quality inspection parameter set saved." });
+      setLocalRows((current) =>
+        mergeQualityParameterRows([
+          ...current,
+          ...activePayloads,
+          ...inactivePayloads,
+        ])
+      )
+      setRemovedRows([])
+      setSelectedSetupKey(
+        qualityParameterSetupKey(activePayloads[0] ?? setupFields)
+      )
+      setStatus({
+        tone: "default",
+        message: "Quality inspection parameter set saved.",
+      })
     } catch (err) {
-      setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Quality parameter save failed." });
+      setStatus({
+        tone: "destructive",
+        message:
+          err instanceof Error ? err.message : "Quality parameter save failed.",
+      })
     } finally {
-      setIsSaving(false);
+      setIsSaving(false)
     }
   }
 
@@ -6517,31 +10894,99 @@ function QualityParameterMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>Maintain one parameter set for an item, option, and setup. The same rows are used by first-piece inspection and hourly quality checks.</CardDescription>
+        <CardDescription>
+          Maintain one parameter set for an item, option, and setup. The same
+          rows are used by first-piece inspection and hourly quality checks.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
           <Field label="Saved parameter set">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedSetupKey} onChange={(event) => setSelectedSetupKey(event.target.value)}>
+            <select
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={selectedSetupKey}
+              onChange={(event) => setSelectedSetupKey(event.target.value)}
+            >
               <option value="">New parameter set</option>
-              {setupOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+              {setupOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </Field>
           <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" onClick={() => { setSelectedSetupKey(""); setSetupFields({ partNo: "", optionNumber: "", setupNo: "" }); setDrafts([newQualityParameterDraft(1)]); setRemovedRows([]); }}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setSelectedSetupKey("")
+                setSetupFields({ partNo: "", optionNumber: "", setupNo: "" })
+                setDrafts([newQualityParameterDraft(1)])
+                setRemovedRows([])
+              }}
+            >
               <Plus className="size-4" />
               New set
             </Button>
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
-          <Field label="Item code"><Input list="quality-part-options" value={setupFields.partNo} onChange={(event) => setSetupFields((current) => ({ ...current, partNo: event.target.value }))} required /></Field>
-          <Field label="Option no."><Input list="quality-option-options" value={setupFields.optionNumber} onChange={(event) => setSetupFields((current) => ({ ...current, optionNumber: event.target.value }))} required /></Field>
-          <Field label="Setup no."><Input list="quality-setup-options" value={setupFields.setupNo} onChange={(event) => setSetupFields((current) => ({ ...current, setupNo: event.target.value }))} required /></Field>
+          <Field label="Item code">
+            <Input
+              list="quality-part-options"
+              value={setupFields.partNo}
+              onChange={(event) =>
+                setSetupFields((current) => ({
+                  ...current,
+                  partNo: event.target.value,
+                }))
+              }
+              required
+            />
+          </Field>
+          <Field label="Option no.">
+            <Input
+              list="quality-option-options"
+              value={setupFields.optionNumber}
+              onChange={(event) =>
+                setSetupFields((current) => ({
+                  ...current,
+                  optionNumber: event.target.value,
+                }))
+              }
+              required
+            />
+          </Field>
+          <Field label="Setup no.">
+            <Input
+              list="quality-setup-options"
+              value={setupFields.setupNo}
+              onChange={(event) =>
+                setSetupFields((current) => ({
+                  ...current,
+                  setupNo: event.target.value,
+                }))
+              }
+              required
+            />
+          </Field>
         </div>
-        <datalist id="quality-part-options">{datalistValues.partNos.map((value) => <option key={value} value={value} />)}</datalist>
-        <datalist id="quality-option-options">{datalistValues.optionNumbers.map((value) => <option key={value} value={value} />)}</datalist>
-        <datalist id="quality-setup-options">{datalistValues.setupNos.map((value) => <option key={value} value={value} />)}</datalist>
+        <datalist id="quality-part-options">
+          {datalistValues.partNos.map((value) => (
+            <option key={value} value={value} />
+          ))}
+        </datalist>
+        <datalist id="quality-option-options">
+          {datalistValues.optionNumbers.map((value) => (
+            <option key={value} value={value} />
+          ))}
+        </datalist>
+        <datalist id="quality-setup-options">
+          {datalistValues.setupNos.map((value) => (
+            <option key={value} value={value} />
+          ))}
+        </datalist>
         <div className="overflow-auto rounded-lg border">
           <Table>
             <TableHeader>
@@ -6560,30 +11005,155 @@ function QualityParameterMasterForm({
             <TableBody>
               {drafts.map((draft, index) => (
                 <TableRow key={draft.draftId}>
-                  <TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell>
-                  <TableCell><Input className="h-8 min-w-48" value={draft.parameterName} onChange={(event) => updateDraft(draft.draftId, "parameterName", event.target.value)} /></TableCell>
-                  <TableCell><Input className="h-8 min-w-28" value={draft.specification} onChange={(event) => updateDraft(draft.draftId, "specification", event.target.value)} /></TableCell>
-                  <TableCell><Input className="h-8 min-w-36" value={draft.instrumentUsed} onChange={(event) => updateDraft(draft.draftId, "instrumentUsed", event.target.value)} /></TableCell>
-                  <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.tolerancePlus} onChange={(event) => updateDraft(draft.draftId, "tolerancePlus", event.target.value)} /></TableCell>
-                  <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.toleranceMinus} onChange={(event) => updateDraft(draft.draftId, "toleranceMinus", event.target.value)} /></TableCell>
-                  <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="number">Number</option><option value="text">Text</option><option value="pass_fail">OK / Not OK</option></select></TableCell>
-                  <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
-                  <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove parameter" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
+                  <TableCell>
+                    <Input
+                      className="h-8 min-w-16"
+                      type="number"
+                      min="1"
+                      value={draft.sequence || String(index + 1)}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.draftId,
+                          "sequence",
+                          event.target.value
+                        )
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      className="h-8 min-w-48"
+                      value={draft.parameterName}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.draftId,
+                          "parameterName",
+                          event.target.value
+                        )
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      className="h-8 min-w-28"
+                      value={draft.specification}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.draftId,
+                          "specification",
+                          event.target.value
+                        )
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      className="h-8 min-w-36"
+                      value={draft.instrumentUsed}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.draftId,
+                          "instrumentUsed",
+                          event.target.value
+                        )
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      className="h-8 min-w-24"
+                      type="number"
+                      step="0.001"
+                      value={draft.tolerancePlus}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.draftId,
+                          "tolerancePlus",
+                          event.target.value
+                        )
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      className="h-8 min-w-24"
+                      type="number"
+                      step="0.001"
+                      value={draft.toleranceMinus}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.draftId,
+                          "toleranceMinus",
+                          event.target.value
+                        )
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <select
+                      className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm"
+                      value={draft.inputType}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.draftId,
+                          "inputType",
+                          event.target.value
+                        )
+                      }
+                    >
+                      <option value="number">Number</option>
+                      <option value="text">Text</option>
+                      <option value="pass_fail">OK / Not OK</option>
+                    </select>
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      className="h-8 min-w-40"
+                      value={draft.remark}
+                      onChange={(event) =>
+                        updateDraft(draft.draftId, "remark", event.target.value)
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="size-8 p-0"
+                      aria-label="Remove parameter"
+                      onClick={() => removeDraft(draft)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button type="button" variant="outline" onClick={addDraft}><Plus className="size-4" />Add parameter</Button>
+          <Button type="button" variant="outline" onClick={addDraft}>
+            <Plus className="size-4" />
+            Add parameter
+          </Button>
           <div className="flex flex-wrap items-center gap-2">
-            {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
-            <Button type="button" disabled={isSaving} onClick={() => void saveParameterSet()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save parameter set"}</Button>
+            {status ? (
+              <AlertMessage tone={status.tone}>{status.message}</AlertMessage>
+            ) : null}
+            <Button
+              type="button"
+              disabled={isSaving}
+              onClick={() => void saveParameterSet()}
+            >
+              <CheckCircle2 className="size-4" />
+              {isSaving ? "Saving" : "Save parameter set"}
+            </Button>
           </div>
         </div>
       </CardContent>
     </Card>
-  );
+  )
 }
 function MaintenanceMasterForm({
   spec,
@@ -6591,103 +11161,264 @@ function MaintenanceMasterForm({
   defaults,
   dataEntry,
 }: {
-  spec: DataEntrySpec;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  defaults: Record<string, unknown>;
-  dataEntry?: DashboardPayload;
+  spec: DataEntrySpec
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  defaults: Record<string, unknown>
+  dataEntry?: DashboardPayload
 }) {
-  const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
-  const persistedRows = useMemo(() => maintenanceMasterRowsFromDataEntry(dataEntry), [dataEntry]);
+  const [localRows, setLocalRows] = useState<DashboardPayload[]>([])
+  const persistedRows = useMemo(
+    () => maintenanceMasterRowsFromDataEntry(dataEntry),
+    [dataEntry]
+  )
   const savedRows = useMemo(() => {
-    const persistedKeys = new Set(persistedRows.map(maintenanceMasterKey));
-    return [...persistedRows, ...localRows.filter((row) => !persistedKeys.has(maintenanceMasterKey(row)))];
-  }, [persistedRows, localRows]);
-  const scheduleOptions = useMemo(() => activeMaintenanceMasterRows(savedRows), [savedRows]);
-  const checklistRows = useMemo(() => activeMaintenanceChecklistRows(maintenanceChecklistMasterRowsFromDataEntry(dataEntry)), [dataEntry]);
-  const checklistOptions = useMemo(() => maintenanceChecklistOptions(checklistRows), [checklistRows]);
-  const defaultCode = displayValue(defaults.maintenanceCode) !== "-" ? displayValue(defaults.maintenanceCode) : nextMaintenanceMasterCode(savedRows);
-  const [selectedCode, setSelectedCode] = useState(defaultCode);
-  const selectedMaster = savedRows.find((row) => maintenanceMasterKey(row) === machineKey(selectedCode));
-  const isExistingSchedule = Boolean(selectedMaster);
-  const selectedChecklistCode = displayValue(selectedMaster?.checklistCode ?? defaults.checklistCode);
-  const [checklistCodeOverride, setChecklistCodeOverride] = useState("");
-  const previewChecklistCode = checklistCodeOverride || (selectedChecklistCode !== "-" ? selectedChecklistCode : "");
-  const previewChecklistRows = previewChecklistCode ? maintenanceChecklistRowsForCode(checklistRows, previewChecklistCode) : [];
+    const persistedKeys = new Set(persistedRows.map(maintenanceMasterKey))
+    return [
+      ...persistedRows,
+      ...localRows.filter(
+        (row) => !persistedKeys.has(maintenanceMasterKey(row))
+      ),
+    ]
+  }, [persistedRows, localRows])
+  const scheduleOptions = useMemo(
+    () => activeMaintenanceMasterRows(savedRows),
+    [savedRows]
+  )
+  const checklistRows = useMemo(
+    () =>
+      activeMaintenanceChecklistRows(
+        maintenanceChecklistMasterRowsFromDataEntry(dataEntry)
+      ),
+    [dataEntry]
+  )
+  const checklistOptions = useMemo(
+    () => maintenanceChecklistOptions(checklistRows),
+    [checklistRows]
+  )
+  const defaultCode =
+    displayValue(defaults.maintenanceCode) !== "-"
+      ? displayValue(defaults.maintenanceCode)
+      : nextMaintenanceMasterCode(savedRows)
+  const [selectedCode, setSelectedCode] = useState(defaultCode)
+  const selectedMaster = savedRows.find(
+    (row) => maintenanceMasterKey(row) === machineKey(selectedCode)
+  )
+  const isExistingSchedule = Boolean(selectedMaster)
+  const selectedChecklistCode = displayValue(
+    selectedMaster?.checklistCode ?? defaults.checklistCode
+  )
+  const [checklistCodeOverride, setChecklistCodeOverride] = useState("")
+  const previewChecklistCode =
+    checklistCodeOverride ||
+    (selectedChecklistCode !== "-" ? selectedChecklistCode : "")
+  const previewChecklistRows = previewChecklistCode
+    ? maintenanceChecklistRowsForCode(checklistRows, previewChecklistCode)
+    : []
 
   function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const checklistCode = str(formData.get("checklistCode"));
+    event.preventDefault()
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    const checklistCode = str(formData.get("checklistCode"))
     const payload = {
       maintenanceCode: selectedCode || nextMaintenanceMasterCode(savedRows),
       maintenanceTitle: str(formData.get("maintenanceTitle")),
-      frequencyDays: optionalNumber(formData.get("frequencyDays")) ?? str(formData.get("frequencyDays")),
+      frequencyDays:
+        optionalNumber(formData.get("frequencyDays")) ??
+        str(formData.get("frequencyDays")),
       frequencyBasis: str(formData.get("frequencyBasis")) || "Calendar days",
       checklistCode,
       checklistTitle: maintenanceChecklistTitle(checklistRows, checklistCode),
-      estimatedMinutes: optionalNumber(formData.get("estimatedMinutes")) ?? str(formData.get("estimatedMinutes")),
+      estimatedMinutes:
+        optionalNumber(formData.get("estimatedMinutes")) ??
+        str(formData.get("estimatedMinutes")),
       status: str(formData.get("status")) || "Active",
       remark: str(formData.get("remark")),
-    };
+    }
     void submitAction("data-entry", {
       entryType: spec.entryType,
       id: defaults.__entryId,
       key: dataEntryKey(spec.entryType, payload),
       returnTab: defaults.__returnTab,
       payload,
-    });
+    })
     setLocalRows((current) => [
-      ...current.filter((row) => maintenanceMasterKey(row) !== maintenanceMasterKey(payload)),
+      ...current.filter(
+        (row) => maintenanceMasterKey(row) !== maintenanceMasterKey(payload)
+      ),
       payload,
-    ]);
-    setSelectedCode(str(payload.maintenanceCode) || nextMaintenanceMasterCode(savedRows));
+    ])
+    setSelectedCode(
+      str(payload.maintenanceCode) || nextMaintenanceMasterCode(savedRows)
+    )
   }
 
-  const selectedTitle = displayValue(selectedMaster?.maintenanceTitle ?? defaults.maintenanceTitle);
-  const selectedFrequency = displayValue(selectedMaster?.frequencyDays ?? defaults.frequencyDays);
-  const selectedFrequencyBasis = displayValue(selectedMaster?.frequencyBasis ?? defaults.frequencyBasis);
-  const selectedEstimatedMinutes = displayValue(selectedMaster?.estimatedMinutes ?? defaults.estimatedMinutes);
-  const selectedStatus = displayValue(selectedMaster?.status ?? defaults.status);
-  const selectedRemark = displayValue(selectedMaster?.remark ?? defaults.remark);
+  const selectedTitle = displayValue(
+    selectedMaster?.maintenanceTitle ?? defaults.maintenanceTitle
+  )
+  const selectedFrequency = displayValue(
+    selectedMaster?.frequencyDays ?? defaults.frequencyDays
+  )
+  const selectedFrequencyBasis = displayValue(
+    selectedMaster?.frequencyBasis ?? defaults.frequencyBasis
+  )
+  const selectedEstimatedMinutes = displayValue(
+    selectedMaster?.estimatedMinutes ?? defaults.estimatedMinutes
+  )
+  const selectedStatus = displayValue(selectedMaster?.status ?? defaults.status)
+  const selectedRemark = displayValue(selectedMaster?.remark ?? defaults.remark)
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>Create reusable maintenance schedules here, then assign them to machines from Machine Master.</CardDescription>
+        <CardDescription>
+          Create reusable maintenance schedules here, then assign them to
+          machines from Machine Master.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
           <Field label="Maintenance schedule">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => { setSelectedCode(event.target.value); setChecklistCodeOverride(""); }}>
-              <option value={nextMaintenanceMasterCode(savedRows)}>New schedule ({nextMaintenanceMasterCode(savedRows)})</option>
-              {scheduleOptions.map((row) => <option key={displayValue(row.maintenanceCode)} value={displayValue(row.maintenanceCode)}>{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</option>)}
+            <select
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={selectedCode}
+              onChange={(event) => {
+                setSelectedCode(event.target.value)
+                setChecklistCodeOverride("")
+              }}
+            >
+              <option value={nextMaintenanceMasterCode(savedRows)}>
+                New schedule ({nextMaintenanceMasterCode(savedRows)})
+              </option>
+              {scheduleOptions.map((row) => (
+                <option
+                  key={displayValue(row.maintenanceCode)}
+                  value={displayValue(row.maintenanceCode)}
+                >
+                  {displayValue(row.maintenanceCode)} -{" "}
+                  {displayValue(row.maintenanceTitle)}
+                </option>
+              ))}
             </select>
           </Field>
-          <TileField label="Saved schedules" value={scheduleOptions.length} numeric />
+          <TileField
+            label="Saved schedules"
+            value={scheduleOptions.length}
+            numeric
+          />
         </div>
-        {previewChecklistRows.length ? <MaintenanceChecklistPreview rows={previewChecklistRows} /> : null}
-        <form key={`${spec.entryType}-${selectedCode}`} className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+        {previewChecklistRows.length ? (
+          <MaintenanceChecklistPreview rows={previewChecklistRows} />
+        ) : null}
+        <form
+          key={`${spec.entryType}-${selectedCode}`}
+          className="grid gap-3 rounded-xl border bg-background p-3"
+          onSubmit={submit}
+        >
           <div>
-            <div className="text-sm font-medium">{isExistingSchedule ? "Update maintenance schedule" : "Create maintenance schedule"}</div>
-            <div className="text-xs text-muted-foreground">The generated code identifies this reusable schedule; the title is what users select when assigning it to machines.</div>
+            <div className="text-sm font-medium">
+              {isExistingSchedule
+                ? "Update maintenance schedule"
+                : "Create maintenance schedule"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              The generated code identifies this reusable schedule; the title is
+              what users select when assigning it to machines.
+            </div>
           </div>
           <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-            <Field label="Maintenance code"><Input name="maintenanceCode" value={selectedCode} readOnly /></Field>
-            <Field label="Maintenance schedule title"><Input name="maintenanceTitle" defaultValue={selectedTitle !== "-" ? selectedTitle : ""} required /></Field>
-            <Field label="Frequency"><Input name="frequencyDays" type="number" min="1" defaultValue={selectedFrequency !== "-" ? selectedFrequency : ""} required /></Field>
-            <Field label="Frequency basis"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="frequencyBasis" defaultValue={selectedFrequencyBasis !== "-" ? selectedFrequencyBasis : "Calendar days"}><option value="Calendar days">Calendar days</option><option value="Running days">Running days</option></select></Field>
-            <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={previewChecklistCode} onChange={(event) => setChecklistCodeOverride(event.target.value)}><option value="">No checklist</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
-            <Field label="Estimated minutes"><Input name="estimatedMinutes" type="number" min="0" defaultValue={selectedEstimatedMinutes !== "-" ? selectedEstimatedMinutes : ""} /></Field>
-            <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue={selectedStatus !== "-" ? selectedStatus : "Active"}><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
-            <Field label="Remark"><Input name="remark" defaultValue={selectedRemark !== "-" ? selectedRemark : ""} /></Field>
+            <Field label="Maintenance code">
+              <Input name="maintenanceCode" value={selectedCode} readOnly />
+            </Field>
+            <Field label="Maintenance schedule title">
+              <Input
+                name="maintenanceTitle"
+                defaultValue={selectedTitle !== "-" ? selectedTitle : ""}
+                required
+              />
+            </Field>
+            <Field label="Frequency">
+              <Input
+                name="frequencyDays"
+                type="number"
+                min="1"
+                defaultValue={
+                  selectedFrequency !== "-" ? selectedFrequency : ""
+                }
+                required
+              />
+            </Field>
+            <Field label="Frequency basis">
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                name="frequencyBasis"
+                defaultValue={
+                  selectedFrequencyBasis !== "-"
+                    ? selectedFrequencyBasis
+                    : "Calendar days"
+                }
+              >
+                <option value="Calendar days">Calendar days</option>
+                <option value="Running days">Running days</option>
+              </select>
+            </Field>
+            <Field label="Checklist">
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                name="checklistCode"
+                value={previewChecklistCode}
+                onChange={(event) =>
+                  setChecklistCodeOverride(event.target.value)
+                }
+              >
+                <option value="">No checklist</option>
+                {checklistOptions.map((row) => (
+                  <option key={row.code} value={row.code}>
+                    {row.code} - {row.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Estimated minutes">
+              <Input
+                name="estimatedMinutes"
+                type="number"
+                min="0"
+                defaultValue={
+                  selectedEstimatedMinutes !== "-"
+                    ? selectedEstimatedMinutes
+                    : ""
+                }
+              />
+            </Field>
+            <Field label="Status">
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                name="status"
+                defaultValue={
+                  selectedStatus !== "-" ? selectedStatus : "Active"
+                }
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </Field>
+            <Field label="Remark">
+              <Input
+                name="remark"
+                defaultValue={selectedRemark !== "-" ? selectedRemark : ""}
+              />
+            </Field>
           </div>
-          <Button className="w-fit" type="submit"><Wrench className="size-4" />{isExistingSchedule ? "Update schedule" : "Create schedule"}</Button>
+          <Button className="w-fit" type="submit">
+            <Wrench className="size-4" />
+            {isExistingSchedule ? "Update schedule" : "Create schedule"}
+          </Button>
         </form>
       </CardContent>
     </Card>
-  );
+  )
 }
 function MaintenanceChecklistMasterForm({
   spec,
@@ -6695,86 +11426,172 @@ function MaintenanceChecklistMasterForm({
   defaults,
   dataEntry,
 }: {
-  spec: DataEntrySpec;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
-  defaults: Record<string, unknown>;
-  dataEntry?: DashboardPayload;
+  spec: DataEntrySpec
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
+  defaults: Record<string, unknown>
+  dataEntry?: DashboardPayload
 }) {
-  const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
-  const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([]);
-  const [status, setStatus] = useState<ActionStatus>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [localRows, setLocalRows] = useState<DashboardPayload[]>([])
+  const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([])
+  const [status, setStatus] = useState<ActionStatus>(null)
+  const [isSaving, setIsSaving] = useState(false)
   const persistedRows = useMemo(
     () => maintenanceChecklistMasterRowsFromDataEntry(dataEntry),
-    [dataEntry],
-  );
-  const savedRows = useMemo(() => mergeMaintenanceChecklistRows([...persistedRows, ...localRows]), [persistedRows, localRows]);
-  const checklistOptions = useMemo(() => maintenanceChecklistOptions(savedRows), [savedRows]);
-  const defaultCode = displayValue(defaults.checklistCode) !== "-" ? displayValue(defaults.checklistCode) : nextMaintenanceChecklistCode(savedRows);
-  const [selectedCode, setSelectedCode] = useState(defaultCode);
-  const selectedRows = useMemo(() => selectedCode ? maintenanceChecklistRowsForCode(savedRows, selectedCode) : [], [savedRows, selectedCode]);
-  const selectedChecklist = checklistOptions.find((row) => machineKey(row.code) === machineKey(selectedCode));
-  const defaultTitle = selectedChecklist?.title || (displayValue(defaults.checklistTitle) !== "-" ? displayValue(defaults.checklistTitle) : "");
-  const [checklistTitle, setChecklistTitle] = useState(defaultTitle);
-  const [drafts, setDrafts] = useState<MaintenanceChecklistStepDraft[]>(() => selectedRows.length ? selectedRows.map(maintenanceChecklistDraftFromRow) : [newMaintenanceChecklistDraft(1)]);
+    [dataEntry]
+  )
+  const savedRows = useMemo(
+    () => mergeMaintenanceChecklistRows([...persistedRows, ...localRows]),
+    [persistedRows, localRows]
+  )
+  const checklistOptions = useMemo(
+    () => maintenanceChecklistOptions(savedRows),
+    [savedRows]
+  )
+  const defaultCode =
+    displayValue(defaults.checklistCode) !== "-"
+      ? displayValue(defaults.checklistCode)
+      : nextMaintenanceChecklistCode(savedRows)
+  const [selectedCode, setSelectedCode] = useState(defaultCode)
+  const selectedRows = useMemo(
+    () =>
+      selectedCode
+        ? maintenanceChecklistRowsForCode(savedRows, selectedCode)
+        : [],
+    [savedRows, selectedCode]
+  )
+  const selectedChecklist = checklistOptions.find(
+    (row) => machineKey(row.code) === machineKey(selectedCode)
+  )
+  const defaultTitle =
+    selectedChecklist?.title ||
+    (displayValue(defaults.checklistTitle) !== "-"
+      ? displayValue(defaults.checklistTitle)
+      : "")
+  const [checklistTitle, setChecklistTitle] = useState(defaultTitle)
+  const [drafts, setDrafts] = useState<MaintenanceChecklistStepDraft[]>(() =>
+    selectedRows.length
+      ? selectedRows.map(maintenanceChecklistDraftFromRow)
+      : [newMaintenanceChecklistDraft(1)]
+  )
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      const rows = selectedCode ? maintenanceChecklistRowsForCode(savedRows, selectedCode) : [];
-      const option = checklistOptions.find((item) => machineKey(item.code) === machineKey(selectedCode));
-      setChecklistTitle(option?.title || (displayValue(defaults.checklistTitle) !== "-" ? displayValue(defaults.checklistTitle) : ""));
-      setDrafts(rows.length ? rows.map(maintenanceChecklistDraftFromRow) : [newMaintenanceChecklistDraft(1)]);
-      setRemovedRows([]);
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [checklistOptions, defaults.checklistTitle, savedRows, selectedCode]);
+      const rows = selectedCode
+        ? maintenanceChecklistRowsForCode(savedRows, selectedCode)
+        : []
+      const option = checklistOptions.find(
+        (item) => machineKey(item.code) === machineKey(selectedCode)
+      )
+      setChecklistTitle(
+        option?.title ||
+          (displayValue(defaults.checklistTitle) !== "-"
+            ? displayValue(defaults.checklistTitle)
+            : "")
+      )
+      setDrafts(
+        rows.length
+          ? rows.map(maintenanceChecklistDraftFromRow)
+          : [newMaintenanceChecklistDraft(1)]
+      )
+      setRemovedRows([])
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [checklistOptions, defaults.checklistTitle, savedRows, selectedCode])
 
   function startNewChecklist() {
-    const nextCode = nextMaintenanceChecklistCode(savedRows);
-    setSelectedCode(nextCode);
-    setChecklistTitle("");
-    setDrafts([newMaintenanceChecklistDraft(1)]);
-    setRemovedRows([]);
-    setStatus(null);
+    const nextCode = nextMaintenanceChecklistCode(savedRows)
+    setSelectedCode(nextCode)
+    setChecklistTitle("")
+    setDrafts([newMaintenanceChecklistDraft(1)])
+    setRemovedRows([])
+    setStatus(null)
   }
 
-  function updateDraft(draftId: string, field: keyof MaintenanceChecklistStepDraft, value: string) {
-    setDrafts((current) => current.map((draft) => draft.draftId === draftId ? { ...draft, [field]: value } : draft));
+  function updateDraft(
+    draftId: string,
+    field: keyof MaintenanceChecklistStepDraft,
+    value: string
+  ) {
+    setDrafts((current) =>
+      current.map((draft) =>
+        draft.draftId === draftId ? { ...draft, [field]: value } : draft
+      )
+    )
   }
 
   function addDraft() {
-    setDrafts((current) => [...current, newMaintenanceChecklistDraft(current.length + 1)]);
+    setDrafts((current) => [
+      ...current,
+      newMaintenanceChecklistDraft(current.length + 1),
+    ])
   }
 
   function removeDraft(draft: MaintenanceChecklistStepDraft) {
-    if (draft.persisted) setRemovedRows((current) => [...current, maintenanceChecklistPayload(draft, selectedCode, checklistTitle, "Inactive")]);
-    setDrafts((current) => current.filter((item) => item.draftId !== draft.draftId));
+    if (draft.persisted)
+      setRemovedRows((current) => [
+        ...current,
+        maintenanceChecklistPayload(
+          draft,
+          selectedCode,
+          checklistTitle,
+          "Inactive"
+        ),
+      ])
+    setDrafts((current) =>
+      current.filter((item) => item.draftId !== draft.draftId)
+    )
   }
 
   async function saveChecklist() {
-    const code = selectedCode || nextMaintenanceChecklistCode(savedRows);
-    const title = checklistTitle.trim();
-    const activeDrafts = drafts.filter((draft) => draft.stepDescription.trim());
+    const code = selectedCode || nextMaintenanceChecklistCode(savedRows)
+    const title = checklistTitle.trim()
+    const activeDrafts = drafts.filter((draft) => draft.stepDescription.trim())
     const duplicateSequences = activeDrafts
       .map((draft, index) => str(optionalNumber(draft.sequence) ?? index + 1))
-      .filter((sequence, index, sequences) => sequence && sequences.indexOf(sequence) !== index);
+      .filter(
+        (sequence, index, sequences) =>
+          sequence && sequences.indexOf(sequence) !== index
+      )
     if (!title) {
-      setStatus({ tone: "destructive", message: "Checklist title is required." });
-      return;
+      setStatus({
+        tone: "destructive",
+        message: "Checklist title is required.",
+      })
+      return
     }
     if (!activeDrafts.length) {
-      setStatus({ tone: "destructive", message: "Add at least one checklist step." });
-      return;
+      setStatus({
+        tone: "destructive",
+        message: "Add at least one checklist step.",
+      })
+      return
     }
     if (duplicateSequences.length) {
-      setStatus({ tone: "destructive", message: "Step numbers must be unique in one checklist." });
-      return;
+      setStatus({
+        tone: "destructive",
+        message: "Step numbers must be unique in one checklist.",
+      })
+      return
     }
-    setIsSaving(true);
-    setStatus(null);
+    setIsSaving(true)
+    setStatus(null)
     try {
-      const activePayloads = activeDrafts.map((draft, index) => maintenanceChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, "Active"));
-      const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
+      const activePayloads = activeDrafts.map((draft, index) =>
+        maintenanceChecklistPayload(
+          { ...draft, sequence: draft.sequence || String(index + 1) },
+          code,
+          title,
+          "Active"
+        )
+      )
+      const inactivePayloads = removedRows.filter(
+        (row) =>
+          !activePayloads.some(
+            (payload) =>
+              dataEntryKey(spec.entryType, payload) ===
+              dataEntryKey(spec.entryType, row)
+          )
+      )
       for (const payload of [...activePayloads, ...inactivePayloads]) {
         await submitAction("data-entry", {
           entryType: spec.entryType,
@@ -6782,16 +11599,28 @@ function MaintenanceChecklistMasterForm({
           key: dataEntryKey(spec.entryType, payload),
           returnTab: defaults.__returnTab,
           payload,
-        });
+        })
       }
-      setLocalRows((current) => mergeMaintenanceChecklistRows([...current, ...activePayloads, ...inactivePayloads]));
-      setRemovedRows([]);
-      setSelectedCode(code);
-      setStatus({ tone: "default", message: "Maintenance checklist saved." });
+      setLocalRows((current) =>
+        mergeMaintenanceChecklistRows([
+          ...current,
+          ...activePayloads,
+          ...inactivePayloads,
+        ])
+      )
+      setRemovedRows([])
+      setSelectedCode(code)
+      setStatus({ tone: "default", message: "Maintenance checklist saved." })
     } catch (err) {
-      setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Maintenance checklist save failed." });
+      setStatus({
+        tone: "destructive",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Maintenance checklist save failed.",
+      })
     } finally {
-      setIsSaving(false);
+      setIsSaving(false)
     }
   }
 
@@ -6799,24 +11628,54 @@ function MaintenanceChecklistMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>Create the checklist once, then add all steps in the table. Step codes are not required.</CardDescription>
+        <CardDescription>
+          Create the checklist once, then add all steps in the table. Step codes
+          are not required.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px]">
           <Field label="Checklist">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}>
-              <option value={nextMaintenanceChecklistCode(savedRows)}>New checklist ({nextMaintenanceChecklistCode(savedRows)})</option>
-              {checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}
+            <select
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={selectedCode}
+              onChange={(event) => setSelectedCode(event.target.value)}
+            >
+              <option value={nextMaintenanceChecklistCode(savedRows)}>
+                New checklist ({nextMaintenanceChecklistCode(savedRows)})
+              </option>
+              {checklistOptions.map((row) => (
+                <option key={row.code} value={row.code}>
+                  {row.code} - {row.title}
+                </option>
+              ))}
             </select>
           </Field>
           <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New checklist</Button>
+            <Button type="button" variant="outline" onClick={startNewChecklist}>
+              <Plus className="size-4" />
+              New checklist
+            </Button>
           </div>
-          <TileField label="Steps" value={drafts.filter((draft) => draft.stepDescription.trim()).length} numeric />
+          <TileField
+            label="Steps"
+            value={
+              drafts.filter((draft) => draft.stepDescription.trim()).length
+            }
+            numeric
+          />
         </div>
         <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
-          <Field label="Checklist code"><Input value={selectedCode} readOnly /></Field>
-          <Field label="Checklist title"><Input value={checklistTitle} onChange={(event) => setChecklistTitle(event.target.value)} required /></Field>
+          <Field label="Checklist code">
+            <Input value={selectedCode} readOnly />
+          </Field>
+          <Field label="Checklist title">
+            <Input
+              value={checklistTitle}
+              onChange={(event) => setChecklistTitle(event.target.value)}
+              required
+            />
+          </Field>
         </div>
         <div className="overflow-auto rounded-lg border">
           <Table>
@@ -6832,52 +11691,128 @@ function MaintenanceChecklistMasterForm({
             <TableBody>
               {drafts.map((draft, index) => (
                 <TableRow key={draft.draftId}>
-                  <TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell>
-                  <TableCell><Input className="h-8 min-w-72" value={draft.stepDescription} onChange={(event) => updateDraft(draft.draftId, "stepDescription", event.target.value)} /></TableCell>
-                  <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></select></TableCell>
-                  <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
-                  <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove checklist step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
+                  <TableCell>
+                    <Input
+                      className="h-8 min-w-16"
+                      type="number"
+                      min="1"
+                      value={draft.sequence || String(index + 1)}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.draftId,
+                          "sequence",
+                          event.target.value
+                        )
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      className="h-8 min-w-72"
+                      value={draft.stepDescription}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.draftId,
+                          "stepDescription",
+                          event.target.value
+                        )
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <select
+                      className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm"
+                      value={draft.inputType}
+                      onChange={(event) =>
+                        updateDraft(
+                          draft.draftId,
+                          "inputType",
+                          event.target.value
+                        )
+                      }
+                    >
+                      <option value="checkbox">Checkbox</option>
+                      <option value="text">Text</option>
+                      <option value="number">Number</option>
+                    </select>
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      className="h-8 min-w-40"
+                      value={draft.remark}
+                      onChange={(event) =>
+                        updateDraft(draft.draftId, "remark", event.target.value)
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="size-8 p-0"
+                      aria-label="Remove checklist step"
+                      onClick={() => removeDraft(draft)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button type="button" variant="outline" onClick={addDraft}><Plus className="size-4" />Add step</Button>
+          <Button type="button" variant="outline" onClick={addDraft}>
+            <Plus className="size-4" />
+            Add step
+          </Button>
           <div className="flex flex-wrap items-center gap-2">
-            {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
-            <Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save checklist"}</Button>
+            {status ? (
+              <AlertMessage tone={status.tone}>{status.message}</AlertMessage>
+            ) : null}
+            <Button
+              type="button"
+              disabled={isSaving}
+              onClick={() => void saveChecklist()}
+            >
+              <CheckCircle2 className="size-4" />
+              {isSaving ? "Saving" : "Save checklist"}
+            </Button>
           </div>
         </div>
       </CardContent>
     </Card>
-  );
+  )
 }
 function PlanningControlPanel({
   payload,
   productionControl,
   submitAction,
 }: {
-  payload: DashboardPayload;
-  productionControl: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  payload: DashboardPayload
+  productionControl: DashboardPayload
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const toolFixtureNumbers = asRecord(payload.toolFixtureNumbers);
+  const toolFixtureNumbers = asRecord(payload.toolFixtureNumbers)
 
   return (
     <section className="grid gap-4">
-      <PlannerWorkflowExceptionPanel rows={asArray(productionControl.workflowExceptionRows)} submitAction={submitAction} />
+      <PlannerWorkflowExceptionPanel
+        rows={asArray(productionControl.workflowExceptionRows)}
+        submitAction={submitAction}
+      />
       <ToolFixturePanel rows={asArray(toolFixtureNumbers.rows)} />
     </section>
-  );
+  )
 }
 
 function PlannerWorkflowExceptionPanel({
   rows,
   submitAction,
 }: {
-  rows: DashboardPayload[];
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  rows: DashboardPayload[]
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
   async function resolveWorkflow(row: DashboardPayload) {
     const payload = {
@@ -6892,15 +11827,18 @@ function PlannerWorkflowExceptionPanel({
       stageLabel: "Operator assigned and machine started",
       role: "Planner",
       doneBy: "Planner",
-      worker: displayValue(row.shopFloorWorker) !== "-" ? displayValue(row.shopFloorWorker) : "",
+      worker:
+        displayValue(row.shopFloorWorker) !== "-"
+          ? displayValue(row.shopFloorWorker)
+          : "",
       remark: "Resolved from raw production entry.",
       completedAt: new Date().toISOString(),
-    };
+    }
     await submitAction("data-entry", {
       entryType: "shop_floor_status",
       key: dataEntryKey("shop_floor_status", payload),
       payload,
-    });
+    })
   }
 
   return (
@@ -6908,7 +11846,8 @@ function PlannerWorkflowExceptionPanel({
       <CardHeader>
         <CardTitle>Workflow exceptions</CardTitle>
         <CardDescription>
-          Raw production exists, but the machinist task workflow has not recorded operator assignment and machine start.
+          Raw production exists, but the machinist task workflow has not
+          recorded operator assignment and machine start.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -6926,16 +11865,29 @@ function PlannerWorkflowExceptionPanel({
               <TableBody>
                 {rows.map((row, index) => (
                   <TableRow key={`${shopFloorPlanKey(row)}-${index}`}>
-                    <TableCell className="font-medium">{displayValue(row.machine)}</TableCell>
+                    <TableCell className="font-medium">
+                      {displayValue(row.machine)}
+                    </TableCell>
                     <TableCell>
                       <ShopFloorItemSummary row={row} tone="next" />
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm">{formatNumber(numValue(row, "rawRows"))} row{numValue(row, "rawRows") === 1 ? "" : "s"}</div>
-                      <div className="text-xs text-muted-foreground">Output {displayValue(row.rawOutputQty, true)} / Actual {displayValue(row.rawActualQty, true)}</div>
+                      <div className="text-sm">
+                        {formatNumber(numValue(row, "rawRows"))} row
+                        {numValue(row, "rawRows") === 1 ? "" : "s"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Output {displayValue(row.rawOutputQty, true)} / Actual{" "}
+                        {displayValue(row.rawActualQty, true)}
+                      </div>
                     </TableCell>
                     <TableCell>
-                      <Button type="button" size="sm" variant="outline" onClick={() => void resolveWorkflow(row)}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void resolveWorkflow(row)}
+                      >
                         <CheckCircle2 className="size-4" />
                         Resolve workflow
                       </Button>
@@ -6950,47 +11902,75 @@ function PlannerWorkflowExceptionPanel({
         )}
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function CorrectionsPanel({
   rows,
   submitAction,
 }: {
-  rows: DashboardPayload[];
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  rows: DashboardPayload[]
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>
 }) {
-  const [tableFilter, setTableFilter] = useState("");
-  const [entryTypeFilter, setEntryTypeFilter] = useState("");
-  const [query, setQuery] = useState("");
-  const [correctedBy, setCorrectedBy] = useState("Planner");
-  const [reasonById, setReasonById] = useState<Record<string, string>>({});
-  const tableOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.targetTable)).filter((value) => value !== "-")), [rows]);
-  const entryTypeOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.entryType)).filter((value) => value !== "-")), [rows]);
-  const filteredRows = useMemo(() => rows.filter((row) =>
-    typedFilterMatches(displayValue(row.targetTable), tableFilter) &&
-    typedFilterMatches(displayValue(row.entryType), entryTypeFilter) &&
-    correctionRowMatchesQuery(row, query),
-  ), [entryTypeFilter, query, rows, tableFilter]);
+  const [tableFilter, setTableFilter] = useState("")
+  const [entryTypeFilter, setEntryTypeFilter] = useState("")
+  const [query, setQuery] = useState("")
+  const [correctedBy, setCorrectedBy] = useState("Planner")
+  const [reasonById, setReasonById] = useState<Record<string, string>>({})
+  const tableOptions = useMemo(
+    () =>
+      uniqueValues(
+        rows
+          .map((row) => displayValue(row.targetTable))
+          .filter((value) => value !== "-")
+      ),
+    [rows]
+  )
+  const entryTypeOptions = useMemo(
+    () =>
+      uniqueValues(
+        rows
+          .map((row) => displayValue(row.entryType))
+          .filter((value) => value !== "-")
+      ),
+    [rows]
+  )
+  const filteredRows = useMemo(
+    () =>
+      rows.filter(
+        (row) =>
+          typedFilterMatches(displayValue(row.targetTable), tableFilter) &&
+          typedFilterMatches(displayValue(row.entryType), entryTypeFilter) &&
+          correctionRowMatchesQuery(row, query)
+      ),
+    [entryTypeFilter, query, rows, tableFilter]
+  )
 
   async function reverseRow(row: DashboardPayload) {
-    const targetId = displayValue(row.targetId);
-    const reason = str(reasonById[targetId]);
+    const targetId = displayValue(row.targetId)
+    const reason = str(reasonById[targetId])
     await submitAction("reverse-entry", {
       targetTable: displayValue(row.targetTable),
       targetId,
-      targetKey: displayValue(row.targetKey) !== "-" ? displayValue(row.targetKey) : "",
-      targetLabel: displayValue(row.targetLabel) !== "-" ? displayValue(row.targetLabel) : "",
+      targetKey:
+        displayValue(row.targetKey) !== "-" ? displayValue(row.targetKey) : "",
+      targetLabel:
+        displayValue(row.targetLabel) !== "-"
+          ? displayValue(row.targetLabel)
+          : "",
       reason,
       correctedBy,
-    });
-    setReasonById((current) => ({ ...current, [targetId]: "" }));
+    })
+    setReasonById((current) => ({ ...current, [targetId]: "" }))
   }
   return (
     <Card>
       <CardHeader>
         <CardTitle>Corrections</CardTitle>
-        <CardDescription>Reverse wrong entries without deleting history. Reversed entries stop affecting live status and task queues.</CardDescription>
+        <CardDescription>
+          Reverse wrong entries without deleting history. Reversed entries stop
+          affecting live status and task queues.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
@@ -7004,14 +11984,43 @@ function CorrectionsPanel({
           <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
             <span>Search</span>
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="pl-9" value={query} placeholder="Search entry, machine, job card, setup, remark..." onChange={(event) => setQuery(event.target.value)} />
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                value={query}
+                placeholder="Search entry, machine, job card, setup, remark..."
+                onChange={(event) => setQuery(event.target.value)}
+              />
             </div>
           </Label>
-          <FilterSelect label="Module" value={tableFilter} onChange={setTableFilter} options={[["", "All modules"], ...tableOptions.map((value) => [value, value] as [string, string])]} />
-          <FilterSelect label="Entry type" value={entryTypeFilter} onChange={setEntryTypeFilter} options={[["", "All entry types"], ...entryTypeOptions.map((value) => [value, value] as [string, string])]} />
+          <FilterSelect
+            label="Module"
+            value={tableFilter}
+            onChange={setTableFilter}
+            options={[
+              ["", "All modules"],
+              ...tableOptions.map(
+                (value) => [value, value] as [string, string]
+              ),
+            ]}
+          />
+          <FilterSelect
+            label="Entry type"
+            value={entryTypeFilter}
+            onChange={setEntryTypeFilter}
+            options={[
+              ["", "All entry types"],
+              ...entryTypeOptions.map(
+                (value) => [value, value] as [string, string]
+              ),
+            ]}
+          />
           <Field label="Corrected by">
-            <Input value={correctedBy} placeholder="Planner/admin name" onChange={(event) => setCorrectedBy(event.target.value)} />
+            <Input
+              value={correctedBy}
+              placeholder="Planner/admin name"
+              onChange={(event) => setCorrectedBy(event.target.value)}
+            />
           </Field>
         </div>
         {filteredRows.length ? (
@@ -7028,40 +12037,67 @@ function CorrectionsPanel({
               </TableHeader>
               <TableBody>
                 {filteredRows.map((row) => {
-                  const targetId = displayValue(row.targetId);
-                  const reason = reasonById[targetId] ?? "";
+                  const targetId = displayValue(row.targetId)
+                  const reason = reasonById[targetId] ?? ""
                   return (
-                    <TableRow key={`${displayValue(row.targetTable)}-${targetId}`}>
+                    <TableRow
+                      key={`${displayValue(row.targetTable)}-${targetId}`}
+                    >
                       <TableCell>
-                        <div className="font-medium">{displayValue(row.targetTable)}</div>
-                        <div className="text-xs text-muted-foreground">{displayValue(row.entryType)}</div>
+                        <div className="font-medium">
+                          {displayValue(row.targetTable)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {displayValue(row.entryType)}
+                        </div>
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium">{displayValue(row.targetLabel)}</div>
-                        <div className="text-xs text-muted-foreground">{displayValue(row.targetKey)}</div>
+                        <div className="font-medium">
+                          {displayValue(row.targetLabel)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {displayValue(row.targetKey)}
+                        </div>
                       </TableCell>
                       <TableCell>{displayValue(row.createdAt)}</TableCell>
                       <TableCell>
-                        <Input value={reason} placeholder="Mandatory correction reason" onChange={(event) => setReasonById((current) => ({ ...current, [targetId]: event.target.value }))} />
+                        <Input
+                          value={reason}
+                          placeholder="Mandatory correction reason"
+                          onChange={(event) =>
+                            setReasonById((current) => ({
+                              ...current,
+                              [targetId]: event.target.value,
+                            }))
+                          }
+                        />
                       </TableCell>
                       <TableCell>
-                        <Button type="button" size="sm" variant="outline" onClick={() => void reverseRow(row)} disabled={!str(reason)}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void reverseRow(row)}
+                          disabled={!str(reason)}
+                        >
                           <Undo2 className="size-4" />
                           Reverse
                         </Button>
                       </TableCell>
                     </TableRow>
-                  );
+                  )
                 })}
               </TableBody>
             </Table>
           </div>
         ) : (
-          <EmptyRowsMessage>No active entries match the current filters</EmptyRowsMessage>
+          <EmptyRowsMessage>
+            No active entries match the current filters
+          </EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
@@ -7069,37 +12105,44 @@ function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
     <Card>
       <CardHeader>
         <CardTitle>Next tool / fixture number</CardTitle>
-        <CardDescription>First missing number, otherwise next new.</CardDescription>
+        <CardDescription>
+          First missing number, otherwise next new.
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <section className="grid gap-3 sm:grid-cols-2 @5xl/main:grid-cols-5">
           {rows.map((row) => (
             <div key={str(row.category)} className="rounded-lg border p-3">
-              <div className="truncate text-xs text-muted-foreground">{str(row.category)}</div>
-              <div className="text-xl font-semibold tabular-nums">{str(row.recommendedNumber || row.nextNew)}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {str(row.category)}
+              </div>
+              <div className="text-xl font-semibold tabular-nums">
+                {str(row.recommendedNumber || row.nextNew)}
+              </div>
               <div className="text-xs text-muted-foreground">
-                {str(row.recommendationType || "Next number")} | {formatNumber(numValue(row, "usedCount"))} used
+                {str(row.recommendationType || "Next number")} |{" "}
+                {formatNumber(numValue(row, "usedCount"))} used
               </div>
             </div>
           ))}
         </section>
       </CardContent>
     </Card>
-  );
+  )
 }
 
 type LegacyField = {
-  name: string;
-  label: string;
-  placeholder?: string;
-  type?: "text" | "date" | "number" | "time";
-  options?: string[];
-  defaultValue?: string;
-  required?: boolean;
-  min?: string;
-  step?: string;
-  readOnly?: boolean;
-};
+  name: string
+  label: string
+  placeholder?: string
+  type?: "text" | "date" | "number" | "time"
+  options?: string[]
+  defaultValue?: string
+  required?: boolean
+  min?: string
+  step?: string
+  readOnly?: boolean
+}
 
 function LegacyActionForm({
   title,
@@ -7109,22 +12152,25 @@ function LegacyActionForm({
   buttonLabel,
   onSubmit,
 }: {
-  title: string;
-  description: string;
-  fields: LegacyField[];
-  defaults?: Record<string, unknown>;
-  buttonLabel: string;
-  onSubmit: (body: Record<string, unknown>) => void;
+  title: string
+  description: string
+  fields: LegacyField[]
+  defaults?: Record<string, unknown>
+  buttonLabel: string
+  onSubmit: (body: Record<string, unknown>) => void
 }) {
   function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    onSubmit(formPayload(new FormData(form), fields));
-    form.reset();
+    event.preventDefault()
+    const form = event.currentTarget
+    onSubmit(formPayload(new FormData(form), fields))
+    form.reset()
   }
 
   return (
-    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+    <form
+      className="grid gap-3 rounded-xl border bg-background p-3"
+      onSubmit={submit}
+    >
       <div>
         <div className="text-sm font-medium">{title}</div>
         <div className="text-xs text-muted-foreground">{description}</div>
@@ -7136,7 +12182,11 @@ function LegacyActionForm({
               <select
                 className="h-9 rounded-md border bg-background px-3 text-sm"
                 name={field.name}
-                defaultValue={str(defaults[field.name]) || field.defaultValue || field.options[0]}
+                defaultValue={
+                  str(defaults[field.name]) ||
+                  field.defaultValue ||
+                  field.options[0]
+                }
                 required={field.required}
               >
                 {field.options.map((option) => (
@@ -7165,11 +12215,17 @@ function LegacyActionForm({
         {buttonLabel}
       </Button>
     </form>
-  );
+  )
 }
 
 function ActionLogTable({ rows }: { rows: DashboardPayload[] }) {
-  return <DataRowsCard title="Planner action log" rows={rows} empty="No planner actions saved yet" />;
+  return (
+    <DataRowsCard
+      title="Planner action log"
+      rows={rows}
+      empty="No planner actions saved yet"
+    />
+  )
 }
 
 function JobCardTileBoard({
@@ -7179,60 +12235,128 @@ function JobCardTileBoard({
   actionNeededCount,
   openMasterReadiness,
 }: {
-  rows: DashboardPayload[];
-  plannedRows: DashboardPayload[];
-  machineRows: DashboardPayload[];
-  actionNeededCount: number;
-  openMasterReadiness: () => void;
+  rows: DashboardPayload[]
+  plannedRows: DashboardPayload[]
+  machineRows: DashboardPayload[]
+  actionNeededCount: number
+  openMasterReadiness: () => void
 }) {
-  const [query, setQuery] = useState("");
-  const [searchField, setSearchField] = useState("all");
-  const [trackingState, setTrackingState] = useState("all");
-  const [rmStatusFilter, setRmStatusFilter] = useState("all");
-  const [productionStatusFilter, setProductionStatusFilter] = useState("all");
-  const [jobCardFilter, setJobCardFilter] = useState("");
-  const [itemCodeFilter, setItemCodeFilter] = useState("");
-  const [machineFilter, setMachineFilter] = useState("");
-  const plannedByJobCard = useMemo(() => groupPlannedRowsByJobCard(plannedRows), [plannedRows]);
-  const plannedByPart = useMemo(() => groupPlannedRowsByPart(plannedRows), [plannedRows]);
-  const jobCardOptions = useMemo(() => uniqueValues(rows.map(jobCardNumber).filter(Boolean)), [rows]);
-  const itemCodeOptions = useMemo(() => uniqueValues(rows.map(itemCode).filter(Boolean)), [rows]);
-  const machineOptions = useMemo(() => plannedMachineOptions(plannedRows, machineBoardRows(machineRows, plannedRows)), [machineRows, plannedRows]);
+  const [query, setQuery] = useState("")
+  const [searchField, setSearchField] = useState("all")
+  const [trackingState, setTrackingState] = useState("all")
+  const [rmStatusFilter, setRmStatusFilter] = useState("all")
+  const [productionStatusFilter, setProductionStatusFilter] = useState("all")
+  const [jobCardFilter, setJobCardFilter] = useState("")
+  const [itemCodeFilter, setItemCodeFilter] = useState("")
+  const [machineFilter, setMachineFilter] = useState("")
+  const plannedByJobCard = useMemo(
+    () => groupPlannedRowsByJobCard(plannedRows),
+    [plannedRows]
+  )
+  const plannedByPart = useMemo(
+    () => groupPlannedRowsByPart(plannedRows),
+    [plannedRows]
+  )
+  const jobCardOptions = useMemo(
+    () => uniqueValues(rows.map(jobCardNumber).filter(Boolean)),
+    [rows]
+  )
+  const itemCodeOptions = useMemo(
+    () => uniqueValues(rows.map(itemCode).filter(Boolean)),
+    [rows]
+  )
+  const machineOptions = useMemo(
+    () =>
+      plannedMachineOptions(
+        plannedRows,
+        machineBoardRows(machineRows, plannedRows)
+      ),
+    [machineRows, plannedRows]
+  )
   const filteredRows = useMemo(
-    () => rows.filter((row) => {
-      const setupRows = plannedRowsForJobCard(row, plannedByJobCard, plannedByPart);
-      const hasProduction = jobCardHasProduction(row, setupRows);
-      return rowMatchesFieldQuery(row, query, searchField, setupRows) &&
-        typedFilterMatches(jobCardNumber(row), jobCardFilter) &&
-        typedFilterMatches(itemCode(row), itemCodeFilter) &&
-        jobCardMatchesMachine(row, machineFilter, plannedByJobCard, plannedByPart) &&
-        (trackingState === "all" || jobCardTrackingState(row, setupRows) === trackingState) &&
-        (rmStatusFilter === "all" || (rmStatusFilter === "received" ? displayValue(row.rmStatus) === "Received" : displayValue(row.rmStatus) !== "Received")) &&
-        (productionStatusFilter === "all" || (productionStatusFilter === "in-production" ? hasProduction : !hasProduction));
-    }),
-    [itemCodeFilter, jobCardFilter, machineFilter, plannedByJobCard, plannedByPart, productionStatusFilter, query, rmStatusFilter, rows, searchField, trackingState],
-  );
-  const needsAction = actionNeededCount;
-  const pendingRm = rows.filter((row) => displayValue(row.rmStatus) !== "Received").length;
-  const ready = rows.filter((row) => jobCardTrackingState(row, plannedRowsForJobCard(row, plannedByJobCard, plannedByPart)) === "Ready").length;
-  const inProduction = rows.filter((row) => jobCardTrackingState(row, plannedRowsForJobCard(row, plannedByJobCard, plannedByPart)) === "In production").length;
+    () =>
+      rows.filter((row) => {
+        const setupRows = plannedRowsForJobCard(
+          row,
+          plannedByJobCard,
+          plannedByPart
+        )
+        const hasProduction = jobCardHasProduction(row, setupRows)
+        return (
+          rowMatchesFieldQuery(row, query, searchField, setupRows) &&
+          typedFilterMatches(jobCardNumber(row), jobCardFilter) &&
+          typedFilterMatches(itemCode(row), itemCodeFilter) &&
+          jobCardMatchesMachine(
+            row,
+            machineFilter,
+            plannedByJobCard,
+            plannedByPart
+          ) &&
+          (trackingState === "all" ||
+            jobCardTrackingState(row, setupRows) === trackingState) &&
+          (rmStatusFilter === "all" ||
+            (rmStatusFilter === "received"
+              ? displayValue(row.rmStatus) === "Received"
+              : displayValue(row.rmStatus) !== "Received")) &&
+          (productionStatusFilter === "all" ||
+            (productionStatusFilter === "in-production"
+              ? hasProduction
+              : !hasProduction))
+        )
+      }),
+    [
+      itemCodeFilter,
+      jobCardFilter,
+      machineFilter,
+      plannedByJobCard,
+      plannedByPart,
+      productionStatusFilter,
+      query,
+      rmStatusFilter,
+      rows,
+      searchField,
+      trackingState,
+    ]
+  )
+  const needsAction = actionNeededCount
+  const pendingRm = rows.filter(
+    (row) => displayValue(row.rmStatus) !== "Received"
+  ).length
+  const ready = rows.filter(
+    (row) =>
+      jobCardTrackingState(
+        row,
+        plannedRowsForJobCard(row, plannedByJobCard, plannedByPart)
+      ) === "Ready"
+  ).length
+  const inProduction = rows.filter(
+    (row) =>
+      jobCardTrackingState(
+        row,
+        plannedRowsForJobCard(row, plannedByJobCard, plannedByPart)
+      ) === "In production"
+  ).length
 
   function clearJobCardFilters() {
-    setQuery("");
-    setSearchField("all");
-    setTrackingState("all");
-    setRmStatusFilter("all");
-    setProductionStatusFilter("all");
-    setJobCardFilter("");
-    setItemCodeFilter("");
-    setMachineFilter("");
+    setQuery("")
+    setSearchField("all")
+    setTrackingState("all")
+    setRmStatusFilter("all")
+    setProductionStatusFilter("all")
+    setJobCardFilter("")
+    setItemCodeFilter("")
+    setMachineFilter("")
   }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Job-card tiles</CardTitle>
-        <CardDescription>{rows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(rows.length)} job cards shown` : "No job-card status rows returned"}</CardDescription>
+        <CardDescription>
+          {rows.length
+            ? `${formatNumber(filteredRows.length)} of ${formatNumber(rows.length)} job cards shown`
+            : "No job-card status rows returned"}
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {rows.length ? (
@@ -7241,7 +12365,11 @@ function JobCardTileBoard({
               items={[
                 ["Pending RM", formatNumber(pendingRm)],
                 ["Ready", formatNumber(ready)],
-                ["Action needed", formatNumber(needsAction), openMasterReadiness],
+                [
+                  "Action needed",
+                  formatNumber(needsAction),
+                  openMasterReadiness,
+                ],
                 ["In production", formatNumber(inProduction)],
                 ["Visible", formatNumber(filteredRows.length)],
               ]}
@@ -7324,7 +12452,12 @@ function JobCardTileBoard({
               ]}
             />
             <div>
-              <Button type="button" variant="outline" size="sm" onClick={clearJobCardFilters}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={clearJobCardFilters}
+              >
                 Clear filters
               </Button>
             </div>
@@ -7334,12 +12467,18 @@ function JobCardTileBoard({
                   <JobCardTile
                     key={`${str(row.jcNo || row.JobCardNo || row.jobCard) || "job-card"}-${index}`}
                     row={row}
-                    setupRows={plannedRowsForJobCard(row, plannedByJobCard, plannedByPart)}
+                    setupRows={plannedRowsForJobCard(
+                      row,
+                      plannedByJobCard,
+                      plannedByPart
+                    )}
                   />
                 ))}
               </div>
             ) : (
-              <EmptyRowsMessage>No job cards match the current filters</EmptyRowsMessage>
+              <EmptyRowsMessage>
+                No job cards match the current filters
+              </EmptyRowsMessage>
             )}
           </>
         ) : (
@@ -7347,66 +12486,125 @@ function JobCardTileBoard({
         )}
       </CardContent>
     </Card>
-  );
+  )
 }
 
-function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: DashboardPayload[] }) {
-  const jcNo = displayValue(row.jcNo || row.JobCardNo || row.jobCard);
-  const partCode = displayValue(row.partCode || row["PART CODE"] || row.itemCode);
-  const option = displayValue(row.optionNumber || row.selectedOption || row.option);
-  const blocker = displayValue(row.planningBlocker || row.nextAction || row.routeStatus);
-  const trackingState = jobCardTrackingState(row, setupRows);
-  const schedule = jobCardScheduleSummary(row, setupRows);
+function JobCardTile({
+  row,
+  setupRows,
+}: {
+  row: DashboardPayload
+  setupRows: DashboardPayload[]
+}) {
+  const jcNo = displayValue(row.jcNo || row.JobCardNo || row.jobCard)
+  const partCode = displayValue(
+    row.partCode || row["PART CODE"] || row.itemCode
+  )
+  const option = displayValue(
+    row.optionNumber || row.selectedOption || row.option
+  )
+  const blocker = displayValue(
+    row.planningBlocker || row.nextAction || row.routeStatus
+  )
+  const trackingState = jobCardTrackingState(row, setupRows)
+  const schedule = jobCardScheduleSummary(row, setupRows)
 
   return (
     <article className="grid gap-3 rounded-lg border bg-background p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="break-words text-sm font-semibold">{jcNo}</div>
-          <div className="break-words text-xs text-muted-foreground">{partCode}</div>
+          <div className="text-sm font-semibold break-words">{jcNo}</div>
+          <div className="text-xs break-words text-muted-foreground">
+            {partCode}
+          </div>
         </div>
         <div className="flex flex-wrap justify-end gap-1.5">
           <StatusBadge value={trackingState} />
           <StatusBadge value={row.rmStatus} />
         </div>
       </div>
-      <TileField label="Description" value={row.description || row.DESCRIPTION} />
+      <TileField
+        label="Description"
+        value={row.description || row.DESCRIPTION}
+      />
       <div className="grid gap-2 rounded-md border bg-muted/20 p-2 sm:grid-cols-2">
-        <TileField label="Planned production start" value={schedule.plannedStart} />
+        <TileField
+          label="Planned production start"
+          value={schedule.plannedStart}
+        />
         <TileField label="Planned production end" value={schedule.plannedEnd} />
-        <TileField label="Actual production start" value={schedule.actualStart} />
+        <TileField
+          label="Actual production start"
+          value={schedule.actualStart}
+        />
         <TileField label="Actual production end" value={schedule.actualEnd} />
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         <TileField label="FG PO" value={row.fgPoNo || row["FG PO NO."]} />
-        <TileField label="Order pcs" value={row.orderPcs || row["ORD. PCS."]} numeric />
+        <TileField
+          label="Order pcs"
+          value={row.orderPcs || row["ORD. PCS."]}
+          numeric
+        />
         <TileField label="Route option" value={option} />
         <TileField label="Option source" value={row.optionSource} />
         <TileField label="Route" value={row.routeStatus} />
         <TileField label="Cycle" value={row.cycleStatus} />
         <TileField label="Tooling" value={row.toolingStatus} />
-        <TileField label="Actual / output" value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`} />
+        <TileField
+          label="Actual / output"
+          value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`}
+        />
         <TileField label="Rejected" value={row.rawRejectQty} numeric />
         <TileField label="Raw rows" value={row.rawRows} numeric />
       </div>
       {setupRows.length ? (
         <div className="grid gap-2">
-          <div className="text-[11px] font-medium uppercase text-muted-foreground">Setup jobs</div>
+          <div className="text-[11px] font-medium text-muted-foreground uppercase">
+            Setup jobs
+          </div>
           <div className="grid max-h-48 gap-2 overflow-y-auto pr-1">
             {setupRows.map((setup, index) => (
-              <div key={`${displayValue(setup.setupNo)}-${displayValue(setup.machine)}-${index}`} className="rounded-md border bg-muted/10 p-2">
+              <div
+                key={`${displayValue(setup.setupNo)}-${displayValue(setup.machine)}-${index}`}
+                className="rounded-md border bg-muted/10 p-2"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-medium">Setup {displayValue(setup.setupNo)} / {displayValue(setup.machine)}</div>
+                  <div className="text-sm font-medium">
+                    Setup {displayValue(setup.setupNo)} /{" "}
+                    {displayValue(setup.machine)}
+                  </div>
                   <StatusBadge value={setup.runningStatus} />
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <TileField label="Setup planned date" value={setup.setupPlannedDate || setup.plannedDate} />
-                  <TileField label="Setup completion date" value={setup.setupCompletionDate || setup.completionDate} />
-                  <TileField label="Plan vs actual" value={setup.planVsActual} />
-                  <TileField label="Planned production start" value={setup.plannedProductionStartDate} />
-                  <TileField label="Planned production end" value={setup.plannedProductionEndDate} />
-                  <TileField label="Actual production start" value={setup.actualProductionStartDate} />
-                  <TileField label="Actual production end" value={setup.actualProductionEndDate} />
+                  <TileField
+                    label="Setup planned date"
+                    value={setup.setupPlannedDate || setup.plannedDate}
+                  />
+                  <TileField
+                    label="Setup completion date"
+                    value={setup.setupCompletionDate || setup.completionDate}
+                  />
+                  <TileField
+                    label="Plan vs actual"
+                    value={setup.planVsActual}
+                  />
+                  <TileField
+                    label="Planned production start"
+                    value={setup.plannedProductionStartDate}
+                  />
+                  <TileField
+                    label="Planned production end"
+                    value={setup.plannedProductionEndDate}
+                  />
+                  <TileField
+                    label="Actual production start"
+                    value={setup.actualProductionStartDate}
+                  />
+                  <TileField
+                    label="Actual production end"
+                    value={setup.actualProductionEndDate}
+                  />
                 </div>
               </div>
             ))}
@@ -7415,67 +12613,112 @@ function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: Das
       ) : null}
       <TileField label="Planning action" value={blocker} important />
     </article>
-  );
+  )
 }
 
 function MachinePlanningBoard({
   rows,
   plannedRows,
 }: {
-  rows: DashboardPayload[];
-  plannedRows: DashboardPayload[];
+  rows: DashboardPayload[]
+  plannedRows: DashboardPayload[]
 }) {
-  const [query, setQuery] = useState("");
-  const [searchField, setSearchField] = useState("all");
-  const boardRows = useMemo(() => machineBoardRows(rows, plannedRows), [plannedRows, rows]);
-  const machineTypes = useMemo(() => uniqueValues(boardRows.map((row) => machineValue(row, "machineType")).filter((value) => value !== "-")), [boardRows]);
-  const [machineType, setMachineType] = useState("all");
-  const [machineFilter, setMachineFilter] = useState("");
-  const [jobCardFilter, setJobCardFilter] = useState("");
-  const [itemCodeFilter, setItemCodeFilter] = useState("");
-  const [runningFilter, setRunningFilter] = useState("all");
-  const [selectedMachine, setSelectedMachine] = useState("");
-  const plannedByMachine = useMemo(() => groupPlannedRowsByMachine(plannedRows), [plannedRows]);
-  const jobCardOptions = useMemo(() => uniqueValues(plannedRows.map(jobCardNumber).filter((value) => value !== "-")), [plannedRows]);
-  const itemCodeOptions = useMemo(() => uniqueValues(plannedRows.map(itemCode).filter((value) => value !== "-")), [plannedRows]);
+  const [query, setQuery] = useState("")
+  const [searchField, setSearchField] = useState("all")
+  const boardRows = useMemo(
+    () => machineBoardRows(rows, plannedRows),
+    [plannedRows, rows]
+  )
+  const machineTypes = useMemo(
+    () =>
+      uniqueValues(
+        boardRows
+          .map((row) => machineValue(row, "machineType"))
+          .filter((value) => value !== "-")
+      ),
+    [boardRows]
+  )
+  const [machineType, setMachineType] = useState("all")
+  const [machineFilter, setMachineFilter] = useState("")
+  const [jobCardFilter, setJobCardFilter] = useState("")
+  const [itemCodeFilter, setItemCodeFilter] = useState("")
+  const [runningFilter, setRunningFilter] = useState("all")
+  const [selectedMachine, setSelectedMachine] = useState("")
+  const plannedByMachine = useMemo(
+    () => groupPlannedRowsByMachine(plannedRows),
+    [plannedRows]
+  )
+  const jobCardOptions = useMemo(
+    () =>
+      uniqueValues(
+        plannedRows.map(jobCardNumber).filter((value) => value !== "-")
+      ),
+    [plannedRows]
+  )
+  const itemCodeOptions = useMemo(
+    () =>
+      uniqueValues(plannedRows.map(itemCode).filter((value) => value !== "-")),
+    [plannedRows]
+  )
   const machineOptions = useMemo(
     () => plannedMachineOptions(plannedRows, boardRows),
-    [boardRows, plannedRows],
-  );
+    [boardRows, plannedRows]
+  )
   const filteredRows = useMemo(
-    () => boardRows.filter((row) => {
-      const machine = machineValue(row, "machine");
-      const isRunning = machineIsRunning(machine, plannedByMachine);
-      return (
-        rowMatchesMachineQuery(row, query, searchField, plannedByMachine) &&
-        typedFilterMatches(machine, machineFilter) &&
-        machineMatchesJobCard(machine, jobCardFilter, plannedByMachine) &&
-        machineMatchesItemCode(machine, itemCodeFilter, plannedByMachine) &&
-        (machineType === "all" || machineValue(row, "machineType") === machineType) &&
-        (runningFilter === "all" || (runningFilter === "running" ? isRunning : !isRunning))
-      );
-    }),
-    [boardRows, itemCodeFilter, jobCardFilter, machineFilter, machineType, plannedByMachine, query, runningFilter, searchField],
-  );
-  const runningRows = boardRows.filter((row) => machineIsRunning(machineValue(row, "machine"), plannedByMachine)).length;
-  const selectedPlans = selectedMachine ? plannedByMachine.get(machineKey(selectedMachine)) ?? [] : [];
+    () =>
+      boardRows.filter((row) => {
+        const machine = machineValue(row, "machine")
+        const isRunning = machineIsRunning(machine, plannedByMachine)
+        return (
+          rowMatchesMachineQuery(row, query, searchField, plannedByMachine) &&
+          typedFilterMatches(machine, machineFilter) &&
+          machineMatchesJobCard(machine, jobCardFilter, plannedByMachine) &&
+          machineMatchesItemCode(machine, itemCodeFilter, plannedByMachine) &&
+          (machineType === "all" ||
+            machineValue(row, "machineType") === machineType) &&
+          (runningFilter === "all" ||
+            (runningFilter === "running" ? isRunning : !isRunning))
+        )
+      }),
+    [
+      boardRows,
+      itemCodeFilter,
+      jobCardFilter,
+      machineFilter,
+      machineType,
+      plannedByMachine,
+      query,
+      runningFilter,
+      searchField,
+    ]
+  )
+  const runningRows = boardRows.filter((row) =>
+    machineIsRunning(machineValue(row, "machine"), plannedByMachine)
+  ).length
+  const selectedPlans = selectedMachine
+    ? (plannedByMachine.get(machineKey(selectedMachine)) ?? [])
+    : []
 
   function clearMachineFilters() {
-    setQuery("");
-    setSearchField("all");
-    setMachineType("all");
-    setMachineFilter("");
-    setJobCardFilter("");
-    setItemCodeFilter("");
-    setRunningFilter("all");
-    setSelectedMachine("");
+    setQuery("")
+    setSearchField("all")
+    setMachineType("all")
+    setMachineFilter("")
+    setJobCardFilter("")
+    setItemCodeFilter("")
+    setRunningFilter("all")
+    setSelectedMachine("")
   }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Machine planning board</CardTitle>
-        <CardDescription>{boardRows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(boardRows.length)} machines shown` : "No machine planning board rows returned"}</CardDescription>
+        <CardDescription>
+          {boardRows.length
+            ? `${formatNumber(filteredRows.length)} of ${formatNumber(boardRows.length)} machines shown`
+            : "No machine planning board rows returned"}
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {boardRows.length ? (
@@ -7506,7 +12749,12 @@ function MachinePlanningBoard({
               selectLabel="Machine type"
               selectValue={machineType}
               onSelectChange={setMachineType}
-              options={[["all", "All machine types"], ...machineTypes.map((value) => [value, value] as [string, string])]}
+              options={[
+                ["all", "All machine types"],
+                ...machineTypes.map(
+                  (value) => [value, value] as [string, string]
+                ),
+              ]}
               secondarySelectLabel="Running"
               secondarySelectValue={runningFilter}
               onSecondarySelectChange={setRunningFilter}
@@ -7545,7 +12793,12 @@ function MachinePlanningBoard({
               ]}
             />
             <div>
-              <Button type="button" variant="outline" size="sm" onClick={clearMachineFilters}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={clearMachineFilters}
+              >
                 Clear filters
               </Button>
             </div>
@@ -7555,24 +12808,43 @@ function MachinePlanningBoard({
                   <MachinePlanningTile
                     key={`${machineValue(row, "machine")}-${index}`}
                     row={row}
-                    plannedRows={plannedByMachine.get(machineKey(machineValue(row, "machine"))) ?? []}
-                    isRunning={machineIsRunning(machineValue(row, "machine"), plannedByMachine)}
-                    selected={machineKey(selectedMachine) === machineKey(machineValue(row, "machine"))}
-                    onSelect={() => setSelectedMachine(machineValue(row, "machine"))}
+                    plannedRows={
+                      plannedByMachine.get(
+                        machineKey(machineValue(row, "machine"))
+                      ) ?? []
+                    }
+                    isRunning={machineIsRunning(
+                      machineValue(row, "machine"),
+                      plannedByMachine
+                    )}
+                    selected={
+                      machineKey(selectedMachine) ===
+                      machineKey(machineValue(row, "machine"))
+                    }
+                    onSelect={() =>
+                      setSelectedMachine(machineValue(row, "machine"))
+                    }
                   />
                 ))}
               </div>
             ) : (
-              <EmptyRowsMessage>No machines match the current filters</EmptyRowsMessage>
+              <EmptyRowsMessage>
+                No machines match the current filters
+              </EmptyRowsMessage>
             )}
-            <MachinePlannedPartsPanel machine={selectedMachine} rows={selectedPlans} />
+            <MachinePlannedPartsPanel
+              machine={selectedMachine}
+              rows={selectedPlans}
+            />
           </>
         ) : (
-          <EmptyRowsMessage>No machine planning board rows returned</EmptyRowsMessage>
+          <EmptyRowsMessage>
+            No machine planning board rows returned
+          </EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function MachinePlanningTile({
@@ -7582,21 +12854,26 @@ function MachinePlanningTile({
   selected,
   onSelect,
 }: {
-  row: DashboardPayload;
-  plannedRows: DashboardPayload[];
-  isRunning: boolean;
-  selected: boolean;
-  onSelect: () => void;
+  row: DashboardPayload
+  plannedRows: DashboardPayload[]
+  isRunning: boolean
+  selected: boolean
+  onSelect: () => void
 }) {
-  const machine = machineValue(row, "machine");
-  const machineType = machineValue(row, "machineType");
-  const status = machineMasterStatusText(row);
-  const plannedCount = plannedRows.length;
-  const planningStatus = machinePlanningStatus(plannedRows);
-  const currentSetup = currentShopFloorItem(plannedRows);
-  const nextSetup = nextShopFloorItem(plannedRows, currentSetup);
-  const focusSetup = currentSetup ?? nextSetup ?? machineTileFocusSetup(plannedRows);
-  const focusIsCurrent = Boolean(currentSetup && focusSetup && shopFloorPlanKey(focusSetup) === shopFloorPlanKey(currentSetup));
+  const machine = machineValue(row, "machine")
+  const machineType = machineValue(row, "machineType")
+  const status = machineMasterStatusText(row)
+  const plannedCount = plannedRows.length
+  const planningStatus = machinePlanningStatus(plannedRows)
+  const currentSetup = currentShopFloorItem(plannedRows)
+  const nextSetup = nextShopFloorItem(plannedRows, currentSetup)
+  const focusSetup =
+    currentSetup ?? nextSetup ?? machineTileFocusSetup(plannedRows)
+  const focusIsCurrent = Boolean(
+    currentSetup &&
+    focusSetup &&
+    shopFloorPlanKey(focusSetup) === shopFloorPlanKey(currentSetup)
+  )
 
   return (
     <button
@@ -7606,49 +12883,129 @@ function MachinePlanningTile({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="break-words text-[13px] font-semibold">{machine}</div>
-          <div className="break-words text-xs text-muted-foreground">{machineType}</div>
+          <div className="text-[13px] font-semibold break-words">{machine}</div>
+          <div className="text-xs break-words text-muted-foreground">
+            {machineType}
+          </div>
         </div>
         <div className="flex flex-wrap justify-end gap-1">
-          <MachineStateBadge label="Run" value={isRunning ? "Running" : "Not running"} tone={isRunning ? "success" : "neutral"} />
-          <MachineStateBadge label="Plan" value={planningStatus} tone={machinePlanningTone(planningStatus)} />
-          <MachineStateBadge label="Master" value={status} tone={status === "Active" ? "success" : status === "Inactive" ? "danger" : "warning"} />
+          <MachineStateBadge
+            label="Run"
+            value={isRunning ? "Running" : "Not running"}
+            tone={isRunning ? "success" : "neutral"}
+          />
+          <MachineStateBadge
+            label="Plan"
+            value={planningStatus}
+            tone={machinePlanningTone(planningStatus)}
+          />
+          <MachineStateBadge
+            label="Master"
+            value={status}
+            tone={
+              status === "Active"
+                ? "success"
+                : status === "Inactive"
+                  ? "danger"
+                  : "warning"
+            }
+          />
         </div>
       </div>
       <div className="grid gap-x-2 gap-y-1.5 sm:grid-cols-2">
-        <TileField label="Location" value={row.location || row.LOCATION || row.Location} />
-        <TileField label="Capacity" value={row.capacity || row.CAPACITY || row.Capacity} numeric />
-        <TileField label="Operator" value={row.operator || row.operatorName || row["OPERATOR NAME"]} />
+        <TileField
+          label="Location"
+          value={row.location || row.LOCATION || row.Location}
+        />
+        <TileField
+          label="Capacity"
+          value={row.capacity || row.CAPACITY || row.Capacity}
+          numeric
+        />
+        <TileField
+          label="Operator"
+          value={row.operator || row.operatorName || row["OPERATOR NAME"]}
+        />
         <TileField label="Planned setups" value={plannedCount} numeric />
         <TileField label="Priority" value={row.priority || row.PRIORITY} />
-        <TileField label={focusIsCurrent ? "Current job card" : "Next job card"} value={focusSetup?.jcNo || row.jcNo || row.jobCard || row.JobCardNo} />
-        <TileField label={focusIsCurrent ? "Current part" : "Next part to setup"} value={focusSetup?.partCode || row.partCode || row["PART CODE"] || row.itemCode} />
-        <TileField label="Setup" value={focusSetup ? `${displayValue(focusSetup.setupNo)} / Option ${displayValue(focusSetup.optionNumber)}` : "-"} />
-        <TileField label={focusIsCurrent ? "Setup completion date" : "Setup planned date"} value={focusIsCurrent ? focusSetup?.setupCompletionDate || focusSetup?.completionDate : focusSetup?.setupPlannedDate || focusSetup?.plannedDate} />
-        <TileField label="Remarks" value={row.remark || row.remarks || row.REMARKS} important />
+        <TileField
+          label={focusIsCurrent ? "Current job card" : "Next job card"}
+          value={focusSetup?.jcNo || row.jcNo || row.jobCard || row.JobCardNo}
+        />
+        <TileField
+          label={focusIsCurrent ? "Current part" : "Next part to setup"}
+          value={
+            focusSetup?.partCode ||
+            row.partCode ||
+            row["PART CODE"] ||
+            row.itemCode
+          }
+        />
+        <TileField
+          label="Setup"
+          value={
+            focusSetup
+              ? `${displayValue(focusSetup.setupNo)} / Option ${displayValue(focusSetup.optionNumber)}`
+              : "-"
+          }
+        />
+        <TileField
+          label={
+            focusIsCurrent ? "Setup completion date" : "Setup planned date"
+          }
+          value={
+            focusIsCurrent
+              ? focusSetup?.setupCompletionDate || focusSetup?.completionDate
+              : focusSetup?.setupPlannedDate || focusSetup?.plannedDate
+          }
+        />
+        <TileField
+          label="Remarks"
+          value={row.remark || row.remarks || row.REMARKS}
+          important
+        />
       </div>
     </button>
-  );
+  )
 }
 
-function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: DashboardPayload[] }) {
+function MachinePlannedPartsPanel({
+  machine,
+  rows,
+}: {
+  machine: string
+  rows: DashboardPayload[]
+}) {
   return (
     <section className="grid gap-3 rounded-lg border bg-muted/20 p-3">
       <div>
-        <div className="text-sm font-semibold">{machine ? `Planned parts on ${machine}` : "Select a machine to see planned parts"}</div>
+        <div className="text-sm font-semibold">
+          {machine
+            ? `Planned parts on ${machine}`
+            : "Select a machine to see planned parts"}
+        </div>
         <div className="text-xs text-muted-foreground">
-          {machine ? `${formatNumber(rows.length)} planned setup rows` : "Click any machine tile above to open its route-level part plan."}
+          {machine
+            ? `${formatNumber(rows.length)} planned setup rows`
+            : "Click any machine tile above to open its route-level part plan."}
         </div>
       </div>
       {machine ? (
         rows.length ? (
           <div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
             {rows.map((row, index) => (
-              <article key={`${displayValue(row.jcNo)}-${displayValue(row.setupNo)}-${index}`} className="grid gap-2 rounded-lg border bg-background p-3">
+              <article
+                key={`${displayValue(row.jcNo)}-${displayValue(row.setupNo)}-${index}`}
+                className="grid gap-2 rounded-lg border bg-background p-3"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="break-words text-sm font-semibold">{displayValue(row.partCode)}</div>
-                    <div className="break-words text-xs text-muted-foreground">{displayValue(row.description)}</div>
+                    <div className="text-sm font-semibold break-words">
+                      {displayValue(row.partCode)}
+                    </div>
+                    <div className="text-xs break-words text-muted-foreground">
+                      {displayValue(row.description)}
+                    </div>
                   </div>
                   <div className="flex flex-wrap justify-end gap-1.5">
                     <StatusBadge value={row.runningStatus} />
@@ -7659,15 +13016,39 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
                   <TileField label="Job card" value={row.jcNo} />
                   <TileField label="FG PO" value={row.fgPoNo} />
                   <TileField label="Option" value={row.optionNumber} />
-                  <TileField label="Setup" value={`${displayValue(row.setupNo)} ${displayValue(row.setupName) !== "-" ? displayValue(row.setupName) : ""}`} />
+                  <TileField
+                    label="Setup"
+                    value={`${displayValue(row.setupNo)} ${displayValue(row.setupName) !== "-" ? displayValue(row.setupName) : ""}`}
+                  />
                   <TileField label="Order pcs" value={row.orderPcs} numeric />
-                  <TileField label="Actual / output" value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`} />
-                  <TileField label="Setup planned date" value={row.setupPlannedDate || row.plannedDate} />
-                  <TileField label="Setup completion date" value={row.setupCompletionDate || row.completionDate} />
-                  <TileField label="Planned production start" value={row.plannedProductionStartDate} />
-                  <TileField label="Planned production end" value={row.plannedProductionEndDate} />
-                  <TileField label="Actual production start" value={row.actualProductionStartDate} />
-                  <TileField label="Actual production end" value={row.actualProductionEndDate} />
+                  <TileField
+                    label="Actual / output"
+                    value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`}
+                  />
+                  <TileField
+                    label="Setup planned date"
+                    value={row.setupPlannedDate || row.plannedDate}
+                  />
+                  <TileField
+                    label="Setup completion date"
+                    value={row.setupCompletionDate || row.completionDate}
+                  />
+                  <TileField
+                    label="Planned production start"
+                    value={row.plannedProductionStartDate}
+                  />
+                  <TileField
+                    label="Planned production end"
+                    value={row.plannedProductionEndDate}
+                  />
+                  <TileField
+                    label="Actual production start"
+                    value={row.actualProductionStartDate}
+                  />
+                  <TileField
+                    label="Actual production end"
+                    value={row.actualProductionEndDate}
+                  />
                   <TileField label="Plan vs actual" value={row.planVsActual} />
                   <TileField label="Cycle" value={row.cycleStatus} />
                   <TileField label="Tooling" value={row.toolingStatus} />
@@ -7676,36 +13057,50 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
             ))}
           </div>
         ) : (
-          <EmptyRowsMessage>No planned parts found for this machine</EmptyRowsMessage>
+          <EmptyRowsMessage>
+            No planned parts found for this machine
+          </EmptyRowsMessage>
         )
       ) : null}
     </section>
-  );
+  )
 }
 
-function TrackingSummary({ items }: { items: Array<[string, string, (() => void)?]> }) {
+function TrackingSummary({
+  items,
+}: {
+  items: Array<[string, string, (() => void)?]>
+}) {
   return (
     <div className="grid gap-2 sm:grid-cols-2 @4xl/main:grid-cols-5">
       {items.map(([label, value, onClick]) => {
-        const className = "rounded-lg border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-background to-green-100/70 p-2.5 text-left shadow-sm shadow-emerald-950/5 dark:border-emerald-900/50 dark:from-emerald-950/35 dark:via-background dark:to-green-950/25";
+        const className =
+          "rounded-lg border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-background to-green-100/70 p-2.5 text-left shadow-sm shadow-emerald-950/5 dark:border-emerald-900/50 dark:from-emerald-950/35 dark:via-background dark:to-green-950/25"
         const content = (
           <>
-            <div className="text-[10px] font-medium uppercase text-emerald-800 dark:text-emerald-200">{label}</div>
+            <div className="text-[10px] font-medium text-emerald-800 uppercase dark:text-emerald-200">
+              {label}
+            </div>
             <div className="text-base font-semibold tabular-nums">{value}</div>
           </>
-        );
+        )
         return onClick ? (
-          <button key={label} type="button" className={`${className} transition hover:border-emerald-400 hover:shadow-md focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30`} onClick={onClick}>
+          <button
+            key={label}
+            type="button"
+            className={`${className} transition hover:border-emerald-400 hover:shadow-md focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30`}
+            onClick={onClick}
+          >
             {content}
           </button>
         ) : (
           <div key={label} className={className}>
             {content}
           </div>
-        );
+        )
       })}
     </div>
-  );
+  )
 }
 
 function TrackingFilters({
@@ -7725,38 +13120,61 @@ function TrackingFilters({
   onSecondarySelectChange,
   secondaryOptions,
 }: {
-  query: string;
-  queryPlaceholder: string;
-  onQueryChange: (value: string) => void;
-  searchFieldLabel: string;
-  searchFieldValue: string;
-  onSearchFieldChange: (value: string) => void;
-  searchFieldOptions: Array<[string, string]>;
-  selectLabel: string;
-  selectValue: string;
-  onSelectChange: (value: string) => void;
-  options: Array<[string, string]>;
-  secondarySelectLabel?: string;
-  secondarySelectValue?: string;
-  onSecondarySelectChange?: (value: string) => void;
-  secondaryOptions?: Array<[string, string]>;
+  query: string
+  queryPlaceholder: string
+  onQueryChange: (value: string) => void
+  searchFieldLabel: string
+  searchFieldValue: string
+  onSearchFieldChange: (value: string) => void
+  searchFieldOptions: Array<[string, string]>
+  selectLabel: string
+  selectValue: string
+  onSelectChange: (value: string) => void
+  options: Array<[string, string]>
+  secondarySelectLabel?: string
+  secondarySelectValue?: string
+  onSecondarySelectChange?: (value: string) => void
+  secondaryOptions?: Array<[string, string]>
 }) {
   return (
     <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_180px_220px_180px]">
       <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
         <span>Search</span>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-9" value={query} placeholder={queryPlaceholder} onChange={(event) => onQueryChange(event.target.value)} />
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            value={query}
+            placeholder={queryPlaceholder}
+            onChange={(event) => onQueryChange(event.target.value)}
+          />
         </div>
       </Label>
-      <FilterSelect label={searchFieldLabel} value={searchFieldValue} onChange={onSearchFieldChange} options={searchFieldOptions} />
-      <FilterSelect label={selectLabel} value={selectValue} onChange={onSelectChange} options={options} />
-      {secondarySelectLabel && secondarySelectValue && onSecondarySelectChange && secondaryOptions ? (
-        <FilterSelect label={secondarySelectLabel} value={secondarySelectValue} onChange={onSecondarySelectChange} options={secondaryOptions} />
+      <FilterSelect
+        label={searchFieldLabel}
+        value={searchFieldValue}
+        onChange={onSearchFieldChange}
+        options={searchFieldOptions}
+      />
+      <FilterSelect
+        label={selectLabel}
+        value={selectValue}
+        onChange={onSelectChange}
+        options={options}
+      />
+      {secondarySelectLabel &&
+      secondarySelectValue &&
+      onSecondarySelectChange &&
+      secondaryOptions ? (
+        <FilterSelect
+          label={secondarySelectLabel}
+          value={secondarySelectValue}
+          onChange={onSecondarySelectChange}
+          options={secondaryOptions}
+        />
       ) : null}
     </div>
-  );
+  )
 }
 
 function FilterSelect({
@@ -7765,27 +13183,27 @@ function FilterSelect({
   onChange,
   options,
 }: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<[string, string]>;
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: Array<[string, string]>
 }) {
   return (
-      <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
-        <span>{label}</span>
-        <select
-          className="h-9 rounded-3xl border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors hover:border-primary/45 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 dark:bg-input/20"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          {options.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </Label>
-  );
+    <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
+      <span>{label}</span>
+      <select
+        className="h-9 rounded-3xl border border-input bg-background px-3 text-sm shadow-xs transition-colors outline-none hover:border-primary/45 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 dark:bg-input/20"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+    </Label>
+  )
 }
 
 function MachineMasterColumnFilter({
@@ -7794,10 +13212,10 @@ function MachineMasterColumnFilter({
   onChange,
   options,
 }: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: string[];
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: string[]
 }) {
   return (
     <select
@@ -7808,31 +13226,36 @@ function MachineMasterColumnFilter({
     >
       <option value="">All</option>
       {options.map((option) => (
-        <option key={option} value={option}>{option}</option>
+        <option key={option} value={option}>
+          {option}
+        </option>
       ))}
     </select>
-  );
+  )
 }
 
 function ExcelStyleFilters({
   filters,
 }: {
   filters: Array<{
-    id: string;
-    label: string;
-    value: string;
-    placeholder: string;
-    options: string[];
-    onChange: (value: string) => void;
-  }>;
+    id: string
+    label: string
+    value: string
+    placeholder: string
+    options: string[]
+    onChange: (value: string) => void
+  }>
 }) {
   return (
     <div className="grid gap-3 @4xl/main:grid-cols-3">
       {filters.map((filter) => (
-        <Label key={filter.id} className="grid gap-1 text-xs font-medium text-muted-foreground">
+        <Label
+          key={filter.id}
+          className="grid gap-1 text-xs font-medium text-muted-foreground"
+        >
           <span>{filter.label}</span>
           <select
-            className="h-9 rounded-3xl border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors hover:border-primary/45 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 dark:bg-input/20"
+            className="h-9 rounded-3xl border border-input bg-background px-3 text-sm shadow-xs transition-colors outline-none hover:border-primary/45 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 dark:bg-input/20"
             value={filter.value}
             onChange={(event) => filter.onChange(event.target.value)}
           >
@@ -7846,7 +13269,7 @@ function ExcelStyleFilters({
         </Label>
       ))}
     </div>
-  );
+  )
 }
 
 function TileField({
@@ -7855,40 +13278,64 @@ function TileField({
   numeric,
   important,
 }: {
-  label: string;
-  value: unknown;
-  numeric?: boolean;
-  important?: boolean;
+  label: string
+  value: unknown
+  numeric?: boolean
+  important?: boolean
 }) {
-  const text = displayValue(value, numeric);
+  const text = displayValue(value, numeric)
   return (
     <div className="min-w-0">
-      <div className="text-[11px] font-medium uppercase text-muted-foreground">{label}</div>
-      <div className={important ? "break-words text-sm font-medium" : "break-words text-sm"}>{text}</div>
+      <div className="text-[11px] font-medium text-muted-foreground uppercase">
+        {label}
+      </div>
+      <div
+        className={
+          important ? "text-sm font-medium break-words" : "text-sm break-words"
+        }
+      >
+        {text}
+      </div>
     </div>
-  );
+  )
 }
 
 function StatusBadge({ value }: { value: unknown }) {
-  const text = displayValue(value);
-  const normalized = text.toLowerCase();
-  const toneClass = statusBadgeToneClass(normalized);
+  const text = displayValue(value)
+  const normalized = text.toLowerCase()
+  const toneClass = statusBadgeToneClass(normalized)
 
   return (
     <Badge variant="outline" className={toneClass}>
       {text}
     </Badge>
-  );
+  )
 }
 
 function statusBadgeToneClass(normalized: string) {
-  if (normalized === "-") return "border-slate-300 bg-slate-50 text-slate-700";
-  if (normalized.includes("in production") || normalized.includes("running")) return "border-sky-300 bg-sky-50 text-sky-800";
-  if (normalized === "ok") return "border-emerald-300 bg-emerald-50 text-emerald-800";
-  if (normalized.includes("ready") || normalized.includes("received") || normalized.includes("dispatch") || normalized.includes("setup complete") || normalized.includes("on time")) return "border-emerald-300 bg-emerald-50 text-emerald-800";
-  if (normalized.includes("early")) return "border-sky-300 bg-sky-50 text-sky-800";
-  if (normalized === "not ok" || normalized === "ng") return "border-red-300 bg-red-50 text-red-800";
-  if (normalized.includes("waiting") || normalized.includes("pending") || normalized.includes("shifted")) return "border-amber-300 bg-amber-50 text-amber-800";
+  if (normalized === "-") return "border-slate-300 bg-slate-50 text-slate-700"
+  if (normalized.includes("in production") || normalized.includes("running"))
+    return "border-sky-300 bg-sky-50 text-sky-800"
+  if (normalized === "ok")
+    return "border-emerald-300 bg-emerald-50 text-emerald-800"
+  if (
+    normalized.includes("ready") ||
+    normalized.includes("received") ||
+    normalized.includes("dispatch") ||
+    normalized.includes("setup complete") ||
+    normalized.includes("on time")
+  )
+    return "border-emerald-300 bg-emerald-50 text-emerald-800"
+  if (normalized.includes("early"))
+    return "border-sky-300 bg-sky-50 text-sky-800"
+  if (normalized === "not ok" || normalized === "ng")
+    return "border-red-300 bg-red-50 text-red-800"
+  if (
+    normalized.includes("waiting") ||
+    normalized.includes("pending") ||
+    normalized.includes("shifted")
+  )
+    return "border-amber-300 bg-amber-50 text-amber-800"
   if (
     normalized.includes("delayed") ||
     normalized.includes("need") ||
@@ -7897,9 +13344,9 @@ function statusBadgeToneClass(normalized: string) {
     normalized.includes("required") ||
     normalized.includes("breakdown")
   ) {
-    return "border-red-300 bg-red-50 text-red-800";
+    return "border-red-300 bg-red-50 text-red-800"
   }
-  return "border-slate-300 bg-slate-50 text-slate-700";
+  return "border-slate-300 bg-slate-50 text-slate-700"
 }
 
 function MachineStateBadge({
@@ -7907,9 +13354,9 @@ function MachineStateBadge({
   value,
   tone,
 }: {
-  label: string;
-  value: string;
-  tone: "success" | "planning" | "warning" | "danger" | "neutral";
+  label: string
+  value: string
+  tone: "success" | "planning" | "warning" | "danger" | "neutral"
 }) {
   const toneClass = {
     success: "border-emerald-300 bg-emerald-50 text-emerald-800",
@@ -7917,13 +13364,15 @@ function MachineStateBadge({
     warning: "border-amber-300 bg-amber-50 text-amber-800",
     danger: "border-red-300 bg-red-50 text-red-800",
     neutral: "border-slate-300 bg-slate-50 text-slate-700",
-  }[tone];
+  }[tone]
   return (
     <Badge variant="outline" className={`gap-1 ${toneClass}`}>
-      <span className="text-[10px] font-semibold uppercase opacity-75">{label}</span>
+      <span className="text-[10px] font-semibold uppercase opacity-75">
+        {label}
+      </span>
       <span>{value}</span>
     </Badge>
-  );
+  )
 }
 
 function EmptyRowsMessage({ children }: { children: ReactNode }) {
@@ -7931,17 +13380,27 @@ function EmptyRowsMessage({ children }: { children: ReactNode }) {
     <div className="grid h-28 place-items-center rounded-xl border border-dashed text-sm text-muted-foreground">
       {children}
     </div>
-  );
+  )
 }
 
-function DataRowsCard({ title, rows, empty }: { title: string; rows: DashboardPayload[]; empty: string }) {
-  const columns = tableColumns(rows);
+function DataRowsCard({
+  title,
+  rows,
+  empty,
+}: {
+  title: string
+  rows: DashboardPayload[]
+  empty: string
+}) {
+  const columns = tableColumns(rows)
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{rows.length ? `${formatNumber(rows.length)} rows` : empty}</CardDescription>
+        <CardDescription>
+          {rows.length ? `${formatNumber(rows.length)} rows` : empty}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {rows.length && columns.length ? (
@@ -7958,7 +13417,10 @@ function DataRowsCard({ title, rows, empty }: { title: string; rows: DashboardPa
                 {rows.slice(0, 12).map((row, index) => (
                   <TableRow key={`${title}-${index}`}>
                     {columns.map((column) => (
-                      <TableCell key={column} className="max-w-[18rem] truncate">
+                      <TableCell
+                        key={column}
+                        className="max-w-[18rem] truncate"
+                      >
                         {formatCell(row[column])}
                       </TableCell>
                     ))}
@@ -7972,7 +13434,7 @@ function DataRowsCard({ title, rows, empty }: { title: string; rows: DashboardPa
         )}
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -7981,116 +13443,161 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <span>{label}</span>
       {children}
     </Label>
-  );
+  )
 }
 
 type DashboardActionMutations = {
-  saveRouteSelection: (args: { jcNo: string; optionNumber: string }) => Promise<unknown>;
+  saveRouteSelection: (args: {
+    jcNo: string
+    optionNumber: string
+  }) => Promise<unknown>
   savePlannerPriority: (args: {
-    target: string;
-    jcNo?: string;
-    partCode?: string;
-    priority: string;
-    approvalMode?: string;
-    interruptedJcNo?: string;
-    interruptedSetupNo?: string;
-    interruptedMachine?: string;
-    interruptedFinishedQty?: number;
-    interruptedSetups?: Array<{ jcNo: string; setupNo: string; machine: string; finishedQty?: number }>;
-    queueBeforeSetups?: Array<{ targetSetupNo: string; jcNo: string; setupNo: string; machine: string }>;
-    remark?: string;
-  }) => Promise<unknown>;
+    target: string
+    jcNo?: string
+    partCode?: string
+    priority: string
+    approvalMode?: string
+    interruptedJcNo?: string
+    interruptedSetupNo?: string
+    interruptedMachine?: string
+    interruptedFinishedQty?: number
+    interruptedSetups?: Array<{
+      jcNo: string
+      setupNo: string
+      machine: string
+      finishedQty?: number
+    }>
+    queueBeforeSetups?: Array<{
+      targetSetupNo: string
+      jcNo: string
+      setupNo: string
+      machine: string
+    }>
+    remark?: string
+  }) => Promise<unknown>
   saveMachineConstraint: (args: {
-    machineNo: string;
-    unavailableFrom: string;
-    unavailableTo: string;
-    reason: string;
-    remark?: string;
-    rescheduleAction?: string;
-    planningMode?: string;
-    interruptedSetups?: Array<{ jcNo: string; setupNo: string; machine: string; finishedQty?: number }>;
+    machineNo: string
+    unavailableFrom: string
+    unavailableTo: string
+    reason: string
+    remark?: string
+    rescheduleAction?: string
+    planningMode?: string
+    interruptedSetups?: Array<{
+      jcNo: string
+      setupNo: string
+      machine: string
+      finishedQty?: number
+    }>
     queuePlacements?: Array<{
-      targetJcNo: string;
-      targetPartCode?: string;
-      targetSetupNo: string;
-      targetSourceMachine?: string;
-      targetMachine: string;
-      queueBeforeSetups?: Array<{ jcNo: string; setupNo: string; machine: string }>;
-    }>;
-  }) => Promise<unknown>;
+      targetJcNo: string
+      targetPartCode?: string
+      targetSetupNo: string
+      targetSourceMachine?: string
+      targetMachine: string
+      queueBeforeSetups?: Array<{
+        jcNo: string
+        setupNo: string
+        machine: string
+      }>
+    }>
+  }) => Promise<unknown>
   savePlanOverride: (args: {
-    target: string;
-    toMachine: string;
-    setupNo?: string;
-    fromMachine?: string;
-    interruptedSetups?: Array<{ jcNo: string; setupNo: string; machine: string; finishedQty?: number }>;
+    target: string
+    toMachine: string
+    setupNo?: string
+    fromMachine?: string
+    interruptedSetups?: Array<{
+      jcNo: string
+      setupNo: string
+      machine: string
+      finishedQty?: number
+    }>
     queuePlacements?: Array<{
-      targetJcNo: string;
-      targetPartCode?: string;
-      targetSetupNo: string;
-      targetSourceMachine?: string;
-      targetMachine: string;
-      queueBeforeSetups?: Array<{ jcNo: string; setupNo: string; machine: string }>;
-    }>;
-    reason?: string;
-  }) => Promise<unknown>;
+      targetJcNo: string
+      targetPartCode?: string
+      targetSetupNo: string
+      targetSourceMachine?: string
+      targetMachine: string
+      queueBeforeSetups?: Array<{
+        jcNo: string
+        setupNo: string
+        machine: string
+      }>
+    }>
+    reason?: string
+  }) => Promise<unknown>
   saveRouteChange: (args: {
-    target: string;
-    newOption: string;
-    changeAfterSetup?: string;
-    applyFromSetup?: string;
-    wipQty?: number;
-    remainingSetups?: Array<{ setupNo: string; plan: boolean; quantity: number; remark?: string }>;
-    reason?: string;
-  }) => Promise<unknown>;
-  saveDispatchApproval: (args: { jcNo: string; approvedBy: string; remark?: string }) => Promise<unknown>;
+    target: string
+    newOption: string
+    changeAfterSetup?: string
+    applyFromSetup?: string
+    wipQty?: number
+    remainingSetups?: Array<{
+      setupNo: string
+      plan: boolean
+      quantity: number
+      remark?: string
+    }>
+    reason?: string
+  }) => Promise<unknown>
+  saveDispatchApproval: (args: {
+    jcNo: string
+    approvedBy: string
+    remark?: string
+  }) => Promise<unknown>
   markComplete: (args: {
-    jcNo: string;
-    completedBy: string;
-    remark?: string;
-    setupNo?: string;
-    machine?: string;
-  }) => Promise<unknown>;
+    jcNo: string
+    completedBy: string
+    remark?: string
+    setupNo?: string
+    machine?: string
+  }) => Promise<unknown>
   saveProductionEntry: (args: {
-    prodDate: string;
-    operatorId: string;
-    operatorName?: string;
-    machineType: string;
-    machine: string;
-    partCode: string;
-    jobCard?: string;
-    setupNo?: string;
-    outputQty: number;
-    actualQty?: number;
-    targetQty: number;
-    rejectQty: number;
-    rejectionType?: string;
-    rejectionRemark?: string;
-    downtimeMinutes?: number;
-    downtimeReason?: string;
-  }) => Promise<unknown>;
-  saveDataEntry: (args: { id?: string; entryType: string; key?: string; payload: unknown }) => Promise<unknown>;
+    prodDate: string
+    operatorId: string
+    operatorName?: string
+    machineType: string
+    machine: string
+    partCode: string
+    jobCard?: string
+    setupNo?: string
+    outputQty: number
+    actualQty?: number
+    targetQty: number
+    rejectQty: number
+    rejectionType?: string
+    rejectionRemark?: string
+    downtimeMinutes?: number
+    downtimeReason?: string
+  }) => Promise<unknown>
+  saveDataEntry: (args: {
+    id?: string
+    entryType: string
+    key?: string
+    payload: unknown
+  }) => Promise<unknown>
   reverseEntry: (args: {
-    targetTable: string;
-    targetId: string;
-    targetKey?: string;
-    targetLabel?: string;
-    reason: string;
-    correctedBy: string;
-  }) => Promise<unknown>;
-};
+    targetTable: string
+    targetId: string
+    targetKey?: string
+    targetLabel?: string
+    reason: string
+    correctedBy: string
+  }) => Promise<unknown>
+}
 
 async function runDashboardAction(
   path: string,
   body: Record<string, unknown>,
-  mutations: DashboardActionMutations,
+  mutations: DashboardActionMutations
 ) {
   if (path === "route-selection") {
     await mutations.saveRouteSelection({
       jcNo: text(body.jcNo),
       optionNumber: text(body.optionNumber),
-    });
-    return "Route option saved.";
+    })
+    return "Route option saved."
   }
 
   if (path === "planner-priority") {
@@ -8107,8 +13614,8 @@ async function runDashboardAction(
       interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
       queueBeforeSetups: priorityQueueBeforeSetups(body.queueBeforeSetups),
       remark: optionalText(body.remark),
-    });
-    return "Priority saved.";
+    })
+    return "Priority saved."
   }
 
   if (path === "machine-constraint") {
@@ -8121,9 +13628,11 @@ async function runDashboardAction(
       rescheduleAction: optionalText(body.rescheduleAction),
       planningMode: optionalText(body.planningMode),
       interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
-      queuePlacements: machineConstraintQueuePlacementsInput(body.queuePlacements),
-    });
-    return "Machine issue saved.";
+      queuePlacements: machineConstraintQueuePlacementsInput(
+        body.queuePlacements
+      ),
+    })
+    return "Machine issue saved."
   }
 
   if (path === "plan-override") {
@@ -8133,10 +13642,12 @@ async function runDashboardAction(
       setupNo: optionalText(body.setupNo),
       fromMachine: optionalText(body.fromMachine),
       interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
-      queuePlacements: machineConstraintQueuePlacementsInput(body.queuePlacements),
+      queuePlacements: machineConstraintQueuePlacementsInput(
+        body.queuePlacements
+      ),
       reason: optionalText(body.reason),
-    });
-    return "Plan override saved.";
+    })
+    return "Plan override saved."
   }
 
   if (path === "route-change") {
@@ -8147,19 +13658,21 @@ async function runDashboardAction(
       applyFromSetup: optionalText(body.applyFromSetup),
       wipQty: optionalNumber(body.wipQty),
       remainingSetups: Array.isArray(body.remainingSetups)
-        ? body.remainingSetups.map((row) => {
-          const setup = asRecord(row);
-          return {
-            setupNo: text(setup.setupNo),
-            plan: Boolean(setup.plan),
-            quantity: optionalNumber(setup.quantity) ?? 0,
-            remark: optionalText(setup.remark),
-          };
-        }).filter((row) => row.setupNo)
+        ? body.remainingSetups
+            .map((row) => {
+              const setup = asRecord(row)
+              return {
+                setupNo: text(setup.setupNo),
+                plan: Boolean(setup.plan),
+                quantity: optionalNumber(setup.quantity) ?? 0,
+                remark: optionalText(setup.remark),
+              }
+            })
+            .filter((row) => row.setupNo)
         : undefined,
       reason: optionalText(body.reason),
-    });
-    return "Route change saved.";
+    })
+    return "Route change saved."
   }
 
   if (path === "dispatch-approval") {
@@ -8167,8 +13680,8 @@ async function runDashboardAction(
       jcNo: text(body.jcNo),
       approvedBy: text(body.approvedBy),
       remark: optionalText(body.remark),
-    });
-    return "Dispatch approved.";
+    })
+    return "Dispatch approved."
   }
 
   if (path === "mark-complete") {
@@ -8178,22 +13691,27 @@ async function runDashboardAction(
       remark: optionalText(body.remark),
       setupNo: optionalText(body.setupNo),
       machine: optionalText(body.machine),
-    });
-    return "Job card completion saved.";
+    })
+    return "Job card completion saved."
   }
 
   if (path === "data-entry") {
-    const entryType = text(body.entryType);
-    const payload = asRecord(body.payload);
+    const entryType = text(body.entryType)
+    const payload = asRecord(body.payload)
     if (entryType === "software_raw") {
-      await mutations.saveProductionEntry(toProductionEntry(payload));
-      return "Saved production row.";
+      await mutations.saveProductionEntry(toProductionEntry(payload))
+      return "Saved production row."
     }
-    const id = optionalText(body.id);
-    const key = optionalText(body.key) || dataEntryKey(entryType, payload);
+    const id = optionalText(body.id)
+    const key = optionalText(body.key) || dataEntryKey(entryType, payload)
 
-    await mutations.saveDataEntry({ id: id || undefined, entryType, key: key || undefined, payload });
-    return "Saved to PostgreSQL.";
+    await mutations.saveDataEntry({
+      id: id || undefined,
+      entryType,
+      key: key || undefined,
+      payload,
+    })
+    return "Saved to PostgreSQL."
   }
 
   if (path === "reverse-entry") {
@@ -8204,53 +13722,72 @@ async function runDashboardAction(
       targetLabel: optionalText(body.targetLabel),
       reason: text(body.reason),
       correctedBy: text(body.correctedBy),
-    });
-    return "Entry reversed. Live status recalculated.";
+    })
+    return "Entry reversed. Live status recalculated."
   }
 
   if (path === "reschedule") {
-    throw new Error("Reschedule is not available through the compatibility API.");
+    throw new Error(
+      "Reschedule is not available through the compatibility API."
+    )
   }
 
   if (path === "data-import") {
-    throw new Error("Bulk Excel import is not available through the compatibility API.");
+    throw new Error(
+      "Bulk Excel import is not available through the compatibility API."
+    )
   }
 
-  throw new Error(`Unsupported dashboard action: ${path}`);
+  throw new Error(`Unsupported dashboard action: ${path}`)
 }
 
 function downloadApi(kind: "data-template", entryType: string) {
-  window.location.href = `/api/${kind}?entryType=${encodeURIComponent(entryType)}&t=${Date.now()}`;
+  window.location.href = `/api/${kind}?entryType=${encodeURIComponent(entryType)}&t=${Date.now()}`
 }
 
-async function postDashboardApi(path: string, body: Record<string, unknown>): Promise<DashboardApiResult> {
-  const productionFloorCode = productionFloorFromLocation();
-  const bodyPayload = asRecord(body.payload);
-  const scopedBody = {
-    ...body,
-    productionFloorCode,
-    ...(Object.keys(bodyPayload).length
-      ? { payload: { ...bodyPayload, productionFloorCode } }
-      : {}),
-  };
+async function postDashboardApi(
+  path: string,
+  body: Record<string, unknown>
+): Promise<DashboardApiResult> {
+  const productionFloorCode = productionFloorFromLocation()
+  const bodyPayload = asRecord(body.payload)
+  const scopedBody =
+    path === "reverse-entry"
+      ? {
+          correctionKind: text(body.targetTable),
+          reason: text(body.reason),
+          recordId: text(body.targetId),
+        }
+      : {
+          ...body,
+          productionFloorCode,
+          ...(Object.keys(bodyPayload).length
+            ? { payload: { ...bodyPayload, productionFloorCode } }
+            : {}),
+        }
   const response = await fetch(`/api/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(scopedBody),
-  });
-  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  })
+  const payload = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >
   if (!response.ok) {
-    throw new Error(str(payload.error) || `Request failed with status ${response.status}`);
+    throw new Error(
+      str(payload.error) || `Request failed with status ${response.status}`
+    )
   }
   return {
     message: str(payload.message || payload.savedText) || "Import complete.",
     queued: payload.queued === true,
     skipped: payload.skipped === true,
-  };
+  }
 }
 
 function priorityInterruptedSetups(value: unknown) {
-  if (!Array.isArray(value)) return undefined;
+  if (!Array.isArray(value)) return undefined
   const rows = value
     .map((row) => asRecord(row))
     .map((row) => ({
@@ -8259,23 +13796,28 @@ function priorityInterruptedSetups(value: unknown) {
       machine: text(row.machine),
       finishedQty: optionalNumber(row.finishedQty),
     }))
-    .filter((row) => row.jcNo && row.setupNo && row.machine);
-  return rows.length ? rows : undefined;
+    .filter((row) => row.jcNo && row.setupNo && row.machine)
+  return rows.length ? rows : undefined
 }
 
-
 function machineConstraintQueuePlacementsInput(value: unknown) {
-  if (!Array.isArray(value)) return undefined;
+  if (!Array.isArray(value)) return undefined
   const rows = value
     .map((row) => asRecord(row))
     .map((row) => {
       const queueBeforeSetups = Array.isArray(row.queueBeforeSetups)
-        ? row.queueBeforeSetups.map((queueRow) => asRecord(queueRow)).map((queueRow) => ({
-          jcNo: text(queueRow.jcNo),
-          setupNo: text(queueRow.setupNo),
-          machine: text(queueRow.machine),
-        })).filter((queueRow) => queueRow.jcNo && queueRow.setupNo && queueRow.machine)
-        : [];
+        ? row.queueBeforeSetups
+            .map((queueRow) => asRecord(queueRow))
+            .map((queueRow) => ({
+              jcNo: text(queueRow.jcNo),
+              setupNo: text(queueRow.setupNo),
+              machine: text(queueRow.machine),
+            }))
+            .filter(
+              (queueRow) =>
+                queueRow.jcNo && queueRow.setupNo && queueRow.machine
+            )
+        : []
       return {
         targetJcNo: text(row.targetJcNo),
         targetPartCode: optionalText(row.targetPartCode),
@@ -8283,13 +13825,13 @@ function machineConstraintQueuePlacementsInput(value: unknown) {
         targetSourceMachine: optionalText(row.targetSourceMachine),
         targetMachine: text(row.targetMachine),
         queueBeforeSetups,
-      };
+      }
     })
-    .filter((row) => row.targetJcNo && row.targetSetupNo && row.targetMachine);
-  return rows.length ? rows : undefined;
+    .filter((row) => row.targetJcNo && row.targetSetupNo && row.targetMachine)
+  return rows.length ? rows : undefined
 }
 function priorityQueueBeforeSetups(value: unknown) {
-  if (!Array.isArray(value)) return undefined;
+  if (!Array.isArray(value)) return undefined
   const rows = value
     .map((row) => asRecord(row))
     .map((row) => ({
@@ -8298,37 +13840,39 @@ function priorityQueueBeforeSetups(value: unknown) {
       setupNo: text(row.setupNo),
       machine: text(row.machine),
     }))
-    .filter((row) => row.targetSetupNo && row.jcNo && row.setupNo && row.machine);
-  return rows.length ? rows : undefined;
+    .filter(
+      (row) => row.targetSetupNo && row.jcNo && row.setupNo && row.machine
+    )
+  return rows.length ? rows : undefined
 }
 function formPayload(form: FormData, fields: LegacyField[]) {
-  const payload: Record<string, unknown> = {};
+  const payload: Record<string, unknown> = {}
   for (const field of fields) {
-    const value = String(form.get(field.name) ?? "").trim();
-    if (!value) continue;
-    payload[field.name] = field.type === "number" ? Number(value) : value;
+    const value = String(form.get(field.name) ?? "").trim()
+    if (!value) continue
+    payload[field.name] = field.type === "number" ? Number(value) : value
   }
-  return payload;
+  return payload
 }
 
 function text(value: unknown) {
-  return str(value);
+  return str(value)
 }
 
 function optionalText(value: unknown) {
-  const cleaned = text(value);
-  return cleaned || undefined;
+  const cleaned = text(value)
+  return cleaned || undefined
 }
 
 function optionalNumber(value: unknown) {
-  if (value === undefined || value === null || value === "") return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  if (value === undefined || value === null || value === "") return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 function numeric(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 function toProductionEntry(payload: DashboardPayload) {
@@ -8349,7 +13893,7 @@ function toProductionEntry(payload: DashboardPayload) {
     rejectionRemark: optionalText(payload.rejectionRemark),
     downtimeMinutes: optionalNumber(payload.downtimeMinutes),
     downtimeReason: optionalText(payload.downtimeReason),
-  };
+  }
 }
 
 function routeOptionText(option: DashboardPayload, fallback: string) {
@@ -8357,19 +13901,22 @@ function routeOptionText(option: DashboardPayload, fallback: string) {
     `Option ${str(option.optionNumber) || fallback}`,
     str(option.machineUsed || option.machine || option.machineFamily),
     str(option.setupName),
-    str(option.setupCount || option.numberOfSetups) ? `${str(option.setupCount || option.numberOfSetups)} setups` : "",
+    str(option.setupCount || option.numberOfSetups)
+      ? `${str(option.setupCount || option.numberOfSetups)} setups`
+      : "",
   ]
     .filter(Boolean)
-    .join(" / ");
+    .join(" / ")
 }
 
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("Could not read selected file"));
-    reader.readAsDataURL(file);
-  });
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ""))
+    reader.onerror = () =>
+      reject(reader.error || new Error("Could not read selected file"))
+    reader.readAsDataURL(file)
+  })
 }
 
 function DashboardSkeleton() {
@@ -8386,95 +13933,120 @@ function DashboardSkeleton() {
         <Skeleton className="h-72 rounded-4xl" />
       </div>
     </div>
-  );
+  )
 }
 
 function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(date);
+  }).format(date)
 }
 
 function asRecord(value: unknown): DashboardPayload {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return {};
+    return {}
   }
-  return value as DashboardPayload;
+  return value as DashboardPayload
 }
 
 function asArray(value: unknown): DashboardPayload[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) return []
   return value
-    .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
-    .map((item) => item as DashboardPayload);
+    .filter(
+      (item) =>
+        typeof item === "object" && item !== null && !Array.isArray(item)
+    )
+    .map((item) => item as DashboardPayload)
 }
 
 function str(value: unknown) {
-  if (typeof value === "string") return value.trim();
-  if (value === null || value === undefined) return "";
-  return String(value);
+  if (typeof value === "string") return value.trim()
+  if (value === null || value === undefined) return ""
+  return String(value)
 }
 
 function displayValue(value: unknown, numeric = false) {
-  const textValue = str(value);
-  if (!textValue) return "-";
-  if (numeric && typeof value === "number") return formatNumber(value);
-  if (numeric && Number.isFinite(Number(textValue))) return formatNumber(Number(textValue));
-  return formatCell(value);
+  const textValue = str(value)
+  if (!textValue) return "-"
+  if (numeric && typeof value === "number") return formatNumber(value)
+  if (numeric && Number.isFinite(Number(textValue)))
+    return formatNumber(Number(textValue))
+  return formatCell(value)
 }
 
 function nextPlanningHolidayLabel(rows: DashboardPayload[]) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10)
   const next = rows
     .map((row) => ({
       label: displayValue(row.date),
       value: str(row.dateValue || row.date),
     }))
     .filter((row) => row.value && row.value >= today)
-    .sort((a, b) => a.value.localeCompare(b.value))[0];
-  return next?.label ?? "-";
+    .sort((a, b) => a.value.localeCompare(b.value))[0]
+  return next?.label ?? "-"
 }
 
 type MachineConstraintQueuePlacementPayload = {
-  targetJcNo: string;
-  targetPartCode: string;
-  targetSetupNo: string;
-  targetSourceMachine: string;
-  targetMachine: string;
-  queueBeforeSetups: Array<{ jcNo: string; setupNo: string; machine: string }>;
-};
+  targetJcNo: string
+  targetPartCode: string
+  targetSetupNo: string
+  targetSourceMachine: string
+  targetMachine: string
+  queueBeforeSetups: Array<{ jcNo: string; setupNo: string; machine: string }>
+}
 
-const machineConstraintPlacementSeparator = "::after::";
+const machineConstraintPlacementSeparator = "::after::"
 
-function machineConstraintMovableRows(rows: DashboardPayload[], rescheduleAction: string) {
-  if (machineKey(rescheduleAction) === "delay") return [];
-  return rows.filter((row) => machineIssueRowNeedsProducedQty(row) || !machineIssueRowIsLocked(row));
+function machineConstraintMovableRows(
+  rows: DashboardPayload[],
+  rescheduleAction: string
+) {
+  if (machineKey(rescheduleAction) === "delay") return []
+  return rows.filter(
+    (row) =>
+      machineIssueRowNeedsProducedQty(row) || !machineIssueRowIsLocked(row)
+  )
 }
 
 function machineConstraintQueuePlacements(
   groups: MachineConstraintQueueReviewGroup[],
   movableRows: DashboardPayload[],
-  queueAfterByRow: Record<string, string>,
+  queueAfterByRow: Record<string, string>
 ): MachineConstraintQueuePlacementPayload[] {
-  const destinationGroups = groups.filter((group) => group.kind === "destination");
-  const defaultDestinationMachine = destinationGroups[0]?.machine ?? "";
-  if (!defaultDestinationMachine) return [];
-  const placements: MachineConstraintQueuePlacementPayload[] = [];
-  const seen = new Set<string>();
+  const destinationGroups = groups.filter(
+    (group) => group.kind === "destination"
+  )
+  const defaultDestinationMachine = destinationGroups[0]?.machine ?? ""
+  if (!defaultDestinationMachine) return []
+  const placements: MachineConstraintQueuePlacementPayload[] = []
+  const seen = new Set<string>()
   for (const row of movableRows) {
-    const rowKey = machineIssueRowKey(row);
-    const placement = machineConstraintPlacementParts(queueAfterByRow[rowKey], defaultDestinationMachine);
-    const group = destinationGroups.find((candidate) => machineKey(candidate.machine) === placement.machineKey);
-    if (!group) continue;
-    const placementIndex = machineConstraintQueuePlacementIndex(group.rows, placement.afterKey);
-    const queueBeforeSetups = group.rows.slice(0, placementIndex).map((queueRow) => ({
-      jcNo: jobCardNumber(queueRow),
-      setupNo: displayValue(queueRow.setupNo),
-      machine: machineValue(queueRow, "machine"),
-    })).filter((queueRow) => queueRow.jcNo && queueRow.setupNo && queueRow.machine);
+    const rowKey = machineIssueRowKey(row)
+    const placement = machineConstraintPlacementParts(
+      queueAfterByRow[rowKey],
+      defaultDestinationMachine
+    )
+    const group = destinationGroups.find(
+      (candidate) => machineKey(candidate.machine) === placement.machineKey
+    )
+    if (!group) continue
+    const placementIndex = machineConstraintQueuePlacementIndex(
+      group.rows,
+      placement.afterKey
+    )
+    const queueBeforeSetups = group.rows
+      .slice(0, placementIndex)
+      .map((queueRow) => ({
+        jcNo: jobCardNumber(queueRow),
+        setupNo: displayValue(queueRow.setupNo),
+        machine: machineValue(queueRow, "machine"),
+      }))
+      .filter(
+        (queueRow) => queueRow.jcNo && queueRow.setupNo && queueRow.machine
+      )
     const payload = {
       targetJcNo: jobCardNumber(row),
       targetPartCode: itemCode(row),
@@ -8482,335 +14054,563 @@ function machineConstraintQueuePlacements(
       targetSourceMachine: machineValue(row, "machine"),
       targetMachine: group.machine,
       queueBeforeSetups,
-    };
-    const key = [payload.targetJcNo, payload.targetSetupNo, payload.targetSourceMachine, payload.targetMachine].map(machineKey).join("|");
-    if (!payload.targetJcNo || !payload.targetSetupNo || !payload.targetMachine || seen.has(key)) continue;
-    seen.add(key);
-    placements.push(payload);
+    }
+    const key = [
+      payload.targetJcNo,
+      payload.targetSetupNo,
+      payload.targetSourceMachine,
+      payload.targetMachine,
+    ]
+      .map(machineKey)
+      .join("|")
+    if (
+      !payload.targetJcNo ||
+      !payload.targetSetupNo ||
+      !payload.targetMachine ||
+      seen.has(key)
+    )
+      continue
+    seen.add(key)
+    placements.push(payload)
   }
-  return placements;
+  return placements
 }
 
 function partMachineSwitchPreSaveConflicts(
   rows: DashboardPayload[],
   proposed: {
-    target: string;
-    selectedItem: string;
-    setupNo: string;
-    toMachine: string;
-    queuePlacements: MachineConstraintQueuePlacementPayload[];
-    resolvedIds: Set<string>;
-  },
+    target: string
+    selectedItem: string
+    setupNo: string
+    toMachine: string
+    queuePlacements: MachineConstraintQueuePlacementPayload[]
+    resolvedIds: Set<string>
+  }
 ) {
-  const targetKey = machineKey(proposed.target);
-  const itemKey = machineKey(proposed.selectedItem);
-  const setupKey = machineKey(proposed.setupNo);
-  const proposedSignature = partMachineSwitchDecisionSignature(proposed.toMachine, proposed.queuePlacements);
-  if (!targetKey || !setupKey || !proposedSignature) return [];
+  const targetKey = machineKey(proposed.target)
+  const itemKey = machineKey(proposed.selectedItem)
+  const setupKey = machineKey(proposed.setupNo)
+  const proposedSignature = partMachineSwitchDecisionSignature(
+    proposed.toMachine,
+    proposed.queuePlacements
+  )
+  if (!targetKey || !setupKey || !proposedSignature) return []
   return rows
     .filter((row) => {
-      const targetId = displayValue(row._id || row.targetId);
-      if (proposed.resolvedIds.has(targetId)) return false;
-      const rowTargetKey = machineKey(displayValue(row.target));
-      if (rowTargetKey !== targetKey && (!itemKey || rowTargetKey !== itemKey)) return false;
-      const rowSetupKey = machineKey(displayValue(row.setupNo));
-      if (rowSetupKey && rowSetupKey !== setupKey) return false;
-      const existingSignature = partMachineSwitchDecisionSignature(displayValue(row.toMachine), asArray(row.queuePlacements) as MachineConstraintQueuePlacementPayload[]);
-      return Boolean(existingSignature && existingSignature !== proposedSignature);
+      const targetId = displayValue(row._id || row.targetId)
+      if (proposed.resolvedIds.has(targetId)) return false
+      const rowTargetKey = machineKey(displayValue(row.target))
+      if (rowTargetKey !== targetKey && (!itemKey || rowTargetKey !== itemKey))
+        return false
+      const rowSetupKey = machineKey(displayValue(row.setupNo))
+      if (rowSetupKey && rowSetupKey !== setupKey) return false
+      const existingSignature = partMachineSwitchDecisionSignature(
+        displayValue(row.toMachine),
+        asArray(row.queuePlacements) as MachineConstraintQueuePlacementPayload[]
+      )
+      return Boolean(
+        existingSignature && existingSignature !== proposedSignature
+      )
     })
     .map((row) => ({
       ...row,
       targetTable: "planOverrides",
       targetId: displayValue(row._id || row.targetId),
-      targetKey: [displayValue(row.target), displayValue(row.setupNo), displayValue(row.fromMachine), displayValue(row.toMachine)].filter((value) => value !== "-").join(" / "),
+      targetKey: [
+        displayValue(row.target),
+        displayValue(row.setupNo),
+        displayValue(row.fromMachine),
+        displayValue(row.toMachine),
+      ]
+        .filter((value) => value !== "-")
+        .join(" / "),
       targetLabel: `Existing switch to ${displayValue(row.toMachine)}`,
       createdAt: displayValue(row.createdAt),
-    }));
+    }))
 }
 
-function partMachineSwitchDecisionSignature(toMachine: string, queuePlacements: MachineConstraintQueuePlacementPayload[]) {
-  const targetMachine = machineKey(toMachine);
-  if (!targetMachine) return "";
+function partMachineSwitchDecisionSignature(
+  toMachine: string,
+  queuePlacements: MachineConstraintQueuePlacementPayload[]
+) {
+  const targetMachine = machineKey(toMachine)
+  if (!targetMachine) return ""
   const placementSignature = queuePlacements
     .map((placement) => ({
       targetMachine: machineKey(placement.targetMachine || toMachine),
       before: asArray(placement.queueBeforeSetups)
-        .map((row) => [displayValue(row.jcNo), displayValue(row.setupNo), displayValue(row.machine)].map(machineKey).join("/"))
+        .map((row) =>
+          [
+            displayValue(row.jcNo),
+            displayValue(row.setupNo),
+            displayValue(row.machine),
+          ]
+            .map(machineKey)
+            .join("/")
+        )
         .sort()
         .join(","),
     }))
-    .sort((left, right) => `${left.targetMachine}|${left.before}`.localeCompare(`${right.targetMachine}|${right.before}`))
+    .sort((left, right) =>
+      `${left.targetMachine}|${left.before}`.localeCompare(
+        `${right.targetMachine}|${right.before}`
+      )
+    )
     .map((placement) => `${placement.targetMachine}:${placement.before}`)
-    .join("|");
-  return `${targetMachine}|${placementSignature}`;
+    .join("|")
+  return `${targetMachine}|${placementSignature}`
 }
 function plannerPriorityPreSaveConflicts(
   rows: DashboardPayload[],
   proposed: {
-    target: string;
-    jcNo: string;
-    partCode: string;
-    priority: string;
-    queueBeforeSetups: Array<{ targetSetupNo: string; jcNo: string; setupNo: string; machine: string }>;
-    resolvedIds: Set<string>;
-  },
+    target: string
+    jcNo: string
+    partCode: string
+    priority: string
+    queueBeforeSetups: Array<{
+      targetSetupNo: string
+      jcNo: string
+      setupNo: string
+      machine: string
+    }>
+    resolvedIds: Set<string>
+  }
 ) {
-  const targetKeys = new Set([proposed.target, proposed.jcNo, proposed.partCode].map(machineKey).filter(Boolean));
-  const proposedSignature = plannerPriorityDecisionSignature(proposed.priority, proposed.queueBeforeSetups);
-  if (!targetKeys.size || !proposedSignature) return [];
+  const targetKeys = new Set(
+    [proposed.target, proposed.jcNo, proposed.partCode]
+      .map(machineKey)
+      .filter(Boolean)
+  )
+  const proposedSignature = plannerPriorityDecisionSignature(
+    proposed.priority,
+    proposed.queueBeforeSetups
+  )
+  if (!targetKeys.size || !proposedSignature) return []
   return rows
     .filter((row) => {
-      const targetId = displayValue(row._id || row.targetId);
-      if (proposed.resolvedIds.has(targetId)) return false;
-      const rowKeys = [row.target, row.jcNo, row.partCode].map((value) => machineKey(displayValue(value))).filter(Boolean);
-      if (!rowKeys.some((key) => targetKeys.has(key))) return false;
-      const existingSignature = plannerPriorityDecisionSignature(displayValue(row.priority), asArray(row.queueBeforeSetups).map((queueRow) => ({
-        targetSetupNo: displayValue(queueRow.targetSetupNo),
-        jcNo: displayValue(queueRow.jcNo),
-        setupNo: displayValue(queueRow.setupNo),
-        machine: displayValue(queueRow.machine),
-      })));
-      return Boolean(existingSignature && existingSignature !== proposedSignature);
+      const targetId = displayValue(row._id || row.targetId)
+      if (proposed.resolvedIds.has(targetId)) return false
+      const rowKeys = [row.target, row.jcNo, row.partCode]
+        .map((value) => machineKey(displayValue(value)))
+        .filter(Boolean)
+      if (!rowKeys.some((key) => targetKeys.has(key))) return false
+      const existingSignature = plannerPriorityDecisionSignature(
+        displayValue(row.priority),
+        asArray(row.queueBeforeSetups).map((queueRow) => ({
+          targetSetupNo: displayValue(queueRow.targetSetupNo),
+          jcNo: displayValue(queueRow.jcNo),
+          setupNo: displayValue(queueRow.setupNo),
+          machine: displayValue(queueRow.machine),
+        }))
+      )
+      return Boolean(
+        existingSignature && existingSignature !== proposedSignature
+      )
     })
     .map((row) => ({
       ...row,
       targetTable: "plannerPriorities",
       targetId: displayValue(row._id || row.targetId),
-      targetKey: [displayValue(row.target), displayValue(row.jcNo), displayValue(row.partCode), displayValue(row.priority)].filter((value) => value !== "-").join(" / "),
+      targetKey: [
+        displayValue(row.target),
+        displayValue(row.jcNo),
+        displayValue(row.partCode),
+        displayValue(row.priority),
+      ]
+        .filter((value) => value !== "-")
+        .join(" / "),
       targetLabel: `Existing priority ${displayValue(row.priority)} for ${displayValue(row.target)}`,
       createdAt: displayValue(row.createdAt),
-    }));
+    }))
 }
 
-function plannerPriorityDecisionSignature(priority: string, queueBeforeSetups: Array<{ targetSetupNo: string; jcNo: string; setupNo: string; machine: string }>) {
-  const priorityKey = machineKey(priority || "Normal");
+function plannerPriorityDecisionSignature(
+  priority: string,
+  queueBeforeSetups: Array<{
+    targetSetupNo: string
+    jcNo: string
+    setupNo: string
+    machine: string
+  }>
+) {
+  const priorityKey = machineKey(priority || "Normal")
   const queueSignature = queueBeforeSetups
-    .map((row) => [row.targetSetupNo, row.jcNo, row.setupNo, row.machine].map(machineKey).join("/"))
+    .map((row) =>
+      [row.targetSetupNo, row.jcNo, row.setupNo, row.machine]
+        .map(machineKey)
+        .join("/")
+    )
     .sort()
-    .join(",");
-  return `${priorityKey}|${queueSignature}`;
+    .join(",")
+  return `${priorityKey}|${queueSignature}`
 }
 
 function machineConstraintPreSaveConflicts(
   rows: DashboardPayload[],
   proposed: {
-    machineNo: string;
-    unavailableFrom: string;
-    unavailableTo: string;
-    rescheduleAction: string;
-    planningMode: string;
-    queuePlacements: MachineConstraintQueuePlacementPayload[];
-    resolvedIds: Set<string>;
-  },
+    machineNo: string
+    unavailableFrom: string
+    unavailableTo: string
+    rescheduleAction: string
+    planningMode: string
+    queuePlacements: MachineConstraintQueuePlacementPayload[]
+    resolvedIds: Set<string>
+  }
 ) {
-  const machine = machineKey(proposed.machineNo);
-  const proposedSignature = machineConstraintDecisionSignature(proposed.rescheduleAction, proposed.planningMode, proposed.queuePlacements);
-  if (!machine || !proposed.unavailableFrom || !proposedSignature) return [];
+  const machine = machineKey(proposed.machineNo)
+  const proposedSignature = machineConstraintDecisionSignature(
+    proposed.rescheduleAction,
+    proposed.planningMode,
+    proposed.queuePlacements
+  )
+  if (!machine || !proposed.unavailableFrom || !proposedSignature) return []
   return rows
     .filter((row) => {
-      const targetId = displayValue(row._id || row.targetId);
-      if (proposed.resolvedIds.has(targetId)) return false;
-      if (machineKey(displayValue(row.machineNo)) !== machine) return false;
-      if (!dateRangesOverlap(proposed.unavailableFrom, proposed.unavailableTo || proposed.unavailableFrom, displayValue(row.unavailableFrom), displayValue(row.unavailableTo || row.unavailableFrom))) return false;
-      const existingSignature = machineConstraintDecisionSignature(displayValue(row.rescheduleAction), displayValue(row.planningMode), asArray(row.queuePlacements) as MachineConstraintQueuePlacementPayload[]);
-      return Boolean(existingSignature && existingSignature !== proposedSignature);
+      const targetId = displayValue(row._id || row.targetId)
+      if (proposed.resolvedIds.has(targetId)) return false
+      if (machineKey(displayValue(row.machineNo)) !== machine) return false
+      if (
+        !dateRangesOverlap(
+          proposed.unavailableFrom,
+          proposed.unavailableTo || proposed.unavailableFrom,
+          displayValue(row.unavailableFrom),
+          displayValue(row.unavailableTo || row.unavailableFrom)
+        )
+      )
+        return false
+      const existingSignature = machineConstraintDecisionSignature(
+        displayValue(row.rescheduleAction),
+        displayValue(row.planningMode),
+        asArray(row.queuePlacements) as MachineConstraintQueuePlacementPayload[]
+      )
+      return Boolean(
+        existingSignature && existingSignature !== proposedSignature
+      )
     })
     .map((row) => ({
       ...row,
       targetTable: "machineConstraints",
       targetId: displayValue(row._id || row.targetId),
-      targetKey: [displayValue(row.machineNo), displayValue(row.unavailableFrom), displayValue(row.unavailableTo), displayValue(row.rescheduleAction)].filter((value) => value !== "-").join(" / "),
+      targetKey: [
+        displayValue(row.machineNo),
+        displayValue(row.unavailableFrom),
+        displayValue(row.unavailableTo),
+        displayValue(row.rescheduleAction),
+      ]
+        .filter((value) => value !== "-")
+        .join(" / "),
       targetLabel: `Existing ${displayValue(row.rescheduleAction || "machine action")} on ${displayValue(row.machineNo)}`,
       createdAt: displayValue(row.createdAt),
-    }));
+    }))
 }
 
-function machineConstraintDecisionSignature(rescheduleAction: string, planningMode: string, queuePlacements: MachineConstraintQueuePlacementPayload[]) {
-  const actionKey = machineKey(rescheduleAction || "shift_required");
-  const modeKey = machineKey(planningMode || "system_recalculate");
+function machineConstraintDecisionSignature(
+  rescheduleAction: string,
+  planningMode: string,
+  queuePlacements: MachineConstraintQueuePlacementPayload[]
+) {
+  const actionKey = machineKey(rescheduleAction || "shift_required")
+  const modeKey = machineKey(planningMode || "system_recalculate")
   const placementSignature = queuePlacements
-    .map((placement) => [
-      placement.targetJcNo,
-      placement.targetSetupNo,
-      placement.targetSourceMachine,
-      placement.targetMachine,
-      ...(placement.queueBeforeSetups ?? []).map((row) => `${row.jcNo}/${row.setupNo}/${row.machine}`),
-    ].map(machineKey).join("/"))
+    .map((placement) =>
+      [
+        placement.targetJcNo,
+        placement.targetSetupNo,
+        placement.targetSourceMachine,
+        placement.targetMachine,
+        ...(placement.queueBeforeSetups ?? []).map(
+          (row) => `${row.jcNo}/${row.setupNo}/${row.machine}`
+        ),
+      ]
+        .map(machineKey)
+        .join("/")
+    )
     .sort()
-    .join("|");
-  return `${actionKey}|${modeKey}|${placementSignature}`;
+    .join("|")
+  return `${actionKey}|${modeKey}|${placementSignature}`
 }
 
-function dateRangesOverlap(leftFrom: string, leftTo: string, rightFrom: string, rightTo: string) {
-  if (!leftFrom || !rightFrom) return false;
-  const leftEnd = leftTo || leftFrom;
-  const rightEnd = rightTo || rightFrom;
-  return leftFrom <= rightEnd && rightFrom <= leftEnd;
+function dateRangesOverlap(
+  leftFrom: string,
+  leftTo: string,
+  rightFrom: string,
+  rightTo: string
+) {
+  if (!leftFrom || !rightFrom) return false
+  const leftEnd = leftTo || leftFrom
+  const rightEnd = rightTo || rightFrom
+  return leftFrom <= rightEnd && rightFrom <= leftEnd
 }
 function machineConstraintPlacementValue(machine: string, afterKey: string) {
-  return `${machineKey(machine)}${machineConstraintPlacementSeparator}${afterKey}`;
+  return `${machineKey(machine)}${machineConstraintPlacementSeparator}${afterKey}`
 }
 
-function machineConstraintPlacementParts(value: string | undefined, defaultMachine: string) {
-  const [machineValuePart = "", ...afterParts] = (value || "").split(machineConstraintPlacementSeparator);
+function machineConstraintPlacementParts(
+  value: string | undefined,
+  defaultMachine: string
+) {
+  const [machineValuePart = "", ...afterParts] = (value || "").split(
+    machineConstraintPlacementSeparator
+  )
   return {
     machineKey: machineValuePart || machineKey(defaultMachine),
     afterKey: afterParts.join(machineConstraintPlacementSeparator),
-  };
+  }
 }
 
-function machineConstraintQueuePlacementIndex(rows: DashboardPayload[], afterKey: string) {
-  if (!afterKey) return 0;
-  const rowIndex = rows.findIndex((row) => machineConstraintQueueRowKey(row) === afterKey);
-  return rowIndex < 0 ? 0 : rowIndex + 1;
+function machineConstraintQueuePlacementIndex(
+  rows: DashboardPayload[],
+  afterKey: string
+) {
+  if (!afterKey) return 0
+  const rowIndex = rows.findIndex(
+    (row) => machineConstraintQueueRowKey(row) === afterKey
+  )
+  return rowIndex < 0 ? 0 : rowIndex + 1
 }
 
 function machineConstraintQueueRowKey(row: DashboardPayload) {
-  return [jobCardNumber(row), displayValue(row.setupNo), machineValue(row, "machine")].map(machineKey).join("|");
+  return [
+    jobCardNumber(row),
+    displayValue(row.setupNo),
+    machineValue(row, "machine"),
+  ]
+    .map(machineKey)
+    .join("|")
 }
 
-function machineConstraintQueueDropLabel(index: number, rows: DashboardPayload[]) {
-  if (index === 0) return "Place moved setup at position 1";
-  const row = rows[index - 1];
-  return row ? `Place moved setup after ${itemCode(row)} / ${jobCardNumber(row)} / setup ${displayValue(row.setupNo)}` : "Place moved setup at the end of this queue";
+function machineConstraintQueueDropLabel(
+  index: number,
+  rows: DashboardPayload[]
+) {
+  if (index === 0) return "Place moved setup at position 1"
+  const row = rows[index - 1]
+  return row
+    ? `Place moved setup after ${itemCode(row)} / ${jobCardNumber(row)} / setup ${displayValue(row.setupNo)}`
+    : "Place moved setup at the end of this queue"
 }
 function machineIssueAffectedRows(
   rows: DashboardPayload[],
-  issue: { machineNo: string; unavailableFrom: string; unavailableTo: string },
+  issue: { machineNo: string; unavailableFrom: string; unavailableTo: string }
 ) {
-  const targetMachine = machineKey(issue.machineNo);
-  if (!targetMachine) return [];
-  const windowStart = dateSortValue(issue.unavailableFrom);
-  const rawWindowEnd = dateSortValue(issue.unavailableTo || issue.unavailableFrom);
-  const hasWindow = windowStart !== Number.MAX_SAFE_INTEGER;
-  const windowEnd = rawWindowEnd === Number.MAX_SAFE_INTEGER ? windowStart : rawWindowEnd;
-  const start = Math.min(windowStart, windowEnd);
-  const end = Math.max(windowStart, windowEnd);
+  const targetMachine = machineKey(issue.machineNo)
+  if (!targetMachine) return []
+  const windowStart = dateSortValue(issue.unavailableFrom)
+  const rawWindowEnd = dateSortValue(
+    issue.unavailableTo || issue.unavailableFrom
+  )
+  const hasWindow = windowStart !== Number.MAX_SAFE_INTEGER
+  const windowEnd =
+    rawWindowEnd === Number.MAX_SAFE_INTEGER ? windowStart : rawWindowEnd
+  const start = Math.min(windowStart, windowEnd)
+  const end = Math.max(windowStart, windowEnd)
   return rows
     .filter((row) => machineKey(machineValue(row, "machine")) === targetMachine)
     .filter((row) => !hasWindow || machineIssueRowOverlaps(row, start, end))
-    .sort(machinePlanDisplaySort);
+    .sort(machinePlanDisplaySort)
 }
 
-function machineIssueRowOverlaps(row: DashboardPayload, windowStart: number, windowEnd: number) {
-  const rowStart = dateSortValue(row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
-  if (rowStart === Number.MAX_SAFE_INTEGER) return true;
-  const rawRowEnd = dateSortValue(row.plannedProductionEndDate || row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate);
-  const rowEnd = rawRowEnd === Number.MAX_SAFE_INTEGER ? rowStart : rawRowEnd;
-  return rowStart <= windowEnd && rowEnd >= windowStart;
+function machineIssueRowOverlaps(
+  row: DashboardPayload,
+  windowStart: number,
+  windowEnd: number
+) {
+  const rowStart = dateSortValue(
+    row.plannedProductionStartDate || row.setupPlannedDate || row.plannedDate
+  )
+  if (rowStart === Number.MAX_SAFE_INTEGER) return true
+  const rawRowEnd = dateSortValue(
+    row.plannedProductionEndDate ||
+      row.plannedProductionStartDate ||
+      row.setupPlannedDate ||
+      row.plannedDate
+  )
+  const rowEnd = rawRowEnd === Number.MAX_SAFE_INTEGER ? rowStart : rawRowEnd
+  return rowStart <= windowEnd && rowEnd >= windowStart
 }
 
 function machineIssueRowIsLocked(row: DashboardPayload) {
-  const stage = str(row.shopFloorStage);
-  const runningStatus = str(row.runningStatus).toLowerCase();
-  return shopFloorItemIsCurrent(row)
-    || runningStatus === "setup complete"
-    || ["raw_material_at_machine", "presetting", "setting", "quality_approval"].includes(stage);
+  const stage = str(row.shopFloorStage)
+  const runningStatus = str(row.runningStatus).toLowerCase()
+  return (
+    shopFloorItemIsCurrent(row) ||
+    runningStatus === "setup complete" ||
+    [
+      "raw_material_at_machine",
+      "presetting",
+      "setting",
+      "quality_approval",
+    ].includes(stage)
+  )
 }
-function partMachineSwitchTargetInterruptionRows(groups: MachineConstraintQueueReviewGroup[], selectedRows: DashboardPayload[]) {
-  const selectedKeys = new Set(selectedRows.map(machineIssueRowKey));
-  const rows: DashboardPayload[] = [];
-  const seen = new Set<string>();
-  for (const group of groups.filter((candidate) => candidate.kind === "destination")) {
+function partMachineSwitchTargetInterruptionRows(
+  groups: MachineConstraintQueueReviewGroup[],
+  selectedRows: DashboardPayload[]
+) {
+  const selectedKeys = new Set(selectedRows.map(machineIssueRowKey))
+  const rows: DashboardPayload[] = []
+  const seen = new Set<string>()
+  for (const group of groups.filter(
+    (candidate) => candidate.kind === "destination"
+  )) {
     for (const row of group.rows) {
-      const key = machineIssueRowKey(row);
-      if (!key || selectedKeys.has(key) || seen.has(key) || !machineIssueRowNeedsProducedQty(row)) continue;
-      seen.add(key);
-      rows.push(row);
+      const key = machineIssueRowKey(row)
+      if (
+        !key ||
+        selectedKeys.has(key) ||
+        seen.has(key) ||
+        !machineIssueRowNeedsProducedQty(row)
+      )
+        continue
+      seen.add(key)
+      rows.push(row)
     }
   }
-  return rows;
+  return rows
 }
 
 function machineIssueRowNeedsProducedQty(row: DashboardPayload) {
-  const runningStatus = str(row.runningStatus).toLowerCase();
-  const stage = str(row.shopFloorStage);
-  return runningStatus === "running"
-    || ["operator_started", "worker_start"].includes(stage)
-    || Number(row.rawRows) > 0
-    || Number(row.rawOutputQty) > 0
-    || Number(row.rawActualQty) > 0;
+  const runningStatus = str(row.runningStatus).toLowerCase()
+  const stage = str(row.shopFloorStage)
+  return (
+    runningStatus === "running" ||
+    ["operator_started", "worker_start"].includes(stage) ||
+    Number(row.rawRows) > 0 ||
+    Number(row.rawOutputQty) > 0 ||
+    Number(row.rawActualQty) > 0
+  )
 }
 
 function machineIssueRowKey(row: DashboardPayload) {
-  return [jobCardNumber(row), displayValue(row.setupNo), machineValue(row, "machine")].map(machineKey).join("|");
+  return [
+    jobCardNumber(row),
+    displayValue(row.setupNo),
+    machineValue(row, "machine"),
+  ]
+    .map(machineKey)
+    .join("|")
 }
 
 function partMachineSwitchAffectedRows(
   rows: DashboardPayload[],
-  issue: { target: string; setupNo: string; fromMachine: string },
+  issue: { target: string; setupNo: string; fromMachine: string }
 ) {
-  const setupKey = machineKey(issue.setupNo);
-  const fromMachineKey = machineKey(issue.fromMachine);
-  if (!machineKey(issue.target) || !setupKey || !fromMachineKey) return [];
+  const setupKey = machineKey(issue.setupNo)
+  const fromMachineKey = machineKey(issue.fromMachine)
+  if (!machineKey(issue.target) || !setupKey || !fromMachineKey) return []
   return rows
     .filter((row) => partMachineSwitchTargetMatches(row, issue.target))
     .filter((row) => machineKey(displayValue(row.setupNo)) === setupKey)
-    .filter((row) => machineKey(machineValue(row, "machine")) === fromMachineKey)
-    .sort(machinePlanDisplaySort);
+    .filter(
+      (row) => machineKey(machineValue(row, "machine")) === fromMachineKey
+    )
+    .sort(machinePlanDisplaySort)
 }
 
 function partMachineSwitchTargetMatches(row: DashboardPayload, target: string) {
-  const targetKey = machineKey(target);
-  if (!targetKey) return true;
-  return machineKey(jobCardNumber(row)) === targetKey || machineKey(itemCode(row)) === targetKey;
+  const targetKey = machineKey(target)
+  if (!targetKey) return true
+  return (
+    machineKey(jobCardNumber(row)) === targetKey ||
+    machineKey(itemCode(row)) === targetKey
+  )
 }
 
 function machineValue(row: DashboardPayload, type: "machine" | "machineType") {
   if (type === "machine") {
-    return displayValue(row.machine || row.machineNo || row["MACHINE NO"] || row["M/C NO"] || row["MACHINE NO."]);
+    return displayValue(
+      row.machine ||
+        row.machineNo ||
+        row["MACHINE NO"] ||
+        row["M/C NO"] ||
+        row["MACHINE NO."]
+    )
   }
-  return displayValue(row.machineType || row["MACHINE TYPE"] || row.type || row.TYPE);
+  return displayValue(
+    row.machineType || row["MACHINE TYPE"] || row.type || row.TYPE
+  )
 }
 
 function machineMasterLocationValue(row: DashboardPayload) {
-  return displayValue(row.location || row.Location || row.LOCATION);
+  return displayValue(row.location || row.Location || row.LOCATION)
 }
 
-function machineBoardRows(machineRows: DashboardPayload[], plannedRows: DashboardPayload[]) {
-  const rowsByMachine = new Map<string, DashboardPayload>();
+function machineBoardRows(
+  machineRows: DashboardPayload[],
+  plannedRows: DashboardPayload[]
+) {
+  const rowsByMachine = new Map<string, DashboardPayload>()
   for (const row of machineRows) {
-    const key = machineKey(machineValue(row, "machine"));
-    if (!key) continue;
-    rowsByMachine.set(key, row);
+    const key = machineKey(machineValue(row, "machine"))
+    if (!key) continue
+    rowsByMachine.set(key, row)
   }
   for (const row of plannedRows) {
-    const machine = machineValue(row, "machine");
-    const key = machineKey(machine);
-    if (!key || rowsByMachine.has(key)) continue;
+    const machine = machineValue(row, "machine")
+    const key = machineKey(machine)
+    if (!key || rowsByMachine.has(key)) continue
     rowsByMachine.set(key, {
       machine,
       machineNo: machine,
       machineType: machineValue(row, "machineType"),
       status: "Planned",
       remarks: "Machine is planned but missing from machine master",
-    });
+    })
   }
 
-  return [...rowsByMachine.values()].sort((a, b) => machineValue(a, "machine").localeCompare(machineValue(b, "machine"), undefined, { numeric: true }));
+  return [...rowsByMachine.values()].sort((a, b) =>
+    machineValue(a, "machine").localeCompare(
+      machineValue(b, "machine"),
+      undefined,
+      { numeric: true }
+    )
+  )
 }
 
 function jobCardNumber(row: DashboardPayload) {
-  return displayValue(row.jcNo || row.JobCardNo || row.jobCard);
+  return displayValue(row.jcNo || row.JobCardNo || row.jobCard)
 }
 
 function itemCode(row: DashboardPayload) {
-  return displayValue(row.partCode || row["PART CODE"] || row.itemCode);
+  return displayValue(row.partCode || row["PART CODE"] || row.itemCode)
 }
 
 function machineMasterStatusText(row: DashboardPayload) {
-  const rawStatus = str(row.status || row.STATUS || row.activeStatus || row.isActive || row.ACTIVE || row.active || row.Active);
-  const normalized = rawStatus.toLowerCase();
-  if (!rawStatus) return "Active";
-  if (normalized === "planned") return "Not in master";
-  if (["active", "yes", "true", "running", "available"].includes(normalized)) return "Active";
-  if (["inactive", "no", "false", "deactive", "deactivated", "disabled", "unavailable"].includes(normalized)) return "Inactive";
-  return rawStatus;
+  const rawStatus = str(
+    row.status ||
+      row.STATUS ||
+      row.activeStatus ||
+      row.isActive ||
+      row.ACTIVE ||
+      row.active ||
+      row.Active
+  )
+  const normalized = rawStatus.toLowerCase()
+  if (!rawStatus) return "Active"
+  if (normalized === "planned") return "Not in master"
+  if (["active", "yes", "true", "running", "available"].includes(normalized))
+    return "Active"
+  if (
+    [
+      "inactive",
+      "no",
+      "false",
+      "deactive",
+      "deactivated",
+      "disabled",
+      "unavailable",
+    ].includes(normalized)
+  )
+    return "Inactive"
+  return rawStatus
 }
 
-function jobCardTrackingState(row: DashboardPayload, setupRows: DashboardPayload[] = []) {
-  const dispatchStatus = str(row.dispatchStatus).toLowerCase();
-  if (dispatchStatus.includes("dispatch")) return "Dispatch";
+function jobCardTrackingState(
+  row: DashboardPayload,
+  setupRows: DashboardPayload[] = []
+) {
+  const dispatchStatus = str(row.dispatchStatus).toLowerCase()
+  if (dispatchStatus.includes("dispatch")) return "Dispatch"
 
   const statuses = [
     row.planningBlocker,
@@ -8819,149 +14619,238 @@ function jobCardTrackingState(row: DashboardPayload, setupRows: DashboardPayload
     row.toolingStatus,
     row.optionSource,
     row.rmStatus,
-  ].map((value) => str(value).toLowerCase());
+  ].map((value) => str(value).toLowerCase())
 
-  if (statuses.some((value) => value.includes("missing") || value.includes("waiting") || value.includes("required"))) {
-    return "Needs action";
+  if (
+    statuses.some(
+      (value) =>
+        value.includes("missing") ||
+        value.includes("waiting") ||
+        value.includes("required")
+    )
+  ) {
+    return "Needs action"
   }
 
   if (jobCardHasProduction(row, setupRows)) {
-    return "In production";
+    return "In production"
   }
 
-  if (statuses.some((value) => value.includes("ready") || value.includes("all checks"))) {
-    return "Ready";
+  if (
+    statuses.some(
+      (value) => value.includes("ready") || value.includes("all checks")
+    )
+  ) {
+    return "Ready"
   }
 
-  return "Pending";
+  return "Pending"
 }
 
-function jobCardHasProduction(row: DashboardPayload, setupRows: DashboardPayload[] = []) {
-  return shopFloorItemIsCurrent(row) || setupRows.some(shopFloorItemIsCurrent);
+function jobCardHasProduction(
+  row: DashboardPayload,
+  setupRows: DashboardPayload[] = []
+) {
+  return shopFloorItemIsCurrent(row) || setupRows.some(shopFloorItemIsCurrent)
 }
 
-function rowMatchesFieldQuery(row: DashboardPayload, query: string, field: string, setupRows: DashboardPayload[] = []) {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) return true;
-  return rowFieldSearchText(row, field, setupRows).includes(normalizedQuery);
+function rowMatchesFieldQuery(
+  row: DashboardPayload,
+  query: string,
+  field: string,
+  setupRows: DashboardPayload[] = []
+) {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return true
+  return rowFieldSearchText(row, field, setupRows).includes(normalizedQuery)
 }
 
-function rowMatchesMachineQuery(row: DashboardPayload, query: string, field: string, plannedByMachine: Map<string, DashboardPayload[]>) {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) return true;
-  const machinePlans = plannedByMachine.get(machineKey(machineValue(row, "machine"))) ?? [];
-  const machineText = rowFieldSearchText(row, field);
-  const planText = machinePlans.map((plan) => rowFieldSearchText(plan, field)).join(" ");
-  return `${machineText} ${planText}`.includes(normalizedQuery);
+function rowMatchesMachineQuery(
+  row: DashboardPayload,
+  query: string,
+  field: string,
+  plannedByMachine: Map<string, DashboardPayload[]>
+) {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return true
+  const machinePlans =
+    plannedByMachine.get(machineKey(machineValue(row, "machine"))) ?? []
+  const machineText = rowFieldSearchText(row, field)
+  const planText = machinePlans
+    .map((plan) => rowFieldSearchText(plan, field))
+    .join(" ")
+  return `${machineText} ${planText}`.includes(normalizedQuery)
 }
 
-function rowFieldSearchText(row: DashboardPayload, field: string, setupRows: DashboardPayload[] = []) {
-  const values = field === "jobCard"
-    ? [row.jcNo, row.JobCardNo, row.jobCard]
-    : field === "part"
-      ? [row.partCode, row["PART CODE"], row.itemCode, row.description, row.DESCRIPTION]
-      : field === "po"
-        ? [row.fgPoNo, row["FG PO NO."]]
-        : field === "route"
-          ? [row.optionNumber, row.selectedOption, row.option, row.routeStatus, row.cycleStatus, row.toolingStatus, row.setupNo, row.setupName]
-          : field === "status"
-            ? [jobCardTrackingState(row, setupRows), row.rmStatus, row.dispatchStatus, row.runningStatus, row.routeStatus, row.cycleStatus, row.toolingStatus]
-            : field === "machine"
-              ? [row.machine, row.machineNo, row["MACHINE NO"], row["M/C NO"], row["MACHINE NO."]]
-              : field === "machineType"
-                ? [row.machineType, row["MACHINE TYPE"], row.type, row.TYPE]
-                : field === "operator"
-                  ? [row.operator, row.operatorName, row["OPERATOR NAME"], row.operatorId]
-                  : Object.values(row);
-  return values.map((value) => formatCell(value)).join(" ").toLowerCase();
+function rowFieldSearchText(
+  row: DashboardPayload,
+  field: string,
+  setupRows: DashboardPayload[] = []
+) {
+  const values =
+    field === "jobCard"
+      ? [row.jcNo, row.JobCardNo, row.jobCard]
+      : field === "part"
+        ? [
+            row.partCode,
+            row["PART CODE"],
+            row.itemCode,
+            row.description,
+            row.DESCRIPTION,
+          ]
+        : field === "po"
+          ? [row.fgPoNo, row["FG PO NO."]]
+          : field === "route"
+            ? [
+                row.optionNumber,
+                row.selectedOption,
+                row.option,
+                row.routeStatus,
+                row.cycleStatus,
+                row.toolingStatus,
+                row.setupNo,
+                row.setupName,
+              ]
+            : field === "status"
+              ? [
+                  jobCardTrackingState(row, setupRows),
+                  row.rmStatus,
+                  row.dispatchStatus,
+                  row.runningStatus,
+                  row.routeStatus,
+                  row.cycleStatus,
+                  row.toolingStatus,
+                ]
+              : field === "machine"
+                ? [
+                    row.machine,
+                    row.machineNo,
+                    row["MACHINE NO"],
+                    row["M/C NO"],
+                    row["MACHINE NO."],
+                  ]
+                : field === "machineType"
+                  ? [row.machineType, row["MACHINE TYPE"], row.type, row.TYPE]
+                  : field === "operator"
+                    ? [
+                        row.operator,
+                        row.operatorName,
+                        row["OPERATOR NAME"],
+                        row.operatorId,
+                      ]
+                    : Object.values(row)
+  return values
+    .map((value) => formatCell(value))
+    .join(" ")
+    .toLowerCase()
 }
 
 function groupPlannedRowsByMachine(rows: DashboardPayload[]) {
-  const grouped = new Map<string, DashboardPayload[]>();
+  const grouped = new Map<string, DashboardPayload[]>()
   for (const row of rows) {
-    const machine = machineValue(row, "machine");
-    const key = machineKey(machine);
-    if (!key) continue;
-    const machineRowsForKey = grouped.get(key) ?? [];
-    machineRowsForKey.push(row);
-    grouped.set(key, machineRowsForKey);
+    const machine = machineValue(row, "machine")
+    const key = machineKey(machine)
+    if (!key) continue
+    const machineRowsForKey = grouped.get(key) ?? []
+    machineRowsForKey.push(row)
+    grouped.set(key, machineRowsForKey)
   }
-  return sortGroupedRows(grouped, machinePlanDisplaySort);
+  return sortGroupedRows(grouped, machinePlanDisplaySort)
 }
 
 function groupPlannedRowsByJobCard(rows: DashboardPayload[]) {
-  const grouped = new Map<string, DashboardPayload[]>();
+  const grouped = new Map<string, DashboardPayload[]>()
   for (const row of rows) {
-    const key = machineKey(row.jcNo || row.JobCardNo || row.jobCard);
-    if (!key) continue;
-    const existing = grouped.get(key) ?? [];
-    existing.push(row);
-    grouped.set(key, existing);
+    const key = machineKey(row.jcNo || row.JobCardNo || row.jobCard)
+    if (!key) continue
+    const existing = grouped.get(key) ?? []
+    existing.push(row)
+    grouped.set(key, existing)
   }
-  return sortGroupedRows(grouped, jobCardSetupSort);
+  return sortGroupedRows(grouped, jobCardSetupSort)
 }
 
 function plannedRowsForJobCard(
   row: DashboardPayload,
   plannedByJobCard: Map<string, DashboardPayload[]>,
-  plannedByPart: Map<string, DashboardPayload[]>,
+  plannedByPart: Map<string, DashboardPayload[]>
 ) {
-  return plannedByJobCard.get(machineKey(jobCardNumber(row))) ?? plannedByPart.get(machineKey(itemCode(row))) ?? [];
+  return (
+    plannedByJobCard.get(machineKey(jobCardNumber(row))) ??
+    plannedByPart.get(machineKey(itemCode(row))) ??
+    []
+  )
 }
 
 function groupPlannedRowsByPart(rows: DashboardPayload[]) {
-  const grouped = new Map<string, DashboardPayload[]>();
+  const grouped = new Map<string, DashboardPayload[]>()
   for (const row of rows) {
-    const key = machineKey(row.partCode || row["PART CODE"] || row.itemCode);
-    if (!key) continue;
-    const existing = grouped.get(key) ?? [];
-    existing.push(row);
-    grouped.set(key, existing);
+    const key = machineKey(row.partCode || row["PART CODE"] || row.itemCode)
+    if (!key) continue
+    const existing = grouped.get(key) ?? []
+    existing.push(row)
+    grouped.set(key, existing)
   }
-  return sortGroupedRows(grouped, jobCardSetupSort);
+  return sortGroupedRows(grouped, jobCardSetupSort)
 }
 
 function sortGroupedRows(
   grouped: Map<string, DashboardPayload[]>,
-  sorter: (a: DashboardPayload, b: DashboardPayload) => number,
+  sorter: (a: DashboardPayload, b: DashboardPayload) => number
 ) {
   for (const [key, rows] of grouped) {
-    grouped.set(key, [...rows].sort(sorter));
+    grouped.set(key, [...rows].sort(sorter))
   }
-  return grouped;
+  return grouped
 }
 
 function machinePlanDisplaySort(a: DashboardPayload, b: DashboardPayload) {
-  return shopFloorDisplayBucket(a) - shopFloorDisplayBucket(b)
-    || shopFloorPlanSort(a, b);
+  return (
+    shopFloorDisplayBucket(a) - shopFloorDisplayBucket(b) ||
+    shopFloorPlanSort(a, b)
+  )
 }
 
 function jobCardSetupSort(a: DashboardPayload, b: DashboardPayload) {
-  return displayValue(a.setupNo).localeCompare(displayValue(b.setupNo), undefined, { numeric: true })
-    || shopFloorPlanSort(a, b);
+  return (
+    displayValue(a.setupNo).localeCompare(displayValue(b.setupNo), undefined, {
+      numeric: true,
+    }) || shopFloorPlanSort(a, b)
+  )
 }
 
 function shopFloorDisplayBucket(row: DashboardPayload) {
-  if (shopFloorItemIsFinished(row)) return 2;
-  if (shopFloorItemIsCurrent(row)) return 0;
-  return 1;
+  if (shopFloorItemIsFinished(row)) return 2
+  if (shopFloorItemIsCurrent(row)) return 0
+  return 1
 }
 
 function shopFloorItemIsFinished(row: DashboardPayload) {
-  return str(row.shopFloorStage) === "item_complete"
-    || str(row.runningStatus).toLowerCase() === "complete";
+  return (
+    str(row.shopFloorStage) === "item_complete" ||
+    str(row.runningStatus).toLowerCase() === "complete"
+  )
 }
 
-function plannedMachineOptions(rows: DashboardPayload[], machineRows: DashboardPayload[] = []) {
-  const boardOptions = machineRows.map((row) => machineValue(row, "machine")).filter((value) => value !== "-");
-  if (boardOptions.length) return uniqueValues(boardOptions);
-  return uniqueValues(rows.map((row) => machineValue(row, "machine")).filter((value) => value !== "-"));
+function plannedMachineOptions(
+  rows: DashboardPayload[],
+  machineRows: DashboardPayload[] = []
+) {
+  const boardOptions = machineRows
+    .map((row) => machineValue(row, "machine"))
+    .filter((value) => value !== "-")
+  if (boardOptions.length) return uniqueValues(boardOptions)
+  return uniqueValues(
+    rows
+      .map((row) => machineValue(row, "machine"))
+      .filter((value) => value !== "-")
+  )
 }
 
 function typedFilterMatches(value: string, filter: string) {
-  const normalizedFilter = filter.trim().toLowerCase();
-  if (!normalizedFilter) return true;
-  return value.toLowerCase() === normalizedFilter;
+  const normalizedFilter = filter.trim().toLowerCase()
+  if (!normalizedFilter) return true
+  return value.toLowerCase() === normalizedFilter
 }
 
 function shopFloorItemLabel(row: DashboardPayload) {
@@ -8970,19 +14859,25 @@ function shopFloorItemLabel(row: DashboardPayload) {
     jobCardNumber(row),
     `Setup ${displayValue(row.setupNo)}`,
     `Option ${displayValue(row.optionNumber)}`,
-  ].filter((value) => value && value !== "-").join(" / ");
+  ]
+    .filter((value) => value && value !== "-")
+    .join(" / ")
 }
 
-function shopFloorItemMatchesFilter(row: DashboardPayload | undefined, filter: string) {
-  const normalizedFilter = filter.trim().toLowerCase();
-  if (!normalizedFilter) return true;
-  if (!row) return ["empty", "no running item", "no plan"].includes(normalizedFilter);
-  return shopFloorItemLabel(row).toLowerCase() === normalizedFilter;
+function shopFloorItemMatchesFilter(
+  row: DashboardPayload | undefined,
+  filter: string
+) {
+  const normalizedFilter = filter.trim().toLowerCase()
+  if (!normalizedFilter) return true
+  if (!row)
+    return ["empty", "no running item", "no plan"].includes(normalizedFilter)
+  return shopFloorItemLabel(row).toLowerCase() === normalizedFilter
 }
 
 function correctionRowMatchesQuery(row: DashboardPayload, query: string) {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) return true;
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return true
   return [
     row.targetTable,
     row.entryType,
@@ -8990,200 +14885,298 @@ function correctionRowMatchesQuery(row: DashboardPayload, query: string) {
     row.targetLabel,
     row.createdAt,
     JSON.stringify(row.details ?? {}),
-  ].map((value) => formatCell(value)).join(" ").toLowerCase().includes(normalizedQuery);
+  ]
+    .map((value) => formatCell(value))
+    .join(" ")
+    .toLowerCase()
+    .includes(normalizedQuery)
 }
 
-function shopFloorRowStatus(current: DashboardPayload | undefined, next: DashboardPayload | undefined, productionCardRows: DashboardPayload[] = []) {
-  if (current) return shopFloorCurrentStatusLabel(current, productionCardRows);
-  if (!next) return "No plan";
-  return str(next.shopFloorStageLabel) || "Setup required";
+function shopFloorRowStatus(
+  current: DashboardPayload | undefined,
+  next: DashboardPayload | undefined,
+  productionCardRows: DashboardPayload[] = []
+) {
+  if (current) return shopFloorCurrentStatusLabel(current, productionCardRows)
+  if (!next) return "No plan"
+  return str(next.shopFloorStageLabel) || "Setup required"
 }
 
-function shopFloorCurrentStatusLabel(row: DashboardPayload, productionCardRows: DashboardPayload[] = []) {
-  if (shopFloorItemIsProductionCurrent(row) || shopFloorItemHasActiveProductionCard(row, productionCardRows)) return "Running";
-  return str(row.shopFloorStageLabel) || str(row.runningStatus) || "Setup complete";
+function shopFloorCurrentStatusLabel(
+  row: DashboardPayload,
+  productionCardRows: DashboardPayload[] = []
+) {
+  if (
+    shopFloorItemIsProductionCurrent(row) ||
+    shopFloorItemHasActiveProductionCard(row, productionCardRows)
+  )
+    return "Running"
+  return (
+    str(row.shopFloorStageLabel) || str(row.runningStatus) || "Setup complete"
+  )
 }
 
 function jobCardMatchesMachine(
   row: DashboardPayload,
   machineFilter: string,
   plannedByJobCard: Map<string, DashboardPayload[]>,
-  plannedByPart: Map<string, DashboardPayload[]>,
+  plannedByPart: Map<string, DashboardPayload[]>
 ) {
-  const normalizedFilter = machineFilter.trim().toLowerCase();
-  if (!normalizedFilter) return true;
+  const normalizedFilter = machineFilter.trim().toLowerCase()
+  if (!normalizedFilter) return true
   const plannedRows = [
     ...(plannedByJobCard.get(machineKey(jobCardNumber(row))) ?? []),
     ...(plannedByPart.get(machineKey(itemCode(row))) ?? []),
-  ];
-  return plannedRows.some((plannedRow) => machineValue(plannedRow, "machine").toLowerCase() === normalizedFilter);
+  ]
+  return plannedRows.some(
+    (plannedRow) =>
+      machineValue(plannedRow, "machine").toLowerCase() === normalizedFilter
+  )
 }
 
-function machineMatchesJobCard(machine: string, jobCardFilter: string, plannedByMachine: Map<string, DashboardPayload[]>) {
-  const normalizedFilter = jobCardFilter.trim().toLowerCase();
-  if (!normalizedFilter) return true;
-  const plannedRows = plannedByMachine.get(machineKey(machine)) ?? [];
-  return plannedRows.some((plannedRow) => jobCardNumber(plannedRow).toLowerCase() === normalizedFilter);
+function machineMatchesJobCard(
+  machine: string,
+  jobCardFilter: string,
+  plannedByMachine: Map<string, DashboardPayload[]>
+) {
+  const normalizedFilter = jobCardFilter.trim().toLowerCase()
+  if (!normalizedFilter) return true
+  const plannedRows = plannedByMachine.get(machineKey(machine)) ?? []
+  return plannedRows.some(
+    (plannedRow) => jobCardNumber(plannedRow).toLowerCase() === normalizedFilter
+  )
 }
 
-function machineMatchesItemCode(machine: string, itemCodeFilter: string, plannedByMachine: Map<string, DashboardPayload[]>) {
-  const normalizedFilter = itemCodeFilter.trim().toLowerCase();
-  if (!normalizedFilter) return true;
-  const plannedRows = plannedByMachine.get(machineKey(machine)) ?? [];
-  return plannedRows.some((plannedRow) => itemCode(plannedRow).toLowerCase() === normalizedFilter);
+function machineMatchesItemCode(
+  machine: string,
+  itemCodeFilter: string,
+  plannedByMachine: Map<string, DashboardPayload[]>
+) {
+  const normalizedFilter = itemCodeFilter.trim().toLowerCase()
+  if (!normalizedFilter) return true
+  const plannedRows = plannedByMachine.get(machineKey(machine)) ?? []
+  return plannedRows.some(
+    (plannedRow) => itemCode(plannedRow).toLowerCase() === normalizedFilter
+  )
 }
 
-function machineIsRunning(machine: string, plannedByMachine: Map<string, DashboardPayload[]>) {
-  const rows = plannedByMachine.get(machineKey(machine)) ?? [];
+function machineIsRunning(
+  machine: string,
+  plannedByMachine: Map<string, DashboardPayload[]>
+) {
+  const rows = plannedByMachine.get(machineKey(machine)) ?? []
   return rows.some((row) => {
-    if (planningRowIsBreakdownStopped(row) || planningRowIsShiftedAfterBreakdown(row) || planningRowHasUnavailableBreakdown(row)) return false;
-    return str(row.runningStatus).toLowerCase() === "running" || Number(row.rawRows) > 0 || Number(row.rawOutputQty) > 0 || Number(row.rawActualQty) > 0;
-  });
+    if (
+      planningRowIsBreakdownStopped(row) ||
+      planningRowIsShiftedAfterBreakdown(row) ||
+      planningRowHasUnavailableBreakdown(row)
+    )
+      return false
+    return (
+      str(row.runningStatus).toLowerCase() === "running" ||
+      Number(row.rawRows) > 0 ||
+      Number(row.rawOutputQty) > 0 ||
+      Number(row.rawActualQty) > 0
+    )
+  })
 }
 
 function currentShopFloorItem(rows: DashboardPayload[]) {
   return rows
     .filter((row) => str(row.shopFloorStage) !== "item_complete")
     .filter((row) => shopFloorItemIsProductionCurrent(row))
-    .sort(shopFloorPlanSort)[0];
+    .sort(shopFloorPlanSort)[0]
 }
 
-function nextShopFloorItem(rows: DashboardPayload[], current: DashboardPayload | undefined) {
-  const currentKey = current ? shopFloorPlanKey(current) : "";
+function nextShopFloorItem(
+  rows: DashboardPayload[],
+  current: DashboardPayload | undefined
+) {
+  const currentKey = current ? shopFloorPlanKey(current) : ""
   return rows
     .filter((row) => shopFloorPlanKey(row) !== currentKey)
     .filter((row) => str(row.shopFloorStage) !== "item_complete")
     .filter((row) => !shopFloorItemIsProductionCurrent(row))
-    .sort(shopFloorPlanSort)[0];
+    .sort(shopFloorPlanSort)[0]
 }
 
-function currentShopFloorStatusItem(rows: DashboardPayload[], productionCardRows: DashboardPayload[] = []) {
+function currentShopFloorStatusItem(
+  rows: DashboardPayload[],
+  productionCardRows: DashboardPayload[] = []
+) {
   return rows
     .filter((row) => str(row.shopFloorStage) !== "item_complete")
-    .filter((row) => shopFloorItemIsStatusCurrent(row) || shopFloorItemHasActiveProductionCard(row, productionCardRows))
-    .sort(shopFloorPlanSort)[0];
+    .filter(
+      (row) =>
+        shopFloorItemIsStatusCurrent(row) ||
+        shopFloorItemHasActiveProductionCard(row, productionCardRows)
+    )
+    .sort(shopFloorPlanSort)[0]
 }
 
-function nextShopFloorStatusItem(rows: DashboardPayload[], current: DashboardPayload | undefined, productionCardRows: DashboardPayload[] = []) {
-  const currentKey = current ? shopFloorPlanKey(current) : "";
+function nextShopFloorStatusItem(
+  rows: DashboardPayload[],
+  current: DashboardPayload | undefined,
+  productionCardRows: DashboardPayload[] = []
+) {
+  const currentKey = current ? shopFloorPlanKey(current) : ""
   return rows
     .filter((row) => shopFloorPlanKey(row) !== currentKey)
     .filter((row) => str(row.shopFloorStage) !== "item_complete")
-    .filter((row) => !shopFloorItemIsStatusCurrent(row) && !shopFloorItemHasActiveProductionCard(row, productionCardRows))
-    .sort(shopFloorPlanSort)[0];
+    .filter(
+      (row) =>
+        !shopFloorItemIsStatusCurrent(row) &&
+        !shopFloorItemHasActiveProductionCard(row, productionCardRows)
+    )
+    .sort(shopFloorPlanSort)[0]
 }
 
 function shopFloorQueueRows(productionControl: DashboardPayload) {
-  const plannedRows = asArray(productionControl.machinePlanDetailRows);
-  const boardRows = machineBoardRows(asArray(productionControl.machinePlanningRows), plannedRows);
-  const plannedByMachine = groupPlannedRowsByMachine(plannedRows);
+  const plannedRows = asArray(productionControl.machinePlanDetailRows)
+  const boardRows = machineBoardRows(
+    asArray(productionControl.machinePlanningRows),
+    plannedRows
+  )
+  const plannedByMachine = groupPlannedRowsByMachine(plannedRows)
   return boardRows
     .map((machineRow) => {
-      const machine = machineValue(machineRow, "machine");
-      const plans = plannedByMachine.get(machineKey(machine)) ?? [];
-      const current = currentShopFloorItem(plans);
-      const next = nextShopFloorItem(plans, current);
+      const machine = machineValue(machineRow, "machine")
+      const plans = plannedByMachine.get(machineKey(machine)) ?? []
+      const current = currentShopFloorItem(plans)
+      const next = nextShopFloorItem(plans, current)
       return {
         machineRow,
         machine,
         location: machineMasterLocationValue(machineRow),
         current,
         next,
-      };
+      }
     })
-    .filter((row): row is {
-      machineRow: DashboardPayload;
-      machine: string;
-      location: string;
-      current: DashboardPayload | undefined;
-      next: DashboardPayload;
-    } => Boolean(row.next));
+    .filter(
+      (
+        row
+      ): row is {
+        machineRow: DashboardPayload
+        machine: string
+        location: string
+        current: DashboardPayload | undefined
+        next: DashboardPayload
+      } => Boolean(row.next)
+    )
 }
 
 function currentShopFloorRows(productionControl: DashboardPayload) {
-  const plannedRows = asArray(productionControl.machinePlanDetailRows);
-  const boardRows = machineBoardRows(asArray(productionControl.machinePlanningRows), plannedRows);
-  const plannedByMachine = groupPlannedRowsByMachine(plannedRows);
+  const plannedRows = asArray(productionControl.machinePlanDetailRows)
+  const boardRows = machineBoardRows(
+    asArray(productionControl.machinePlanningRows),
+    plannedRows
+  )
+  const plannedByMachine = groupPlannedRowsByMachine(plannedRows)
   return boardRows
     .map((machineRow) => {
-      const machine = machineValue(machineRow, "machine");
-      const plans = plannedByMachine.get(machineKey(machine)) ?? [];
-      return currentShopFloorItem(plans);
+      const machine = machineValue(machineRow, "machine")
+      const plans = plannedByMachine.get(machineKey(machine)) ?? []
+      return currentShopFloorItem(plans)
     })
-    .filter((row): row is DashboardPayload => Boolean(row));
+    .filter((row): row is DashboardPayload => Boolean(row))
 }
 
-function roleTaskMatches(row: {
-  current: DashboardPayload | undefined;
-  next: DashboardPayload;
-}, role: RoleTaskKind) {
-  const nextStage = nextShopFloorStage(row.next);
-  if (!nextStage) return false;
-  if (row.next.shopFloorTaskReady === false) return false;
+function roleTaskMatches(
+  row: {
+    current: DashboardPayload | undefined
+    next: DashboardPayload
+  },
+  role: RoleTaskKind
+) {
+  const nextStage = nextShopFloorStage(row.next)
+  if (!nextStage) return false
+  if (row.next.shopFloorTaskReady === false) return false
   if (role === "shopFloor") {
-    return nextStage.id === "raw_material_at_machine" && !row.current;
+    return nextStage.id === "raw_material_at_machine" && !row.current
   }
-  if (role === "quality") return nextStage.id === "quality_approval";
-  return nextStage.id === "presetting" || nextStage.id === "setting" || nextStage.id === "operator_started";
+  if (role === "quality") return nextStage.id === "quality_approval"
+  return (
+    nextStage.id === "presetting" ||
+    nextStage.id === "setting" ||
+    nextStage.id === "operator_started"
+  )
 }
 
 function nextShopFloorStage(row: DashboardPayload) {
-  const nextIndex = shopFloorStageIndex(str(row.shopFloorStage)) + 1;
-  return shopFloorStages[nextIndex];
+  const nextIndex = shopFloorStageIndex(str(row.shopFloorStage)) + 1
+  return shopFloorStages[nextIndex]
 }
 
 function pendingTaskLabel(row: DashboardPayload) {
-  return nextShopFloorStage(row)?.label ?? "No pending task";
+  return nextShopFloorStage(row)?.label ?? "No pending task"
 }
 
-function shopFloorItemHasActiveProductionCard(row: DashboardPayload, productionCardRows: DashboardPayload[] = []) {
+function shopFloorItemHasActiveProductionCard(
+  row: DashboardPayload,
+  productionCardRows: DashboardPayload[] = []
+) {
   return productionCardRows.some((card) => {
-    const role = optionalText(card.cardRole) ?? "";
-    const entryKind = optionalText(card.cardEntryKind) || inferredProductionCardEntryKind(card);
-    if (role && !sameProductionCardText(role, "shopFloor")) return false;
-    if (entryKind !== "production") return false;
-    if (!optionalText(card.startTime)) return false;
-    if (optionalText(card.endTime)) return false;
-    if (!sameProductionCardText(card.machine, displayValue(row.machine))) return false;
-    if (!sameProductionCardText(card.partCode || card.partNo, itemCode(row))) return false;
-    if (!sameProductionCardText(card.jobCard || card.jcNo, jobCardNumber(row))) return false;
-    return sameProductionCardText(card.setupNo, displayValue(row.setupNo));
-  });
+    const role = optionalText(card.cardRole) ?? ""
+    const entryKind =
+      optionalText(card.cardEntryKind) || inferredProductionCardEntryKind(card)
+    if (role && !sameProductionCardText(role, "shopFloor")) return false
+    if (entryKind !== "production") return false
+    if (!optionalText(card.startTime)) return false
+    if (optionalText(card.endTime)) return false
+    if (!sameProductionCardText(card.machine, displayValue(row.machine)))
+      return false
+    if (!sameProductionCardText(card.partCode || card.partNo, itemCode(row)))
+      return false
+    if (!sameProductionCardText(card.jobCard || card.jcNo, jobCardNumber(row)))
+      return false
+    return sameProductionCardText(card.setupNo, displayValue(row.setupNo))
+  })
 }
 function shopFloorItemIsCurrent(row: DashboardPayload) {
-  return shopFloorItemIsProductionCurrent(row);
+  return shopFloorItemIsProductionCurrent(row)
 }
 
 function shopFloorItemIsProductionCurrent(row: DashboardPayload) {
-  if (planningRowIsBreakdownStopped(row) || planningRowIsShiftedAfterBreakdown(row)) return false;
-  return ["operator_started", "worker_start"].includes(str(row.shopFloorStage))
-    || str(row.runningStatus).toLowerCase() === "running"
-    || Number(row.rawRows) > 0
-    || Number(row.rawOutputQty) > 0
-    || Number(row.rawActualQty) > 0;
+  if (
+    planningRowIsBreakdownStopped(row) ||
+    planningRowIsShiftedAfterBreakdown(row)
+  )
+    return false
+  return (
+    ["operator_started", "worker_start"].includes(str(row.shopFloorStage)) ||
+    str(row.runningStatus).toLowerCase() === "running" ||
+    Number(row.rawRows) > 0 ||
+    Number(row.rawOutputQty) > 0 ||
+    Number(row.rawActualQty) > 0
+  )
 }
 
 function shopFloorItemIsStatusCurrent(row: DashboardPayload) {
-  if (shopFloorItemIsProductionCurrent(row)) return true;
-  const stageIndex = shopFloorStageIndex(str(row.shopFloorStage));
-  const qualityApprovedIndex = shopFloorStageIndex("quality_approval");
-  return stageIndex >= qualityApprovedIndex;
+  if (shopFloorItemIsProductionCurrent(row)) return true
+  const stageIndex = shopFloorStageIndex(str(row.shopFloorStage))
+  const qualityApprovedIndex = shopFloorStageIndex("quality_approval")
+  return stageIndex >= qualityApprovedIndex
 }
 
 function shopFloorStageIndex(stage: string) {
-  const normalizedStage = {
-    shop_floor_rm: "raw_material_at_machine",
-    tools_drawing: "presetting",
-    qc_approval: "quality_approval",
-    worker_start: "operator_started",
-  }[stage] ?? stage;
-  return shopFloorStages.findIndex((item) => item.id === normalizedStage);
+  const normalizedStage =
+    {
+      shop_floor_rm: "raw_material_at_machine",
+      tools_drawing: "presetting",
+      qc_approval: "quality_approval",
+      worker_start: "operator_started",
+    }[stage] ?? stage
+  return shopFloorStages.findIndex((item) => item.id === normalizedStage)
 }
 
 function shopFloorPlanSort(a: DashboardPayload, b: DashboardPayload) {
-  return dateSortValue(plannedSetupDate(a)) - dateSortValue(plannedSetupDate(b))
-    || displayValue(a.setupNo).localeCompare(displayValue(b.setupNo), undefined, { numeric: true })
-    || itemCode(a).localeCompare(itemCode(b), undefined, { numeric: true });
+  return (
+    dateSortValue(plannedSetupDate(a)) - dateSortValue(plannedSetupDate(b)) ||
+    displayValue(a.setupNo).localeCompare(displayValue(b.setupNo), undefined, {
+      numeric: true,
+    }) ||
+    itemCode(a).localeCompare(itemCode(b), undefined, { numeric: true })
+  )
 }
 
 function shopFloorPlanKey(row: DashboardPayload) {
@@ -9193,36 +15186,76 @@ function shopFloorPlanKey(row: DashboardPayload) {
     displayValue(row.optionNumber),
     displayValue(row.setupNo),
     displayValue(row.machine),
-  ].map(machineKey).join("|");
+  ]
+    .map(machineKey)
+    .join("|")
 }
 
 function machinePlanningStatus(rows: DashboardPayload[]) {
-  if (!rows.length) return "No plan";
-  if (rows.some((row) => planningRowIsBreakdownStopped(row) || planningRowHasUnavailableBreakdown(row))) return "Breakdown";
-  if (rows.some((row) => str(row.runningStatus).toLowerCase() === "setup complete")) return "Setup complete";
-  return "Planned";
+  if (!rows.length) return "No plan"
+  if (
+    rows.some(
+      (row) =>
+        planningRowIsBreakdownStopped(row) ||
+        planningRowHasUnavailableBreakdown(row)
+    )
+  )
+    return "Breakdown"
+  if (
+    rows.some(
+      (row) => str(row.runningStatus).toLowerCase() === "setup complete"
+    )
+  )
+    return "Setup complete"
+  return "Planned"
 }
 
 function machineTileFocusSetup(rows: DashboardPayload[]) {
-  const completed = rows.filter((row) => str(row.runningStatus).toLowerCase() === "setup complete" || displayValue(row.completionDate) !== "-");
-  if (completed.length) return completed.sort((a, b) =>
-    dateSortValue(completedSetupDate(b)) - dateSortValue(completedSetupDate(a)) ||
-    dateSortValue(plannedSetupDate(b)) - dateSortValue(plannedSetupDate(a)),
-  )[0];
-  const pending = rows.filter((row) => displayValue(row.completionDate) === "-");
-  return (pending.length ? pending : rows).sort((a, b) =>
-    dateSortValue(plannedSetupDate(a)) - dateSortValue(plannedSetupDate(b)) ||
-    displayValue(a.setupNo).localeCompare(displayValue(b.setupNo), undefined, { numeric: true }),
-  )[0];
+  const completed = rows.filter(
+    (row) =>
+      str(row.runningStatus).toLowerCase() === "setup complete" ||
+      displayValue(row.completionDate) !== "-"
+  )
+  if (completed.length)
+    return completed.sort(
+      (a, b) =>
+        dateSortValue(completedSetupDate(b)) -
+          dateSortValue(completedSetupDate(a)) ||
+        dateSortValue(plannedSetupDate(b)) - dateSortValue(plannedSetupDate(a))
+    )[0]
+  const pending = rows.filter((row) => displayValue(row.completionDate) === "-")
+  return (pending.length ? pending : rows).sort(
+    (a, b) =>
+      dateSortValue(plannedSetupDate(a)) - dateSortValue(plannedSetupDate(b)) ||
+      displayValue(a.setupNo).localeCompare(
+        displayValue(b.setupNo),
+        undefined,
+        { numeric: true }
+      )
+  )[0]
 }
 
-function LabeledInput({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+function LabeledInput({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  type?: string
+}) {
   return (
     <label className="grid gap-1 text-xs font-medium text-muted-foreground">
       {label}
-      <Input value={value} type={type} onChange={(event) => onChange(event.target.value)} />
+      <Input
+        value={value}
+        type={type}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </label>
-  );
+  )
 }
 
 function LabeledSelect({
@@ -9232,121 +15265,173 @@ function LabeledSelect({
   options,
   placeholder,
 }: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<string | { value: string; label: string }>;
-  placeholder?: string;
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: Array<string | { value: string; label: string }>
+  placeholder?: string
 }) {
   return (
     <label className="grid gap-1 text-xs font-medium text-muted-foreground">
       {label}
-      <select className="h-9 rounded-md border bg-background px-3 text-sm text-foreground" value={value} onChange={(event) => onChange(event.target.value)}>
+      <select
+        className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
         {placeholder ? <option value="">{placeholder}</option> : null}
         {options.map((option) => {
-          const optionValue = typeof option === "string" ? option : option.value;
-          const optionLabel = typeof option === "string" ? option : option.label;
-          return <option key={optionValue} value={optionValue}>{optionLabel}</option>;
+          const optionValue = typeof option === "string" ? option : option.value
+          const optionLabel = typeof option === "string" ? option : option.label
+          return (
+            <option key={optionValue} value={optionValue}>
+              {optionLabel}
+            </option>
+          )
         })}
       </select>
     </label>
-  );
+  )
 }
 
-function AlertMessage({ tone, children }: { tone: NonNullable<ActionStatus>["tone"]; children: ReactNode }) {
+function AlertMessage({
+  tone,
+  children,
+}: {
+  tone: NonNullable<ActionStatus>["tone"]
+  children: ReactNode
+}) {
   return (
-    <Badge variant={tone === "destructive" ? "destructive" : "outline"} className="w-fit">
+    <Badge
+      variant={tone === "destructive" ? "destructive" : "outline"}
+      className="w-fit"
+    >
       {children}
     </Badge>
-  );
+  )
 }
 
 function hourSlotOptions() {
   return Array.from({ length: 24 }, (_, hour) => {
-    const start = `${String(hour).padStart(2, "0")}:00`;
-    const end = `${String((hour + 1) % 24).padStart(2, "0")}:00`;
-    return `${start}-${end}`;
-  });
+    const start = `${String(hour).padStart(2, "0")}:00`
+    const end = `${String((hour + 1) % 24).padStart(2, "0")}:00`
+    return `${start}-${end}`
+  })
 }
 
 function currentHourSlot() {
-  const hour = new Date().getHours();
-  return `${String(hour).padStart(2, "0")}:00-${String((hour + 1) % 24).padStart(2, "0")}:00`;
+  const hour = new Date().getHours()
+  return `${String(hour).padStart(2, "0")}:00-${String((hour + 1) % 24).padStart(2, "0")}:00`
 }
 
 function qualityParameterCode(row: DashboardPayload) {
-  return str(row.code || row.parameterCode || row["CODE"]);
+  return str(row.code || row.parameterCode || row["CODE"])
 }
 
 function qualityParameterName(row: DashboardPayload) {
-  return str(row.parameterName || row.description || row["PARAMETER"] || row["DESCRIPTION"] || row.specification || qualityParameterCode(row));
+  return str(
+    row.parameterName ||
+      row.description ||
+      row["PARAMETER"] ||
+      row["DESCRIPTION"] ||
+      row.specification ||
+      qualityParameterCode(row)
+  )
 }
 
 function qualityParameterInputType(row: DashboardPayload) {
-  const inputType = str(row.inputType).toLowerCase();
-  if (inputType === "pass_fail" || inputType === "pass/fail") return "pass_fail";
-  if (inputType === "text") return "text";
-  return "number";
+  const inputType = str(row.inputType).toLowerCase()
+  if (inputType === "pass_fail" || inputType === "pass/fail") return "pass_fail"
+  if (inputType === "text") return "text"
+  return "number"
 }
 
 function qualityParameterTolerance(row: DashboardPayload) {
-  const plus = str(row.tolerancePlus || row["TOLERANCE +"] || row["TOL +"]);
-  const minus = str(row.toleranceMinus || row["TOLERANCE -"] || row["TOL -"]);
-  if (!plus && !minus) return "-";
-  return `+${plus || "0"} / -${minus || "0"}`;
+  const plus = str(row.tolerancePlus || row["TOLERANCE +"] || row["TOL +"])
+  const minus = str(row.toleranceMinus || row["TOLERANCE -"] || row["TOL -"])
+  if (!plus && !minus) return "-"
+  return `+${plus || "0"} / -${minus || "0"}`
 }
 
-function qualityParameterMatchesSetup(parameter: DashboardPayload, row: DashboardPayload) {
-  if (str(parameter.status).toLowerCase() === "inactive") return false;
-  const parameterPart = machineKey(parameter.partNo || parameter.partCode || parameter["PART NO"] || parameter["PART CODE"]);
-  const parameterOption = machineKey(parameter.optionNumber || parameter["OPTION NUMBER"] || parameter["OPTION NO"]);
-  const parameterSetup = machineKey(parameter.setupNo || parameter["SETUP NO."] || parameter["SETUP NO"] || parameter["SET UP"]);
-  return parameterPart === machineKey(itemCode(row))
-    && parameterOption === machineKey(displayValue(row.optionNumber))
-    && parameterSetup === machineKey(displayValue(row.setupNo));
+function qualityParameterMatchesSetup(
+  parameter: DashboardPayload,
+  row: DashboardPayload
+) {
+  if (str(parameter.status).toLowerCase() === "inactive") return false
+  const parameterPart = machineKey(
+    parameter.partNo ||
+      parameter.partCode ||
+      parameter["PART NO"] ||
+      parameter["PART CODE"]
+  )
+  const parameterOption = machineKey(
+    parameter.optionNumber ||
+      parameter["OPTION NUMBER"] ||
+      parameter["OPTION NO"]
+  )
+  const parameterSetup = machineKey(
+    parameter.setupNo ||
+      parameter["SETUP NO."] ||
+      parameter["SETUP NO"] ||
+      parameter["SET UP"]
+  )
+  return (
+    parameterPart === machineKey(itemCode(row)) &&
+    parameterOption === machineKey(displayValue(row.optionNumber)) &&
+    parameterSetup === machineKey(displayValue(row.setupNo))
+  )
 }
 
 function qualityReadingResult(parameter: DashboardPayload, value: unknown) {
-  const reading = str(value);
-  if (!reading) return "";
-  if (qualityParameterInputType(parameter) === "pass_fail") return qualityPassFailResult(reading);
-  if (qualityParameterInputType(parameter) !== "number") return "Recorded";
-  const numericReading = Number(reading);
-  const specification = Number(str(parameter.specification));
-  if (!Number.isFinite(numericReading) || !Number.isFinite(specification)) return "Recorded";
-  const plus = Number(str(parameter.tolerancePlus || 0));
-  const minus = Number(str(parameter.toleranceMinus || 0));
-  const lower = specification - (Number.isFinite(minus) ? minus : 0);
-  const upper = specification + (Number.isFinite(plus) ? plus : 0);
-  return numericReading >= lower && numericReading <= upper ? "OK" : "Not OK";
+  const reading = str(value)
+  if (!reading) return ""
+  if (qualityParameterInputType(parameter) === "pass_fail")
+    return qualityPassFailResult(reading)
+  if (qualityParameterInputType(parameter) !== "number") return "Recorded"
+  const numericReading = Number(reading)
+  const specification = Number(str(parameter.specification))
+  if (!Number.isFinite(numericReading) || !Number.isFinite(specification))
+    return "Recorded"
+  const plus = Number(str(parameter.tolerancePlus || 0))
+  const minus = Number(str(parameter.toleranceMinus || 0))
+  const lower = specification - (Number.isFinite(minus) ? minus : 0)
+  const upper = specification + (Number.isFinite(plus) ? plus : 0)
+  return numericReading >= lower && numericReading <= upper ? "OK" : "Not OK"
 }
 
 function normalizeQualityReadingInput(value: unknown) {
-  const reading = str(value);
-  return reading.toLowerCase() === "ng" ? "Not OK" : reading;
+  const reading = str(value)
+  return reading.toLowerCase() === "ng" ? "Not OK" : reading
 }
 
 function qualityPassFailResult(value: unknown) {
-  const reading = str(value).toLowerCase();
-  if (!reading) return "";
-  return reading === "ok" || reading === "pass" ? "OK" : "Not OK";
+  const reading = str(value).toLowerCase()
+  if (!reading) return ""
+  return reading === "ok" || reading === "pass" ? "OK" : "Not OK"
 }
 
 function qualityResultTone(result: unknown) {
-  const normalized = str(result).toLowerCase();
-  if (normalized === "not ok" || normalized === "ng") return "bad";
-  if (normalized === "ok") return "good";
-  return "neutral";
+  const normalized = str(result).toLowerCase()
+  if (normalized === "not ok" || normalized === "ng") return "bad"
+  if (normalized === "ok") return "good"
+  return "neutral"
 }
 
 function qualityReadingInputClass(result: unknown) {
-  const tone = qualityResultTone(result);
-  if (tone === "bad") return "border-red-400 bg-red-50 text-red-900 focus-visible:border-red-500 focus-visible:ring-red-200 dark:bg-red-950/30 dark:text-red-100";
-  if (tone === "good") return "border-emerald-300 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-100";
-  return "";
+  const tone = qualityResultTone(result)
+  if (tone === "bad")
+    return "border-red-400 bg-red-50 text-red-900 focus-visible:border-red-500 focus-visible:ring-red-200 dark:bg-red-950/30 dark:text-red-100"
+  if (tone === "good")
+    return "border-emerald-300 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-100"
+  return ""
 }
 
-function hourlyQualityCheckId(row: DashboardPayload, prodDate: string, shift: string, hourSlot: string) {
+function hourlyQualityCheckId(
+  row: DashboardPayload,
+  prodDate: string,
+  shift: string,
+  hourSlot: string
+) {
   return [
     "hourly-quality",
     prodDate,
@@ -9356,21 +15441,22 @@ function hourlyQualityCheckId(row: DashboardPayload, prodDate: string, shift: st
     itemCode(row),
     displayValue(row.optionNumber),
     displayValue(row.setupNo),
-  ].map(machineKey).join("|");
+  ]
+    .map(machineKey)
+    .join("|")
 }
-
 
 function hourlyQualityCheckPayload(
   row: DashboardPayload,
   parameters: DashboardPayload[],
   readings: Record<string, string>,
   remarks: Record<string, string>,
-  meta: { prodDate: string; shift: string; hourSlot: string; checkedBy: string },
+  meta: { prodDate: string; shift: string; hourSlot: string; checkedBy: string }
 ) {
   const readingRows = parameters.map((parameter) => {
-    const code = qualityParameterCode(parameter);
-    const actualReading = str(readings[code]);
-    const result = qualityReadingResult(parameter, actualReading);
+    const code = qualityParameterCode(parameter)
+    const actualReading = str(readings[code])
+    const result = qualityReadingResult(parameter, actualReading)
     return {
       code,
       parameterName: qualityParameterName(parameter),
@@ -9381,10 +15467,15 @@ function hourlyQualityCheckPayload(
       actualReading,
       result,
       remark: str(remarks[code]),
-    };
-  });
+    }
+  })
   return {
-    checkId: hourlyQualityCheckId(row, meta.prodDate, meta.shift, meta.hourSlot),
+    checkId: hourlyQualityCheckId(
+      row,
+      meta.prodDate,
+      meta.shift,
+      meta.hourSlot
+    ),
     prodDate: meta.prodDate,
     shift: meta.shift,
     hourSlot: meta.hourSlot,
@@ -9398,42 +15489,51 @@ function hourlyQualityCheckPayload(
     setupName: displayValue(row.setupName),
     checkedBy: meta.checkedBy.trim(),
     okCount: readingRows.filter((reading) => reading.result === "OK").length,
-    ngCount: readingRows.filter((reading) => qualityResultTone(reading.result) === "bad").length,
+    ngCount: readingRows.filter(
+      (reading) => qualityResultTone(reading.result) === "bad"
+    ).length,
     readings: readingRows,
     savedAt: new Date().toISOString(),
-  };
+  }
 }
 function plannedSetupDate(row: DashboardPayload | undefined) {
-  return row?.plannedProductionStartDate || row?.setupPlannedDate || row?.plannedDate;
+  return (
+    row?.plannedProductionStartDate || row?.setupPlannedDate || row?.plannedDate
+  )
 }
 
 function completedSetupDate(row: DashboardPayload | undefined) {
-  return row?.setupCompletionDate || row?.completionDate;
+  return row?.setupCompletionDate || row?.completionDate
 }
 
-function machinePlanningTone(status: string): "success" | "planning" | "warning" | "danger" | "neutral" {
-  if (status === "Breakdown") return "danger";
-  if (status === "Setup complete") return "success";
-  if (status === "Planned") return "planning";
-  return "neutral";
+function machinePlanningTone(
+  status: string
+): "success" | "planning" | "warning" | "danger" | "neutral" {
+  if (status === "Breakdown") return "danger"
+  if (status === "Setup complete") return "success"
+  if (status === "Planned") return "planning"
+  return "neutral"
 }
 
 function planningRowIsBreakdownStopped(row: DashboardPayload) {
-  return str(row.runningStatus).toLowerCase() === "breakdown stopped";
+  return str(row.runningStatus).toLowerCase() === "breakdown stopped"
 }
 
 function planningRowIsShiftedAfterBreakdown(row: DashboardPayload) {
-  const status = str(row.runningStatus).toLowerCase();
-  return status === "plan shifted" || status === "plan delayed";
+  const status = str(row.runningStatus).toLowerCase()
+  return status === "plan shifted" || status === "plan delayed"
 }
 
 function planningRowHasUnavailableBreakdown(row: DashboardPayload) {
-  const text = [row.machineUnavailableReason, row.plannerActionRequired].map(str).join(" ").toLowerCase();
-  return text.includes("breakdown") || text.includes("unavailable");
+  const text = [row.machineUnavailableReason, row.plannerActionRequired]
+    .map(str)
+    .join(" ")
+    .toLowerCase()
+  return text.includes("breakdown") || text.includes("unavailable")
 }
 
 function machineKey(value: unknown) {
-  return str(value).toLowerCase();
+  return str(value).toLowerCase()
 }
 
 function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
@@ -9445,7 +15545,9 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       payload.optionNumber,
       payload.setupNo,
       payload.description,
-    ].map((value) => str(value).toLowerCase()).join("|");
+    ]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
   }
   if (entryType === "first_piece_inspection_report") {
     return [
@@ -9455,7 +15557,9 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       payload.setupNo,
       payload.machine,
       "fpi",
-    ].map((value) => str(value).toLowerCase()).join("|");
+    ]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
   }
   if (entryType === "quality_parameter_master") {
     return [
@@ -9463,18 +15567,25 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       payload.optionNumber,
       payload.setupNo,
       payload.code || payload.parameterCode,
-    ].map((value) => str(value).toLowerCase()).join("|");
+    ]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
   }
   if (entryType === "hourly_quality_check") {
-    return str(payload.checkId) || [
-      payload.prodDate || payload.date,
-      payload.shift,
-      payload.hourSlot,
-      payload.machine || payload.machineNo,
-      payload.partCode || payload.partNo,
-      payload.optionNumber,
-      payload.setupNo,
-    ].map((value) => str(value).toLowerCase()).join("|");
+    return (
+      str(payload.checkId) ||
+      [
+        payload.prodDate || payload.date,
+        payload.shift,
+        payload.hourSlot,
+        payload.machine || payload.machineNo,
+        payload.partCode || payload.partNo,
+        payload.optionNumber,
+        payload.setupNo,
+      ]
+        .map((value) => str(value).toLowerCase())
+        .join("|")
+    )
   }
   if (entryType === "production_card" || entryType === "software_raw") {
     return [
@@ -9484,23 +15595,28 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       payload.partCode,
       payload.setupNo,
       payload.machine,
-    ].map((value) => str(value).toLowerCase()).join("|");
+    ]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
   }
   if (entryType === "setup_checklist_master") {
-    return [
-      payload.version,
-      payload.sequence,
-      payload.checkPoint,
-    ].map((value) => str(value).toLowerCase()).join("|");
+    return [payload.version, payload.sequence, payload.checkPoint]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
   }
   if (entryType === "setup_checklist_session") {
-    return str(payload.sessionId) || [
-      payload.jcNo,
-      payload.partCode,
-      payload.optionNumber,
-      payload.setupNo,
-      payload.machine,
-    ].map((value) => str(value).toLowerCase()).join("|");
+    return (
+      str(payload.sessionId) ||
+      [
+        payload.jcNo,
+        payload.partCode,
+        payload.optionNumber,
+        payload.setupNo,
+        payload.machine,
+      ]
+        .map((value) => str(value).toLowerCase())
+        .join("|")
+    )
   }
   if (entryType === "setup_checklist") {
     return [
@@ -9509,7 +15625,9 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       payload.optionNumber,
       payload.setupNo,
       payload.machineNo,
-    ].map((value) => str(value).toLowerCase()).join("|");
+    ]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
   }
   if (entryType === "shop_floor_status") {
     return [
@@ -9518,81 +15636,145 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
       payload.optionNumber,
       payload.setupNo,
       payload.machine,
-    ].map((value) => str(value).toLowerCase()).join("|");
+    ]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
   }
   if (entryType === "maintenance_master") {
-    return str(payload.maintenanceCode || payload.code).toLowerCase();
+    return str(payload.maintenanceCode || payload.code).toLowerCase()
   }
   if (entryType === "maintenance_checklist_master") {
-    return [payload.checklistCode, payload.sequence].map((value) => str(value).toLowerCase()).join("|");
+    return [payload.checklistCode, payload.sequence]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
   }
   if (entryType === "maintenance_schedule") {
-    return [payload.machineNo || payload.machine, payload.maintenanceCode].map((value) => str(value).toLowerCase()).join("|");
+    return [payload.machineNo || payload.machine, payload.maintenanceCode]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
   }
   if (entryType === "maintenance_task") {
-    return str(payload.taskId) || [payload.machineNo || payload.machine, payload.maintenanceType, payload.maintenanceCode, payload.completedDate, payload.completedAt].map((value) => str(value).toLowerCase()).join("|");
+    return (
+      str(payload.taskId) ||
+      [
+        payload.machineNo || payload.machine,
+        payload.maintenanceType,
+        payload.maintenanceCode,
+        payload.completedDate,
+        payload.completedAt,
+      ]
+        .map((value) => str(value).toLowerCase())
+        .join("|")
+    )
   }
-  if (entryType === "downtime_reason_master" || entryType === "rejection_type_master" || entryType === "rejection_reason_master" || entryType === "rejection_remark_master") return str(payload.code).toLowerCase();
+  if (
+    entryType === "downtime_reason_master" ||
+    entryType === "rejection_type_master" ||
+    entryType === "rejection_reason_master" ||
+    entryType === "rejection_remark_master"
+  )
+    return str(payload.code).toLowerCase()
   if (entryType === "planning_holiday") {
-    return [
-      payload.date,
-      payload.scope,
-      payload.machine,
-      payload.department,
-    ].map((value) => str(value).toLowerCase()).join("|");
+    return [payload.date, payload.scope, payload.machine, payload.department]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
   }
-  if (entryType === "work_order" || entryType === "rm_inward") return str(payload.jcNo);
-  if (entryType === "route" || entryType === "cycle" || entryType === "tooling") {
-    return [payload.partNo, payload.optionNumber, payload.setupNo].map((value) => str(value).toLowerCase()).join("|");
+  if (entryType === "work_order" || entryType === "rm_inward")
+    return str(payload.jcNo)
+  if (
+    entryType === "route" ||
+    entryType === "cycle" ||
+    entryType === "tooling"
+  ) {
+    return [payload.partNo, payload.optionNumber, payload.setupNo]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
   }
-  if (entryType === "machine_master") return str(payload.machineNo);
-  if (entryType === "employee") return str(payload.empId);
-  return "";
+  if (entryType === "machine_master") return str(payload.machineNo)
+  if (entryType === "employee") return str(payload.empId)
+  return ""
 }
 
-function qualityParameterRowsFromDataEntry(dataEntry: DashboardPayload | undefined) {
-  const record = asRecord(dataEntry);
+function qualityParameterRowsFromDataEntry(
+  dataEntry: DashboardPayload | undefined
+) {
+  const record = asRecord(dataEntry)
   return mergeQualityParameterRows([
     ...asArray(record.qualityParameterMasterRows),
-    ...asArray(record.rows).filter((row) => str(row.entryType) === "quality_parameter_master"),
-    ...asArray(record.templates).filter((row) => str(row.entryType) === "quality_parameter_master"),
-  ]);
+    ...asArray(record.rows).filter(
+      (row) => str(row.entryType) === "quality_parameter_master"
+    ),
+    ...asArray(record.templates).filter(
+      (row) => str(row.entryType) === "quality_parameter_master"
+    ),
+  ])
 }
 
 function qualityParameterSetupKey(row: DashboardPayload) {
-  return [row.partNo || row.partCode, row.optionNumber, row.setupNo].map((value) => machineKey(value)).join("|");
+  return [row.partNo || row.partCode, row.optionNumber, row.setupNo]
+    .map((value) => machineKey(value))
+    .join("|")
 }
 
 function qualityParameterMasterKey(row: DashboardPayload) {
-  return [row.partNo || row.partCode, row.optionNumber, row.setupNo, row.code || row.parameterCode].map((value) => machineKey(value)).join("|");
+  return [
+    row.partNo || row.partCode,
+    row.optionNumber,
+    row.setupNo,
+    row.code || row.parameterCode,
+  ]
+    .map((value) => machineKey(value))
+    .join("|")
 }
 
 function sortQualityParameterRows(rows: DashboardPayload[]) {
-  return [...rows].sort((a, b) => (optionalNumber(a.sequence) ?? 9999) - (optionalNumber(b.sequence) ?? 9999)
-    || qualityParameterCode(a).localeCompare(qualityParameterCode(b), undefined, { numeric: true })
-    || qualityParameterName(a).localeCompare(qualityParameterName(b), undefined, { numeric: true }));
+  return [...rows].sort(
+    (a, b) =>
+      (optionalNumber(a.sequence) ?? 9999) -
+        (optionalNumber(b.sequence) ?? 9999) ||
+      qualityParameterCode(a).localeCompare(
+        qualityParameterCode(b),
+        undefined,
+        { numeric: true }
+      ) ||
+      qualityParameterName(a).localeCompare(
+        qualityParameterName(b),
+        undefined,
+        { numeric: true }
+      )
+  )
 }
 
 function mergeQualityParameterRows(rows: DashboardPayload[]) {
-  const byKey = new Map<string, DashboardPayload>();
+  const byKey = new Map<string, DashboardPayload>()
   for (const row of rows) {
-    const key = qualityParameterMasterKey(row);
-    if (!key.replaceAll("|", "")) continue;
-    byKey.set(key, row);
+    const key = qualityParameterMasterKey(row)
+    if (!key.replaceAll("|", "")) continue
+    byKey.set(key, row)
   }
-  return sortQualityParameterRows([...byKey.values()]);
+  return sortQualityParameterRows([...byKey.values()])
 }
 
 function qualityParameterSetupOptions(rows: DashboardPayload[]) {
-  const byKey = new Map<string, { key: string; label: string; partNo: string; optionNumber: string; setupNo: string; count: number }>();
+  const byKey = new Map<
+    string,
+    {
+      key: string
+      label: string
+      partNo: string
+      optionNumber: string
+      setupNo: string
+      count: number
+    }
+  >()
   for (const row of rows) {
-    if (str(row.status || "Active").toLowerCase() === "inactive") continue;
-    const key = qualityParameterSetupKey(row);
-    if (!key.replaceAll("|", "")) continue;
-    const partNo = displayValue(row.partNo || row.partCode);
-    const optionNumber = displayValue(row.optionNumber);
-    const setupNo = displayValue(row.setupNo);
-    const current = byKey.get(key);
+    if (str(row.status || "Active").toLowerCase() === "inactive") continue
+    const key = qualityParameterSetupKey(row)
+    if (!key.replaceAll("|", "")) continue
+    const partNo = displayValue(row.partNo || row.partCode)
+    const optionNumber = displayValue(row.optionNumber)
+    const setupNo = displayValue(row.setupNo)
+    const current = byKey.get(key)
     byKey.set(key, {
       key,
       partNo,
@@ -9600,9 +15782,11 @@ function qualityParameterSetupOptions(rows: DashboardPayload[]) {
       setupNo,
       label: `${partNo} | Option ${optionNumber} | Setup ${setupNo}`,
       count: (current?.count ?? 0) + 1,
-    });
+    })
   }
-  return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  return [...byKey.values()].sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { numeric: true })
+  )
 }
 
 function newQualityParameterDraft(sequence: number): QualityParameterDraft {
@@ -9616,14 +15800,19 @@ function newQualityParameterDraft(sequence: number): QualityParameterDraft {
     toleranceMinus: "",
     inputType: "number",
     remark: "",
-  };
+  }
 }
 
-function qualityParameterDraftFromRow(row: DashboardPayload): QualityParameterDraft {
+function qualityParameterDraftFromRow(
+  row: DashboardPayload
+): QualityParameterDraft {
   return {
-    draftId: qualityParameterMasterKey(row) || `quality-param-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    draftId:
+      qualityParameterMasterKey(row) ||
+      `quality-param-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     persisted: true,
-    sequence: displayValue(row.sequence) !== "-" ? displayValue(row.sequence) : "",
+    sequence:
+      displayValue(row.sequence) !== "-" ? displayValue(row.sequence) : "",
     parameterName: qualityParameterName(row),
     specification: str(row.specification),
     instrumentUsed: str(row.instrumentUsed),
@@ -9631,18 +15820,27 @@ function qualityParameterDraftFromRow(row: DashboardPayload): QualityParameterDr
     toleranceMinus: str(row.toleranceMinus),
     inputType: qualityParameterInputType(row),
     remark: str(row.remark),
-  };
+  }
 }
 
-function qualityParameterAutoCode(draft: QualityParameterDraft | DashboardPayload) {
-  const existingCode = str((draft as DashboardPayload).code || (draft as DashboardPayload).parameterCode);
-  if (existingCode) return existingCode;
-  const sequence = optionalNumber(draft.sequence) ?? 1;
-  return `P${sequence}`;
+function qualityParameterAutoCode(
+  draft: QualityParameterDraft | DashboardPayload
+) {
+  const existingCode = str(
+    (draft as DashboardPayload).code ||
+      (draft as DashboardPayload).parameterCode
+  )
+  if (existingCode) return existingCode
+  const sequence = optionalNumber(draft.sequence) ?? 1
+  return `P${sequence}`
 }
 
-function qualityParameterPayload(draft: QualityParameterDraft | DashboardPayload, setupFields: DashboardPayload, status: string): DashboardPayload {
-  const draftRecord = draft as QualityParameterDraft & DashboardPayload;
+function qualityParameterPayload(
+  draft: QualityParameterDraft | DashboardPayload,
+  setupFields: DashboardPayload,
+  status: string
+): DashboardPayload {
+  const draftRecord = draft as QualityParameterDraft & DashboardPayload
   return {
     partNo: str(setupFields.partNo || setupFields.partCode),
     optionNumber: str(setupFields.optionNumber),
@@ -9658,92 +15856,145 @@ function qualityParameterPayload(draft: QualityParameterDraft | DashboardPayload
     required: "Yes",
     status,
     remark: str(draft.remark),
-  };
+  }
 }
 
-function combinedQualityInspectionMasterRows(productionControl: DashboardPayload) {
+function combinedQualityInspectionMasterRows(
+  productionControl: DashboardPayload
+) {
   return [
     ...asArray(productionControl.qualityParameterMasterRows),
     ...asArray(productionControl.firstPieceInspectionMasterRows),
-  ];
+  ]
 }
-function maintenanceMasterRowsFromDataEntry(dataEntry: DashboardPayload | undefined) {
-  return asArray(asRecord(dataEntry).maintenanceMasterRows)
-    .filter((row) => displayValue(row.maintenanceCode || row.code) !== "-");
+function maintenanceMasterRowsFromDataEntry(
+  dataEntry: DashboardPayload | undefined
+) {
+  return asArray(asRecord(dataEntry).maintenanceMasterRows).filter(
+    (row) => displayValue(row.maintenanceCode || row.code) !== "-"
+  )
 }
 
 function maintenanceMasterKey(row: DashboardPayload) {
-  return machineKey(row.maintenanceCode || row.code);
+  return machineKey(row.maintenanceCode || row.code)
 }
 
 function nextMaintenanceMasterCode(rows: DashboardPayload[]) {
   const max = rows.reduce((highest, row) => {
-    const code = displayValue(row.maintenanceCode || row.code);
-    const match = /^MM(\d+)$/i.exec(code);
-    return match ? Math.max(highest, Number(match[1])) : highest;
-  }, 0);
-  return `MM${String(max + 1).padStart(3, "0")}`;
+    const code = displayValue(row.maintenanceCode || row.code)
+    const match = /^MM(\d+)$/i.exec(code)
+    return match ? Math.max(highest, Number(match[1])) : highest
+  }, 0)
+  return `MM${String(max + 1).padStart(3, "0")}`
 }
 function maintenanceScheduleFields(): LegacyField[] {
   return [
     { name: "maintenanceCode", label: "Maintenance code", required: true },
-    { name: "maintenanceTitle", label: "Maintenance schedule title", required: true },
+    {
+      name: "maintenanceTitle",
+      label: "Maintenance schedule title",
+      required: true,
+    },
     { name: "checklistCode", label: "Checklist code" },
-    { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
-    { name: "firstDueDate", label: "First due date", type: "date", required: true },
-    { name: "estimatedMinutes", label: "Estimated minutes", type: "number", min: "0" },
+    {
+      name: "frequencyDays",
+      label: "Frequency days",
+      type: "number",
+      min: "1",
+      required: true,
+    },
+    {
+      name: "firstDueDate",
+      label: "First due date",
+      type: "date",
+      required: true,
+    },
+    {
+      name: "estimatedMinutes",
+      label: "Estimated minutes",
+      type: "number",
+      min: "0",
+    },
     { name: "status", label: "Status" },
     { name: "remark", label: "Remark" },
-  ];
+  ]
 }
 
 function activeMaintenanceMasterRows(rows: DashboardPayload[]) {
   return rows
     .filter((row) => str(row.status || "Active").toLowerCase() !== "inactive")
-    .sort((a, b) => displayValue(a.maintenanceTitle).localeCompare(displayValue(b.maintenanceTitle), undefined, { numeric: true })
-      || displayValue(a.maintenanceCode).localeCompare(displayValue(b.maintenanceCode), undefined, { numeric: true }));
+    .sort(
+      (a, b) =>
+        displayValue(a.maintenanceTitle).localeCompare(
+          displayValue(b.maintenanceTitle),
+          undefined,
+          { numeric: true }
+        ) ||
+        displayValue(a.maintenanceCode).localeCompare(
+          displayValue(b.maintenanceCode),
+          undefined,
+          { numeric: true }
+        )
+    )
 }
-function maintenanceChecklistMasterRowsFromDataEntry(dataEntry: DashboardPayload | undefined) {
+function maintenanceChecklistMasterRowsFromDataEntry(
+  dataEntry: DashboardPayload | undefined
+) {
   const rows = [
     ...asArray(asRecord(dataEntry).maintenanceChecklistMasterRows),
     ...asArray(asRecord(dataEntry).rows),
     ...asArray(asRecord(dataEntry).templates),
-  ];
-  return rows.filter((row) => str(row.entryType) === "maintenance_checklist_master" || displayValue(row.checklistCode) !== "-");
+  ]
+  return rows.filter(
+    (row) =>
+      str(row.entryType) === "maintenance_checklist_master" ||
+      displayValue(row.checklistCode) !== "-"
+  )
 }
 
 function nextMaintenanceChecklistCode(rows: DashboardPayload[]) {
   const max = rows.reduce((highest, row) => {
-    const code = displayValue(row.checklistCode);
-    const match = /^MC(\d+)$/i.exec(code);
-    return match ? Math.max(highest, Number(match[1])) : highest;
-  }, 0);
-  return `MC${String(max + 1).padStart(3, "0")}`;
+    const code = displayValue(row.checklistCode)
+    const match = /^MC(\d+)$/i.exec(code)
+    return match ? Math.max(highest, Number(match[1])) : highest
+  }, 0)
+  return `MC${String(max + 1).padStart(3, "0")}`
 }
 
-
-function newMaintenanceChecklistDraft(sequence: number): MaintenanceChecklistStepDraft {
+function newMaintenanceChecklistDraft(
+  sequence: number
+): MaintenanceChecklistStepDraft {
   return {
     draftId: `maintenance-checklist-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     sequence: String(sequence),
     stepDescription: "",
     inputType: "checkbox",
     remark: "",
-  };
+  }
 }
 
-function maintenanceChecklistDraftFromRow(row: DashboardPayload): MaintenanceChecklistStepDraft {
+function maintenanceChecklistDraftFromRow(
+  row: DashboardPayload
+): MaintenanceChecklistStepDraft {
   return {
-    draftId: maintenanceChecklistStepKey(row) || `maintenance-checklist-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    draftId:
+      maintenanceChecklistStepKey(row) ||
+      `maintenance-checklist-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     persisted: true,
-    sequence: displayValue(row.sequence) !== "-" ? displayValue(row.sequence) : "",
+    sequence:
+      displayValue(row.sequence) !== "-" ? displayValue(row.sequence) : "",
     stepDescription: str(row.stepDescription),
     inputType: str(row.inputType || "checkbox"),
     remark: str(row.remark),
-  };
+  }
 }
 
-function maintenanceChecklistPayload(draft: MaintenanceChecklistStepDraft | DashboardPayload, checklistCode: string, checklistTitle: string, status: string): DashboardPayload {
+function maintenanceChecklistPayload(
+  draft: MaintenanceChecklistStepDraft | DashboardPayload,
+  checklistCode: string,
+  checklistTitle: string,
+  status: string
+): DashboardPayload {
   const payload: DashboardPayload = {
     checklistCode,
     checklistTitle,
@@ -9751,19 +16002,19 @@ function maintenanceChecklistPayload(draft: MaintenanceChecklistStepDraft | Dash
     stepDescription: str(draft.stepDescription),
     inputType: str(draft.inputType || "checkbox"),
     remark: str(draft.remark),
-  };
-  if (status.toLowerCase() === "inactive") payload.status = status;
-  return payload;
+  }
+  if (status.toLowerCase() === "inactive") payload.status = status
+  return payload
 }
 
 function mergeMaintenanceChecklistRows(rows: DashboardPayload[]) {
-  const byKey = new Map<string, DashboardPayload>();
+  const byKey = new Map<string, DashboardPayload>()
   for (const row of rows) {
-    const key = maintenanceChecklistStepKey(row);
-    if (!key.replaceAll("|", "")) continue;
-    byKey.set(key, row);
+    const key = maintenanceChecklistStepKey(row)
+    if (!key.replaceAll("|", "")) continue
+    byKey.set(key, row)
   }
-  return activeMaintenanceChecklistRows([...byKey.values()]);
+  return activeMaintenanceChecklistRows([...byKey.values()])
 }
 function maintenanceChecklistMasterDefaults(returnTab = "maintenanceTab") {
   return {
@@ -9773,54 +16024,90 @@ function maintenanceChecklistMasterDefaults(returnTab = "maintenanceTab") {
     stepDescription: "",
     inputType: "checkbox",
     __returnTab: returnTab,
-  };
+  }
 }
 
 function activeMaintenanceChecklistRows(rows: DashboardPayload[]) {
   return rows
     .filter((row) => str(row.status || "Active").toLowerCase() !== "inactive")
-    .sort((a, b) => displayValue(a.checklistCode).localeCompare(displayValue(b.checklistCode), undefined, { numeric: true })
-      || (optionalNumber(a.sequence) ?? 0) - (optionalNumber(b.sequence) ?? 0)
-      || displayValue(a.stepDescription).localeCompare(displayValue(b.stepDescription), undefined, { numeric: true }));
+    .sort(
+      (a, b) =>
+        displayValue(a.checklistCode).localeCompare(
+          displayValue(b.checklistCode),
+          undefined,
+          { numeric: true }
+        ) ||
+        (optionalNumber(a.sequence) ?? 0) - (optionalNumber(b.sequence) ?? 0) ||
+        displayValue(a.stepDescription).localeCompare(
+          displayValue(b.stepDescription),
+          undefined,
+          { numeric: true }
+        )
+    )
 }
 
 function maintenanceChecklistOptions(rows: DashboardPayload[]) {
-  const byCode = new Map<string, { code: string; title: string; steps: number }>();
+  const byCode = new Map<
+    string,
+    { code: string; title: string; steps: number }
+  >()
   for (const row of rows) {
-    const code = displayValue(row.checklistCode);
-    if (code === "-") continue;
-    const existing = byCode.get(machineKey(code));
+    const code = displayValue(row.checklistCode)
+    if (code === "-") continue
+    const existing = byCode.get(machineKey(code))
     if (existing) {
-      existing.steps += 1;
+      existing.steps += 1
     } else {
-      byCode.set(machineKey(code), { code, title: displayValue(row.checklistTitle), steps: 1 });
+      byCode.set(machineKey(code), {
+        code,
+        title: displayValue(row.checklistTitle),
+        steps: 1,
+      })
     }
   }
-  return [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+  return [...byCode.values()].sort((a, b) =>
+    a.code.localeCompare(b.code, undefined, { numeric: true })
+  )
 }
 
-function maintenanceChecklistRowsForCode(rows: DashboardPayload[], checklistCode: unknown) {
-  const code = machineKey(checklistCode);
-  if (!code) return [];
-  return rows.filter((row) => machineKey(row.checklistCode) === code);
+function maintenanceChecklistRowsForCode(
+  rows: DashboardPayload[],
+  checklistCode: unknown
+) {
+  const code = machineKey(checklistCode)
+  if (!code) return []
+  return rows.filter((row) => machineKey(row.checklistCode) === code)
 }
 
-function maintenanceChecklistTitle(rows: DashboardPayload[], checklistCode: unknown) {
-  const checklistRow = maintenanceChecklistRowsForCode(rows, checklistCode)[0];
-  return displayValue(checklistRow?.checklistTitle) !== "-" ? displayValue(checklistRow?.checklistTitle) : "";
+function maintenanceChecklistTitle(
+  rows: DashboardPayload[],
+  checklistCode: unknown
+) {
+  const checklistRow = maintenanceChecklistRowsForCode(rows, checklistCode)[0]
+  return displayValue(checklistRow?.checklistTitle) !== "-"
+    ? displayValue(checklistRow?.checklistTitle)
+    : ""
 }
 
 function maintenanceChecklistStepKey(row: DashboardPayload) {
-  return [row.checklistCode, row.sequence].map((value) => str(value).toLowerCase()).join("|");
+  return [row.checklistCode, row.sequence]
+    .map((value) => str(value).toLowerCase())
+    .join("|")
 }
 
-function maintenanceChecklistCompletionSteps(schedule: DashboardPayload, checklistRows: DashboardPayload[]) {
-  const rows = maintenanceChecklistRowsForCode(checklistRows, schedule.checklistCode);
+function maintenanceChecklistCompletionSteps(
+  schedule: DashboardPayload,
+  checklistRows: DashboardPayload[]
+) {
+  const rows = maintenanceChecklistRowsForCode(
+    checklistRows,
+    schedule.checklistCode
+  )
   return rows.map((row) => {
-    const inputType = str(row.inputType || "checkbox").toLowerCase();
-    const promptLabel = displayValue(row.stepDescription);
-    const defaultValue = inputType === "checkbox" ? "OK" : "";
-    const value = window.prompt(promptLabel, defaultValue)?.trim() ?? "";
+    const inputType = str(row.inputType || "checkbox").toLowerCase()
+    const promptLabel = displayValue(row.stepDescription)
+    const defaultValue = inputType === "checkbox" ? "OK" : ""
+    const value = window.prompt(promptLabel, defaultValue)?.trim() ?? ""
     return {
       checklistCode: displayValue(row.checklistCode),
       checklistTitle: displayValue(row.checklistTitle),
@@ -9829,107 +16116,242 @@ function maintenanceChecklistCompletionSteps(schedule: DashboardPayload, checkli
       inputType: displayValue(row.inputType || "checkbox"),
       required: displayValue(row.required || "Yes"),
       value,
-      result: inputType === "checkbox" ? (value.toLowerCase() === "ok" || value.toLowerCase() === "yes" ? "OK" : value) : "Recorded",
-    };
-  });
+      result:
+        inputType === "checkbox"
+          ? value.toLowerCase() === "ok" || value.toLowerCase() === "yes"
+            ? "OK"
+            : value
+          : "Recorded",
+    }
+  })
 }
 
 function maintenanceMachineRows(rows: DashboardPayload[]) {
-  const byMachine = new Map<string, DashboardPayload>();
+  const byMachine = new Map<string, DashboardPayload>()
   for (const row of rows) {
-    const machineNo = displayValue(row.machineNo || row.machine || row["MACHINE NO"] || row["M/C NO"] || row["MACHINE NO."]);
-    if (machineNo === "-") continue;
-    if (str(row.status || "Active").toLowerCase() === "inactive") continue;
-    const key = machineKey(machineNo);
-    if (byMachine.has(key)) continue;
+    const machineNo = displayValue(
+      row.machineNo ||
+        row.machine ||
+        row["MACHINE NO"] ||
+        row["M/C NO"] ||
+        row["MACHINE NO."]
+    )
+    if (machineNo === "-") continue
+    if (str(row.status || "Active").toLowerCase() === "inactive") continue
+    const key = machineKey(machineNo)
+    if (byMachine.has(key)) continue
     byMachine.set(key, {
       ...row,
       machineNo,
       machineType: displayValue(row.machineType || row["MACHINE TYPE"]),
       machineName: displayValue(row.machineName || row["MACHINE NAME"]),
       location: displayValue(row.location || row["LOCATION"]),
-    });
+    })
   }
-  return [...byMachine.values()].sort((a, b) => displayValue(a.machineNo).localeCompare(displayValue(b.machineNo), undefined, { numeric: true }));
+  return [...byMachine.values()].sort((a, b) =>
+    displayValue(a.machineNo).localeCompare(
+      displayValue(b.machineNo),
+      undefined,
+      { numeric: true }
+    )
+  )
 }
 
-function machineMasterMatches(row: DashboardPayload, machineNoFilter: string, machineNameFilter: string, machineTypeFilter: string, machineLocationFilter: string, machineStatusFilter: string) {
-  return typedFilterMatches(displayValue(row.machineNo), machineNoFilter) &&
+function machineMasterMatches(
+  row: DashboardPayload,
+  machineNoFilter: string,
+  machineNameFilter: string,
+  machineTypeFilter: string,
+  machineLocationFilter: string,
+  machineStatusFilter: string
+) {
+  return (
+    typedFilterMatches(displayValue(row.machineNo), machineNoFilter) &&
     typedFilterMatches(displayValue(row.machineName), machineNameFilter) &&
     typedFilterMatches(displayValue(row.machineType), machineTypeFilter) &&
     typedFilterMatches(displayValue(row.location), machineLocationFilter) &&
-    typedFilterMatches(displayValue(row.status || "Active"), machineStatusFilter);
+    typedFilterMatches(
+      displayValue(row.status || "Active"),
+      machineStatusFilter
+    )
+  )
 }
 
-function maintenanceScheduleMatches(row: DashboardPayload, codeFilter: string, titleFilter: string, checklistFilter: string, frequencyFilter: string, firstDueFilter: string, statusFilter: string) {
-  return typedFilterMatches(displayValue(row.maintenanceCode), codeFilter) &&
+function maintenanceScheduleMatches(
+  row: DashboardPayload,
+  codeFilter: string,
+  titleFilter: string,
+  checklistFilter: string,
+  frequencyFilter: string,
+  firstDueFilter: string,
+  statusFilter: string
+) {
+  return (
+    typedFilterMatches(displayValue(row.maintenanceCode), codeFilter) &&
     typedFilterMatches(displayValue(row.maintenanceTitle), titleFilter) &&
     typedFilterMatches(displayValue(row.checklistCode), checklistFilter) &&
     typedFilterMatches(displayValue(row.frequencyDays), frequencyFilter) &&
     typedFilterMatches(displayValue(row.firstDueDate), firstDueFilter) &&
-    typedFilterMatches(displayValue(row.status || "Active"), statusFilter);
+    typedFilterMatches(displayValue(row.status || "Active"), statusFilter)
+  )
 }
 function maintenanceScheduleKey(row: DashboardPayload) {
-  return [row.machineNo || row.machine, row.maintenanceCode].map((value) => str(value).toLowerCase()).join("|");
+  return [row.machineNo || row.machine, row.maintenanceCode]
+    .map((value) => str(value).toLowerCase())
+    .join("|")
 }
 
 function maintenanceTaskId(row: DashboardPayload, completedDate: string) {
-  return ["planned", row.machineNo || row.machine, row.maintenanceCode, completedDate].map((value) => str(value).toLowerCase()).join("|");
+  return [
+    "planned",
+    row.machineNo || row.machine,
+    row.maintenanceCode,
+    completedDate,
+  ]
+    .map((value) => str(value).toLowerCase())
+    .join("|")
 }
 
 function breakdownMaintenanceTaskId(machineNo: unknown, completedDate: string) {
-  return ["breakdown", machineNo, completedDate, Date.now()].map((value) => str(value).toLowerCase()).join("|");
+  return ["breakdown", machineNo, completedDate, Date.now()]
+    .map((value) => str(value).toLowerCase())
+    .join("|")
 }
 
 function maintenanceRecordKey(row: DashboardPayload) {
-  return str(row.taskId) || [row.maintenanceType || "Planned", row.machineNo || row.machine, row.maintenanceCode, row.completedDate, row.completedAt].map((value) => str(value).toLowerCase()).join("|");
+  return (
+    str(row.taskId) ||
+    [
+      row.maintenanceType || "Planned",
+      row.machineNo || row.machine,
+      row.maintenanceCode,
+      row.completedDate,
+      row.completedAt,
+    ]
+      .map((value) => str(value).toLowerCase())
+      .join("|")
+  )
 }
 
-function maintenanceSchedulesForMachine(rows: DashboardPayload[], machineNo: unknown) {
-  const key = machineKey(machineNo);
+function maintenanceSchedulesForMachine(
+  rows: DashboardPayload[],
+  machineNo: unknown
+) {
+  const key = machineKey(machineNo)
   return rows
     .filter((row) => machineKey(row.machineNo || row.machine) === key)
-    .sort((a, b) => displayValue(a.maintenanceCode).localeCompare(displayValue(b.maintenanceCode), undefined, { numeric: true }));
+    .sort((a, b) =>
+      displayValue(a.maintenanceCode).localeCompare(
+        displayValue(b.maintenanceCode),
+        undefined,
+        { numeric: true }
+      )
+    )
 }
 
-function maintenanceHistoryRowsForMachine(rows: DashboardPayload[], machineNo: unknown) {
-  const key = machineKey(machineNo);
+function maintenanceHistoryRowsForMachine(
+  rows: DashboardPayload[],
+  machineNo: unknown
+) {
+  const key = machineKey(machineNo)
   return rows
     .filter((row) => machineKey(row.machineNo || row.machine) === key)
-    .sort((a, b) => dateSortValue(isoDateValue(b.completedDate || b.completedAt)) - dateSortValue(isoDateValue(a.completedDate || a.completedAt)));
+    .sort(
+      (a, b) =>
+        dateSortValue(isoDateValue(b.completedDate || b.completedAt)) -
+        dateSortValue(isoDateValue(a.completedDate || a.completedAt))
+    )
 }
 
-function maintenanceHistoryMatches(row: DashboardPayload, query: string, typeFilter: string, codeFilter: string, resultFilter: string) {
-  const type = displayValue(row.maintenanceType || "Planned");
-  const code = displayValue(row.maintenanceCode);
-  const result = displayValue(row.result);
-  const haystack = [row.machineNo, type, code, row.maintenanceTitle, row.completedDate, row.completedBy, row.partsChanged, row.workDone, row.breakdownReason, row.remark].map(str).join(" ").toLowerCase();
-  const queryMatch = !str(query) || haystack.includes(str(query).toLowerCase());
-  return queryMatch && typedFilterMatches(type, typeFilter) && typedFilterMatches(code, codeFilter) && typedFilterMatches(result, resultFilter);
+function maintenanceHistoryMatches(
+  row: DashboardPayload,
+  query: string,
+  typeFilter: string,
+  codeFilter: string,
+  resultFilter: string
+) {
+  const type = displayValue(row.maintenanceType || "Planned")
+  const code = displayValue(row.maintenanceCode)
+  const result = displayValue(row.result)
+  const haystack = [
+    row.machineNo,
+    type,
+    code,
+    row.maintenanceTitle,
+    row.completedDate,
+    row.completedBy,
+    row.partsChanged,
+    row.workDone,
+    row.breakdownReason,
+    row.remark,
+  ]
+    .map(str)
+    .join(" ")
+    .toLowerCase()
+  const queryMatch = !str(query) || haystack.includes(str(query).toLowerCase())
+  return (
+    queryMatch &&
+    typedFilterMatches(type, typeFilter) &&
+    typedFilterMatches(code, codeFilter) &&
+    typedFilterMatches(result, resultFilter)
+  )
 }
 
-function maintenanceDueRows(scheduleRows: DashboardPayload[], completionRows: DashboardPayload[], machineRows: DashboardPayload[], checklistRows: DashboardPayload[], productionRunRows: DashboardPayload[]): DashboardPayload[] {
-  const machinesByKey = new Map(machineRows.map((row) => [machineKey(row.machineNo), row]));
-  const today = todayIsoDate();
+function maintenanceDueRows(
+  scheduleRows: DashboardPayload[],
+  completionRows: DashboardPayload[],
+  machineRows: DashboardPayload[],
+  checklistRows: DashboardPayload[],
+  productionRunRows: DashboardPayload[]
+): DashboardPayload[] {
+  const machinesByKey = new Map(
+    machineRows.map((row) => [machineKey(row.machineNo), row])
+  )
+  const today = todayIsoDate()
   return scheduleRows
     .filter((row) => str(row.status || "Active").toLowerCase() !== "inactive")
     .map((row) => {
-      const machine = machinesByKey.get(machineKey(row.machineNo));
-      const latestCompletion = latestMaintenanceCompletion(row, completionRows);
-      const scheduleChecklistRows = maintenanceChecklistRowsForCode(checklistRows, row.checklistCode);
-      const lastCompletedDate = isoDateValue(latestCompletion?.completedDate || latestCompletion?.completedAt || row.lastCompletedDate);
-      const firstDueDate = isoDateValue(row.firstDueDate || row.nextDueDate || today);
-      const frequencyDays = optionalNumber(row.frequencyDays) ?? 0;
-      const frequencyBasis = maintenanceFrequencyBasis(row);
-      const dueInfo = frequencyBasis === "running"
-        ? runningMaintenanceDueInfo(row, productionRunRows, lastCompletedDate || firstDueDate, frequencyDays, today)
-        : calendarMaintenanceDueInfo(latestCompletion, lastCompletedDate, firstDueDate, frequencyDays, today);
+      const machine = machinesByKey.get(machineKey(row.machineNo))
+      const latestCompletion = latestMaintenanceCompletion(row, completionRows)
+      const scheduleChecklistRows = maintenanceChecklistRowsForCode(
+        checklistRows,
+        row.checklistCode
+      )
+      const lastCompletedDate = isoDateValue(
+        latestCompletion?.completedDate ||
+          latestCompletion?.completedAt ||
+          row.lastCompletedDate
+      )
+      const firstDueDate = isoDateValue(
+        row.firstDueDate || row.nextDueDate || today
+      )
+      const frequencyDays = optionalNumber(row.frequencyDays) ?? 0
+      const frequencyBasis = maintenanceFrequencyBasis(row)
+      const dueInfo =
+        frequencyBasis === "running"
+          ? runningMaintenanceDueInfo(
+              row,
+              productionRunRows,
+              lastCompletedDate || firstDueDate,
+              frequencyDays,
+              today
+            )
+          : calendarMaintenanceDueInfo(
+              latestCompletion,
+              lastCompletedDate,
+              firstDueDate,
+              frequencyDays,
+              today
+            )
       return {
         ...row,
         machineType: displayValue(row.machineType || machine?.machineType),
         machineName: displayValue(row.machineName || machine?.machineName),
         location: displayValue(row.location || machine?.location),
-        checklistTitle: displayValue(row.checklistTitle) !== "-" ? displayValue(row.checklistTitle) : maintenanceChecklistTitle(checklistRows, row.checklistCode),
+        checklistTitle:
+          displayValue(row.checklistTitle) !== "-"
+            ? displayValue(row.checklistTitle)
+            : maintenanceChecklistTitle(checklistRows, row.checklistCode),
         checklistSteps: scheduleChecklistRows,
         frequencyDays,
         frequencyBasis,
@@ -9939,154 +16361,253 @@ function maintenanceDueRows(scheduleRows: DashboardPayload[], completionRows: Da
         runningDaysRemaining: dueInfo.runningDaysRemaining,
         lastCompletedDate,
         status: dueInfo.status,
-      } as DashboardPayload;
+      } as DashboardPayload
     })
-    .sort((a, b) => maintenanceStatusRank(a.status) - maintenanceStatusRank(b.status)
-      || dateSortValue(a.nextDueDate) - dateSortValue(b.nextDueDate)
-      || displayValue(a.machineNo).localeCompare(displayValue(b.machineNo), undefined, { numeric: true })
-      || displayValue(a.maintenanceCode).localeCompare(displayValue(b.maintenanceCode), undefined, { numeric: true }));
+    .sort(
+      (a, b) =>
+        maintenanceStatusRank(a.status) - maintenanceStatusRank(b.status) ||
+        dateSortValue(a.nextDueDate) - dateSortValue(b.nextDueDate) ||
+        displayValue(a.machineNo).localeCompare(
+          displayValue(b.machineNo),
+          undefined,
+          { numeric: true }
+        ) ||
+        displayValue(a.maintenanceCode).localeCompare(
+          displayValue(b.maintenanceCode),
+          undefined,
+          { numeric: true }
+        )
+    )
 }
 
-function calendarMaintenanceDueInfo(latestCompletion: DashboardPayload | undefined, lastCompletedDate: string, firstDueDate: string, frequencyDays: number, today: string) {
-  const nextDueDate = isoDateValue(latestCompletion?.nextDueDate) || (lastCompletedDate && frequencyDays > 0 ? addIsoDays(lastCompletedDate, frequencyDays) : firstDueDate);
+function calendarMaintenanceDueInfo(
+  latestCompletion: DashboardPayload | undefined,
+  lastCompletedDate: string,
+  firstDueDate: string,
+  frequencyDays: number,
+  today: string
+) {
+  const nextDueDate =
+    isoDateValue(latestCompletion?.nextDueDate) ||
+    (lastCompletedDate && frequencyDays > 0
+      ? addIsoDays(lastCompletedDate, frequencyDays)
+      : firstDueDate)
   const status = !nextDueDate
     ? "Unscheduled"
     : nextDueDate < today
       ? "Overdue"
       : nextDueDate === today
         ? "Due today"
-        : "Upcoming";
-  return { nextDueDate, status, dueProgress: "", runningDaysSinceMaintenance: 0, runningDaysRemaining: 0 };
+        : "Upcoming"
+  return {
+    nextDueDate,
+    status,
+    dueProgress: "",
+    runningDaysSinceMaintenance: 0,
+    runningDaysRemaining: 0,
+  }
 }
 
-function runningMaintenanceDueInfo(schedule: DashboardPayload, productionRunRows: DashboardPayload[], startDate: string, frequencyDays: number, today: string) {
-  if (!frequencyDays) return { nextDueDate: "", status: "Unscheduled", dueProgress: "", runningDaysSinceMaintenance: 0, runningDaysRemaining: 0 };
-  const runningDates = runningDatesForMachine(productionRunRows, schedule.machineNo, startDate, today);
-  const runningDaysSinceMaintenance = runningDates.length;
-  const runningDaysRemaining = Math.max(frequencyDays - runningDaysSinceMaintenance, 0);
-  const dueDate = runningDates[frequencyDays - 1] || "";
-  const status = runningDaysSinceMaintenance >= frequencyDays
-    ? (dueDate && dueDate < today ? "Overdue" : "Due today")
-    : "Upcoming";
+function runningMaintenanceDueInfo(
+  schedule: DashboardPayload,
+  productionRunRows: DashboardPayload[],
+  startDate: string,
+  frequencyDays: number,
+  today: string
+) {
+  if (!frequencyDays)
+    return {
+      nextDueDate: "",
+      status: "Unscheduled",
+      dueProgress: "",
+      runningDaysSinceMaintenance: 0,
+      runningDaysRemaining: 0,
+    }
+  const runningDates = runningDatesForMachine(
+    productionRunRows,
+    schedule.machineNo,
+    startDate,
+    today
+  )
+  const runningDaysSinceMaintenance = runningDates.length
+  const runningDaysRemaining = Math.max(
+    frequencyDays - runningDaysSinceMaintenance,
+    0
+  )
+  const dueDate = runningDates[frequencyDays - 1] || ""
+  const status =
+    runningDaysSinceMaintenance >= frequencyDays
+      ? dueDate && dueDate < today
+        ? "Overdue"
+        : "Due today"
+      : "Upcoming"
   return {
     nextDueDate: dueDate || `After ${runningDaysRemaining} running days`,
     status,
     dueProgress: `${runningDaysSinceMaintenance}/${frequencyDays} running days`,
     runningDaysSinceMaintenance,
     runningDaysRemaining,
-  };
+  }
 }
 
-function runningDatesForMachine(rows: DashboardPayload[], machineNo: unknown, startDate: string, today: string) {
-  const machine = machineKey(machineNo);
-  const dates = new Set<string>();
+function runningDatesForMachine(
+  rows: DashboardPayload[],
+  machineNo: unknown,
+  startDate: string,
+  today: string
+) {
+  const machine = machineKey(machineNo)
+  const dates = new Set<string>()
   for (const row of rows) {
-    if (machineKey(row.machine || row.machineNo) !== machine) continue;
-    const date = isoDateValue(row.prodDate || row.productionDate || row.date);
-    if (!date || date <= startDate || date > today) continue;
-    dates.add(date);
+    if (machineKey(row.machine || row.machineNo) !== machine) continue
+    const date = isoDateValue(row.prodDate || row.productionDate || row.date)
+    if (!date || date <= startDate || date > today) continue
+    dates.add(date)
   }
-  return [...dates].sort();
+  return [...dates].sort()
 }
 
 function maintenanceFrequencyBasis(row: DashboardPayload | undefined) {
-  const value = str(row?.frequencyBasis || row?.frequencyType || row?.frequencyMode).toLowerCase();
-  return value.includes("running") ? "running" : "calendar";
+  const value = str(
+    row?.frequencyBasis || row?.frequencyType || row?.frequencyMode
+  ).toLowerCase()
+  return value.includes("running") ? "running" : "calendar"
 }
 
 function maintenanceFrequencyLabel(row: DashboardPayload | undefined) {
-  const days = formatNumber(optionalNumber(row?.frequencyDays) ?? 0);
-  return maintenanceFrequencyBasis(row) === "running" ? `${days} running days` : `${days} calendar days`;
+  const days = formatNumber(optionalNumber(row?.frequencyDays) ?? 0)
+  return maintenanceFrequencyBasis(row) === "running"
+    ? `${days} running days`
+    : `${days} calendar days`
 }
-function latestMaintenanceCompletion(schedule: DashboardPayload, completionRows: DashboardPayload[]) {
+function latestMaintenanceCompletion(
+  schedule: DashboardPayload,
+  completionRows: DashboardPayload[]
+) {
   return completionRows
-    .filter((row) => maintenanceScheduleKey(row) === maintenanceScheduleKey(schedule))
-    .sort((a, b) => dateSortValue(isoDateValue(b.completedDate || b.completedAt)) - dateSortValue(isoDateValue(a.completedDate || a.completedAt)))[0];
+    .filter(
+      (row) => maintenanceScheduleKey(row) === maintenanceScheduleKey(schedule)
+    )
+    .sort(
+      (a, b) =>
+        dateSortValue(isoDateValue(b.completedDate || b.completedAt)) -
+        dateSortValue(isoDateValue(a.completedDate || a.completedAt))
+    )[0]
 }
 
 function maintenanceStatusRank(status: unknown) {
-  const value = str(status).toLowerCase();
-  if (value.includes("overdue")) return 0;
-  if (value.includes("due")) return 1;
-  if (value.includes("unscheduled")) return 2;
-  return 3;
+  const value = str(status).toLowerCase()
+  if (value.includes("overdue")) return 0
+  if (value.includes("due")) return 1
+  if (value.includes("unscheduled")) return 2
+  return 3
 }
 
 function todayIsoDate() {
-  const now = new Date();
-  const offsetMs = now.getTimezoneOffset() * 60000;
-  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
+  const now = new Date()
+  const offsetMs = now.getTimezoneOffset() * 60000
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10)
 }
 
 function addIsoDays(date: string, days: number) {
-  const parsed = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return "";
-  parsed.setDate(parsed.getDate() + days);
-  return parsed.toISOString().slice(0, 10);
+  const parsed = new Date(`${date}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) return ""
+  parsed.setDate(parsed.getDate() + days)
+  return parsed.toISOString().slice(0, 10)
 }
 
 function isoDateValue(value: unknown) {
-  const text = str(value);
-  if (!text || text === "-") return "";
-  const isoMatch = text.match(/^\d{4}-\d{2}-\d{2}/);
-  if (isoMatch) return isoMatch[0];
-  const parsed = new Date(text);
-  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+  const text = str(value)
+  if (!text || text === "-") return ""
+  const isoMatch = text.match(/^\d{4}-\d{2}-\d{2}/)
+  if (isoMatch) return isoMatch[0]
+  const parsed = new Date(text)
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10)
 }
-function productionCycleMasterChanged(row: DashboardPayload, card: DashboardPayload) {
-  const nextCycle = optionalNumber(card.cycleTime) ?? productionCycleSeconds(row);
-  const nextPieceWeight = optionalNumber(card.pieceWeight) ?? productionPieceWeightGrams(row);
-  return Math.abs(nextCycle - productionCycleSeconds(row)) > 0.0001
-    || Math.abs(nextPieceWeight - productionPieceWeightGrams(row)) > 0.0001;
+function productionCycleMasterChanged(
+  row: DashboardPayload,
+  card: DashboardPayload
+) {
+  const nextCycle =
+    optionalNumber(card.cycleTime) ?? productionCycleSeconds(row)
+  const nextPieceWeight =
+    optionalNumber(card.pieceWeight) ?? productionPieceWeightGrams(row)
+  return (
+    Math.abs(nextCycle - productionCycleSeconds(row)) > 0.0001 ||
+    Math.abs(nextPieceWeight - productionPieceWeightGrams(row)) > 0.0001
+  )
 }
 
-function productionCycleMasterPayload(row: DashboardPayload, card: DashboardPayload) {
+function productionCycleMasterPayload(
+  row: DashboardPayload,
+  card: DashboardPayload
+) {
   return {
     partNo: itemCode(row),
     optionNumber: displayValue(row.optionNumber),
     setupNo: displayValue(row.setupNo),
     setupName: displayValue(row.setupName),
     machineUsed: displayValue(row.machineType),
-    operationWeight: optionalNumber(card.pieceWeight) ?? productionPieceWeightGrams(row),
+    operationWeight:
+      optionalNumber(card.pieceWeight) ?? productionPieceWeightGrams(row),
     cycleTime: optionalNumber(card.cycleTime) ?? productionCycleSeconds(row),
     loadingUnloading: optionalNumber(card.loadingUnloading) ?? 0,
     updatedFrom: "shop_floor_tasks",
     updatedAt: new Date().toISOString(),
-  };
+  }
 }
 function omitRecordKey<T>(record: Record<string, T>, key: string) {
-  if (!(key in record)) return record;
-  const next = { ...record };
-  delete next[key];
-  return next;
+  if (!(key in record)) return record
+  const next = { ...record }
+  delete next[key]
+  return next
 }
 
-function productionCardMatchesSelection(card: DashboardPayload, row: DashboardPayload, role: RoleTaskKind, cardEntryKind: string, prodDate: string, shift: string) {
-  if (!sameProductionCardText(card.cardRole, role)) return false;
-  if (!sameProductionCardText(card.cardEntryKind || inferredProductionCardEntryKind(card), cardEntryKind)) return false;
-  if (!sameProductionCardText(card.prodDate, prodDate)) return false;
-  if (!sameProductionCardText(card.shift, shift)) return false;
-  if (!sameProductionCardText(card.machine, displayValue(row.machine))) return false;
-  if (!sameProductionCardText(card.partCode || card.partNo, itemCode(row))) return false;
-  if (!sameProductionCardText(card.jobCard || card.jcNo, jobCardNumber(row))) return false;
-  return sameProductionCardText(card.setupNo, displayValue(row.setupNo));
+function productionCardMatchesSelection(
+  card: DashboardPayload,
+  row: DashboardPayload,
+  role: RoleTaskKind,
+  cardEntryKind: string,
+  prodDate: string,
+  shift: string
+) {
+  if (!sameProductionCardText(card.cardRole, role)) return false
+  if (
+    !sameProductionCardText(
+      card.cardEntryKind || inferredProductionCardEntryKind(card),
+      cardEntryKind
+    )
+  )
+    return false
+  if (!sameProductionCardText(card.prodDate, prodDate)) return false
+  if (!sameProductionCardText(card.shift, shift)) return false
+  if (!sameProductionCardText(card.machine, displayValue(row.machine)))
+    return false
+  if (!sameProductionCardText(card.partCode || card.partNo, itemCode(row)))
+    return false
+  if (!sameProductionCardText(card.jobCard || card.jcNo, jobCardNumber(row)))
+    return false
+  return sameProductionCardText(card.setupNo, displayValue(row.setupNo))
 }
 
 function inferredProductionCardEntryKind(card: DashboardPayload) {
-  if (optionalText(card.rejectionReasonCode) || optionalNumber(card.rejectQty)) return "rejection";
-  if (optionalText(card.downtimeCode) || optionalNumber(card.downtimeMinutes)) return "downtime";
-  if (optionalText(card.bulkDowntime)) return "bulk_downtime";
-  return "production";
+  if (optionalText(card.rejectionReasonCode) || optionalNumber(card.rejectQty))
+    return "rejection"
+  if (optionalText(card.downtimeCode) || optionalNumber(card.downtimeMinutes))
+    return "downtime"
+  if (optionalText(card.bulkDowntime)) return "bulk_downtime"
+  return "production"
 }
 
 function sameProductionCardText(left: unknown, right: unknown) {
-  return str(left).toLowerCase() === str(right).toLowerCase();
+  return str(left).toLowerCase() === str(right).toLowerCase()
 }
 function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
   const payload = {
     cardId: productionCardId(row, card),
     cardRole: optionalText(card.cardRole),
-    cardEntryKind: optionalText(card.cardEntryKind) || inferredProductionCardEntryKind(card),
+    cardEntryKind:
+      optionalText(card.cardEntryKind) || inferredProductionCardEntryKind(card),
     prodDate: text(card.prodDate) || new Date().toISOString().slice(0, 10),
     shift: optionalText(card.shift),
     location: optionalText(row.location),
@@ -10101,8 +16622,12 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
     optionNumber: displayValue(row.optionNumber),
     setupNo: displayValue(row.setupNo),
     setupName: displayValue(row.setupName),
-    cycleTime: optionalNumber(card.cycleTime) ?? optionalNumber(row.cycleTime) ?? 0,
-    loadingUnloading: optionalNumber(card.loadingUnloading) ?? optionalNumber(row.loadingUnloading) ?? 0,
+    cycleTime:
+      optionalNumber(card.cycleTime) ?? optionalNumber(row.cycleTime) ?? 0,
+    loadingUnloading:
+      optionalNumber(card.loadingUnloading) ??
+      optionalNumber(row.loadingUnloading) ??
+      0,
     startTime: optionalText(card.startTime),
     endTime: optionalText(card.endTime),
     runtimeMinutes: optionalNumber(card.runtimeMinutes) ?? 0,
@@ -10111,7 +16636,8 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
     downtimeReason: optionalText(card.downtimeReason),
     downtimeCode: optionalText(card.downtimeCode),
     outputQty: optionalNumber(card.outputQty) ?? 0,
-    actualQty: optionalNumber(card.actualQty) ?? optionalNumber(card.outputQty) ?? 0,
+    actualQty:
+      optionalNumber(card.actualQty) ?? optionalNumber(card.outputQty) ?? 0,
     targetQty: optionalNumber(card.targetQty) ?? 0,
     rejectQty: optionalNumber(card.rejectQty) ?? 0,
     rejectionType: optionalText(card.rejectionType),
@@ -10125,7 +16651,11 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
     pieceWeight: optionalNumber(card.pieceWeight) ?? 0,
     cratesUsed: optionalNumber(card.cratesUsed) ?? 0,
     crateWeightKg: optionalNumber(card.crateWeightKg) ?? 0,
-    producedPcs: optionalNumber(card.producedPcs) ?? optionalNumber(card.actualQty) ?? optionalNumber(card.outputQty) ?? 0,
+    producedPcs:
+      optionalNumber(card.producedPcs) ??
+      optionalNumber(card.actualQty) ??
+      optionalNumber(card.outputQty) ??
+      0,
     settingQty: optionalNumber(card.settingQty) ?? 0,
     toolingCheck: asRecord(card.toolingCheck),
     shopFloorChecks: asRecord(card.shopFloorChecks),
@@ -10133,13 +16663,14 @@ function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
     remarks: optionalText(card.remarks),
     efficiency: optionalNumber(card.efficiency) ?? 0,
     savedAt: new Date().toISOString(),
-  };
-  return payload;
+  }
+  return payload
 }
 
 function productionCardId(row: DashboardPayload, card: DashboardPayload) {
-  const role = optionalText(card.cardRole);
-  const entryKind = optionalText(card.cardEntryKind) || inferredProductionCardEntryKind(card);
+  const role = optionalText(card.cardRole)
+  const entryKind =
+    optionalText(card.cardEntryKind) || inferredProductionCardEntryKind(card)
   return [
     role,
     entryKind,
@@ -10151,93 +16682,115 @@ function productionCardId(row: DashboardPayload, card: DashboardPayload) {
     row.machine,
   ]
     .map((value) => str(value).toLowerCase())
-    .join("|");
+    .join("|")
 }
 
 function productionCycleSeconds(row: DashboardPayload) {
-  return (optionalNumber(row.cycleTime) ?? 0) + (optionalNumber(row.loadingUnloading) ?? 0);
+  return (
+    (optionalNumber(row.cycleTime) ?? 0) +
+    (optionalNumber(row.loadingUnloading) ?? 0)
+  )
 }
 
 function productionPieceWeightGrams(row: DashboardPayload) {
-  return optionalNumber(row.operationWeight) ?? optionalNumber(row.stageWeight) ?? 0;
+  return (
+    optionalNumber(row.operationWeight) ?? optionalNumber(row.stageWeight) ?? 0
+  )
 }
 
 function time24Input(value: string) {
-  return value.replace(/[^0-9:]/g, "").slice(0, 5);
+  return value.replace(/[^0-9:]/g, "").slice(0, 5)
 }
 
-function productionCardRuntimeMinutes(prodDate: string, startTime: string, endTime: string) {
-  if (!prodDate || !startTime || !endTime) return 0;
-  const start = new Date(`${prodDate}T${startTime}:00`);
-  let end = new Date(`${prodDate}T${endTime}:00`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
-  if (end < start) end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
-  return Math.max(Math.round((end.getTime() - start.getTime()) / 60000), 0);
+function productionCardRuntimeMinutes(
+  prodDate: string,
+  startTime: string,
+  endTime: string
+) {
+  if (!prodDate || !startTime || !endTime) return 0
+  const start = new Date(`${prodDate}T${startTime}:00`)
+  let end = new Date(`${prodDate}T${endTime}:00`)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0
+  if (end < start) end = new Date(end.getTime() + 24 * 60 * 60 * 1000)
+  return Math.max(Math.round((end.getTime() - start.getTime()) / 60000), 0)
 }
 
 function storedSetupChecklistSessionKey(sessionId: string) {
-  return `mrmpl:setup-checklist:${sessionId}`;
+  return `mrmpl:setup-checklist:${sessionId}`
 }
 
 function readStoredFirstPieceInspectionTasks() {
-  if (typeof window === "undefined") return [];
-  return readFirstPieceInspectionTasksFromStorage(window.localStorage)
-    .filter(
-      (task) =>
-        Boolean(shopFloorPlanKey(task)) &&
-        normalizeProductionFloorCode(task.productionFloorCode) ===
-          productionFloorFromLocation(),
-    );
+  if (typeof window === "undefined") return []
+  return readFirstPieceInspectionTasksFromStorage(window.localStorage).filter(
+    (task) =>
+      Boolean(shopFloorPlanKey(task)) &&
+      normalizeProductionFloorCode(task.productionFloorCode) ===
+        productionFloorFromLocation()
+  )
 }
 
 function writeStoredFirstPieceInspectionTasks(tasks: DashboardPayload[]) {
-  if (typeof window === "undefined") return;
-  const activeFloor = productionFloorFromLocation();
+  if (typeof window === "undefined") return
+  const activeFloor = productionFloorFromLocation()
   const otherFloorTasks = readFirstPieceInspectionTasksFromStorage(
-    window.localStorage,
+    window.localStorage
   ).filter(
     (task) =>
-      normalizeProductionFloorCode(task.productionFloorCode) !== activeFloor,
-  );
-  writeFirstPieceInspectionTasksToStorage(
-    window.localStorage,
-    [...otherFloorTasks, ...tasks],
-  );
+      normalizeProductionFloorCode(task.productionFloorCode) !== activeFloor
+  )
+  writeFirstPieceInspectionTasksToStorage(window.localStorage, [
+    ...otherFloorTasks,
+    ...tasks,
+  ])
 }
 
 function mergeFirstPieceInspectionTasks(...taskGroups: DashboardPayload[][]) {
-  return mergeStoredFirstPieceInspectionTasks(shopFloorPlanKey, ...taskGroups);
+  return mergeStoredFirstPieceInspectionTasks(shopFloorPlanKey, ...taskGroups)
 }
 
-function readStoredFirstPieceInspectionDraft(reportId: string): FirstPieceInspectionDraft | undefined {
-  if (typeof window === "undefined" || !reportId) return undefined;
-  return readFirstPieceInspectionDraftFromStorage(window.localStorage, reportId);
+function readStoredFirstPieceInspectionDraft(
+  reportId: string
+): FirstPieceInspectionDraft | undefined {
+  if (typeof window === "undefined" || !reportId) return undefined
+  return readFirstPieceInspectionDraftFromStorage(window.localStorage, reportId)
 }
 
-function writeStoredFirstPieceInspectionDraft(reportId: string, draft: FirstPieceInspectionDraft) {
-  if (typeof window === "undefined" || !reportId) return;
-  writeFirstPieceInspectionDraftToStorage(window.localStorage, reportId, draft);
+function writeStoredFirstPieceInspectionDraft(
+  reportId: string,
+  draft: FirstPieceInspectionDraft
+) {
+  if (typeof window === "undefined" || !reportId) return
+  writeFirstPieceInspectionDraftToStorage(window.localStorage, reportId, draft)
 }
 
 function removeStoredFirstPieceInspectionDraft(reportId: string) {
-  if (typeof window === "undefined" || !reportId) return;
-  removeFirstPieceInspectionDraftFromStorage(window.localStorage, reportId);
+  if (typeof window === "undefined" || !reportId) return
+  removeFirstPieceInspectionDraftFromStorage(window.localStorage, reportId)
 }
 
 function readStoredSetupChecklistSession(sessionId: string) {
-  if (typeof window === "undefined" || !sessionId) return undefined;
+  if (typeof window === "undefined" || !sessionId) return undefined
   try {
-    const stored = asRecord(JSON.parse(window.localStorage.getItem(storedSetupChecklistSessionKey(sessionId)) || "null"));
-    return str(stored.sessionId) ? stored : undefined;
+    const stored = asRecord(
+      JSON.parse(
+        window.localStorage.getItem(
+          storedSetupChecklistSessionKey(sessionId)
+        ) || "null"
+      )
+    )
+    return str(stored.sessionId) ? stored : undefined
   } catch {
-    return undefined;
+    return undefined
   }
 }
 
 function writeStoredSetupChecklistSession(session: DashboardPayload) {
-  const sessionId = str(session.sessionId);
-  if (typeof window === "undefined" || !sessionId) return;
-  window.localStorage.setItem(storedSetupChecklistSessionKey(sessionId), JSON.stringify(session));
+  const sessionId = str(session.sessionId)
+  if (typeof window === "undefined" || !sessionId) return
+  window.localStorage.setItem(
+    storedSetupChecklistSessionKey(sessionId),
+    JSON.stringify(session)
+  )
 }
 function setupChecklistPageHref(row: DashboardPayload, phase: string) {
   const params = new URLSearchParams({
@@ -10251,11 +16804,11 @@ function setupChecklistPageHref(row: DashboardPayload, phase: string) {
     machine: displayValue(row.machine),
     machineType: displayValue(row.machineType),
     floor: normalizeProductionFloorCode(
-      row.productionFloorCode ?? productionFloorFromLocation(),
+      row.productionFloorCode ?? productionFloorFromLocation()
     ),
     returnTab: "machinistTasksTab",
-  });
-  return `/dashboard/setup-checklist?${params.toString()}`;
+  })
+  return `/dashboard/setup-checklist?${params.toString()}`
 }
 
 function setupChecklistSessionId(row: DashboardPayload) {
@@ -10265,10 +16818,15 @@ function setupChecklistSessionId(row: DashboardPayload) {
     displayValue(row.optionNumber),
     displayValue(row.setupNo),
     displayValue(row.machine),
-  ].map((value) => str(value).toLowerCase()).join("|");
+  ]
+    .map((value) => str(value).toLowerCase())
+    .join("|")
 }
 
-function setupChecklistSessionPayload(row: DashboardPayload, session: DashboardPayload) {
+function setupChecklistSessionPayload(
+  row: DashboardPayload,
+  session: DashboardPayload
+) {
   return {
     jcNo: jobCardNumber(row),
     partCode: itemCode(row),
@@ -10279,30 +16837,49 @@ function setupChecklistSessionPayload(row: DashboardPayload, session: DashboardP
     machineType: displayValue(row.machineType),
     sessionId: setupChecklistSessionId(row),
     ...session,
-  };
+  }
 }
 
-function setupChecklistSessionForRow(sessions: DashboardPayload[], row: DashboardPayload) {
-  const sessionId = setupChecklistSessionId(row);
-  return sessions.find((session) => str(session.sessionId) === sessionId)
-    ?? sessions.find((session) => setupChecklistSessionId(session) === sessionId);
+function setupChecklistSessionForRow(
+  sessions: DashboardPayload[],
+  row: DashboardPayload
+) {
+  const sessionId = setupChecklistSessionId(row)
+  return (
+    sessions.find((session) => str(session.sessionId) === sessionId) ??
+    sessions.find((session) => setupChecklistSessionId(session) === sessionId)
+  )
 }
 
-function mostCompleteSetupChecklistSession(snapshotSession: DashboardPayload | undefined, localSession: DashboardPayload | undefined, stageId: string | undefined) {
-  const phase = stageId === "presetting" ? "start" : stageId === "setting" ? "end" : "";
-  if (!phase) return snapshotSession ?? localSession;
-  if (localSession && setupChecklistValuesComplete(asArray(localSession.items), {}, phase)) return localSession;
-  return snapshotSession ?? localSession;
+function mostCompleteSetupChecklistSession(
+  snapshotSession: DashboardPayload | undefined,
+  localSession: DashboardPayload | undefined,
+  stageId: string | undefined
+) {
+  const phase =
+    stageId === "presetting" ? "start" : stageId === "setting" ? "end" : ""
+  if (!phase) return snapshotSession ?? localSession
+  if (
+    localSession &&
+    setupChecklistValuesComplete(asArray(localSession.items), {}, phase)
+  )
+    return localSession
+  return snapshotSession ?? localSession
 }
 function activeSetupChecklistMasterRows(rows: DashboardPayload[]) {
-  const activeRows = rows.filter((row) => str(row.status || "Active").toLowerCase() !== "inactive");
+  const activeRows = rows.filter(
+    (row) => str(row.status || "Active").toLowerCase() !== "inactive"
+  )
   const latestVersion = activeRows
     .map((row) => str(row.version || "1"))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-    .at(-1);
+    .at(-1)
   return activeRows
     .filter((row) => str(row.version || "1") === latestVersion)
-    .sort((a, b) => (optionalNumber(a.sequence) ?? 0) - (optionalNumber(b.sequence) ?? 0));
+    .sort(
+      (a, b) =>
+        (optionalNumber(a.sequence) ?? 0) - (optionalNumber(b.sequence) ?? 0)
+    )
 }
 
 function setupChecklistItemsFromMaster(rows: DashboardPayload[]) {
@@ -10314,28 +16891,39 @@ function setupChecklistItemsFromMaster(rows: DashboardPayload[]) {
     required: displayValue(row.required || "Yes"),
     section: displayValue(row.section || "Pre setting / setting"),
     masterCreatedAt: displayValue(row.createdAt),
-  }));
+  }))
 }
 
 function setupChecklistItemKey(item: DashboardPayload, fallbackIndex = 0) {
-  return [item.version, item.sequence ?? fallbackIndex + 1, item.checkPoint].map((value) => str(value).toLowerCase()).join("|");
+  return [item.version, item.sequence ?? fallbackIndex + 1, item.checkPoint]
+    .map((value) => str(value).toLowerCase())
+    .join("|")
 }
 
 function setupChecklistItemRequired(item: DashboardPayload) {
-  return str(item.required || "Yes").toLowerCase() !== "no";
+  return str(item.required || "Yes").toLowerCase() !== "no"
 }
 
 function setupChecklistExistingValue(item: DashboardPayload, phase: string) {
-  return displayValue(phase === "start" ? item.startValue : item.endValue) === "-" ? "" : displayValue(phase === "start" ? item.startValue : item.endValue);
+  return displayValue(phase === "start" ? item.startValue : item.endValue) ===
+    "-"
+    ? ""
+    : displayValue(phase === "start" ? item.startValue : item.endValue)
 }
 
-function setupChecklistValuesComplete(items: DashboardPayload[], values: Record<string, string>, phase: string) {
-  if (!items.length) return false;
+function setupChecklistValuesComplete(
+  items: DashboardPayload[],
+  values: Record<string, string>,
+  phase: string
+) {
+  if (!items.length) return false
   return items.every((item, index) => {
-    if (!setupChecklistItemRequired(item)) return true;
-    const value = values[setupChecklistItemKey(item, index)] ?? setupChecklistExistingValue(item, phase);
-    return Boolean(str(value));
-  });
+    if (!setupChecklistItemRequired(item)) return true
+    const value =
+      values[setupChecklistItemKey(item, index)] ??
+      setupChecklistExistingValue(item, phase)
+    return Boolean(str(value))
+  })
 }
 
 function setupChecklistSessionForStage({
@@ -10349,29 +16937,36 @@ function setupChecklistSessionForStage({
   remark,
   completedAt,
 }: {
-  row: DashboardPayload;
-  phase: string;
-  values: Record<string, string>;
-  items: DashboardPayload[];
-  masterRows: DashboardPayload[];
-  existingSession?: DashboardPayload;
-  doneBy: string;
-  remark: string;
-  completedAt: string;
+  row: DashboardPayload
+  phase: string
+  values: Record<string, string>
+  items: DashboardPayload[]
+  masterRows: DashboardPayload[]
+  existingSession?: DashboardPayload
+  doneBy: string
+  remark: string
+  completedAt: string
 }) {
-  const masterVersion = str(existingSession?.masterVersion || items[0]?.version || masterRows[0]?.version || "1");
+  const masterVersion = str(
+    existingSession?.masterVersion ||
+      items[0]?.version ||
+      masterRows[0]?.version ||
+      "1"
+  )
   const sessionItems = items.map((item, index) => {
-    const itemKey = setupChecklistItemKey(item, index);
-    const value = values[itemKey] ?? setupChecklistExistingValue(item, phase);
+    const itemKey = setupChecklistItemKey(item, index)
+    const value = values[itemKey] ?? setupChecklistExistingValue(item, phase)
     return phase === "start"
       ? { ...item, startValue: value }
-      : { ...item, endValue: value };
-  });
+      : { ...item, endValue: value }
+  })
   return {
     ...(existingSession ?? {}),
     sessionId: setupChecklistSessionId(row),
     masterVersion,
-    masterEffectiveFrom: displayValue(masterRows[0]?.effectiveFrom || existingSession?.masterEffectiveFrom),
+    masterEffectiveFrom: displayValue(
+      masterRows[0]?.effectiveFrom || existingSession?.masterEffectiveFrom
+    ),
     status: phase === "start" ? "In progress" : "Completed",
     startedAt: phase === "start" ? completedAt : existingSession?.startedAt,
     startedBy: phase === "start" ? doneBy : existingSession?.startedBy,
@@ -10380,7 +16975,7 @@ function setupChecklistSessionForStage({
     endedBy: phase === "end" ? doneBy : existingSession?.endedBy,
     endRemark: phase === "end" ? remark : existingSession?.endRemark,
     items: sessionItems,
-  };
+  }
 }
 
 function setupChecklistMasterDefaults() {
@@ -10393,12 +16988,15 @@ function setupChecklistMasterDefaults() {
     section: "Pre setting / setting",
     effectiveFrom: new Date().toISOString().slice(0, 10),
     status: "Active",
-  };
+  }
 }
 function firstPieceMasterDefaults(row: DashboardPayload) {
   return {
     partNo: itemCode(row) !== "-" ? itemCode(row) : "",
-    optionNumber: displayValue(row.optionNumber) !== "-" ? displayValue(row.optionNumber) : "",
+    optionNumber:
+      displayValue(row.optionNumber) !== "-"
+        ? displayValue(row.optionNumber)
+        : "",
     setupNo: displayValue(row.setupNo) !== "-" ? displayValue(row.setupNo) : "",
     parameterName: "",
     instrumentUsed: "",
@@ -10407,29 +17005,48 @@ function firstPieceMasterDefaults(row: DashboardPayload) {
     toleranceMinus: "",
     inputType: "number",
     __returnTab: "firstPieceInspectionTab",
-  };
+  }
 }
 
-function matchingFirstPieceInspectionMasters(masters: DashboardPayload[], row: DashboardPayload) {
-  const sharedRows = sortQualityParameterRows(masters.filter((master) => qualityParameterMatchesSetup(master, row)));
-  if (sharedRows.length) return sharedRows;
-  const part = machineKey(itemCode(row));
-  const jcNo = machineKey(jobCardNumber(row));
-  const option = machineKey(row.optionNumber);
-  const setup = machineKey(row.setupNo);
+function matchingFirstPieceInspectionMasters(
+  masters: DashboardPayload[],
+  row: DashboardPayload
+) {
+  const sharedRows = sortQualityParameterRows(
+    masters.filter((master) => qualityParameterMatchesSetup(master, row))
+  )
+  if (sharedRows.length) return sharedRows
+  const part = machineKey(itemCode(row))
+  const jcNo = machineKey(jobCardNumber(row))
+  const option = machineKey(row.optionNumber)
+  const setup = machineKey(row.setupNo)
   return masters
     .filter((master) => {
-      const masterJcNo = machineKey(master.jcNo || master.jobCard || master.jobCardNumber);
-      const masterPart = machineKey(master.uid || master.partNo || master.partCode);
-      return (!qualityParameterCode(master) && (!masterJcNo || masterJcNo === jcNo) &&
+      const masterJcNo = machineKey(
+        master.jcNo || master.jobCard || master.jobCardNumber
+      )
+      const masterPart = machineKey(
+        master.uid || master.partNo || master.partCode
+      )
+      return (
+        !qualityParameterCode(master) &&
+        (!masterJcNo || masterJcNo === jcNo) &&
         masterPart === part &&
         machineKey(master.optionNumber) === option &&
-        machineKey(master.setupNo) === setup);
+        machineKey(master.setupNo) === setup
+      )
     })
-    .sort((a, b) =>
-      displayValue(a.uid).localeCompare(displayValue(b.uid), undefined, { numeric: true }) ||
-      displayValue(a.description).localeCompare(displayValue(b.description), undefined, { numeric: true }),
-    );
+    .sort(
+      (a, b) =>
+        displayValue(a.uid).localeCompare(displayValue(b.uid), undefined, {
+          numeric: true,
+        }) ||
+        displayValue(a.description).localeCompare(
+          displayValue(b.description),
+          undefined,
+          { numeric: true }
+        )
+    )
 }
 
 function firstPieceMasterKey(master: DashboardPayload) {
@@ -10441,7 +17058,10 @@ function firstPieceMasterKey(master: DashboardPayload) {
     master.setupNo,
     qualityParameterCode(master) || master.uid,
     qualityParameterName(master) || master.description,
-  ].map((value) => str(value).toLowerCase()).filter(Boolean).join("|");
+  ]
+    .map((value) => str(value).toLowerCase())
+    .filter(Boolean)
+    .join("|")
 }
 
 function firstPieceReportKey(row: DashboardPayload) {
@@ -10452,23 +17072,32 @@ function firstPieceReportKey(row: DashboardPayload) {
     displayValue(row.setupNo),
     displayValue(row.machine),
     "fpi",
-  ].map((value) => str(value).toLowerCase()).join("|");
+  ]
+    .map((value) => str(value).toLowerCase())
+    .join("|")
 }
 
-function firstPieceReadingsFor(readings: Record<string, string[]>, master: DashboardPayload) {
-  return readings[firstPieceMasterKey(master)] ?? Array.from({ length: 5 }, () => "");
+function firstPieceReadingsFor(
+  readings: Record<string, string[]>,
+  master: DashboardPayload
+) {
+  return (
+    readings[firstPieceMasterKey(master)] ?? Array.from({ length: 5 }, () => "")
+  )
 }
 
 function uniqueValues(values: string[]) {
-  return [...new Set(values.map(str).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  return [...new Set(values.map(str).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true })
+  )
 }
 
 function numValue(row: DashboardPayload, ...keys: string[]) {
   for (const key of keys) {
-    const value = Number(row[key]);
-    if (Number.isFinite(value)) return value;
+    const value = Number(row[key])
+    if (Number.isFinite(value)) return value
   }
-  return 0;
+  return 0
 }
 
 function tableColumns(rows: DashboardPayload[]) {
@@ -10504,33 +17133,34 @@ function tableColumns(rows: DashboardPayload[]) {
     "rejectRate",
     "remark",
     "createdAt",
-  ];
-  const seen = new Set<string>();
+  ]
+  const seen = new Set<string>()
 
   for (const key of priority) {
     if (rows.some((row) => row[key] !== undefined && row[key] !== "")) {
-      seen.add(key);
+      seen.add(key)
     }
   }
 
   for (const row of rows) {
     for (const key of Object.keys(row)) {
-      if (key === "_id" || key === "_creationTime" || key === "ownerId") continue;
-      seen.add(key);
-      if (seen.size >= 12) return [...seen];
+      if (key === "_id" || key === "_creationTime" || key === "ownerId")
+        continue
+      seen.add(key)
+      if (seen.size >= 12) return [...seen]
     }
   }
 
-  return [...seen];
+  return [...seen]
 }
 
 function formatCell(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "-";
-  if (Array.isArray(value)) return value.map(formatCell).join(", ") || "-";
-  if (typeof value === "number") return formatNumber(value);
-  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (value === null || value === undefined || value === "") return "-"
+  if (Array.isArray(value)) return value.map(formatCell).join(", ") || "-"
+  if (typeof value === "number") return formatNumber(value)
+  if (typeof value === "boolean") return value ? "Yes" : "No"
   if (typeof value === "string") {
-    return /^\d{4}-\d{2}-\d{2}T/.test(value) ? formatDate(value) : value;
+    return /^\d{4}-\d{2}-\d{2}T/.test(value) ? formatDate(value) : value
   }
-  return JSON.stringify(value);
+  return JSON.stringify(value)
 }

@@ -9,6 +9,7 @@ import {
   type DataEntryCorrectionRow,
 } from "./dashboard-corrections"
 import { normalizeSourceCoverage } from "./dashboard-coverage"
+import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 import {
@@ -334,63 +335,9 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
     },
 
     async requestRefresh(organizationId: string) {
-      return transaction(pool, async (client) => {
-        const result = await client.query<{ id: string; status: string }>(
-          `
-            INSERT INTO derived.refresh_jobs (
-              organization_id, queue_key, idempotency_key, status, run_after
-            )
-            VALUES ($1, 'dashboard', $2, 'pending', now())
-            ON CONFLICT (organization_id, queue_key)
-              WHERE status IN ('pending', 'running')
-            DO NOTHING
-            RETURNING id, status
-          `,
-          [organizationId, randomUUID()]
-        )
-        const insertedJob = result.rows[0]
-        if (!insertedJob) {
-          const active = await client.query<{ id: string }>(
-            `
-              SELECT id
-              FROM derived.refresh_jobs
-              WHERE organization_id = $1
-                AND queue_key = 'dashboard'
-                AND status IN ('pending', 'running')
-              ORDER BY created_at
-              LIMIT 1
-            `,
-            [organizationId]
-          )
-          const job = active.rows[0]
-          if (!job) {
-            throw new Error("Active dashboard refresh job was not found")
-          }
-          return { jobId: job.id, queued: false, skipped: true }
-        }
-
-        await client.query(
-          `
-            INSERT INTO derived.outbox_events (
-              organization_id, topic, aggregate_type, aggregate_id,
-              payload, idempotency_key
-            )
-            VALUES ($1, 'dashboard.refresh.requested', 'refresh_job',
-              $2, $3, $4)
-          `,
-          [
-            organizationId,
-            insertedJob.id,
-            {
-              organizationId,
-              queueKey: "dashboard",
-              refreshJobId: insertedJob.id,
-            },
-            randomUUID(),
-          ]
-        )
-        return { jobId: insertedJob.id, queued: true, skipped: false }
-      })
+      return transaction(pool, (client) =>
+        queueDashboardRefresh(client, organizationId)
+      )
     },
 
     async status(organizationId: string) {
@@ -452,9 +399,10 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
       if (!actorUserId) throw new Error("Correction actor is required.")
 
       return transaction(pool, async (client) => {
-        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
-          `${input.organizationId}:${correctionKind}:${recordId}`,
-        ])
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+          [`${input.organizationId}:${correctionKind}:${recordId}`]
+        )
         const source = await readCanonicalDashboardSource(
           client,
           input.organizationId
@@ -499,6 +447,7 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
             },
           ]
         )
+        await queueDashboardRefresh(client, input.organizationId)
         return { reversed: true }
       })
     },
@@ -510,8 +459,10 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
           client,
           organizationId
         )
-        return activeCorrectionCandidates(source)
-          .slice(0, Math.min(Math.max(Math.floor(limit), 1), 200))
+        return activeCorrectionCandidates(source).slice(
+          0,
+          Math.min(Math.max(Math.floor(limit), 1), 200)
+        )
       } finally {
         client.release()
       }

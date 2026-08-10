@@ -113,6 +113,16 @@ describe("PostgreSQL dashboard corrections", () => {
       reason: "Incorrect machine row",
       target: { id: sourceId, kind: "dataEntries" },
     })
+    const refresh = await pool.query<{ jobs: string; outbox_events: string }>(
+      `SELECT
+         (SELECT count(*)::text FROM derived.refresh_jobs
+          WHERE organization_id = $1 AND queue_key = 'dashboard') AS jobs,
+         (SELECT count(*)::text FROM derived.outbox_events
+          WHERE organization_id = $1
+            AND topic = 'dashboard.refresh.requested') AS outbox_events`,
+      [organizationId]
+    )
+    expect(refresh.rows).toEqual([{ jobs: "1", outbox_events: "1" }])
     await expect(
       repository.reverseEntry({
         actorUserId: "user-1",

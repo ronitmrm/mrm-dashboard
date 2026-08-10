@@ -21,8 +21,8 @@ import {
 import {
   dashboardErrorResponse,
   DashboardRequestPolicyError,
-  enforceDashboardRequestSize,
-} from "@/lib/dashboard-route-policy"
+  readDashboardJsonBody,
+} from "../../../lib/dashboard-route-policy"
 import {
   normalizeInterruptedSetups,
   normalizeQueueBeforeSetups,
@@ -71,6 +71,19 @@ function json(payload: unknown, status = 200) {
       "Cache-Control": "no-store",
     },
   })
+}
+
+function dashboardRouteError(err: unknown) {
+  const status =
+    err instanceof RouteError ||
+    err instanceof OperationalEntryError ||
+    err instanceof DashboardReadError ||
+    err instanceof DashboardRequestPolicyError
+      ? err.status
+      : 500
+  if (status >= 500) console.error("Dashboard API request failed", err)
+  const response = dashboardErrorResponse(err, status)
+  return json({ error: response.error }, response.status)
 }
 
 const dataEntryTemplateFields: Record<string, string[]> = {
@@ -649,16 +662,7 @@ async function get(request: NextRequest, context: RouteContext) {
 
     return json({ error: "Not found" }, 404)
   } catch (err) {
-    const status =
-      err instanceof RouteError ||
-      err instanceof OperationalEntryError ||
-      err instanceof DashboardReadError ||
-      err instanceof DashboardRequestPolicyError
-        ? err.status
-        : 500
-    if (status >= 500) console.error("Dashboard API request failed", err)
-    const response = dashboardErrorResponse(err, status)
-    return json({ error: response.error }, response.status)
+    return dashboardRouteError(err)
   }
 }
 
@@ -674,8 +678,7 @@ async function post(request: NextRequest, context: RouteContext) {
       return json(await requestPostgresDashboardRefresh(request))
     }
 
-    enforceDashboardRequestSize(request.headers.get("content-length"))
-    const body = await request.json().catch(() => ({}))
+    const body = plainRecord(await readDashboardJsonBody(request))
 
     if (path === "attendance" || path === "training") {
       const result = await executePostgresOperationalEntry(
@@ -889,9 +892,9 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "reverse-entry") {
       const result = await requestPostgresDashboardCorrection(request, {
-        correctionKind: text(body.correctionKind || body.targetTable),
+        correctionKind: text(body.correctionKind),
         reason: text(body.reason),
-        recordId: text(body.recordId || body.targetId),
+        recordId: text(body.recordId),
       })
       return json(
         await withPlanningRefresh(path, body, {
@@ -1211,16 +1214,7 @@ async function post(request: NextRequest, context: RouteContext) {
 
     return json({ error: "Not found" }, 404)
   } catch (err) {
-    const status =
-      err instanceof RouteError ||
-      err instanceof OperationalEntryError ||
-      err instanceof DashboardReadError ||
-      err instanceof DashboardRequestPolicyError
-        ? err.status
-        : 500
-    if (status >= 500) console.error("Dashboard API request failed", err)
-    const response = dashboardErrorResponse(err, status)
-    return json({ error: response.error }, response.status)
+    return dashboardRouteError(err)
   }
 }
 

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import { drizzleAdapter } from "@better-auth/drizzle-adapter"
 import { createDatabase, identitySchema } from "@workspace/db"
 import { readRedisAccelerationEnvironment } from "@workspace/runtime"
@@ -22,11 +24,20 @@ type AuthEnvironment = Record<string, string | undefined>
 
 function configureAuth({
   allowSignUp,
+  auditUserAdministration,
   baseURL,
   database,
   secret,
 }: {
   allowSignUp: boolean
+  auditUserAdministration: (input: {
+    actorUserId: string
+    banned?: boolean
+    path: string
+    reason?: string
+    role?: string | null
+    userId: string
+  }) => Promise<void>
   baseURL: string
   database: ReturnType<typeof createDatabase>["database"]
   secret: string
@@ -45,6 +56,34 @@ function configureAuth({
       provider: "pg",
       schema: identitySchema,
     }),
+    databaseHooks: {
+      user: {
+        update: {
+          after: async (user, context) => {
+            const actorUserId = context?.context.session?.user.id
+            const path = context?.path
+            if (!actorUserId || !path) return
+            const statusChange =
+              path === "/admin/ban-user" || path === "/admin/unban-user"
+            if (!statusChange && path !== "/admin/set-role") return
+            const body =
+              typeof context.body === "object" && context.body !== null
+                ? (context.body as Record<string, unknown>)
+                : {}
+            await auditUserAdministration({
+              actorUserId,
+              banned:
+                typeof user.banned === "boolean" ? user.banned : undefined,
+              path,
+              reason:
+                typeof body.banReason === "string" ? body.banReason : undefined,
+              role: typeof user.role === "string" ? user.role : null,
+              userId: user.id,
+            })
+          },
+        },
+      },
+    },
     emailAndPassword: {
       disableSignUp: !allowSignUp,
       enabled: true,
@@ -88,6 +127,31 @@ export function createAuthSystem({
   )
   const auth = configureAuth({
     allowSignUp,
+    auditUserAdministration: async (input) => {
+      const statusChange =
+        input.path === "/admin/ban-user" || input.path === "/admin/unban-user"
+      await connection.pool.query(
+        `INSERT INTO audit.events (
+           event_type, target_schema, target_table, target_id, actor_user_id,
+           reason, metadata, source_system, source_table, source_id
+         ) VALUES ($1, 'identity', 'users', $2, $3, $4, $5,
+           'mrm-dashboard', 'better_auth_administration', $6)`,
+        [
+          statusChange
+            ? "access.user.status_changed"
+            : "access.user.role_changed",
+          input.userId,
+          input.actorUserId,
+          input.reason ?? null,
+          {
+            banned: input.banned ?? null,
+            path: input.path,
+            role: input.role ?? null,
+          },
+          randomUUID(),
+        ]
+      )
+    },
     baseURL,
     database: connection.database,
     secret,
@@ -129,7 +193,9 @@ export function readAuthEnvironment(
     throw new Error("BETTER_AUTH_URL must use HTTPS in managed runtime mode")
   }
   if (baseURL.origin !== publicURL.origin) {
-    throw new Error("BETTER_AUTH_URL and NEXT_PUBLIC_APP_URL must use the same origin")
+    throw new Error(
+      "BETTER_AUTH_URL and NEXT_PUBLIC_APP_URL must use the same origin"
+    )
   }
 
   return {
