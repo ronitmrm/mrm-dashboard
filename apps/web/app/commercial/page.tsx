@@ -13,6 +13,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  MetricCard,
 } from "@workspace/ui/components/card"
 import {
   Table,
@@ -97,12 +98,7 @@ export default async function CommercialPage() {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map(([label, count]) => (
-          <Card key={label}>
-            <CardHeader className="pb-2">
-              <CardDescription>{label}</CardDescription>
-              <CardTitle className="text-3xl tabular-nums">{count}</CardTitle>
-            </CardHeader>
-          </Card>
+          <MetricCard key={label} label={label} value={count} />
         ))}
       </section>
 

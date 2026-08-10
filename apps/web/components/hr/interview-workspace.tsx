@@ -13,6 +13,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  MetricCard,
 } from "@workspace/ui/components/card"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
@@ -89,17 +90,12 @@ function SummaryCards({
   return (
     <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
       {items.map(({ icon: Icon, label, value }) => (
-        <Card className="h-20" key={label}>
-          <CardContent className="flex h-full items-center justify-between gap-2 px-4 py-3">
-            <div className="min-w-0">
-              <p className="truncate text-xs text-muted-foreground" title={label}>
-                {label}
-              </p>
-              <p className="text-xl font-semibold tabular-nums">{value}</p>
-            </div>
-            <Icon className="size-5 shrink-0 text-primary" />
-          </CardContent>
-        </Card>
+        <MetricCard
+          icon={<Icon className="size-5" />}
+          key={label}
+          label={label}
+          value={value}
+        />
       ))}
     </div>
   )

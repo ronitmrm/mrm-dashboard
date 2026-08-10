@@ -37,6 +37,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  MetricCard,
 } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
@@ -7986,24 +7987,9 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
 function TrackingSummary({ items }: { items: Array<[string, string, (() => void)?]> }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2 @4xl/main:grid-cols-5">
-      {items.map(([label, value, onClick]) => {
-        const className = "rounded-lg border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-background to-green-100/70 p-2.5 text-left shadow-sm shadow-emerald-950/5 dark:border-emerald-900/50 dark:from-emerald-950/35 dark:via-background dark:to-green-950/25";
-        const content = (
-          <>
-            <div className="text-[10px] font-medium text-emerald-800 dark:text-emerald-200">{label}</div>
-            <div className="text-base font-semibold tabular-nums">{value}</div>
-          </>
-        );
-        return onClick ? (
-          <button key={label} type="button" className={`${className} transition hover:border-emerald-400 hover:shadow-md focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30`} onClick={onClick}>
-            {content}
-          </button>
-        ) : (
-          <div key={label} className={className}>
-            {content}
-          </div>
-        );
-      })}
+      {items.map(([label, value, onClick]) => (
+        <MetricCard key={label} label={label} onClick={onClick} value={value} />
+      ))}
     </div>
   );
 }
@@ -8677,13 +8663,13 @@ function DashboardSkeleton() {
     <div className="grid gap-4">
       <div className="grid gap-4 md:grid-cols-2 @5xl/main:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-32 rounded-4xl" />
+          <Skeleton key={index} className="h-32 rounded-lg" />
         ))}
       </div>
-      <Skeleton className="h-96 rounded-4xl" />
+      <Skeleton className="h-96 rounded-lg" />
       <div className="grid gap-4 md:grid-cols-2">
-        <Skeleton className="h-72 rounded-4xl" />
-        <Skeleton className="h-72 rounded-4xl" />
+        <Skeleton className="h-72 rounded-lg" />
+        <Skeleton className="h-72 rounded-lg" />
       </div>
     </div>
   );
