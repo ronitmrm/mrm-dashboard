@@ -85,10 +85,10 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "optionNumber",
     "setupNo",
     "setupName",
-    "machineUsed",
-    "operationWeight",
     "cycleTime",
-    "loadingUnloading",
+    "loading",
+    "unloading",
+    "totalTime",
   ],
   tooling: [
     "partNo",
@@ -496,16 +496,26 @@ async function savePlanningMasterEntry(
   }
 
   if (entryType === "cycle") {
+    const cycleTime = numeric(payload.cycleTime)
+    const splitLoadingUnloading =
+      numeric(payload.loading) + numeric(payload.unloading)
+    const loadingUnloading =
+      splitLoadingUnloading || numeric(payload.loadingUnloading)
+    const sourcePayload = {
+      ...payload,
+      loadingUnloading,
+      totalTime: numeric(payload.totalTime) || cycleTime + loadingUnloading,
+    }
     return repository.upsertCycleStandard({
       actorUserId,
-      cycleTimeSeconds: numeric(payload.cycleTime),
+      cycleTimeSeconds: cycleTime,
       itemUid,
       organizationId,
       productionFloorCode: text(payload.productionFloorCode),
       routeCode,
       setupNumber: setupNumber!,
-      setupTimeMinutes: numeric(payload.loadingUnloading),
-      sourcePayload: payload,
+      setupTimeMinutes: loadingUnloading,
+      sourcePayload,
     })
   }
 
