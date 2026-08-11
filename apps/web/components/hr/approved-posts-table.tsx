@@ -60,24 +60,16 @@ import {
   deletePostAction,
   updatePostAction,
 } from "@/app/hr/actions"
+import {
+  APPROVED_POST_FILTER_COLUMNS,
+  type ApprovedPostFilterKey,
+} from "@/components/hr/approved-post-filter-columns"
 import { SingleEmployeeAssignmentFields } from "@/components/hr/single-employee-assignment-fields"
 
 type TemplateOption = Pick<
   RecruitmentTemplateRow,
   "id" | "name" | "templateCode"
 >
-
-type ApprovedPostFilterKey =
-  | "postCode"
-  | "vacancyCode"
-  | "department"
-  | "designation"
-  | "template"
-  | "employeeName"
-  | "employeeCode"
-  | "joiningDate"
-  | "lastWorkingDate"
-  | "status"
 
 type ApprovedPostFilters = Record<ApprovedPostFilterKey, string[] | null>
 
@@ -442,98 +434,17 @@ export function ApprovedPostsTable({
                 </TableRow>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   {employeeManagement ? <TableHead /> : null}
-                  <TableHead>
-                    <ApprovedPostColumnFilter
-                      filterKey="joiningDate"
-                      label="Joining Date"
-                      onApply={(value) => updateFilter("joiningDate", value)}
-                      options={filterOptions.joiningDate}
-                      selected={filters.joiningDate}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ApprovedPostColumnFilter
-                      filterKey="postCode"
-                      label="Post Code"
-                      onApply={(value) => updateFilter("postCode", value)}
-                      options={filterOptions.postCode}
-                      selected={filters.postCode}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ApprovedPostColumnFilter
-                      filterKey="vacancyCode"
-                      label="Vacancy Code"
-                      onApply={(value) => updateFilter("vacancyCode", value)}
-                      options={filterOptions.vacancyCode}
-                      selected={filters.vacancyCode}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ApprovedPostColumnFilter
-                      filterKey="department"
-                      label="Department"
-                      onApply={(value) => updateFilter("department", value)}
-                      options={filterOptions.department}
-                      selected={filters.department}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ApprovedPostColumnFilter
-                      filterKey="designation"
-                      label="Designation"
-                      onApply={(value) => updateFilter("designation", value)}
-                      options={filterOptions.designation}
-                      selected={filters.designation}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ApprovedPostColumnFilter
-                      filterKey="template"
-                      label="Template"
-                      onApply={(value) => updateFilter("template", value)}
-                      options={filterOptions.template}
-                      selected={filters.template}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ApprovedPostColumnFilter
-                      filterKey="employeeName"
-                      label="Employee Name"
-                      onApply={(value) => updateFilter("employeeName", value)}
-                      options={filterOptions.employeeName}
-                      selected={filters.employeeName}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ApprovedPostColumnFilter
-                      filterKey="employeeCode"
-                      label="Employee Code"
-                      onApply={(value) => updateFilter("employeeCode", value)}
-                      options={filterOptions.employeeCode}
-                      selected={filters.employeeCode}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ApprovedPostColumnFilter
-                      filterKey="lastWorkingDate"
-                      label="Last Working Date"
-                      onApply={(value) =>
-                        updateFilter("lastWorkingDate", value)
-                      }
-                      options={filterOptions.lastWorkingDate}
-                      selected={filters.lastWorkingDate}
-                    />
-                  </TableHead>
-                  <TableHead>
-                    <ApprovedPostColumnFilter
-                      filterKey="status"
-                      label="Status"
-                      onApply={(value) => updateFilter("status", value)}
-                      options={filterOptions.status}
-                      selected={filters.status}
-                    />
-                  </TableHead>
+                  {APPROVED_POST_FILTER_COLUMNS.map((column) => (
+                    <TableHead key={column.key}>
+                      <ApprovedPostColumnFilter
+                        filterKey={column.key}
+                        label={column.label}
+                        onApply={(value) => updateFilter(column.key, value)}
+                        options={filterOptions[column.key]}
+                        selected={filters[column.key]}
+                      />
+                    </TableHead>
+                  ))}
                   {showActions ? <TableHead /> : null}
                 </TableRow>
               </TableHeader>
