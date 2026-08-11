@@ -214,34 +214,31 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "route",
     title: "Route Master",
-    description: "Part Route, Option, Setup, And Route-Level Machine Details.",
+    description: "Part Route, Option, Setup, And Route-Level Machine Family.",
     fields: [
       { name: "partNo", label: "Part No.", required: true },
       { name: "optionNumber", label: "Option No.", required: true },
       { name: "setupNo", label: "Setup No.", required: true },
       { name: "numberOfSetups", label: "No. Of Setup", type: "number" },
       { name: "setupName", label: "Setup Name" },
-      { name: "machineUsed", label: "Machine Family" },
+      { name: "machineFamily", label: "Machine Family" },
       { name: "machineType", label: "Machine Type" },
       { name: "stageWeight", label: "Stage Weight Gram", type: "number", step: "0.01" },
-      { name: "rodSize", label: "Rod Size" },
-      { name: "cuttingLength", label: "Cutting Length" },
-      { name: "finishedGoodsLength", label: "Fg Length" },
     ],
   },
   {
     entryType: "cycle",
     title: "Cycle Time",
-    description: "Setup Cycle And Loading/Unloading Timings Used By Planning.",
+    description: "Setup Cycle, Loading, Unloading, And Total Timings Used By Planning.",
     fields: [
       { name: "partNo", label: "Part No.", required: true },
       { name: "optionNumber", label: "Option No.", required: true },
       { name: "setupNo", label: "Setup No.", required: true },
       { name: "setupName", label: "Setup Name" },
-      { name: "machineUsed", label: "Machine Family" },
-      { name: "operationWeight", label: "Operation Weight Gram", type: "number", step: "0.01" },
       { name: "cycleTime", label: "Cycle Time Sec", type: "number", step: "0.01", required: true },
-      { name: "loadingUnloading", label: "Loading/Unloading Sec", type: "number", step: "0.01", required: true },
+      { name: "loading", label: "Loading Sec", type: "number", step: "0.01", required: true },
+      { name: "unloading", label: "Unloading Sec", type: "number", step: "0.01", required: true },
+      { name: "totalTime", label: "Total Time Sec", type: "number", step: "0.01" },
     ],
   },
   {
@@ -266,7 +263,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "work_order",
     title: "Work Order",
-    description: "Jc, Part, Po, Rm Inward, Delivery, And Priority Metadata.",
+    description: "Jc, Part, Po, And Order Quantities.",
     fields: [
       { name: "jcNo", label: "Jc No.", required: true },
       { name: "partCode", label: "Part Code", required: true },
@@ -275,14 +272,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "poDate", label: "Po Date", type: "date" },
       { name: "orderPcs", label: "Order Pcs", type: "number", required: true },
       { name: "orderKg", label: "Order Kg", type: "number", step: "0.01" },
-      { name: "numberOfSetups", label: "No. Of Setup", type: "number" },
-      { name: "optionNumber", label: "Selected Option" },
-      { name: "rmInwardKg", label: "Rm Inward Kg", type: "number", step: "0.01" },
-      { name: "rmInwardDate", label: "Rm Inward Date", type: "date" },
-      { name: "deliveryDate", label: "Delivery Date", type: "date" },
-      { name: "plannerPriority", label: "Priority", options: ["", "Urgent", "High", "Low"], defaultValue: "" },
-      { name: "description", label: "Description" },
-      { name: "deliveryRemark", label: "Remark" },
     ],
   },
   {
@@ -293,8 +282,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "jcNo", label: "Jc No.", required: true },
       { name: "rmInwardDate", label: "Rm Inward Date", type: "date", required: true },
       { name: "rmInwardKg", label: "Rm Inward Kg", type: "number", step: "0.01" },
-      { name: "status", label: "Status" },
-      { name: "remark", label: "Remark" },
     ],
   },
   {
@@ -5878,12 +5865,12 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
     optionNumber: optionNumber && optionNumber !== "Not selected" ? optionNumber : "",
     setupNo,
     setupName,
-    machineUsed,
   };
 
   if (entryType === "route") {
     return {
       ...defaults,
+      machineFamily: machineUsed,
       machineType: str(row.machineType),
       numberOfSetups: str(row.numberOfSetups),
     };
@@ -5892,14 +5879,16 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
   if (entryType === "cycle") {
     return {
       ...defaults,
-      operationWeight: row.operationWeight || row.stageWeight || "",
       cycleTime: "",
-      loadingUnloading: "",
+      loading: "",
+      unloading: "",
+      totalTime: "",
     };
   }
 
   return {
     ...defaults,
+    machineUsed,
     fixture: "",
     fixtureQty: "",
     tooling: "",

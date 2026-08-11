@@ -4915,6 +4915,14 @@ function masterKey(row: Record<string, unknown>) {
 function routeMasterTableRow(row: Record<string, unknown>) {
   const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
   const setupNo = rowText(row, "SETUP NO.", "SETUP NO", "SETUP CODE", "setupNo");
+  const machineFamily = rowText(
+    row,
+    "MACHINE FAMILY",
+    "machineFamily",
+    "MACHINE USED",
+    "machineUsed",
+    "machine",
+  );
   return {
     partNo: rowText(row, "PART NO", "PART CODE", "partNo", "partCode"),
     optionNumber,
@@ -4922,25 +4930,34 @@ function routeMasterTableRow(row: Record<string, unknown>) {
     displaySetupNo: setupStepKey(setupNo, optionNumber),
     numberOfSetups: rowValue(row, "NO. OF SETUP", "NO OF SETUP", "numberOfSetups"),
     setupName: rowText(row, "SETUP NAME", "setupName"),
-    machineUsed: rowText(row, "MACHINE USED", "machineUsed", "machine"),
+    machineFamily,
+    machineUsed: machineFamily,
     machineType: rowText(row, "MACHINE TYPE", "machineType"),
     stageWeight: rowValue(row, "STAGE WEIGHT", "STAGE WEIGHT GRAM", "stageWeight"),
-    rodSize: rowText(row, "ROD SIZE", "rodSize"),
-    cuttingLength: rowValue(row, "CUTTING LENGTH", "cuttingLength"),
-    finishedGoodsLength: rowValue(row, "FG LENGTH", "FINISHED GOODS LENGTH", "finishedGoodsLength"),
   };
 }
 
 function cycleMasterTableRow(row: Record<string, unknown>) {
+  const cycleTime = rowValue(row, "CYCLE TIME", "CYCLE TIME SEC", "cycleTime");
+  const loading = rowValue(row, "LOADING", "LOADING SEC", "loading");
+  const unloading = rowValue(row, "UNLOADING", "UNLOADING SEC", "unloading");
+  const loadingUnloading = rowValue(row, "LOADING/UNLOADING", "LOADING UNLOADING", "LOADING/UNLOADING SEC", "loadingUnloading");
+  const hasSplitTimings = loading !== undefined || unloading !== undefined;
+  const totalTime = rowValue(row, "TOTAL TIME", "TOTAL TIME SEC", "totalTime") ?? (
+    safeNumber(cycleTime) + (hasSplitTimings
+      ? safeNumber(loading) + safeNumber(unloading)
+      : safeNumber(loadingUnloading))
+  );
   return {
     partNo: rowText(row, "PART NO", "PART CODE", "partNo", "partCode"),
     optionNumber: rowText(row, "OPTION NUMBER", "optionNumber"),
     setupNo: rowText(row, "SETUP NO.", "SETUP NO", "SETUP CODE", "setupNo"),
     setupName: rowText(row, "SETUP NAME", "setupName"),
-    machineUsed: rowText(row, "MACHINE USED", "machineUsed", "machine"),
-    operationWeight: rowValue(row, "OPERATION WEIGHT", "OPERATION WEIGHT GRAM", "operationWeight"),
-    cycleTime: rowValue(row, "CYCLE TIME", "CYCLE TIME SEC", "cycleTime"),
-    loadingUnloading: rowValue(row, "LOADING/UNLOADING", "LOADING UNLOADING", "LOADING/UNLOADING SEC", "loadingUnloading"),
+    cycleTime,
+    loading,
+    unloading,
+    totalTime,
+    loadingUnloading,
   };
 }
 
