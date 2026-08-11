@@ -75,6 +75,7 @@ type ApprovedPostFilterKey =
   | "template"
   | "employeeName"
   | "employeeCode"
+  | "joiningDate"
   | "lastWorkingDate"
   | "status"
 
@@ -88,6 +89,7 @@ const EMPTY_FILTERS: ApprovedPostFilters = {
   template: null,
   employeeName: null,
   employeeCode: null,
+  joiningDate: null,
   lastWorkingDate: null,
   status: null,
 }
@@ -299,7 +301,7 @@ export function ApprovedPostsTable({
       .map((job) => job.postCode)
   )
   const showActions = canWrite || employeeManagement
-  const columnCount = 9 + (employeeManagement ? 1 : 0) + (showActions ? 1 : 0)
+  const columnCount = 10 + (employeeManagement ? 1 : 0) + (showActions ? 1 : 0)
   const hasFilters = Object.values(filters).some((filter) => filter !== null)
   const filterOptions = useMemo(
     () => ({
@@ -315,6 +317,9 @@ export function ApprovedPostsTable({
       ),
       employeeCode: uniqueOptions(
         posts.map((row) => row.employeeCode ?? "Unassigned")
+      ),
+      joiningDate: uniqueOptions(
+        posts.map((row) => row.joiningDate ?? "Not appointed")
       ),
       lastWorkingDate: uniqueOptions(
         posts.map((row) => row.lastWorkingDate ?? "Not applicable")
@@ -342,6 +347,10 @@ export function ApprovedPostsTable({
           matchesFilter(
             row.employeeCode ?? "Unassigned",
             filters.employeeCode
+          ) &&
+          matchesFilter(
+            row.joiningDate ?? "Not appointed",
+            filters.joiningDate
           ) &&
           matchesFilter(
             row.lastWorkingDate ?? "Not applicable",
@@ -424,6 +433,7 @@ export function ApprovedPostsTable({
                   <TableHead>Template</TableHead>
                   <TableHead>Employee Name</TableHead>
                   <TableHead>Employee Code</TableHead>
+                  <TableHead>Joining Date</TableHead>
                   <TableHead>Last Working Date</TableHead>
                   <TableHead>Status</TableHead>
                   {showActions ? (
@@ -432,6 +442,15 @@ export function ApprovedPostsTable({
                 </TableRow>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   {employeeManagement ? <TableHead /> : null}
+                  <TableHead>
+                    <ApprovedPostColumnFilter
+                      filterKey="joiningDate"
+                      label="Joining Date"
+                      onApply={(value) => updateFilter("joiningDate", value)}
+                      options={filterOptions.joiningDate}
+                      selected={filters.joiningDate}
+                    />
+                  </TableHead>
                   <TableHead>
                     <ApprovedPostColumnFilter
                       filterKey="postCode"
@@ -550,6 +569,7 @@ export function ApprovedPostsTable({
                       <TableCell className="font-mono">
                         {row.employeeCode ?? "—"}
                       </TableCell>
+                      <TableCell>{row.joiningDate ?? "—"}</TableCell>
                       <TableCell>{row.lastWorkingDate ?? "—"}</TableCell>
                       <TableCell>
                         <PostStatusBadge status={row.status} />

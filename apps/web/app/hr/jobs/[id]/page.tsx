@@ -64,6 +64,14 @@ function formatInterviewScore(score: number | null) {
   return score > 5 ? `${score}/10 (legacy)` : `${score}/5`
 }
 
+function formatSalary(value: number | null) {
+  return value === null
+    ? "â€”"
+    : `₹ ${new Intl.NumberFormat("en-IN", {
+        maximumFractionDigits: 2,
+      }).format(value)}`
+}
+
 function InterviewAssessment({
   questionScores,
   roundName,
@@ -189,10 +197,7 @@ export default async function JobWorkspacePage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <JobInterviewScheduleForm
-                applications={applications}
-                job={job}
-              />
+              <JobInterviewScheduleForm applications={applications} job={job} />
             </CardContent>
           </Card>
 
@@ -236,6 +241,10 @@ export default async function JobWorkspacePage({
                   <TableHead>Status</TableHead>
                   <TableHead>Next Interview</TableHead>
                   <TableHead>Required Round</TableHead>
+                  <TableHead>Will Join</TableHead>
+                  <TableHead>Joining Date</TableHead>
+                  <TableHead>Before Probation</TableHead>
+                  <TableHead>After Probation</TableHead>
                   <TableHead className="text-right">Rounds</TableHead>
                 </TableRow>
               </TableHeader>
@@ -269,6 +278,23 @@ export default async function JobWorkspacePage({
                             ? "All Rounds Approved"
                             : "Application Closed")}
                       </TableCell>
+                      <TableCell>
+                        {application.willingToJoin === null
+                          ? "â€”"
+                          : application.willingToJoin
+                            ? "Yes"
+                            : "No"}
+                      </TableCell>
+                      <TableCell>{application.joiningDate ?? "â€”"}</TableCell>
+                      <TableCell>
+                        {formatSalary(application.salaryBeforeProbation)}
+                      </TableCell>
+                      <TableCell>
+                        {application.salaryAfterProbationMinimum === null ||
+                        application.salaryAfterProbationMaximum === null
+                          ? "â€”"
+                          : `${formatSalary(application.salaryAfterProbationMinimum)} to ${formatSalary(application.salaryAfterProbationMaximum)}`}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {application.interviewCount}
                       </TableCell>
@@ -278,7 +304,7 @@ export default async function JobWorkspacePage({
                   <TableRow>
                     <TableCell
                       className="py-10 text-center text-muted-foreground"
-                      colSpan={6}
+                      colSpan={10}
                     >
                       Search And Assign The First Candidate To This Job.
                     </TableCell>

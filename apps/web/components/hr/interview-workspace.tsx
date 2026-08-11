@@ -78,6 +78,14 @@ function formatTime(value: string | null) {
     : "—"
 }
 
+function formatSalary(value: number | null) {
+  return value === null
+    ? "—"
+    : `₹ ${new Intl.NumberFormat("en-IN", {
+        maximumFractionDigits: 2,
+      }).format(value)}`
+}
+
 function SummaryCards({
   items,
 }: {
@@ -338,6 +346,13 @@ export function InterviewResultsWorkspace({
               <p><span className="text-muted-foreground">Score:</span> {selectedRecord.score ?? "—"}</p>
               <p><span className="text-muted-foreground">Interviewer:</span> {selectedRecord.interviewerName ?? "—"}</p>
               <p><span className="text-muted-foreground">Joining Date:</span> {selectedRecord.joiningDate ?? "—"}</p>
+              {selectedRecord.roundName === "HR Round" ? (
+                <>
+                  <p><span className="text-muted-foreground">Willing To Join:</span> {selectedRecord.willingToJoin === null ? "—" : selectedRecord.willingToJoin ? "Yes" : "No"}</p>
+                  <p><span className="text-muted-foreground">Before Probation:</span> {formatSalary(selectedRecord.salaryBeforeProbation)}</p>
+                  <p><span className="text-muted-foreground">After Probation:</span> {selectedRecord.salaryAfterProbationMinimum === null || selectedRecord.salaryAfterProbationMaximum === null ? "—" : `${formatSalary(selectedRecord.salaryAfterProbationMinimum)} to ${formatSalary(selectedRecord.salaryAfterProbationMaximum)}`}</p>
+                </>
+              ) : null}
             </div>
             <div className="grid gap-3">
               <h3 className="font-medium">Round Assessment</h3>

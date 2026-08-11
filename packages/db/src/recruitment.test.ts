@@ -121,7 +121,7 @@ describe("assignEmployee", () => {
     const updateCall = query.mock.calls.find(([statement]) =>
       statement.includes("UPDATE recruitment.posts")
     )
-    expect(updateCall?.[1]?.[5]).toEqual([selectedPostId, relatedPostId])
+    expect(updateCall?.[1]?.[7]).toEqual([selectedPostId, relatedPostId])
   })
 
   test("rejects a bulk workbook before updating when any target is invalid", async () => {
@@ -207,7 +207,9 @@ describe("updateCombinedRole", () => {
           ],
         }
       }
-      if (statement.includes("SELECT id FROM recruitment.requirement_templates")) {
+      if (
+        statement.includes("SELECT id FROM recruitment.requirement_templates")
+      ) {
         return { rows: [{ id: templateId }] }
       }
       if (statement.includes("SELECT id, post_code, status")) {
@@ -221,7 +223,11 @@ describe("updateCombinedRole", () => {
       if (statement.includes("SELECT DISTINCT post.post_code")) {
         return { rows: [] }
       }
-      if (statement.includes("SELECT post_id FROM recruitment.combined_role_posts")) {
+      if (
+        statement.includes(
+          "SELECT post_id FROM recruitment.combined_role_posts"
+        )
+      ) {
         return {
           rows: [{ post_id: primaryPostId }, { post_id: memberPostId }],
         }
@@ -249,9 +255,7 @@ describe("updateCombinedRole", () => {
 
     const updatePosts = (
       query.mock.calls as unknown as Array<[string, unknown[]]>
-    ).find(([statement]) =>
-      statement.includes("requirement_template_id = $3")
-    )
+    ).find(([statement]) => statement.includes("requirement_template_id = $3"))
     expect(updatePosts?.[1]).toEqual([
       combinedRoleId,
       "CMB-1",
@@ -308,9 +312,13 @@ describe("combined job templates", () => {
         return { rowCount: 0, rows: [] }
       }
       if (statement.includes("INSERT INTO recruitment.job_posts")) {
-        expect(statement).toContain("candidate.id = post.requirement_template_id")
+        expect(statement).toContain(
+          "candidate.id = post.requirement_template_id"
+        )
         expect(statement).toContain("candidate.combined_role_id = combined.id")
-        expect(statement.indexOf("candidate.id = post.requirement_template_id")).toBeLessThan(
+        expect(
+          statement.indexOf("candidate.id = post.requirement_template_id")
+        ).toBeLessThan(
           statement.indexOf("candidate.combined_role_id = combined.id) DESC")
         )
         return { rows: [{ id: "job-1" }] }
@@ -802,6 +810,185 @@ describe("job workspace", () => {
         relevant_experience: 5,
       })
     )
+  })
+
+  test("appoints a willing candidate with the agreed salary terms", async () => {
+    const postId = "00000000-0000-4000-8000-000000000001"
+    const query = vi.fn(
+      async (statement: string, _parameters?: readonly unknown[]) => {
+        void _parameters
+        if (
+          statement.includes("SELECT id, status") &&
+          statement.includes("FROM recruitment.applications")
+        ) {
+          return { rows: [{ id: "application-1", status: "Interview" }] }
+        }
+        if (statement.includes("SELECT round_name, status")) {
+          return {
+            rows: [
+              { round_name: "Screening Round", status: "Approved" },
+              { round_name: "Technical Round", status: "Approved" },
+              {
+                round_name: "HR Round",
+                scheduled_at: "2026-08-11 10:00:00+00",
+                status: "Scheduled",
+              },
+            ],
+          }
+        }
+        if (statement.includes("INSERT INTO recruitment.interviews")) {
+          return { rows: [{ id: "interview-1" }] }
+        }
+        if (statement.includes("SELECT candidate.name AS candidate_name")) {
+          return {
+            rows: [
+              {
+                candidate_name: "Candidate One",
+                job_id: "job-1",
+                post_id: postId,
+              },
+            ],
+          }
+        }
+        if (statement.includes("SELECT id, employee_name, employee_code")) {
+          return {
+            rows: [
+              {
+                can_replace: true,
+                combined_role_id: null,
+                employee_code: null,
+                employee_name: null,
+                id: postId,
+                last_working_date: null,
+                status: "Vacant",
+              },
+            ],
+          }
+        }
+        if (statement.includes("UPDATE recruitment.posts")) {
+          return { rows: [{ id: postId }] }
+        }
+        return { rows: [] }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.recordInterview({
+      applicationId: "application-1",
+      joiningDate: "2026-08-20",
+      organizationId: "organization-1",
+      questionScores: {
+        final_hiring_recommendation: 5,
+        motivation_retention: 4,
+        policy_shift_acceptance: 4,
+        reliability_discipline: 5,
+        team_fit: 5,
+      },
+      roundName: "HR Round",
+      salaryAfterProbationMaximum: "20000",
+      salaryAfterProbationMinimum: "15000",
+      salaryBeforeProbation: "15000",
+      status: "Approved",
+      willingToJoin: "yes",
+    })
+
+    const applicationUpdate = query.mock.calls.find(([statement]) =>
+      statement.includes("UPDATE recruitment.applications")
+    )
+    expect(applicationUpdate?.[1]?.slice(0, 6)).toEqual([
+      "Approved",
+      "2026-08-20",
+      true,
+      15000,
+      15000,
+      20000,
+    ])
+    const postUpdate = query.mock.calls.find(([statement]) =>
+      statement.includes("UPDATE recruitment.posts")
+    )
+    expect(postUpdate?.[1]?.slice(0, 6)).toEqual([
+      "Candidate One",
+      null,
+      "Appointed",
+      null,
+      "2026-08-20",
+      "application-1",
+    ])
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("UPDATE recruitment.job_posts")
+      )
+    ).toBe(true)
+  })
+
+  test("withdraws an approved candidate who is not willing to join", async () => {
+    const query = vi.fn(
+      async (statement: string, _parameters?: readonly unknown[]) => {
+        void _parameters
+        if (
+          statement.includes("SELECT id, status") &&
+          statement.includes("FROM recruitment.applications")
+        ) {
+          return { rows: [{ id: "application-1", status: "Interview" }] }
+        }
+        if (statement.includes("SELECT round_name, status")) {
+          return {
+            rows: [
+              { round_name: "Screening Round", status: "Approved" },
+              { round_name: "Technical Round", status: "Approved" },
+              {
+                round_name: "HR Round",
+                scheduled_at: "2026-08-11 10:00:00+00",
+                status: "Scheduled",
+              },
+            ],
+          }
+        }
+        if (statement.includes("INSERT INTO recruitment.interviews")) {
+          return { rows: [{ id: "interview-1" }] }
+        }
+        return { rows: [] }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.recordInterview({
+      applicationId: "application-1",
+      organizationId: "organization-1",
+      questionScores: {
+        final_hiring_recommendation: 5,
+        motivation_retention: 4,
+        policy_shift_acceptance: 4,
+        reliability_discipline: 5,
+        team_fit: 5,
+      },
+      roundName: "HR Round",
+      status: "Approved",
+      willingToJoin: "no",
+    })
+
+    const applicationUpdate = query.mock.calls.find(([statement]) =>
+      statement.includes("UPDATE recruitment.applications")
+    )
+    expect(applicationUpdate?.[1]?.slice(0, 6)).toEqual([
+      "Withdrawn",
+      null,
+      false,
+      null,
+      null,
+      null,
+    ])
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("UPDATE recruitment.posts")
+      )
+    ).toBe(false)
   })
 })
 

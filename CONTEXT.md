@@ -102,6 +102,20 @@ One attempt by a candidate to fill a recruitment opening. Interview planning,
 round outcomes, and a possible joining date belong to this application cycle.
 _Avoid_: Candidate, interview.
 
+**Candidate Appointment**:
+The accepted joining commitment created after all three interview rounds are
+approved and the candidate confirms willingness, joining date, and salary terms.
+_Avoid_: Final interview approval, occupied post.
+
+**Pre-Probation Salary**:
+The fixed monthly salary agreed for a Candidate Appointment before probation is
+completed.
+_Avoid_: Salary range.
+
+**Post-Probation Salary Range**:
+The agreed minimum and maximum monthly salary applicable after probation.
+_Avoid_: Fixed probation salary.
+
 **Active Candidate Application**:
 A candidate application that is assigned, in interview, or on hold. A candidate
 can have only one active application for the same recruitment opening.

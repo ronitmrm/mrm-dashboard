@@ -22,11 +22,21 @@ export function isActiveRecruitmentApplicationStatus(status: string) {
 export function deriveRecruitmentPostStatus(input: {
   employeeCode?: string | null
   employeeName?: string | null
+  joiningDate?: string | null
   storedStatus?: string | null
+  currentDate?: string | null
 }) {
   if (input.storedStatus === "Inactive") return "Inactive"
   if (!optionalText(input.employeeName) && !optionalText(input.employeeCode)) {
     return "Vacant"
+  }
+  if (
+    input.storedStatus === "Appointed" &&
+    optionalText(input.joiningDate) &&
+    optionalText(input.currentDate) &&
+    input.joiningDate! <= input.currentDate!
+  ) {
+    return "Occupied"
   }
   if (
     input.storedStatus === "Appointed" ||

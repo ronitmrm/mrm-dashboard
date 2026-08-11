@@ -165,10 +165,7 @@ export async function updateCombinedRoleAction(formData: FormData) {
         name: value(formData, "name"),
         postIds: values(formData, "post_ids"),
         primaryPostId: value(formData, "primary_post_id"),
-        requirementTemplateCode: value(
-          formData,
-          "requirement_template_code"
-        ),
+        requirementTemplateCode: value(formData, "requirement_template_code"),
       }),
     "Combined role updated."
   )
@@ -433,7 +430,17 @@ export async function recordInterviewAction(formData: FormData) {
       joiningDate: value(formData, "joining_date"),
       questionScores,
       roundName,
+      salaryAfterProbationMaximum: value(
+        formData,
+        "salary_after_probation_maximum"
+      ),
+      salaryAfterProbationMinimum: value(
+        formData,
+        "salary_after_probation_minimum"
+      ),
+      salaryBeforeProbation: value(formData, "salary_before_probation"),
       status,
+      willingToJoin: value(formData, "willing_to_join"),
     })
   )
 }

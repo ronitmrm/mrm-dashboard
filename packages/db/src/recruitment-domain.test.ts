@@ -1,11 +1,36 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  deriveRecruitmentPostStatus,
   listRecruitableApprovedPosts,
   resolveRecruitmentEmployeeAssignmentTarget,
 } from "./recruitment-domain"
 
 const post = (postCode: string, status: string) => ({ postCode, status })
+
+describe("deriveRecruitmentPostStatus", () => {
+  test("keeps an appointment appointed before the joining date", () => {
+    expect(
+      deriveRecruitmentPostStatus({
+        currentDate: "2026-08-11",
+        employeeName: "Candidate One",
+        joiningDate: "2026-08-12",
+        storedStatus: "Appointed",
+      })
+    ).toBe("Appointed")
+  })
+
+  test("marks an appointment occupied on and after the joining date", () => {
+    expect(
+      deriveRecruitmentPostStatus({
+        currentDate: "2026-08-11",
+        employeeName: "Candidate One",
+        joiningDate: "2026-08-11",
+        storedStatus: "Appointed",
+      })
+    ).toBe("Occupied")
+  })
+})
 
 describe("listRecruitableApprovedPosts", () => {
   test("includes vacant and resigned posts without an open job", () => {

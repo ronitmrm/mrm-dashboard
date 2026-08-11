@@ -76,6 +76,7 @@ export type RecruitmentPostRow = {
   employeeName: string | null
   id: string
   isPrimaryCombinedPost: boolean
+  joiningDate: string | null
   lastWorkingDate: string | null
   postCode: string
   requirementTemplateCode: string | null
@@ -146,8 +147,12 @@ export type RecruitmentJobApplicationRow = {
   joiningDate: string | null
   nextRound: RecruitmentInterviewRoundName | null
   plannedRound: string | null
+  salaryAfterProbationMaximum: number | null
+  salaryAfterProbationMinimum: number | null
+  salaryBeforeProbation: number | null
   scoreableRound: RecruitmentInterviewRoundName | null
   status: string
+  willingToJoin: boolean | null
 }
 
 export type RecruitmentJobInterviewRow = {
@@ -160,10 +165,14 @@ export type RecruitmentJobInterviewRow = {
   joiningDate: string | null
   questionScores: Record<string, number>
   roundName: string
+  salaryAfterProbationMaximum: number | null
+  salaryAfterProbationMinimum: number | null
+  salaryBeforeProbation: number | null
   scheduledAt: string | null
   score: number | null
   status: string
   updatedAt: string
+  willingToJoin: boolean | null
 }
 
 export type RecruitmentInterviewRecordRow = RecruitmentJobInterviewRow & {
@@ -240,6 +249,34 @@ function money(value: unknown) {
     throw new Error("Salary must be a positive number.")
   }
   return parsed
+}
+
+function requiredMoney(value: unknown, label: string) {
+  const parsed = money(value)
+  if (parsed === null || parsed <= 0) {
+    throw new Error(`${label} must be greater than zero.`)
+  }
+  return parsed
+}
+
+function requiredYesNo(value: unknown, label: string) {
+  if (
+    value === true ||
+    String(value ?? "")
+      .trim()
+      .toLowerCase() === "yes"
+  ) {
+    return true
+  }
+  if (
+    value === false ||
+    String(value ?? "")
+      .trim()
+      .toLowerCase() === "no"
+  ) {
+    return false
+  }
+  throw new Error(`${label} is required.`)
 }
 
 async function transaction<T>(
@@ -460,9 +497,11 @@ async function assignCandidatesInTransaction(
 }
 
 type EmployeeAssignmentInput = MutationContext & {
+  appointedApplicationId?: string | null
   employeeCode?: string | null
   employeeEvent?: string | null
   employeeName?: string | null
+  joiningDate?: string | null
   lastWorkingDate?: string | null
   postId: string
 }
@@ -572,9 +611,20 @@ async function assignEmployeeInTransaction(
       UPDATE recruitment.posts
       SET employee_name = $1, employee_code = $2,
         status = $3, last_working_date = migration.try_date($4),
-        updated_by_user_id = $5, updated_at = now(),
+        joining_date = CASE
+          WHEN $3 = 'Appointed' THEN migration.try_date($5)
+          WHEN $3 = 'Occupied' THEN
+            COALESCE(migration.try_date($5), joining_date)
+          ELSE NULL
+        END,
+        appointed_application_id = CASE
+          WHEN $3 IN ('Appointed', 'Occupied') THEN
+            COALESCE($6::uuid, appointed_application_id)
+          ELSE NULL
+        END,
+        updated_by_user_id = $7, updated_at = now(),
         row_version = row_version + 1
-      WHERE id = ANY($6::uuid[]) AND organization_id = $7
+      WHERE id = ANY($8::uuid[]) AND organization_id = $9
       RETURNING id
     `,
     [
@@ -582,6 +632,8 @@ async function assignEmployeeInTransaction(
       assignment.employeeCode,
       assignment.status,
       assignment.lastWorkingDate,
+      optional(input.joiningDate),
+      optional(input.appointedApplicationId),
       input.actorUserId ?? null,
       targetIds,
       input.organizationId,
@@ -604,6 +656,8 @@ async function assignEmployeeInTransaction(
             ? "combined-role"
             : "approved-post",
           combinedRoleId: currentPost.combined_role_id,
+          appointedApplicationId: optional(input.appointedApplicationId),
+          joiningDate: optional(input.joiningDate),
           postId: post.id,
           status: assignment.status,
           lastWorkingDate: assignment.lastWorkingDate,
@@ -818,8 +872,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         designation: string
         employee_code: string | null
         employee_name: string | null
+        current_date: string
         id: string
         is_primary_combined_post: boolean
+        joining_date: string | null
         last_working_date: string | null
         post_code: string
         requirement_template_code: string | null
@@ -829,14 +885,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }>(
         `
           SELECT post.id, post.post_code, post.vacancy_code,
-            post.vacancy_number, post.status,
+            post.vacancy_number, post.status, current_date::text,
             CASE WHEN post.status = 'Resigned'
                 AND post.last_working_date < current_date
               THEN NULL ELSE post.employee_name END AS employee_name,
             CASE WHEN post.status = 'Resigned'
                 AND post.last_working_date < current_date
               THEN NULL ELSE post.employee_code END AS employee_code,
-            post.last_working_date::text,
+            post.joining_date::text, post.last_working_date::text,
             combined.id AS combined_role_id,
             combined.name AS combined_role_name,
             combined.vacancy_code AS combined_vacancy_code,
@@ -871,12 +927,15 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         employeeName: row.employee_name,
         id: row.id,
         isPrimaryCombinedPost: row.is_primary_combined_post,
+        joiningDate: row.joining_date,
         lastWorkingDate: row.last_working_date,
         postCode: row.post_code,
         requirementTemplateCode: row.requirement_template_code,
         status: deriveRecruitmentPostStatus({
           employeeCode: row.employee_code,
           employeeName: row.employee_name,
+          currentDate: row.current_date,
+          joiningDate: row.joining_date,
           storedStatus: row.status,
         }),
         vacancyCode: row.vacancy_code,
@@ -1196,7 +1255,11 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             interview_count: number
             joining_date: string | null
             planned_round: string | null
+            salary_after_probation_maximum: string | null
+            salary_after_probation_minimum: string | null
+            salary_before_probation: string | null
             status: string
+            willing_to_join: boolean | null
           }>(
             `
               SELECT application.id, application.candidate_id,
@@ -1206,6 +1269,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                 candidate.current_company, candidate.experience,
                 application.status, application.interview_at::text,
                 application.planned_round, application.joining_date::text,
+                application.willing_to_join,
+                application.salary_before_probation,
+                application.salary_after_probation_minimum,
+                application.salary_after_probation_maximum,
                 count(interview.id)::int AS interview_count
               FROM recruitment.applications application
               JOIN recruitment.candidates candidate
@@ -1230,10 +1297,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             joining_date: string | null
             question_scores: unknown
             round_name: string
+            salary_after_probation_maximum: string | null
+            salary_after_probation_minimum: string | null
+            salary_before_probation: string | null
             scheduled_at: string | null
             score: string | null
             status: string
             updated_at: string
+            willing_to_join: boolean | null
           }>(
             `
               SELECT interview.id, interview.application_id,
@@ -1243,6 +1314,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                 interview.scores ->> 'overall' AS score,
                 interview.scores -> 'questions' AS question_scores,
                 interview.comments, interview.joining_date::text,
+                application.willing_to_join,
+                application.salary_before_probation,
+                application.salary_after_probation_minimum,
+                application.salary_after_probation_maximum,
                 interview.created_at::text, interview.updated_at::text
               FROM recruitment.interviews interview
               JOIN recruitment.applications application
@@ -1290,6 +1365,18 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             joiningDate: row.joining_date,
             nextRound,
             plannedRound: row.planned_round,
+            salaryAfterProbationMaximum:
+              row.salary_after_probation_maximum === null
+                ? null
+                : Number(row.salary_after_probation_maximum),
+            salaryAfterProbationMinimum:
+              row.salary_after_probation_minimum === null
+                ? null
+                : Number(row.salary_after_probation_minimum),
+            salaryBeforeProbation:
+              row.salary_before_probation === null
+                ? null
+                : Number(row.salary_before_probation),
             scoreableRound:
               nextRound &&
               history.some(
@@ -1300,6 +1387,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
                 ? nextRound
                 : null,
             status: row.status,
+            willingToJoin: row.willing_to_join,
           }
         }),
         interviews: interviewResult.rows.map((row) => ({
@@ -1312,10 +1400,23 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           joiningDate: row.joining_date,
           questionScores: normalizedQuestionScores(row.question_scores),
           roundName: row.round_name,
+          salaryAfterProbationMaximum:
+            row.salary_after_probation_maximum === null
+              ? null
+              : Number(row.salary_after_probation_maximum),
+          salaryAfterProbationMinimum:
+            row.salary_after_probation_minimum === null
+              ? null
+              : Number(row.salary_after_probation_minimum),
+          salaryBeforeProbation:
+            row.salary_before_probation === null
+              ? null
+              : Number(row.salary_before_probation),
           scheduledAt: row.scheduled_at,
           score: row.score === null ? null : Number(row.score),
           status: row.status,
           updatedAt: row.updated_at,
+          willingToJoin: row.willing_to_join,
         })),
         job: {
           applicantCount: job.applicant_count,
@@ -1441,10 +1542,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         joining_date: string | null
         question_scores: unknown
         round_name: string
+        salary_after_probation_maximum: string | null
+        salary_after_probation_minimum: string | null
+        salary_before_probation: string | null
         scheduled_at: string | null
         score: string | null
         status: string
         updated_at: string
+        willing_to_join: boolean | null
       }>(
         `
           SELECT interview.id, interview.application_id,
@@ -1455,6 +1560,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             interview.scores ->> 'overall' AS score,
             interview.scores -> 'questions' AS question_scores,
             interview.comments, interview.joining_date::text,
+            application.willing_to_join,
+            application.salary_before_probation,
+            application.salary_after_probation_minimum,
+            application.salary_after_probation_maximum,
             interview.created_at::text, interview.updated_at::text
           FROM recruitment.interviews interview
           JOIN recruitment.applications application
@@ -1483,10 +1592,23 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         joiningDate: row.joining_date,
         questionScores: normalizedQuestionScores(row.question_scores),
         roundName: row.round_name,
+        salaryAfterProbationMaximum:
+          row.salary_after_probation_maximum === null
+            ? null
+            : Number(row.salary_after_probation_maximum),
+        salaryAfterProbationMinimum:
+          row.salary_after_probation_minimum === null
+            ? null
+            : Number(row.salary_after_probation_minimum),
+        salaryBeforeProbation:
+          row.salary_before_probation === null
+            ? null
+            : Number(row.salary_before_probation),
         scheduledAt: row.scheduled_at,
         score: row.score === null ? null : Number(row.score),
         status: row.status,
         updatedAt: row.updated_at,
+        willingToJoin: row.willing_to_join,
       }))
     },
 
@@ -2688,7 +2810,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             [input.organizationId, designationCode]
           )
           if (!designation.rows[0]) {
-            throw new Error("Preferred designation was not found in the master.")
+            throw new Error(
+              "Preferred designation was not found in the master."
+            )
           }
           designationId = designation.rows[0].id
         }
@@ -3119,7 +3243,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           throw new Error("All three interview rounds are already approved.")
         }
         const selectedRound = required(input.roundName, "Interview round")
-        if (canonicalRecruitmentInterviewRound(selectedRound) !== nextRound.name) {
+        if (
+          canonicalRecruitmentInterviewRound(selectedRound) !== nextRound.name
+        ) {
           throw new Error(`The next required round is ${nextRound.name}.`)
         }
         const interviewAt = required(
@@ -3191,7 +3317,11 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         joiningDate?: string | null
         questionScores: Record<string, unknown>
         roundName: string
+        salaryAfterProbationMaximum?: string | number | null
+        salaryAfterProbationMinimum?: string | number | null
+        salaryBeforeProbation?: string | number | null
         status: "Approved" | "Hold" | "Rejected"
+        willingToJoin?: boolean | string | null
       }
     ) {
       return transaction(pool, async (client) => {
@@ -3259,12 +3389,44 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           nextRound.name,
           input.questionScores
         )
+        const finalApproval =
+          input.status === "Approved" && nextRound.name === "HR Round"
+        const willingToJoin = finalApproval
+          ? requiredYesNo(input.willingToJoin, "Candidate willingness")
+          : null
+        const joiningDate =
+          finalApproval && willingToJoin
+            ? required(input.joiningDate, "Joining date")
+            : null
+        const salaryBeforeProbation =
+          finalApproval && willingToJoin
+            ? requiredMoney(
+                input.salaryBeforeProbation,
+                "Salary before probation"
+              )
+            : null
+        const salaryAfterProbationMinimum =
+          finalApproval && willingToJoin
+            ? requiredMoney(
+                input.salaryAfterProbationMinimum,
+                "Minimum salary after probation"
+              )
+            : null
+        const salaryAfterProbationMaximum =
+          finalApproval && willingToJoin
+            ? requiredMoney(
+                input.salaryAfterProbationMaximum,
+                "Maximum salary after probation"
+              )
+            : null
         if (
-          input.status === "Approved" &&
-          nextRound.name === "HR Round" &&
-          !optional(input.joiningDate)
+          salaryAfterProbationMinimum !== null &&
+          salaryAfterProbationMaximum !== null &&
+          salaryAfterProbationMaximum < salaryAfterProbationMinimum
         ) {
-          throw new Error("Joining date is required for final approval.")
+          throw new Error(
+            "Maximum salary after probation must be at least the minimum salary."
+          )
         }
         const result = await client.query<{ id: string }>(
           `
@@ -3298,37 +3460,104 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               questions: assessment.questionScores,
             }),
             optional(input.comments),
-            optional(input.joiningDate),
+            joiningDate,
             input.actorUserId ?? null,
             randomUUID(),
           ]
         )
-        const finalApproval =
-          input.status === "Approved" && nextRound.name === "HR Round"
         const recordedInterview = result.rows[0]!
         await client.query(
           `
             UPDATE recruitment.applications
             SET status = $1, joining_date = migration.try_date($2),
-              updated_by_user_id = $3, updated_at = now(),
+              willing_to_join = $3,
+              salary_before_probation = $4,
+              salary_after_probation_minimum = $5,
+              salary_after_probation_maximum = $6,
+              updated_by_user_id = $7, updated_at = now(),
               row_version = row_version + 1
-            WHERE id = $4 AND organization_id = $5
+            WHERE id = $8 AND organization_id = $9
           `,
           [
             finalApproval
-              ? "Approved"
+              ? willingToJoin
+                ? "Approved"
+                : "Withdrawn"
               : input.status === "Approved"
                 ? "Interview"
                 : input.status,
-            optional(input.joiningDate),
+            joiningDate,
+            willingToJoin,
+            salaryBeforeProbation,
+            salaryAfterProbationMinimum,
+            salaryAfterProbationMaximum,
             input.actorUserId ?? null,
             input.applicationId,
             input.organizationId,
           ]
         )
+        if (finalApproval && willingToJoin) {
+          const appointmentResult = await client.query<{
+            candidate_name: string
+            job_id: string
+            post_id: string | null
+          }>(
+            `
+              SELECT candidate.name AS candidate_name,
+                job.id AS job_id, job.post_id
+              FROM recruitment.applications application
+              JOIN recruitment.candidates candidate
+                ON candidate.id = application.candidate_id
+              JOIN recruitment.job_posts job
+                ON job.id = application.job_post_id
+              WHERE application.id = $1
+                AND application.organization_id = $2
+              FOR UPDATE OF job
+            `,
+            [application.id, input.organizationId]
+          )
+          const appointment = appointmentResult.rows[0]
+          if (!appointment?.post_id) {
+            throw new Error(
+              "The recruitment opening is not linked to an approved post."
+            )
+          }
+          await assignEmployeeInTransaction(
+            client,
+            {
+              actorUserId: input.actorUserId,
+              appointedApplicationId: application.id,
+              employeeEvent: "Appointed",
+              employeeName: appointment.candidate_name,
+              joiningDate,
+              organizationId: input.organizationId,
+              postId: appointment.post_id,
+            },
+            randomUUID()
+          )
+          await client.query(
+            `
+              UPDATE recruitment.job_posts
+              SET status = 'Closed', closed_on = current_date,
+                updated_by_user_id = $1, updated_at = now(),
+                row_version = row_version + 1
+              WHERE id = $2 AND organization_id = $3
+            `,
+            [
+              input.actorUserId ?? null,
+              appointment.job_id,
+              input.organizationId,
+            ]
+          )
+        }
         await audit(client, {
           ...input,
           eventType: "recruitment.interview.recorded",
+          metadata: {
+            finalApproval,
+            joiningDate,
+            willingToJoin,
+          },
           targetId: recordedInterview.id,
           targetTable: "interviews",
         })
