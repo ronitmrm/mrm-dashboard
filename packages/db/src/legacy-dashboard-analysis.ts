@@ -4967,7 +4967,6 @@ function toolingMasterTableRow(row: Record<string, unknown>) {
     optionNumber: rowText(row, "OPTION NUMBER", "optionNumber"),
     setupNo: rowText(row, "SETUP NO.", "SETUP NO", "SETUP CODE", "setupNo"),
     setupName: rowText(row, "SETUP NAME", "setupName"),
-    machineUsed: rowText(row, "MACHINE USED", "machineUsed", "machine"),
     fixture: rowText(row, "FIXTURE", "fixture"),
     fixtureQty: rowValue(row, "FIXTURE QTY", "fixtureQty"),
     tooling: rowText(row, "TOOLING", "tooling"),

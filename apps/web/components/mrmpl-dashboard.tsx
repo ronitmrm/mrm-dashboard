@@ -250,7 +250,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "optionNumber", label: "Option No.", required: true },
       { name: "setupNo", label: "Setup No.", required: true },
       { name: "setupName", label: "Setup Name" },
-      { name: "machineUsed", label: "Machine Family" },
       { name: "fixture", label: "Fixture" },
       { name: "fixtureQty", label: "Fixture Qty", type: "number" },
       { name: "tooling", label: "Tooling" },
@@ -5888,7 +5887,6 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
 
   return {
     ...defaults,
-    machineUsed,
     fixture: "",
     fixtureQty: "",
     tooling: "",

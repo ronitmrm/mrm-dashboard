@@ -95,7 +95,6 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "optionNumber",
     "setupNo",
     "setupName",
-    "machineUsed",
     "fixture",
     "fixtureQty",
     "tooling",
