@@ -107,6 +107,7 @@ import {
   type FirstPieceInspectionDraft,
 } from "@/lib/first-piece-inspection-draft";
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
+import { maintenanceChecklistRowsForSchedule } from "@/lib/maintenance-schedule-options";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { shopFloorNoPendingActionLabel } from "@/lib/shop-floor-workflow";
 import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
@@ -6681,7 +6682,7 @@ function DataEntryForm({
   const resolvedDefaults = generatedCode ? { ...defaults, code: generatedCode } : defaults;
   const defaultsKey = JSON.stringify(resolvedDefaults);
   if (spec.entryType === "maintenance_master") {
-    return <MaintenanceMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} />;
+    return <MaintenanceMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} productionControl={productionControl} />;
   }
   if (spec.entryType === "maintenance_checklist_master") {
     return <MaintenanceChecklistMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} />;
@@ -6904,11 +6905,13 @@ function MaintenanceMasterForm({
   submitAction,
   defaults,
   dataEntry,
+  productionControl,
 }: {
   spec: DataEntrySpec;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   defaults: Record<string, unknown>;
   dataEntry?: DashboardPayload;
+  productionControl?: DashboardPayload;
 }) {
   const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
   const persistedRows = useMemo(() => maintenanceMasterRowsFromDataEntry(dataEntry), [dataEntry]);
@@ -6917,7 +6920,10 @@ function MaintenanceMasterForm({
     return [...persistedRows, ...localRows.filter((row) => !persistedKeys.has(maintenanceMasterKey(row)))];
   }, [persistedRows, localRows]);
   const scheduleOptions = useMemo(() => activeMaintenanceMasterRows(savedRows), [savedRows]);
-  const checklistRows = useMemo(() => activeMaintenanceChecklistRows(maintenanceChecklistMasterRowsFromDataEntry(dataEntry)), [dataEntry]);
+  const checklistRows = useMemo(
+    () => activeMaintenanceChecklistRows(maintenanceChecklistRowsForSchedule(dataEntry, productionControl)),
+    [dataEntry, productionControl],
+  );
   const checklistOptions = useMemo(() => maintenanceChecklistOptions(checklistRows), [checklistRows]);
   const defaultCode = displayValue(defaults.maintenanceCode) !== "-" ? displayValue(defaults.maintenanceCode) : nextMaintenanceMasterCode(savedRows);
   const [selectedCode, setSelectedCode] = useState(defaultCode);
