@@ -38,6 +38,7 @@
     "./recruitment-codes": "./src/recruitment-codes.ts",
     "./recruitment-domain": "./src/recruitment-domain.ts",
     "./recruitment-interview-workflow": "./src/recruitment-interview-workflow.ts",
-    "./schema": "./src/schema/index.ts"
+    "./schema": "./src/schema/index.ts",
+    "./user-entry-text": "./src/user-entry-text.ts"
   }
 }

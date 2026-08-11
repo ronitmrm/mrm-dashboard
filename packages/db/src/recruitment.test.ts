@@ -1401,7 +1401,8 @@ describe("upsertCandidate", () => {
       candidateId,
       departmentCode: "QA",
       designationCode: "INSPECTOR",
-      name: "Edited candidate",
+      currentCompany: "ACME INDUSTRIES",
+      name: "RAKESH HAREBHA",
       organizationId: "00000000-0000-4000-8000-000000000010",
       phone: "9999999999",
     })
@@ -1409,6 +1410,8 @@ describe("upsertCandidate", () => {
     const updateCall = query.mock.calls.find(([statement]) =>
       statement.includes("UPDATE recruitment.candidates")
     )
+    expect(updateCall?.[1]?.[1]).toBe("Rakesh Harebha")
+    expect(updateCall?.[1]?.[4]).toBe("Acme Industries")
     expect(updateCall?.[1]?.[8]).toBe(designationId)
     expect(updateCall?.[1]?.[10]).toBe(candidateId)
     const replaceDepartmentCall = query.mock.calls.find(([statement]) =>

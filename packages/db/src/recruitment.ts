@@ -20,6 +20,7 @@ import {
   scoreRecruitmentInterview,
   type RecruitmentInterviewRoundName,
 } from "./recruitment-interview-workflow"
+import { properCaseUserText } from "./user-entry-text"
 
 export {
   deriveRecruitmentEmployeeAssignment,
@@ -226,6 +227,15 @@ function required(value: unknown, label: string) {
 function optional(value: unknown) {
   const normalized = String(value ?? "").trim()
   return normalized || null
+}
+
+function requiredProperCase(value: unknown, label: string) {
+  return properCaseUserText(required(value, label))
+}
+
+function optionalProperCase(value: unknown) {
+  const normalized = optional(value)
+  return normalized ? properCaseUserText(normalized) : null
 }
 
 function compareText(left: string, right: string) {
@@ -575,7 +585,7 @@ async function assignEmployeeInTransaction(
   const currentEmployeeName = optional(existingAssignment.employee_name)
   const currentEmployeeCode = optional(existingAssignment.employee_code)
   const requestedEmployeeName =
-    optional(input.employeeName) ?? currentEmployeeName
+    optionalProperCase(input.employeeName) ?? currentEmployeeName
   const requestedEmployeeCode =
     optional(input.employeeCode) ?? currentEmployeeCode
   const normal = (value: string | null) => value?.trim().toLowerCase() ?? ""
@@ -603,7 +613,7 @@ async function assignEmployeeInTransaction(
     employeeEvent,
     employeeName:
       employeeEvent === "Appointed" || employeeEvent === "Joined"
-        ? input.employeeName
+        ? optionalProperCase(input.employeeName)
         : null,
     lastWorkingDate: input.lastWorkingDate,
   })
@@ -1823,7 +1833,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       const table = input.kind === "department" ? "departments" : "designations"
       return transaction(pool, async (client) => {
         const code = required(input.code, `${input.kind} code`)
-        const name = required(input.name, `${input.kind} name`)
+        const name = requiredProperCase(input.name, `${input.kind} name`)
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
           [`${input.organizationId}:${table}:master`]
@@ -1947,7 +1957,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           [
             input.organizationId,
             required(input.templateCode, "Template code"),
-            required(input.name, "Template name"),
+            requiredProperCase(input.name, "Template name"),
             optional(input.gender),
             optional(input.experienceRequirement),
             optional(input.education),
@@ -2376,7 +2386,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             RETURNING *
           `,
           [
-            optional(input.name) ?? role.name,
+            optionalProperCase(input.name) ?? role.name,
             input.actorUserId ?? null,
             combinedRoleId,
             input.organizationId,
@@ -2493,7 +2503,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `,
           [
             input.organizationId,
-            optional(input.name) ?? identity.defaultName,
+            optionalProperCase(input.name) ?? identity.defaultName,
             identity.vacancyCode,
             input.actorUserId ?? null,
             randomUUID(),
@@ -2755,7 +2765,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             currentEmployeeName: current.employeeName,
             employeeCode: row.employeeCode,
             employeeEvent: row.employeeEvent,
-            employeeName: row.employeeName,
+            employeeName: optionalProperCase(row.employeeName),
             lastWorkingDate: row.lastWorkingDate,
           })
           for (const target of targets) {
@@ -3019,10 +3029,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         }
         const parameters = [
           input.organizationId,
-          required(input.name, "Candidate name"),
+          requiredProperCase(input.name, "Candidate name"),
           required(input.phone, "Candidate phone"),
           optional(input.email),
-          optional(input.currentCompany),
+          optionalProperCase(input.currentCompany),
           optional(input.experience),
           optional(input.source),
           departmentId,
@@ -3722,7 +3732,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             application.id,
             nextRound.name,
             input.status,
-            optional(input.interviewerName),
+            optionalProperCase(input.interviewerName),
             JSON.stringify({
               overall: assessment.overall,
               questions: assessment.questionScores,
