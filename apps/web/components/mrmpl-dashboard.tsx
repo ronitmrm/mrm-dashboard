@@ -10754,7 +10754,7 @@ function productionCardRuntimeMinutes(prodDate: string, startTime: string, endTi
 }
 
 function storedSetupChecklistSessionKey(sessionId: string) {
-  return `mrmpl:setup-checklist:${sessionId}`;
+  return `mrmpl:setup-checklist:fresh-2026-08-11:${sessionId}`;
 }
 
 function readStoredFirstPieceInspectionTasks() {

@@ -8,10 +8,11 @@ export type FirstPieceInspectionDraft = {
 
 type DraftStorage = Pick<Storage, "getItem" | "removeItem" | "setItem">
 
-const openTasksStorageKey = "mrmpl:first-piece-inspection:open-tasks"
+const productionResetStorageVersion = "fresh-2026-08-11"
+const openTasksStorageKey = `mrmpl:first-piece-inspection:${productionResetStorageVersion}:open-tasks`
 
 function draftStorageKey(reportId: string) {
-  return `mrmpl:first-piece-inspection:draft:${reportId}`
+  return `mrmpl:first-piece-inspection:${productionResetStorageVersion}:draft:${reportId}`
 }
 
 function asRecord(value: unknown): FirstPieceInspectionRecord {
