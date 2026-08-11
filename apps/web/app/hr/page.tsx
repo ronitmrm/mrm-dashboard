@@ -29,6 +29,7 @@ export default async function HrRecruitmentPage({
   searchParams,
 }: {
   searchParams: Promise<{
+    appointment?: string
     error?: string
     job?: string
     panel?: string
@@ -215,6 +216,7 @@ export default async function HrRecruitmentPage({
         panelId={activeItem.panelId}
         posts={posts}
         returnJobId={feedback.returnJob}
+        selectedAppointmentApplicationId={feedback.appointment}
         selectedJobId={feedback.job}
         selectedTemplateCode={feedback.template}
         templates={templates}

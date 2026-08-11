@@ -18,7 +18,6 @@ import { LockKeyhole } from "lucide-react"
 import { useId, useState } from "react"
 
 import { recordInterviewAction } from "@/app/hr/actions"
-import { CandidateAppointmentFields } from "@/components/hr/candidate-appointment-fields"
 
 export type InterviewApplicationOption = {
   candidateName: string
@@ -47,7 +46,6 @@ export function InterviewOutcomeForm({
 }) {
   const fieldId = useId()
   const [applicationId, setApplicationId] = useState(initialApplicationId)
-  const [decision, setDecision] = useState("Approved")
   const selectedApplication = applications.find(
     (application) => application.id === applicationId
   )
@@ -151,11 +149,10 @@ export function InterviewOutcomeForm({
             <FieldLabel htmlFor={`${fieldId}-decision`}>Decision</FieldLabel>
             <NativeSelect
               className="w-full"
+              defaultValue="Approved"
               id={`${fieldId}-decision`}
               name="status"
-              onChange={(event) => setDecision(event.target.value)}
               required
-              value={decision}
             >
               <NativeSelectOption value="Approved">Approved</NativeSelectOption>
               <NativeSelectOption value="Rejected">Rejected</NativeSelectOption>
@@ -173,9 +170,6 @@ export function InterviewOutcomeForm({
             />
           </Field>
         </div>
-        {round?.name === "HR Round" && decision === "Approved" ? (
-          <CandidateAppointmentFields />
-        ) : null}
         <Field>
           <FieldLabel htmlFor={`${fieldId}-comments`}>Comments</FieldLabel>
           <Textarea id={`${fieldId}-comments`} name="comments" />

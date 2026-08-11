@@ -812,12 +812,10 @@ describe("job workspace", () => {
     )
   })
 
-  test("appoints a willing candidate with the agreed salary terms", async () => {
-    const postId = "00000000-0000-4000-8000-000000000001"
-    let interviewRecorded = false
+  test("saves final HR approval before appointment details", async () => {
     const query = vi.fn(
-      async (statement: string, _parameters?: readonly unknown[]) => {
-        void _parameters
+      async (statement: string, parameters?: readonly unknown[]) => {
+        void parameters
         if (
           statement.includes("SELECT id, status") &&
           statement.includes("FROM recruitment.applications")
@@ -832,46 +830,13 @@ describe("job workspace", () => {
               {
                 round_name: "HR Round",
                 scheduled_at: "2026-08-11 10:00:00+00",
-                status: interviewRecorded ? "Approved" : "Scheduled",
+                status: "Scheduled",
               },
             ],
           }
         }
         if (statement.includes("INSERT INTO recruitment.interviews")) {
-          interviewRecorded = true
           return { rows: [{ id: "interview-1" }] }
-        }
-        if (statement.includes("application.willing_to_join")) {
-          return {
-            rows: [
-              {
-                candidate_name: "Candidate One",
-                id: "application-1",
-                job_id: "job-1",
-                post_id: postId,
-                status: "Interview",
-                willing_to_join: null,
-              },
-            ],
-          }
-        }
-        if (statement.includes("SELECT id, employee_name, employee_code")) {
-          return {
-            rows: [
-              {
-                can_replace: true,
-                combined_role_id: null,
-                employee_code: null,
-                employee_name: null,
-                id: postId,
-                last_working_date: null,
-                status: "Vacant",
-              },
-            ],
-          }
-        }
-        if (statement.includes("UPDATE recruitment.posts")) {
-          return { rows: [{ id: postId }] }
         }
         return { rows: [] }
       }
@@ -883,7 +848,6 @@ describe("job workspace", () => {
 
     await repository.recordInterview({
       applicationId: "application-1",
-      joiningDate: "2026-08-20",
       organizationId: "organization-1",
       questionScores: {
         final_hiring_recommendation: 5,
@@ -893,121 +857,31 @@ describe("job workspace", () => {
         team_fit: 5,
       },
       roundName: "HR Round",
-      salaryAfterProbationMaximum: "20000",
-      salaryAfterProbationMinimum: "15000",
-      salaryBeforeProbation: "15000",
       status: "Approved",
-      willingToJoin: "yes",
     })
 
     const applicationUpdate = query.mock.calls.find(([statement]) =>
       statement.includes("UPDATE recruitment.applications")
     )
-    expect(applicationUpdate?.[1]?.slice(0, 6)).toEqual([
+    expect(applicationUpdate?.[1]).toEqual([
       "Approved",
-      "2026-08-20",
-      true,
-      15000,
-      15000,
-      20000,
-    ])
-    const postUpdate = query.mock.calls.find(([statement]) =>
-      statement.includes("UPDATE recruitment.posts")
-    )
-    expect(postUpdate?.[1]?.slice(0, 6)).toEqual([
-      "Candidate One",
       null,
-      "Appointed",
-      null,
-      "2026-08-20",
       "application-1",
+      "organization-1",
     ])
     expect(
       query.mock.calls.some(([statement]) =>
-        statement.includes("UPDATE recruitment.job_posts")
+        statement.includes("application.willing_to_join")
       )
-    ).toBe(true)
-  })
-
-  test("withdraws an approved candidate who is not willing to join", async () => {
-    let interviewRecorded = false
-    const query = vi.fn(
-      async (statement: string, _parameters?: readonly unknown[]) => {
-        void _parameters
-        if (
-          statement.includes("SELECT id, status") &&
-          statement.includes("FROM recruitment.applications")
-        ) {
-          return { rows: [{ id: "application-1", status: "Interview" }] }
-        }
-        if (statement.includes("SELECT round_name, status")) {
-          return {
-            rows: [
-              { round_name: "Screening Round", status: "Approved" },
-              { round_name: "Technical Round", status: "Approved" },
-              {
-                round_name: "HR Round",
-                scheduled_at: "2026-08-11 10:00:00+00",
-                status: interviewRecorded ? "Approved" : "Scheduled",
-              },
-            ],
-          }
-        }
-        if (statement.includes("INSERT INTO recruitment.interviews")) {
-          interviewRecorded = true
-          return { rows: [{ id: "interview-1" }] }
-        }
-        if (statement.includes("application.willing_to_join")) {
-          return {
-            rows: [
-              {
-                candidate_name: "Candidate One",
-                id: "application-1",
-                job_id: "job-1",
-                post_id: null,
-                status: "Interview",
-                willing_to_join: null,
-              },
-            ],
-          }
-        }
-        return { rows: [] }
-      }
-    )
-    const client = { query, release: vi.fn() } as unknown as PoolClient
-    const repository = createRecruitmentRepository({
-      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
-    })
-
-    await repository.recordInterview({
-      applicationId: "application-1",
-      organizationId: "organization-1",
-      questionScores: {
-        final_hiring_recommendation: 5,
-        motivation_retention: 4,
-        policy_shift_acceptance: 4,
-        reliability_discipline: 5,
-        team_fit: 5,
-      },
-      roundName: "HR Round",
-      status: "Approved",
-      willingToJoin: "no",
-    })
-
-    const applicationUpdate = query.mock.calls.find(([statement]) =>
-      statement.includes("UPDATE recruitment.applications")
-    )
-    expect(applicationUpdate?.[1]?.slice(0, 6)).toEqual([
-      "Withdrawn",
-      null,
-      false,
-      null,
-      null,
-      null,
-    ])
+    ).toBe(false)
     expect(
       query.mock.calls.some(([statement]) =>
         statement.includes("UPDATE recruitment.posts")
+      )
+    ).toBe(false)
+    expect(
+      query.mock.calls.some(([statement]) =>
+        statement.includes("UPDATE recruitment.job_posts")
       )
     ).toBe(false)
   })

@@ -1996,7 +1996,6 @@ export async function captureCanonicalBehaviorParityFixture({
       await recruitment.recordInterview({
         applicationId: repeatedApplication[0]!.id,
         interviewerName: "Oracle Interviewer",
-        joiningDate: round.name === "HR Round" ? "2026-09-01" : undefined,
         organizationId,
         questionScores: round.scores,
         roundName: round.name,
@@ -2012,6 +2011,15 @@ export async function captureCanonicalBehaviorParityFixture({
         )?.nextRound ?? null
       )
     }
+    await recruitment.completeCandidateAppointment({
+      applicationId: repeatedApplication[0]!.id,
+      joiningDate: "2026-09-01",
+      organizationId,
+      salaryAfterProbationMaximum: 20000,
+      salaryAfterProbationMinimum: 15000,
+      salaryBeforeProbation: 15000,
+      willingToJoin: "yes",
+    })
     const interviewEvidence = await pool.query<{
       question_count: number
       round_name: string

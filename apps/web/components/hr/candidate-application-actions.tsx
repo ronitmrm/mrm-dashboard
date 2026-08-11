@@ -13,11 +13,8 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 import { UserCheck, UserX } from "lucide-react"
 
-import {
-  completeCandidateAppointmentAction,
-  withdrawCandidateApplicationAction,
-} from "@/app/hr/actions"
-import { CandidateAppointmentFields } from "@/components/hr/candidate-appointment-fields"
+import { withdrawCandidateApplicationAction } from "@/app/hr/actions"
+import { CandidateAppointmentDialog } from "@/components/hr/candidate-appointment-dialog"
 
 export function CandidateApplicationActions({
   applicationId,
@@ -39,38 +36,18 @@ export function CandidateApplicationActions({
   return (
     <div className="flex justify-end gap-2">
       {canCompleteAppointment ? (
-        <Sheet>
-          <SheetTrigger asChild>
+        <CandidateAppointmentDialog
+          applicationId={applicationId}
+          candidateName={candidateName}
+          defaultJoiningDate={defaultJoiningDate}
+          returnJobId={returnJobId}
+          trigger={
             <Button size="sm" type="button" variant="outline">
               <UserCheck data-icon="inline-start" />
               Appointment Details
             </Button>
-          </SheetTrigger>
-          <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-            <SheetHeader>
-              <SheetTitle>Complete Appointment Details</SheetTitle>
-              <SheetDescription>
-                {candidateName} Has All Three Rounds Approved. Confirm The
-                Joining Terms To Complete The Appointment.
-              </SheetDescription>
-            </SheetHeader>
-            <form
-              action={completeCandidateAppointmentAction}
-              className="grid gap-5 px-6 pb-6"
-            >
-              <input
-                name="application_id"
-                type="hidden"
-                value={applicationId}
-              />
-              <input name="return_job_id" type="hidden" value={returnJobId} />
-              <CandidateAppointmentFields
-                defaultJoiningDate={defaultJoiningDate ?? ""}
-              />
-              <Button type="submit">Save Appointment Details</Button>
-            </form>
-          </SheetContent>
-        </Sheet>
+          }
+        />
       ) : null}
 
       {canWithdraw ? (

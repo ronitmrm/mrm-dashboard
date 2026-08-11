@@ -3620,14 +3620,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         applicationId: string
         comments?: string | null
         interviewerName?: string | null
-        joiningDate?: string | null
         questionScores: Record<string, unknown>
         roundName: string
-        salaryAfterProbationMaximum?: string | number | null
-        salaryAfterProbationMinimum?: string | number | null
-        salaryBeforeProbation?: string | number | null
         status: "Approved" | "Hold" | "Rejected"
-        willingToJoin?: boolean | string | null
       }
     ) {
       return transaction(pool, async (client) => {
@@ -3697,9 +3692,6 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         )
         const finalApproval =
           input.status === "Approved" && nextRound.name === "HR Round"
-        const appointmentTerms = finalApproval
-          ? candidateAppointmentTerms(input)
-          : null
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.interviews (
@@ -3732,43 +3724,34 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               questions: assessment.questionScores,
             }),
             optional(input.comments),
-            appointmentTerms?.joiningDate ?? null,
+            null,
             input.actorUserId ?? null,
             randomUUID(),
           ]
         )
         const recordedInterview = result.rows[0]!
-        if (appointmentTerms) {
-          await completeCandidateAppointmentInTransaction(client, {
-            actorUserId: input.actorUserId,
-            applicationId: application.id,
-            organizationId: input.organizationId,
-            terms: appointmentTerms,
-          })
-        } else {
-          await client.query(
-            `
-              UPDATE recruitment.applications
-              SET status = $1, updated_by_user_id = $2,
-                updated_at = now(), row_version = row_version + 1
-              WHERE id = $3 AND organization_id = $4
-            `,
-            [
-              input.status === "Approved" ? "Interview" : input.status,
-              input.actorUserId ?? null,
-              input.applicationId,
-              input.organizationId,
-            ]
-          )
-        }
+        await client.query(
+          `
+            UPDATE recruitment.applications
+            SET status = $1, updated_by_user_id = $2,
+              updated_at = now(), row_version = row_version + 1
+            WHERE id = $3 AND organization_id = $4
+          `,
+          [
+            finalApproval
+              ? "Approved"
+              : input.status === "Approved"
+                ? "Interview"
+                : input.status,
+            input.actorUserId ?? null,
+            input.applicationId,
+            input.organizationId,
+          ]
+        )
         await audit(client, {
           ...input,
           eventType: "recruitment.interview.recorded",
-          metadata: {
-            finalApproval,
-            joiningDate: appointmentTerms?.joiningDate ?? null,
-            willingToJoin: appointmentTerms?.willingToJoin ?? null,
-          },
+          metadata: { finalApproval },
           targetId: recordedInterview.id,
           targetTable: "interviews",
         })

@@ -43,7 +43,8 @@ async function mutate(
     repository: ReturnType<typeof createRecruitmentRepository>,
     context: { actorUserId: string; organizationId: string }
   ) => Promise<unknown>,
-  successMessage = "Saved successfully."
+  successMessage = "Saved successfully.",
+  successParams?: Record<string, string>
 ) {
   const path = hrReturnPath(formData)
   const session = await requireCapability(capability, path)
@@ -69,6 +70,11 @@ async function mutate(
   revalidatePath(hrPath)
   if (path !== hrPath) revalidatePath(path)
   const feedback = new URLSearchParams(outcome)
+  if (outcome.success && successParams) {
+    for (const [key, value] of Object.entries(successParams)) {
+      feedback.set(key, value)
+    }
+  }
   redirect(`${path}${path.includes("?") ? "&" : "?"}${feedback}`)
 }
 
@@ -446,6 +452,7 @@ export async function scheduleInterviewAction(formData: FormData) {
 }
 
 export async function recordInterviewAction(formData: FormData) {
+  const applicationId = value(formData, "application_id")
   const roundName = value(formData, "round_name")
   const round = recruitmentInterviewRound(roundName)
   const questionScores = Object.fromEntries(
@@ -459,26 +466,22 @@ export async function recordInterviewAction(formData: FormData) {
     selectedStatus === "Rejected" || selectedStatus === "Hold"
       ? selectedStatus
       : "Approved"
-  await mutate(formData, "hr.recruitment.write", (repository, context) =>
-    repository.recordInterview({
-      ...context,
-      applicationId: value(formData, "application_id"),
-      comments: value(formData, "comments"),
-      interviewerName: value(formData, "interviewer_name"),
-      joiningDate: value(formData, "joining_date"),
-      questionScores,
-      roundName,
-      salaryAfterProbationMaximum: value(
-        formData,
-        "salary_after_probation_maximum"
-      ),
-      salaryAfterProbationMinimum: value(
-        formData,
-        "salary_after_probation_minimum"
-      ),
-      salaryBeforeProbation: value(formData, "salary_before_probation"),
-      status,
-      willingToJoin: value(formData, "willing_to_join"),
-    })
+  await mutate(
+    formData,
+    "hr.recruitment.write",
+    (repository, context) =>
+      repository.recordInterview({
+        ...context,
+        applicationId,
+        comments: value(formData, "comments"),
+        interviewerName: value(formData, "interviewer_name"),
+        questionScores,
+        roundName,
+        status,
+      }),
+    "Interview outcome saved.",
+    round?.name === "HR Round" && status === "Approved"
+      ? { appointment: applicationId }
+      : undefined
   )
 }

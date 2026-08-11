@@ -57,8 +57,8 @@ export function CandidateAppointmentFields({
               type="date"
             />
           </Field>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="grid gap-4 rounded-xl border bg-background p-4">
+          <div className="grid gap-4">
+            <div className="grid min-w-0 gap-4 rounded-xl border bg-background p-4">
               <div>
                 <p className="font-medium">Before Probation</p>
                 <p className="text-xs text-muted-foreground">
@@ -70,6 +70,7 @@ export function CandidateAppointmentFields({
                   Fixed Salary (₹)
                 </FieldLabel>
                 <Input
+                  className="w-full"
                   id={`${fieldId}-salary-before`}
                   inputMode="decimal"
                   min="1"
@@ -81,7 +82,7 @@ export function CandidateAppointmentFields({
                 />
               </Field>
             </div>
-            <div className="grid gap-4 rounded-xl border bg-background p-4">
+            <div className="grid min-w-0 gap-4 rounded-xl border bg-background p-4">
               <div>
                 <p className="font-medium">After Probation</p>
                 <p className="text-xs text-muted-foreground">
@@ -89,11 +90,12 @@ export function CandidateAppointmentFields({
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field>
+                <Field className="min-w-0">
                   <FieldLabel htmlFor={`${fieldId}-salary-after-min`}>
                     Minimum (₹)
                   </FieldLabel>
                   <Input
+                    className="w-full"
                     id={`${fieldId}-salary-after-min`}
                     inputMode="decimal"
                     min="1"
@@ -104,11 +106,12 @@ export function CandidateAppointmentFields({
                     type="number"
                   />
                 </Field>
-                <Field>
+                <Field className="min-w-0">
                   <FieldLabel htmlFor={`${fieldId}-salary-after-max`}>
                     Maximum (₹)
                   </FieldLabel>
                   <Input
+                    className="w-full"
                     id={`${fieldId}-salary-after-max`}
                     inputMode="decimal"
                     min="1"

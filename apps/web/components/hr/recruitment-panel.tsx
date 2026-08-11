@@ -78,6 +78,7 @@ type RecruitmentPanelProps = {
   panelId: string
   posts: RecruitmentPostRow[]
   returnJobId?: string
+  selectedAppointmentApplicationId?: string
   selectedJobId?: string
   selectedTemplateCode?: string
   templates: RecruitmentTemplateRow[]
@@ -620,10 +621,18 @@ function CandidateSearchPanel({
 function InterviewsPanel({
   canWrite,
   interviews,
-}: Pick<RecruitmentPanelProps, "canWrite" | "interviews">) {
+  selectedAppointmentApplicationId,
+}: Pick<
+  RecruitmentPanelProps,
+  "canWrite" | "interviews" | "selectedAppointmentApplicationId"
+>) {
   return (
     <>
-      <InterviewScheduleBoard canWrite={canWrite} interviews={interviews} />
+      <InterviewScheduleBoard
+        appointmentApplicationId={selectedAppointmentApplicationId}
+        canWrite={canWrite}
+        interviews={interviews}
+      />
       {canWrite ? <InterviewScheduleForm interviews={interviews} /> : null}
     </>
   )
@@ -695,12 +704,13 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
         <InterviewsPanel
           canWrite={props.canWrite}
           interviews={props.interviews}
+          selectedAppointmentApplicationId={
+            props.selectedAppointmentApplicationId
+          }
         />
       )
     case "interviewWorkspacePanel":
-      return (
-        <InterviewResultsWorkspace records={props.interviewRecords} />
-      )
+      return <InterviewResultsWorkspace records={props.interviewRecords} />
     case "conversationLogsPanel":
       return (
         <ConversationLogsTable
