@@ -284,20 +284,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
     ],
   },
   {
-    entryType: "employee",
-    title: "Employee Master",
-    description: "Operator And Shop-Floor Employee Master Data.",
-    fields: [
-      { name: "empId", label: "Emp Id", required: true },
-      { name: "employeeType", label: "Employee Type" },
-      { name: "employeeName", label: "Employee Name", required: true },
-      { name: "location", label: "Location" },
-      { name: "doj", label: "Doj", type: "date" },
-      { name: "terminatedDate", label: "Terminated Date", type: "date" },
-      { name: "status", label: "Status", options: ["Active", "Inactive", "Terminated"], defaultValue: "Active" },
-    ],
-  },
-  {
     entryType: "machine_master",
     title: "Machine Master",
     description: "Machine Number, Family, Type, Name, And Location Used By Planning And Machine Filters.",
@@ -450,7 +436,6 @@ const generalDataEntryTypes = [
   "tooling",
   "work_order",
   "rm_inward",
-  "employee",
   "machine_master",
   "software_raw",
 ] as const;
@@ -4036,6 +4021,13 @@ function RoleTaskPanel({
   const [locationFilter, setLocationFilter] = useState("");
   const [itemFilter, setItemFilter] = useState("");
   const [taskFilter, setTaskFilter] = useState("");
+  const employeeMasterPage = usePostgresOperationalPage(
+    role === "shopFloor" ? "/api/employee-master" : null,
+  );
+  const employeeMasterRows = useMemo(
+    () => asArray(employeeMasterPage.data?.rows),
+    [employeeMasterPage.data?.rows],
+  );
   const copy = enableFirstPieceInspection
     ? {
         title: "First Piece Inspection",
@@ -4167,6 +4159,9 @@ function RoleTaskPanel({
             role={role}
             rows={productionCardRows}
             existingCardRows={existingProductionCardRows}
+            employeeMasterError={employeeMasterPage.error}
+            employeeMasterLoaded={employeeMasterPage.data !== undefined}
+            employeeMasterRows={employeeMasterRows}
             onSaveProductionCard={saveProductionCard}
             rejectionTypeRows={asArray(productionControl.rejectionTypeMasterRows)}
             rejectionReasonRows={asArray(productionControl.rejectionReasonMasterRows)}
@@ -4857,6 +4852,9 @@ function ProductionCardRoleEntryForm({
   role,
   rows,
   existingCardRows = [],
+  employeeMasterError,
+  employeeMasterLoaded = false,
+  employeeMasterRows = [],
   bulkRows = [],
   rejectionTypeRows = [],
   rejectionReasonRows = [],
@@ -4866,6 +4864,9 @@ function ProductionCardRoleEntryForm({
   role: RoleTaskKind;
   rows: DashboardPayload[];
   existingCardRows?: DashboardPayload[];
+  employeeMasterError?: string;
+  employeeMasterLoaded?: boolean;
+  employeeMasterRows?: DashboardPayload[];
   bulkRows?: DashboardPayload[];
   rejectionTypeRows?: DashboardPayload[];
   rejectionReasonRows?: DashboardPayload[];
@@ -4908,6 +4909,12 @@ function ProductionCardRoleEntryForm({
     key: shopFloorPlanKey(row),
     label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}`,
   })), [rows]);
+  const employeeOptions = useMemo(() => employeeMasterRows.map((row) => ({
+    code: displayValue(row.empId),
+    name: displayValue(row.employeeName),
+  })).filter((row) => row.code !== "-" && row.name !== "-")
+    .sort((left, right) => left.name.localeCompare(right.name, "en-IN", { numeric: true })), [employeeMasterRows]);
+  const selectedEmployee = employeeOptions.find((employee) => employee.code === operatorNumber);
   const rejectionTypeOptions = useMemo(() => codedMasterOptions(rejectionTypeRows, DEFAULT_REJECTION_TYPE_OPTIONS, ["typeOfRejection", "rejectionType", "name"]), [rejectionTypeRows]);
   const rejectionReasonOptions = useMemo(() => codedMasterOptions(rejectionReasonRows, DEFAULT_REJECTION_REASON_OPTIONS, ["rejectionReason", "reason", "name", "downtimeReason", "description"]), [rejectionReasonRows]);
   const downtimeReasonOptions = useMemo(() => rejectionReasonOptions.map((option) => ({ code: option.code, reason: option.label, label: `${option.code} - ${option.label}` })).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })), [rejectionReasonOptions]);
@@ -5023,7 +5030,7 @@ useEffect(() => {
         prodDate,
         shift,
         operatorId: role === "shopFloor" ? operatorNumber : "",
-        operatorName: "",
+        operatorName: role === "shopFloor" ? selectedEmployee?.name ?? "" : "",
         qcName: "",
         cycleTime: role === "shopFloor" ? cycleSeconds : 0,
         loadingUnloading: 0,
@@ -5221,7 +5228,26 @@ useEffect(() => {
               <Input className={compactInputClass} type="number" step="0.01" value={pieceWeightInput} onChange={(event) => setPieceWeightByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} />
             </CompactEntryField>
             <CompactEntryField label="Operator No.">
-              <Input className={compactInputClass} value={operatorNumber} onChange={(event) => setOperatorNumber(event.target.value)} />
+              <SearchableSelect
+                className={compactSelectClass}
+                disabled={!employeeOptions.length}
+                value={operatorNumber}
+                onChange={(event) => setOperatorNumber(event.target.value)}
+              >
+                <option value="">
+                  {employeeMasterError
+                    ? "Employee Master Unavailable"
+                    : !employeeMasterLoaded
+                      ? "Loading Employee Master"
+                      : employeeOptions.length
+                        ? "Select Employee"
+                        : "No Joined Employees"}
+                </option>
+                {operatorNumber && !selectedEmployee ? <option value={operatorNumber}>{operatorNumber}</option> : null}
+                {employeeOptions.map((employee) => (
+                  <option key={employee.code} value={employee.code}>{employee.code} - {employee.name}</option>
+                ))}
+              </SearchableSelect>
             </CompactEntryField>
             <CompactEntryField label="Machine Start">
               <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />

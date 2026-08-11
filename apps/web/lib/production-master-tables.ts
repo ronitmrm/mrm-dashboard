@@ -14,7 +14,6 @@ export const productionMasterTableEntryTypes = [
   "route",
   "cycle",
   "tooling",
-  "employee",
   "machine_master",
   "maintenance_master",
 ] as const
@@ -51,7 +50,6 @@ export const productionMasterRowSources: Record<string, readonly string[]> = {
   route: ["routeMasterRows"],
   cycle: ["cycleMasterRows"],
   tooling: ["toolingMasterRows"],
-  employee: ["employeeMasterRows"],
   machine_master: ["machinePlanningRows"],
   maintenance_master: ["maintenanceMasterRows"],
   maintenance_checklist_master: ["maintenanceChecklistMasterRows"],

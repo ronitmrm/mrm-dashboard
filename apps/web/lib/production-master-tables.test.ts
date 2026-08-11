@@ -102,6 +102,11 @@ describe("Production master table rows", () => {
     }
   })
 
+  it("uses the shared HR Employee Master instead of a Production master", () => {
+    expect(productionMasterTableEntryTypes).not.toContain("employee")
+    expect(productionMasterRowSources.employee).toBeUndefined()
+  })
+
   it("uses the Route Master line as the quality parameter set selector", () => {
     const source = readFileSync(
       new URL("../components/mrmpl-dashboard.tsx", import.meta.url),

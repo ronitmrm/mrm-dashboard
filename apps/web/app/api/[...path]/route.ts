@@ -42,6 +42,7 @@ import {
   executePostgresOperationalEntry,
   isPostgresOperationalEntryType,
   OperationalEntryError,
+  readPostgresEmployeeMaster,
   readPostgresHourlyQualityPage,
   readPostgresSetupChecklistPage,
 } from "@/lib/postgres-operational-entry-server"
@@ -113,15 +114,6 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "orderKg",
   ],
   rm_inward: ["jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg"],
-  employee: [
-    "empId",
-    "employeeType",
-    "employeeName",
-    "location",
-    "doj",
-    "terminatedDate",
-    "status",
-  ],
   machine_master: [
     "machineNo",
     "machineFamily",
@@ -598,6 +590,10 @@ async function get(request: NextRequest, context: RouteContext) {
           search.get("floor")
         )
       )
+    }
+
+    if (path === "employee-master") {
+      return json(await readPostgresEmployeeMaster(request))
     }
 
     if (path === "dashboard") {

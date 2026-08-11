@@ -50,6 +50,7 @@ vi.mock("@/lib/postgres-operational-entry-server", () => ({
   OperationalEntryError: class OperationalEntryError extends Error {
     status = 500
   },
+  readPostgresEmployeeMaster: vi.fn(),
   readPostgresHourlyQualityPage: vi.fn(),
   readPostgresSetupChecklistPage: vi.fn(),
 }))

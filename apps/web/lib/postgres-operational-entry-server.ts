@@ -4,12 +4,14 @@ import {
   createAuthorizationRepository,
   createMaintenanceRepository,
   createQualityRepository,
+  createRecruitmentRepository,
   createWorkforceRepository,
 } from "@workspace/db"
 import type { NextRequest } from "next/server"
 
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
 import { operationalEntryPlan } from "@/lib/postgres-operational-entry"
+import { sharedEmployeeMasterRows } from "@/lib/shared-employee-master"
 import { withPostgresRepository } from "@/lib/postgres-repository-lifecycle"
 import { authorizationRequestTelemetryForCurrentScope } from "./auth/authorization-request-telemetry"
 import { telemetryRequestId } from "./request-telemetry"
@@ -143,6 +145,26 @@ export async function readPostgresSetupChecklistPage(
       operation: "quality.setup_checklist.read",
       requestId: telemetryRequestId(request),
       subsystem: "quality",
+    }
+  )
+}
+
+export async function readPostgresEmployeeMaster(request: NextRequest) {
+  const actor = await authorizedActor(request, "operations.dashboard.read")
+  return withPostgresRepository(
+    createRecruitmentRepository(actor),
+    async (repository) => {
+      const organizationId = await repository.organizationIdForCode("MRMPL")
+      return {
+        rows: sharedEmployeeMasterRows(
+          await repository.listPosts(organizationId)
+        ),
+      }
+    },
+    {
+      operation: "workforce.employee_master.read",
+      requestId: telemetryRequestId(request),
+      subsystem: "workforce",
     }
   )
 }
