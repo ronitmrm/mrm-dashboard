@@ -21,6 +21,30 @@ function optionalText(formData: FormData, name: string) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
 }
 
+function employeeReference(formData: FormData) {
+  const value = requiredText(formData, "employee")
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    throw new Error("employee selection is invalid")
+  }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !("employeeCode" in parsed) ||
+    typeof parsed.employeeCode !== "string" ||
+    !("organizationId" in parsed) ||
+    typeof parsed.organizationId !== "string"
+  ) {
+    throw new Error("employee selection is invalid")
+  }
+  return {
+    employeeCode: parsed.employeeCode,
+    organizationId: parsed.organizationId,
+  }
+}
+
 async function withAccessService<T>(
   capability: string,
   operation: (
@@ -48,14 +72,29 @@ export async function provisionStaffAction(formData: FormData) {
     throw new Error("password must contain at least 12 characters")
   }
 
+  const employee = employeeReference(formData)
   await withAccessService(
     "administration.users.manage",
     (access, actorUserId) =>
       access.provisionStaff({
         actorUserId,
         email: requiredText(formData, "email").toLowerCase(),
-        name: requiredText(formData, "name"),
+        ...employee,
         password,
+      })
+  )
+  revalidatePath(accessPath)
+}
+
+export async function linkEmployeeAction(formData: FormData) {
+  const employee = employeeReference(formData)
+  await withAccessService(
+    "administration.users.manage",
+    (access, actorUserId) =>
+      access.linkEmployee({
+        actorUserId,
+        ...employee,
+        userId: requiredText(formData, "userId"),
       })
   )
   revalidatePath(accessPath)
@@ -88,6 +127,24 @@ export async function assignRoleAction(formData: FormData) {
         actorUserId,
         roleKey: requiredText(formData, "roleKey"),
         userId: requiredText(formData, "userId"),
+      })
+  )
+  revalidatePath(accessPath)
+}
+
+export async function setPostRoleAction(formData: FormData) {
+  const effect = requiredText(formData, "effect")
+  if (effect !== "assign" && effect !== "remove") {
+    throw new Error("effect must be assign or remove")
+  }
+  await withAccessService(
+    "administration.roles.manage",
+    (access, actorUserId) =>
+      access.setPostRole({
+        actorUserId,
+        enabled: effect === "assign",
+        postId: requiredText(formData, "postId"),
+        roleKey: requiredText(formData, "roleKey"),
       })
   )
   revalidatePath(accessPath)

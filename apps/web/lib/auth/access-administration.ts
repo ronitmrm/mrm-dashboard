@@ -13,7 +13,8 @@ type CreateAccessAdministrationServiceOptions = {
 type ProvisionStaffInput = {
   actorUserId: string
   email: string
-  name: string
+  employeeCode: string
+  organizationId: string
   password: string
 }
 
@@ -32,6 +33,20 @@ type AssignRoleInput = {
   actorUserId: string
   roleKey: string
   userId: string
+}
+
+type LinkEmployeeInput = {
+  actorUserId: string
+  employeeCode: string
+  organizationId: string
+  userId: string
+}
+
+type SetPostRoleInput = {
+  actorUserId: string
+  enabled: boolean
+  postId: string
+  roleKey: string
 }
 
 type SetPermissionOverrideInput = {
@@ -67,21 +82,45 @@ export function createAccessAdministrationService({
     async provisionStaff({
       actorUserId,
       email,
-      name,
+      employeeCode,
+      organizationId,
       password,
     }: ProvisionStaffInput) {
       await requireActorCapability(actorUserId, MANAGE_USERS_CAPABILITY)
 
+      const employee = await access.employeeForAccount({
+        employeeCode,
+        organizationId,
+      })
+
       const created = await auth.api.createUser({
         body: {
           email,
-          name,
+          name: employee.name,
           password,
           role: "user",
         },
       })
 
+      try {
+        await access.linkEmployeeUser({
+          actorUserId,
+          employeeCode: employee.employeeCode,
+          organizationId: employee.organizationId,
+          userId: created.user.id,
+        })
+      } catch (error) {
+        await auth.api.removeUser({ body: { userId: created.user.id } })
+        throw error
+      }
+
       return created.user
+    },
+
+    async linkEmployee(input: LinkEmployeeInput) {
+      await requireActorCapability(input.actorUserId, MANAGE_USERS_CAPABILITY)
+      await access.employeeForAccount(input)
+      return access.linkEmployeeUser(input)
     },
 
     async createRole({
@@ -110,6 +149,11 @@ export function createAccessAdministrationService({
     async assignRole({ actorUserId, roleKey, userId }: AssignRoleInput) {
       await requireActorCapability(actorUserId, MANAGE_ROLES_CAPABILITY)
       return access.assignRole({ actorUserId, roleKey, userId })
+    },
+
+    async setPostRole(input: SetPostRoleInput) {
+      await requireActorCapability(input.actorUserId, MANAGE_ROLES_CAPABILITY)
+      return access.setPostRole(input)
     },
 
     async setPermissionOverride(input: SetPermissionOverrideInput) {

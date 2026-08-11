@@ -1331,7 +1331,9 @@ test("identity starts fresh without legacy Pricing auth tables", async () => {
 
   expect(result.rows.map((row) => row.table_name)).toEqual([
     "accounts",
+    "employee_links",
     "permissions",
+    "post_role_assignments",
     "role_permissions",
     "roles",
     "sessions",

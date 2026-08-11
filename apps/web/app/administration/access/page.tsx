@@ -52,8 +52,10 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import {
   assignRoleAction,
   createRoleAction,
+  linkEmployeeAction,
   provisionStaffAction,
   setPermissionOverrideAction,
+  setPostRoleAction,
 } from "./actions"
 
 export const dynamic = "force-dynamic"
@@ -71,6 +73,12 @@ export default async function AccessAdministrationPage() {
   const snapshot = await access
     .getSnapshot({ actorUserId: session.user.id })
     .finally(() => access.close())
+  const unlinkedEmployees = snapshot.employees.filter(
+    (employee) => !employee.linkedUserId
+  )
+  const unlinkedUsers = snapshot.users.filter(
+    (user) => !user.employee && user.betterAuthRole !== "admin"
+  )
   const permissionsByModule = new Map<
     string,
     (typeof snapshot.permissions)[number][]
@@ -118,13 +126,33 @@ export default async function AccessAdministrationPage() {
             <form action={provisionStaffAction}>
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="staff-name">Full Name</FieldLabel>
-                  <Input
-                    id="staff-name"
-                    name="name"
-                    autoComplete="name"
+                  <FieldLabel htmlFor="staff-employee">Employee</FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="staff-employee"
+                    name="employee"
                     required
-                  />
+                  >
+                    <NativeSelectOption value="" disabled>
+                      Select an employee
+                    </NativeSelectOption>
+                    {unlinkedEmployees.map((employee) => (
+                      <NativeSelectOption
+                        key={`${employee.organizationId}:${employee.employeeCode}`}
+                        value={JSON.stringify({
+                          employeeCode: employee.employeeCode,
+                          organizationId: employee.organizationId,
+                        })}
+                      >
+                        {employee.employeeName} ({employee.employeeCode}) ·{" "}
+                        {employee.departments.join(", ")} ·{" "}
+                        {employee.postCodes.join(", ")}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                  <FieldDescription>
+                    Name, department, and posts come from Employee Master.
+                  </FieldDescription>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="staff-email">Email Address</FieldLabel>
@@ -153,7 +181,7 @@ export default async function AccessAdministrationPage() {
                     Application.
                   </FieldDescription>
                 </Field>
-                <Button type="submit">
+                <Button type="submit" disabled={!unlinkedEmployees.length}>
                   <UserRoundPlus />
                   Provision Staff
                 </Button>
@@ -238,10 +266,159 @@ export default async function AccessAdministrationPage() {
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Assign Role</CardTitle>
+            <CardTitle>Link Existing Account</CardTitle>
             <CardDescription>
-              Role Grants Are Additive And Immediately Affect Server-Side
-              Capability Checks.
+              Connect An Existing Better Auth User To One Employee Master
+              Record.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={linkEmployeeAction}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="link-user">Login Account</FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="link-user"
+                    name="userId"
+                    required
+                  >
+                    <NativeSelectOption value="" disabled>
+                      Select an account
+                    </NativeSelectOption>
+                    {unlinkedUsers.map((user) => (
+                      <NativeSelectOption key={user.id} value={user.id}>
+                        {user.name} · {user.email}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="link-employee">Employee</FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="link-employee"
+                    name="employee"
+                    required
+                  >
+                    <NativeSelectOption value="" disabled>
+                      Select an employee
+                    </NativeSelectOption>
+                    {unlinkedEmployees.map((employee) => (
+                      <NativeSelectOption
+                        key={`${employee.organizationId}:${employee.employeeCode}`}
+                        value={JSON.stringify({
+                          employeeCode: employee.employeeCode,
+                          organizationId: employee.organizationId,
+                        })}
+                      >
+                        {employee.employeeName} ({employee.employeeCode}) ·{" "}
+                        {employee.postCodes.join(", ")}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Button
+                  type="submit"
+                  disabled={!unlinkedUsers.length || !unlinkedEmployees.length}
+                >
+                  Link Account
+                </Button>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Post Access Profile</CardTitle>
+            <CardDescription>
+              Roles Assigned Here Apply Automatically To The Employee Occupying
+              The Post.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <form action={setPostRoleAction}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="profile-post">Approved Post</FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="profile-post"
+                    name="postId"
+                    required
+                  >
+                    {snapshot.postAccessProfiles.map((post) => (
+                      <NativeSelectOption key={post.id} value={post.id}>
+                        {post.postCode} · {post.department} · {post.designation}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="profile-role">
+                    Application Role
+                  </FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="profile-role"
+                    name="roleKey"
+                    required
+                  >
+                    {snapshot.roles
+                      .filter((role) => !role.isSystem)
+                      .map((role) => (
+                        <NativeSelectOption key={role.id} value={role.key}>
+                          {role.name}
+                        </NativeSelectOption>
+                      ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="profile-effect">Change</FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="profile-effect"
+                    name="effect"
+                    required
+                  >
+                    <NativeSelectOption value="assign">
+                      Assign Role
+                    </NativeSelectOption>
+                    <NativeSelectOption value="remove">
+                      Remove Role
+                    </NativeSelectOption>
+                  </NativeSelect>
+                </Field>
+                <Button type="submit">Save Post Access</Button>
+              </FieldGroup>
+            </form>
+            <div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border p-3">
+              {snapshot.postAccessProfiles.map((post) => (
+                <div
+                  className="flex items-start justify-between gap-3 text-sm"
+                  key={post.id}
+                >
+                  <span>
+                    {post.postCode} · {post.department}
+                  </span>
+                  <span className="text-right text-muted-foreground">
+                    {post.roleKeys.join(", ") || "No role"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Assign Direct Role</CardTitle>
+            <CardDescription>
+              Exceptional Access Only. Normal Access Comes From The Employee's
+              Approved Post Profile.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -281,7 +458,7 @@ export default async function AccessAdministrationPage() {
                     ))}
                   </NativeSelect>
                 </Field>
-                <Button type="submit">Assign Role</Button>
+                <Button type="submit">Assign Direct Role</Button>
               </FieldGroup>
             </form>
           </CardContent>
@@ -392,6 +569,7 @@ export default async function AccessAdministrationPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Staff Member</TableHead>
+                  <TableHead>Employee / Post</TableHead>
                   <TableHead>Roles</TableHead>
                   <TableHead>Overrides</TableHead>
                 </TableRow>
@@ -408,11 +586,41 @@ export default async function AccessAdministrationPage() {
                       </div>
                     </TableCell>
                     <TableCell>
+                      {user.employee ? (
+                        <div className="grid gap-0.5">
+                          <span>{user.employee.employeeCode}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {user.employee.departments.join(", ")} ·{" "}
+                            {user.employee.postCodes.join(", ")}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          Not linked
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <div className="flex flex-wrap gap-1.5">
-                        {user.roleKeys.length ? (
-                          user.roleKeys.map((roleKey) => (
-                            <Badge key={roleKey} variant="secondary">
-                              {roleKey}
+                        {user.roleKeys.length ||
+                        user.employee?.inheritedRoleKeys.length ? (
+                          [
+                            ...user.roleKeys.map((roleKey) => ({
+                              key: roleKey,
+                              source: "direct",
+                            })),
+                            ...(user.employee?.inheritedRoleKeys ?? []).map(
+                              (roleKey) => ({
+                                key: roleKey,
+                                source: "post",
+                              })
+                            ),
+                          ].map((role) => (
+                            <Badge
+                              key={`${role.source}:${role.key}`}
+                              variant="secondary"
+                            >
+                              {role.key} · {role.source}
                             </Badge>
                           ))
                         ) : (

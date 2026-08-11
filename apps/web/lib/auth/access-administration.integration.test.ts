@@ -18,6 +18,11 @@ const connectionString =
 const originalDatabaseUrl = process.env.DATABASE_URL
 const originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET
 const pool = new Pool({ connectionString })
+const organizationId = "10000000-0000-4000-8000-000000000001"
+const departmentId = "10000000-0000-4000-8000-000000000002"
+const designationId = "10000000-0000-4000-8000-000000000003"
+const postId = "10000000-0000-4000-8000-000000000004"
+const employeeCode = "ACCESS-EMP-001"
 
 async function resetIdentity() {
   const system = createAuthSystem({
@@ -43,6 +48,44 @@ beforeAll(async () => {
   process.env.DATABASE_URL = connectionString
   process.env.BETTER_AUTH_SECRET = "test-only-better-auth-secret-000000000000"
   await migrateDatabase({ connectionString })
+  await pool.query(
+    `INSERT INTO core.organizations (id, code, name)
+     VALUES ($1, 'ACCESS-TEST', 'Access Test Organization')
+     ON CONFLICT (id) DO NOTHING`,
+    [organizationId]
+  )
+  await pool.query(
+    `INSERT INTO recruitment.departments (
+       id, organization_id, code, name,
+       source_system, source_table, source_id
+     ) VALUES ($1, $2, 'ACCESS', 'Production', 'test', 'departments', $1)
+     ON CONFLICT (id) DO NOTHING`,
+    [departmentId, organizationId]
+  )
+  await pool.query(
+    `INSERT INTO recruitment.designations (
+       id, organization_id, code, name,
+       source_system, source_table, source_id
+     ) VALUES ($1, $2, 'PLANNER', 'Production Planner',
+       'test', 'designations', $1)
+     ON CONFLICT (id) DO NOTHING`,
+    [designationId, organizationId]
+  )
+  await pool.query(
+    `INSERT INTO recruitment.posts (
+       id, organization_id, department_id, designation_id,
+       vacancy_number, post_code, vacancy_code,
+       employee_name, employee_code, status,
+       source_system, source_table, source_id
+     ) VALUES ($1, $2, $3, $4, '1', 'ACCESS-POST-001',
+       'ACCESS-VAC-001', 'Production Planner', $5, 'Occupied',
+       'test', 'posts', $1)
+     ON CONFLICT (id) DO UPDATE SET
+       employee_name = EXCLUDED.employee_name,
+       employee_code = EXCLUDED.employee_code,
+       status = EXCLUDED.status`,
+    [postId, organizationId, departmentId, designationId, employeeCode]
+  )
 })
 
 beforeEach(async () => {
@@ -51,6 +94,16 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await resetIdentity()
+  await pool.query("DELETE FROM recruitment.posts WHERE id = $1", [postId])
+  await pool.query("DELETE FROM recruitment.designations WHERE id = $1", [
+    designationId,
+  ])
+  await pool.query("DELETE FROM recruitment.departments WHERE id = $1", [
+    departmentId,
+  ])
+  await pool.query("DELETE FROM core.organizations WHERE id = $1", [
+    organizationId,
+  ])
   if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL
   else process.env.DATABASE_URL = originalDatabaseUrl
   if (originalBetterAuthSecret === undefined)
@@ -91,7 +144,8 @@ describe("access administration", () => {
       const staff = await access.provisionStaff({
         actorUserId: administrator.user.id,
         email: "planner@mrmpl.test",
-        name: "Production Planner",
+        employeeCode,
+        organizationId,
         password: "planner-test-password",
       })
 
@@ -115,7 +169,8 @@ describe("access administration", () => {
         access.provisionStaff({
           actorUserId: staff.id,
           email: "unauthorized@mrmpl.test",
-          name: "Unauthorized User",
+          employeeCode,
+          organizationId,
           password: "unauthorized-test-password",
         })
       ).rejects.toThrow("administration.users.manage")
@@ -160,7 +215,8 @@ describe("access administration", () => {
       const staff = await access.provisionStaff({
         actorUserId: administrator.user.id,
         email: "planner@mrmpl.test",
-        name: "Production Planner",
+        employeeCode,
+        organizationId,
         password: "planner-test-password",
       })
 
@@ -284,6 +340,113 @@ describe("access administration", () => {
     } finally {
       await authorization.close()
       await otherInstanceAccess.close()
+      await access.close()
+      await provisioner.close()
+      await system.close()
+    }
+  })
+
+  it("derives access from the linked employee's current approved post", async () => {
+    const system = createAuthSystem({
+      allowSignUp: true,
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const provisioner = createInitialAdministratorProvisioner({
+      connectionString,
+    })
+    const access = createAccessAdministrationService({
+      auth: system.auth,
+      connectionString,
+    })
+    const authorization = createAuthorizationRepository({ connectionString })
+
+    try {
+      const administrator = await system.auth.api.signUpEmail({
+        body: {
+          email: "administrator@mrmpl.test",
+          name: "System Administrator",
+          password: "test-only-password",
+        },
+      })
+      await provisioner.promote({
+        email: administrator.user.email,
+        userId: administrator.user.id,
+      })
+      const staff = await access.provisionStaff({
+        actorUserId: administrator.user.id,
+        email: "linked-planner@mrmpl.test",
+        employeeCode,
+        organizationId,
+        password: "linked-planner-password",
+      })
+      await access.createRole({
+        actorUserId: administrator.user.id,
+        key: "post-production-planner",
+        name: "Post production planner",
+        permissionKeys: ["planning.plan.read"],
+      })
+      await access.setPostRole({
+        actorUserId: administrator.user.id,
+        enabled: true,
+        postId,
+        roleKey: "post-production-planner",
+      })
+
+      await expect(
+        authorization.hasCapability(staff.id, "planning.plan.read")
+      ).resolves.toBe(true)
+      const snapshot = await access.getSnapshot({
+        actorUserId: administrator.user.id,
+      })
+      expect(snapshot.users).toContainEqual(
+        expect.objectContaining({
+          id: staff.id,
+          employee: expect.objectContaining({
+            employeeCode,
+            inheritedRoleKeys: ["post-production-planner"],
+            postCodes: ["ACCESS-POST-001"],
+          }),
+        })
+      )
+
+      await pool.query(
+        `UPDATE recruitment.posts
+         SET status = 'Resigned', last_working_date = current_date - 1
+         WHERE id = $1`,
+        [postId]
+      )
+      await expect(
+        authorization.hasCapability(staff.id, "planning.plan.read")
+      ).resolves.toBe(false)
+      await pool.query(
+        `UPDATE recruitment.posts
+         SET status = 'Occupied', last_working_date = NULL
+         WHERE id = $1`,
+        [postId]
+      )
+      await expect(
+        authorization.hasCapability(staff.id, "planning.plan.read")
+      ).resolves.toBe(true)
+
+      await access.setPostRole({
+        actorUserId: administrator.user.id,
+        enabled: false,
+        postId,
+        roleKey: "post-production-planner",
+      })
+      await expect(
+        authorization.hasCapability(staff.id, "planning.plan.read")
+      ).resolves.toBe(false)
+    } finally {
+      await pool.query(
+        `UPDATE recruitment.posts
+         SET status = 'Occupied', last_working_date = NULL
+         WHERE id = $1`,
+        [postId]
+      )
+      await authorization.close()
       await access.close()
       await provisioner.close()
       await system.close()
