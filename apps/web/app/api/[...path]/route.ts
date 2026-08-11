@@ -113,18 +113,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "orderPcs",
     "orderKg",
   ],
-  rm_inward: [
-    "jcNo",
-    "fgPoNo",
-    "rmPoNo",
-    "partCode",
-    "orderPcs",
-    "orderKg",
-    "rmInwardDate",
-    "rmInwardKg",
-    "status",
-    "remark",
-  ],
+  rm_inward: ["jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg"],
   employee: [
     "empId",
     "employeeType",
@@ -273,15 +262,10 @@ async function rmInwardTemplateResponse(
     .filter((row) => text(row.rmStatus).toLowerCase() !== "received")
     .map((row) => ({
       jcNo: row.jcNo,
-      fgPoNo: row.fgPoNo,
       rmPoNo: row.rmPoNo,
       partCode: row.partCode,
-      orderPcs: row.orderPcs,
-      orderKg: row.orderKg,
       rmInwardDate: "",
       rmInwardKg: "",
-      status: "",
-      remark: "",
     }))
   return csvResponse("rm_inward_template.csv", csvRows(fields, pendingRows))
 }
