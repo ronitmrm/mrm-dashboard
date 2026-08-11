@@ -669,19 +669,19 @@ function FirstPieceInspectionShell({
   const isLoading = dashboardDeliveryState.data === null && dashboardDeliveryState.request !== "error";
 
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-4 text-foreground">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+    <section className="grid w-full min-w-0 gap-4 text-foreground">
+      <div className="grid gap-3 @3xl/main:grid-cols-[minmax(0,1fr)_auto] @3xl/main:items-start">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold">First Piece Inspection</h1>
-          <p className="text-sm text-muted-foreground">Select A Pending Setup, Enter Five Readings, Then Approve It. Works On Tablet And Computer.</p>
+          <p className="text-sm text-muted-foreground">Select A Pending Setup, Enter Five Readings, Then Approve It.</p>
         </div>
-        <Button type="button" variant="outline" onClick={() => window.location.assign(dashboardTabHref("qualityControlTasksTab", productionFloorCode))}>
+        <Button className="w-full @3xl/main:w-auto" type="button" variant="outline" onClick={() => window.location.assign(dashboardTabHref("qualityControlTasksTab", productionFloorCode))}>
           <LayoutDashboard className="size-4" />
           Quality Control
         </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 @2xl/main:grid-cols-2 @5xl/main:grid-cols-3">
         <MetricCard label="Pending Reports" value={formatNumber(tasks.length)} />
         <MetricCard label="Inspection Parameters" value={formatNumber(combinedQualityInspectionMasterRows(productionControl).length)} />
         <MetricCard label="Required Readings" value="5 Per Dimension" />
@@ -4360,16 +4360,16 @@ function FirstPieceInspectionPanel({
     });
   }
   return (
-    <section className="grid gap-4">
+    <section className="grid min-w-0 gap-4">
       <div
         aria-label="First Piece Inspection Views"
-        className="flex w-fit items-center gap-1 rounded-xl border bg-muted/40 p-1"
+        className="grid w-full grid-cols-2 items-center gap-1 rounded-xl border bg-muted/40 p-1 @2xl/main:flex @2xl/main:w-fit"
         role="tablist"
       >
         <Button
           aria-controls="first-piece-task-list"
           aria-selected={activeView === "tasks"}
-          className="gap-2 rounded-lg"
+          className="min-w-0 justify-center gap-2 rounded-lg"
           onClick={() => setActiveView("tasks")}
           role="tab"
           size="sm"
@@ -4383,7 +4383,7 @@ function FirstPieceInspectionPanel({
         <Button
           aria-controls="first-piece-saved-reports"
           aria-selected={activeView === "reports"}
-          className="gap-2 rounded-lg"
+          className="min-w-0 justify-center gap-2 rounded-lg"
           onClick={() => setActiveView("reports")}
           role="tab"
           size="sm"
@@ -4413,10 +4413,10 @@ function FirstPieceInspectionPanel({
                       <TableHead className="w-14"></TableHead>
                       <TableHead>Item</TableHead>
                       <TableHead>Job Card</TableHead>
-                      <TableHead className="hidden sm:table-cell">Machine</TableHead>
-                      <TableHead className="hidden md:table-cell">Setup</TableHead>
-                      <TableHead className="hidden lg:table-cell">Option</TableHead>
-                      <TableHead className="hidden xl:table-cell">Task Assigned</TableHead>
+                      <TableHead className="hidden @3xl/main:table-cell">Machine</TableHead>
+                      <TableHead className="hidden @4xl/main:table-cell">Setup</TableHead>
+                      <TableHead className="hidden @5xl/main:table-cell">Option</TableHead>
+                      <TableHead className="hidden @6xl/main:table-cell">Task Assigned</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -4433,14 +4433,14 @@ function FirstPieceInspectionPanel({
                             </TableCell>
                             <TableCell className="font-medium">{itemCode(task)}</TableCell>
                             <TableCell>{jobCardNumber(task)}</TableCell>
-                            <TableCell className="hidden sm:table-cell">{displayValue(task.machine)}</TableCell>
-                            <TableCell className="hidden md:table-cell">{displayValue(task.setupNo)}</TableCell>
-                            <TableCell className="hidden lg:table-cell">{displayValue(task.optionNumber)}</TableCell>
-                            <TableCell className="hidden xl:table-cell">{displayValue(task.shopFloorUpdatedAt)}</TableCell>
+                            <TableCell className="hidden @3xl/main:table-cell">{displayValue(task.machine)}</TableCell>
+                            <TableCell className="hidden @4xl/main:table-cell">{displayValue(task.setupNo)}</TableCell>
+                            <TableCell className="hidden @5xl/main:table-cell">{displayValue(task.optionNumber)}</TableCell>
+                            <TableCell className="hidden @6xl/main:table-cell">{displayValue(task.shopFloorUpdatedAt)}</TableCell>
                           </TableRow>
                           {expanded ? (
                             <TableRow>
-                              <TableCell colSpan={7} className="bg-muted/15 p-4">
+                              <TableCell colSpan={7} className="bg-muted/15 p-2 @2xl/main:p-4">
                                 <ShopFloorRowAction
                                   next={task}
                                   onSaveStage={saveStage}
@@ -5521,7 +5521,7 @@ function FirstPieceInspectionForm({
           </Button>
         ) : null}
       </div>
-      <div className="grid gap-3 lg:hidden">
+      <div className="grid gap-3 @5xl/main:hidden">
         {masters.map((master) => (
           <div className="grid gap-3 rounded-lg border bg-background p-3" key={`mobile-${firstPieceMasterKey(master)}`}>
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -5531,7 +5531,7 @@ function FirstPieceInspectionForm({
               </div>
               <Badge variant="outline">{displayValue(master.specification)} ({qualityParameterTolerance(master)})</Badge>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <div className="grid gap-2 @lg/main:grid-cols-2 @2xl/main:grid-cols-3 @4xl/main:grid-cols-5">
               {[0, 1, 2, 3, 4].map((pieceIndex) => (
                 <label className="grid gap-1 text-xs font-medium" key={pieceIndex}>
                   Piece {pieceIndex + 1}
@@ -5546,7 +5546,7 @@ function FirstPieceInspectionForm({
           </div>
         ))}
       </div>
-      <div className="hidden overflow-auto lg:block">
+      <div className="hidden overflow-auto @5xl/main:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -5601,14 +5601,14 @@ function FirstPieceReadingControl({
   return (
     <div className={`grid gap-1 rounded-md ${qualityResultTone(result) === "bad" ? "bg-red-50/70 dark:bg-red-950/20" : ""}`}>
       {qualityParameterInputType(master) === "pass_fail" ? (
-        <SearchableSelect className={`h-11 min-w-20 rounded-md border bg-background px-2 text-sm lg:h-8 ${qualityReadingInputClass(result)}`} value={value} onChange={(event) => onChange(event.target.value)} required>
+        <SearchableSelect className={`h-11 min-w-20 rounded-md border bg-background px-2 text-sm @5xl/main:h-8 ${qualityReadingInputClass(result)}`} value={value} onChange={(event) => onChange(event.target.value)} required>
           <option value="">Select</option>
           <option value="OK">Ok</option>
           <option value="Not OK">Not Ok</option>
         </SearchableSelect>
       ) : (
         <Input
-          className={`h-11 min-w-20 lg:h-8 ${qualityReadingInputClass(result)}`}
+          className={`h-11 min-w-20 @5xl/main:h-8 ${qualityReadingInputClass(result)}`}
           type={qualityParameterInputType(master) === "number" ? "number" : "text"}
           inputMode={qualityParameterInputType(master) === "number" ? "decimal" : undefined}
           step="0.001"

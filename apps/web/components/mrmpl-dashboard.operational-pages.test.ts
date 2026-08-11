@@ -30,7 +30,25 @@ describe("Production operational page loading", () => {
     expect(firstPiecePage).toContain("shopFloorQueueRows(productionControl)")
     expect(firstPiecePage).toContain('roleTaskMatches(row, "quality")')
     expect(firstPiecePage).toContain("readStoredFirstPieceInspectionTasks()")
+    expect(firstPiecePage).toContain('className="grid w-full min-w-0 gap-4 text-foreground"')
+    expect(firstPiecePage).toContain("@5xl/main:grid-cols-3")
+    expect(firstPiecePage).not.toContain("max-w-6xl")
     expect(firstPiecePage).not.toContain("Example Only")
     expect(firstPiecePage).not.toContain("Filled Dummy Inspection")
+
+    const firstPiecePanel = source.slice(
+      source.indexOf("function FirstPieceInspectionPanel"),
+      source.indexOf("function ShopFloorItemSummary")
+    )
+    expect(firstPiecePanel).toContain("@2xl/main:flex")
+    expect(firstPiecePanel).toContain("@6xl/main:table-cell")
+
+    const firstPieceForm = source.slice(
+      source.indexOf("function FirstPieceInspectionForm"),
+      source.indexOf("function FirstPieceReadingControl")
+    )
+    expect(firstPieceForm).toContain("@5xl/main:hidden")
+    expect(firstPieceForm).toContain("@4xl/main:grid-cols-5")
+    expect(firstPieceForm).toContain("hidden overflow-auto @5xl/main:block")
   })
 })
