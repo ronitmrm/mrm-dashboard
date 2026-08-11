@@ -24,6 +24,7 @@ type DashboardQueryClient = Pick<PoolClient, "query">
 
 type SourceRow = {
   changed_at: Date | string
+  production_floor_code?: ProductionFloorCode
   source_id: string
   source_payload: JsonRecord
 }
@@ -160,6 +161,9 @@ function sourceRecord(
 ): JsonRecord & { _id: unknown; createdAt: string } {
   return {
     ...row.source_payload,
+    ...(row.production_floor_code
+      ? { productionFloorCode: row.production_floor_code }
+      : {}),
     _id: row.source_payload._id ?? row.source_id,
     createdAt:
       typeof row.source_payload.createdAt === "string"
@@ -179,7 +183,12 @@ function dataEntryRecord(row: DataEntrySourceRow): JsonRecord & {
     return {
       ...source,
       entryType: source.entryType,
-      payload: source.payload,
+      payload: {
+        ...jsonRecord(source.payload),
+        ...(source.productionFloorCode
+          ? { productionFloorCode: source.productionFloorCode }
+          : {}),
+      },
     }
   }
   return {
@@ -188,7 +197,7 @@ function dataEntryRecord(row: DataEntrySourceRow): JsonRecord & {
     entryType: row.inferred_entry_type,
     key:
       typeof source.key === "string" && source.key ? source.key : row.source_id,
-    payload: row.source_payload,
+    payload: source,
   }
 }
 

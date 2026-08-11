@@ -120,10 +120,8 @@ beforeAll(async () => {
         key: "CNC-READ-01",
         payload: {
           machineType: "CNC",
-          productionFloorCode: "cnc",
           unitNo: "CNC-READ-01",
         },
-        productionFloorCode: "cnc",
       },
     ]
   )
@@ -170,6 +168,7 @@ describe("canonical PostgreSQL dashboard read model", () => {
             dataEntry: {
               keySummary: Array<{ entryType: string; rows: number }>
             }
+            machinePlanningRows: Array<Record<string, unknown>>
           }
         >
       }
@@ -217,6 +216,9 @@ describe("canonical PostgreSQL dashboard read model", () => {
           (row) => row.entryType === "machine_master"
         )
       ).toEqual({ entryType: "machine_master", rows: 1 })
+      expect(
+        payload.productionFloorSnapshots.cnc?.machinePlanningRows[0]
+      ).toMatchObject({ productionFloorCode: "cnc" })
       expect(built.sourceWatermark).toMatchObject({
         changedAt: expect.any(String),
         sourceCoverage,

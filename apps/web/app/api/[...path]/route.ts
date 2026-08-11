@@ -415,6 +415,10 @@ async function savePlanningMasterEntry(
   payload: Record<string, unknown>
 ) {
   if (entryType === "machine_master") {
+    const location = text(payload.location)
+    if (!location) {
+      throw new RouteError(400, "Machine location is required.")
+    }
     return repository.upsertMachine({
       actorUserId,
       machineNumber: text(payload.machineNo),
@@ -1195,6 +1199,8 @@ async function post(request: NextRequest, context: RouteContext) {
           entryType,
           fileName,
           fileBase64
+        ).map((payload) =>
+          productionFloorPayload(payload, body.productionFloorCode)
         )
         const importPolicy = browserImportPolicy(entryType, importedRows.length)
         if (!importPolicy.ok) {
