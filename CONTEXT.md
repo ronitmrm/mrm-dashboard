@@ -126,6 +126,11 @@ A candidate application that was finally approved, rejected, or withdrawn. It
 remains part of recruitment history and does not prevent a later application.
 _Avoid_: Deleted application, old entry.
 
+**Candidate Withdrawal**:
+The candidate's decision to stop one active Candidate Application before
+appointment. Its reason and prior interview history remain recorded.
+_Avoid_: Candidate deletion, job closure.
+
 **Recruitment Interview Round**:
 One sequential standardized assessment within a candidate application:
 Screening, Technical, then HR. A later round cannot begin until the preceding

@@ -135,6 +135,7 @@ export type RecruitmentInterviewRow = {
 }
 
 export type RecruitmentJobApplicationRow = {
+  allRoundsApproved: boolean
   candidateEmail: string | null
   candidateId: string
   candidateName: string
@@ -675,6 +676,199 @@ async function assignEmployeeInTransaction(
   }
   const selectedPost = { id: currentPost.id }
   return { selectedPost, updatedPostCount: result.rows.length }
+}
+
+type CandidateAppointmentTermsInput = {
+  joiningDate?: string | null
+  salaryAfterProbationMaximum?: string | number | null
+  salaryAfterProbationMinimum?: string | number | null
+  salaryBeforeProbation?: string | number | null
+  willingToJoin?: boolean | string | null
+}
+
+type CandidateAppointmentTerms = {
+  joiningDate: string | null
+  salaryAfterProbationMaximum: number | null
+  salaryAfterProbationMinimum: number | null
+  salaryBeforeProbation: number | null
+  willingToJoin: boolean
+}
+
+function candidateAppointmentTerms(
+  input: CandidateAppointmentTermsInput
+): CandidateAppointmentTerms {
+  const willingToJoin = requiredYesNo(
+    input.willingToJoin,
+    "Candidate willingness"
+  )
+  if (!willingToJoin) {
+    return {
+      joiningDate: null,
+      salaryAfterProbationMaximum: null,
+      salaryAfterProbationMinimum: null,
+      salaryBeforeProbation: null,
+      willingToJoin,
+    }
+  }
+  const salaryAfterProbationMinimum = requiredMoney(
+    input.salaryAfterProbationMinimum,
+    "Minimum salary after probation"
+  )
+  const salaryAfterProbationMaximum = requiredMoney(
+    input.salaryAfterProbationMaximum,
+    "Maximum salary after probation"
+  )
+  if (salaryAfterProbationMaximum < salaryAfterProbationMinimum) {
+    throw new Error(
+      "Maximum salary after probation must be at least the minimum salary."
+    )
+  }
+  return {
+    joiningDate: required(input.joiningDate, "Joining date"),
+    salaryAfterProbationMaximum,
+    salaryAfterProbationMinimum,
+    salaryBeforeProbation: requiredMoney(
+      input.salaryBeforeProbation,
+      "Salary before probation"
+    ),
+    willingToJoin,
+  }
+}
+
+async function completeCandidateAppointmentInTransaction(
+  client: PoolClient,
+  input: MutationContext & {
+    applicationId: string
+    terms: CandidateAppointmentTerms
+  }
+) {
+  const applicationResult = await client.query<{
+    candidate_name: string
+    id: string
+    job_id: string
+    post_id: string | null
+    status: string
+    willing_to_join: boolean | null
+  }>(
+    `
+      SELECT application.id, application.status,
+        application.willing_to_join,
+        candidate.name AS candidate_name,
+        job.id AS job_id, job.post_id
+      FROM recruitment.applications application
+      JOIN recruitment.candidates candidate
+        ON candidate.id = application.candidate_id
+      JOIN recruitment.job_posts job
+        ON job.id = application.job_post_id
+      WHERE application.id = $1
+        AND application.organization_id = $2
+      FOR UPDATE OF application, job
+    `,
+    [
+      required(input.applicationId, "Candidate application"),
+      input.organizationId,
+    ]
+  )
+  const application = applicationResult.rows[0]
+  if (!application) throw new Error("Candidate application was not found.")
+  if (
+    application.status !== "Approved" &&
+    !isActiveRecruitmentApplicationStatus(application.status)
+  ) {
+    throw new Error("This candidate application cannot be appointed.")
+  }
+  if (application.willing_to_join !== null) {
+    throw new Error("Appointment details are already completed.")
+  }
+  const interviews = await client.query<{
+    round_name: string
+    status: string
+  }>(
+    `
+      SELECT round_name, status
+      FROM recruitment.interviews
+      WHERE application_id = $1 AND organization_id = $2
+      FOR UPDATE
+    `,
+    [application.id, input.organizationId]
+  )
+  if (
+    nextRecruitmentInterviewRound(
+      interviews.rows.map((interview) => ({
+        roundName: interview.round_name,
+        status: interview.status,
+      }))
+    )
+  ) {
+    throw new Error(
+      "All three interview rounds must be approved before completing appointment details."
+    )
+  }
+  await client.query(
+    `
+      UPDATE recruitment.applications
+      SET status = $1, joining_date = migration.try_date($2),
+        willing_to_join = $3,
+        salary_before_probation = $4,
+        salary_after_probation_minimum = $5,
+        salary_after_probation_maximum = $6,
+        updated_by_user_id = $7, updated_at = now(),
+        row_version = row_version + 1
+      WHERE id = $8 AND organization_id = $9
+    `,
+    [
+      input.terms.willingToJoin ? "Approved" : "Withdrawn",
+      input.terms.joiningDate,
+      input.terms.willingToJoin,
+      input.terms.salaryBeforeProbation,
+      input.terms.salaryAfterProbationMinimum,
+      input.terms.salaryAfterProbationMaximum,
+      input.actorUserId ?? null,
+      application.id,
+      input.organizationId,
+    ]
+  )
+  if (input.terms.willingToJoin) {
+    if (!application.post_id) {
+      throw new Error(
+        "The recruitment opening is not linked to an approved post."
+      )
+    }
+    await assignEmployeeInTransaction(
+      client,
+      {
+        actorUserId: input.actorUserId,
+        appointedApplicationId: application.id,
+        employeeEvent: "Appointed",
+        employeeName: application.candidate_name,
+        joiningDate: input.terms.joiningDate,
+        organizationId: input.organizationId,
+        postId: application.post_id,
+      },
+      randomUUID()
+    )
+    await client.query(
+      `
+        UPDATE recruitment.job_posts
+        SET status = 'Closed', closed_on = current_date,
+          updated_by_user_id = $1, updated_at = now(),
+          row_version = row_version + 1
+        WHERE id = $2 AND organization_id = $3
+      `,
+      [input.actorUserId ?? null, application.job_id, input.organizationId]
+    )
+  }
+  await audit(client, {
+    ...input,
+    eventType: "recruitment.application.appointment_completed",
+    metadata: {
+      joiningDate: input.terms.joiningDate,
+      willingToJoin: input.terms.willingToJoin,
+    },
+    targetId: application.id,
+    targetTable: "applications",
+  })
+  return { id: application.id }
 }
 
 async function organizationIdForCode(pool: Pool, code: string) {
@@ -1349,10 +1543,13 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       return {
         applications: applicationResult.rows.map((row) => {
           const history = interviewProgress.get(row.id) ?? []
+          const requiredRound = nextRecruitmentInterviewRound(history)
+          const allRoundsApproved = requiredRound === null
           const nextRound = isActiveRecruitmentApplicationStatus(row.status)
-            ? (nextRecruitmentInterviewRound(history)?.name ?? null)
+            ? (requiredRound?.name ?? null)
             : null
           return {
+            allRoundsApproved,
             candidateEmail: row.candidate_email,
             candidateId: row.candidate_id,
             candidateName: row.candidate_name,
@@ -3067,6 +3264,115 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       )
     },
 
+    async completeCandidateAppointment(
+      input: MutationContext &
+        CandidateAppointmentTermsInput & { applicationId: string }
+    ) {
+      const terms = candidateAppointmentTerms(input)
+      return transaction(pool, (client) =>
+        completeCandidateAppointmentInTransaction(client, {
+          ...input,
+          applicationId: required(input.applicationId, "Candidate application"),
+          terms,
+        })
+      )
+    },
+
+    async withdrawCandidateApplication(
+      input: MutationContext & { applicationId: string; reason: string }
+    ) {
+      return transaction(pool, async (client) => {
+        const applicationId = required(
+          input.applicationId,
+          "Candidate application"
+        )
+        const reason = required(input.reason, "Withdrawal reason")
+        const beforeResult = await client.query<{
+          candidate_id: string
+          candidate_name: string
+          id: string
+          job_id: string
+          job_title: string
+          status: string
+        }>(
+          `
+            SELECT application.id, application.status,
+              candidate.id AS candidate_id,
+              candidate.name AS candidate_name,
+              job.id AS job_id, job.title AS job_title
+            FROM recruitment.applications application
+            JOIN recruitment.candidates candidate
+              ON candidate.id = application.candidate_id
+            JOIN recruitment.job_posts job
+              ON job.id = application.job_post_id
+            WHERE application.id = $1
+              AND application.organization_id = $2
+            FOR UPDATE OF application
+          `,
+          [applicationId, input.organizationId]
+        )
+        const before = beforeResult.rows[0]
+        if (!before) throw new Error("Candidate application was not found.")
+        if (!isActiveRecruitmentApplicationStatus(before.status)) {
+          throw new Error(
+            "Only an active candidate application can be withdrawn."
+          )
+        }
+        const afterResult = await client.query<{
+          id: string
+          status: string
+        }>(
+          `
+            UPDATE recruitment.applications
+            SET status = 'Withdrawn', interview_at = NULL,
+              planned_round = NULL, updated_by_user_id = $1,
+              updated_at = now(), row_version = row_version + 1
+            WHERE id = $2 AND organization_id = $3
+            RETURNING id, status
+          `,
+          [input.actorUserId ?? null, applicationId, input.organizationId]
+        )
+        const candidateEvent = await client.query<{ id: string }>(
+          `
+            INSERT INTO recruitment.candidate_events (
+              organization_id, candidate_id, job_post_id, application_id,
+              event_type, title, notes, actor_user_id, source_system,
+              source_table, source_id
+            )
+            VALUES ($1, $2, $3, $4, 'Candidate Withdrawal', $5, $6, $7,
+              'mrm-dashboard', 'application-withdrawals', $8)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            before.candidate_id,
+            before.job_id,
+            applicationId,
+            `Withdrew from ${before.job_title}`,
+            reason,
+            input.actorUserId ?? null,
+            randomUUID(),
+          ]
+        )
+        await audit(client, {
+          ...input,
+          afterState: afterResult.rows[0],
+          beforeState: { id: before.id, status: before.status },
+          eventType: "recruitment.application.withdrawn",
+          metadata: {
+            candidateEventId: candidateEvent.rows[0]!.id,
+            candidateId: before.candidate_id,
+            candidateName: before.candidate_name,
+            jobId: before.job_id,
+          },
+          reason,
+          targetId: applicationId,
+          targetTable: "applications",
+        })
+        return afterResult.rows[0]!
+      })
+    },
+
     async logCandidateEvent(
       input: MutationContext & {
         candidateId: string
@@ -3391,43 +3697,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         )
         const finalApproval =
           input.status === "Approved" && nextRound.name === "HR Round"
-        const willingToJoin = finalApproval
-          ? requiredYesNo(input.willingToJoin, "Candidate willingness")
+        const appointmentTerms = finalApproval
+          ? candidateAppointmentTerms(input)
           : null
-        const joiningDate =
-          finalApproval && willingToJoin
-            ? required(input.joiningDate, "Joining date")
-            : null
-        const salaryBeforeProbation =
-          finalApproval && willingToJoin
-            ? requiredMoney(
-                input.salaryBeforeProbation,
-                "Salary before probation"
-              )
-            : null
-        const salaryAfterProbationMinimum =
-          finalApproval && willingToJoin
-            ? requiredMoney(
-                input.salaryAfterProbationMinimum,
-                "Minimum salary after probation"
-              )
-            : null
-        const salaryAfterProbationMaximum =
-          finalApproval && willingToJoin
-            ? requiredMoney(
-                input.salaryAfterProbationMaximum,
-                "Maximum salary after probation"
-              )
-            : null
-        if (
-          salaryAfterProbationMinimum !== null &&
-          salaryAfterProbationMaximum !== null &&
-          salaryAfterProbationMaximum < salaryAfterProbationMinimum
-        ) {
-          throw new Error(
-            "Maximum salary after probation must be at least the minimum salary."
-          )
-        }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.interviews (
@@ -3460,92 +3732,31 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               questions: assessment.questionScores,
             }),
             optional(input.comments),
-            joiningDate,
+            appointmentTerms?.joiningDate ?? null,
             input.actorUserId ?? null,
             randomUUID(),
           ]
         )
         const recordedInterview = result.rows[0]!
-        await client.query(
-          `
-            UPDATE recruitment.applications
-            SET status = $1, joining_date = migration.try_date($2),
-              willing_to_join = $3,
-              salary_before_probation = $4,
-              salary_after_probation_minimum = $5,
-              salary_after_probation_maximum = $6,
-              updated_by_user_id = $7, updated_at = now(),
-              row_version = row_version + 1
-            WHERE id = $8 AND organization_id = $9
-          `,
-          [
-            finalApproval
-              ? willingToJoin
-                ? "Approved"
-                : "Withdrawn"
-              : input.status === "Approved"
-                ? "Interview"
-                : input.status,
-            joiningDate,
-            willingToJoin,
-            salaryBeforeProbation,
-            salaryAfterProbationMinimum,
-            salaryAfterProbationMaximum,
-            input.actorUserId ?? null,
-            input.applicationId,
-            input.organizationId,
-          ]
-        )
-        if (finalApproval && willingToJoin) {
-          const appointmentResult = await client.query<{
-            candidate_name: string
-            job_id: string
-            post_id: string | null
-          }>(
-            `
-              SELECT candidate.name AS candidate_name,
-                job.id AS job_id, job.post_id
-              FROM recruitment.applications application
-              JOIN recruitment.candidates candidate
-                ON candidate.id = application.candidate_id
-              JOIN recruitment.job_posts job
-                ON job.id = application.job_post_id
-              WHERE application.id = $1
-                AND application.organization_id = $2
-              FOR UPDATE OF job
-            `,
-            [application.id, input.organizationId]
-          )
-          const appointment = appointmentResult.rows[0]
-          if (!appointment?.post_id) {
-            throw new Error(
-              "The recruitment opening is not linked to an approved post."
-            )
-          }
-          await assignEmployeeInTransaction(
-            client,
-            {
-              actorUserId: input.actorUserId,
-              appointedApplicationId: application.id,
-              employeeEvent: "Appointed",
-              employeeName: appointment.candidate_name,
-              joiningDate,
-              organizationId: input.organizationId,
-              postId: appointment.post_id,
-            },
-            randomUUID()
-          )
+        if (appointmentTerms) {
+          await completeCandidateAppointmentInTransaction(client, {
+            actorUserId: input.actorUserId,
+            applicationId: application.id,
+            organizationId: input.organizationId,
+            terms: appointmentTerms,
+          })
+        } else {
           await client.query(
             `
-              UPDATE recruitment.job_posts
-              SET status = 'Closed', closed_on = current_date,
-                updated_by_user_id = $1, updated_at = now(),
-                row_version = row_version + 1
-              WHERE id = $2 AND organization_id = $3
+              UPDATE recruitment.applications
+              SET status = $1, updated_by_user_id = $2,
+                updated_at = now(), row_version = row_version + 1
+              WHERE id = $3 AND organization_id = $4
             `,
             [
+              input.status === "Approved" ? "Interview" : input.status,
               input.actorUserId ?? null,
-              appointment.job_id,
+              input.applicationId,
               input.organizationId,
             ]
           )
@@ -3555,8 +3766,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           eventType: "recruitment.interview.recorded",
           metadata: {
             finalApproval,
-            joiningDate,
-            willingToJoin,
+            joiningDate: appointmentTerms?.joiningDate ?? null,
+            willingToJoin: appointmentTerms?.willingToJoin ?? null,
           },
           targetId: recordedInterview.id,
           targetTable: "interviews",

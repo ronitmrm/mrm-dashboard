@@ -814,6 +814,7 @@ describe("job workspace", () => {
 
   test("appoints a willing candidate with the agreed salary terms", async () => {
     const postId = "00000000-0000-4000-8000-000000000001"
+    let interviewRecorded = false
     const query = vi.fn(
       async (statement: string, _parameters?: readonly unknown[]) => {
         void _parameters
@@ -831,21 +832,25 @@ describe("job workspace", () => {
               {
                 round_name: "HR Round",
                 scheduled_at: "2026-08-11 10:00:00+00",
-                status: "Scheduled",
+                status: interviewRecorded ? "Approved" : "Scheduled",
               },
             ],
           }
         }
         if (statement.includes("INSERT INTO recruitment.interviews")) {
+          interviewRecorded = true
           return { rows: [{ id: "interview-1" }] }
         }
-        if (statement.includes("SELECT candidate.name AS candidate_name")) {
+        if (statement.includes("application.willing_to_join")) {
           return {
             rows: [
               {
                 candidate_name: "Candidate One",
+                id: "application-1",
                 job_id: "job-1",
                 post_id: postId,
+                status: "Interview",
+                willing_to_join: null,
               },
             ],
           }
@@ -925,6 +930,7 @@ describe("job workspace", () => {
   })
 
   test("withdraws an approved candidate who is not willing to join", async () => {
+    let interviewRecorded = false
     const query = vi.fn(
       async (statement: string, _parameters?: readonly unknown[]) => {
         void _parameters
@@ -942,13 +948,28 @@ describe("job workspace", () => {
               {
                 round_name: "HR Round",
                 scheduled_at: "2026-08-11 10:00:00+00",
-                status: "Scheduled",
+                status: interviewRecorded ? "Approved" : "Scheduled",
               },
             ],
           }
         }
         if (statement.includes("INSERT INTO recruitment.interviews")) {
+          interviewRecorded = true
           return { rows: [{ id: "interview-1" }] }
+        }
+        if (statement.includes("application.willing_to_join")) {
+          return {
+            rows: [
+              {
+                candidate_name: "Candidate One",
+                id: "application-1",
+                job_id: "job-1",
+                post_id: null,
+                status: "Interview",
+                willing_to_join: null,
+              },
+            ],
+          }
         }
         return { rows: [] }
       }
@@ -1262,6 +1283,169 @@ describe("candidate application cycles", () => {
         id: "candidate-1",
       }),
     ])
+  })
+})
+
+describe("candidate appointment completion", () => {
+  test("completes appointment terms for an already approved candidate", async () => {
+    const applicationId = "00000000-0000-4000-8000-000000000101"
+    const candidateId = "00000000-0000-4000-8000-000000000102"
+    const jobId = "00000000-0000-4000-8000-000000000103"
+    const organizationId = "00000000-0000-4000-8000-000000000104"
+    const postId = "00000000-0000-4000-8000-000000000105"
+    const query = vi.fn(
+      async (statement: string, values?: readonly unknown[]) => {
+        void values
+        if (statement.includes("application.willing_to_join")) {
+          return {
+            rows: [
+              {
+                candidate_id: candidateId,
+                candidate_name: "Rakesh Harebha",
+                id: applicationId,
+                job_id: jobId,
+                post_id: postId,
+                status: "Approved",
+                willing_to_join: null,
+              },
+            ],
+          }
+        }
+        if (statement.includes("SELECT round_name, status")) {
+          return {
+            rows: [
+              { round_name: "Screening Round", status: "Approved" },
+              { round_name: "Department Round", status: "Approved" },
+              { round_name: "HR Round", status: "Approved" },
+            ],
+          }
+        }
+        if (statement.includes("SELECT id, employee_name, employee_code")) {
+          return {
+            rows: [
+              {
+                can_replace: true,
+                combined_role_id: null,
+                employee_code: null,
+                employee_name: null,
+                id: postId,
+                last_working_date: null,
+                status: "Vacant",
+              },
+            ],
+          }
+        }
+        if (statement.includes("UPDATE recruitment.posts")) {
+          return { rows: [{ id: postId }] }
+        }
+        return { rows: [] }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.completeCandidateAppointment({
+      actorUserId: "00000000-0000-4000-8000-000000000106",
+      applicationId,
+      joiningDate: "2026-08-08",
+      organizationId,
+      salaryAfterProbationMaximum: 20000,
+      salaryAfterProbationMinimum: 15000,
+      salaryBeforeProbation: 15000,
+      willingToJoin: "yes",
+    })
+
+    const applicationUpdate = query.mock.calls.find(([statement]) =>
+      statement.includes("UPDATE recruitment.applications")
+    )
+    expect(applicationUpdate?.[1]).toEqual([
+      "Approved",
+      "2026-08-08",
+      true,
+      15000,
+      15000,
+      20000,
+      "00000000-0000-4000-8000-000000000106",
+      applicationId,
+      organizationId,
+    ])
+    expect(
+      query.mock.calls.some(
+        ([statement, values]) =>
+          statement.includes("UPDATE recruitment.posts") &&
+          values?.includes("Rakesh Harebha") &&
+          values?.includes("Appointed") &&
+          values?.includes("2026-08-08")
+      )
+    ).toBe(true)
+  })
+
+  test("records a mid-process withdrawal reason in candidate history", async () => {
+    const applicationId = "00000000-0000-4000-8000-000000000111"
+    const candidateId = "00000000-0000-4000-8000-000000000112"
+    const jobId = "00000000-0000-4000-8000-000000000113"
+    const organizationId = "00000000-0000-4000-8000-000000000114"
+    const reason = "Accepted another job offer"
+    const query = vi.fn(
+      async (statement: string, values?: readonly unknown[]) => {
+        void values
+        if (
+          statement.includes("SELECT application.id, application.status") &&
+          statement.includes("candidate.name")
+        ) {
+          return {
+            rows: [
+              {
+                candidate_id: candidateId,
+                candidate_name: "Candidate One",
+                id: applicationId,
+                job_id: jobId,
+                job_title: "Assistant",
+                status: "Interview",
+              },
+            ],
+          }
+        }
+        if (statement.includes("UPDATE recruitment.applications")) {
+          return { rows: [{ id: applicationId, status: "Withdrawn" }] }
+        }
+        if (statement.includes("INSERT INTO recruitment.candidate_events")) {
+          return { rows: [{ id: "00000000-0000-4000-8000-000000000115" }] }
+        }
+        return { rows: [] }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await repository.withdrawCandidateApplication({
+      actorUserId: "00000000-0000-4000-8000-000000000116",
+      applicationId,
+      organizationId,
+      reason,
+    })
+
+    expect(
+      query.mock.calls.some(
+        ([statement, values]) =>
+          statement.includes("UPDATE recruitment.applications") &&
+          statement.includes("status = 'Withdrawn'") &&
+          values?.includes(applicationId)
+      )
+    ).toBe(true)
+    expect(
+      query.mock.calls.some(
+        ([statement, values]) =>
+          statement.includes("INSERT INTO recruitment.candidate_events") &&
+          statement.includes("'Candidate Withdrawal'") &&
+          values?.includes(reason) &&
+          values?.includes(applicationId)
+      )
+    ).toBe(true)
   })
 })
 

@@ -1,7 +1,10 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
-import { createRecruitmentRepository } from "@workspace/db"
+import {
+  createRecruitmentRepository,
+  isActiveRecruitmentApplicationStatus,
+} from "@workspace/db"
 import { recruitmentInterviewRound } from "@workspace/db/recruitment-interview-workflow"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
@@ -26,6 +29,7 @@ import { ArrowLeft, BriefcaseBusiness, UserPlus } from "lucide-react"
 
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 import { JobInterviewScheduleForm } from "@/components/hr/interview-schedule-form"
+import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   listGrantedCapabilities,
@@ -246,6 +250,9 @@ export default async function JobWorkspacePage({
                   <TableHead>Before Probation</TableHead>
                   <TableHead>After Probation</TableHead>
                   <TableHead className="text-right">Rounds</TableHead>
+                  {canWrite ? (
+                    <TableHead className="text-right">Actions</TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -298,13 +305,31 @@ export default async function JobWorkspacePage({
                       <TableCell className="text-right tabular-nums">
                         {application.interviewCount}
                       </TableCell>
+                      {canWrite ? (
+                        <TableCell>
+                          <CandidateApplicationActions
+                            applicationId={application.id}
+                            candidateName={application.candidateName}
+                            canCompleteAppointment={
+                              application.status === "Approved" &&
+                              application.allRoundsApproved &&
+                              application.willingToJoin === null
+                            }
+                            canWithdraw={isActiveRecruitmentApplicationStatus(
+                              application.status
+                            )}
+                            defaultJoiningDate={application.joiningDate}
+                            returnJobId={job.id}
+                          />
+                        </TableCell>
+                      ) : null}
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
                     <TableCell
                       className="py-10 text-center text-muted-foreground"
-                      colSpan={10}
+                      colSpan={canWrite ? 11 : 10}
                     >
                       Search And Assign The First Candidate To This Job.
                     </TableCell>

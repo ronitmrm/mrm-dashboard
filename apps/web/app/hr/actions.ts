@@ -355,6 +355,44 @@ export async function assignCandidateAction(formData: FormData) {
   )
 }
 
+export async function completeCandidateAppointmentAction(formData: FormData) {
+  await mutate(
+    formData,
+    "hr.recruitment.write",
+    (repository, context) =>
+      repository.completeCandidateAppointment({
+        ...context,
+        applicationId: value(formData, "application_id"),
+        joiningDate: value(formData, "joining_date"),
+        salaryAfterProbationMaximum: value(
+          formData,
+          "salary_after_probation_maximum"
+        ),
+        salaryAfterProbationMinimum: value(
+          formData,
+          "salary_after_probation_minimum"
+        ),
+        salaryBeforeProbation: value(formData, "salary_before_probation"),
+        willingToJoin: value(formData, "willing_to_join"),
+      }),
+    "Appointment details completed."
+  )
+}
+
+export async function withdrawCandidateApplicationAction(formData: FormData) {
+  await mutate(
+    formData,
+    "hr.recruitment.write",
+    (repository, context) =>
+      repository.withdrawCandidateApplication({
+        ...context,
+        applicationId: value(formData, "application_id"),
+        reason: value(formData, "reason"),
+      }),
+    "Candidate withdrawal recorded in conversation history."
+  )
+}
+
 export async function logCandidateEventAction(formData: FormData) {
   await mutate(formData, "hr.recruitment.write", (repository, context) =>
     repository.logCandidateEvent({
