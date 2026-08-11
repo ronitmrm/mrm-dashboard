@@ -38,6 +38,7 @@ import {
   ClipboardCheck,
   ListTodo,
 } from "lucide-react"
+import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import { CandidateAppointmentDialog } from "@/components/hr/candidate-appointment-dialog"
@@ -215,7 +216,15 @@ export function InterviewScheduleBoard({
               {visiblePlanned.length ? (
                 visiblePlanned.map((row) => (
                   <TableRow key={row.applicationId}>
-                    <TableCell>{row.candidateName}</TableCell>
+                    <TableCell>
+                      <Link
+                        className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline"
+                        href={`/hr/candidates/${row.candidateId}`}
+                        title="Open candidate profile and conversation log"
+                      >
+                        {row.candidateName}
+                      </Link>
+                    </TableCell>
                     <TableCell>{row.jobTitle}</TableCell>
                     <TableCell>{formatDate(row.interviewAt)}</TableCell>
                     <TableCell>{formatTime(row.interviewAt)}</TableCell>

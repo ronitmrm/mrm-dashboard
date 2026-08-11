@@ -119,6 +119,7 @@ export type RecruitmentJobRow = {
 
 export type RecruitmentInterviewRow = {
   applicationId: string
+  candidateId: string
   candidateName: string
   interviewAt: string | null
   jobId: string
@@ -1635,6 +1636,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       const result = await pool.query<{
         application_id: string
         approved_rounds: string[]
+        candidate_id: string
         candidate_name: string
         interview_at: string | null
         job_id: string
@@ -1650,7 +1652,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }>(
         `
           SELECT application.id AS application_id,
-            candidate.name AS candidate_name, job.title AS job_title,
+            candidate.id AS candidate_id, candidate.name AS candidate_name,
+            job.title AS job_title,
             job.id AS job_id, job.job_number, post.post_code,
             application.status, application.interview_at::text,
             application.planned_round, application.joining_date::text,
@@ -1699,6 +1702,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           : null
         return {
           applicationId: row.application_id,
+          candidateId: row.candidate_id,
           candidateName: row.candidate_name,
           interviewAt: row.interview_at,
           jobId: row.job_id,

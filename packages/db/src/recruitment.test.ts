@@ -1553,6 +1553,7 @@ describe("listInterviews", () => {
         {
           application_id: "application-1",
           approved_rounds: [],
+          candidate_id: "candidate-1",
           candidate_name: "Candidate One",
           interview_at: null,
           job_id: "job-1",
@@ -1583,6 +1584,7 @@ describe("listInterviews", () => {
     expect(rows[0]).toEqual(
       expect.objectContaining({
         applicationId: "application-1",
+        candidateId: "candidate-1",
         jobId: "job-1",
         jobNumber: "JOB-001",
         nextRound: "Screening Round",
