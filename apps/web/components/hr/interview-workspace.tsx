@@ -42,6 +42,7 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 
 import { CandidateAppointmentDialog } from "@/components/hr/candidate-appointment-dialog"
+import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 
 function StatusBadge({ status }: { status: string }) {
@@ -231,13 +232,23 @@ export function InterviewScheduleBoard({
                     <TableCell>{row.scoreableRound}</TableCell>
                     {canWrite ? (
                       <TableCell className="text-right">
-                        <Button
-                          onClick={() => setSelectedInterview(row)}
-                          size="sm"
-                          type="button"
-                        >
-                          Record Outcome
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            onClick={() => setSelectedInterview(row)}
+                            size="sm"
+                            type="button"
+                          >
+                            Record Outcome
+                          </Button>
+                          <CandidateApplicationActions
+                            applicationId={row.applicationId}
+                            candidateName={row.candidateName}
+                            canCompleteAppointment={false}
+                            canWithdraw
+                            defaultJoiningDate={row.joiningDate}
+                            panelId="interviewsPanel"
+                          />
+                        </div>
                       </TableCell>
                     ) : null}
                   </TableRow>

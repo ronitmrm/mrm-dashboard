@@ -22,6 +22,7 @@ export function CandidateApplicationActions({
   canCompleteAppointment,
   canWithdraw,
   defaultJoiningDate,
+  panelId,
   returnJobId,
 }: {
   applicationId: string
@@ -29,7 +30,8 @@ export function CandidateApplicationActions({
   canCompleteAppointment: boolean
   canWithdraw: boolean
   defaultJoiningDate: string | null
-  returnJobId: string
+  panelId?: string
+  returnJobId?: string
 }) {
   if (!canCompleteAppointment && !canWithdraw) return null
 
@@ -40,6 +42,7 @@ export function CandidateApplicationActions({
           applicationId={applicationId}
           candidateName={candidateName}
           defaultJoiningDate={defaultJoiningDate}
+          panelId={panelId}
           returnJobId={returnJobId}
           trigger={
             <Button size="sm" type="button" variant="outline">
@@ -75,7 +78,12 @@ export function CandidateApplicationActions({
                 type="hidden"
                 value={applicationId}
               />
-              <input name="return_job_id" type="hidden" value={returnJobId} />
+              {panelId ? (
+                <input name="panel" type="hidden" value={panelId} />
+              ) : null}
+              {returnJobId ? (
+                <input name="return_job_id" type="hidden" value={returnJobId} />
+              ) : null}
               <Field>
                 <FieldLabel htmlFor={`withdrawal-reason-${applicationId}`}>
                   Reason
