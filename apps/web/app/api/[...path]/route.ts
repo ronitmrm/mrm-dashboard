@@ -76,12 +76,9 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "setupNo",
     "numberOfSetups",
     "setupName",
-    "machineUsed",
+    "machineFamily",
     "machineType",
     "stageWeight",
-    "rodSize",
-    "cuttingLength",
-    "finishedGoodsLength",
   ],
   cycle: [
     "partNo",
@@ -474,6 +471,10 @@ async function savePlanningMasterEntry(
   const routeCode = text(payload.optionNumber) || "1"
 
   if (entryType === "route") {
+    const sourcePayload = {
+      ...payload,
+      machineUsed: text(payload.machineFamily) || payload.machineUsed,
+    }
     return repository.upsertRouteOption({
       actorUserId,
       itemUid,
@@ -490,7 +491,7 @@ async function savePlanningMasterEntry(
           setupNumber: setupNumber!,
         },
       ],
-      sourcePayload: payload,
+      sourcePayload,
     })
   }
 
