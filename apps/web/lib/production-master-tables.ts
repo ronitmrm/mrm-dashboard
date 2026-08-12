@@ -10,12 +10,23 @@ export const qualityWorkspaceEntryTypes = [
   "rejection_reason_master",
 ] as const
 
+export const companyWideQualityMasterEntryTypes = [
+  "rejection_type_master",
+  "rejection_remark_master",
+  "rejection_reason_master",
+] as const
+
+export const productionUnitQualityMasterEntryTypes = [
+  "quality_parameter_master",
+] as const
+
 export const productionMasterTableEntryTypes = [
   "route",
   "cycle",
   "tooling",
-  "machine_master",
   "maintenance_master",
+  ...checklistWorkspaceEntryTypes,
+  ...qualityWorkspaceEntryTypes,
 ] as const
 
 export function rowsForProductionMaster<T extends Record<string, unknown>>(
@@ -50,7 +61,6 @@ export const productionMasterRowSources: Record<string, readonly string[]> = {
   route: ["routeMasterRows"],
   cycle: ["cycleMasterRows"],
   tooling: ["toolingMasterRows"],
-  machine_master: ["machinePlanningRows"],
   maintenance_master: ["maintenanceMasterRows"],
   maintenance_checklist_master: ["maintenanceChecklistMasterRows"],
   planning_holiday: ["planningHolidayRows"],

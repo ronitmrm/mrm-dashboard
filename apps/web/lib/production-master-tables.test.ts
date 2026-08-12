@@ -4,11 +4,13 @@ import { describe, expect, it } from "vitest"
 
 import {
   checklistWorkspaceEntryTypes,
+  companyWideQualityMasterEntryTypes,
   columnsForProductionMaster,
   dataEntryRowsForProductionMaster,
   productionMasterTableEntryTypes,
   productionMasterRowSources,
   qualityWorkspaceEntryTypes,
+  productionUnitQualityMasterEntryTypes,
   rowsForProductionMaster,
 } from "./production-master-tables"
 
@@ -36,9 +38,7 @@ describe("Production master table rows", () => {
   })
 
   it("uses only canonical master row sources", () => {
-    expect(productionMasterRowSources.machine_master).toEqual([
-      "machinePlanningRows",
-    ])
+    expect(productionMasterRowSources.machine_master).toBeUndefined()
     expect(productionMasterRowSources.route).toEqual(["routeMasterRows"])
   })
 
@@ -77,20 +77,17 @@ describe("Production master table rows", () => {
     ])
   })
 
-  it("keeps checklist authoring outside Master Tables", () => {
+  it("shows checklist data in the universal Master Tables workspace", () => {
     expect(checklistWorkspaceEntryTypes).toEqual([
       "setup_checklist_master",
       "maintenance_checklist_master",
     ])
-    expect(productionMasterTableEntryTypes).not.toContain(
-      "setup_checklist_master"
-    )
-    expect(productionMasterTableEntryTypes).not.toContain(
-      "maintenance_checklist_master"
+    expect(productionMasterTableEntryTypes).toEqual(
+      expect.arrayContaining([...checklistWorkspaceEntryTypes])
     )
   })
 
-  it("keeps quality authoring outside Master Tables", () => {
+  it("shows all quality masters and records their ownership", () => {
     expect(qualityWorkspaceEntryTypes).toEqual([
       "quality_parameter_master",
       "rejection_type_master",
@@ -98,13 +95,26 @@ describe("Production master table rows", () => {
       "rejection_reason_master",
     ])
     for (const entryType of qualityWorkspaceEntryTypes) {
-      expect(productionMasterTableEntryTypes).not.toContain(entryType)
+      expect(productionMasterTableEntryTypes).toContain(entryType)
     }
+    expect(companyWideQualityMasterEntryTypes).toEqual([
+      "rejection_type_master",
+      "rejection_remark_master",
+      "rejection_reason_master",
+    ])
+    expect(productionUnitQualityMasterEntryTypes).toEqual([
+      "quality_parameter_master",
+    ])
   })
 
   it("uses the shared HR Employee Master instead of a Production master", () => {
     expect(productionMasterTableEntryTypes).not.toContain("employee")
     expect(productionMasterRowSources.employee).toBeUndefined()
+  })
+
+  it("keeps the central Machine Master outside Production master tables", () => {
+    expect(productionMasterTableEntryTypes).not.toContain("machine_master")
+    expect(productionMasterRowSources.machine_master).toBeUndefined()
   })
 
   it("uses the Route Master line as the quality parameter set selector", () => {

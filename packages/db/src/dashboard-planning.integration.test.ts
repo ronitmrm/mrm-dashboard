@@ -36,7 +36,9 @@ beforeAll(async () => {
     `
       INSERT INTO manufacturing.production_floors (
         organization_id, code, name
-      ) VALUES ($1, 'conventional', 'Conventional Production Floor')
+      ) VALUES
+        ($1, 'conventional', 'Conventional Production Floor'),
+        ($1, 'cnc', 'CNC Production Floor')
       ON CONFLICT (organization_id, code) DO NOTHING
     `,
     [organizationId]
@@ -127,6 +129,38 @@ describe("dashboard planning writes", () => {
         uid: newItemUid,
       },
     ])
+  })
+
+  test("reallocates one central machine record between production floors", async () => {
+    const machineNumber = `MOVE-${suffix}`
+    const original = await repository.upsertMachine({
+      machineNumber,
+      name: "Moveable machine",
+      organizationId,
+      productionFloorCode: "conventional",
+      sourcePayload: { machineNo: machineNumber, productionFloorCode: "conventional" },
+    })
+    const reallocated = await repository.upsertMachine({
+      machineNumber,
+      name: "Moveable machine",
+      organizationId,
+      productionFloorCode: "cnc",
+      sourcePayload: { machineNo: machineNumber, productionFloorCode: "cnc" },
+    })
+
+    const floor = await pool.query<{ code: string }>(
+      `
+        SELECT floor.code
+        FROM catalog.machines machine
+        JOIN manufacturing.production_floors floor
+          ON floor.id = machine.production_floor_id
+        WHERE machine.id = $1
+      `,
+      [original.id]
+    )
+
+    expect(reallocated.id).toBe(original.id)
+    expect(floor.rows[0]?.code).toBe("cnc")
   })
 
   test("upserts normalized masters, work orders, and route setups by business key", async () => {

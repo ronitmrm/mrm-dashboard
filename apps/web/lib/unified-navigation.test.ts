@@ -9,9 +9,11 @@ import {
   dashboardNavigation,
   dashboardTabHref,
   hrNavigation,
+  machineMasterNavigation,
   navigationHrefMatches,
   planningHolidayNavigation,
   productionFloorNavigation,
+  universalProductionNavigation,
 } from "./unified-navigation"
 
 describe("unified navigation", () => {
@@ -47,9 +49,28 @@ describe("unified navigation", () => {
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
     expect(dashboardNavigation).toHaveLength(19)
-    expect(productionFloorNavigation).toHaveLength(18)
+    expect(productionFloorNavigation).toHaveLength(12)
     expect(productionFloorNavigation).not.toContainEqual(
       planningHolidayNavigation
+    )
+    expect(productionFloorNavigation).not.toContainEqual(
+      machineMasterNavigation
+    )
+    expect(machineMasterNavigation).toMatchObject({
+      id: "machineMasterTab",
+      title: "Machine Master",
+    })
+    expect(universalProductionNavigation.map(({ id }) => id)).toEqual([
+      "dataEntryTab",
+      "masterTablesTab",
+      "machineMasterTab",
+    ])
+    expect(productionFloorNavigation.map(({ id }) => id)).not.toEqual(
+      expect.arrayContaining([
+        "setupChecklistMasterTab",
+        "maintenanceMastersTab",
+        "qualityMastersTab",
+      ])
     )
     expect(planningHolidayNavigation).toMatchObject({
       id: "planningHolidayTab",

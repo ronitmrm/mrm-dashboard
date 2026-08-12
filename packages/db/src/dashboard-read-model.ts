@@ -311,6 +311,24 @@ function floorRows(rows: JsonRecord[], floorCode: ProductionFloorCode) {
   return rows.filter((row) => productionFloorCodeForRecord(row) === floorCode)
 }
 
+const companyWideQualityEntryTypes = new Set([
+  "rejection_type_master",
+  "rejection_reason_master",
+  "rejection_remark_master",
+])
+
+export function dashboardDataEntriesForFloor(
+  rows: JsonRecord[],
+  floorCode: ProductionFloorCode
+) {
+  return rows.filter(
+    (row) =>
+      (typeof row.entryType === "string" &&
+        companyWideQualityEntryTypes.has(row.entryType)) ||
+      productionFloorCodeForRecord(row) === floorCode
+  )
+}
+
 function jsonRecord(value: unknown): JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as JsonRecord)
@@ -549,7 +567,7 @@ export async function buildCanonicalDashboardReadModel(
   }
 
   function buildFloorPayload(floorCode: ProductionFloorCode) {
-    const floorDataEntries = floorRows(dataEntries, floorCode)
+    const floorDataEntries = dashboardDataEntriesForFloor(dataEntries, floorCode)
     const floorCorrections = floorRows(source.corrections, floorCode)
     const floorUpdatedAt = latestCreatedAt(
       floorRows(source.productionEntries, floorCode),

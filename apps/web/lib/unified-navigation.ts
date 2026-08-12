@@ -240,8 +240,31 @@ export const planningHolidayNavigation = dashboardNavigation.find(
   (item) => item.id === "planningHolidayTab"
 )!
 
+export const machineMasterNavigation = dashboardNavigation.find(
+  (item) => item.id === "machineMasterTab"
+)!
+
+const universalProductionNavigationIds = new Set<DashboardTabId>([
+  "dataEntryTab",
+  "masterTablesTab",
+  "machineMasterTab",
+])
+
+const consolidatedProductionNavigationIds = new Set<DashboardTabId>([
+  "setupChecklistMasterTab",
+  "maintenanceMastersTab",
+  "qualityMastersTab",
+])
+
+export const universalProductionNavigation = dashboardNavigation.filter(
+  (item) => universalProductionNavigationIds.has(item.id)
+)
+
 export const productionFloorNavigation = dashboardNavigation.filter(
-  (item) => item.id !== planningHolidayNavigation.id
+  (item) =>
+    item.id !== planningHolidayNavigation.id &&
+    !universalProductionNavigationIds.has(item.id) &&
+    !consolidatedProductionNavigationIds.has(item.id)
 )
 
 export const commercialNavigation = [

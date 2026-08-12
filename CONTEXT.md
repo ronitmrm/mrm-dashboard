@@ -48,6 +48,14 @@ _Avoid_: Pseudo-machine.
 An independent production operation with its own team, machines, routes, cycle standards, inspection parameters, planning, tasks, and entries. Conventional, CNC, and Forging are separate production floors; records from one floor never participate in another floor's planning or task queues.
 _Avoid_: Department, machine group, production-floor filter.
 
+**Production Unit Workspace**:
+A company-wide Master Tables or Data Entry workspace whose required Production Unit selection determines which Production Floor's scoped records are shown or changed.
+_Avoid_: Separate Master Tables or Data Entry pages for each Production Floor.
+
+**Company-Wide Quality Code Master**:
+The shared Rejection Type, Defect / Downtime Reason, and Rejection Remark code lists used by every Production Floor. These codes are not copied or customized per Production Floor.
+_Avoid_: Production-floor rejection codes, department-specific defect reasons.
+
 **Priority Plan Scenario**:
 The setup-by-setup decision flow shown before saving a planner priority change. It opens one setup at a time; downstream setup dates are hidden until the previous setup action is confirmed.
 _Avoid_: Single probable date.

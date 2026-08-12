@@ -453,7 +453,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
         const productionFloorCode = normalizeProductionFloorCode(
           input.productionFloorCode
         )
-        await ensureProductionFloorId(
+        const productionFloorId = await ensureProductionFloorId(
           client,
           input.organizationId,
           productionFloorCode
@@ -461,32 +461,31 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
         await businessKeyLock(
           client,
           "catalog.machine",
-          `${productionFloorCode}:${machineNumber}`
+          machineNumber
         )
         const existing = await client.query<{ id: string }>(
           `
             SELECT machine.id FROM catalog.machines machine
-            JOIN manufacturing.production_floors floor
-              ON floor.id = machine.production_floor_id
             WHERE machine.organization_id = $1
               AND lower(machine.machine_number) = lower($2)
-              AND floor.code = $3
             FOR UPDATE
           `,
-          [input.organizationId, machineNumber, productionFloorCode]
+          [input.organizationId, machineNumber]
         )
         const sourcePayload = input.sourcePayload ?? input
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
               `
                 UPDATE catalog.machines
-                SET name = $1, active = true, updated_by_user_id = $2,
-                  source_payload = $3, updated_at = now(),
+                SET production_floor_id = $1,
+                  name = $2, active = true, updated_by_user_id = $3,
+                  source_payload = $4, updated_at = now(),
                   row_version = row_version + 1
-                WHERE id = $4
+                WHERE id = $5
                 RETURNING id
               `,
               [
+                productionFloorId,
                 input.name?.trim() || null,
                 input.actorUserId ?? null,
                 sourcePayload,
@@ -500,16 +499,13 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
                   created_by_user_id, updated_by_user_id, source_system,
                   source_table, source_id, source_payload
                 )
-                VALUES ($1, (
-                  SELECT id FROM manufacturing.production_floors
-                  WHERE organization_id = $1 AND code = $2
-                ), $3, $4, $5, $5, 'mrm-dashboard',
+                VALUES ($1, $2, $3, $4, $5, $5, 'mrm-dashboard',
                   'machine_master', $6, $7)
                 RETURNING id
               `,
               [
                 input.organizationId,
-                productionFloorCode,
+                productionFloorId,
                 machineNumber,
                 input.name?.trim() || null,
                 input.actorUserId ?? null,
@@ -623,7 +619,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
         const productionFloorCode = normalizeProductionFloorCode(
           input.productionFloorCode
         )
-        await ensureProductionFloorId(
+        const productionFloorId = await ensureProductionFloorId(
           client,
           input.organizationId,
           productionFloorCode
@@ -681,16 +677,13 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
                   updated_by_user_id, source_system, source_table, source_id,
                   source_payload
                 )
-                VALUES ($1, (
-                  SELECT id FROM manufacturing.production_floors
-                  WHERE organization_id = $1 AND code = $2
-                ), $3, $4, $4, 1, true, $5, $5,
+                VALUES ($1, $2, $3, $4, $4, 1, true, $5, $5,
                   'mrm-dashboard', 'route', $6, $7)
                 RETURNING id
               `,
               [
                 input.organizationId,
-                productionFloorCode,
+                productionFloorId,
                 itemId,
                 routeCode,
                 input.actorUserId ?? null,

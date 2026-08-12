@@ -85,6 +85,7 @@ import {
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
 import {
   checklistWorkspaceEntryTypes,
+  companyWideQualityMasterEntryTypes,
   columnsForProductionMaster,
   dataEntryRowsForProductionMaster,
   productionMasterTableEntryTypes,
@@ -205,10 +206,8 @@ function validDashboardTab(tab: DashboardTabId | null) {
 }
 
 function dataEntryDestination(entryType: string): DashboardTabId {
+  if (entryType === "machine_master") return "machineMasterTab";
   if (entryType === "planning_holiday") return "planningHolidayTab";
-  if (checklistWorkspaceEntryTypes.includes(entryType as typeof checklistWorkspaceEntryTypes[number])) return "setupChecklistMasterTab";
-  if (maintenanceMasterEntryTypes.includes(entryType as typeof maintenanceMasterEntryTypes[number])) return "maintenanceMastersTab";
-  if (qualityWorkspaceEntryTypes.includes(entryType as typeof qualityWorkspaceEntryTypes[number])) return "qualityMastersTab";
   return "dataEntryTab";
 }
 const dataEntrySpecs: DataEntrySpec[] = [
@@ -290,6 +289,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
     description: "Machines For The Currently Selected Production Unit. Each Machine Is Kept Separate By Production Unit And Location.",
     fields: [
       { name: "machineNo", label: "Machine No.", required: true },
+      { name: "productionFloorCode", label: "Production Unit", options: productionFloors.map((floor) => floor.code), required: true },
       { name: "machineFamily", label: "Machine Family", required: true },
       { name: "machineType", label: "Machine Type", required: true },
       { name: "machineName", label: "Machine Name" },
@@ -436,11 +436,17 @@ const generalDataEntryTypes = [
   "tooling",
   "work_order",
   "rm_inward",
-  "machine_master",
   "software_raw",
 ] as const;
 
 const maintenanceMasterEntryTypes = ["maintenance_master"] as const;
+
+const universalDataEntryTypes = [
+  ...generalDataEntryTypes,
+  ...checklistWorkspaceEntryTypes,
+  ...maintenanceMasterEntryTypes,
+  ...qualityWorkspaceEntryTypes,
+] as const;
 
 function masterTableSpecs() {
   const allowed = new Set<string>(productionMasterTableEntryTypes);
@@ -1251,7 +1257,10 @@ function DashboardShell({
 
   function openDataEntry(entryType: string, defaults: Record<string, unknown> = {}) {
     setPreferredDataEntryType(entryType);
-    setPreferredDataEntryDefaults(defaults);
+    setPreferredDataEntryDefaults({
+      productionFloorCode: activeProductionFloor,
+      ...defaults,
+    });
     setActiveTab(dataEntryDestination(entryType));
   }
 
@@ -1278,6 +1287,11 @@ function DashboardShell({
     tab: DashboardTabId,
     productionFloorCode: ProductionFloorCode,
   ) {
+    if (tab === "machineMasterTab") {
+      setActiveTab(tab);
+      window.history.replaceState({}, "", dashboardTabHref(tab));
+      return;
+    }
     if (tab === "firstPieceInspectionTab") {
       window.location.assign(`/dashboard/first-piece-inspection?${new URLSearchParams({ floor: productionFloorCode }).toString()}`);
       return;
@@ -1405,13 +1419,13 @@ function DashboardShell({
           <div className="min-w-0 flex-1">
            <h1 className="truncate text-base font-semibold">{selectedTab.title}</h1>
             <p className="truncate text-xs text-muted-foreground">
-              <span>{selectedProductionFloor.label} · {planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live Postgresql Records"}</span>
+              <span>{activeTab === "machineMasterTab" ? "Central Machine Master · All Production Units" : `${selectedProductionFloor.label} · ${planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live Postgresql Records"}`}</span>
               {planningRecalculatedAt && view.updatedAt ? <span> - Workbook Updated {formatDate(view.updatedAt)}</span> : null}
             </p>
           </div>
-          <Badge className="hidden sm:inline-flex" variant="outline">
+          {activeTab === "machineMasterTab" ? null : <Badge className="hidden sm:inline-flex" variant="outline">
             {selectedProductionFloor.shortLabel}
-          </Badge>
+          </Badge>}
           <Badge variant="outline">
             {dashboardStatusLabel}
           </Badge>
@@ -1479,6 +1493,8 @@ function DashboardShell({
                 firstPieceInspectionTasks={firstPieceInspectionTasks}
                 preferredDataEntryType={preferredDataEntryType}
                 preferredDataEntryDefaults={preferredDataEntryDefaults}
+                productionFloorCode={activeProductionFloor}
+                onProductionFloorChange={(floorCode) => selectDashboardDestination(activeTab, floorCode)}
               />
             </fieldset>
           )}
@@ -1641,6 +1657,8 @@ function DashboardContent({
   firstPieceInspectionTasks,
   preferredDataEntryType,
   preferredDataEntryDefaults,
+  productionFloorCode,
+  onProductionFloorChange,
 }: {
   activeTab: DashboardTabId;
   payload: DashboardPayload;
@@ -1653,6 +1671,8 @@ function DashboardContent({
   firstPieceInspectionTasks: DashboardPayload[];
   preferredDataEntryType: string;
   preferredDataEntryDefaults: Record<string, unknown>;
+  productionFloorCode: ProductionFloorCode;
+  onProductionFloorChange: (floorCode: ProductionFloorCode) => void;
 }) {
   const productionControl = asRecord(payload.productionControl);
 
@@ -1665,7 +1685,7 @@ function DashboardContent({
   }
 
   if (activeTab === "machineMasterTab") {
-    return <MachineMasterPanel productionControl={productionControl} submitAction={submitAction} openDataEntry={openDataEntry} />;
+    return <CentralMachineMasterWorkspace payload={payload} submitAction={submitAction} openDataEntry={openDataEntry} preferredDefaults={preferredDataEntryDefaults} />;
   }
 
   if (activeTab === "masterGapsTab") {
@@ -1673,11 +1693,11 @@ function DashboardContent({
   }
 
   if (activeTab === "dataEntryTab") {
-    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={generalDataEntryTypes} />;
+    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={universalDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} />;
   }
 
   if (activeTab === "masterTablesTab") {
-    return <MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} />;
+    return <MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} />;
   }
 
   if (activeTab === "planningHolidayTab") {
@@ -5929,6 +5949,8 @@ function DataEntryPanel({
   preferredEntryType,
   preferredDefaults,
   allowedEntryTypes,
+  productionFloorCode,
+  onProductionFloorChange,
   title = "Production data entry",
   description = "Use focused forms for manual entry or download the matching CSV template for a small import.",
 }: {
@@ -5941,6 +5963,8 @@ function DataEntryPanel({
   preferredEntryType: string;
   preferredDefaults: Record<string, unknown>;
   allowedEntryTypes?: readonly string[];
+  productionFloorCode?: ProductionFloorCode;
+  onProductionFloorChange?: (floorCode: ProductionFloorCode) => void;
   title?: string;
   description?: string;
 }) {
@@ -5958,6 +5982,9 @@ function DataEntryPanel({
   const [bulkEntryType, setBulkEntryType] = useState(initialEntryType);
   const [isImporting, setIsImporting] = useState(false);
   const selectedSpec = availableSpecs.find((spec) => spec.entryType === bulkEntryType) ?? availableSpecs[0];
+  const selectedMasterIsCompanyWide = companyWideQualityMasterEntryTypes.includes(
+    bulkEntryType as typeof companyWideQualityMasterEntryTypes[number],
+  );
   const selectedMasterRows = useMemo(
     () => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [],
     [payload, productionControl, selectedSpec],
@@ -5974,7 +6001,7 @@ function DataEntryPanel({
       const fileBase64 = await readFileAsDataUrl(file);
       await submitAction(
         "data-import",
-        { entryType: bulkEntryType, fileName: file.name, fileBase64 },
+        { entryType: bulkEntryType, productionFloorCode, fileName: file.name, fileBase64 },
         { throwOnError: true },
       );
       if (typeof form.reset === "function") form.reset();
@@ -5993,6 +6020,27 @@ function DataEntryPanel({
         {isImporting ? <div className="px-6"><ProcessingNotice message="Reading and importing the CSV file..." /></div> : null}
         <fieldset aria-busy={isImporting} className="contents" disabled={isImporting}>
         <CardContent className="grid gap-4">
+          {productionFloorCode && onProductionFloorChange ? (
+            <div className="grid gap-2 @3xl/main:grid-cols-[minmax(240px,360px)_1fr] @3xl/main:items-end">
+              <Field label="Production Unit">
+                <SearchableSelect
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  required
+                  value={productionFloorCode}
+                  onChange={(event) => onProductionFloorChange(normalizeProductionFloorCode(event.target.value))}
+                >
+                  {productionFloors.map((floor) => (
+                    <option key={floor.code} value={floor.code}>{floor.label}</option>
+                  ))}
+                </SearchableSelect>
+              </Field>
+              <p className="pb-2 text-sm text-muted-foreground">
+                {selectedMasterIsCompanyWide
+                  ? "This quality code master is shared by every Production Unit."
+                  : "Uploads and manual entries are saved for the selected Production Unit."}
+              </p>
+            </div>
+          ) : null}
           <form className="grid gap-3 @3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]" onSubmit={importEntryTemplate}>
             <Field label="Select Entry Form">
               <SearchableSelect
@@ -6039,16 +6087,23 @@ function MasterTablesPanel({
   payload,
   productionControl,
   openDataEntry,
+  productionFloorCode,
+  onProductionFloorChange,
 }: {
   payload: DashboardPayload;
   productionControl: DashboardPayload;
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  productionFloorCode: ProductionFloorCode;
+  onProductionFloorChange: (floorCode: ProductionFloorCode) => void;
 }) {
   const specs = useMemo(() => masterTableSpecs(), []);
   const [entryType, setEntryType] = useState(() => specs[0]?.entryType ?? "");
   const [searchQuery, setSearchQuery] = useState("");
   const [tableResetKey, setTableResetKey] = useState(0);
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
+  const selectedMasterIsCompanyWide = companyWideQualityMasterEntryTypes.includes(
+    selectedSpec?.entryType as typeof companyWideQualityMasterEntryTypes[number],
+  );
   const dataEntry = asRecord(payload.dataEntry);
   const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [], [payload, productionControl, selectedSpec]);
   const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec) : [], [selectedSpec]);
@@ -6079,7 +6134,19 @@ function MasterTablesPanel({
           <CardTitle>Master Tables</CardTitle>
           <CardDescription>Search Saved Master Data In Tabular Format. Use Data Entry Only When You Need To Add Or Edit Rows.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(260px,1fr)_auto]">
+        <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(220px,320px)_minmax(260px,1fr)]">
+          <Field label="Production Unit">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              required
+              value={productionFloorCode}
+              onChange={(event) => onProductionFloorChange(normalizeProductionFloorCode(event.target.value))}
+            >
+              {productionFloors.map((floor) => (
+                <option key={floor.code} value={floor.code}>{floor.label}</option>
+              ))}
+            </SearchableSelect>
+          </Field>
           <Field label="Master">
             <SearchableSelect
               className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -6097,9 +6164,13 @@ function MasterTablesPanel({
               <Input className="pl-9" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search Saved Rows" />
             </div>
           </Field>
-          <div className="flex items-end gap-2">
+          <div className="flex flex-wrap items-end gap-2 @4xl/main:col-span-3">
             <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); setTableResetKey((current) => current + 1); }}>Clear Filters</Button>
-            <Button type="button" variant="outline" disabled={!filteredRows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, filteredRows, columns)}>
+            <Button type="button" variant="outline" disabled={!rows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, rows, columns, "all-rows")}>
+              <Download className="size-4" />
+              Download All Rows
+            </Button>
+            <Button type="button" variant="outline" disabled={!filteredRows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, filteredRows, columns, "visible-rows")}>
               <Download className="size-4" />
               Export Visible Rows
             </Button>
@@ -6116,7 +6187,9 @@ function MasterTablesPanel({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle>{selectedSpec.title}</CardTitle>
-              <CardDescription>{selectedSpec.description}</CardDescription>
+              <CardDescription>
+                {selectedSpec.description} {selectedMasterIsCompanyWide ? "Shared Across All Production Units." : `Showing ${productionFloors.find((floor) => floor.code === productionFloorCode)?.label ?? productionFloorCode}.`}
+              </CardDescription>
             </div>
             <Badge variant="outline">{formatNumber(filteredRows.length)} / {formatNumber(rows.length)} Rows</Badge>
           </div>
@@ -6249,14 +6322,14 @@ function masterTableCellText(row: DashboardPayload, key: string) {
 }
 
 
-function downloadMasterTableCsv(spec: DataEntrySpec, rows: DashboardPayload[], columns: MasterTableColumn[]) {
+function downloadMasterTableCsv(spec: DataEntrySpec, rows: DashboardPayload[], columns: MasterTableColumn[], scope: "all-rows" | "visible-rows") {
   const header = columns.map((column) => csvCell(column.label)).join(",");
   const body = rows.map((row) => columns.map((column) => csvCell(masterTableCellText(row, column.key))).join(","));
   const blob = new Blob(["\ufeff", [header, ...body].join("\r\n"), "\r\n"], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${safeExportFileName(spec.title)}-${new Date().toISOString().slice(0, 10)}-visible-rows.csv`;
+  anchor.download = `${safeExportFileName(spec.title)}-${new Date().toISOString().slice(0, 10)}-${scope}.csv`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -6281,6 +6354,76 @@ function masterTableRowMatches(row: DashboardPayload, columns: MasterTableColumn
 function masterTableRowKey(entryType: string, row: DashboardPayload, index: number) {
   return `${entryType}|${dataEntryKey(entryType, row) || JSON.stringify(row) || index}`;
 }
+
+const centralMachineMasterRowKeys = [
+  "machinePlanningRows",
+  "maintenanceScheduleRows",
+  "maintenanceTaskRows",
+  "maintenanceMasterRows",
+  "maintenanceChecklistMasterRows",
+] as const;
+
+function combinedMachineMasterProductionControl(pages: DashboardPayload[]) {
+  const controls = pages.map((page) => asRecord(page.productionControl));
+  return Object.fromEntries(
+    centralMachineMasterRowKeys.map((key) => [
+      key,
+      controls.flatMap((control) => asArray(control[key])),
+    ]),
+  );
+}
+
+function CentralMachineMasterWorkspace({
+  payload,
+  submitAction,
+  openDataEntry,
+  preferredDefaults,
+}: {
+  payload: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  preferredDefaults: Record<string, unknown>;
+}) {
+  const [reloadKey, setReloadKey] = useState(0);
+  const conventional = usePostgresOperationalPage("/api/dashboard?floor=conventional", 0, undefined, 0, reloadKey);
+  const conventional02 = usePostgresOperationalPage("/api/dashboard?floor=conventional-02", 0, undefined, 0, reloadKey);
+  const cnc = usePostgresOperationalPage("/api/dashboard?floor=cnc", 0, undefined, 0, reloadKey);
+  const forging = usePostgresOperationalPage("/api/dashboard?floor=forging", 0, undefined, 0, reloadKey);
+  const floorPages = useMemo(
+    () => [conventional.data, conventional02.data, cnc.data, forging.data].filter((page): page is DashboardPayload => Boolean(page)),
+    [cnc.data, conventional.data, conventional02.data, forging.data],
+  );
+  const productionControl = useMemo(
+    () => combinedMachineMasterProductionControl(floorPages.length ? floorPages : [payload]),
+    [floorPages, payload],
+  );
+  const workspacePayload = useMemo(
+    () => ({ ...payload, productionControl }),
+    [payload, productionControl],
+  );
+
+  async function saveAndReload(path: string, body: Record<string, unknown>) {
+    await submitAction(path, body);
+    setReloadKey((current) => current + 1);
+  }
+
+  return (
+    <div className="grid gap-6">
+      <DataEntryPanel
+        key={`central-machine-master-${JSON.stringify(preferredDefaults)}`}
+        payload={workspacePayload}
+        submitAction={saveAndReload}
+        preferredEntryType="machine_master"
+        preferredDefaults={preferredDefaults}
+        allowedEntryTypes={["machine_master"]}
+        title="Central Machine Master"
+        description="Create, import, or reallocate machines here. Production screens only receive machines assigned to their Production unit."
+      />
+      <MachineMasterPanel productionControl={productionControl} submitAction={saveAndReload} openDataEntry={openDataEntry} />
+    </div>
+  );
+}
+
 function MachineMasterPanel({
   productionControl,
   submitAction,
@@ -6290,9 +6433,6 @@ function MachineMasterPanel({
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
 }) {
-  const selectedProductionFloor = productionFloors.find(
-    (floor) => floor.code === productionFloorFromLocation(),
-  ) ?? productionFloors[0];
   const machineRows = useMemo(() => maintenanceMachineRows(asArray(productionControl.machinePlanningRows)), [productionControl.machinePlanningRows]);
   const scheduleRows = useMemo(() => asArray(productionControl.maintenanceScheduleRows), [productionControl.maintenanceScheduleRows]);
   const completionRows = asArray(productionControl.maintenanceTaskRows);
@@ -6312,6 +6452,7 @@ function MachineMasterPanel({
   const [machineFamilyFilter, setMachineFamilyFilter] = useState("");
   const [machineNameFilter, setMachineNameFilter] = useState("");
   const [machineTypeFilter, setMachineTypeFilter] = useState("");
+  const [machineUnitFilter, setMachineUnitFilter] = useState("");
   const [machineLocationFilter, setMachineLocationFilter] = useState("");
   const [machineStatusFilter, setMachineStatusFilter] = useState("");
   const [isScheduleFormOpen, setIsScheduleFormOpen] = useState(false);
@@ -6326,12 +6467,13 @@ function MachineMasterPanel({
   const machineFamilyOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineFamily)).filter((value) => value !== "-")), [machineRows]);
   const machineNameOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineName)).filter((value) => value !== "-")), [machineRows]);
   const machineTypeOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineType)).filter((value) => value !== "-")), [machineRows]);
+  const machineUnitOptions = useMemo(() => uniqueValues(machineRows.map(machineProductionUnitLabel)), [machineRows]);
   const machineLocationOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.location)).filter((value) => value !== "-")), [machineRows]);
   const machineStatusOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.status || "Active")).filter((value) => value !== "-")), [machineRows]);
-  const hasMachineFilters = Boolean(machineNoFilter || machineFamilyFilter || machineNameFilter || machineTypeFilter || machineLocationFilter || machineStatusFilter);
+  const hasMachineFilters = Boolean(machineNoFilter || machineFamilyFilter || machineNameFilter || machineTypeFilter || machineUnitFilter || machineLocationFilter || machineStatusFilter);
   const filteredMachineRows = useMemo(
-    () => machineRows.filter((row) => machineMasterMatches(row, machineNoFilter, machineFamilyFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter)),
-    [machineRows, machineNoFilter, machineFamilyFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter],
+    () => machineRows.filter((row) => machineMasterMatches(row, machineNoFilter, machineFamilyFilter, machineNameFilter, machineTypeFilter, machineUnitFilter, machineLocationFilter, machineStatusFilter)),
+    [machineRows, machineNoFilter, machineFamilyFilter, machineNameFilter, machineTypeFilter, machineUnitFilter, machineLocationFilter, machineStatusFilter],
   );
 
   const selectedMaintenance = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(selectedMaintenanceCode));
@@ -6357,11 +6499,11 @@ function MachineMasterPanel({
   const resultOptions = uniqueValues(machineHistory.map((row) => displayValue(row.result)).filter((value) => value !== "-"));
 
   function openMachine(machineNo: string) {
-    window.location.assign(`${dashboardTabHref("machineMasterTab", productionFloorFromLocation())}&machine=${encodeURIComponent(machineNo)}`);
+    window.location.assign(`${dashboardTabHref("machineMasterTab")}&machine=${encodeURIComponent(machineNo)}`);
   }
 
   function closeMachine() {
-    window.location.assign(dashboardTabHref("machineMasterTab", productionFloorFromLocation()));
+    window.location.assign(dashboardTabHref("machineMasterTab"));
   }
 
   async function saveSchedule(event: FormEvent<HTMLFormElement>) {
@@ -6384,6 +6526,7 @@ function MachineMasterPanel({
       machineFamily: displayValue(selectedMachine.machineFamily) !== "-" ? displayValue(selectedMachine.machineFamily) : "",
       machineType: displayValue(selectedMachine.machineType) !== "-" ? displayValue(selectedMachine.machineType) : "",
       machineName: displayValue(selectedMachine.machineName) !== "-" ? displayValue(selectedMachine.machineName) : "",
+      productionFloorCode: normalizeProductionFloorCode(selectedMachine.productionFloorCode),
       location: displayValue(selectedMachine.location) !== "-" ? displayValue(selectedMachine.location) : "",
       updatedAt: new Date().toISOString(),
     };
@@ -6400,23 +6543,23 @@ function MachineMasterPanel({
         <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Filtered", formatNumber(filteredMachineRows.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)]]} />
         <Card>
           <CardHeader>
-            <CardTitle>{selectedProductionFloor.shortLabel} Machines</CardTitle>
-            <CardDescription>Only Machines Assigned To {selectedProductionFloor.label} Are Shown. Select A Machine To Open Its Maintenance Page.</CardDescription>
+            <CardTitle>All Machines</CardTitle>
+            <CardDescription>One Company-Wide Machine Master. Production Unit Allocation Controls Where Each Machine Is Available.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              {!machineRows.length ? <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("machine_master", { status: "Active", __returnTab: "machineMasterTab" })}>Add Machine</Button> : <div className="text-xs text-muted-foreground">Showing {formatNumber(filteredMachineRows.length)} Of {formatNumber(machineRows.length)} Machines</div>}
-              {hasMachineFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setMachineNoFilter(""); setMachineFamilyFilter(""); setMachineNameFilter(""); setMachineTypeFilter(""); setMachineLocationFilter(""); setMachineStatusFilter(""); }}>Clear Filters</Button> : null}
+              <div className="flex flex-wrap items-center gap-2"><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("machine_master", { status: "Active", productionFloorCode: "conventional", __returnTab: "machineMasterTab" })}>Add Machine</Button><div className="text-xs text-muted-foreground">Showing {formatNumber(filteredMachineRows.length)} Of {formatNumber(machineRows.length)} Machines</div></div>
+              {hasMachineFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setMachineNoFilter(""); setMachineFamilyFilter(""); setMachineNameFilter(""); setMachineTypeFilter(""); setMachineUnitFilter(""); setMachineLocationFilter(""); setMachineStatusFilter(""); }}>Clear Filters</Button> : null}
             </div>
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow><TableHead>Machine No.</TableHead><TableHead>Machine Family</TableHead><TableHead>Machine Type</TableHead><TableHead>Machine Name</TableHead><TableHead>Production Unit</TableHead><TableHead>Machine Location</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow>
-                  <TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Machine No." value={machineNoFilter} onChange={setMachineNoFilter} options={machineNoOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Family" value={machineFamilyFilter} onChange={setMachineFamilyFilter} options={machineFamilyOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Type" value={machineTypeFilter} onChange={setMachineTypeFilter} options={machineTypeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Name" value={machineNameFilter} onChange={setMachineNameFilter} options={machineNameOptions} /></TableHead><TableHead>{selectedProductionFloor.shortLabel}</TableHead><TableHead><MachineMasterColumnFilter label="Machine Location" value={machineLocationFilter} onChange={setMachineLocationFilter} options={machineLocationOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={machineStatusFilter} onChange={setMachineStatusFilter} options={machineStatusOptions} /></TableHead><TableHead></TableHead></TableRow>
+                  <TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Machine No." value={machineNoFilter} onChange={setMachineNoFilter} options={machineNoOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Family" value={machineFamilyFilter} onChange={setMachineFamilyFilter} options={machineFamilyOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Type" value={machineTypeFilter} onChange={setMachineTypeFilter} options={machineTypeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Name" value={machineNameFilter} onChange={setMachineNameFilter} options={machineNameOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Production Unit" value={machineUnitFilter} onChange={setMachineUnitFilter} options={machineUnitOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Location" value={machineLocationFilter} onChange={setMachineLocationFilter} options={machineLocationOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={machineStatusFilter} onChange={setMachineStatusFilter} options={machineStatusOptions} /></TableHead><TableHead></TableHead></TableRow>
                 </TableHeader>
                 <TableBody>{filteredMachineRows.length ? filteredMachineRows.map((row) => {
                   const machineNo = displayValue(row.machineNo);
-                  return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineFamily)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{selectedProductionFloor.shortLabel}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></TableCell></TableRow>;
+                  return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineFamily)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{machineProductionUnitLabel(row)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><div className="flex justify-end gap-2"><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("machine_master", { ...row, productionFloorCode: normalizeProductionFloorCode(row.productionFloorCode), __returnTab: "machineMasterTab" })}>Edit</Button><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></div></TableCell></TableRow>;
                 }) : <TableRow><TableCell colSpan={8} className="h-24 text-center text-sm text-muted-foreground">No Machines Match The Selected Filters.</TableCell></TableRow>}</TableBody>
               </Table>
             </div>
@@ -6452,7 +6595,7 @@ function MachineMasterPanel({
       <TrackingSummary items={[["Schedules", formatNumber(machineSchedules.length)], ["Records", formatNumber(machineHistory.length)], ["Filtered", formatNumber(filteredHistory.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)]]} />
       <Card>
         <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine Maintenance Schedules And Records.</CardDescription></CardHeader>
-        <CardContent><div className="grid gap-3 md:grid-cols-5"><TileField label="Machine Family" value={selectedMachine.machineFamily} important /><TileField label="Machine Type" value={selectedMachine.machineType} /><TileField label="Machine Name" value={selectedMachine.machineName} /><TileField label="Machine Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
+        <CardContent><div className="grid gap-3 md:grid-cols-6"><TileField label="Machine Family" value={selectedMachine.machineFamily} important /><TileField label="Machine Type" value={selectedMachine.machineType} /><TileField label="Machine Name" value={selectedMachine.machineName} /><TileField label="Production Unit" value={machineProductionUnitLabel(selectedMachine)} /><TileField label="Machine Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
       </Card>
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3">
@@ -7621,7 +7764,9 @@ function LegacyActionForm({
               >
                 {field.options.map((option) => (
                   <option key={option} value={option}>
-                    {option ? option.replaceAll("_", " ") : "Normal"}
+                    {field.name === "productionFloorCode"
+                      ? productionFloors.find((floor) => floor.code === option)?.shortLabel ?? option
+                      : option ? option.replaceAll("_", " ") : "Normal"}
                   </option>
                 ))}
               </SearchableSelect>
@@ -8689,8 +8834,8 @@ function downloadApi(kind: "data-template", entryType: string) {
 }
 
 async function postDashboardApi(path: string, body: Record<string, unknown>): Promise<DashboardApiResult> {
-  const productionFloorCode = normalizeProductionFloorCode(body.productionFloorCode ?? productionFloorFromLocation());
   const bodyPayload = asRecord(body.payload);
+  const productionFloorCode = normalizeProductionFloorCode(body.productionFloorCode ?? bodyPayload.productionFloorCode ?? productionFloorFromLocation());
   const scopedBody = {
     ...body,
     productionFloorCode,
@@ -10471,11 +10616,17 @@ function maintenanceMachineRows(rows: DashboardPayload[]) {
   return [...byMachine.values()].sort((a, b) => displayValue(a.machineNo).localeCompare(displayValue(b.machineNo), undefined, { numeric: true }));
 }
 
-function machineMasterMatches(row: DashboardPayload, machineNoFilter: string, machineFamilyFilter: string, machineNameFilter: string, machineTypeFilter: string, machineLocationFilter: string, machineStatusFilter: string) {
+function machineProductionUnitLabel(row: DashboardPayload) {
+  const floorCode = normalizeProductionFloorCode(row.productionFloorCode);
+  return productionFloors.find((floor) => floor.code === floorCode)?.shortLabel ?? floorCode;
+}
+
+function machineMasterMatches(row: DashboardPayload, machineNoFilter: string, machineFamilyFilter: string, machineNameFilter: string, machineTypeFilter: string, machineUnitFilter: string, machineLocationFilter: string, machineStatusFilter: string) {
   return typedFilterMatches(displayValue(row.machineNo), machineNoFilter) &&
     typedFilterMatches(displayValue(row.machineFamily), machineFamilyFilter) &&
     typedFilterMatches(displayValue(row.machineName), machineNameFilter) &&
     typedFilterMatches(displayValue(row.machineType), machineTypeFilter) &&
+    typedFilterMatches(machineProductionUnitLabel(row), machineUnitFilter) &&
     typedFilterMatches(displayValue(row.location), machineLocationFilter) &&
     typedFilterMatches(displayValue(row.status || "Active"), machineStatusFilter);
 }

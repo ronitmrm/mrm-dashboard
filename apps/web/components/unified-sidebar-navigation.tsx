@@ -43,6 +43,7 @@ import {
   navigationHrefMatches,
   planningHolidayNavigation,
   productionFloorNavigation,
+  universalProductionNavigation,
   type DashboardTabId,
 } from "@/lib/unified-navigation"
 
@@ -208,6 +209,13 @@ export function UnifiedSidebarNavigation({
         planningHolidayNavigation.subtitle,
         "holiday calendar",
       ].some((value) => value.toLowerCase().includes(normalizedMenuSearch)))
+  const filteredUniversalProductionNavigation = navigationAccess.operations
+    ? filterProductionItems(
+        universalProductionNavigation,
+        normalizedMenuSearch,
+        "universal production data entry master tables machine master"
+      )
+    : []
   const administrationMatchesSearch =
     navigationAccess.administration &&
     (!normalizedMenuSearch ||
@@ -381,6 +389,39 @@ export function UnifiedSidebarNavigation({
         </SidebarGroup>
       ) : null}
 
+      {filteredUniversalProductionNavigation.length ? (
+        <SidebarGroup className="px-3 py-0.5">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {filteredUniversalProductionNavigation.map((item) => (
+                <SidebarMenuItem key={item.id}>
+                  <SidebarMenuButton
+                    asChild
+                    className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                    isActive={activeDashboardTab === item.id}
+                  >
+                    {onDashboardTabSelect ? (
+                      <button
+                        onClick={() => onDashboardTabSelect(item.id, activeProductionFloor)}
+                        type="button"
+                      >
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </button>
+                    ) : (
+                      <a href={dashboardTabHref(item.id, activeProductionFloor)}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </a>
+                    )}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ) : null}
+
       {filteredProductionNavigation.map(({ floor, items }) => {
         const sectionId = productionSectionIds[floor.code]
         return (
@@ -466,6 +507,7 @@ export function UnifiedSidebarNavigation({
       !filteredHrNavigation.length &&
       !filteredCommercialNavigation.length &&
       !planningHolidayMatchesSearch &&
+      !filteredUniversalProductionNavigation.length &&
       !filteredProductionNavigation.length &&
       !administrationMatchesSearch ? (
         <p className="px-6 py-8 text-center text-sm text-muted-foreground">
