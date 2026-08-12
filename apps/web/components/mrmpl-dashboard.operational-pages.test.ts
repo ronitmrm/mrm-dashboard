@@ -51,4 +51,21 @@ describe("Production operational page loading", () => {
     expect(firstPieceForm).toContain("@4xl/main:grid-cols-5")
     expect(firstPieceForm).toContain("hidden overflow-auto @5xl/main:block")
   })
+
+  it("handles rejected CSV imports without an unhandled browser error", () => {
+    const source = readFileSync(
+      new URL("./mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
+    const importHandler = source.slice(
+      source.indexOf("async function importEntryTemplate"),
+      source.indexOf("return (", source.indexOf("async function importEntryTemplate"))
+    )
+
+    expect(importHandler).toContain("{ throwOnError: true }")
+    expect(importHandler).toContain("catch {")
+    expect(importHandler.indexOf("catch {")).toBeLessThan(
+      importHandler.indexOf("finally {")
+    )
+  })
 })

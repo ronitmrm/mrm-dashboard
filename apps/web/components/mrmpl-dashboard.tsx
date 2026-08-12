@@ -6008,6 +6008,8 @@ function DataEntryPanel({
         { throwOnError: true },
       );
       if (typeof form.reset === "function") form.reset();
+    } catch {
+      // submitAction already shows the import error; keep the file selected for correction.
     } finally {
       setIsImporting(false);
     }
@@ -6080,9 +6082,9 @@ function DataEntryPanel({
           dataEntry={dataEntry}
           masterRows={selectedMasterRows}
           productionControl={productionControl}
+          productionFloorCode={productionFloorCode}
         />
       ) : null}
-          productionFloorCode={productionFloorCode}
     </section>
   );
 }
@@ -6798,17 +6800,17 @@ function DataEntryForm({
   dataEntry,
   masterRows = [],
   productionControl = {},
+  productionFloorCode,
 }: {
   spec: DataEntrySpec;
-  productionFloorCode,
   submitAction: (path: string, body: Record<string, unknown>, options?: { throwOnError?: boolean }) => Promise<void>;
   defaults: Record<string, unknown>;
   dataEntry?: DashboardPayload;
   masterRows?: DashboardPayload[];
   productionControl?: DashboardPayload;
+  productionFloorCode?: ProductionFloorCode;
 }) {
   const [locallyGeneratedCodes, setLocallyGeneratedCodes] = useState<string[]>([]);
-  productionFloorCode?: ProductionFloorCode;
   const generatedCode = nextAutomaticMasterCode(spec.entryType, [
     ...masterRows,
     ...locallyGeneratedCodes.map((code) => ({ code })),
