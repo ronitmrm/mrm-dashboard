@@ -168,7 +168,7 @@ async function ensureRouteItemId(
         source_payload
       )
       VALUES ($1, $2, $2, $3, $3, 'mrm-dashboard', 'route_master', $4,
-        jsonb_build_object('generatedFrom', 'route_master', 'uid', $2))
+        jsonb_build_object('generatedFrom', 'route_master', 'uid', $2::text))
       ON CONFLICT DO NOTHING
     `,
     [organizationId, uid, actorUserId ?? null, `${organizationId}:${uid.toLowerCase()}`]
