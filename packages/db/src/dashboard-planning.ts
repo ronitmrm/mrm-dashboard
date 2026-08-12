@@ -804,7 +804,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
                 SET operation_code = $1, operation_name = $2, sequence = $3,
                   active = true, updated_by_user_id = $4,
                   legacy_setup_code = COALESCE($5, legacy_setup_code),
-                  source_payload = $6,
+                  source_system = 'mrm-dashboard',
+                  source_table = 'dataEntries', source_payload = $6,
                   updated_at = now(), row_version = row_version + 1
                 WHERE id = $7
               `,
@@ -828,7 +829,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
                   source_system, source_table, source_id, source_payload
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $8,
-                  'mrm-dashboard', 'route_setup', $9, $10)
+                  'mrm-dashboard', 'dataEntries', $9, $10)
               `,
               [
                 input.organizationId,
