@@ -1214,11 +1214,12 @@ async function post(request: NextRequest, context: RouteContext) {
           "operations.shop_floor.write",
           async (planningContext) => {
             if (["route", "cycle", "tooling"].includes(entryType)) {
-              const missingItemUids =
-                await planningContext.repository.missingItemUids(
-                  planningContext.organizationId,
-                  importedRows.map((payload) => text(payload.partNo))
-                )
+              const missingItemUids = ["cycle", "tooling"].includes(entryType)
+                ? await planningContext.repository.missingItemUids(
+                    planningContext.organizationId,
+                    importedRows.map((payload) => text(payload.partNo))
+                  )
+                : []
               const validationError = planningImportValidationError(
                 entryType,
                 importedRows,

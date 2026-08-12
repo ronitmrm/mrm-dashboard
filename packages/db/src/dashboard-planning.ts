@@ -129,6 +129,29 @@ async function itemIdFor(
   return result.rows[0].id
 }
 
+async function ensureRouteItemId(
+  client: PoolClient,
+  organizationId: string,
+  itemUid: string,
+  actorUserId?: string | null
+) {
+  const uid = requiredText(itemUid, "Item UID")
+  await client.query(
+    `
+      INSERT INTO catalog.items (
+        organization_id, uid, description, created_by_user_id,
+        updated_by_user_id, source_system, source_table, source_id,
+        source_payload
+      )
+      VALUES ($1, $2, $2, $3, $3, 'mrm-dashboard', 'route_master', $4,
+        jsonb_build_object('generatedFrom', 'route_master', 'uid', $2))
+      ON CONFLICT DO NOTHING
+    `,
+    [organizationId, uid, actorUserId ?? null, `${organizationId}:${uid.toLowerCase()}`]
+  )
+  return itemIdFor(client, organizationId, uid)
+}
+
 async function workOrderFor(
   client: PoolClient,
   organizationId: string,
@@ -571,10 +594,11 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
         const productionFloorCode = normalizeProductionFloorCode(
           input.productionFloorCode
         )
-        const itemId = await itemIdFor(
+        const itemId = await ensureRouteItemId(
           client,
           input.organizationId,
-          input.itemUid
+          input.itemUid,
+          input.actorUserId
         )
         await businessKeyLock(
           client,

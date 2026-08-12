@@ -28,6 +28,11 @@ vi.mock("@/lib/dashboard-planning-input", () => ({
   planningSetupNumber: vi.fn(),
 }))
 
+vi.mock("@/lib/planning-master-import", () => ({
+  planningImportRowError: vi.fn(),
+  planningImportValidationError: vi.fn(),
+}))
+
 vi.mock("@/lib/planning-refresh-policy", () => ({
   shouldQueuePlanningRefresh: vi.fn(),
 }))

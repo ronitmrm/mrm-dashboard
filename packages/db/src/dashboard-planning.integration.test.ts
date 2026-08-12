@@ -61,6 +61,38 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
+  test("creates a planning item when its first Route Master is imported", async () => {
+    const newItemUid = `ROUTE-${suffix}`
+
+    await repository.upsertRouteOption({
+      itemUid: newItemUid,
+      organizationId,
+      routeCode: "1",
+      setups: [{ operationCode: "SETUP-1", sequence: 1, setupNumber: 1 }],
+    })
+
+    const item = await pool.query<{
+      source_system: string
+      source_table: string
+      uid: string
+    }>(
+      `
+        SELECT uid, source_system, source_table
+        FROM catalog.items
+        WHERE organization_id = $1 AND lower(uid) = lower($2)
+      `,
+      [organizationId, newItemUid]
+    )
+
+    expect(item.rows).toEqual([
+      {
+        source_system: "mrm-dashboard",
+        source_table: "route_master",
+        uid: newItemUid,
+      },
+    ])
+  })
+
   test("upserts normalized masters, work orders, and route setups by business key", async () => {
     const machine = await repository.upsertMachine({
       machineNumber: firstMachine,

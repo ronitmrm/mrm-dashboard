@@ -34,7 +34,7 @@ describe("planning master CSV imports", () => {
     )
   })
 
-  it("reports reversed route setup columns and missing products together", () => {
+  it("reports reversed route setup columns without requiring Product Master", () => {
     const invalidRows = [
       { partNo: "M4", optionNumber: "1", setupNo: "5", numberOfSetups: "1" },
       { partNo: "M4", optionNumber: "1", setupNo: "5", numberOfSetups: "2" },
@@ -48,7 +48,13 @@ describe("planning master CSV imports", () => {
       setupNumber: "5",
     })
     expect(planningImportValidationError("route", invalidRows, ["M2B"])).toBe(
-      'Route CSV needs correction before import. CSV rows 2 and 3 repeat setup 5 for product M4, option 1. Each setup number must be unique; the setupNo and numberOfSetups columns appear reversed in this file. CSV row 4: Product "M2B" was not found in Product Master. Add it there, then import this file again.'
+      "Route CSV needs correction before import. CSV rows 2 and 3 repeat setup 5 for product M4, option 1. Each setup number must be unique; the setupNo and numberOfSetups columns appear reversed in this file."
+    )
+  })
+
+  it("requires a Route Master before importing cycle rows", () => {
+    expect(planningImportValidationError("cycle", rows, ["M2B"])).toBe(
+      'Cycle CSV needs correction before import. CSV row 4: Part "M2B" has no Route Master. Import its Route Master first, then import this file again.'
     )
   })
 })

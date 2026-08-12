@@ -55,10 +55,13 @@ export function planningImportValidationError(
       )
     }
   }
-  const missingRow = firstMissingPlanningItemRow(rows, missingItemUids)
+  const missingRow =
+    entryType === "route"
+      ? null
+      : firstMissingPlanningItemRow(rows, missingItemUids)
   if (missingRow) {
     issues.push(
-      `CSV row ${missingRow.csvRow}: Product "${missingRow.itemUid}" was not found in Product Master. Add it there, then import this file again.`
+      `CSV row ${missingRow.csvRow}: Part "${missingRow.itemUid}" has no Route Master. Import its Route Master first, then import this file again.`
     )
   }
   if (!issues.length) return null
