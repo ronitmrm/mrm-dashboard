@@ -71,6 +71,17 @@ function neonConnectionString(role, pooled = true) {
 }
 
 function upstashCredentials() {
+  const environmentUrl = process.env.UPSTASH_REDIS_REST_URL?.trim()
+  const environmentToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim()
+  if (environmentUrl && environmentToken) {
+    return { token: environmentToken, url: environmentUrl }
+  }
+  if (environmentUrl || environmentToken) {
+    throw new Error(
+      "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must both be set"
+    )
+  }
+
   const databases = JSON.parse(capture("upstash", ["redis", "list"]))
   const target = databases.find(
     (candidate) => candidate.database_name === upstashDatabase
@@ -101,17 +112,22 @@ function spawnPnpm(args, options) {
   return spawn(process.execPath, [executable, ...args], options)
 }
 
-const webDatabaseUrl = neonConnectionString("mrmpl_staging_web")
+const webDatabaseUrl =
+  process.env.WEB_DATABASE_URL?.trim() ||
+  neonConnectionString("mrmpl_staging_web")
 const workerDatabaseUrl =
   webOnly || seedAdmin || !workerEnabled
     ? undefined
-    : neonConnectionString("mrmpl_staging_worker")
+    : process.env.WORKER_DATABASE_URL?.trim() ||
+      neonConnectionString("mrmpl_staging_worker")
 const workerListenerDatabaseUrl =
   webOnly || seedAdmin || !workerEnabled || workerOnly
     ? undefined
-    : neonConnectionString("mrmpl_staging_worker", false)
+    : process.env.WORKER_LISTENER_DATABASE_URL?.trim() ||
+      neonConnectionString("mrmpl_staging_worker", false)
 const migrationDatabaseUrl = seedAdmin
-  ? neonConnectionString("mrmpl_staging_migration", false)
+  ? process.env.MIGRATION_DATABASE_URL?.trim() ||
+    neonConnectionString("mrmpl_staging_migration", false)
   : undefined
 const upstash = upstashCredentials()
 const managedEnvironment = {
