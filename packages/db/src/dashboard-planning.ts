@@ -359,6 +359,28 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
   return {
     close,
 
+    async missingItemUids(organizationId: string, itemUids: string[]) {
+      const requested = [
+        ...new Set(itemUids.map((uid) => uid.trim()).filter(Boolean)),
+      ]
+      if (!requested.length) return []
+      const result = await pool.query<{ uid: string }>(
+        `
+          SELECT requested.uid
+          FROM unnest($2::text[]) WITH ORDINALITY requested(uid, position)
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM catalog.items item
+            WHERE item.organization_id = $1
+              AND lower(item.uid) = lower(requested.uid)
+          )
+          ORDER BY requested.position
+        `,
+        [organizationId, requested]
+      )
+      return result.rows.map((row) => row.uid)
+    },
+
     async organizationIdForCode(code: string) {
       const result = await pool.query<{ id: string }>(
         "SELECT id FROM core.organizations WHERE lower(code) = lower($1)",

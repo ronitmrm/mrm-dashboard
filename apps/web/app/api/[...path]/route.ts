@@ -25,6 +25,10 @@ import {
   normalizeRemainingSetups,
   planningSetupNumber,
 } from "@/lib/dashboard-planning-input"
+import {
+  planningImportRowError,
+  planningImportValidationError,
+} from "@/lib/planning-master-import"
 import { shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy"
 import { productionModuleIsEnabled } from "@/lib/production-module"
 import { withHttpPerformanceOperation } from "../../../lib/http-operation-telemetry"
@@ -1209,9 +1213,31 @@ async function post(request: NextRequest, context: RouteContext) {
           request,
           "operations.shop_floor.write",
           async (planningContext) => {
+            if (["route", "cycle", "tooling"].includes(entryType)) {
+              const missingItemUids =
+                await planningContext.repository.missingItemUids(
+                  planningContext.organizationId,
+                  importedRows.map((payload) => text(payload.partNo))
+                )
+              const validationError = planningImportValidationError(
+                entryType,
+                importedRows,
+                missingItemUids
+              )
+              if (validationError) {
+                throw new RouteError(400, validationError)
+              }
+            }
             let count = 0
-            for (const payload of importedRows) {
-              await savePlanningMasterEntry(planningContext, entryType, payload)
+            for (const [index, payload] of importedRows.entries()) {
+              try {
+                await savePlanningMasterEntry(planningContext, entryType, payload)
+              } catch (error) {
+                throw new RouteError(
+                  400,
+                  planningImportRowError(entryType, index, payload, error)
+                )
+              }
               count += 1
             }
             return count

@@ -5933,7 +5933,11 @@ function DataEntryPanel({
   description = "Use focused forms for manual entry or download the matching CSV template for a small import.",
 }: {
   payload: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  submitAction: (
+    path: string,
+    body: Record<string, unknown>,
+    options?: { throwOnError?: boolean },
+  ) => Promise<void>;
   preferredEntryType: string;
   preferredDefaults: Record<string, unknown>;
   allowedEntryTypes?: readonly string[];
@@ -5968,7 +5972,11 @@ function DataEntryPanel({
     setIsImporting(true);
     try {
       const fileBase64 = await readFileAsDataUrl(file);
-      await submitAction("data-import", { entryType: bulkEntryType, fileName: file.name, fileBase64 });
+      await submitAction(
+        "data-import",
+        { entryType: bulkEntryType, fileName: file.name, fileBase64 },
+        { throwOnError: true },
+      );
       if (typeof form.reset === "function") form.reset();
     } finally {
       setIsImporting(false);
