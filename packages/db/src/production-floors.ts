@@ -1,12 +1,12 @@
 export const productionFloors = [
   {
     code: "conventional",
-    label: "Conventional-01 Production Department",
+    label: "Production Planning & Control Conventional-01",
     shortLabel: "Conventional-01",
   },
   {
     code: "conventional-02",
-    label: "Conventional-02 Production Department",
+    label: "Production Planning & Control Conventional-02",
     shortLabel: "Conventional-02",
   },
   {

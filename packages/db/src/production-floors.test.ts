@@ -35,10 +35,18 @@ describe("production floors", () => {
     expect(
       productionFloors
         .filter(({ code }) => code.startsWith("conventional"))
-        .map(({ code, shortLabel }) => ({ code, shortLabel }))
+        .map(({ code, label, shortLabel }) => ({ code, label, shortLabel }))
     ).toEqual([
-      { code: "conventional", shortLabel: "Conventional-01" },
-      { code: "conventional-02", shortLabel: "Conventional-02" },
+      {
+        code: "conventional",
+        label: "Production Planning & Control Conventional-01",
+        shortLabel: "Conventional-01",
+      },
+      {
+        code: "conventional-02",
+        label: "Production Planning & Control Conventional-02",
+        shortLabel: "Conventional-02",
+      },
     ])
   })
 
