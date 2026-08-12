@@ -61,6 +61,42 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
+  test("creates a missing recognized production floor for a machine import", async () => {
+    const machineNumber = `FLOOR-${suffix}`
+    await pool.query(
+      `
+        DELETE FROM manufacturing.production_floors
+        WHERE organization_id = $1 AND code = 'conventional-02'
+      `,
+      [organizationId]
+    )
+
+    await repository.upsertMachine({
+      machineNumber,
+      organizationId,
+      productionFloorCode: "conventional-02",
+    })
+
+    const floor = await pool.query<{ code: string; name: string }>(
+      `
+        SELECT floor.code, floor.name
+        FROM catalog.machines machine
+        JOIN manufacturing.production_floors floor
+          ON floor.id = machine.production_floor_id
+        WHERE machine.organization_id = $1
+          AND machine.machine_number = $2
+      `,
+      [organizationId, machineNumber]
+    )
+
+    expect(floor.rows).toEqual([
+      {
+        code: "conventional-02",
+        name: "Production Planning & Control Conventional-02",
+      },
+    ])
+  })
+
   test("creates a planning item when its first Route Master is imported", async () => {
     const newItemUid = `ROUTE-${suffix}`
 

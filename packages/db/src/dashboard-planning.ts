@@ -5,6 +5,7 @@ import type { Pool, PoolClient } from "pg"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 import {
   normalizeProductionFloorCode,
+  productionFloors,
   type ProductionFloorCode,
 } from "./production-floors"
 
@@ -73,6 +74,29 @@ async function businessKeyLock(
     "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
     [namespace, key.toLowerCase()]
   )
+}
+
+async function ensureProductionFloorId(
+  client: PoolClient,
+  organizationId: string,
+  code: ProductionFloorCode
+) {
+  const floor = productionFloors.find((candidate) => candidate.code === code)!
+  const result = await client.query<{ id: string }>(
+    `
+      INSERT INTO manufacturing.production_floors (
+        organization_id, code, name
+      )
+      VALUES ($1, $2, $3)
+      ON CONFLICT (organization_id, code) DO UPDATE SET
+        name = EXCLUDED.name,
+        active = true,
+        updated_at = now()
+      RETURNING id
+    `,
+    [organizationId, floor.code, floor.label]
+  )
+  return result.rows[0]!.id
 }
 
 async function queueDashboardRefresh(
@@ -429,6 +453,11 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
         const productionFloorCode = normalizeProductionFloorCode(
           input.productionFloorCode
         )
+        await ensureProductionFloorId(
+          client,
+          input.organizationId,
+          productionFloorCode
+        )
         await businessKeyLock(
           client,
           "catalog.machine",
@@ -593,6 +622,11 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
         const routeCode = requiredText(input.routeCode, "Route code")
         const productionFloorCode = normalizeProductionFloorCode(
           input.productionFloorCode
+        )
+        await ensureProductionFloorId(
+          client,
+          input.organizationId,
+          productionFloorCode
         )
         const itemId = await ensureRouteItemId(
           client,
