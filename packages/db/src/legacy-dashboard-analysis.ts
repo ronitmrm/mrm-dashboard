@@ -198,9 +198,9 @@ function mergeSourceActionRows(sourceRows: ActionRow[], liveRows: ActionRow[], k
 
 function routeSelectionDecisionKey(row: ActionRow) {
   return [
-    canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO")),
+    canonicalKey(rowText(row, "jcNo", "jobCardNumber", "JC NO.", "JC NO")),
     canonicalKey(rowText(row, "partCode", "PART CODE", "PART NO")),
-    canonicalKey(rowText(row, "optionNumber", "SELECTED ROUTE OPTION", "OPTION NUMBER")),
+    canonicalKey(rowText(row, "optionNumber", "routeCode", "SELECTED ROUTE OPTION", "OPTION NUMBER")),
   ].join("|");
 }
 
@@ -1040,7 +1040,7 @@ function buildProductionControl({
     const plannerPriority = plannerPriorityForWorkOrder(priorityByTarget, jcNo, partCode);
     const plannerPriorityValue = plannerPriority ? rowText(plannerPriority, "priority", "PRIORITY") : "";
     const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
-    const selectedOptionNumber = rowText(selectedRouteByJc.get(canonicalKey(jcNo)) ?? {}, "optionNumber", "SELECTED ROUTE OPTION", "OPTION NUMBER");
+    const selectedOptionNumber = rowText(selectedRouteByJc.get(canonicalKey(jcNo)) ?? {}, "optionNumber", "routeCode", "SELECTED ROUTE OPTION", "OPTION NUMBER");
     const routeChange = routeChangeForWorkOrder(routeChangeByTarget, jcNo, partCode);
     const routeChangeOption = rowText(routeChange ?? {}, "newOption", "NEW ROUTE OPTION", "NEW OPTION");
     const routeChangeRemainingSetups = routeChangeRemainingPlan(routeChange);
@@ -2342,7 +2342,7 @@ function latestRmInwardByJobCard(rows: Array<Record<string, unknown>>) {
 function latestRouteSelectionByJobCard(rows: Array<Record<string, unknown>>) {
   const byJc = new Map<string, Record<string, unknown>>();
   for (const row of rows) {
-    const key = canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo"));
+    const key = canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo", "jobCardNumber"));
     if (!key) continue;
     const current = byJc.get(key);
     if (!current || rowText(row, "createdAt") >= rowText(current, "createdAt")) {
