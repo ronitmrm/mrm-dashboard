@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   firstDuplicateRouteSetup,
   firstMissingPlanningItemRow,
+  machineMasterImportPayload,
   planningImportRowError,
   planningImportValidationError,
 } from "./planning-master-import"
@@ -56,5 +57,21 @@ describe("planning master CSV imports", () => {
     expect(planningImportValidationError("cycle", rows, ["M2B"])).toBe(
       'Cycle CSV needs correction before import. CSV row 4: Part "M2B" has no Route Master. Import its Route Master first, then import this file again.'
     )
+  })
+
+  it("uses each Machine Master row's Production Unit", () => {
+    expect(
+      machineMasterImportPayload(
+        {
+          machineNo: "A304",
+          productionUnit: "Prduction Planning & Control Conventional-02",
+        },
+        "conventional"
+      )
+    ).toMatchObject({
+      machineNo: "A304",
+      productionFloorCode:
+        "Prduction Planning & Control Conventional-02",
+    })
   })
 })

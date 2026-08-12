@@ -4,6 +4,19 @@ function text(value: unknown) {
   return String(value ?? "").trim()
 }
 
+export function machineMasterImportPayload(
+  row: ImportRow,
+  fallbackProductionFloor: unknown
+): ImportRow {
+  return {
+    ...row,
+    productionFloorCode:
+      text(row.productionFloorCode) ||
+      text(row.productionUnit) ||
+      text(fallbackProductionFloor),
+  }
+}
+
 export function firstMissingPlanningItemRow(
   rows: ImportRow[],
   missingItemUids: readonly string[]

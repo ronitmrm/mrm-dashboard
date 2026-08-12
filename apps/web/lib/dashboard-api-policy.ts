@@ -1,4 +1,5 @@
 export const maxBrowserImportRows = 25;
+export const maxMachineMasterBrowserImportRows = 250;
 
 const exportUnavailableError =
   "Dashboard exports are not implemented yet. Use controlled workbook exports instead of placeholder files.";
@@ -11,9 +12,22 @@ export function exportUnavailablePayload(path: string) {
   };
 }
 
-export function browserImportPolicy(_entryType: string, rowCount: number) {
-  if (rowCount <= maxBrowserImportRows) {
+export function browserImportPolicy(entryType: string, rowCount: number) {
+  const rowLimit =
+    entryType === "machine_master"
+      ? maxMachineMasterBrowserImportRows
+      : maxBrowserImportRows;
+
+  if (rowCount <= rowLimit) {
     return { ok: true as const };
+  }
+
+  if (entryType === "machine_master") {
+    return {
+      ok: false as const,
+      status: 413,
+      error: `Machine Master browser imports are limited to ${rowLimit} rows. Split the CSV into smaller files.`,
+    };
   }
 
   return {

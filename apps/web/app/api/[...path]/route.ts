@@ -2,7 +2,10 @@ import {
   createDashboardPlanningRepository,
   createProductionShopFloorRepository,
 } from "@workspace/db"
-import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
+import {
+  normalizeProductionFloorCode,
+  parseProductionFloorCode,
+} from "@workspace/db/production-floors"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
@@ -26,6 +29,7 @@ import {
   planningSetupNumber,
 } from "@/lib/dashboard-planning-input"
 import {
+  machineMasterImportPayload,
   planningImportRowError,
   planningImportValidationError,
 } from "@/lib/planning-master-import"
@@ -120,6 +124,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
   rm_inward: ["jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg"],
   machine_master: [
     "machineNo",
+    "productionUnit",
     "machineFamily",
     "machineType",
     "machineName",
@@ -418,6 +423,15 @@ async function savePlanningMasterEntry(
   payload: Record<string, unknown>
 ) {
   if (entryType === "machine_master") {
+    const requestedFloor = parseProductionFloorCode(
+      payload.productionFloorCode
+    )
+    if (!requestedFloor) {
+      throw new RouteError(
+        400,
+        "A valid Production Unit is required. Use Conventional-01, Conventional-02, CNC-01, or Forging."
+      )
+    }
     const location = text(payload.location)
     if (!location) {
       throw new RouteError(400, "Machine location is required.")
@@ -427,7 +441,7 @@ async function savePlanningMasterEntry(
       machineNumber: text(payload.machineNo),
       name: optionalText(payload.machineName),
       organizationId,
-      productionFloorCode: text(payload.productionFloorCode),
+      productionFloorCode: requestedFloor,
       sourcePayload: payload,
     })
   }
@@ -1149,10 +1163,10 @@ async function post(request: NextRequest, context: RouteContext) {
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
       if (postgresMasterEntryTypes.has(entryType)) {
-        const payload = productionFloorPayload(
-          plainRecord(body.payload),
-          body.productionFloorCode
-        )
+        const rawPayload = plainRecord(body.payload)
+        const payload = entryType === "machine_master"
+          ? machineMasterImportPayload(rawPayload, body.productionFloorCode)
+          : productionFloorPayload(rawPayload, body.productionFloorCode)
         const result = await withPlanningRepository(
           request,
           "operations.shop_floor.write",
@@ -1178,8 +1192,9 @@ async function post(request: NextRequest, context: RouteContext) {
           entryType,
           fileName,
           fileBase64
-        ).map((payload) =>
-          productionFloorPayload(payload, body.productionFloorCode)
+        ).map((payload) => entryType === "machine_master"
+          ? machineMasterImportPayload(payload, body.productionFloorCode)
+          : productionFloorPayload(payload, body.productionFloorCode)
         )
         const importPolicy = browserImportPolicy(entryType, importedRows.length)
         if (!importPolicy.ok) {
@@ -1202,8 +1217,9 @@ async function post(request: NextRequest, context: RouteContext) {
           entryType,
           fileName,
           fileBase64
-        ).map((payload) =>
-          productionFloorPayload(payload, body.productionFloorCode)
+        ).map((payload) => entryType === "machine_master"
+          ? machineMasterImportPayload(payload, body.productionFloorCode)
+          : productionFloorPayload(payload, body.productionFloorCode)
         )
         const importPolicy = browserImportPolicy(entryType, importedRows.length)
         if (!importPolicy.ok) {

@@ -25,10 +25,6 @@ export type ProductionFloorCode = (typeof productionFloors)[number]["code"]
 
 export const defaultProductionFloorCode: ProductionFloorCode = "conventional"
 
-const productionFloorCodes = new Set<string>(
-  productionFloors.map((floor) => floor.code)
-)
-
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -39,13 +35,39 @@ function text(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : ""
 }
 
+function comparableFloorName(value: unknown) {
+  return text(value)
+    .replaceAll("&", " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+}
+
+export function parseProductionFloorCode(
+  value: unknown
+): ProductionFloorCode | null {
+  const name = comparableFloorName(value)
+  if (!name) return null
+
+  for (const floor of productionFloors) {
+    if (
+      [floor.code, floor.label, floor.shortLabel]
+        .map(comparableFloorName)
+        .includes(name)
+    ) {
+      return floor.code
+    }
+  }
+
+  if (name.endsWith("conventional 01")) return "conventional"
+  if (name.endsWith("conventional 02")) return "conventional-02"
+  if (name.endsWith("cnc 01")) return "cnc"
+  return null
+}
+
 export function normalizeProductionFloorCode(
   value: unknown
 ): ProductionFloorCode {
-  const code = text(value)
-  return productionFloorCodes.has(code)
-    ? (code as ProductionFloorCode)
-    : defaultProductionFloorCode
+  return parseProductionFloorCode(value) ?? defaultProductionFloorCode
 }
 
 export function productionFloorCodeForRecord(
