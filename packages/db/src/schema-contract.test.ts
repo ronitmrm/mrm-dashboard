@@ -1029,8 +1029,11 @@ test("dashboard source projection preserves floor-specific payloads transactiona
 
   const updatedPayload = {
     ...initialPayload,
-    productionFloorCode: "forging",
-    payload: { machineNumber: "CNC-901", productionFloorCode: "forging" },
+    productionFloorCode: "conventional-02",
+    payload: {
+      machineNumber: "CNC-901",
+      productionFloorCode: "conventional-02",
+    },
   }
   await pool.query(
     `
@@ -1113,7 +1116,7 @@ test("dashboard source projection preserves floor-specific payloads transactiona
     remaining: "0",
     topology: { indexes: "3", projection_trigger: "1", triggers: "33" },
     updated: {
-      production_floor_code: "forging",
+      production_floor_code: "conventional-02",
       source_payload: updatedPayload,
     },
   })

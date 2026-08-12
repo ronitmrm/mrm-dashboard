@@ -341,7 +341,26 @@ export async function readCanonicalDashboardSource(
 ): Promise<CanonicalDashboardSource> {
   const result = await client.query<GroupedSourceRow>(
     `
-      WITH data_entries AS (
+      WITH source_records AS NOT MATERIALIZED (
+        SELECT source.*,
+          CASE
+            WHEN lower(btrim(COALESCE(
+              source.source_payload ->> 'productionFloorCode',
+              source.source_payload ->> 'productionUnit',
+              source.source_payload ->> 'Production Unit',
+              source.source_payload #>> '{payload,productionFloorCode}',
+              source.source_payload #>> '{payload,productionUnit}',
+              source.source_payload #>> '{payload,Production Unit}',
+              ''
+            ))) IN (
+              'conventional-02',
+              'production planning & control conventional-02',
+              'production planning and control conventional-02'
+            ) THEN 'conventional-02'
+            ELSE source.production_floor_code
+          END AS effective_production_floor_code
+        FROM derived.dashboard_source_records source
+      ), data_entries AS (
         SELECT source.source_id, source.source_payload, source.changed_at,
           source.source_kind, source.source_group, source.entry_type,
           budget.floor_code AS production_floor_code, source.available
@@ -350,10 +369,10 @@ export async function readCanonicalDashboardSource(
         CROSS JOIN LATERAL (
           SELECT source_id, source_payload, changed_at, source_kind,
             source_group, entry_type, (count(*) OVER ())::integer AS available
-          FROM derived.dashboard_source_records
+          FROM source_records
           WHERE organization_id = $1 AND source_kind = 'data_entry'
             AND entry_type = budget.category
-            AND production_floor_code = budget.floor_code
+            AND effective_production_floor_code = budget.floor_code
           ORDER BY changed_at DESC, source_id DESC
           LIMIT budget.row_limit
         ) source
@@ -366,10 +385,10 @@ export async function readCanonicalDashboardSource(
         CROSS JOIN LATERAL (
           SELECT source_id, source_payload, changed_at, source_kind,
             source_group, entry_type, (count(*) OVER ())::integer AS available
-          FROM derived.dashboard_source_records
+          FROM source_records
           WHERE organization_id = $1 AND source_kind = 'physical'
             AND source_group = budget.category
-            AND production_floor_code = budget.floor_code
+            AND effective_production_floor_code = budget.floor_code
           ORDER BY changed_at DESC, source_id DESC
           LIMIT budget.row_limit
         ) source
@@ -381,9 +400,9 @@ export async function readCanonicalDashboardSource(
         CROSS JOIN LATERAL (
           SELECT source_id, source_payload, changed_at, source_kind,
             source_group, entry_type, (count(*) OVER ())::integer AS available
-          FROM derived.dashboard_source_records
+          FROM source_records
           WHERE organization_id = $1 AND source_kind = 'correction'
-            AND production_floor_code = floor.code
+            AND effective_production_floor_code = floor.code
           ORDER BY changed_at DESC, source_id DESC
           LIMIT 5000
         ) source
