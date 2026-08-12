@@ -5,7 +5,7 @@ const FOUNDATION_STATEMENTS = [
     INSERT INTO manufacturing.production_floors (
       organization_id, code, name
     )
-    SELECT $2, 'conventional', 'Conventional Production Floor'
+    SELECT $2, 'conventional', 'Conventional-01 Production Department'
     WHERE $1::uuid IS NOT NULL
     ON CONFLICT (organization_id, code) DO UPDATE SET
       name = EXCLUDED.name,

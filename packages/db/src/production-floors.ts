@@ -1,13 +1,18 @@
 export const productionFloors = [
   {
     code: "conventional",
-    label: "Conventional Production Floor",
-    shortLabel: "Conventional",
+    label: "Conventional-01 Production Department",
+    shortLabel: "Conventional-01",
+  },
+  {
+    code: "conventional-02",
+    label: "Conventional-02 Production Department",
+    shortLabel: "Conventional-02",
   },
   {
     code: "cnc",
-    label: "CNC Production Floor",
-    shortLabel: "CNC",
+    label: "Production Planning & Control CNC-01",
+    shortLabel: "CNC-01",
   },
   {
     code: "forging",

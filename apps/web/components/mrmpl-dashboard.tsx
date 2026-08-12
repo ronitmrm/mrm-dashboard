@@ -6634,7 +6634,7 @@ function PlanningHolidayPanel({
         ]}
       />
       <Card>
-        <CardHeader><CardTitle>Plan A Holiday</CardTitle><CardDescription>All Factory Applies The Date To Conventional, Cnc, And Forging Planning. A Department Choice Affects Only That Production Floor.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Plan A Holiday</CardTitle><CardDescription>All Factory Applies The Date To Every Production Department. A Department Choice Affects Only That Production Floor.</CardDescription></CardHeader>
         {isSaving ? <div className="px-6"><ProcessingNotice message="Saving the planning holiday..." /></div> : null}
         <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
         <CardContent>

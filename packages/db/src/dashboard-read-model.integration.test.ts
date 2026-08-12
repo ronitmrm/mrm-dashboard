@@ -400,7 +400,7 @@ describe("canonical PostgreSQL dashboard read model", () => {
       expect(priorRead.parameters).toContainEqual(continuityFields)
       expect(priorRead.responseBytes).toBeLessThan(2048)
       expect(priorRead.rows).toEqual(
-        ["conventional", "cnc", "forging"].map((floorCode) => ({
+        ["conventional", "conventional-02", "cnc", "forging"].map((floorCode) => ({
           machine_plan_row: {
             jcNo: `JC-${floorCode}`,
             machine: `M-${floorCode}`,

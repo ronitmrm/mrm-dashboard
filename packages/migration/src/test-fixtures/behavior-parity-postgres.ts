@@ -718,7 +718,7 @@ async function captureDashboardWorkflow({
   const refresh = await worker.runRefreshOnce()
   const outboxPublished = await worker.flushOutboxOnce()
   const floorStates = await Promise.all(
-    (["conventional", "cnc", "forging"] as const).map(async (floor) => ({
+    (["conventional", "conventional-02", "cnc", "forging"] as const).map(async (floor) => ({
       floor,
       state: await dashboard.state(organizationId, { month: "2026-08" }, floor),
     }))
@@ -2262,7 +2262,7 @@ export async function captureCanonicalBehaviorParityFixture({
             JSON.stringify(afterInvalidWorkbook.rows) ===
             JSON.stringify(beforeInvalidWorkbook.rows),
         },
-        productionFloors: ["conventional", "cnc", "forging"].filter((code) =>
+        productionFloors: ["conventional", "conventional-02", "cnc", "forging"].filter((code) =>
           floors.rows.some((floor) => floor.code === code)
         ),
         quality: qualityEvidence.rows[0]!,

@@ -53,12 +53,14 @@ type SectionId =
   | "costing"
   | "hr"
   | "productionConventional"
+  | "productionConventional02"
   | "productionCnc"
   | "productionForging"
 type ExpandedSections = Record<SectionId, boolean>
 
 const productionSectionIds: Record<ProductionFloorCode, SectionId> = {
   conventional: "productionConventional",
+  "conventional-02": "productionConventional02",
   cnc: "productionCnc",
   forging: "productionForging",
 }
@@ -73,6 +75,8 @@ function defaultExpandedSections(
     hr: pathname.startsWith("/hr"),
     productionConventional:
       onProduction && activeProductionFloor === "conventional",
+    productionConventional02:
+      onProduction && activeProductionFloor === "conventional-02",
     productionCnc: onProduction && activeProductionFloor === "cnc",
     productionForging: onProduction && activeProductionFloor === "forging",
   }
@@ -98,6 +102,10 @@ function storedExpandedSections(
           : typeof parsed.production === "boolean"
             ? parsed.production
             : fallback.productionConventional,
+      productionConventional02:
+        typeof parsed.productionConventional02 === "boolean"
+          ? parsed.productionConventional02
+          : fallback.productionConventional02,
       productionCnc:
         typeof parsed.productionCnc === "boolean"
           ? parsed.productionCnc

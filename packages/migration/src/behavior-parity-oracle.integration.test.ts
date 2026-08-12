@@ -148,7 +148,7 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
         invalidCandidateBulkLeavesNoPartialWrites: true,
         invalidWorkbookLeavesNoPartialWrites: true,
       },
-      productionFloors: ["conventional", "cnc", "forging"],
+      productionFloors: ["conventional", "conventional-02", "cnc", "forging"],
       quality: {
         active_production_cards: 1,
         first_piece_readings: 1,
