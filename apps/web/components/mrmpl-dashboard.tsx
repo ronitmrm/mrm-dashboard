@@ -294,7 +294,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "machineType", label: "Machine Type", required: true },
       { name: "machineName", label: "Machine Name" },
       { name: "location", label: "Machine Location Within Unit", required: true },
-      { name: "capacity", label: "Capacity", type: "number", step: "0.01" },
       { name: "status", label: "Status", options: ["Active", "Inactive", "Maintenance"], defaultValue: "Active" },
       { name: "remarks", label: "Remarks" },
     ],
@@ -8091,7 +8090,6 @@ function MachinePlanningTile({
       </div>
       <div className="grid gap-x-2 gap-y-1.5 sm:grid-cols-2">
         <TileField label="Location" value={row.location || row.LOCATION || row.Location} />
-        <TileField label="Capacity" value={row.capacity || row.CAPACITY || row.Capacity} numeric />
         <TileField label="Operator" value={row.operator || row.operatorName || row["OPERATOR NAME"]} />
         <TileField label="Planned Setups" value={plannedCount} numeric />
         <TileField label="Priority" value={row.priority || row.PRIORITY} />

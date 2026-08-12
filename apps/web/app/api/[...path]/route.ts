@@ -120,7 +120,6 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "machineType",
     "machineName",
     "location",
-    "capacity",
     "status",
     "remarks",
   ],
