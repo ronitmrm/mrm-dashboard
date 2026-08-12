@@ -56,4 +56,13 @@ describe("production floors", () => {
       shortLabel: "CNC-01",
     })
   })
+
+  it("uses the full Production Planning & Control title for Forging", () => {
+    expect(
+      productionFloors.find(({ code }) => code === "forging")
+    ).toMatchObject({
+      label: "Production Planning & Control Forging",
+      shortLabel: "Forging",
+    })
+  })
 })

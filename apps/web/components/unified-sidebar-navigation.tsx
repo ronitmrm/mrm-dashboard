@@ -537,6 +537,7 @@ function NavigationSection({
               <SidebarMenuButton
                 className="h-10 rounded-lg px-3 font-medium group-data-[state=open]/collapsible:text-sidebar-primary hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
                 isActive={isActive}
+                title={label}
                 type="button"
               >
                 <Icon className="size-[18px]" />

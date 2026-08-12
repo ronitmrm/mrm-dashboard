@@ -16,7 +16,7 @@ export const productionFloors = [
   },
   {
     code: "forging",
-    label: "Forging Production Floor",
+    label: "Production Planning & Control Forging",
     shortLabel: "Forging",
   },
 ] as const
