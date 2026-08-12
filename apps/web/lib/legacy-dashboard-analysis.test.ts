@@ -2272,6 +2272,41 @@ describe("buildLegacyDashboardSnapshot", () => {
     ).toEqual([])
   })
 
+  it("holds an accepted work order with no planning item in Master Readiness", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-08-12T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-M3",
+            partCode: "M3",
+            orderPcs: 100,
+            planningItemPending: true,
+          },
+        },
+      ],
+    })
+    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
+      allWorkOrderGaps: Array<Record<string, unknown>>
+      machinePlanDetailRows: Array<Record<string, unknown>>
+    }
+
+    expect(productionControl.allWorkOrderGaps).toContainEqual(
+      expect.objectContaining({
+        jcNo: "JC-M3",
+        nextAction: "Create the Product Route in Master Readiness",
+        partCode: "M3",
+        planningItemMissing: true,
+        routeMasterMissing: true,
+        routeSelectionMissing: false,
+      })
+    )
+    expect(productionControl.machinePlanDetailRows).toEqual([])
+  })
+
   it("uses day-first RM inward dates for setup planned dates", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",

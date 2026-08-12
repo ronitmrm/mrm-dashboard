@@ -173,7 +173,85 @@ async function ensureRouteItemId(
     `,
     [organizationId, uid, actorUserId ?? null, `${organizationId}:${uid.toLowerCase()}`]
   )
-  return itemIdFor(client, organizationId, uid)
+  const itemId = await itemIdFor(client, organizationId, uid)
+  await client.query(
+    `
+      UPDATE catalog.items
+      SET source_table = 'route_master',
+        source_id = $3,
+        source_payload = jsonb_build_object(
+          'generatedFrom', 'route_master', 'uid', $2::text
+        ),
+        updated_by_user_id = $4,
+        updated_at = now(),
+        row_version = row_version + 1
+      WHERE organization_id = $1 AND id = $5
+        AND source_system = 'mrm-dashboard'
+        AND source_table = 'work_order_readiness'
+    `,
+    [
+      organizationId,
+      uid,
+      `${organizationId}:${uid.toLowerCase()}`,
+      actorUserId ?? null,
+      itemId,
+    ]
+  )
+  await client.query(
+    `
+      UPDATE manufacturing.work_orders
+      SET source_payload = source_payload ||
+          jsonb_build_object('planningItemPending', false),
+        updated_at = now(),
+        row_version = row_version + 1
+      WHERE organization_id = $1 AND item_id = $2
+        AND source_payload ->> 'planningItemPending' = 'true'
+    `,
+    [organizationId, itemId]
+  )
+  return itemId
+}
+
+async function ensureWorkOrderItemId(
+  client: PoolClient,
+  organizationId: string,
+  itemUid: string,
+  actorUserId?: string | null
+) {
+  const uid = requiredText(itemUid, "Item UID")
+  await client.query(
+    `
+      INSERT INTO catalog.items (
+        organization_id, uid, description, created_by_user_id,
+        updated_by_user_id, source_system, source_table, source_id,
+        source_payload
+      )
+      VALUES ($1, $2, $2, $3, $3, 'mrm-dashboard',
+        'work_order_readiness', $4,
+        jsonb_build_object(
+          'generatedFrom', 'work_order_readiness', 'uid', $2::text
+        ))
+      ON CONFLICT DO NOTHING
+    `,
+    [organizationId, uid, actorUserId ?? null, `${organizationId}:${uid.toLowerCase()}`]
+  )
+  const item = await client.query<{
+    id: string
+    planning_item_pending: boolean
+  }>(
+    `
+      SELECT id,
+        source_system = 'mrm-dashboard'
+          AND source_table = 'work_order_readiness'
+          AS planning_item_pending
+      FROM catalog.items
+      WHERE organization_id = $1 AND lower(uid) = lower($2)
+      FOR UPDATE
+    `,
+    [organizationId, uid]
+  )
+  if (!item.rows[0]) throw new Error("Planning item could not be created.")
+  return item.rows[0]
 }
 
 async function workOrderFor(
@@ -534,10 +612,11 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           throw new Error("Ordered quantity cannot be negative.")
         }
         await businessKeyLock(client, "manufacturing.work_order", jobCardNumber)
-        const itemId = await itemIdFor(
+        const planningItem = await ensureWorkOrderItemId(
           client,
           input.organizationId,
-          input.itemUid
+          input.itemUid,
+          input.actorUserId
         )
         const existing = await client.query<{ id: string }>(
           `
@@ -547,10 +626,17 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           `,
           [input.organizationId, jobCardNumber]
         )
-        const sourcePayload = input.sourcePayload ?? input
+        const sourcePayload = {
+          ...(typeof input.sourcePayload === "object" &&
+          input.sourcePayload !== null &&
+          !Array.isArray(input.sourcePayload)
+            ? input.sourcePayload
+            : input),
+          planningItemPending: planningItem.planning_item_pending,
+        }
         const values = [
           requiredText(input.workOrderNumber, "Work order number"),
-          itemId,
+          planningItem.id,
           input.orderedQuantity,
           input.dueDate ?? null,
           input.actorUserId ?? null,
@@ -594,7 +680,10 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
               ]
             )
         await queueDashboardRefresh(client, input.organizationId)
-        return result.rows[0]!
+        return {
+          ...result.rows[0]!,
+          planningItemPending: planningItem.planning_item_pending,
+        }
       })
     },
 

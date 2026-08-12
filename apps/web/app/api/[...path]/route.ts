@@ -1178,7 +1178,9 @@ async function post(request: NextRequest, context: RouteContext) {
           await withPlanningRefresh(path, body, {
             ...result,
             rowsUpdated: 1,
-            savedText: "Saved to PostgreSQL.",
+            savedText: entryType === "work_order"
+              ? "Work Order accepted. Missing masters are held in Master Readiness for planner action."
+              : "Saved to PostgreSQL.",
           })
         )
       }
@@ -1262,7 +1264,9 @@ async function post(request: NextRequest, context: RouteContext) {
         return json(
           await withPlanningRefresh(path, body, {
             inserted,
-            message: `Imported ${inserted} ${entryType.replaceAll("_", " ")} rows.`,
+            message: entryType === "work_order"
+              ? `Imported ${inserted} work order rows. Missing masters are held in Master Readiness for planner action.`
+              : `Imported ${inserted} ${entryType.replaceAll("_", " ")} rows.`,
             ok: true,
             rowsUpdated: inserted,
           })

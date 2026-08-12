@@ -5700,7 +5700,7 @@ function MasterReadinessPanel({
       />
       <WorkOrderGapTable
         title="Whole Work-Order Missing Details"
-        description="Planner View For Every Work Order With Missing Route Option, Route Master, Cycle Time, Tooling, Or Machine Master."
+        description="Planner View For Every Accepted Work Order With A Missing Planning Item, Route Option, Route Master, Cycle Time, Tooling, Or Machine Master."
         rows={allWorkOrderGaps}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
@@ -5730,6 +5730,7 @@ function WorkOrderGapTable({
   const filteredRows = rows.filter((row) => {
     const matchesGap = gapFilter === "all"
       || (gapFilter === "route_option" && Boolean(row.routeSelectionMissing))
+      || (gapFilter === "planning_item" && Boolean(row.planningItemMissing))
       || (gapFilter === "route_master" && Boolean(row.routeMasterMissing))
       || (gapFilter === "cycle_time" && Boolean(row.cycleTimeMissing))
       || (gapFilter === "tooling" && Boolean(row.toolingPlanMissing))
@@ -5751,6 +5752,7 @@ function WorkOrderGapTable({
           <Field label="Gap Type">
             <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={gapFilter} onChange={(event) => setGapFilter(event.target.value)}>
               <option value="all">All Gaps</option>
+              <option value="planning_item">Planning Item Missing</option>
               <option value="route_option">Route Option Missing</option>
               <option value="route_master">Route Master Missing</option>
               <option value="cycle_time">Cycle Time Missing</option>
@@ -5862,7 +5864,7 @@ function WorkOrderGapRow({
           ) : null}
           <div className="grid gap-2 sm:grid-cols-4">
             {row.routeMasterMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("route", dataEntryDefaultsFromGap(row, "route"))}>Add Routing</Button>
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("route", dataEntryDefaultsFromGap(row, "route"))}>{row.planningItemMissing ? "Create Product Route" : "Add Routing"}</Button>
             ) : null}
             {row.cycleTimeMissing ? (
               <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("cycle", dataEntryDefaultsFromGap(row, "cycle"))}>Add Cycle Time</Button>
@@ -5882,6 +5884,7 @@ function WorkOrderGapRow({
 
 function workOrderGapLabels(row: DashboardPayload) {
   return [
+    row.planningItemMissing ? "Planning item" : "",
     row.routeSelectionMissing ? "Route option" : "",
     row.routeMasterMissing ? "Route master" : "",
     row.cycleTimeMissing ? "Cycle time" : "",

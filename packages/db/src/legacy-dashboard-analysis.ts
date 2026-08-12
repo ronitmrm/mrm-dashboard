@@ -1075,6 +1075,8 @@ function buildProductionControl({
     const actual = rawByJc.get(canonicalKey(jcNo));
     const orderPcs = safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"));
     const dispatchStatus = dispatchJcKeys.has(canonicalKey(jcNo)) ? "Shifted to dispatch" : "In production";
+    const planningItemPending = rowValue(row, "planningItemPending") === true
+      || rowText(row, "planningItemPending").toLowerCase() === "true";
     const routeReadyForPlanning = ["Ready", "Auto single option", "Route change plan"].includes(routeStatus);
     const machineFamily = rowText(firstMissingRoute, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
     return {
@@ -1083,6 +1085,7 @@ function buildProductionControl({
       rmPoNo: rowText(row, "RM PO NO.", "rmPoNo"),
       poDate: rowText(row, "PO DATE", "poDate"),
       partCode,
+      planningItemPending,
       description: rowText(row, "DESCRIPTION", "description"),
       optionNumber: effectiveOption || "Not selected",
       optionSource: routeChange ? "Route change" : (optionNumber ? "Excel" : (selectedOptionNumber ? "Planner selected" : (effectiveOption ? "Auto single route" : "Planner required"))),
@@ -1120,7 +1123,9 @@ function buildProductionControl({
       rawRejectQty: round(actual?.rejectQty ?? 0),
       rawRows: actual?.rows ?? 0,
       dispatchStatus,
-      planningBlocker: routeReadyForPlanning
+      planningBlocker: planningItemPending
+        ? "Create the Product Route in Master Readiness"
+        : routeReadyForPlanning
         ? (missingCycle.length
             ? `Add cycle time for setup ${compactJoin(missingCycle)}`
             : (missingTooling.length
@@ -1133,13 +1138,15 @@ function buildProductionControl({
   const allWorkOrderGaps = workOrderOutputRows
     .map((row) => ({
       ...row,
-      routeSelectionMissing: row.optionSource === "Planner required",
+      planningItemMissing: row.planningItemPending,
+      routeSelectionMissing: row.optionSource === "Planner required" && row.availableOptions.length > 1,
       routeMasterMissing: row.routeStatus === "Route master missing",
       cycleTimeMissing: row.cycleStatus.startsWith("Missing"),
       toolingPlanMissing: row.toolingStatus.startsWith("Missing"),
       machineMasterMissing: row.machineMasterStatus.startsWith("Missing"),
       missingAreas: [
-        row.optionSource === "Planner required" ? "Route option" : "",
+        row.planningItemPending ? "Planning item" : "",
+        row.optionSource === "Planner required" && row.availableOptions.length > 1 ? "Route option" : "",
         row.routeStatus === "Route master missing" ? "Route master" : "",
         row.cycleStatus.startsWith("Missing") ? "Cycle time" : "",
         row.toolingStatus.startsWith("Missing") ? "Tooling plan" : "",
@@ -1147,7 +1154,7 @@ function buildProductionControl({
       ].filter(Boolean).join(", "),
       nextAction: row.planningBlocker,
     }))
-    .filter((row) => row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing || row.machineMasterMissing);
+    .filter((row) => row.planningItemMissing || row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing || row.machineMasterMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
   const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);

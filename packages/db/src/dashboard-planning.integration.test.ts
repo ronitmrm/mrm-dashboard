@@ -131,6 +131,72 @@ describe("dashboard planning writes", () => {
     ])
   })
 
+  test("accepts a work order before its planning item and releases the readiness hold after Route Master", async () => {
+    const pendingItemUid = `PENDING-${suffix}`
+    const pendingJobCard = `JC-PENDING-${suffix}`
+
+    const workOrder = await repository.upsertWorkOrder({
+      itemUid: pendingItemUid,
+      jobCardNumber: pendingJobCard,
+      orderedQuantity: 25,
+      organizationId,
+      sourcePayload: {
+        jcNo: pendingJobCard,
+        orderPcs: 25,
+        partCode: pendingItemUid,
+      },
+      workOrderNumber: `WO-PENDING-${suffix}`,
+    })
+
+    expect(workOrder.planningItemPending).toBe(true)
+    const held = await pool.query<{
+      item_source_table: string
+      planning_item_pending: boolean
+    }>(
+      `
+        SELECT item.source_table AS item_source_table,
+          (work_order.source_payload ->> 'planningItemPending')::boolean
+            AS planning_item_pending
+        FROM manufacturing.work_orders work_order
+        JOIN catalog.items item ON item.id = work_order.item_id
+        WHERE work_order.organization_id = $1
+          AND work_order.job_card_number = $2
+      `,
+      [organizationId, pendingJobCard]
+    )
+    expect(held.rows).toEqual([{
+      item_source_table: "work_order_readiness",
+      planning_item_pending: true,
+    }])
+
+    await repository.upsertRouteOption({
+      itemUid: pendingItemUid,
+      organizationId,
+      routeCode: "1",
+      setups: [{ operationCode: "SETUP-1", sequence: 1, setupNumber: 1 }],
+    })
+
+    const released = await pool.query<{
+      item_source_table: string
+      planning_item_pending: boolean
+    }>(
+      `
+        SELECT item.source_table AS item_source_table,
+          (work_order.source_payload ->> 'planningItemPending')::boolean
+            AS planning_item_pending
+        FROM manufacturing.work_orders work_order
+        JOIN catalog.items item ON item.id = work_order.item_id
+        WHERE work_order.organization_id = $1
+          AND work_order.job_card_number = $2
+      `,
+      [organizationId, pendingJobCard]
+    )
+    expect(released.rows).toEqual([{
+      item_source_table: "route_master",
+      planning_item_pending: false,
+    }])
+  })
+
   test("reallocates one central machine record between production floors", async () => {
     const machineNumber = `MOVE-${suffix}`
     const original = await repository.upsertMachine({

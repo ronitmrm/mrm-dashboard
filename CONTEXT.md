@@ -32,6 +32,10 @@ _Avoid_: Setup completion date.
 A rebuild of forecast planning from the latest masters, holidays, constraints, production entries, and shop-floor workflow data. It may move future unstarted setups to newly available physical machines, but it must not move setups that already have production actuals or a raw-material-at-machine-or-later shop-floor task unless a planner explicitly switches the machine.
 _Avoid_: Manual date refresh.
 
+**Planning Readiness Hold**:
+An accepted Work Order that cannot enter planning because one or more required planning masters are missing. It remains visible in Master Readiness until a planner completes the required master actions.
+_Avoid_: Rejected Work Order, failed import.
+
 **Operational Replanning**:
 An automatic planning recalculation after live planning inputs change, such as priority, RM inward, shop-floor progress, setup completion, or production quantity. Master and structural changes remain manually recalculated.
 _Avoid_: Manual operational refresh.
