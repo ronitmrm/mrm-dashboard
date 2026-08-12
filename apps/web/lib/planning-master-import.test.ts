@@ -76,12 +76,24 @@ describe("planning master CSV imports", () => {
     })
   })
 
-  it("uses each job card as the unique Work Order number when an FG PO is shared", () => {
-    expect(workOrderNumberForPayload({ fgPoNo: "FG-001", jcNo: "JC-001" })).toBe(
-      "JC-001"
+  it("uses FG PO and Part Code together as the unique Work Order line", () => {
+    expect(workOrderNumberForPayload({ fgPoNo: "FG-001", jcNo: "JC-001", partCode: "M2B" })).toBe(
+      "FG-001::M2B"
     )
-    expect(workOrderNumberForPayload({ fgPoNo: "FG-001", jcNo: "JC-002" })).toBe(
-      "JC-002"
+    expect(workOrderNumberForPayload({ fgPoNo: "FG-001", jcNo: "JC-002", partCode: "M3" })).toBe(
+      "FG-001::M3"
+    )
+  })
+
+  it("rejects repeated Job Cards and repeated FG PO plus Part Code lines", () => {
+    const invalidRows = [
+      { fgPoNo: "FG-001", jcNo: "JC-001", partCode: "M2B" },
+      { fgPoNo: "FG-002", jcNo: "JC-001", partCode: "M3" },
+      { fgPoNo: " fg-001 ", jcNo: "JC-003", partCode: " m2b " },
+    ]
+
+    expect(planningImportValidationError("work_order", invalidRows, [])).toBe(
+      "Work order CSV needs correction before import. CSV rows 2 and 3 repeat Job Card JC-001. Each Job Card must identify exactly one line. CSV rows 2 and 4 repeat FG PO FG-001 with Part Code M2B. That combination may appear only once in a Work Order."
     )
   })
 })

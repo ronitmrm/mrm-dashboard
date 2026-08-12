@@ -1233,7 +1233,7 @@ async function post(request: NextRequest, context: RouteContext) {
           request,
           "operations.shop_floor.write",
           async (planningContext) => {
-            if (["route", "cycle", "tooling"].includes(entryType)) {
+            if (["route", "cycle", "tooling", "work_order"].includes(entryType)) {
               const missingItemUids = ["cycle", "tooling"].includes(entryType)
                 ? await planningContext.repository.missingItemUids(
                     planningContext.organizationId,
