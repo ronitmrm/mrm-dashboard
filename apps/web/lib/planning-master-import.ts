@@ -17,6 +17,10 @@ export function machineMasterImportPayload(
   }
 }
 
+export function workOrderNumberForPayload(row: ImportRow) {
+  return text(row.jcNo)
+}
+
 export function firstMissingPlanningItemRow(
   rows: ImportRow[],
   missingItemUids: readonly string[]

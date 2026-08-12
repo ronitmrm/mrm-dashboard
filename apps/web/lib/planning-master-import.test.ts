@@ -6,6 +6,7 @@ import {
   machineMasterImportPayload,
   planningImportRowError,
   planningImportValidationError,
+  workOrderNumberForPayload,
 } from "./planning-master-import"
 
 describe("planning master CSV imports", () => {
@@ -73,5 +74,14 @@ describe("planning master CSV imports", () => {
       productionFloorCode:
         "Prduction Planning & Control Conventional-02",
     })
+  })
+
+  it("uses each job card as the unique Work Order number when an FG PO is shared", () => {
+    expect(workOrderNumberForPayload({ fgPoNo: "FG-001", jcNo: "JC-001" })).toBe(
+      "JC-001"
+    )
+    expect(workOrderNumberForPayload({ fgPoNo: "FG-001", jcNo: "JC-002" })).toBe(
+      "JC-002"
+    )
   })
 })

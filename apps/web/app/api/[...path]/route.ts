@@ -33,6 +33,7 @@ import {
   machineMasterImportPayload,
   planningImportRowError,
   planningImportValidationError,
+  workOrderNumberForPayload,
 } from "@/lib/planning-master-import"
 import { shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy"
 import { productionModuleIsEnabled } from "@/lib/production-module"
@@ -456,7 +457,7 @@ async function savePlanningMasterEntry(
       orderedQuantity: numeric(payload.orderPcs),
       organizationId,
       sourcePayload: payload,
-      workOrderNumber: text(payload.fgPoNo) || text(payload.jcNo),
+      workOrderNumber: workOrderNumberForPayload(payload),
     })
   }
 
