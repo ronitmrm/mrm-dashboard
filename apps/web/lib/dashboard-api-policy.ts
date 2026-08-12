@@ -1,4 +1,4 @@
-export const maxBrowserImportRows = 25;
+export const maxBrowserImportRows = 100;
 export const maxMachineMasterBrowserImportRows = 250;
 
 const exportUnavailableError =

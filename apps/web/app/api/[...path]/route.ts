@@ -21,6 +21,7 @@ import {
   browserImportPolicy,
   exportUnavailablePayload,
 } from "@/lib/dashboard-api-policy"
+import { executeBoundedImport } from "../../../lib/bounded-import"
 import {
   normalizeInterruptedSetups,
   normalizeQueueBeforeSetups,
@@ -1245,8 +1246,7 @@ async function post(request: NextRequest, context: RouteContext) {
                 throw new RouteError(400, validationError)
               }
             }
-            let count = 0
-            for (const [index, payload] of importedRows.entries()) {
+            await executeBoundedImport(importedRows, async (payload, index) => {
               try {
                 await savePlanningMasterEntry(planningContext, entryType, payload)
               } catch (error) {
@@ -1255,9 +1255,8 @@ async function post(request: NextRequest, context: RouteContext) {
                   planningImportRowError(entryType, index, payload, error)
                 )
               }
-              count += 1
-            }
-            return count
+            }, entryType === "machine_master" ? 4 : 1)
+            return importedRows.length
           }
         )
         return json(
