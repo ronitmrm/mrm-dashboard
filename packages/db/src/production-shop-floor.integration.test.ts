@@ -18,8 +18,11 @@ const suffix = randomUUID().slice(0, 8)
 const itemUid = `FLOOR-${suffix}`
 const firstJobCard = `FLOOR-JC-${suffix}-1`
 const secondJobCard = `FLOOR-JC-${suffix}-2`
+const thirdJobCard = `FLOOR-JC-${suffix}-3`
+const fourthJobCard = `FLOOR-JC-${suffix}-4`
 const firstMachine = `FLOOR-MC-${suffix}-1`
 const secondMachine = `FLOOR-MC-${suffix}-2`
+const rmPoNumber = `RM-${suffix}`
 let organizationId: string
 let productionEntryId: string
 
@@ -64,12 +67,19 @@ beforeAll(async () => {
   for (const [index, jobCardNumber] of [
     firstJobCard,
     secondJobCard,
+    thirdJobCard,
+    fourthJobCard,
   ].entries()) {
     await planning.upsertWorkOrder({
       itemUid,
       jobCardNumber,
       orderedQuantity: 100,
       organizationId,
+      sourcePayload: {
+        jcNo: jobCardNumber,
+        partCode: itemUid,
+        rmPoNo: rmPoNumber,
+      },
       workOrderNumber: `FLOOR-WO-${suffix}-${index + 1}`,
     })
   }
@@ -102,17 +112,14 @@ afterAll(async () => {
 
 describe("production and shop-floor workflows", () => {
   test("keeps every received item when one RM PO covers multiple job cards", async () => {
-    const receiptNumber = `RM-SHARED-${suffix}`
-    const jobCards = [1, 2, 3, 4].map(
-      (index) => `RM-JC-${suffix}-${index}`
-    )
+    const jobCards = [firstJobCard, secondJobCard, thirdJobCard, fourthJobCard]
 
     for (const jcNo of jobCards) {
       await repository.upsertRawMaterialReceipt({
         organizationId,
-        payload: { jcNo, rmPoNo: receiptNumber, status: "Received" },
+        payload: { jcNo, rmPoNo: rmPoNumber, partCode: itemUid },
         quantityKg: 25,
-        receiptNumber,
+        receiptNumber: rmPoNumber,
         receivedOn: "2026-08-12",
       })
     }
@@ -127,10 +134,93 @@ describe("production and shop-floor workflows", () => {
         FROM manufacturing.raw_material_receipts
         WHERE organization_id = $1 AND receipt_number = $2
       `,
-      [organizationId, receiptNumber]
+      [organizationId, rmPoNumber]
     )
 
     expect(result.rows[0]).toEqual({ job_cards: "4", receipts: "4" })
+  })
+
+  test.each([
+    {
+      expected: /Job Card .* was not found in Work Orders/,
+      name: "Job Card",
+      payload: {
+        jcNo: `UNKNOWN-${suffix}`,
+        partCode: itemUid,
+        rmPoNo: rmPoNumber,
+      },
+    },
+    {
+      expected: /RM PO Number .* does not match Work Order/,
+      name: "RM PO Number",
+      payload: {
+        jcNo: firstJobCard,
+        partCode: itemUid,
+        rmPoNo: `WRONG-RM-${suffix}`,
+      },
+    },
+    {
+      expected: /Part Code .* does not match Work Order/,
+      name: "Part Code",
+      payload: {
+        jcNo: firstJobCard,
+        partCode: `WRONG-PART-${suffix}`,
+        rmPoNo: rmPoNumber,
+      },
+    },
+  ])("rejects an RM receipt when $name mismatches", async ({ expected, payload }) => {
+    await expect(
+      repository.upsertRawMaterialReceipt({
+        organizationId,
+        payload,
+        quantityKg: 25,
+        receiptNumber: String(payload.rmPoNo),
+        receivedOn: "2026-08-12",
+      })
+    ).rejects.toThrow(expected)
+  })
+
+  test("rejects the whole RM batch when one tuple mismatches", async () => {
+    const validReceipt = {
+      organizationId,
+      payload: {
+        jcNo: thirdJobCard,
+        partCode: itemUid,
+        rmPoNo: rmPoNumber,
+      },
+      receiptNumber: rmPoNumber,
+      receivedOn: "2026-08-12",
+    }
+    await repository.upsertRawMaterialReceipt({
+      ...validReceipt,
+      quantityKg: 25,
+    })
+
+    await expect(
+      repository.upsertRawMaterialReceipts([
+        { ...validReceipt, quantityKg: 91 },
+        {
+          ...validReceipt,
+          payload: {
+            jcNo: fourthJobCard,
+            partCode: `WRONG-PART-${suffix}`,
+            rmPoNo: rmPoNumber,
+          },
+          quantityKg: 25,
+        },
+      ])
+    ).rejects.toThrow(/Part Code .* does not match Work Order/)
+
+    const persisted = await pool.query<{ quantity_kg: string }>(
+      `
+        SELECT quantity_kg::text
+        FROM manufacturing.raw_material_receipts
+        WHERE organization_id = $1 AND receipt_number = $2
+          AND job_card_number = $3
+      `,
+      [organizationId, rmPoNumber, thirdJobCard]
+    )
+    expect(persisted.rows[0]?.quantity_kg).toBe("25.00000000")
   })
 
   test("keeps the production-card merge behavior and records append-only production", async () => {
@@ -138,11 +228,11 @@ describe("production and shop-floor workflows", () => {
       organizationId,
       payload: {
         jcNo: firstJobCard,
-        rmPoNo: `RM-${suffix}`,
+        rmPoNo: rmPoNumber,
         status: "Received",
       },
       quantityKg: 125.5,
-      receiptNumber: `RM-${suffix}`,
+      receiptNumber: rmPoNumber,
       receivedOn: "2026-07-20",
     })
     const sameReceipt = await repository.upsertRawMaterialReceipt({
@@ -150,10 +240,10 @@ describe("production and shop-floor workflows", () => {
       payload: {
         jcNo: firstJobCard,
         remark: "Weighed",
-        rmPoNo: `RM-${suffix}`,
+        rmPoNo: rmPoNumber,
       },
       quantityKg: 126,
-      receiptNumber: `RM-${suffix}`,
+      receiptNumber: rmPoNumber,
       receivedOn: "2026-07-20",
     })
     expect(sameReceipt.id).toBe(receipt.id)
@@ -211,6 +301,8 @@ describe("production and shop-floor workflows", () => {
       cards: string
       output_qty: string
       production_entries: string
+      rm_part_code: string
+      rm_po_number: string
       raw_material_receipts: string
       remarks: string
     }>(
@@ -230,15 +322,31 @@ describe("production and shop-floor workflows", () => {
           (SELECT count(*) FROM manufacturing.raw_material_receipts
             WHERE organization_id = $1 AND receipt_number = $4
               AND quantity_kg = 126
-              AND source_payload->>'remark' = 'Weighed') AS raw_material_receipts
+              AND source_payload->>'remark' = 'Weighed') AS raw_material_receipts,
+          (SELECT source_payload->>'partCode'
+            FROM manufacturing.raw_material_receipts
+            WHERE organization_id = $1 AND receipt_number = $4
+              AND job_card_number = $5) AS rm_part_code,
+          (SELECT source_payload->>'rmPoNo'
+            FROM manufacturing.raw_material_receipts
+            WHERE organization_id = $1 AND receipt_number = $4
+              AND job_card_number = $5) AS rm_po_number
       `,
-      [organizationId, `CARD-${suffix}`, productionEntryId, `RM-${suffix}`]
+      [
+        organizationId,
+        `CARD-${suffix}`,
+        productionEntryId,
+        rmPoNumber,
+        firstJobCard,
+      ]
     )
     expect(result.rows[0]).toEqual({
       card_events: "2",
       cards: "1",
       output_qty: "10",
       production_entries: "1",
+      rm_part_code: itemUid,
+      rm_po_number: rmPoNumber,
       raw_material_receipts: "1",
       remarks: "Updated card",
     })

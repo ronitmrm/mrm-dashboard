@@ -1112,10 +1112,9 @@ async function post(request: NextRequest, context: RouteContext) {
         request,
         "operations.production.write",
         async ({ actorUserId, organizationId, repository }) => {
-          let count = 0
-          for (const payload of importedRows) {
-            if (entryType === "rm_inward") {
-              await repository.upsertRawMaterialReceipt({
+          if (entryType === "rm_inward") {
+            await repository.upsertRawMaterialReceipts(
+              importedRows.map((payload) => ({
                 actorUserId,
                 organizationId,
                 payload,
@@ -1125,28 +1124,28 @@ async function post(request: NextRequest, context: RouteContext) {
                 receivedOn:
                   text(payload.rmInwardDate) ||
                   new Date().toISOString().slice(0, 10),
-              })
-            } else {
-              await repository.recordProductionEntry({
-                actorUserId,
-                jobCardNumber: text(payload.jobCard || payload.jcNo),
-                machineNumber: optionalText(payload.machine),
-                operationSetupCode: optionalText(payload.setupNo),
-                operatorCode: optionalText(payload.operatorId),
-                organizationId,
-                payload,
-                productionFloorCode: text(payload.productionFloorCode),
-                productionDate:
-                  text(payload.prodDate) ||
-                  new Date().toISOString().slice(0, 10),
-                quantityGood: firstNumeric(
-                  payload.outputQty,
-                  payload.actualQty
-                ),
-                quantityRejected: firstNumeric(payload.rejectQty),
-                shift: optionalText(payload.shift),
-              })
-            }
+              }))
+            )
+            return importedRows.length
+          }
+          let count = 0
+          for (const payload of importedRows) {
+            await repository.recordProductionEntry({
+              actorUserId,
+              jobCardNumber: text(payload.jobCard || payload.jcNo),
+              machineNumber: optionalText(payload.machine),
+              operationSetupCode: optionalText(payload.setupNo),
+              operatorCode: optionalText(payload.operatorId),
+              organizationId,
+              payload,
+              productionFloorCode: text(payload.productionFloorCode),
+              productionDate:
+                text(payload.prodDate) ||
+                new Date().toISOString().slice(0, 10),
+              quantityGood: firstNumeric(payload.outputQty, payload.actualQty),
+              quantityRejected: firstNumeric(payload.rejectQty),
+              shift: optionalText(payload.shift),
+            })
             count += 1
           }
           return count

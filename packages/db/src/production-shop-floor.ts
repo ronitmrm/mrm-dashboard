@@ -10,6 +10,22 @@ import {
 
 type RepositoryOptions = RepositoryPoolOptions
 
+type RawMaterialReceiptInput = {
+  actorUserId?: string | null
+  organizationId: string
+  payload: Record<string, unknown>
+  productionFloorCode?: string
+  quantityKg: number
+  receiptNumber: string
+  receivedOn: string
+}
+
+type RawMaterialWorkOrder = {
+  job_card_number: string
+  part_code: string
+  rm_po_number: string
+}
+
 type WorkOrderContext = {
   item_id: string
   route_option_id: string | null
@@ -130,6 +146,142 @@ async function queueDashboardRefresh(
       randomUUID(),
     ]
   )
+}
+
+function payloadText(payload: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = String(payload[key] ?? "").trim()
+    if (value) return value
+  }
+  return ""
+}
+
+function sameIdentifier(left: string, right: string) {
+  return left.trim().toLowerCase() === right.trim().toLowerCase()
+}
+
+async function writeRawMaterialReceipt(
+  client: PoolClient,
+  input: RawMaterialReceiptInput
+) {
+  const requestedJobCard = requiredText(
+    payloadText(input.payload, "jcNo", "jobCard"),
+    "Job card"
+  )
+  if (!(input.quantityKg > 0)) {
+    throw new Error("Raw-material receipt quantity must be positive.")
+  }
+
+  const workOrderResult = await client.query<RawMaterialWorkOrder>(
+    `
+      SELECT work_order.job_card_number, item.uid AS part_code,
+        COALESCE(
+          NULLIF(btrim(work_order.source_payload->>'rmPoNo'), ''),
+          NULLIF(btrim(work_order.source_payload->>'RM PO NO.'), ''),
+          NULLIF(btrim(work_order.source_payload->>'RM PO NO'), '')
+        ) AS rm_po_number
+      FROM manufacturing.work_orders work_order
+      JOIN catalog.items item ON item.id = work_order.item_id
+      WHERE work_order.organization_id = $1
+        AND lower(work_order.job_card_number) = lower($2)
+      FOR UPDATE OF work_order
+    `,
+    [input.organizationId, requestedJobCard]
+  )
+  const workOrder = workOrderResult.rows[0]
+  if (!workOrder) {
+    throw new Error(
+      `RM receipt rejected: Job Card "${requestedJobCard}" was not found in Work Orders.`
+    )
+  }
+  if (!workOrder.rm_po_number) {
+    throw new Error(
+      `RM receipt rejected: Work Order for Job Card "${workOrder.job_card_number}" has no RM PO Number.`
+    )
+  }
+
+  const requestedRmPo = payloadText(input.payload, "rmPoNo")
+  if (requestedRmPo && !sameIdentifier(requestedRmPo, workOrder.rm_po_number)) {
+    throw new Error(
+      `RM receipt rejected: RM PO Number "${requestedRmPo}" does not match Work Order "${workOrder.rm_po_number}" for Job Card "${workOrder.job_card_number}".`
+    )
+  }
+  const requestedPartCode = payloadText(input.payload, "partCode", "partNo")
+  if (
+    requestedPartCode &&
+    !sameIdentifier(requestedPartCode, workOrder.part_code)
+  ) {
+    throw new Error(
+      `RM receipt rejected: Part Code "${requestedPartCode}" does not match Work Order "${workOrder.part_code}" for Job Card "${workOrder.job_card_number}".`
+    )
+  }
+
+  const receiptNumber = workOrder.rm_po_number
+  const sourcePayload = {
+    ...input.payload,
+    jcNo: workOrder.job_card_number,
+    rmPoNo: workOrder.rm_po_number,
+    partCode: workOrder.part_code,
+  }
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtext('production.raw-material'), hashtext(lower($1) || '|' || lower($2)))",
+    [receiptNumber, workOrder.job_card_number]
+  )
+  const existing = await client.query<{ id: string }>(
+    `
+      SELECT id FROM manufacturing.raw_material_receipts
+      WHERE organization_id = $1 AND lower(receipt_number) = lower($2)
+        AND lower(job_card_number) = lower($3)
+      FOR UPDATE
+    `,
+    [input.organizationId, receiptNumber, workOrder.job_card_number]
+  )
+  return existing.rows[0]
+    ? (
+        await client.query<{ id: string }>(
+          `
+            UPDATE manufacturing.raw_material_receipts
+            SET received_on = COALESCE(migration.try_date($1), received_on),
+              quantity_kg = $2, remaining_quantity_kg = $2,
+              updated_by_user_id = $3, source_payload = $4,
+              updated_at = now(), row_version = row_version + 1
+            WHERE id = $5 RETURNING id
+          `,
+          [
+            input.receivedOn,
+            input.quantityKg,
+            input.actorUserId ?? null,
+            sourcePayload,
+            existing.rows[0].id,
+          ]
+        )
+      ).rows[0]!
+    : (
+        await client.query<{ id: string }>(
+          `
+            INSERT INTO manufacturing.raw_material_receipts (
+              organization_id, receipt_number, job_card_number,
+              received_on, quantity_kg, remaining_quantity_kg,
+              created_by_user_id, updated_by_user_id, source_system,
+              source_table, source_id, source_payload
+            )
+            VALUES ($1, $2, $3,
+              COALESCE(migration.try_date($4), current_date),
+              $5, $5, $6, $6, 'mrm-dashboard', 'rm_inward', $7, $8)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            receiptNumber,
+            workOrder.job_card_number,
+            input.receivedOn,
+            input.quantityKg,
+            input.actorUserId ?? null,
+            randomUUID(),
+            sourcePayload,
+          ]
+        )
+      ).rows[0]!
 }
 
 async function workOrderContext(
@@ -255,6 +407,19 @@ async function plannerSwitchExists(
 export function createProductionShopFloorRepository(options: RepositoryOptions) {
   const { close, pool } = repositoryPool(options)
 
+  async function upsertRawMaterialReceipts(inputs: RawMaterialReceiptInput[]) {
+    return transaction(pool, async (client) => {
+      const receipts = []
+      for (const input of inputs) {
+        receipts.push(await writeRawMaterialReceipt(client, input))
+      }
+      if (inputs[0]) {
+        await queueDashboardRefresh(client, inputs[0].organizationId)
+      }
+      return receipts
+    })
+  }
+
   return {
     close,
 
@@ -267,86 +432,11 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
       return result.rows[0].id
     },
 
-    async upsertRawMaterialReceipt(input: {
-      actorUserId?: string | null
-      organizationId: string
-      payload: Record<string, unknown>
-      productionFloorCode?: string
-      quantityKg: number
-      receiptNumber: string
-      receivedOn: string
-    }) {
-      return transaction(pool, async (client) => {
-        const receiptNumber = requiredText(
-          input.receiptNumber,
-          "Raw-material receipt"
-        )
-        const jobCardNumber = requiredText(
-          String(input.payload.jcNo ?? input.payload.jobCard ?? ""),
-          "Job card"
-        )
-        if (!(input.quantityKg > 0)) {
-          throw new Error("Raw-material receipt quantity must be positive.")
-        }
-        await client.query(
-          "SELECT pg_advisory_xact_lock(hashtext('production.raw-material'), hashtext(lower($1) || '|' || lower($2)))",
-          [receiptNumber, jobCardNumber]
-        )
-        const existing = await client.query<{ id: string }>(
-          `
-            SELECT id FROM manufacturing.raw_material_receipts
-            WHERE organization_id = $1 AND lower(receipt_number) = lower($2)
-              AND lower(job_card_number) = lower($3)
-            FOR UPDATE
-          `,
-          [input.organizationId, receiptNumber, jobCardNumber]
-        )
-        const result = existing.rows[0]
-          ? await client.query<{ id: string }>(
-              `
-                UPDATE manufacturing.raw_material_receipts
-                SET received_on = COALESCE(migration.try_date($1), received_on),
-                  quantity_kg = $2, remaining_quantity_kg = $2,
-                  updated_by_user_id = $3, source_payload = $4,
-                  updated_at = now(), row_version = row_version + 1
-                WHERE id = $5 RETURNING id
-              `,
-              [
-                input.receivedOn,
-                input.quantityKg,
-                input.actorUserId ?? null,
-                input.payload,
-                existing.rows[0].id,
-              ]
-            )
-          : await client.query<{ id: string }>(
-              `
-                INSERT INTO manufacturing.raw_material_receipts (
-                  organization_id, receipt_number, job_card_number,
-                  received_on, quantity_kg, remaining_quantity_kg,
-                  created_by_user_id, updated_by_user_id, source_system,
-                  source_table, source_id, source_payload
-                )
-                VALUES ($1, $2, $3,
-                  COALESCE(migration.try_date($4), current_date),
-                  $5, $5, $6, $6, 'mrm-dashboard', 'rm_inward', $7, $8)
-                RETURNING id
-              `,
-              [
-                input.organizationId,
-                receiptNumber,
-                jobCardNumber,
-                input.receivedOn,
-                input.quantityKg,
-                input.actorUserId ?? null,
-                randomUUID(),
-                input.payload,
-              ]
-            )
-        await queueDashboardRefresh(client, input.organizationId)
-        return result.rows[0]!
-      })
+    async upsertRawMaterialReceipt(input: RawMaterialReceiptInput) {
+      return (await upsertRawMaterialReceipts([input]))[0]!
     },
+
+    upsertRawMaterialReceipts,
 
     async upsertProductionCard(input: {
       actorUserId?: string | null
