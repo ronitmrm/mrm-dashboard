@@ -281,20 +281,25 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
           input.receiptNumber,
           "Raw-material receipt"
         )
+        const jobCardNumber = requiredText(
+          String(input.payload.jcNo ?? input.payload.jobCard ?? ""),
+          "Job card"
+        )
         if (!(input.quantityKg > 0)) {
           throw new Error("Raw-material receipt quantity must be positive.")
         }
         await client.query(
-          "SELECT pg_advisory_xact_lock(hashtext('production.raw-material'), hashtext(lower($1)))",
-          [receiptNumber]
+          "SELECT pg_advisory_xact_lock(hashtext('production.raw-material'), hashtext(lower($1) || '|' || lower($2)))",
+          [receiptNumber, jobCardNumber]
         )
         const existing = await client.query<{ id: string }>(
           `
             SELECT id FROM manufacturing.raw_material_receipts
             WHERE organization_id = $1 AND lower(receipt_number) = lower($2)
+              AND lower(job_card_number) = lower($3)
             FOR UPDATE
           `,
-          [input.organizationId, receiptNumber]
+          [input.organizationId, receiptNumber, jobCardNumber]
         )
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
@@ -317,18 +322,20 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
           : await client.query<{ id: string }>(
               `
                 INSERT INTO manufacturing.raw_material_receipts (
-                  organization_id, receipt_number, received_on, quantity_kg,
-                  remaining_quantity_kg, created_by_user_id,
-                  updated_by_user_id, source_system, source_table, source_id,
-                  source_payload
+                  organization_id, receipt_number, job_card_number,
+                  received_on, quantity_kg, remaining_quantity_kg,
+                  created_by_user_id, updated_by_user_id, source_system,
+                  source_table, source_id, source_payload
                 )
-                VALUES ($1, $2, COALESCE(migration.try_date($3), current_date),
-                  $4, $4, $5, $5, 'mrm-dashboard', 'rm_inward', $6, $7)
+                VALUES ($1, $2, $3,
+                  COALESCE(migration.try_date($4), current_date),
+                  $5, $5, $6, $6, 'mrm-dashboard', 'rm_inward', $7, $8)
                 RETURNING id
               `,
               [
                 input.organizationId,
                 receiptNumber,
+                jobCardNumber,
                 input.receivedOn,
                 input.quantityKg,
                 input.actorUserId ?? null,

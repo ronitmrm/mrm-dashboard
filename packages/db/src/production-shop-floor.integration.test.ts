@@ -101,6 +101,38 @@ afterAll(async () => {
 })
 
 describe("production and shop-floor workflows", () => {
+  test("keeps every received item when one RM PO covers multiple job cards", async () => {
+    const receiptNumber = `RM-SHARED-${suffix}`
+    const jobCards = [1, 2, 3, 4].map(
+      (index) => `RM-JC-${suffix}-${index}`
+    )
+
+    for (const jcNo of jobCards) {
+      await repository.upsertRawMaterialReceipt({
+        organizationId,
+        payload: { jcNo, rmPoNo: receiptNumber, status: "Received" },
+        quantityKg: 25,
+        receiptNumber,
+        receivedOn: "2026-08-12",
+      })
+    }
+
+    const result = await pool.query<{
+      job_cards: string
+      receipts: string
+    }>(
+      `
+        SELECT count(*) AS receipts,
+          count(DISTINCT lower(source_payload->>'jcNo')) AS job_cards
+        FROM manufacturing.raw_material_receipts
+        WHERE organization_id = $1 AND receipt_number = $2
+      `,
+      [organizationId, receiptNumber]
+    )
+
+    expect(result.rows[0]).toEqual({ job_cards: "4", receipts: "4" })
+  })
+
   test("keeps the production-card merge behavior and records append-only production", async () => {
     const receipt = await repository.upsertRawMaterialReceipt({
       organizationId,
