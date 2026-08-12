@@ -1,19 +1,34 @@
+import { parseProductionFloorCode } from "@workspace/db"
+
 type ImportRow = Record<string, unknown>
 
 function text(value: unknown) {
   return String(value ?? "").trim()
 }
 
+function importedField(row: ImportRow, names: string[]) {
+  const normalizedNames = new Set(
+    names.map((name) => name.toLowerCase().replace(/[^a-z0-9]/g, ""))
+  )
+  for (const [name, value] of Object.entries(row)) {
+    const normalizedName = name.toLowerCase().replace(/[^a-z0-9]/g, "")
+    if (normalizedNames.has(normalizedName) && text(value)) return value
+  }
+  return undefined
+}
+
 export function machineMasterImportPayload(
   row: ImportRow,
   fallbackProductionFloor: unknown
 ): ImportRow {
+  const requestedProductionFloor =
+    importedField(row, ["productionFloorCode", "productionUnit"]) ??
+    fallbackProductionFloor
   return {
     ...row,
     productionFloorCode:
-      text(row.productionFloorCode) ||
-      text(row.productionUnit) ||
-      text(fallbackProductionFloor),
+      parseProductionFloorCode(requestedProductionFloor) ??
+      text(requestedProductionFloor),
   }
 }
 

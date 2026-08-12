@@ -71,8 +71,22 @@ describe("planning master CSV imports", () => {
       )
     ).toMatchObject({
       machineNo: "A304",
-      productionFloorCode:
-        "Prduction Planning & Control Conventional-02",
+      productionFloorCode: "conventional-02",
+    })
+  })
+
+  it("accepts the user-facing Production Unit CSV heading", () => {
+    expect(
+      machineMasterImportPayload(
+        {
+          machineNo: "A305",
+          "Production Unit": "Production Planning & Control Conventional-02",
+        },
+        "conventional"
+      )
+    ).toMatchObject({
+      machineNo: "A305",
+      productionFloorCode: "conventional-02",
     })
   })
 

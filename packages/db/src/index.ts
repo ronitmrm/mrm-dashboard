@@ -86,6 +86,7 @@ export { createProductionShopFloorRepository } from "./production-shop-floor"
 export {
   defaultProductionFloorCode,
   normalizeProductionFloorCode,
+  parseProductionFloorCode,
   productionFloorCodeForRecord,
   productionFloors,
   type ProductionFloorCode,

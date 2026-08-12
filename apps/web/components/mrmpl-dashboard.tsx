@@ -6451,13 +6451,6 @@ function MachineMasterPanel({
   const [historyCodeFilter, setHistoryCodeFilter] = useState("");
   const [historyResultFilter, setHistoryResultFilter] = useState("");
   const [selectedReportKey, setSelectedReportKey] = useState("");
-  const [machineNoFilter, setMachineNoFilter] = useState("");
-  const [machineFamilyFilter, setMachineFamilyFilter] = useState("");
-  const [machineNameFilter, setMachineNameFilter] = useState("");
-  const [machineTypeFilter, setMachineTypeFilter] = useState("");
-  const [machineUnitFilter, setMachineUnitFilter] = useState("");
-  const [machineLocationFilter, setMachineLocationFilter] = useState("");
-  const [machineStatusFilter, setMachineStatusFilter] = useState("");
   const [isScheduleFormOpen, setIsScheduleFormOpen] = useState(false);
   const [scheduleCodeFilter, setScheduleCodeFilter] = useState("");
   const [scheduleTitleFilter, setScheduleTitleFilter] = useState("");
@@ -6465,19 +6458,6 @@ function MachineMasterPanel({
   const [scheduleFrequencyFilter, setScheduleFrequencyFilter] = useState("");
   const [scheduleFirstDueFilter, setScheduleFirstDueFilter] = useState("");
   const [scheduleStatusFilter, setScheduleStatusFilter] = useState("");
-
-  const machineNoOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineNo)).filter((value) => value !== "-")), [machineRows]);
-  const machineFamilyOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineFamily)).filter((value) => value !== "-")), [machineRows]);
-  const machineNameOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineName)).filter((value) => value !== "-")), [machineRows]);
-  const machineTypeOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineType)).filter((value) => value !== "-")), [machineRows]);
-  const machineUnitOptions = useMemo(() => uniqueValues(machineRows.map(machineProductionUnitLabel)), [machineRows]);
-  const machineLocationOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.location)).filter((value) => value !== "-")), [machineRows]);
-  const machineStatusOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.status || "Active")).filter((value) => value !== "-")), [machineRows]);
-  const hasMachineFilters = Boolean(machineNoFilter || machineFamilyFilter || machineNameFilter || machineTypeFilter || machineUnitFilter || machineLocationFilter || machineStatusFilter);
-  const filteredMachineRows = useMemo(
-    () => machineRows.filter((row) => machineMasterMatches(row, machineNoFilter, machineFamilyFilter, machineNameFilter, machineTypeFilter, machineUnitFilter, machineLocationFilter, machineStatusFilter)),
-    [machineRows, machineNoFilter, machineFamilyFilter, machineNameFilter, machineTypeFilter, machineUnitFilter, machineLocationFilter, machineStatusFilter],
-  );
 
   const selectedMaintenance = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(selectedMaintenanceCode));
   const selectedMachine = machineRows.find((row) => machineKey(row.machineNo) === machineKey(selectedMachineNo));
@@ -6543,7 +6523,7 @@ function MachineMasterPanel({
   if (!selectedMachineNo) {
     return (
       <section className="grid gap-4">
-        <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Filtered", formatNumber(filteredMachineRows.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)]]} />
+        <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)]]} />
         <Card>
           <CardHeader>
             <CardTitle>All Machines</CardTitle>
@@ -6551,16 +6531,14 @@ function MachineMasterPanel({
           </CardHeader>
           <CardContent className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2"><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("machine_master", { status: "Active", productionFloorCode: "conventional", __returnTab: "machineMasterTab" })}>Add Machine</Button><div className="text-xs text-muted-foreground">Showing {formatNumber(filteredMachineRows.length)} Of {formatNumber(machineRows.length)} Machines</div></div>
-              {hasMachineFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setMachineNoFilter(""); setMachineFamilyFilter(""); setMachineNameFilter(""); setMachineTypeFilter(""); setMachineUnitFilter(""); setMachineLocationFilter(""); setMachineStatusFilter(""); }}>Clear Filters</Button> : null}
+              <div className="flex flex-wrap items-center gap-2"><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("machine_master", { status: "Active", productionFloorCode: "conventional", __returnTab: "machineMasterTab" })}>Add Machine</Button><div className="text-xs text-muted-foreground">{formatNumber(machineRows.length)} Machines</div></div>
             </div>
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow><TableHead>Machine No.</TableHead><TableHead>Machine Family</TableHead><TableHead>Machine Type</TableHead><TableHead>Machine Name</TableHead><TableHead>Production Unit</TableHead><TableHead>Machine Location</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow>
-                  <TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Machine No." value={machineNoFilter} onChange={setMachineNoFilter} options={machineNoOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Family" value={machineFamilyFilter} onChange={setMachineFamilyFilter} options={machineFamilyOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Type" value={machineTypeFilter} onChange={setMachineTypeFilter} options={machineTypeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Name" value={machineNameFilter} onChange={setMachineNameFilter} options={machineNameOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Production Unit" value={machineUnitFilter} onChange={setMachineUnitFilter} options={machineUnitOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Machine Location" value={machineLocationFilter} onChange={setMachineLocationFilter} options={machineLocationOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={machineStatusFilter} onChange={setMachineStatusFilter} options={machineStatusOptions} /></TableHead><TableHead></TableHead></TableRow>
                 </TableHeader>
-                <TableBody>{filteredMachineRows.length ? filteredMachineRows.map((row) => {
+                <TableBody>{machineRows.length ? machineRows.map((row) => {
                   const machineNo = displayValue(row.machineNo);
                   return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineFamily)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{machineProductionUnitLabel(row)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><div className="flex justify-end gap-2"><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("machine_master", { ...row, productionFloorCode: normalizeProductionFloorCode(row.productionFloorCode), __returnTab: "machineMasterTab" })}>Edit</Button><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></div></TableCell></TableRow>;
                 }) : <TableRow><TableCell colSpan={8} className="h-24 text-center text-sm text-muted-foreground">No Machines Match The Selected Filters.</TableCell></TableRow>}</TableBody>
@@ -10633,17 +10611,7 @@ function maintenanceMachineRows(rows: DashboardPayload[]) {
 
 function machineProductionUnitLabel(row: DashboardPayload) {
   const floorCode = normalizeProductionFloorCode(row.productionFloorCode);
-  return productionFloors.find((floor) => floor.code === floorCode)?.shortLabel ?? floorCode;
-}
-
-function machineMasterMatches(row: DashboardPayload, machineNoFilter: string, machineFamilyFilter: string, machineNameFilter: string, machineTypeFilter: string, machineUnitFilter: string, machineLocationFilter: string, machineStatusFilter: string) {
-  return typedFilterMatches(displayValue(row.machineNo), machineNoFilter) &&
-    typedFilterMatches(displayValue(row.machineFamily), machineFamilyFilter) &&
-    typedFilterMatches(displayValue(row.machineName), machineNameFilter) &&
-    typedFilterMatches(displayValue(row.machineType), machineTypeFilter) &&
-    typedFilterMatches(machineProductionUnitLabel(row), machineUnitFilter) &&
-    typedFilterMatches(displayValue(row.location), machineLocationFilter) &&
-    typedFilterMatches(displayValue(row.status || "Active"), machineStatusFilter);
+  return productionFloors.find((floor) => floor.code === floorCode)?.label ?? floorCode;
 }
 
 function maintenanceScheduleMatches(row: DashboardPayload, codeFilter: string, titleFilter: string, checklistFilter: string, frequencyFilter: string, firstDueFilter: string, statusFilter: string) {
