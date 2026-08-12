@@ -49,7 +49,7 @@ describe("unified navigation", () => {
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
     expect(dashboardNavigation).toHaveLength(19)
-    expect(productionFloorNavigation).toHaveLength(12)
+    expect(productionFloorNavigation).toHaveLength(11)
     expect(productionFloorNavigation).not.toContainEqual(
       planningHolidayNavigation
     )
@@ -61,6 +61,7 @@ describe("unified navigation", () => {
       title: "Machine Master",
     })
     expect(universalProductionNavigation.map(({ id }) => id)).toEqual([
+      "correctionsTab",
       "dataEntryTab",
       "masterTablesTab",
       "machineMasterTab",
@@ -134,6 +135,9 @@ describe("unified navigation", () => {
     expect(dashboardTabHref("maintenanceTab")).toBe("/?tab=maintenanceTab")
     expect(dashboardTabHref("maintenanceTab", "cnc")).toBe(
       "/?tab=maintenanceTab&floor=cnc"
+    )
+    expect(dashboardTabHref("correctionsTab")).toBe(
+      "/?tab=correctionsTab"
     )
   })
 

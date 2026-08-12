@@ -76,6 +76,7 @@ describe("PostgreSQL dashboard corrections", () => {
     const before = await repository.correctionCandidates(organizationId)
     expect(before).toContainEqual(
       expect.objectContaining({
+        productionFloorCode: "conventional",
         targetId: sourceId,
         targetTable: "dataEntries",
       })

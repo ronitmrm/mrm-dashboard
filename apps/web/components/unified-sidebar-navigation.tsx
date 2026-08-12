@@ -213,7 +213,7 @@ export function UnifiedSidebarNavigation({
     ? filterProductionItems(
         universalProductionNavigation,
         normalizedMenuSearch,
-        "universal production data entry master tables machine master"
+        "universal production corrections reverse wrong entries data entry master tables machine master"
       )
     : []
   const administrationMatchesSearch =
@@ -409,7 +409,12 @@ export function UnifiedSidebarNavigation({
                         <span>{item.title}</span>
                       </button>
                     ) : (
-                      <a href={dashboardTabHref(item.id, activeProductionFloor)}>
+                      <a
+                        href={universalProductionNavigationHref(
+                          item.id,
+                          activeProductionFloor
+                        )}
+                      >
                         <item.icon />
                         <span>{item.title}</span>
                       </a>
@@ -536,6 +541,13 @@ function productionNavigationHref(
     return `/dashboard/first-piece-inspection?${params.toString()}`
   }
   return dashboardTabHref(tab, floor)
+}
+
+function universalProductionNavigationHref(
+  tab: DashboardTabId,
+  floor: ProductionFloorCode
+) {
+  return dashboardTabHref(tab, tab === "correctionsTab" ? undefined : floor)
 }
 
 function filterProductionItems<T extends { subtitle: string; title: string }>(

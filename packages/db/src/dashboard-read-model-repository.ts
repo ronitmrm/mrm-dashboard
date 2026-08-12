@@ -60,6 +60,9 @@ function correctionCandidate(table: string, row: JsonRecord) {
     createdAt: typeof row.createdAt === "string" ? row.createdAt : "",
     details: table === "dataEntries" ? payload : row,
     entryType,
+    productionFloorCode: text(
+      row.productionFloorCode || payload.productionFloorCode
+    ),
     targetId: String(row._id),
     targetKey,
     targetLabel,

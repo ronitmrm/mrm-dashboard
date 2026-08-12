@@ -64,6 +64,10 @@ _Avoid_: Department, machine group, production-floor filter.
 A company-wide Master Tables or Data Entry workspace whose required Production Unit selection determines which Production Floor's scoped records are shown or changed.
 _Avoid_: Separate Master Tables or Data Entry pages for each Production Floor.
 
+**Universal Production Corrections Workspace**:
+A company-wide workspace where eligible records from every Production Floor can be reviewed and reversed. Each reversal preserves the original record and its correction evidence while removing the wrong record's effect from live operational state.
+_Avoid_: Production-floor-specific Corrections, deleting wrong entries.
+
 **Company-Wide Quality Code Master**:
 The shared Rejection Type, Defect / Downtime Reason, and Rejection Remark code lists used by every Production Floor. These codes are not copied or customized per Production Floor.
 _Avoid_: Production-floor rejection codes, department-specific defect reasons.

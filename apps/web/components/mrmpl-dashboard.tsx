@@ -1287,7 +1287,7 @@ function DashboardShell({
     tab: DashboardTabId,
     productionFloorCode: ProductionFloorCode,
   ) {
-    if (tab === "machineMasterTab") {
+    if (tab === "machineMasterTab" || tab === "correctionsTab") {
       setActiveTab(tab);
       window.history.replaceState({}, "", dashboardTabHref(tab));
       return;
@@ -7580,16 +7580,19 @@ function CorrectionsPanel({
 }) {
   const [tableFilter, setTableFilter] = useState("");
   const [entryTypeFilter, setEntryTypeFilter] = useState("");
+  const [productionUnitFilter, setProductionUnitFilter] = useState("");
   const [query, setQuery] = useState("");
   const [correctedBy, setCorrectedBy] = useState("Planner");
   const [reasonById, setReasonById] = useState<Record<string, string>>({});
   const tableOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.targetTable)).filter((value) => value !== "-")), [rows]);
   const entryTypeOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.entryType)).filter((value) => value !== "-")), [rows]);
+  const productionUnitOptions = useMemo(() => uniqueValues(rows.map(correctionProductionUnitLabel)), [rows]);
   const filteredRows = useMemo(() => rows.filter((row) =>
     typedFilterMatches(displayValue(row.targetTable), tableFilter) &&
     typedFilterMatches(displayValue(row.entryType), entryTypeFilter) &&
+    typedFilterMatches(correctionProductionUnitLabel(row), productionUnitFilter) &&
     correctionRowMatchesQuery(row, query),
-  ), [entryTypeFilter, query, rows, tableFilter]);
+  ), [entryTypeFilter, productionUnitFilter, query, rows, tableFilter]);
 
   async function reverseRow(row: DashboardPayload) {
     const targetId = displayValue(row.targetId);
@@ -7608,17 +7611,18 @@ function CorrectionsPanel({
     <Card>
       <CardHeader>
         <CardTitle>Corrections</CardTitle>
-        <CardDescription>Reverse Wrong Entries Without Deleting History. Reversed Entries Stop Affecting Live Status And Task Queues.</CardDescription>
+        <CardDescription>Review Every Production Unit In One Place. Reverse Wrong Entries Without Deleting History; Reversed Entries Stop Affecting Live Status And Task Queues.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
           items={[
             ["Active entries", formatNumber(filteredRows.length)],
+            ["Production units", formatNumber(productionUnitOptions.length)],
             ["Modules", formatNumber(tableOptions.length)],
             ["Entry types", formatNumber(entryTypeOptions.length)],
           ]}
         />
-        <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_180px_220px_220px]">
+        <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_180px_180px_200px_220px]">
           <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
             <span>Search</span>
             <div className="relative">
@@ -7626,6 +7630,7 @@ function CorrectionsPanel({
               <Input className="pl-9" value={query} placeholder="Search Entry, Machine, Job Card, Setup, Remark..." onChange={(event) => setQuery(event.target.value)} />
             </div>
           </Label>
+          <FilterSelect label="Production Unit" value={productionUnitFilter} onChange={setProductionUnitFilter} options={[["", "All production units"], ...productionUnitOptions.map((value) => [value, value] as [string, string])]} />
           <FilterSelect label="Module" value={tableFilter} onChange={setTableFilter} options={[["", "All modules"], ...tableOptions.map((value) => [value, value] as [string, string])]} />
           <FilterSelect label="Entry Type" value={entryTypeFilter} onChange={setEntryTypeFilter} options={[["", "All entry types"], ...entryTypeOptions.map((value) => [value, value] as [string, string])]} />
           <Field label="Corrected By">
@@ -7637,6 +7642,7 @@ function CorrectionsPanel({
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
+                  <TableHead className="min-w-40">Production Unit</TableHead>
                   <TableHead className="min-w-44">Module</TableHead>
                   <TableHead className="min-w-80">Entry</TableHead>
                   <TableHead className="min-w-44">Created</TableHead>
@@ -7650,6 +7656,7 @@ function CorrectionsPanel({
                   const reason = reasonById[targetId] ?? "";
                   return (
                     <TableRow key={`${displayValue(row.targetTable)}-${targetId}`}>
+                      <TableCell>{correctionProductionUnitLabel(row)}</TableCell>
                       <TableCell>
                         <div className="font-medium">{displayValue(row.targetTable)}</div>
                         <div className="text-xs text-muted-foreground">{displayValue(row.entryType)}</div>
@@ -7680,6 +7687,11 @@ function CorrectionsPanel({
       </CardContent>
     </Card>
   );
+}
+
+function correctionProductionUnitLabel(row: DashboardPayload) {
+  const floorCode = str(row.productionFloorCode);
+  return productionFloors.find((floor) => floor.code === floorCode)?.shortLabel ?? "Unassigned";
 }
 
 function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
