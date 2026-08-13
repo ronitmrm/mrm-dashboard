@@ -225,13 +225,15 @@ export function dashboardPayloadForProductionFloor(
 }
 
 export function universalProductionDashboardRows(
-  floorPayloads: unknown[],
+  floorPayloads: readonly {
+    productionFloorCode: ProductionFloorCode;
+    payload: unknown;
+  }[],
 ): DashboardRecord[] {
   const payloadByFloor = new Map<ProductionFloorCode, DashboardRecord>();
   for (const value of floorPayloads) {
-    if (!isRecord(value)) continue;
-    const floorCode = canonicalFloor(value.productionFloorCode);
-    if (floorCode) payloadByFloor.set(floorCode, value);
+    if (!isRecord(value.payload)) continue;
+    payloadByFloor.set(value.productionFloorCode, value.payload);
   }
 
   return productionFloors
@@ -246,7 +248,7 @@ export function universalProductionDashboardRows(
       return rows.map((row): DashboardRecord => ({
         ...row,
         productionFloorCode: floor.code,
-        productionUnit: floor.shortLabel,
+        productionUnit: floor.label,
       }));
     })
     .sort((left, right) =>

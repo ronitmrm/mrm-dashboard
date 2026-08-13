@@ -85,5 +85,7 @@ describe("Production operational page loading", () => {
     expect(panel).toContain("universalProductionDashboardRows")
     expect(panel).toContain("Production Unit")
     expect(panel).toContain("row.productionUnit")
+    expect(panel).toContain("MachineMasterColumnFilter")
+    expect(panel).not.toContain("Search Work Orders")
   })
 })

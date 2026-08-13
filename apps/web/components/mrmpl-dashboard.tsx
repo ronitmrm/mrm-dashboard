@@ -81,6 +81,7 @@ import {
   productionFloors,
   toDashboardViewModel,
   universalProductionDashboardRows,
+  type DashboardRecord,
   type ProductionFloorCode,
 } from "@/lib/dashboard-view-model";
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
@@ -1765,6 +1766,31 @@ function DashboardContent({
   return <ProductionControlPanel productionControl={productionControl} submitAction={submitAction} />;
 }
 
+const productionDashboardColumns = [
+  { key: "jcNo", label: "JC No.", className: "min-w-28" },
+  { key: "fgPoNo", label: "FG PO No.", className: "min-w-32" },
+  { key: "partCode", label: "Part Code", className: "min-w-28" },
+  { key: "productionUnit", label: "Production Unit", className: "min-w-72" },
+  { key: "orderedQty", label: "Ordered Qty", className: "min-w-28 text-right" },
+  { key: "unit", label: "Unit", className: "min-w-20" },
+  { key: "rmReceivedDate", label: "RM Received Date", className: "min-w-36" },
+  { key: "plannedDispatchDateAtRmReceipt", label: "Planned Dispatch Date During RM Receipt", className: "min-w-52" },
+  { key: "currentProbableDispatchDate", label: "Current Probable Dispatch Date", className: "min-w-52" },
+  { key: "status", label: "Status", className: "min-w-28" },
+  { key: "dispatchedDate", label: "Dispatched Date", className: "min-w-36" },
+] as const;
+
+type ProductionDashboardColumnKey = (typeof productionDashboardColumns)[number]["key"];
+
+function productionDashboardFilterValue(
+  row: DashboardRecord,
+  key: ProductionDashboardColumnKey,
+) {
+  return key === "orderedQty"
+    ? formatNumber(Number(row.orderedQty) || 0)
+    : displayValue(row[key]);
+}
+
 function ProductionDashboardPanel({
   payload,
 }: {
@@ -1775,28 +1801,32 @@ function ProductionDashboardPanel({
   const cnc = usePostgresOperationalPage("/api/dashboard?floor=cnc", 30_000, undefined, 3_000);
   const forging = usePostgresOperationalPage("/api/dashboard?floor=forging", 30_000, undefined, 3_000);
   const floorPayloads = useMemo(
-    () => [payload, conventional.data, conventional02.data, cnc.data, forging.data]
-      .filter((page): page is DashboardPayload => Boolean(page)),
+    () => ([
+      { productionFloorCode: "conventional", payload: conventional.data ?? (payload.productionFloorCode === "conventional" ? payload : undefined) },
+      { productionFloorCode: "conventional-02", payload: conventional02.data ?? (payload.productionFloorCode === "conventional-02" ? payload : undefined) },
+      { productionFloorCode: "cnc", payload: cnc.data ?? (payload.productionFloorCode === "cnc" ? payload : undefined) },
+      { productionFloorCode: "forging", payload: forging.data ?? (payload.productionFloorCode === "forging" ? payload : undefined) },
+    ] as const),
     [cnc.data, conventional.data, conventional02.data, forging.data, payload],
   );
   const rows = useMemo(
     () => universalProductionDashboardRows(floorPayloads),
     [floorPayloads],
   );
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [productionUnit, setProductionUnit] = useState("");
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const columnFilterOptions = useMemo(
+    () => Object.fromEntries(productionDashboardColumns.map((column) => [
+      column.key,
+      uniqueValues(rows.map((row) => productionDashboardFilterValue(row, column.key))),
+    ])) as Record<ProductionDashboardColumnKey, string[]>,
+    [rows],
+  );
   const filteredRows = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (status && displayValue(row.status) !== status) return false;
-      if (productionUnit && displayValue(row.productionFloorCode) !== productionUnit) return false;
-      if (!query) return true;
-      return [row.jcNo, row.fgPoNo, row.partCode, row.productionUnit]
-        .map((value) => str(value).toLowerCase())
-        .some((value) => value.includes(query));
-    });
-  }, [productionUnit, rows, search, status]);
+    return rows.filter((row) => productionDashboardColumns.every((column) => {
+      const selected = columnFilters[column.key];
+      return !selected || productionDashboardFilterValue(row, column.key) === selected;
+    }));
+  }, [columnFilters, rows]);
   const pending = rows.filter((row) => displayValue(row.status) === "Pending").length;
   const dispatched = rows.filter((row) => displayValue(row.status) === "Dispatched").length;
   const rmReceived = rows.filter((row) => displayValue(row.rmReceivedDate) !== "-").length;
@@ -1822,37 +1852,6 @@ function ProductionDashboardPanel({
               Some Production Units Could Not Be Loaded. The Table Will Retry Automatically.
             </div>
           ) : null}
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem_14rem]">
-            <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
-              <span>Search Work Orders</span>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                <Input
-                  className="pl-9"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="JC No., FG PO No., or Part Code"
-                />
-              </div>
-            </Label>
-            <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
-              <span>Production Unit</span>
-              <SearchableSelect value={productionUnit} onChange={(event) => setProductionUnit(event.target.value)}>
-                <option value="">All production units</option>
-                {productionFloors.map((floor) => (
-                  <option key={floor.code} value={floor.code}>{floor.shortLabel}</option>
-                ))}
-              </SearchableSelect>
-            </Label>
-            <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
-              <span>Status</span>
-              <SearchableSelect value={status} onChange={(event) => setStatus(event.target.value)}>
-                <option value="">All statuses</option>
-                <option value="Pending">Pending</option>
-                <option value="Dispatched">Dispatched</option>
-              </SearchableSelect>
-            </Label>
-          </div>
           <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-background">
@@ -1868,6 +1867,18 @@ function ProductionDashboardPanel({
                   <TableHead className="min-w-52">Current Probable Dispatch Date</TableHead>
                   <TableHead className="min-w-28">Status</TableHead>
                   <TableHead className="min-w-36">Dispatched Date</TableHead>
+                </TableRow>
+                <TableRow className="bg-muted/40">
+                  {productionDashboardColumns.map((column) => (
+                    <TableHead key={column.key} className={column.className}>
+                      <MachineMasterColumnFilter
+                        label={column.label}
+                        value={columnFilters[column.key] ?? ""}
+                        onChange={(value) => setColumnFilters((current) => ({ ...current, [column.key]: value }))}
+                        options={columnFilterOptions[column.key]}
+                      />
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1888,7 +1899,7 @@ function ProductionDashboardPanel({
                 )) : (
                   <TableRow>
                     <TableCell colSpan={11} className="h-28 text-center text-sm text-muted-foreground">
-                      No Work Orders Match The Selected Filters.
+                      No Work Orders Match The Selected Column Filters.
                     </TableCell>
                   </TableRow>
                 )}

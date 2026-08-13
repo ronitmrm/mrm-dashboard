@@ -256,38 +256,44 @@ describe("toDashboardViewModel", () => {
     const rows = universalProductionDashboardRows([
       {
         productionFloorCode: "cnc",
-        productionControl: {
-          productionDashboardRows: [
-            {
-              jcNo: "JC-CNC",
-              status: "Pending",
-              currentProbableDispatchDate: "20-Aug-26",
-            },
-          ],
+        payload: {
+          productionControl: {
+            productionDashboardRows: [
+              {
+                jcNo: "JC-CNC",
+                status: "Pending",
+                currentProbableDispatchDate: "20-Aug-26",
+              },
+            ],
+          },
         },
       },
       {
         productionFloorCode: "conventional",
-        productionControl: {
-          productionDashboardRows: [
-            {
-              jcNo: "JC-CONV",
-              status: "Pending",
-              currentProbableDispatchDate: "18-Aug-26",
-            },
-          ],
+        payload: {
+          productionControl: {
+            productionDashboardRows: [
+              {
+                jcNo: "JC-CONV",
+                status: "Pending",
+                currentProbableDispatchDate: "18-Aug-26",
+              },
+            ],
+          },
         },
       },
       {
         productionFloorCode: "forging",
-        productionControl: {
-          productionDashboardRows: [
-            {
-              jcNo: "JC-FORGING",
-              status: "Dispatched",
-              currentProbableDispatchDate: "17-Aug-26",
-            },
-          ],
+        payload: {
+          productionControl: {
+            productionDashboardRows: [
+              {
+                jcNo: "JC-FORGING",
+                status: "Dispatched",
+                currentProbableDispatchDate: "17-Aug-26",
+              },
+            ],
+          },
         },
       },
     ]);
@@ -296,17 +302,17 @@ describe("toDashboardViewModel", () => {
       expect.objectContaining({
         jcNo: "JC-CONV",
         productionFloorCode: "conventional",
-        productionUnit: "Conventional-01",
+        productionUnit: "Production Planning & Control Conventional-01",
       }),
       expect.objectContaining({
         jcNo: "JC-CNC",
         productionFloorCode: "cnc",
-        productionUnit: "CNC-01",
+        productionUnit: "Production Planning & Control CNC-01",
       }),
       expect.objectContaining({
         jcNo: "JC-FORGING",
         productionFloorCode: "forging",
-        productionUnit: "Forging",
+        productionUnit: "Production Planning & Control Forging",
       }),
     ]);
   });
