@@ -500,4 +500,41 @@ describe("production and shop-floor workflows", () => {
       reversed: true,
     })
   })
+
+  test("uses the only active route when no explicit selection is required", async () => {
+    await repository.recordShopFloorStage({
+      jobCardNumber: thirdJobCard,
+      machineNumber: firstMachine,
+      operationSetupCode: "1",
+      organizationId,
+      payload: { doneBy: "Stores", partCode: itemUid },
+      stage: "raw_material_at_machine",
+    })
+
+    const result = await pool.query<{
+      active: boolean
+      route_code: string
+    }>(
+      `
+        SELECT state.active, route.route_code
+        FROM manufacturing.shop_floor_setup_state state
+        JOIN manufacturing.work_orders work_order
+          ON work_order.id = state.work_order_id
+        JOIN manufacturing.route_options route
+          ON route.id = state.route_option_id
+        WHERE work_order.job_card_number = $1
+      `,
+      [thirdJobCard]
+    )
+
+    expect(result.rows).toEqual([{ active: true, route_code: "1" }])
+
+    await repository.recordSetupCompletion({
+      completedBy: "Stores",
+      jobCardNumber: thirdJobCard,
+      machineNumber: firstMachine,
+      operationSetupCode: "1",
+      organizationId,
+    })
+  })
 })

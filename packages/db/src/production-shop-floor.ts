@@ -287,21 +287,40 @@ async function writeRawMaterialReceipt(
 async function workOrderContext(
   client: PoolClient,
   organizationId: string,
-  jobCardNumber: string
+  jobCardNumber: string,
+  productionFloorCode?: string
 ) {
   const result = await client.query<WorkOrderContext>(
     `
       SELECT work_order.id AS work_order_id, work_order.item_id,
-        selection.route_option_id
+        COALESCE(selection.route_option_id, automatic_route.route_option_id)
+          AS route_option_id
       FROM manufacturing.work_orders work_order
       LEFT JOIN manufacturing.route_selections selection
         ON selection.work_order_id = work_order.id
         AND selection.reversed_at IS NULL
+      LEFT JOIN LATERAL (
+        SELECT CASE WHEN count(*) = 1
+          THEN (array_agg(route.id))[1]
+          ELSE NULL
+        END AS route_option_id
+        FROM manufacturing.route_options route
+        JOIN manufacturing.production_floors floor
+          ON floor.id = route.production_floor_id
+        WHERE route.organization_id = work_order.organization_id
+          AND route.item_id = work_order.item_id
+          AND route.active
+          AND floor.code = $3
+      ) automatic_route ON selection.route_option_id IS NULL
       WHERE work_order.organization_id = $1
         AND lower(work_order.job_card_number) = lower($2)
       FOR UPDATE OF work_order
     `,
-    [organizationId, requiredText(jobCardNumber, "Job card")]
+    [
+      organizationId,
+      requiredText(jobCardNumber, "Job card"),
+      normalizeProductionFloorCode(productionFloorCode),
+    ]
   )
   if (!result.rows[0]) throw new Error("Production work order was not found.")
   return result.rows[0]
@@ -451,7 +470,8 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
         const workOrder = await workOrderContext(
           client,
           input.organizationId,
-          input.jobCardNumber
+          input.jobCardNumber,
+          input.productionFloorCode
         )
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtext('production.card'), hashtext(lower($1)))",
@@ -574,7 +594,8 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
         const workOrder = await workOrderContext(
           client,
           input.organizationId,
-          input.jobCardNumber
+          input.jobCardNumber,
+          input.productionFloorCode
         )
         const setupId = await operationSetupForCode(
           client,
@@ -644,7 +665,8 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
         const workOrder = await workOrderContext(
           client,
           input.organizationId,
-          input.jobCardNumber
+          input.jobCardNumber,
+          input.productionFloorCode
         )
         if (!workOrder.route_option_id) {
           throw new Error("Select a route before saving shop-floor status.")
@@ -804,7 +826,8 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
         const workOrder = await workOrderContext(
           client,
           input.organizationId,
-          input.jobCardNumber
+          input.jobCardNumber,
+          input.productionFloorCode
         )
         const sourcePayload = input
         const result = await client.query<{ id: string }>(
@@ -846,7 +869,8 @@ export function createProductionShopFloorRepository(options: RepositoryOptions) 
         const workOrder = await workOrderContext(
           client,
           input.organizationId,
-          input.jobCardNumber
+          input.jobCardNumber,
+          input.productionFloorCode
         )
         if (!workOrder.route_option_id) {
           throw new Error("Select a route before completing a setup.")
