@@ -6,6 +6,7 @@ import { commercialNavigationAccess } from "./auth/commercial-capabilities"
 import {
   administrationNavigation,
   commercialNavigation,
+  consolidatedProductionNavigation,
   dashboardNavigation,
   dashboardTabHref,
   hrNavigation,
@@ -66,6 +67,11 @@ describe("unified navigation", () => {
       "dataEntryTab",
       "masterTablesTab",
       "machineMasterTab",
+    ])
+    expect(consolidatedProductionNavigation.map(({ id }) => id)).toEqual([
+      "setupChecklistMasterTab",
+      "maintenanceMastersTab",
+      "qualityMastersTab",
     ])
     expect(productionFloorNavigation.map(({ id }) => id)).not.toEqual(
       expect.arrayContaining([

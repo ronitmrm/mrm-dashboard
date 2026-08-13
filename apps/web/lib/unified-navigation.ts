@@ -266,6 +266,10 @@ const consolidatedProductionNavigationIds = new Set<DashboardTabId>([
   "qualityMastersTab",
 ])
 
+export const consolidatedProductionNavigation = dashboardNavigation.filter(
+  (item) => consolidatedProductionNavigationIds.has(item.id)
+)
+
 export const universalProductionNavigation = dashboardNavigation.filter(
   (item) => universalProductionNavigationIds.has(item.id)
 )

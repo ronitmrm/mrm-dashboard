@@ -38,6 +38,7 @@ import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-acce
 import {
   administrationNavigation,
   commercialNavigation,
+  consolidatedProductionNavigation,
   dashboardTabHref,
   hrNavigation,
   navigationHrefMatches,
@@ -211,9 +212,12 @@ export function UnifiedSidebarNavigation({
       ].some((value) => value.toLowerCase().includes(normalizedMenuSearch)))
   const filteredUniversalProductionNavigation = navigationAccess.operations
     ? filterProductionItems(
-        universalProductionNavigation,
+        [
+          ...universalProductionNavigation,
+          ...consolidatedProductionNavigation,
+        ],
         normalizedMenuSearch,
-        "universal production corrections reverse wrong entries data entry master tables machine master"
+        "universal production corrections reverse wrong entries data entry master tables machine master checklists maintenance quality masters"
       )
     : []
   const administrationMatchesSearch =
