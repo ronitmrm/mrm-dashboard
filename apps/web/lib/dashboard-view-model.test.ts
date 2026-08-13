@@ -8,6 +8,7 @@ import {
   jobCardScheduleSummary,
   mergeDashboardStateResponse,
   toDashboardViewModel,
+  universalProductionDashboardRows,
 } from "./dashboard-view-model";
 
 describe("dashboard state normalization", () => {
@@ -249,5 +250,64 @@ describe("toDashboardViewModel", () => {
     expect(selected.productionControl).toEqual({
       machineRows: [{ machine: "F1" }],
     });
+  });
+
+  it("combines Production Dashboard rows from every production unit", () => {
+    const rows = universalProductionDashboardRows([
+      {
+        productionFloorCode: "cnc",
+        productionControl: {
+          productionDashboardRows: [
+            {
+              jcNo: "JC-CNC",
+              status: "Pending",
+              currentProbableDispatchDate: "20-Aug-26",
+            },
+          ],
+        },
+      },
+      {
+        productionFloorCode: "conventional",
+        productionControl: {
+          productionDashboardRows: [
+            {
+              jcNo: "JC-CONV",
+              status: "Pending",
+              currentProbableDispatchDate: "18-Aug-26",
+            },
+          ],
+        },
+      },
+      {
+        productionFloorCode: "forging",
+        productionControl: {
+          productionDashboardRows: [
+            {
+              jcNo: "JC-FORGING",
+              status: "Dispatched",
+              currentProbableDispatchDate: "17-Aug-26",
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        jcNo: "JC-CONV",
+        productionFloorCode: "conventional",
+        productionUnit: "Conventional-01",
+      }),
+      expect.objectContaining({
+        jcNo: "JC-CNC",
+        productionFloorCode: "cnc",
+        productionUnit: "CNC-01",
+      }),
+      expect.objectContaining({
+        jcNo: "JC-FORGING",
+        productionFloorCode: "forging",
+        productionUnit: "Forging",
+      }),
+    ]);
   });
 });

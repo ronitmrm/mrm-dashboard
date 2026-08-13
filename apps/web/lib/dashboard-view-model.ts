@@ -224,6 +224,43 @@ export function dashboardPayloadForProductionFloor(
   };
 }
 
+export function universalProductionDashboardRows(
+  floorPayloads: unknown[],
+): DashboardRecord[] {
+  const payloadByFloor = new Map<ProductionFloorCode, DashboardRecord>();
+  for (const value of floorPayloads) {
+    if (!isRecord(value)) continue;
+    const floorCode = canonicalFloor(value.productionFloorCode);
+    if (floorCode) payloadByFloor.set(floorCode, value);
+  }
+
+  return productionFloors
+    .flatMap((floor) => {
+      const payload = payloadByFloor.get(floor.code);
+      const productionControl = isRecord(payload?.productionControl)
+        ? payload.productionControl
+        : {};
+      const rows = Array.isArray(productionControl.productionDashboardRows)
+        ? productionControl.productionDashboardRows.filter(isRecord)
+        : [];
+      return rows.map((row): DashboardRecord => ({
+        ...row,
+        productionFloorCode: floor.code,
+        productionUnit: floor.shortLabel,
+      }));
+    })
+    .sort((left, right) =>
+      Number(str(left.status).toLowerCase() === "dispatched") -
+        Number(str(right.status).toLowerCase() === "dispatched") ||
+      dateSortValue(left.currentProbableDispatchDate) -
+        dateSortValue(right.currentProbableDispatchDate) ||
+      str(left.productionUnit).localeCompare(str(right.productionUnit)) ||
+      str(left.jcNo).localeCompare(str(right.jcNo), undefined, {
+        numeric: true,
+      }),
+    );
+}
+
 export function toDashboardViewModel(payload: unknown): DashboardViewModel {
   const data = isRecord(payload) ? payload : {};
   const summary = isRecord(data.summary) ? data.summary : data;

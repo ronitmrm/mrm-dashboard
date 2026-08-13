@@ -80,6 +80,7 @@ import {
   normalizeProductionFloorCode,
   productionFloors,
   toDashboardViewModel,
+  universalProductionDashboardRows,
   type ProductionFloorCode,
 } from "@/lib/dashboard-view-model";
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
@@ -1287,7 +1288,7 @@ function DashboardShell({
     tab: DashboardTabId,
     productionFloorCode: ProductionFloorCode,
   ) {
-    if (tab === "machineMasterTab" || tab === "correctionsTab") {
+    if (tab === "machineMasterTab" || tab === "correctionsTab" || tab === "productionDashboardTab") {
       setActiveTab(tab);
       window.history.replaceState({}, "", dashboardTabHref(tab));
       return;
@@ -1350,6 +1351,7 @@ function DashboardShell({
   const selectedProductionFloor = productionFloors.find(
     (floor) => floor.code === activeProductionFloor,
   ) ?? productionFloors[0];
+  const isAllProductionUnitsTab = activeTab === "machineMasterTab" || activeTab === "productionDashboardTab";
   const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
   const dashboardStatusLabel = dashboardConnectionLabel(dashboardDeliveryState);
   const dashboardStatusNotice = dashboardDeliveryNotice(dashboardDeliveryState);
@@ -1419,11 +1421,11 @@ function DashboardShell({
           <div className="min-w-0 flex-1">
            <h1 className="truncate text-base font-semibold">{selectedTab.title}</h1>
             <p className="truncate text-xs text-muted-foreground">
-              <span>{activeTab === "machineMasterTab" ? "Central Machine Master · All Production Units" : `${selectedProductionFloor.label} · ${planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live Postgresql Records"}`}</span>
+              <span>{isAllProductionUnitsTab ? "All Production Units" : `${selectedProductionFloor.label} · ${planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live Postgresql Records"}`}</span>
               {planningRecalculatedAt && view.updatedAt ? <span> - Workbook Updated {formatDate(view.updatedAt)}</span> : null}
             </p>
           </div>
-          {activeTab === "machineMasterTab" ? null : <Badge className="hidden sm:inline-flex" variant="outline">
+          {isAllProductionUnitsTab ? null : <Badge className="hidden sm:inline-flex" variant="outline">
             {selectedProductionFloor.shortLabel}
           </Badge>}
           <Badge variant="outline">
@@ -1677,7 +1679,7 @@ function DashboardContent({
   const productionControl = asRecord(payload.productionControl);
 
   if (activeTab === "productionDashboardTab") {
-    return <ProductionDashboardPanel productionControl={productionControl} />;
+    return <ProductionDashboardPanel payload={payload} />;
   }
 
   if (activeTab === "jobCardStatusTab") {
@@ -1764,26 +1766,41 @@ function DashboardContent({
 }
 
 function ProductionDashboardPanel({
-  productionControl,
+  payload,
 }: {
-  productionControl: DashboardPayload;
+  payload: DashboardPayload;
 }) {
-  const rows = asArray(productionControl.productionDashboardRows);
+  const conventional = usePostgresOperationalPage("/api/dashboard?floor=conventional", 30_000, undefined, 3_000);
+  const conventional02 = usePostgresOperationalPage("/api/dashboard?floor=conventional-02", 30_000, undefined, 3_000);
+  const cnc = usePostgresOperationalPage("/api/dashboard?floor=cnc", 30_000, undefined, 3_000);
+  const forging = usePostgresOperationalPage("/api/dashboard?floor=forging", 30_000, undefined, 3_000);
+  const floorPayloads = useMemo(
+    () => [payload, conventional.data, conventional02.data, cnc.data, forging.data]
+      .filter((page): page is DashboardPayload => Boolean(page)),
+    [cnc.data, conventional.data, conventional02.data, forging.data, payload],
+  );
+  const rows = useMemo(
+    () => universalProductionDashboardRows(floorPayloads),
+    [floorPayloads],
+  );
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [productionUnit, setProductionUnit] = useState("");
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
     return rows.filter((row) => {
       if (status && displayValue(row.status) !== status) return false;
+      if (productionUnit && displayValue(row.productionFloorCode) !== productionUnit) return false;
       if (!query) return true;
-      return [row.jcNo, row.fgPoNo, row.partCode]
+      return [row.jcNo, row.fgPoNo, row.partCode, row.productionUnit]
         .map((value) => str(value).toLowerCase())
         .some((value) => value.includes(query));
     });
-  }, [rows, search, status]);
+  }, [productionUnit, rows, search, status]);
   const pending = rows.filter((row) => displayValue(row.status) === "Pending").length;
   const dispatched = rows.filter((row) => displayValue(row.status) === "Dispatched").length;
   const rmReceived = rows.filter((row) => displayValue(row.rmReceivedDate) !== "-").length;
+  const floorLoadErrors = [conventional.error, conventional02.error, cnc.error, forging.error].filter(Boolean);
 
   return (
     <section className="grid gap-4">
@@ -1800,7 +1817,12 @@ function ProductionDashboardPanel({
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem]">
+          {floorLoadErrors.length ? (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="status">
+              Some Production Units Could Not Be Loaded. The Table Will Retry Automatically.
+            </div>
+          ) : null}
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem_14rem]">
             <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
               <span>Search Work Orders</span>
               <div className="relative">
@@ -1812,6 +1834,15 @@ function ProductionDashboardPanel({
                   placeholder="JC No., FG PO No., or Part Code"
                 />
               </div>
+            </Label>
+            <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              <span>Production Unit</span>
+              <SearchableSelect value={productionUnit} onChange={(event) => setProductionUnit(event.target.value)}>
+                <option value="">All production units</option>
+                {productionFloors.map((floor) => (
+                  <option key={floor.code} value={floor.code}>{floor.shortLabel}</option>
+                ))}
+              </SearchableSelect>
             </Label>
             <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
               <span>Status</span>
@@ -1829,6 +1860,7 @@ function ProductionDashboardPanel({
                   <TableHead className="min-w-28">JC No.</TableHead>
                   <TableHead className="min-w-32">FG PO No.</TableHead>
                   <TableHead className="min-w-28">Part Code</TableHead>
+                  <TableHead className="min-w-36">Production Unit</TableHead>
                   <TableHead className="min-w-28 text-right">Ordered Qty</TableHead>
                   <TableHead className="min-w-20">Unit</TableHead>
                   <TableHead className="min-w-36">RM Received Date</TableHead>
@@ -1844,6 +1876,7 @@ function ProductionDashboardPanel({
                     <TableCell className="font-medium">{displayValue(row.jcNo)}</TableCell>
                     <TableCell>{displayValue(row.fgPoNo)}</TableCell>
                     <TableCell>{displayValue(row.partCode)}</TableCell>
+                    <TableCell>{displayValue(row.productionUnit)}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatNumber(Number(row.orderedQty) || 0)}</TableCell>
                     <TableCell>{displayValue(row.unit)}</TableCell>
                     <TableCell>{displayValue(row.rmReceivedDate)}</TableCell>
@@ -1854,7 +1887,7 @@ function ProductionDashboardPanel({
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-28 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={11} className="h-28 text-center text-sm text-muted-foreground">
                       No Work Orders Match The Selected Filters.
                     </TableCell>
                   </TableRow>

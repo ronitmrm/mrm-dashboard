@@ -68,4 +68,22 @@ describe("Production operational page loading", () => {
       importHandler.indexOf("finally {")
     )
   })
+
+  it("loads the Production Dashboard across every Production Unit", () => {
+    const source = readFileSync(
+      new URL("./mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
+    const panel = source.slice(
+      source.indexOf("function ProductionDashboardPanel"),
+      source.indexOf("function ProductionControlPanel")
+    )
+
+    for (const floor of ["conventional", "conventional-02", "cnc", "forging"]) {
+      expect(panel).toContain(`/api/dashboard?floor=${floor}`)
+    }
+    expect(panel).toContain("universalProductionDashboardRows")
+    expect(panel).toContain("Production Unit")
+    expect(panel).toContain("row.productionUnit")
+  })
 })

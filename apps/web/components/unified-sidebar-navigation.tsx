@@ -547,7 +547,12 @@ function universalProductionNavigationHref(
   tab: DashboardTabId,
   floor: ProductionFloorCode
 ) {
-  return dashboardTabHref(tab, tab === "correctionsTab" ? undefined : floor)
+  return dashboardTabHref(
+    tab,
+    tab === "correctionsTab" || tab === "productionDashboardTab"
+      ? undefined
+      : floor
+  )
 }
 
 function filterProductionItems<T extends { subtitle: string; title: string }>(

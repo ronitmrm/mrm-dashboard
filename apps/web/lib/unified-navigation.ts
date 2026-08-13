@@ -253,6 +253,7 @@ export const machineMasterNavigation = dashboardNavigation.find(
 )!
 
 const universalProductionNavigationIds = new Set<DashboardTabId>([
+  "productionDashboardTab",
   "correctionsTab",
   "dataEntryTab",
   "masterTablesTab",
