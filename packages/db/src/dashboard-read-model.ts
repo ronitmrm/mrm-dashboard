@@ -41,9 +41,10 @@ type GroupedSourceRow = SourceRow & {
   source_group: string
 }
 
-type PreviousMachinePlanRow = {
-  machine_plan_row: JsonRecord
+type PreviousPlanningRow = {
+  previous_row: JsonRecord
   production_floor_code: ProductionFloorCode
+  row_kind: "machine_plan" | "production_dashboard"
 }
 
 export type CanonicalDashboardSource = {
@@ -102,6 +103,13 @@ const machinePlanContinuityFields = [
   "partCode",
   "routeMachine",
   "setupNo",
+] as const
+
+const productionDashboardContinuityFields = [
+  "jcNo",
+  "partCode",
+  "rmReceivedDate",
+  "plannedDispatchDateAtRmReceipt",
 ] as const
 
 const dataEntrySourceBudgets: Record<string, number> = {
@@ -493,7 +501,7 @@ export async function buildCanonicalDashboardReadModel(
     table: string
   ) => withoutCorrectedRows(rows as Row[], table, correctionTargets)
 
-  const previousModel = await client.query<PreviousMachinePlanRow>(
+  const previousModel = await client.query<PreviousPlanningRow>(
     `
       WITH previous_model AS (
         SELECT payload
@@ -526,7 +534,7 @@ export async function buildCanonicalDashboardReadModel(
         CROSS JOIN jsonb_array_elements_text($2::jsonb)
           WITH ORDINALITY floor(code, ordinality)
       )
-      SELECT floor_payloads.production_floor_code,
+      SELECT floor_payloads.production_floor_code, previous.row_kind,
         (
           SELECT COALESCE(
             jsonb_object_agg(field.key, field.value),
@@ -534,55 +542,82 @@ export async function buildCanonicalDashboardReadModel(
           )
           FROM jsonb_each(
             CASE
-              WHEN jsonb_typeof(plan.row) = 'object' THEN plan.row
+              WHEN jsonb_typeof(previous.row) = 'object' THEN previous.row
               ELSE '{}'::jsonb
             END
           ) field
-          WHERE field.key = ANY($3::text[])
-        ) AS machine_plan_row
+          WHERE field.key = ANY(
+            CASE previous.row_kind
+              WHEN 'machine_plan' THEN $3::text[]
+              ELSE $5::text[]
+            END
+          )
+        ) AS previous_row
       FROM floor_payloads
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE
-          WHEN jsonb_typeof(
-            floor_payloads.floor_payload #>
+      CROSS JOIN LATERAL (
+        SELECT 'machine_plan'::text AS row_kind, plan.row, plan.ordinality
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(
+              floor_payloads.floor_payload #>
+                '{productionControl,machinePlanDetailRows}'
+            ) = 'array'
+            THEN floor_payloads.floor_payload #>
               '{productionControl,machinePlanDetailRows}'
-          ) = 'array'
-          THEN floor_payloads.floor_payload #>
-            '{productionControl,machinePlanDetailRows}'
-          ELSE '[]'::jsonb
-        END
-      ) WITH ORDINALITY plan(row, ordinality)
-      ORDER BY floor_payloads.floor_order, plan.ordinality
+            ELSE '[]'::jsonb
+          END
+        ) WITH ORDINALITY plan(row, ordinality)
+        UNION ALL
+        SELECT 'production_dashboard'::text AS row_kind,
+          dashboard.row, dashboard.ordinality
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(
+              floor_payloads.floor_payload #>
+                '{productionControl,productionDashboardRows}'
+            ) = 'array'
+            THEN floor_payloads.floor_payload #>
+              '{productionControl,productionDashboardRows}'
+            ELSE '[]'::jsonb
+          END
+        ) WITH ORDINALITY dashboard(row, ordinality)
+      ) previous
+      ORDER BY floor_payloads.floor_order, previous.row_kind,
+        previous.ordinality
     `,
     [
       context.organizationId,
       JSON.stringify(productionFloors.map((floor) => floor.code)),
       machinePlanContinuityFields,
       defaultProductionFloorCode,
+      productionDashboardContinuityFields,
     ]
   )
   const previousMachinePlanRowsByFloor = new Map<
     ProductionFloorCode,
     JsonRecord[]
   >()
+  const previousProductionDashboardRowsByFloor = new Map<
+    ProductionFloorCode,
+    JsonRecord[]
+  >()
   for (const previousRow of previousModel.rows) {
+    const target = previousRow.row_kind === "machine_plan"
+      ? previousMachinePlanRowsByFloor
+      : previousProductionDashboardRowsByFloor
     const rows =
-      previousMachinePlanRowsByFloor.get(previousRow.production_floor_code) ??
+      target.get(previousRow.production_floor_code) ??
       []
-    const row = jsonRecord(previousRow.machine_plan_row)
-    rows.push({
-      jcNo: row.jcNo,
-      machine: row.machine,
-      optionNumber: row.optionNumber,
-      partCode: row.partCode,
-      routeMachine: row.routeMachine,
-      setupNo: row.setupNo,
-    })
-    previousMachinePlanRowsByFloor.set(previousRow.production_floor_code, rows)
+    rows.push(jsonRecord(previousRow.previous_row))
+    target.set(previousRow.production_floor_code, rows)
   }
 
   function previousMachinePlanRows(floorCode: ProductionFloorCode) {
     return previousMachinePlanRowsByFloor.get(floorCode) ?? []
+  }
+
+  function previousProductionDashboardRows(floorCode: ProductionFloorCode) {
+    return previousProductionDashboardRowsByFloor.get(floorCode) ?? []
   }
 
   function buildFloorPayload(floorCode: ProductionFloorCode) {
@@ -626,6 +661,8 @@ export async function buildCanonicalDashboardReadModel(
         floorCode
       ),
       previousMachinePlanDetailRows: previousMachinePlanRows(floorCode),
+      previousProductionDashboardRows:
+        previousProductionDashboardRows(floorCode),
       productionEntries: floorRows(
         corrected(source.productionEntries, "productionEntries"),
         floorCode

@@ -6981,6 +6981,98 @@ describe("buildLegacyDashboardSnapshot", () => {
       dateLabelValue(setupThree!.plannedProductionEndDate)
     )
   })
+
+  it("keeps the RM-receipt dispatch promise while recalculating the current probable date", () => {
+    const dataEntries = (orderPcs: number) => [
+      {
+        entryType: "work_order",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        payload: {
+          jcNo: "JC-DASHBOARD-1",
+          fgPoNo: "FG-9001",
+          partCode: "M-DASHBOARD",
+          optionNumber: "1",
+          orderPcs,
+          rmInwardDate: "2026-06-24",
+        },
+      },
+      {
+        entryType: "route",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        payload: {
+          partNo: "M-DASHBOARD",
+          optionNumber: "1",
+          setupNo: "1",
+          machineUsed: "C5",
+          machineType: "AUTOMATIC",
+        },
+      },
+      {
+        entryType: "cycle",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        payload: {
+          partNo: "M-DASHBOARD",
+          optionNumber: "1",
+          setupNo: "1",
+          cycleTime: 60,
+          loadingUnloading: 0,
+        },
+      },
+      {
+        entryType: "machine_master",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        payload: {
+          machineNo: "C501",
+          machineType: "AUTOMATIC",
+          status: "Active",
+        },
+      },
+    ]
+    const first = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: dataEntries(100),
+    })
+    const firstRow = first.productionControl.productionDashboardRows[0]!
+
+    expect(firstRow).toMatchObject({
+      jcNo: "JC-DASHBOARD-1",
+      fgPoNo: "FG-9001",
+      partCode: "M-DASHBOARD",
+      orderedQty: 100,
+      unit: "PCS",
+      rmReceivedDate: "24-June-26",
+      status: "Pending",
+      dispatchedDate: "",
+    })
+    expect(firstRow.plannedDispatchDateAtRmReceipt).toBe(
+      firstRow.currentProbableDispatchDate,
+    )
+
+    const recalculated = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: dataEntries(100_000),
+      dispatchApprovals: [{
+        jobCardNumber: "JC-DASHBOARD-1",
+        createdAt: "2026-07-02T10:00:00.000Z",
+      }],
+      previousProductionDashboardRows:
+        first.productionControl.productionDashboardRows,
+    })
+    const recalculatedRow = recalculated.productionControl.productionDashboardRows[0]!
+
+    expect(recalculatedRow).toMatchObject({
+      orderedQty: 100_000,
+      unit: "PCS",
+      plannedDispatchDateAtRmReceipt: firstRow.plannedDispatchDateAtRmReceipt,
+      status: "Dispatched",
+      dispatchedDate: "2-July-26",
+    })
+    expect(recalculatedRow.currentProbableDispatchDate).not.toBe(
+      firstRow.currentProbableDispatchDate,
+    )
+  })
 })
 
 function dateLabelValue(value: unknown) {

@@ -26,6 +26,7 @@ export type LegacyDashboardInput = {
   dispatchApprovals?: ActionRow[];
   setupCompletions?: ActionRow[];
   previousMachinePlanDetailRows?: Array<Record<string, unknown>>;
+  previousProductionDashboardRows?: Array<Record<string, unknown>>;
   filters?: DashboardFilters;
   updatedAt?: string;
 };
@@ -334,6 +335,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     dispatchApprovals: input.dispatchApprovals ?? [],
     setupCompletions: mergeSourceActionRows(sourcePlannerDecisions.setupCompletions, input.setupCompletions ?? [], setupCompletionDecisionKey),
     previousMachinePlanDetailRows: input.previousMachinePlanDetailRows ?? [],
+    previousProductionDashboardRows: input.previousProductionDashboardRows ?? [],
     filters: input.filters ?? {},
     workbookName: input.workbookName,
     updatedAt: input.updatedAt ?? "",
@@ -401,6 +403,7 @@ function buildProductionAnalysis({
   dispatchApprovals,
   setupCompletions,
   previousMachinePlanDetailRows,
+  previousProductionDashboardRows,
   filters,
   workbookName,
   updatedAt,
@@ -445,6 +448,7 @@ function buildProductionAnalysis({
   dispatchApprovals: ActionRow[];
   setupCompletions: ActionRow[];
   previousMachinePlanDetailRows: Array<Record<string, unknown>>;
+  previousProductionDashboardRows: Array<Record<string, unknown>>;
   filters: DashboardFilters;
   workbookName: string;
   updatedAt: string;
@@ -761,6 +765,7 @@ function buildProductionAnalysis({
     dispatchApprovals,
     setupCompletions,
     previousMachinePlanDetailRows,
+    previousProductionDashboardRows,
   });
   const routingStatus = buildRoutingStatus(routeRows, productionRows);
   const toolFixtureNumbers = buildToolFixtureNumbers(toolingRows);
@@ -947,6 +952,7 @@ function buildProductionControl({
   dispatchApprovals,
   setupCompletions,
   previousMachinePlanDetailRows,
+  previousProductionDashboardRows,
 }: {
   productionRows: ProductionRow[];
   routeRows: Record<string, unknown>[];
@@ -983,6 +989,7 @@ function buildProductionControl({
   dispatchApprovals: ActionRow[];
   setupCompletions: ActionRow[];
   previousMachinePlanDetailRows: Array<Record<string, unknown>>;
+  previousProductionDashboardRows: Array<Record<string, unknown>>;
 }) {
   const routeGroups = groupRouteRows(routeRows);
   const dedupedRouteRows = [...routeGroups.values()].flat();
@@ -1160,6 +1167,13 @@ function buildProductionControl({
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
   const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
+  const productionDashboardRows = buildProductionDashboardRows({
+    dispatchApprovals,
+    dispatchRows,
+    machinePlanDetailRows,
+    previousRows: previousProductionDashboardRows,
+    workOrderRows: prioritizedWorkOrderRows,
+  });
   const workflowExceptionRows = machinePlanDetailRows.filter((row) => row.rawProductionWithoutWorkflow);
   const plannerActionConflicts = plannerActionConflictRows(machinePlanDetailRows);
   const setupChecklistHistoryRows: Record<string, unknown>[] = [];
@@ -1234,6 +1248,7 @@ function buildProductionControl({
       issues: masterGaps.map((row) => ({ severity: "warning", sourceSheet: "Work_Order_Import", key: row.jcNo || row.partCode, message: row.nextAction })),
     },
     workOrders: prioritizedWorkOrderRows,
+    productionDashboardRows,
     jobCardStatusTiles: workOrderOutputRows,
     routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus === "Received"),
     routeSelectionWaitingRm: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus !== "Received"),
@@ -1292,6 +1307,75 @@ function buildProductionControl({
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
   };
+}
+
+function buildProductionDashboardRows({
+  dispatchApprovals,
+  dispatchRows,
+  machinePlanDetailRows,
+  previousRows,
+  workOrderRows,
+}: {
+  dispatchApprovals: ActionRow[];
+  dispatchRows: Record<string, unknown>[];
+  machinePlanDetailRows: Record<string, unknown>[];
+  previousRows: Record<string, unknown>[];
+  workOrderRows: Record<string, unknown>[];
+}) {
+  const plansByWorkOrder = groupByRecord(machinePlanDetailRows, productionDashboardRowKey);
+  const previousByWorkOrder = new Map(
+    previousRows.map((row) => [productionDashboardRowKey(row), row]),
+  );
+  const dispatchedByJobCard = new Map<string, string>();
+  for (const row of [...dispatchRows, ...dispatchApprovals]) {
+    const jobCardKey = canonicalKey(rowText(row, "jobCardNumber", "jcNo", "JC NO.", "JC NO"));
+    if (!jobCardKey) continue;
+    const dispatchedDate = parseDate(rowValue(row, "dispatchedDate", "dispatchDate", "date", "createdAt"));
+    const existingDate = dispatchedByJobCard.get(jobCardKey) ?? "";
+    if (!dispatchedByJobCard.has(jobCardKey) || dispatchedDate > existingDate) {
+      dispatchedByJobCard.set(jobCardKey, dispatchedDate);
+    }
+  }
+
+  return workOrderRows.map((workOrder) => {
+    const key = productionDashboardRowKey(workOrder);
+    const plans = plansByWorkOrder.get(key) ?? [];
+    const currentProbableDate = maxDateValue(...plans.map((row) =>
+      parseDate(rowValue(row, "plannedProductionEndDate")) || rowText(row, "plannedProductionEndDate")
+    ));
+    const rmReceivedDate = parseDate(rowValue(workOrder, "rmInwardDate"));
+    const previous = previousByWorkOrder.get(key);
+    const previousRmReceivedDate = previous ? parseDate(rowValue(previous, "rmReceivedDate")) : "";
+    const previousInitialDate = previous && previousRmReceivedDate === rmReceivedDate
+      ? rowText(previous, "plannedDispatchDateAtRmReceipt")
+      : "";
+    const dispatchedDate = dispatchedByJobCard.get(canonicalKey(rowText(workOrder, "jcNo"))) ?? "";
+    const orderPcs = safeNumber(rowValue(workOrder, "orderPcs"));
+    const orderKg = safeNumber(rowValue(workOrder, "orderKg"));
+
+    return {
+      jcNo: rowText(workOrder, "jcNo"),
+      fgPoNo: rowText(workOrder, "fgPoNo"),
+      partCode: rowText(workOrder, "partCode"),
+      orderedQty: orderPcs > 0 ? orderPcs : orderKg,
+      unit: orderPcs > 0 ? "PCS" : orderKg > 0 ? "KG" : "-",
+      rmReceivedDate: dateLabel(rmReceivedDate),
+      plannedDispatchDateAtRmReceipt: previousInitialDate || dateLabel(currentProbableDate),
+      currentProbableDispatchDate: dateLabel(currentProbableDate),
+      status: dispatchedByJobCard.has(canonicalKey(rowText(workOrder, "jcNo"))) ? "Dispatched" : "Pending",
+      dispatchedDate: dateLabel(dispatchedDate),
+    };
+  }).sort((left, right) =>
+    Number(left.status === "Dispatched") - Number(right.status === "Dispatched") ||
+    compareDateValues(left.currentProbableDispatchDate, right.currentProbableDispatchDate) ||
+    left.jcNo.localeCompare(right.jcNo, undefined, { numeric: true }),
+  );
+}
+
+function productionDashboardRowKey(row: Record<string, unknown>) {
+  return [rowText(row, "jcNo", "jobCardNumber", "JC NO.", "JC NO"), rowText(row, "partCode", "PART CODE")]
+    .map(canonicalKey)
+    .join("|");
 }
 
 function plannerActionConflictRows(machinePlanDetailRows: Record<string, unknown>[]) {

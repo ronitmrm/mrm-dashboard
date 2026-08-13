@@ -30,6 +30,7 @@ import {
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 
 export type DashboardTabId =
+  | "productionDashboardTab"
   | "productionControlTab"
   | "jobCardStatusTab"
   | "machineDetailTab"
@@ -101,6 +102,13 @@ export function navigationHrefMatches(
 }
 
 export const dashboardNavigation: readonly DashboardNavigationItem[] = [
+  {
+    href: dashboardTabHref("productionDashboardTab"),
+    icon: LayoutDashboard,
+    id: "productionDashboardTab",
+    subtitle: "Orders And Dispatch Dates",
+    title: "Production Dashboard",
+  },
   {
     href: dashboardTabHref("productionControlTab"),
     icon: ClipboardList,

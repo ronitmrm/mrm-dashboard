@@ -1676,6 +1676,10 @@ function DashboardContent({
 }) {
   const productionControl = asRecord(payload.productionControl);
 
+  if (activeTab === "productionDashboardTab") {
+    return <ProductionDashboardPanel productionControl={productionControl} />;
+  }
+
   if (activeTab === "jobCardStatusTab") {
     return <JobCardsPanel productionControl={productionControl} submitAction={submitAction} openMasterReadiness={openMasterReadiness} />;
   }
@@ -1757,6 +1761,111 @@ function DashboardContent({
   }
 
   return <ProductionControlPanel productionControl={productionControl} submitAction={submitAction} />;
+}
+
+function ProductionDashboardPanel({
+  productionControl,
+}: {
+  productionControl: DashboardPayload;
+}) {
+  const rows = asArray(productionControl.productionDashboardRows);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (status && displayValue(row.status) !== status) return false;
+      if (!query) return true;
+      return [row.jcNo, row.fgPoNo, row.partCode]
+        .map((value) => str(value).toLowerCase())
+        .some((value) => value.includes(query));
+    });
+  }, [rows, search, status]);
+  const pending = rows.filter((row) => displayValue(row.status) === "Pending").length;
+  const dispatched = rows.filter((row) => displayValue(row.status) === "Dispatched").length;
+  const rmReceived = rows.filter((row) => displayValue(row.rmReceivedDate) !== "-").length;
+
+  return (
+    <section className="grid gap-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MetricCard label="Total Work Orders" value={formatNumber(rows.length)} />
+        <MetricCard label="Pending Dispatch" value={formatNumber(pending)} />
+        <MetricCard label="Dispatched" value={formatNumber(dispatched)} />
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Production Dashboard</CardTitle>
+          <CardDescription>
+            {formatNumber(rmReceived)} Work Orders Have Received Raw Material. Current Probable Dates Recalculate With Live Production Progress.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem]">
+            <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              <span>Search Work Orders</span>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="JC No., FG PO No., or Part Code"
+                />
+              </div>
+            </Label>
+            <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
+              <span>Status</span>
+              <SearchableSelect value={status} onChange={(event) => setStatus(event.target.value)}>
+                <option value="">All statuses</option>
+                <option value="Pending">Pending</option>
+                <option value="Dispatched">Dispatched</option>
+              </SearchableSelect>
+            </Label>
+          </div>
+          <div className="overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-background">
+                <TableRow>
+                  <TableHead className="min-w-28">JC No.</TableHead>
+                  <TableHead className="min-w-32">FG PO No.</TableHead>
+                  <TableHead className="min-w-28">Part Code</TableHead>
+                  <TableHead className="min-w-28 text-right">Ordered Qty</TableHead>
+                  <TableHead className="min-w-20">Unit</TableHead>
+                  <TableHead className="min-w-36">RM Received Date</TableHead>
+                  <TableHead className="min-w-52">Planned Dispatch Date During RM Receipt</TableHead>
+                  <TableHead className="min-w-52">Current Probable Dispatch Date</TableHead>
+                  <TableHead className="min-w-28">Status</TableHead>
+                  <TableHead className="min-w-36">Dispatched Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredRows.length ? filteredRows.map((row) => (
+                  <TableRow key={`${displayValue(row.jcNo)}-${displayValue(row.partCode)}`}>
+                    <TableCell className="font-medium">{displayValue(row.jcNo)}</TableCell>
+                    <TableCell>{displayValue(row.fgPoNo)}</TableCell>
+                    <TableCell>{displayValue(row.partCode)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(Number(row.orderedQty) || 0)}</TableCell>
+                    <TableCell>{displayValue(row.unit)}</TableCell>
+                    <TableCell>{displayValue(row.rmReceivedDate)}</TableCell>
+                    <TableCell>{displayValue(row.plannedDispatchDateAtRmReceipt)}</TableCell>
+                    <TableCell>{displayValue(row.currentProbableDispatchDate)}</TableCell>
+                    <TableCell><StatusBadge value={row.status} /></TableCell>
+                    <TableCell>{displayValue(row.dispatchedDate)}</TableCell>
+                  </TableRow>
+                )) : (
+                  <TableRow>
+                    <TableCell colSpan={10} className="h-28 text-center text-sm text-muted-foreground">
+                      No Work Orders Match The Selected Filters.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
 }
 
 function ProductionControlPanel({

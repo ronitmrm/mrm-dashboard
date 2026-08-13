@@ -323,7 +323,7 @@ describe("canonical PostgreSQL dashboard read model", () => {
     }
   })
 
-  it("transfers only six machine-plan continuity fields from prior models", async () => {
+  it("transfers only planning continuity fields from prior models", async () => {
     const continuityFields = [
       "jcNo",
       "machine",
@@ -341,20 +341,43 @@ describe("canonical PostgreSQL dashboard read model", () => {
       routeMachine: `R-${floorCode}`,
       setupNo: 3,
     })
+    const dashboardContinuityFields = [
+      "jcNo",
+      "partCode",
+      "rmReceivedDate",
+      "plannedDispatchDateAtRmReceipt",
+    ]
+    const dashboardContinuityRow = (floorCode: string) => ({
+      currentProbableDispatchDate: "not-transferred",
+      forbidden: `not-transferred-${floorCode}`,
+      jcNo: `JC-${floorCode}`,
+      partCode: `P-${floorCode}`,
+      plannedDispatchDateAtRmReceipt: "30-June-26",
+      rmReceivedDate: "24-June-26",
+    })
     const priorPayload = {
       forbiddenLargeField: "x".repeat(1_000_000),
       productionControl: {
         machinePlanDetailRows: [continuityRow("conventional")],
+        productionDashboardRows: [dashboardContinuityRow("conventional")],
       },
       productionFloorSnapshots: {
+        "conventional-02": {
+          productionControl: {
+            machinePlanDetailRows: [continuityRow("conventional-02")],
+            productionDashboardRows: [dashboardContinuityRow("conventional-02")],
+          },
+        },
         cnc: {
           productionControl: {
             machinePlanDetailRows: [continuityRow("cnc")],
+            productionDashboardRows: [dashboardContinuityRow("cnc")],
           },
         },
         forging: {
           productionControl: {
             machinePlanDetailRows: [continuityRow("forging")],
+            productionDashboardRows: [dashboardContinuityRow("forging")],
           },
         },
       },
@@ -398,19 +421,33 @@ describe("canonical PostgreSQL dashboard read model", () => {
       const priorRead = priorReads[0]!
       expect(priorRead.sql.trimStart()).not.toMatch(/^SELECT\s+payload/i)
       expect(priorRead.parameters).toContainEqual(continuityFields)
-      expect(priorRead.responseBytes).toBeLessThan(2048)
+      expect(priorRead.parameters).toContainEqual(dashboardContinuityFields)
+      expect(priorRead.responseBytes).toBeLessThan(4096)
       expect(priorRead.rows).toEqual(
-        ["conventional", "conventional-02", "cnc", "forging"].map((floorCode) => ({
-          machine_plan_row: {
-            jcNo: `JC-${floorCode}`,
-            machine: `M-${floorCode}`,
-            optionNumber: 2,
-            partCode: `P-${floorCode}`,
-            routeMachine: `R-${floorCode}`,
-            setupNo: 3,
+        ["conventional", "conventional-02", "cnc", "forging"].flatMap((floorCode) => [
+          {
+            previous_row: {
+              jcNo: `JC-${floorCode}`,
+              machine: `M-${floorCode}`,
+              optionNumber: 2,
+              partCode: `P-${floorCode}`,
+              routeMachine: `R-${floorCode}`,
+              setupNo: 3,
+            },
+            production_floor_code: floorCode,
+            row_kind: "machine_plan",
           },
-          production_floor_code: floorCode,
-        }))
+          {
+            previous_row: {
+              jcNo: `JC-${floorCode}`,
+              partCode: `P-${floorCode}`,
+              plannedDispatchDateAtRmReceipt: "30-June-26",
+              rmReceivedDate: "24-June-26",
+            },
+            production_floor_code: floorCode,
+            row_kind: "production_dashboard",
+          },
+        ])
       )
     } finally {
       client.release()
