@@ -5,6 +5,7 @@
 - While running powershell commands, run this for execution policy bypass: `Set-ExecutionPolicy Bypass -Scope Process -Force`.
 - Be extremely concise when responding to me with information. Sacrifice grammar for the sake of concision.
 - reach for the `neon`, `upstash` and `gh` cli's when needed.
+- For Neon work, always use the installed Neon Postgres plugin instead of the Neon CLI.
 
 ## Project Shape
 
