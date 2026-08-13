@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { priorityChangePlan, priorityPlanQueueBeforeSetups, priorityPlanStepWindows } from "./priority-change-plan";
+import {
+  priorityChangePlan,
+  priorityPlanQueueBeforeSetups,
+  priorityPlanStepPreviewState,
+  priorityPlanStepWindows,
+} from "./priority-change-plan";
 
 function row(overrides: Record<string, unknown>) {
   return {
@@ -15,6 +20,24 @@ function row(overrides: Record<string, unknown>) {
 }
 
 describe("priorityChangePlan", () => {
+  it("hides downstream setup dates until the previous setup is confirmed", () => {
+    expect(priorityPlanStepPreviewState("setup-1", {}, "setup-1")).toEqual({
+      datesVisible: true,
+      label: "Editing",
+    });
+    expect(priorityPlanStepPreviewState("setup-2", {}, "setup-1")).toEqual({
+      datesVisible: false,
+      label: "Waiting",
+    });
+    expect(
+      priorityPlanStepPreviewState(
+        "setup-1",
+        { "setup-1": true },
+        "setup-2"
+      )
+    ).toEqual({ datesVisible: true, label: "Confirmed" });
+  });
+
   it("keeps downstream setup preview behind the previous setup when setup 1 waits for a running machine", () => {
     const productionControl = {
       machinePlanDetailRows: [

@@ -111,7 +111,7 @@ import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type
 import { maintenanceChecklistRowsForSchedule } from "@/lib/maintenance-schedule-options";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { shopFloorNoPendingActionLabel } from "@/lib/shop-floor-workflow";
-import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
+import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepPreviewState, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
 import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
   applyShopFloorStatusPatches,
@@ -2995,6 +2995,7 @@ function PlannerPriorityForm({
       partCode: selectedPart,
       priority,
       approvalMode,
+      confirmedSetupNumbers: priorityPlan.steps.map((step) => step.setupNo),
       interruptedJcNo: firstInterruption?.jcNo || "",
       interruptedSetupNo: firstInterruption?.setupNo || "",
       interruptedMachine: firstInterruption?.machine || "",
@@ -3159,18 +3160,18 @@ function PrioritySetupPreviewSummary({
       <div className="grid gap-2 md:grid-cols-3">
         {steps.map((step) => {
           const window = windows.get(step.key) ?? { startDate: step.startDate, endDate: step.endDate };
-          const stateLabel = confirmedSteps[step.key]
-            ? "Confirmed"
-            : step.key === activeStepKey
-              ? "Editing"
-              : "Queued preview";
+          const previewState = priorityPlanStepPreviewState(step.key, confirmedSteps, activeStepKey);
           return (
             <div key={step.key} className="grid gap-1 rounded-md border bg-muted/20 p-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-sm font-medium">Setup {step.setupNo}</div>
-                <Badge variant={confirmedSteps[step.key] ? "outline" : "secondary"}>{stateLabel}</Badge>
+                <Badge variant={confirmedSteps[step.key] ? "outline" : "secondary"}>{previewState.label}</Badge>
               </div>
-              <div className="text-sm font-semibold">{window.startDate || "-"} To {window.endDate || "-"}</div>
+              <div className="text-sm font-semibold">
+                {previewState.datesVisible
+                  ? `${window.startDate || "-"} To ${window.endDate || "-"}`
+                  : "Available After Previous Setup Confirmation"}
+              </div>
               <div className="text-xs text-muted-foreground">{step.machine} - {step.itemCode} / {step.jcNo}</div>
             </div>
           );

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   isActivePlannerDecision,
+  validConfirmedPrioritySetupNumbers,
+  workOrderIdentityMatches,
   machineCodeMatches,
   machineFamilyKey,
   normalizeRescheduleAction,
@@ -30,6 +32,28 @@ describe("machineFamilyKey", () => {
 });
 
 describe("planner source rules", () => {
+  it("accepts only a complete ordered priority setup confirmation sequence", () => {
+    expect(validConfirmedPrioritySetupNumbers(["1", "2", "3"])).toEqual(["1", "2", "3"]);
+    expect(validConfirmedPrioritySetupNumbers([])).toBeNull();
+    expect(validConfirmedPrioritySetupNumbers(["2", "1"])).toBeNull();
+    expect(validConfirmedPrioritySetupNumbers(["1", "1"])).toBeNull();
+  });
+
+  it("does not allow a Job Card to be reassigned to another Work Order Line", () => {
+    expect(
+      workOrderIdentityMatches(
+        { itemId: "ITEM-1", workOrderNumber: "FG-1::PART-1" },
+        { itemId: "item-1", workOrderNumber: "fg-1::part-1" }
+      )
+    ).toBe(true);
+    expect(
+      workOrderIdentityMatches(
+        { itemId: "ITEM-1", workOrderNumber: "FG-1::PART-1" },
+        { itemId: "ITEM-2", workOrderNumber: "FG-1::PART-2" }
+      )
+    ).toBe(false);
+  });
+
   it("uses Friday as the weekly plant shutdown day", () => {
     expect(isPlanningWorkday(new Date("2026-06-26T00:00:00.000Z"))).toBe(false);
     expect(isPlanningWorkday(new Date("2026-06-28T00:00:00.000Z"))).toBe(true);

@@ -197,6 +197,26 @@ describe("dashboard planning writes", () => {
     }])
   })
 
+  test("does not reassign an existing Job Card to another Work Order Line", async () => {
+    await repository.upsertWorkOrder({
+      itemUid: "ITEM-JC-LOCK-1",
+      jobCardNumber: "JC-LOCKED-LINE",
+      orderedQuantity: 10,
+      organizationId,
+      workOrderNumber: "FG-LOCK-1::ITEM-JC-LOCK-1",
+    })
+
+    await expect(
+      repository.upsertWorkOrder({
+        itemUid: "ITEM-JC-LOCK-2",
+        jobCardNumber: "JC-LOCKED-LINE",
+        orderedQuantity: 10,
+        organizationId,
+        workOrderNumber: "FG-LOCK-2::ITEM-JC-LOCK-2",
+      })
+    ).rejects.toThrow(/Job Card already belongs to another FG PO Number and Part Code/i)
+  })
+
   test("reallocates one central machine record between production floors", async () => {
     const machineNumber = `MOVE-${suffix}`
     const original = await repository.upsertMachine({
@@ -363,6 +383,7 @@ describe("dashboard planning writes", () => {
       routeCode: "1",
     })
     await repository.recordPlannerPriority({
+      confirmedSetupNumbers: ["1"],
       interruptedSetups: [
         {
           finishedQuantity: 12,

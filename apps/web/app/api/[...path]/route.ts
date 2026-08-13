@@ -3,12 +3,13 @@ import {
   createProductionShopFloorRepository,
 } from "@workspace/db"
 import {
-  normalizeProductionFloorCode,
   parseProductionFloorCode,
 } from "@workspace/db/production-floors"
+import { validConfirmedPrioritySetupNumbers } from "@workspace/db/planning-rules"
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { planningProductionFloorPayload } from "../../../lib/planning-production-floor"
 import {
   authorizationRequestTelemetryForCurrentScope,
   withAuthorizationRequestTelemetry,
@@ -758,6 +759,15 @@ async function post(request: NextRequest, context: RouteContext) {
     }
 
     if (path === "planner-priority") {
+      const confirmedSetupNumbers = validConfirmedPrioritySetupNumbers(
+        body.confirmedSetupNumbers
+      )
+      if (!confirmedSetupNumbers) {
+        throw new RouteError(
+          400,
+          "Confirm every priority setup in sequence before applying the priority."
+        )
+      }
       const result = await withPlanningRepository(
         request,
         "planning.priority.write",
@@ -765,6 +775,7 @@ async function post(request: NextRequest, context: RouteContext) {
           repository.recordPlannerPriority({
             actorUserId,
             approvalMode: optionalText(body.approvalMode),
+            confirmedSetupNumbers,
             interruptedFinishedQuantity:
               body.interruptedFinishedQty === undefined ||
               body.interruptedFinishedQty === ""
@@ -1324,12 +1335,14 @@ function productionFloorPayload(
   payload: Record<string, unknown>,
   requestedFloor: unknown
 ): Record<string, unknown> {
-  return {
-    ...payload,
-    productionFloorCode: normalizeProductionFloorCode(
-      requestedFloor ?? payload.productionFloorCode
-    ),
+  const scopedPayload = planningProductionFloorPayload(payload, requestedFloor)
+  if (!scopedPayload) {
+    throw new RouteError(
+      400,
+      "A valid Production Unit is required. Use Conventional-01, Conventional-02, CNC-01, or Forging."
+    )
   }
+  return scopedPayload
 }
 
 function text(value: unknown) {

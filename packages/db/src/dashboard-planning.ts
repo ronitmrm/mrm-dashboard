@@ -4,6 +4,10 @@ import type { Pool, PoolClient } from "pg"
 
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 import {
+  validConfirmedPrioritySetupNumbers,
+  workOrderIdentityMatches,
+} from "./planning-rules"
+import {
   normalizeProductionFloorCode,
   productionFloors,
   type ProductionFloorCode,
@@ -618,14 +622,37 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           input.itemUid,
           input.actorUserId
         )
-        const existing = await client.query<{ id: string }>(
+        const workOrderNumber = requiredText(
+          input.workOrderNumber,
+          "Work order number"
+        )
+        const existing = await client.query<{
+          id: string
+          item_id: string
+          work_order_number: string
+        }>(
           `
-            SELECT id FROM manufacturing.work_orders
+            SELECT id, item_id, work_order_number
+            FROM manufacturing.work_orders
             WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
             FOR UPDATE
           `,
           [input.organizationId, jobCardNumber]
         )
+        if (
+          existing.rows[0] &&
+          !workOrderIdentityMatches(
+            {
+              itemId: existing.rows[0].item_id,
+              workOrderNumber: existing.rows[0].work_order_number,
+            },
+            { itemId: planningItem.id, workOrderNumber }
+          )
+        ) {
+          throw new Error(
+            "This Job Card already belongs to another FG PO Number and Part Code."
+          )
+        }
         const sourcePayload = {
           ...(typeof input.sourcePayload === "object" &&
           input.sourcePayload !== null &&
@@ -635,7 +662,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           planningItemPending: planningItem.planning_item_pending,
         }
         const values = [
-          requiredText(input.workOrderNumber, "Work order number"),
+          workOrderNumber,
           planningItem.id,
           input.orderedQuantity,
           input.dueDate ?? null,
@@ -1167,6 +1194,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
     async recordPlannerPriority(input: {
       actorUserId?: string | null
       approvalMode?: string | null
+      confirmedSetupNumbers: string[]
       interruptedFinishedQuantity?: number | null
       interruptedJobCardNumber?: string | null
       interruptedMachineNumber?: string | null
@@ -1181,6 +1209,14 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       remark?: string | null
     }) {
       return transaction(pool, async (client) => {
+        const confirmedSetupNumbers = validConfirmedPrioritySetupNumbers(
+          input.confirmedSetupNumbers
+        )
+        if (!confirmedSetupNumbers) {
+          throw new Error(
+            "Confirm every priority setup in sequence before applying the priority."
+          )
+        }
         const workOrder = await workOrderFor(
           client,
           input.organizationId,
@@ -1201,7 +1237,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
             input.remark?.trim() || requiredText(input.priority, "Priority"),
             input.actorUserId ?? null,
             randomUUID(),
-            input,
+            { ...input, confirmedSetupNumbers },
           ]
         )
         await client.query(
