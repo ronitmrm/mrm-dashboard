@@ -104,6 +104,7 @@ export function createAccessAdministrationService({
 
       try {
         await access.linkEmployeeUser({
+          accountOrigin: "new",
           actorUserId,
           employeeCode: employee.employeeCode,
           organizationId: employee.organizationId,
@@ -120,7 +121,7 @@ export function createAccessAdministrationService({
     async linkEmployee(input: LinkEmployeeInput) {
       await requireActorCapability(input.actorUserId, MANAGE_USERS_CAPABILITY)
       await access.employeeForAccount(input)
-      return access.linkEmployeeUser(input)
+      return access.linkEmployeeUser({ ...input, accountOrigin: "existing" })
     },
 
     async createRole({
@@ -139,6 +140,7 @@ export function createAccessAdministrationService({
       }
 
       return access.createRole({
+        actorUserId,
         description: description?.trim() || undefined,
         key: normalizedKey,
         name: name.trim(),

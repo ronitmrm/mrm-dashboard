@@ -1,8 +1,10 @@
+import { appendAccessAuditChanges } from "./access-audit"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
 type AccessAdministrationRepositoryOptions = RepositoryPoolOptions
 
 type CreateRoleInput = {
+  actorUserId: string
   description?: string
   key: string
   name: string
@@ -21,6 +23,7 @@ type EmployeeReference = {
 }
 
 type LinkEmployeeUserInput = EmployeeReference & {
+  accountOrigin: "existing" | "new"
   actorUserId: string
   userId: string
 }
@@ -102,6 +105,7 @@ export function createAccessAdministrationRepository(
     close,
 
     async createRole({
+      actorUserId,
       description,
       key,
       name,
@@ -143,6 +147,22 @@ export function createAccessAdministrationRepository(
            ON CONFLICT (role_id, permission_id) DO NOTHING`,
           [roleId, permissionKeys]
         )
+        await appendAccessAuditChanges(client, [
+          {
+            actorUserId,
+            eventType: "access.role.created",
+            metadata: { key, name },
+            targetId: roleId,
+            targetTable: "roles",
+          },
+          ...permissionKeys.map((permissionKey) => ({
+            actorUserId,
+            eventType: "access.role.capability_granted",
+            metadata: { permissionKey, roleKey: key },
+            targetId: roleId,
+            targetTable: "roles",
+          })),
+        ])
         await client.query("COMMIT")
 
         return { id: roleId, key }
@@ -155,25 +175,45 @@ export function createAccessAdministrationRepository(
     },
 
     async assignRole({ actorUserId, roleKey, userId }: AssignRoleInput) {
-      const result = await pool.query(
-        `INSERT INTO identity.user_roles (
-           user_id,
-           role_id,
-           assigned_by_user_id
-         )
-         SELECT users.id, roles.id, $1
-         FROM identity.users AS users
-         CROSS JOIN identity.roles AS roles
-         WHERE users.id = $2
-           AND roles.key = $3
-         ON CONFLICT (user_id, role_id) DO UPDATE
-         SET assigned_by_user_id = EXCLUDED.assigned_by_user_id,
-             assigned_at = now()`,
-        [actorUserId, userId, roleKey]
-      )
+      const client = await pool.connect()
 
-      if (result.rowCount !== 1) {
-        throw new Error("The selected user or role does not exist")
+      try {
+        await client.query("BEGIN")
+        const result = await client.query(
+          `INSERT INTO identity.user_roles (
+             user_id,
+             role_id,
+             assigned_by_user_id
+           )
+           SELECT users.id, roles.id, $1
+           FROM identity.users AS users
+           CROSS JOIN identity.roles AS roles
+           WHERE users.id = $2
+             AND roles.key = $3
+           ON CONFLICT (user_id, role_id) DO UPDATE
+           SET assigned_by_user_id = EXCLUDED.assigned_by_user_id,
+               assigned_at = now()`,
+          [actorUserId, userId, roleKey]
+        )
+
+        if (result.rowCount !== 1) {
+          throw new Error("The selected user or role does not exist")
+        }
+        await appendAccessAuditChanges(client, [
+          {
+            actorUserId,
+            eventType: "access.role.assigned",
+            metadata: { roleKey },
+            targetId: userId,
+            targetTable: "users",
+          },
+        ])
+        await client.query("COMMIT")
+      } catch (error) {
+        await client.query("ROLLBACK")
+        throw error
+      } finally {
+        client.release()
       }
     },
 
@@ -226,42 +266,74 @@ export function createAccessAdministrationRepository(
     },
 
     async linkEmployeeUser({
+      accountOrigin,
       actorUserId,
       employeeCode,
       organizationId,
       userId,
     }: LinkEmployeeUserInput) {
-      const result = await pool.query(
-        `INSERT INTO identity.employee_links (
-           user_id,
-           organization_id,
-           employee_code,
-           linked_by_user_id
-         )
-         SELECT users.id, posts.organization_id,
-           max(btrim(posts.employee_code)), $1
-         FROM identity.users AS users
-         CROSS JOIN recruitment.posts
-         WHERE users.id = $2
-           AND users.role IS DISTINCT FROM 'admin'
-           AND posts.organization_id = $3
-           AND lower(btrim(posts.employee_code)) = lower(btrim($4))
-           AND (
-             posts.status = 'Occupied'
-             OR (
-               posts.status = 'Appointed'
-               AND posts.joining_date <= current_date
-             )
-             OR (
-               posts.status = 'Resigned'
-               AND posts.last_working_date >= current_date
-             )
+      const client = await pool.connect()
+
+      try {
+        await client.query("BEGIN")
+        const result = await client.query(
+          `INSERT INTO identity.employee_links (
+             user_id,
+             organization_id,
+             employee_code,
+             linked_by_user_id
            )
-         GROUP BY users.id, posts.organization_id`,
-        [actorUserId, userId, organizationId, employeeCode]
-      )
-      if (result.rowCount !== 1) {
-        throw new Error("The selected user or active employee does not exist")
+           SELECT users.id, posts.organization_id,
+             max(btrim(posts.employee_code)), $1
+           FROM identity.users AS users
+           CROSS JOIN recruitment.posts
+           WHERE users.id = $2
+             AND users.role IS DISTINCT FROM 'admin'
+             AND posts.organization_id = $3
+             AND lower(btrim(posts.employee_code)) = lower(btrim($4))
+             AND (
+               posts.status = 'Occupied'
+               OR (
+                 posts.status = 'Appointed'
+                 AND posts.joining_date <= current_date
+               )
+               OR (
+                 posts.status = 'Resigned'
+                 AND posts.last_working_date >= current_date
+               )
+             )
+           GROUP BY users.id, posts.organization_id`,
+          [actorUserId, userId, organizationId, employeeCode]
+        )
+        if (result.rowCount !== 1) {
+          throw new Error("The selected user or active employee does not exist")
+        }
+        await appendAccessAuditChanges(client, [
+          {
+            actorUserId,
+            eventType: "access.employee.linked",
+            metadata: { employeeCode, organizationId },
+            targetId: userId,
+            targetTable: "users",
+          },
+          ...(accountOrigin === "new"
+            ? [
+                {
+                  actorUserId,
+                  eventType: "access.user.provisioned",
+                  metadata: { employeeCode, organizationId },
+                  targetId: userId,
+                  targetTable: "users",
+                },
+              ]
+            : []),
+        ])
+        await client.query("COMMIT")
+      } catch (error) {
+        await client.query("ROLLBACK")
+        throw error
+      } finally {
+        client.release()
       }
     },
 
@@ -271,38 +343,72 @@ export function createAccessAdministrationRepository(
       postId,
       roleKey,
     }: SetPostRoleInput) {
-      if (!enabled) {
-        await pool.query(
-          `DELETE FROM identity.post_role_assignments
-           USING identity.roles
-           WHERE post_role_assignments.post_id = $1
-             AND post_role_assignments.role_id = roles.id
-             AND roles.key = $2`,
-          [postId, roleKey]
-        )
-        return
-      }
+      const client = await pool.connect()
 
-      const result = await pool.query(
-        `INSERT INTO identity.post_role_assignments (
-           post_id,
-           role_id,
-           assigned_by_user_id
-         )
-         SELECT posts.id, roles.id, $1
-         FROM recruitment.posts
-         CROSS JOIN identity.roles
-         WHERE posts.id = $2
-           AND posts.status <> 'Inactive'
-           AND roles.key = $3
-           AND NOT roles.is_system
-         ON CONFLICT (post_id, role_id) DO UPDATE
-         SET assigned_by_user_id = EXCLUDED.assigned_by_user_id,
-             assigned_at = now()`,
-        [actorUserId, postId, roleKey]
-      )
-      if (result.rowCount !== 1) {
-        throw new Error("The selected active post or role does not exist")
+      try {
+        await client.query("BEGIN")
+        if (!enabled) {
+          const result = await client.query(
+            `DELETE FROM identity.post_role_assignments
+             USING identity.roles
+             WHERE post_role_assignments.post_id = $1
+               AND post_role_assignments.role_id = roles.id
+               AND roles.key = $2`,
+            [postId, roleKey]
+          )
+          if (result.rowCount === 1) {
+            await appendAccessAuditChanges(client, [
+              {
+                actorUserId,
+                eventType: "access.post_role.removed",
+                metadata: { roleKey },
+                targetId: postId,
+                targetSchema: "recruitment",
+                targetTable: "posts",
+              },
+            ])
+          }
+          await client.query("COMMIT")
+          return
+        }
+
+        const result = await client.query(
+          `INSERT INTO identity.post_role_assignments (
+             post_id,
+             role_id,
+             assigned_by_user_id
+           )
+           SELECT posts.id, roles.id, $1
+           FROM recruitment.posts
+           CROSS JOIN identity.roles
+           WHERE posts.id = $2
+             AND posts.status <> 'Inactive'
+             AND roles.key = $3
+             AND NOT roles.is_system
+           ON CONFLICT (post_id, role_id) DO UPDATE
+           SET assigned_by_user_id = EXCLUDED.assigned_by_user_id,
+               assigned_at = now()`,
+          [actorUserId, postId, roleKey]
+        )
+        if (result.rowCount !== 1) {
+          throw new Error("The selected active post or role does not exist")
+        }
+        await appendAccessAuditChanges(client, [
+          {
+            actorUserId,
+            eventType: "access.post_role.assigned",
+            metadata: { roleKey },
+            targetId: postId,
+            targetSchema: "recruitment",
+            targetTable: "posts",
+          },
+        ])
+        await client.query("COMMIT")
+      } catch (error) {
+        await client.query("ROLLBACK")
+        throw error
+      } finally {
+        client.release()
       }
     },
 
@@ -314,38 +420,59 @@ export function createAccessAdministrationRepository(
       reason,
       userId,
     }: SetPermissionOverrideInput) {
-      const result = await pool.query(
-        `INSERT INTO identity.user_permission_overrides (
-           user_id,
-           permission_id,
-           effect,
-           reason,
-           assigned_by_user_id,
-           expires_at
-         )
-         SELECT users.id, permissions.id, $1, $2, $3, $4
-         FROM identity.users AS users
-         CROSS JOIN identity.permissions AS permissions
-         WHERE users.id = $5
-           AND permissions.key = $6
-         ON CONFLICT (user_id, permission_id) DO UPDATE
-         SET effect = EXCLUDED.effect,
-             reason = EXCLUDED.reason,
-             assigned_by_user_id = EXCLUDED.assigned_by_user_id,
-             assigned_at = now(),
-             expires_at = EXCLUDED.expires_at`,
-        [
-          effect,
-          reason ?? null,
-          actorUserId,
-          expiresAt ?? null,
-          userId,
-          permissionKey,
-        ]
-      )
+      const client = await pool.connect()
 
-      if (result.rowCount !== 1) {
-        throw new Error("The selected user or capability does not exist")
+      try {
+        await client.query("BEGIN")
+        const result = await client.query(
+          `INSERT INTO identity.user_permission_overrides (
+             user_id,
+             permission_id,
+             effect,
+             reason,
+             assigned_by_user_id,
+             expires_at
+           )
+           SELECT users.id, permissions.id, $1, $2, $3, $4
+           FROM identity.users AS users
+           CROSS JOIN identity.permissions AS permissions
+           WHERE users.id = $5
+             AND permissions.key = $6
+           ON CONFLICT (user_id, permission_id) DO UPDATE
+           SET effect = EXCLUDED.effect,
+               reason = EXCLUDED.reason,
+               assigned_by_user_id = EXCLUDED.assigned_by_user_id,
+               assigned_at = now(),
+               expires_at = EXCLUDED.expires_at`,
+          [
+            effect,
+            reason ?? null,
+            actorUserId,
+            expiresAt ?? null,
+            userId,
+            permissionKey,
+          ]
+        )
+
+        if (result.rowCount !== 1) {
+          throw new Error("The selected user or capability does not exist")
+        }
+        await appendAccessAuditChanges(client, [
+          {
+            actorUserId,
+            eventType: "access.permission.override_set",
+            metadata: { effect, expiresAt, permissionKey },
+            reason,
+            targetId: userId,
+            targetTable: "users",
+          },
+        ])
+        await client.query("COMMIT")
+      } catch (error) {
+        await client.query("ROLLBACK")
+        throw error
+      } finally {
+        client.release()
       }
     },
 

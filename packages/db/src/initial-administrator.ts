@@ -1,3 +1,4 @@
+import { appendAccessAuditChanges } from "./access-audit"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
 type ProvisionerOptions = RepositoryPoolOptions
@@ -61,6 +62,17 @@ export function createInitialAdministratorProvisioner(
         if (assignment.rowCount !== 1) {
           throw new Error("The seeded administrator role is missing")
         }
+
+        await appendAccessAuditChanges(client, [
+          {
+            actorUserId: userId,
+            eventType: "access.initial_administrator.promoted",
+            metadata: { email },
+            reason: "Initial administrator bootstrap",
+            targetId: userId,
+            targetTable: "users",
+          },
+        ])
 
         await client.query("COMMIT")
       } catch (error) {

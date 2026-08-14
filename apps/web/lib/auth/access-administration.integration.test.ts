@@ -25,22 +25,25 @@ const postId = "10000000-0000-4000-8000-000000000004"
 const employeeCode = "ACCESS-EMP-001"
 
 async function resetIdentity() {
-  const system = createAuthSystem({
-    allowSignUp: true,
-    baseURL: "http://localhost:3001",
-    connectionString,
-    secret: "test-only-better-auth-secret-000000000000",
-  })
+  const client = await pool.connect()
 
   try {
-    await system.database.execute(
-      "TRUNCATE identity.sessions, identity.accounts, identity.users CASCADE"
-    )
-    await system.database.execute(
-      "DELETE FROM identity.roles WHERE is_system = false"
-    )
+    await client.query("BEGIN")
+    await client.query("DELETE FROM audit.events WHERE event_type LIKE 'access.%'")
+    await client.query("DELETE FROM identity.post_role_assignments")
+    await client.query("DELETE FROM identity.employee_links")
+    await client.query("DELETE FROM identity.user_permission_overrides")
+    await client.query("DELETE FROM identity.user_roles")
+    await client.query("DELETE FROM identity.sessions")
+    await client.query("DELETE FROM identity.accounts")
+    await client.query("DELETE FROM identity.users")
+    await client.query("DELETE FROM identity.roles WHERE is_system = false")
+    await client.query("COMMIT")
+  } catch (error) {
+    await client.query("ROLLBACK")
+    throw error
   } finally {
-    await system.close()
+    client.release()
   }
 }
 
@@ -58,7 +61,7 @@ beforeAll(async () => {
     `INSERT INTO recruitment.departments (
        id, organization_id, code, name,
        source_system, source_table, source_id
-     ) VALUES ($1, $2, 'ACCESS', 'Production', 'test', 'departments', $1)
+     ) VALUES ($1, $2, 'ACCESS', 'Production', 'test', 'departments', $1::uuid::text)
      ON CONFLICT (id) DO NOTHING`,
     [departmentId, organizationId]
   )
@@ -67,7 +70,7 @@ beforeAll(async () => {
        id, organization_id, code, name,
        source_system, source_table, source_id
      ) VALUES ($1, $2, 'PLANNER', 'Production Planner',
-       'test', 'designations', $1)
+       'test', 'designations', $1::uuid::text)
      ON CONFLICT (id) DO NOTHING`,
     [designationId, organizationId]
   )
@@ -79,7 +82,7 @@ beforeAll(async () => {
        source_system, source_table, source_id
      ) VALUES ($1, $2, $3, $4, '1', 'ACCESS-POST-001',
        'ACCESS-VAC-001', 'Production Planner', $5, 'Occupied',
-       'test', 'posts', $1)
+       'test', 'posts', $1::uuid::text)
      ON CONFLICT (id) DO UPDATE SET
        employee_name = EXCLUDED.employee_name,
        employee_code = EXCLUDED.employee_code,
@@ -164,6 +167,37 @@ describe("access administration", () => {
       ).resolves.toMatchObject({
         user: { id: staff.id },
       })
+
+      const audit = await pool.query<{
+        actor_user_id: string
+        event_type: string
+        target_id: string
+      }>(
+        `SELECT event_type, actor_user_id, target_id
+         FROM audit.events
+         WHERE target_id = ANY($1::uuid[])
+         ORDER BY event_type`,
+        [[administrator.user.id, staff.id]]
+      )
+      expect(audit.rows).toEqual(
+        expect.arrayContaining([
+          {
+            actor_user_id: administrator.user.id,
+            event_type: "access.initial_administrator.promoted",
+            target_id: administrator.user.id,
+          },
+          {
+            actor_user_id: administrator.user.id,
+            event_type: "access.user.provisioned",
+            target_id: staff.id,
+          },
+          {
+            actor_user_id: administrator.user.id,
+            event_type: "access.employee.linked",
+            target_id: staff.id,
+          },
+        ])
+      )
 
       await expect(
         access.provisionStaff({
@@ -337,6 +371,22 @@ describe("access administration", () => {
           ]),
         })
       )
+
+      const audit = await pool.query<{ event_type: string }>(
+        `SELECT event_type
+         FROM audit.events
+         WHERE actor_user_id = $1
+           AND event_type LIKE 'access.%'`,
+        [administrator.user.id]
+      )
+      expect(audit.rows.map((row) => row.event_type)).toEqual(
+        expect.arrayContaining([
+          "access.role.created",
+          "access.role.capability_granted",
+          "access.role.assigned",
+          "access.permission.override_set",
+        ])
+      )
     } finally {
       await authorization.close()
       await otherInstanceAccess.close()
@@ -420,6 +470,7 @@ describe("access administration", () => {
       await expect(
         authorization.hasCapability(staff.id, "planning.plan.read")
       ).resolves.toBe(false)
+
       await pool.query(
         `UPDATE recruitment.posts
          SET status = 'Occupied', last_working_date = NULL
@@ -439,6 +490,22 @@ describe("access administration", () => {
       await expect(
         authorization.hasCapability(staff.id, "planning.plan.read")
       ).resolves.toBe(false)
+
+      const audit = await pool.query<{ event_type: string }>(
+        `SELECT event_type
+         FROM audit.events
+         WHERE actor_user_id = $1
+           AND event_type IN (
+             'access.post_role.assigned',
+             'access.post_role.removed'
+           )
+         ORDER BY event_type`,
+        [administrator.user.id]
+      )
+      expect(audit.rows.map((row) => row.event_type)).toEqual([
+        "access.post_role.assigned",
+        "access.post_role.removed",
+      ])
     } finally {
       await pool.query(
         `UPDATE recruitment.posts

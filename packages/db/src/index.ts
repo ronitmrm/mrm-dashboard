@@ -1,4 +1,8 @@
 export { createAccessAdministrationRepository } from "./access-administration"
+export {
+  appendAccessAuditChanges,
+  type AccessAuditChange,
+} from "./access-audit"
 export { createAuthorizationRepository } from "./authorization"
 export { createCatalogMasterRepository } from "./catalog-masters"
 export {
