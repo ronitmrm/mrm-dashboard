@@ -3,9 +3,25 @@
 - This repo is meant to be iterated on by non-technical users through AI agents. Keep changes boring, traceable, and easy to verify.
 - Save the handoff docs in this directory under `./.handoff/`. Create it if not present and add it to .gitignore as well.
 - While running powershell commands, run this for execution policy bypass: `Set-ExecutionPolicy Bypass -Scope Process -Force`.
-- Be extremely concise when responding to me with information. Sacrifice grammar for the sake of concision.
+- Be extremely concise when responding to me. Sacrifice grammar for the sake of concision.
+- find the skill `tdd` and follow the test driven development approach highlighted in that skill. if you don't find the said skill, don't bother.
+- **Be smart with your choice of following `tdd` approach given a task; not every task requires an over engineered solution. trivial UI changes for example do not need 3 tests that validate the change. prefer being quick with the implementation, especially when given a targeted request.**
 - reach for the `neon`, `upstash` and `gh` cli's when needed.
 - For Neon work, always use the installed Neon Postgres plugin instead of the Neon CLI.
+- When starting local server/s, opt for the managed config by default, unless specified otherwise by the user.
+
+## Code Architecture Best Practices
+
+- channel the senior engineer in you and adopt a `yagni` approach to writing code.
+- avoid overengineering changes.
+- if the number of changes requested in a request is greater than 3, OR if the effort at firt glance is substantial enough - always take the time to investigate the code in the blast radius of the said changes, after implementing them.
+- when making targeted changes, like perf improvements in a few specific UX interactions, often zoom out to review the blast radius and suggest similar improvements that may benefit either the perf or the polish holistically.
+- when working with **typescript** projects:
+  - `any` is the enemy. inferred types are our friend. our system should adapt to changes instead of requiring changes everywhere.
+  - if your TS code looks like a python dev wrote it, it is bad TS code.
+  - write typescript in ways that Matt Pocock and Theo would be proud of.
+
+### A note about TESTS: tests are good! having said that, endless smoke tests, regression tests, etc. are wasteful. write less tests, but good tests that do not leave you in doubt about the integrity of the changes you made. when UI testing - reach for the in-app browser first. there is a high chance that the user is using the codex desktop app. if the in-app browser is missing, settle for the `agent-browser` cli.
 
 ## Project Shape
 
@@ -15,28 +31,6 @@
 - Database package: `packages/db` with PostgreSQL repositories and domain logic.
 - Worker package: `packages/runtime` with durable PostgreSQL jobs and Redis delivery.
 - Runtime data source: PostgreSQL. Redis is disposable acceleration only.
-
-## Non-Negotiables
-
-- Do not route to, embed, restore, or depend on the deprecated static legacy dashboard.
-- Do not add a Python server or sidecar backend to serve dashboard data.
-- Do not commit `.env*`, workbook files, local exports, build output, or generated agent metadata.
-- Do not use fake/sample dashboard data unless it is isolated in a test.
-- Do not add a runtime Convex or SQLite dependency. Source loaders belong only in `packages/migration`.
-
-## Data And Runtime
-
-- Dashboard writes go through normalized repositories and append durable refresh
-  work inside the same PostgreSQL transaction.
-- The main dashboard reads only committed, versioned PostgreSQL read models.
-- Use bounded normalized projections for specialized screens; do not introduce
-  N+1 request paths or rebuild full dashboard state inside a request.
-- Redis loss must not reject a canonical write, invalidate a Better Auth
-  session, or hide the newest PostgreSQL model.
-- Source archives and migration staging rows are immutable evidence. Only
-  `packages/migration` may import Convex exports or open the Pricing SQLite file.
-- Historical identifiers and raw payloads must remain attributable after
-  normalization. Corrections append reversal/quarantine evidence.
 
 ## Design System
 
@@ -48,26 +42,6 @@
 - Keep the MRMPL logo asset at `apps/web/public/mrm-green.svg`.
 - Preserve light/dark mode, responsive layouts, and browser-persisted workbook filters.
 - Keep dashboard UI data-dense and operational; avoid marketing-page patterns.
-
-## Code Rules
-
-- Normalize dashboard payload changes in `apps/web/lib/dashboard-view-model.ts` before changing layout components.
-- Keep analysis/business logic in the exported `@workspace/db` domain modules.
-- Keep API compatibility routes under `apps/web/app/api/[...path]/route.ts` honest: no fake success responses.
-- For Next.js behavior, check local Next docs or current package behavior before relying on old conventions.
-- Prefer existing package boundaries over adding new abstractions.
-- You have a bunch of code best practices skills from matt Pocock. use those regularly while working in this project.
-
-## Environment
-
-- Copy `apps/web/.env.example` to `apps/web/.env`.
-- Required env vars:
-  - `DATABASE_URL`
-  - `REDIS_URL`
-  - `BETTER_AUTH_SECRET`
-  - `BETTER_AUTH_URL`
-  - `NEXT_PUBLIC_APP_URL`
-- This project is local-first. Do not alter deployments unless explicitly requested.
 
 ## Agent Working Memory
 
@@ -92,6 +66,10 @@ Keep memory files concise, human-readable Markdown. Prefer updating an existing 
 
 Do not store secrets, credentials, private keys, tokens, large command outputs, build artifacts, or temporary scratch notes in memory.
 
+Periodically perform a quick audit for stale memory files and clean them up.
+
+**Note: `./docs/` contains tracked project documentation, not agent working memory. Start with `./docs/README.md`: implementation-specific material belongs in `./docs/codebase/`, while stable business terms, lifecycle semantics, formulas, and metrics belong in `./docs/glossary/`. If business logic changes, update the canonical glossary definition first and then its codebase consumers. Be strict with CRUD in docs because they are lifecycle sources of truth.**
+
 ## Verification
 
 Before handing off code changes, run:
@@ -113,7 +91,6 @@ Always kill dev server/s after testing, unless the user specifies to have them u
 - Regularly check git fetch origin for upstream changes.
 - Commit every completed change set with a clear, specific message. Be proactive in committing changes and keep the commits small and traceable.
 - Never commit secrets, `.env.local/.env`, workbook files, generated caches, or ignored files.
-- After every 5 local commits, ask the user if they want to push upstream to `staging` aka deploy the latest changes (in a non-technical language).
 - If commit or push fails, stop and investigate the exact failure instead of continuing silently.
 - When the user prompts to **deploy** the changes:
   - commit the remaining changes and push the commits upstream to `staging`.
@@ -123,3 +100,4 @@ Always kill dev server/s after testing, unless the user specifies to have them u
     - update the refs of the local `staging` branch with main and push the updated refs upstream to the remote `staging` branch.
   - if there are conflicts:
     - resolve the conflicts and then follow the steps of the previous case.
+- When deploying, babysit the github actions workflow end-to-end and in case of error/s - if the error/s is/are trivial, assume liberty and fix them and follow the "deploy" path again. DO NOT push directly to main, unless workflow file/s have changes.

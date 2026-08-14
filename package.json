@@ -2,6 +2,7 @@
   "name": "mrmpl-dashboard",
   "version": "0.0.1",
   "private": true,
+  "packageManager": "pnpm@11.15.0",
   "scripts": {
     "auth:seed-admin": "pnpm --filter web auth:provision-admin",
     "auth:seed-admin:managed": "node --env-file=apps/web/.env.local scripts/dev-managed.mjs --seed-admin",

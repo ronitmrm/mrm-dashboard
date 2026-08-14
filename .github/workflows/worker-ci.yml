@@ -1,0 +1,78 @@
+name: Worker CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: mrmpl
+          POSTGRES_PASSWORD: mrmpl
+          POSTGRES_USER: mrmpl
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U mrmpl -d mrmpl"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint worker dependency graph
+        run: pnpm --filter @workspace/runtime... lint
+
+      - name: Typecheck worker dependency graph
+        run: pnpm --filter @workspace/runtime... typecheck
+
+      - name: Test worker
+        run: pnpm --filter @workspace/runtime test
+
+      - name: Build worker dependency graph
+        run: pnpm --filter @workspace/runtime... build

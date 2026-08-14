@@ -165,7 +165,8 @@ ten branches.
 ## Deployment gate
 
 A source-controlled Vercel deployment and hosted continuous-worker owner are
-still required before hosted staging is declared delivered. Do not set live
-environment variables through a dashboard-only edit; merge reviewed source,
-set scoped server-only secrets, deploy from `staging`, and record the deployment
-evidence without URLs or provider IDs.
+still required before hosted staging is declared delivered. The Railway worker
+deploys from GitHub `main`; its production and development connection URLs both
+target the Neon `staging` branch. Keep credentials in their hosting provider,
+merge reviewed source, and record deployment evidence without URLs or provider
+IDs. See `docs/railway-worker-deployment.md` for the worker procedure.
