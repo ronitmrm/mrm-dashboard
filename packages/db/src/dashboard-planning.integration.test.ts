@@ -32,6 +32,17 @@ beforeAll(async () => {
     `
   )
   organizationId = organization.rows[0]!.id
+  await pool.query(
+    `
+      INSERT INTO manufacturing.production_floors (
+        organization_id, code, name
+      ) VALUES
+        ($1, 'conventional', 'Conventional Production Floor'),
+        ($1, 'cnc', 'CNC Production Floor')
+      ON CONFLICT (organization_id, code) DO NOTHING
+    `,
+    [organizationId]
+  )
   const item = await pool.query<{ id: string }>(
     `
       INSERT INTO catalog.items (
@@ -52,6 +63,192 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
+  test("creates a missing recognized production floor for a machine import", async () => {
+    const machineNumber = `FLOOR-${suffix}`
+    await pool.query(
+      `
+        DELETE FROM manufacturing.production_floors
+        WHERE organization_id = $1 AND code = 'conventional-02'
+      `,
+      [organizationId]
+    )
+
+    await repository.upsertMachine({
+      machineNumber,
+      organizationId,
+      productionFloorCode: "conventional-02",
+    })
+
+    const floor = await pool.query<{ code: string; name: string }>(
+      `
+        SELECT floor.code, floor.name
+        FROM catalog.machines machine
+        JOIN manufacturing.production_floors floor
+          ON floor.id = machine.production_floor_id
+        WHERE machine.organization_id = $1
+          AND machine.machine_number = $2
+      `,
+      [organizationId, machineNumber]
+    )
+
+    expect(floor.rows).toEqual([
+      {
+        code: "conventional-02",
+        name: "Production Planning & Control Conventional-02",
+      },
+    ])
+  })
+
+  test("creates a planning item when its first Route Master is imported", async () => {
+    const newItemUid = `ROUTE-${suffix}`
+
+    await repository.upsertRouteOption({
+      itemUid: newItemUid,
+      organizationId,
+      routeCode: "1",
+      setups: [{ operationCode: "SETUP-1", sequence: 1, setupNumber: 1 }],
+    })
+
+    const item = await pool.query<{
+      source_system: string
+      source_table: string
+      uid: string
+    }>(
+      `
+        SELECT uid, source_system, source_table
+        FROM catalog.items
+        WHERE organization_id = $1 AND lower(uid) = lower($2)
+      `,
+      [organizationId, newItemUid]
+    )
+
+    expect(item.rows).toEqual([
+      {
+        source_system: "mrm-dashboard",
+        source_table: "route_master",
+        uid: newItemUid,
+      },
+    ])
+  })
+
+  test("accepts a work order before its planning item and releases the readiness hold after Route Master", async () => {
+    const pendingItemUid = `PENDING-${suffix}`
+    const pendingJobCard = `JC-PENDING-${suffix}`
+
+    const workOrder = await repository.upsertWorkOrder({
+      itemUid: pendingItemUid,
+      jobCardNumber: pendingJobCard,
+      orderedQuantity: 25,
+      organizationId,
+      sourcePayload: {
+        jcNo: pendingJobCard,
+        orderPcs: 25,
+        partCode: pendingItemUid,
+      },
+      workOrderNumber: `WO-PENDING-${suffix}`,
+    })
+
+    expect(workOrder.planningItemPending).toBe(true)
+    const held = await pool.query<{
+      item_source_table: string
+      planning_item_pending: boolean
+    }>(
+      `
+        SELECT item.source_table AS item_source_table,
+          (work_order.source_payload ->> 'planningItemPending')::boolean
+            AS planning_item_pending
+        FROM manufacturing.work_orders work_order
+        JOIN catalog.items item ON item.id = work_order.item_id
+        WHERE work_order.organization_id = $1
+          AND work_order.job_card_number = $2
+      `,
+      [organizationId, pendingJobCard]
+    )
+    expect(held.rows).toEqual([{
+      item_source_table: "work_order_readiness",
+      planning_item_pending: true,
+    }])
+
+    await repository.upsertRouteOption({
+      itemUid: pendingItemUid,
+      organizationId,
+      routeCode: "1",
+      setups: [{ operationCode: "SETUP-1", sequence: 1, setupNumber: 1 }],
+    })
+
+    const released = await pool.query<{
+      item_source_table: string
+      planning_item_pending: boolean
+    }>(
+      `
+        SELECT item.source_table AS item_source_table,
+          (work_order.source_payload ->> 'planningItemPending')::boolean
+            AS planning_item_pending
+        FROM manufacturing.work_orders work_order
+        JOIN catalog.items item ON item.id = work_order.item_id
+        WHERE work_order.organization_id = $1
+          AND work_order.job_card_number = $2
+      `,
+      [organizationId, pendingJobCard]
+    )
+    expect(released.rows).toEqual([{
+      item_source_table: "route_master",
+      planning_item_pending: false,
+    }])
+  })
+
+  test("does not reassign an existing Job Card to another Work Order Line", async () => {
+    await repository.upsertWorkOrder({
+      itemUid: "ITEM-JC-LOCK-1",
+      jobCardNumber: "JC-LOCKED-LINE",
+      orderedQuantity: 10,
+      organizationId,
+      workOrderNumber: "FG-LOCK-1::ITEM-JC-LOCK-1",
+    })
+
+    await expect(
+      repository.upsertWorkOrder({
+        itemUid: "ITEM-JC-LOCK-2",
+        jobCardNumber: "JC-LOCKED-LINE",
+        orderedQuantity: 10,
+        organizationId,
+        workOrderNumber: "FG-LOCK-2::ITEM-JC-LOCK-2",
+      })
+    ).rejects.toThrow(/Job Card already belongs to another FG PO Number and Part Code/i)
+  })
+
+  test("reallocates one central machine record between production floors", async () => {
+    const machineNumber = `MOVE-${suffix}`
+    const original = await repository.upsertMachine({
+      machineNumber,
+      name: "Moveable machine",
+      organizationId,
+      productionFloorCode: "conventional",
+      sourcePayload: { machineNo: machineNumber, productionFloorCode: "conventional" },
+    })
+    const reallocated = await repository.upsertMachine({
+      machineNumber,
+      name: "Moveable machine",
+      organizationId,
+      productionFloorCode: "cnc",
+      sourcePayload: { machineNo: machineNumber, productionFloorCode: "cnc" },
+    })
+
+    const floor = await pool.query<{ code: string }>(
+      `
+        SELECT floor.code
+        FROM catalog.machines machine
+        JOIN manufacturing.production_floors floor
+          ON floor.id = machine.production_floor_id
+        WHERE machine.id = $1
+      `,
+      [original.id]
+    )
+
+    expect(reallocated.id).toBe(original.id)
+    expect(floor.rows[0]?.code).toBe("cnc")
+  })
+
   test("upserts normalized masters, work orders, and route setups by business key", async () => {
     const machine = await repository.upsertMachine({
       machineNumber: firstMachine,
@@ -186,6 +383,7 @@ describe("dashboard planning writes", () => {
       routeCode: "1",
     })
     await repository.recordPlannerPriority({
+      confirmedSetupNumbers: ["1"],
       interruptedSetups: [
         {
           finishedQuantity: 12,
@@ -347,6 +545,7 @@ describe("dashboard planning writes", () => {
       constraint_details: "3",
       current_routes: "1",
       jobs: "1",
+      outbox_events: "1",
       overrides: "1",
       override_details: "3",
       priorities: "1",
@@ -355,7 +554,6 @@ describe("dashboard planning writes", () => {
       route_change_setups: "2",
       route_history: "2",
     })
-    expect(Number(result.rows[0]!.outbox_events)).toBeGreaterThan(0)
   })
 
   test("rejects a plan override while the target physical machine is locked by another active setup", async () => {

@@ -36,23 +36,40 @@ import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { BoundedResultNotice } from "@/components/bounded-result-notice"
 
 import { createEnquiryAction, importEnquiryRegisterAction } from "./actions"
 
 export const dynamic = "force-dynamic"
 
-export default async function EnquiriesPage() {
+export default async function EnquiriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ customer?: string }>
+}) {
   await requireCapability("pricing.enquiries.read", "/commercial/enquiries")
+  const customerSearch = (await searchParams).customer?.trim() ?? ""
   const connectionString = readAuthEnvironment().connectionString
   const customerRepository = createCustomerRepository({ connectionString })
   const workflow = createCommercialWorkflowRepository({ connectionString })
-  const [customers, enquiries] = await Promise.all([
-    customerRepository
-      .listForOrganization("MRMPL")
-      .finally(() => customerRepository.close()),
-    workflow.listEnquiries("MRMPL").finally(() => workflow.close()),
-  ])
-  const organizationId = customers[0]?.organizationId
+  const { customerOptions, enquiryResult, organizationId } =
+    await (async () => {
+      try {
+        return {
+          customerOptions: await customerRepository.searchForOrganization(
+            "MRMPL",
+            customerSearch
+          ),
+          enquiryResult: await workflow.listEnquiriesBounded("MRMPL"),
+          organizationId:
+            await customerRepository.organizationIdForCode("MRMPL"),
+        }
+      } finally {
+        await customerRepository.close()
+        await workflow.close()
+      }
+    })()
+  const enquiries = enquiryResult.rows
   const today = new Date().toISOString().slice(0, 10)
 
   return (
@@ -60,18 +77,18 @@ export default async function EnquiriesPage() {
       <section className="grid gap-2">
         <h2 className="text-2xl font-semibold tracking-tight">Enquiries</h2>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Sales intake, commercial handover, technical review, clarification,
-          and design progression in one PostgreSQL workflow.
+          Sales Intake, Commercial Handover, Technical Review, Clarification,
+          And Design Progression In One Postgresql Workflow.
         </p>
         <div className="flex flex-wrap gap-2 pt-2">
           <Button asChild size="sm" variant="outline">
             <Link href="/commercial/enquiries/register/export.xlsx">
-              Export register
+              Export Register
             </Link>
           </Button>
           <Button asChild size="sm" variant="outline">
             <Link href="/commercial/enquiries/register/template.xlsx">
-              Register template
+              Register Template
             </Link>
           </Button>
         </div>
@@ -80,10 +97,10 @@ export default async function EnquiriesPage() {
       {organizationId ? (
         <Card>
           <CardHeader>
-            <CardTitle>Import enquiry register</CardTitle>
+            <CardTitle>Import Enquiry Register</CardTitle>
             <CardDescription>
-              CSV, XLS, or XLSX rows update an editable ENQ or create a new one.
-              The whole file rolls back if any customer or gate is invalid.
+              Csv, Xls, Or Xlsx Rows Update An Editable Enq Or Create A New One.
+              The Whole File Rolls Back If Any Customer Or Gate Is Invalid.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -97,7 +114,7 @@ export default async function EnquiriesPage() {
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="enquiry-register-file">
-                    Register file
+                    Register File
                   </FieldLabel>
                   <Input
                     id="enquiry-register-file"
@@ -107,7 +124,7 @@ export default async function EnquiriesPage() {
                     required
                   />
                 </Field>
-                <Button type="submit">Import register</Button>
+                <Button type="submit">Import Register</Button>
               </FieldGroup>
             </form>
           </CardContent>
@@ -116,13 +133,37 @@ export default async function EnquiriesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Log enquiry</CardTitle>
+          <CardTitle>Log Enquiry</CardTitle>
           <CardDescription>
-            ENQ numbering follows the recovered monthly sequence. Commercial
-            terms are validated again before technical handover.
+            Enq Numbering Follows The Recovered Monthly Sequence. Commercial
+            Terms Are Validated Again Before Technical Handover.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="grid gap-5">
+          <form
+            className="flex flex-col gap-2 sm:flex-row sm:items-end"
+            id="customer-search"
+          >
+            <Field className="max-w-md flex-1">
+              <FieldLabel htmlFor="customer-query">Find Customer</FieldLabel>
+              <Input
+                defaultValue={customerSearch}
+                id="customer-query"
+                name="customer"
+                placeholder="Customer Uid Or Company"
+              />
+            </Field>
+            <Button type="submit" variant="outline">
+              Search
+            </Button>
+          </form>
+          <BoundedResultNotice
+            actionHref="#customer-search"
+            actionLabel="Refine customer search"
+            coverage={customerOptions.coverage}
+            searchQuery={customerSearch}
+            section="Customer options"
+          />
           {organizationId ? (
             <form action={createEnquiryAction}>
               <input
@@ -139,7 +180,7 @@ export default async function EnquiriesPage() {
                       name="customer_id"
                       required
                     >
-                      {customers.map((customer) => (
+                      {customerOptions.rows.map((customer) => (
                         <NativeSelectOption
                           key={customer.id}
                           value={customer.id}
@@ -151,7 +192,7 @@ export default async function EnquiriesPage() {
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="enquiry-received">
-                      Received on
+                      Received On
                     </FieldLabel>
                     <Input
                       id="enquiry-received"
@@ -207,13 +248,13 @@ export default async function EnquiriesPage() {
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="enquiry-payment">
-                      Payment terms
+                      Payment Terms
                     </FieldLabel>
                     <Input id="enquiry-payment" name="payment_terms" />
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="enquiry-shipment">
-                      Shipment mode
+                      Shipment Mode
                     </FieldLabel>
                     <Input id="enquiry-shipment" name="shipment_mode" />
                   </Field>
@@ -234,7 +275,7 @@ export default async function EnquiriesPage() {
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="enquiry-fx">
-                      FX / exchange rate
+                      Fx / Exchange Rate
                     </FieldLabel>
                     <Input
                       id="enquiry-fx"
@@ -251,17 +292,17 @@ export default async function EnquiriesPage() {
                   <FieldLabel htmlFor="enquiry-remarks">Remarks</FieldLabel>
                   <Textarea id="enquiry-remarks" name="remarks" />
                   <FieldDescription>
-                    Technical line details are added after the enquiry is
-                    logged.
+                    Technical Line Details Are Added After The Enquiry Is
+                    Logged.
                   </FieldDescription>
                 </Field>
-                <Button type="submit">Log enquiry</Button>
+                <Button type="submit">Log Enquiry</Button>
               </FieldGroup>
             </form>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Load the MRMPL organization and customer masters before logging an
-              enquiry.
+              Load The Mrmpl Organization And Customer Masters Before Logging An
+              Enquiry.
             </p>
           )}
         </CardContent>
@@ -269,23 +310,29 @@ export default async function EnquiriesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Enquiry register</CardTitle>
+          <CardTitle>Enquiry Register</CardTitle>
           <CardDescription>
-            Current handover state and line count from normalized PostgreSQL
-            rows.
+            Current Handover State And Line Count From Normalized Postgresql
+            Rows.
           </CardDescription>
+          <BoundedResultNotice
+            actionHref="/commercial/enquiries/register/export.xlsx"
+            actionLabel="Export the complete register"
+            coverage={enquiryResult.coverage}
+            section="Enquiries"
+          />
         </CardHeader>
         <CardContent>
           <div className="overflow-hidden rounded-3xl border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ENQ</TableHead>
+                  <TableHead>Enq</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Received</TableHead>
                   <TableHead>Lines</TableHead>
-                  <TableHead>Quoted / ordered</TableHead>
-                  <TableHead>Follow-up</TableHead>
+                  <TableHead>Quoted / Ordered</TableHead>
+                  <TableHead>Follow-Up</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Handover</TableHead>
                   <TableHead className="text-right">Open</TableHead>
@@ -333,7 +380,7 @@ export default async function EnquiriesPage() {
                       className="h-32 text-center text-muted-foreground"
                       colSpan={9}
                     >
-                      No enquiries have been logged.
+                      No Enquiries Have Been Logged.
                     </TableCell>
                   </TableRow>
                 )}

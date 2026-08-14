@@ -6,6 +6,10 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Settings2 } from "lucide-react"
 
+import {
+  defaultProductionFloorCode,
+  normalizeProductionFloorCode,
+} from "@workspace/db/production-floors"
 import { Badge } from "@workspace/ui/components/badge"
 import { Separator } from "@workspace/ui/components/separator"
 import {
@@ -24,9 +28,29 @@ import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-acce
 import {
   administrationNavigation,
   commercialNavigation,
+  dashboardNavigation,
   hrNavigation,
   navigationHrefMatches,
+  type DashboardTabId,
 } from "@/lib/unified-navigation"
+
+const productionPageNavigation: Record<
+  string,
+  { label: string; parentTab: DashboardTabId }
+> = {
+  "/dashboard/first-piece-inspection": {
+    label: "First Piece Inspection",
+    parentTab: "firstPieceInspectionTab",
+  },
+  "/dashboard/hourly-quality-check": {
+    label: "Hourly Quality Check",
+    parentTab: "qualityControlTasksTab",
+  },
+  "/dashboard/setup-checklist": {
+    label: "Setup Checklist",
+    parentTab: "machinistTasksTab",
+  },
+}
 
 export function CommercialShell({
   children,
@@ -39,7 +63,18 @@ export function CommercialShell({
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const productionPage = productionPageNavigation[pathname]
+  const requestedReturnTab = searchParams.get("returnTab")
+  const activeDashboardTab = dashboardNavigation.some(
+    (item) => item.id === requestedReturnTab
+  )
+    ? (requestedReturnTab as DashboardTabId)
+    : productionPage?.parentTab
+  const activeProductionFloor = normalizeProductionFloorCode(
+    searchParams.get("floor") ?? defaultProductionFloorCode
+  )
   const current =
+    productionPage ??
     [
       ...commercialNavigation,
       ...hrNavigation,
@@ -58,12 +93,12 @@ export function CommercialShell({
         } as React.CSSProperties
       }
     >
-      <Sidebar variant="inset">
-        <SidebarHeader>
+      <Sidebar variant="sidebar">
+        <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
           <Link className="flex items-center px-2 py-2" href="/">
             <Image
               src="/mrm-green.svg"
-              alt="MRMPL"
+              alt="Mrmpl"
               width={792}
               height={176}
               priority
@@ -72,13 +107,24 @@ export function CommercialShell({
           </Link>
         </SidebarHeader>
         <SidebarContent>
-          <UnifiedSidebarNavigation navigationAccess={navigationAccess} />
+          <UnifiedSidebarNavigation
+            activeDashboardTab={activeDashboardTab}
+            activeProductionFloor={activeProductionFloor}
+            navigationAccess={navigationAccess}
+          />
         </SidebarContent>
-        <SidebarFooter>
-          <div className="grid gap-0.5 px-2 py-2">
-            <span className="truncate text-sm font-medium">{user.name}</span>
-            <span className="truncate text-xs text-muted-foreground">
-              {user.email}
+        <SidebarFooter className="border-t border-sidebar-border p-3">
+          <div className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/12 text-sm font-semibold text-sidebar-primary">
+              {(user.name || user.email).trim().charAt(0).toUpperCase()}
+            </span>
+            <span className="grid min-w-0 flex-1 gap-0.5">
+              <span className="truncate text-sm font-semibold">
+                {user.name}
+              </span>
+              <span className="truncate text-xs text-muted-foreground">
+                {user.email}
+              </span>
             </span>
           </div>
         </SidebarFooter>
@@ -93,12 +139,12 @@ export function CommercialShell({
               {current.label}
             </h1>
             <p className="truncate text-xs text-muted-foreground">
-              Unified MRMPL workflow
+              Unified Mrmpl Workflow
             </p>
           </div>
           <Badge variant="outline">
             <Settings2 />
-            PostgreSQL
+            Postgresql
           </Badge>
         </header>
         <main className="@container/main flex flex-1 flex-col gap-6 p-4 lg:p-6">
@@ -108,3 +154,5 @@ export function CommercialShell({
     </SidebarProvider>
   )
 }
+
+export const ProductionShell = CommercialShell

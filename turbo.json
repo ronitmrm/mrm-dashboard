@@ -21,13 +21,14 @@
     "REFRESH_WORKER_BATCH_SIZE",
     "REFRESH_WORKER_ID",
     "REFRESH_WORKER_MAX_RETRY_DELAY_MS",
-    "REFRESH_WORKER_POLL_MS",
+    "REFRESH_WORKER_SWEEP_MS",
     "UPSTASH_REDIS_REST_TOKEN",
     "UPSTASH_REDIS_REST_URL",
     "WEB_DATABASE_POOL_MAX",
     "WEB_DATABASE_URL",
     "WORKER_DATABASE_POOL_MAX",
     "WORKER_DATABASE_URL",
+    "WORKER_LISTENER_DATABASE_URL",
     "TEST_REDIS_URL"
   ],
   "tasks": {
@@ -47,7 +48,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": ["TEST_DATABASE_URL", "TEST_REDIS_URL"]
+      "env": ["CONTROLLED_SEARCH_GATE", "TEST_DATABASE_URL", "TEST_REDIS_URL"]
     },
     "dev": {
       "cache": false,

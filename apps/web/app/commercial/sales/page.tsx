@@ -28,6 +28,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { BoundedResultNotice } from "@/components/bounded-result-notice"
 
 import {
   completeFollowupAction,
@@ -38,37 +39,75 @@ import {
 
 export const dynamic = "force-dynamic"
 
-export default async function SalesPage() {
+export default async function SalesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    candidate?: string
+    candidate_item?: string
+    followup?: string
+  }>
+}) {
   await requireCapability("pricing.sales.read", "/commercial/sales")
+  const params = await searchParams
+  const candidateSearch = params.candidate?.trim() ?? ""
+  const requestedCandidateItemId = params.candidate_item?.trim() ?? ""
+  const requestedFollowupId = params.followup?.trim() ?? ""
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
   try {
     const [
-      clarificationTasks,
-      enquiries,
-      followups,
-      handoverTasks,
-      quoteReadyTasks,
-      sentQuoteTasks,
+      clarificationResults,
+      enquiryResults,
+      followupResults,
+      handoverResults,
+      quoteReadyResults,
+      sentQuoteResults,
     ] = await Promise.all([
-      workflow.listSalesClarificationQueue("MRMPL"),
-      workflow.listEnquiries("MRMPL"),
-      workflow.listFollowups("MRMPL"),
-      workflow.listSalesHandoverQueue("MRMPL"),
-      workflow.listSalesQuoteReadyQueue("MRMPL"),
-      workflow.listSalesSentQuoteQueue("MRMPL"),
+      workflow.listSalesClarificationQueueBounded("MRMPL"),
+      workflow.listEnquiriesBounded("MRMPL"),
+      workflow.listFollowupsBounded("MRMPL"),
+      workflow.listSalesHandoverQueueBounded("MRMPL"),
+      workflow.listSalesQuoteReadyQueueBounded("MRMPL"),
+      workflow.listSalesSentQuoteQueueBounded("MRMPL"),
     ])
-    const candidateEntries = await Promise.all(
-      clarificationTasks.map(
-        async (task) =>
-          [
-            task.enquiryItemId,
-            await workflow.listSalesMatchCandidates(task.enquiryItemId),
-          ] as const
+    const clarificationTasks = clarificationResults.rows
+    const enquiries = enquiryResults.rows
+    const followups = followupResults.rows
+    const selectedFollowup =
+      followups.find((followup) => followup.id === requestedFollowupId) ??
+      followups.find((followup) => followup.status === "Pending") ??
+      followups[0]
+    const handoverTasks = handoverResults.rows
+    const quoteReadyTasks = quoteReadyResults.rows
+    const sentQuoteTasks = sentQuoteResults.rows
+    const selectedClarification =
+      clarificationTasks.find(
+        (task) => task.enquiryItemId === requestedCandidateItemId
+      ) ?? clarificationTasks[0]
+    const candidateItemId = selectedClarification?.enquiryItemId ?? ""
+    const candidateResults =
+      await workflow.listSalesMatchCandidatesForItemsBounded(
+        selectedClarification ? [selectedClarification.enquiryItemId] : []
       )
-    )
-    const candidates = new Map(candidateEntries)
+    const searchedCandidates =
+      candidateItemId && candidateSearch
+        ? await workflow.searchSalesMatchCandidates(
+            candidateItemId,
+            candidateSearch
+          )
+        : null
+    const candidatesFor = (enquiryItemId: string) => {
+      const base = candidateResults.get(enquiryItemId)?.rows ?? []
+      if (enquiryItemId !== candidateItemId || !searchedCandidates) return base
+      const seen = new Set<string>()
+      return [...searchedCandidates.rows, ...base].filter((candidate) => {
+        if (seen.has(candidate.quoteItemId)) return false
+        seen.add(candidate.quoteItemId)
+        return true
+      })
+    }
     const organizationId = enquiries[0]?.organizationId
     const today = new Date().toISOString().slice(0, 10)
 
@@ -77,39 +116,136 @@ export default async function SalesPage() {
         <section className="grid gap-2">
           <h2 className="text-2xl font-semibold tracking-tight">Sales</h2>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Clarification matching, Technical handover, quote readiness, sent
-            history, and due follow-ups share one source-equivalent queue.
+            Clarification Matching, Technical Handover, Quote Readiness, Sent
+            History, And Due Follow-Ups Share One Source-Equivalent Queue.
           </p>
           <div className="flex flex-wrap gap-2 pt-2">
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/sales/history/export.xlsx">
-                Export Sales history
+                Export Sales History
               </Link>
             </Button>
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/sales/history/followups/export.xlsx">
-                Export follow-ups
+                Export Follow-Ups
               </Link>
             </Button>
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/sales/history/sent-quotes/export.xlsx">
-                Export sent quotes
+                Export Sent Quotes
               </Link>
             </Button>
           </div>
+          <BoundedResultNotice
+            actionHref="/commercial/enquiries/register/export.xlsx"
+            actionLabel="Export the complete enquiry register"
+            coverage={enquiryResults.coverage}
+            section="Enquiry options"
+          />
         </section>
 
         <Card>
           <CardHeader>
-            <CardTitle>Sales clarification</CardTitle>
+            <CardTitle>Sales Clarification</CardTitle>
             <CardDescription>
-              Choose new work, a commercial requote, or a technical revision.
-              Quote candidates are scoped to the same customer.
+              Choose New Work, A Commercial Requote, Or A Technical Revision.
+              Quote Candidates Are Scoped To The Same Customer.
             </CardDescription>
+            <BoundedResultNotice
+              actionHref="/commercial/sales/history/export.xlsx"
+              actionLabel="Export complete Sales history"
+              coverage={clarificationResults.coverage}
+              section="Sales clarification"
+            />
           </CardHeader>
           <CardContent className="grid gap-5">
             {clarificationTasks.length ? (
-              clarificationTasks.map((task) => (
+              <form
+                className="grid gap-3 rounded-2xl border p-4 md:grid-cols-[minmax(12rem,18rem)_minmax(14rem,1fr)_auto] md:items-end"
+                id="sales-candidate-search"
+              >
+                <input
+                  name="followup"
+                  type="hidden"
+                  value={selectedFollowup?.id ?? ""}
+                />
+                <Field>
+                  <FieldLabel htmlFor="candidate-item">
+                    Clarification Line
+                  </FieldLabel>
+                  <NativeSelect
+                    defaultValue={candidateItemId}
+                    id="candidate-item"
+                    name="candidate_item"
+                  >
+                    {clarificationTasks.map((task) => (
+                      <NativeSelectOption
+                        key={task.enquiryItemId}
+                        value={task.enquiryItemId}
+                      >
+                        {task.enquiryNumber} / Line {task.lineNumber}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="candidate-query">
+                    Find Quote Candidate
+                  </FieldLabel>
+                  <Input
+                    defaultValue={candidateSearch}
+                    id="candidate-query"
+                    name="candidate"
+                    placeholder="Part, Quote Number, Uid, Or Description"
+                  />
+                </Field>
+                <Button type="submit" variant="outline">
+                  Search
+                </Button>
+              </form>
+            ) : null}
+            {clarificationTasks.length ? (
+              <div className="grid gap-2">
+                {clarificationTasks.map((task) => (
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-3"
+                    key={task.clarificationTaskId}
+                  >
+                    <div>
+                      <p className="font-medium">
+                        {task.enquiryNumber} / Line {task.lineNumber}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {task.customerUid} · {task.companyName} ·{" "}
+                        {task.customerPartCode}
+                      </p>
+                    </div>
+                    <Button asChild size="sm" variant="outline">
+                      <Link
+                        aria-current={
+                          task.enquiryItemId === candidateItemId
+                            ? "true"
+                            : undefined
+                        }
+                        href={{
+                          pathname: "/commercial/sales",
+                          query: {
+                            candidate_item: task.enquiryItemId,
+                            ...(selectedFollowup
+                              ? { followup: selectedFollowup.id }
+                              : {}),
+                          },
+                        }}
+                      >
+                        Open Clarification
+                      </Link>
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {selectedClarification ? (
+              [selectedClarification].map((task) => (
                 <form
                   action={completeSalesClarificationAction}
                   className="rounded-3xl border p-5"
@@ -205,7 +341,7 @@ export default async function SalesPage() {
                         <FieldLabel
                           htmlFor={`${task.enquiryItemId}-sales-target`}
                         >
-                          Target price
+                          Target Price
                         </FieldLabel>
                         <Input
                           id={`${task.enquiryItemId}-sales-target`}
@@ -220,7 +356,7 @@ export default async function SalesPage() {
                         <FieldLabel
                           htmlFor={`${task.enquiryItemId}-sales-drawing-ref`}
                         >
-                          Drawing reference
+                          Drawing Reference
                         </FieldLabel>
                         <Input
                           id={`${task.enquiryItemId}-sales-drawing-ref`}
@@ -232,7 +368,7 @@ export default async function SalesPage() {
                         <FieldLabel
                           htmlFor={`${task.enquiryItemId}-sales-drawing`}
                         >
-                          Replacement drawing
+                          Replacement Drawing
                         </FieldLabel>
                         <Input
                           id={`${task.enquiryItemId}-sales-drawing`}
@@ -245,7 +381,7 @@ export default async function SalesPage() {
                         <FieldLabel
                           htmlFor={`${task.enquiryItemId}-sales-decision`}
                         >
-                          Match decision
+                          Match Decision
                         </FieldLabel>
                         <NativeSelect
                           id={`${task.enquiryItemId}-sales-decision`}
@@ -253,9 +389,9 @@ export default async function SalesPage() {
                           defaultValue="new"
                         >
                           <NativeSelectOption value="new">
-                            New item — return to Technical
+                            New Item — Return To Technical
                           </NativeSelectOption>
-                          {(candidates.get(task.enquiryItemId) ?? []).flatMap(
+                          {candidatesFor(task.enquiryItemId).flatMap(
                             (candidate) => [
                               <NativeSelectOption
                                 key={`quote:${candidate.quoteItemId}`}
@@ -268,7 +404,7 @@ export default async function SalesPage() {
                                 key={`technical:${candidate.quoteItemId}`}
                                 value={`technical:${candidate.quoteItemId}`}
                               >
-                                Technical revision · {candidate.productUid} ·{" "}
+                                Technical Revision · {candidate.productUid} ·{" "}
                                 {candidate.quoteNumber}
                               </NativeSelectOption>,
                             ]
@@ -276,11 +412,28 @@ export default async function SalesPage() {
                         </NativeSelect>
                       </Field>
                     </div>
+                    <BoundedResultNotice
+                      actionHref="#sales-candidate-search"
+                      actionLabel="Search Quote Candidates"
+                      coverage={
+                        task.enquiryItemId === candidateItemId &&
+                        searchedCandidates
+                          ? searchedCandidates.coverage
+                          : candidateResults.get(task.enquiryItemId)?.coverage
+                      }
+                      searchQuery={
+                        task.enquiryItemId === candidateItemId &&
+                        searchedCandidates
+                          ? candidateSearch
+                          : undefined
+                      }
+                      section={`Quote candidates for ${task.enquiryNumber} / Line ${task.lineNumber}`}
+                    />
                     <Field>
                       <FieldLabel
                         htmlFor={`${task.enquiryItemId}-sales-remarks`}
                       >
-                        Line remarks
+                        Line Remarks
                       </FieldLabel>
                       <Textarea
                         id={`${task.enquiryItemId}-sales-remarks`}
@@ -291,7 +444,7 @@ export default async function SalesPage() {
                       <FieldLabel
                         htmlFor={`${task.enquiryItemId}-sales-response`}
                       >
-                        Sales response
+                        Sales Response
                       </FieldLabel>
                       <Textarea
                         id={`${task.enquiryItemId}-sales-response`}
@@ -300,14 +453,14 @@ export default async function SalesPage() {
                       />
                     </Field>
                     <Button className="w-fit" type="submit">
-                      Complete clarification
+                      Complete Clarification
                     </Button>
                   </FieldGroup>
                 </form>
               ))
             ) : (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                No Sales clarifications are open.
+                No Sales Clarifications Are Open.
               </p>
             )}
           </CardContent>
@@ -316,10 +469,16 @@ export default async function SalesPage() {
         <div className="grid gap-6 xl:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Technical handover</CardTitle>
+              <CardTitle>Technical Handover</CardTitle>
               <CardDescription>
-                Draft enquiries with at least one line.
+                Draft Enquiries With At Least One Line.
               </CardDescription>
+              <BoundedResultNotice
+                actionHref="/commercial/sales/history/export.xlsx"
+                actionLabel="Export complete Sales history"
+                coverage={handoverResults.coverage}
+                section="Technical handover"
+              />
             </CardHeader>
             <CardContent className="grid gap-3">
               {handoverTasks.map((task) => {
@@ -339,7 +498,7 @@ export default async function SalesPage() {
                     <div>
                       <p className="font-medium">{task.enquiryNumber}</p>
                       <p className="text-sm text-muted-foreground">
-                        {task.companyName} · {task.totalLines} lines
+                        {task.companyName} · {task.totalLines} Lines
                         {missing.length
                           ? ` · Missing ${missing.join(", ")}`
                           : ""}
@@ -356,7 +515,7 @@ export default async function SalesPage() {
                         size="sm"
                         disabled={missing.length > 0 || task.salesHoldLines > 0}
                       >
-                        Hand over
+                        Hand Over
                       </Button>
                     </form>
                   </div>
@@ -364,7 +523,7 @@ export default async function SalesPage() {
               })}
               {!handoverTasks.length ? (
                 <p className="text-sm text-muted-foreground">
-                  No enquiries are waiting for handover.
+                  No Enquiries Are Waiting For Handover.
                 </p>
               ) : null}
             </CardContent>
@@ -372,10 +531,16 @@ export default async function SalesPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Quote-ready</CardTitle>
+              <CardTitle>Quote-Ready</CardTitle>
               <CardDescription>
-                Every feasible line is costed; not-feasible lines are omitted.
+                Every Feasible Line Is Costed; Not-Feasible Lines Are Omitted.
               </CardDescription>
+              <BoundedResultNotice
+                actionHref="/commercial/sales/history/export.xlsx"
+                actionLabel="Export complete Sales history"
+                coverage={quoteReadyResults.coverage}
+                section="Quote-ready"
+              />
             </CardHeader>
             <CardContent className="grid gap-3">
               {quoteReadyTasks.map((task) => (
@@ -386,18 +551,18 @@ export default async function SalesPage() {
                   <div>
                     <p className="font-medium">{task.enquiryNumber}</p>
                     <p className="text-sm text-muted-foreground">
-                      {task.quotedLines} quoted · {task.notQuotedLines} not
-                      feasible · {task.currency}
+                      {task.quotedLines} Quoted · {task.notQuotedLines} Not
+                      Feasible · {task.currency}
                     </p>
                   </div>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="/commercial/quotes">Open quote register</Link>
+                    <Link href="/commercial/quotes">Open Quote Register</Link>
                   </Button>
                 </div>
               ))}
               {!quoteReadyTasks.length ? (
                 <p className="text-sm text-muted-foreground">
-                  No complete draft quotes are waiting.
+                  No Complete Draft Quotes Are Waiting.
                 </p>
               ) : null}
             </CardContent>
@@ -406,9 +571,9 @@ export default async function SalesPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Manual follow-up</CardTitle>
+            <CardTitle>Manual Follow-Up</CardTitle>
             <CardDescription>
-              Create a Sales follow-up independently of quote send.
+              Create A Sales Follow-Up Independently Of Quote Send.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -423,7 +588,7 @@ export default async function SalesPage() {
                 <FieldGroup>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <Field>
-                      <FieldLabel htmlFor="followup-enquiry">ENQ</FieldLabel>
+                      <FieldLabel htmlFor="followup-enquiry">Enq</FieldLabel>
                       <NativeSelect
                         id="followup-enquiry"
                         name="enquiry_id"
@@ -440,7 +605,7 @@ export default async function SalesPage() {
                       </NativeSelect>
                     </Field>
                     <Field>
-                      <FieldLabel htmlFor="followup-due">Due on</FieldLabel>
+                      <FieldLabel htmlFor="followup-due">Due On</FieldLabel>
                       <Input
                         id="followup-due"
                         name="due_on"
@@ -472,13 +637,13 @@ export default async function SalesPage() {
                     </Field>
                   </div>
                   <Button className="w-fit" type="submit">
-                    Create follow-up
+                    Create Follow-Up
                   </Button>
                 </FieldGroup>
               </form>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No enquiries are available.
+                No Enquiries Are Available.
               </p>
             )}
           </CardContent>
@@ -486,11 +651,17 @@ export default async function SalesPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Follow-up history</CardTitle>
+            <CardTitle>Follow-Up History</CardTitle>
             <CardDescription>
-              Pending work is due when its local calendar date is today or
-              earlier. Completion may chain the next reminder.
+              Pending Work Is Due When Its Local Calendar Date Is Today Or
+              Earlier. Completion May Chain The Next Reminder.
             </CardDescription>
+            <BoundedResultNotice
+              actionHref="/commercial/sales/history/followups/export.xlsx"
+              actionLabel="Export complete follow-up history"
+              coverage={followupResults.coverage}
+              section="Follow-up history"
+            />
           </CardHeader>
           <CardContent>
             <div className="overflow-hidden rounded-3xl border">
@@ -498,11 +669,11 @@ export default async function SalesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Due</TableHead>
-                    <TableHead>ENQ</TableHead>
+                    <TableHead>Enq</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Channel</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Notes / completion</TableHead>
+                    <TableHead>Notes / Completion</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -516,7 +687,8 @@ export default async function SalesPage() {
                         <Badge variant="outline">{followup.status}</Badge>
                       </TableCell>
                       <TableCell className="min-w-96">
-                        {followup.status === "Pending" ? (
+                        {followup.status === "Pending" &&
+                        followup.id === selectedFollowup?.id ? (
                           <form action={completeFollowupAction}>
                             <input
                               type="hidden"
@@ -532,12 +704,12 @@ export default async function SalesPage() {
                               <Input
                                 name="note"
                                 defaultValue={followup.note}
-                                aria-label="Completion notes"
+                                aria-label="Completion Notes"
                               />
                               <NativeSelect
                                 name="channel"
                                 defaultValue={followup.channel}
-                                aria-label="Next channel"
+                                aria-label="Next Channel"
                               >
                                 {["Email", "Phone", "WhatsApp"].map(
                                   (channel) => (
@@ -553,18 +725,34 @@ export default async function SalesPage() {
                               <Input
                                 name="next_due_on"
                                 type="date"
-                                aria-label="Next due date"
+                                aria-label="Next Due Date"
                               />
                               <Input
                                 name="next_note"
-                                placeholder="Next reminder"
-                                aria-label="Next notes"
+                                placeholder="Next Reminder"
+                                aria-label="Next Notes"
                               />
                             </div>
                             <Button className="mt-2" size="sm" type="submit">
                               Complete
                             </Button>
                           </form>
+                        ) : followup.status === "Pending" ? (
+                          <Button asChild size="sm" variant="outline">
+                            <Link
+                              href={{
+                                pathname: "/commercial/sales",
+                                query: {
+                                  ...(candidateItemId
+                                    ? { candidate_item: candidateItemId }
+                                    : {}),
+                                  followup: followup.id,
+                                },
+                              }}
+                            >
+                              Open Follow-Up
+                            </Link>
+                          </Button>
                         ) : (
                           followup.note || "—"
                         )}
@@ -579,10 +767,16 @@ export default async function SalesPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Sent quotes</CardTitle>
+            <CardTitle>Sent Quotes</CardTitle>
             <CardDescription>
-              Latest 50 enquiries with sent quote rows and follow-up coverage.
+              Sent Quote Rows And Follow-Up Coverage.
             </CardDescription>
+            <BoundedResultNotice
+              actionHref="/commercial/sales/history/sent-quotes/export.xlsx"
+              actionLabel="Export complete sent quote history"
+              coverage={sentQuoteResults.coverage}
+              section="Sent quotes"
+            />
           </CardHeader>
           <CardContent className="grid gap-3">
             {sentQuoteTasks.map((task) => (
@@ -593,12 +787,12 @@ export default async function SalesPage() {
                 <div>
                   <p className="font-medium">{task.enquiryNumber}</p>
                   <p className="text-sm text-muted-foreground">
-                    {task.companyName} · {task.sentQuoteItems} sent · Next{" "}
-                    {task.nextFollowupDue ?? "not scheduled"}
+                    {task.companyName} · {task.sentQuoteItems} Sent · Next{" "}
+                    {task.nextFollowupDue ?? "Not Scheduled"}
                   </p>
                 </div>
                 <Badge variant="secondary">
-                  {task.pendingFollowups} pending
+                  {task.pendingFollowups} Pending
                 </Badge>
               </div>
             ))}

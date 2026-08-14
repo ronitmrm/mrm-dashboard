@@ -717,4 +717,20 @@ describe("PostgreSQL product-costing and quote workflow", () => {
       )
     ).toBe(true)
   })
+
+  test("exports the complete pricing graph across root batches", async () => {
+    const canonical = await repository.listPricingRegister(organizationCode, {
+      revisions: true,
+    })
+    const exported = await repository.listPricingRegisterForExport(
+      organizationCode,
+      { revisions: true },
+      1
+    )
+
+    expect(exported).toEqual(canonical)
+    expect(
+      new Set(exported.map((row) => row.quoteNumber)).size
+    ).toBeGreaterThan(1)
+  })
 })

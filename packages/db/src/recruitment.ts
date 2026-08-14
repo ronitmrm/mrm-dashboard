@@ -3,6 +3,32 @@ import { randomUUID } from "node:crypto"
 import type { Pool, PoolClient } from "pg"
 
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  nextRecruitmentCombinedRoleIdentity,
+  nextRecruitmentPostIdentity,
+  recruitmentAdvisoryLockKey,
+} from "./recruitment-codes"
+import {
+  deriveRecruitmentEmployeeAssignment,
+  deriveRecruitmentPostStatus,
+  isActiveRecruitmentApplicationStatus,
+  recruitmentPostDeletionBlocker,
+} from "./recruitment-domain"
+import {
+  canonicalRecruitmentInterviewRound,
+  nextRecruitmentInterviewRound,
+  scoreRecruitmentInterview,
+  type RecruitmentInterviewRoundName,
+} from "./recruitment-interview-workflow"
+import { properCaseUserText } from "./user-entry-text"
+
+export {
+  deriveRecruitmentEmployeeAssignment,
+  deriveRecruitmentPostStatus,
+  isActiveRecruitmentApplicationStatus,
+  recruitmentPostDeletionBlocker,
+  resolveRecruitmentEmployeeAssignmentTarget,
+} from "./recruitment-domain"
 
 type MutationContext = {
   actorUserId?: string | null
@@ -15,8 +41,12 @@ export type RecruitmentMasterSnapshot = {
 }
 
 export type RecruitmentTemplateRow = {
+  combinedRoleId: string | null
+  combinedRoleName: string | null
   department: string | null
+  departmentCode: string | null
   designation: string
+  designationCode: string
   education: string | null
   experienceRequirement: string | null
   gender: string | null
@@ -28,12 +58,27 @@ export type RecruitmentTemplateRow = {
   templateCode: string
 }
 
+export type RecruitmentCombinedRoleRow = {
+  id: string
+  name: string
+  postCodes: string[]
+  primaryPostCode: string | null
+  status: string
+  vacancyCode: string | null
+}
+
 export type RecruitmentPostRow = {
+  combinedRoleId: string | null
+  combinedRoleName: string | null
+  combinedVacancyCode: string | null
   department: string
   designation: string
   employeeCode: string | null
   employeeName: string | null
   id: string
+  isPrimaryCombinedPost: boolean
+  joiningDate: string | null
+  lastWorkingDate: string | null
   postCode: string
   requirementTemplateCode: string | null
   status: string
@@ -42,6 +87,7 @@ export type RecruitmentPostRow = {
 }
 
 export type RecruitmentCandidateRow = {
+  activeApplicationJobIds: string[]
   applicationCount: number
   currentCompany: string | null
   departments: string[]
@@ -49,8 +95,13 @@ export type RecruitmentCandidateRow = {
   eventCount: number
   experience: string | null
   id: string
+  hasResume: boolean
   name: string
   phone: string
+  preferredDepartmentCode: string | null
+  preferredDesignation: string | null
+  preferredDesignationCode: string | null
+  resumeFileName: string | null
   source: string | null
   status: string
 }
@@ -69,14 +120,102 @@ export type RecruitmentJobRow = {
 
 export type RecruitmentInterviewRow = {
   applicationId: string
+  candidateId: string
   candidateName: string
   interviewAt: string | null
+  jobId: string
+  jobNumber: string
   joiningDate: string | null
   jobTitle: string
   latestRound: string | null
   latestStatus: string | null
+  nextRound: RecruitmentInterviewRoundName | null
   plannedRound: string | null
+  postCode: string | null
+  scoreableRound: RecruitmentInterviewRoundName | null
   status: string
+}
+
+export type RecruitmentJobApplicationRow = {
+  allRoundsApproved: boolean
+  candidateEmail: string | null
+  candidateId: string
+  candidateName: string
+  candidatePhone: string
+  currentCompany: string | null
+  experience: string | null
+  id: string
+  interviewAt: string | null
+  interviewCount: number
+  joiningDate: string | null
+  nextRound: RecruitmentInterviewRoundName | null
+  plannedRound: string | null
+  salaryAfterProbationMaximum: number | null
+  salaryAfterProbationMinimum: number | null
+  salaryBeforeProbation: number | null
+  scoreableRound: RecruitmentInterviewRoundName | null
+  status: string
+  willingToJoin: boolean | null
+}
+
+export type RecruitmentJobInterviewRow = {
+  applicationId: string
+  candidateName: string
+  comments: string | null
+  createdAt: string
+  id: string
+  interviewerName: string | null
+  joiningDate: string | null
+  questionScores: Record<string, number>
+  roundName: string
+  salaryAfterProbationMaximum: number | null
+  salaryAfterProbationMinimum: number | null
+  salaryBeforeProbation: number | null
+  scheduledAt: string | null
+  score: number | null
+  status: string
+  updatedAt: string
+  willingToJoin: boolean | null
+}
+
+export type RecruitmentInterviewRecordRow = RecruitmentJobInterviewRow & {
+  jobId: string
+  jobNumber: string
+  jobTitle: string
+}
+
+export type RecruitmentJobWorkspace = {
+  applications: RecruitmentJobApplicationRow[]
+  interviews: RecruitmentJobInterviewRow[]
+  job: RecruitmentJobRow
+}
+
+export type RecruitmentCandidateEventRow = {
+  candidateId: string
+  candidateName: string
+  candidatePhone: string
+  department: string | null
+  eventType: string
+  id: string
+  jobNumber: string | null
+  notes: string | null
+  occurredAt: string
+  title: string
+}
+
+export type RecruitmentCandidateApplicationHistoryRow = {
+  applicationId: string
+  interviewCount: number
+  jobId: string
+  jobNumber: string
+  jobTitle: string
+  status: string
+}
+
+export type RecruitmentCandidateWorkspace = {
+  applications: RecruitmentCandidateApplicationHistoryRow[]
+  candidate: RecruitmentCandidateRow
+  events: RecruitmentCandidateEventRow[]
 }
 
 function required(value: unknown, label: string) {
@@ -90,6 +229,28 @@ function optional(value: unknown) {
   return normalized || null
 }
 
+function requiredProperCase(value: unknown, label: string) {
+  return properCaseUserText(required(value, label))
+}
+
+function optionalProperCase(value: unknown) {
+  const normalized = optional(value)
+  return normalized ? properCaseUserText(normalized) : null
+}
+
+function compareText(left: string, right: string) {
+  return left === right ? 0 : left < right ? -1 : 1
+}
+
+function normalizedQuestionScores(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, score]) => [key, Number(score)] as const)
+      .filter(([, score]) => Number.isFinite(score))
+  )
+}
+
 function money(value: unknown) {
   const normalized = String(value ?? "")
     .replaceAll(",", "")
@@ -100,6 +261,34 @@ function money(value: unknown) {
     throw new Error("Salary must be a positive number.")
   }
   return parsed
+}
+
+function requiredMoney(value: unknown, label: string) {
+  const parsed = money(value)
+  if (parsed === null || parsed <= 0) {
+    throw new Error(`${label} must be greater than zero.`)
+  }
+  return parsed
+}
+
+function requiredYesNo(value: unknown, label: string) {
+  if (
+    value === true ||
+    String(value ?? "")
+      .trim()
+      .toLowerCase() === "yes"
+  ) {
+    return true
+  }
+  if (
+    value === false ||
+    String(value ?? "")
+      .trim()
+      .toLowerCase() === "no"
+  ) {
+    return false
+  }
+  throw new Error(`${label} is required.`)
 }
 
 async function transaction<T>(
@@ -120,34 +309,577 @@ async function transaction<T>(
   }
 }
 
-async function audit(
-  client: PoolClient,
-  input: MutationContext & {
-    eventType: string
-    metadata?: Record<string, unknown>
-    targetId: string
-    targetTable: string
-  }
-) {
+type AuditInput = MutationContext & {
+  afterState?: Record<string, unknown> | null
+  beforeState?: Record<string, unknown> | null
+  eventType: string
+  metadata?: Record<string, unknown>
+  reason?: string | null
+  sourceId?: string
+  targetId: string
+  targetTable: string
+}
+
+async function auditMany(client: PoolClient, inputs: AuditInput[]) {
+  if (!inputs.length) return
+  const events = inputs.map((input) => ({
+    actorUserId: input.actorUserId ?? null,
+    afterState: input.afterState ?? null,
+    beforeState: input.beforeState ?? null,
+    eventType: input.eventType,
+    metadata: input.metadata ?? {},
+    organizationId: input.organizationId,
+    reason: input.reason ?? null,
+    sourceId: input.sourceId ?? randomUUID(),
+    targetId: input.targetId,
+    targetTable: input.targetTable,
+  }))
   await client.query(
     `
       INSERT INTO audit.events (
         organization_id, event_type, target_schema, target_table, target_id,
-        actor_user_id, metadata, source_system, source_table, source_id
+        actor_user_id, reason, before_state, after_state, metadata,
+        source_system, source_table, source_id
       )
-      VALUES ($1, $2, 'recruitment', $3, $4, $5, $6,
-        'mrm-dashboard', 'recruitment_events', $7)
+      SELECT
+        (event.value->>'organizationId')::uuid,
+        event.value->>'eventType',
+        'recruitment',
+        event.value->>'targetTable',
+        (event.value->>'targetId')::uuid,
+        nullif(event.value->>'actorUserId', '')::uuid,
+        event.value->>'reason',
+        nullif(event.value->'beforeState', 'null'::jsonb),
+        nullif(event.value->'afterState', 'null'::jsonb),
+        coalesce(event.value->'metadata', '{}'::jsonb),
+        'mrm-dashboard',
+        'recruitment_events',
+        event.value->>'sourceId'
+      FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY
+        AS event(value, sequence)
+      ORDER BY event.sequence
+    `,
+    [JSON.stringify(events)]
+  )
+}
+
+async function audit(client: PoolClient, input: AuditInput) {
+  await auditMany(client, [input])
+}
+
+function recruitmentAssignmentAudit(
+  input: AuditInput,
+  commandId: string,
+  commandOrdinal: number
+): AuditInput {
+  return {
+    ...input,
+    metadata: {
+      ...input.metadata,
+      commandId,
+      commandOrdinal,
+    },
+    sourceId: `recruitment:${commandId}:${String(commandOrdinal).padStart(6, "0")}`,
+  }
+}
+
+type CandidateAssignmentInput = MutationContext & {
+  candidateIds: string[]
+  jobId: string
+}
+
+type CandidateAssignmentCommandInput = CandidateAssignmentInput & {
+  commandId: string
+}
+
+const recruitmentAssignmentCommandLimit = 100
+
+function normalizedCandidateAssignmentIds(candidateIds: string[]) {
+  return [
+    ...new Set(candidateIds.map((candidateId) => candidateId.trim())),
+  ].filter(Boolean)
+}
+
+function assertCandidateAssignmentCount(candidateIds: string[]) {
+  if (!candidateIds.length) throw new Error("Select at least one candidate.")
+  if (candidateIds.length > recruitmentAssignmentCommandLimit) {
+    throw new Error(
+      `Select no more than ${recruitmentAssignmentCommandLimit} candidates.`
+    )
+  }
+}
+
+async function assignCandidatesInTransaction(
+  client: PoolClient,
+  input: CandidateAssignmentCommandInput
+) {
+  const candidateIds = input.candidateIds
+  const jobId = input.jobId
+
+  const activeApplications = await client.query<{
+    candidate_name: string
+  }>(
+    `
+      SELECT candidate.name AS candidate_name
+      FROM recruitment.applications application
+      JOIN recruitment.candidates candidate
+        ON candidate.id = application.candidate_id
+      WHERE application.organization_id = $1
+        AND application.job_post_id = $2
+        AND application.candidate_id = ANY($3::uuid[])
+        AND application.status IN ('Assigned', 'Interview', 'Hold')
+      ORDER BY candidate.name
+    `,
+    [input.organizationId, jobId, candidateIds]
+  )
+  if (activeApplications.rows.length) {
+    const candidateNames = activeApplications.rows
+      .map((row) => row.candidate_name)
+      .join(", ")
+    throw new Error(
+      `${candidateNames} ${activeApplications.rows.length === 1 ? "already has" : "already have"} an active application for this job. Complete or close it before assigning again.`
+    )
+  }
+
+  const result = await client.query<{ candidate_id: string; id: string }>(
+    `
+      INSERT INTO recruitment.applications (
+        organization_id, candidate_id, job_post_id, status,
+        created_by_user_id, updated_by_user_id, source_system,
+        source_table, source_id
+      )
+      SELECT $1, candidate.id, job.id, 'Assigned', $2, $2,
+        'mrm-dashboard', 'assignments', $3 || ':' || candidate.id::text
+      FROM recruitment.candidates candidate
+      JOIN recruitment.job_posts job
+        ON job.id = $4 AND job.organization_id = $1
+       AND job.status = 'Open'
+      WHERE candidate.id = ANY($5::uuid[])
+        AND candidate.organization_id = $1
+      ON CONFLICT (candidate_id, job_post_id)
+        WHERE status IN ('Assigned', 'Interview', 'Hold')
+        DO NOTHING
+      RETURNING id, candidate_id
     `,
     [
       input.organizationId,
-      input.eventType,
-      input.targetTable,
-      input.targetId,
       input.actorUserId ?? null,
-      input.metadata ?? {},
-      randomUUID(),
+      input.commandId,
+      jobId,
+      candidateIds,
     ]
   )
+  if (result.rows.length !== candidateIds.length) {
+    throw new Error(
+      "One or more selected candidates could not be assigned. Refresh the candidate list and try again."
+    )
+  }
+  const applicationsByCandidateId = new Map(
+    result.rows.map((application) => [application.candidate_id, application])
+  )
+  const orderedApplications = candidateIds.map((candidateId) => {
+    const application = applicationsByCandidateId.get(candidateId)
+    if (!application) {
+      throw new Error(
+        "One or more selected candidates could not be assigned. Refresh the candidate list and try again."
+      )
+    }
+    return application
+  })
+  await auditMany(
+    client,
+    orderedApplications.map((application, selectionOrdinal) =>
+      recruitmentAssignmentAudit(
+        {
+          ...input,
+          eventType: "recruitment.application.assigned",
+          metadata: {
+            candidateId: application.candidate_id,
+            selectionOrdinal,
+          },
+          targetId: application.id,
+          targetTable: "applications",
+        },
+        input.commandId,
+        selectionOrdinal
+      )
+    )
+  )
+  return orderedApplications
+}
+
+type EmployeeAssignmentInput = MutationContext & {
+  appointedApplicationId?: string | null
+  employeeCode?: string | null
+  employeeEvent?: string | null
+  employeeName?: string | null
+  joiningDate?: string | null
+  lastWorkingDate?: string | null
+  postId: string
+}
+
+async function assignEmployeeInTransaction(
+  client: PoolClient,
+  input: EmployeeAssignmentInput,
+  commandId: string
+) {
+  const current = await client.query<{
+    can_replace: boolean
+    combined_role_id: string | null
+    employee_code: string | null
+    employee_name: string | null
+    id: string
+    last_working_date: string | null
+    status: string
+  }>(
+    `
+      SELECT id, employee_name, employee_code, combined_role_id,
+        last_working_date::text, status,
+        (status = 'Vacant' OR (status = 'Resigned'
+          AND last_working_date < current_date)) AS can_replace
+      FROM recruitment.posts
+      WHERE id = $1 AND organization_id = $2 AND status <> 'Inactive'
+      FOR UPDATE
+    `,
+    [required(input.postId, "Approved post"), input.organizationId]
+  )
+  if (!current.rows[0]) throw new Error("Approved post was not found.")
+  const currentPost = current.rows[0]
+  const targets = currentPost.combined_role_id
+    ? await client.query<{
+        can_replace: boolean
+        employee_code: string | null
+        employee_name: string | null
+        id: string
+        last_working_date: string | null
+        status: string
+      }>(
+        `
+          SELECT post.id, post.employee_name, post.employee_code,
+            post.last_working_date::text, post.status,
+            (post.status = 'Vacant' OR (post.status = 'Resigned'
+              AND post.last_working_date < current_date)) AS can_replace
+          FROM recruitment.combined_role_posts link
+          JOIN recruitment.combined_roles combined
+            ON combined.id = link.combined_role_id
+          JOIN recruitment.posts post ON post.id = link.post_id
+          WHERE link.combined_role_id = $1
+            AND combined.organization_id = $2
+            AND combined.status = 'Active'
+            AND post.organization_id = $2
+            AND post.status <> 'Inactive'
+          ORDER BY link.is_primary DESC, post.post_code, post.id
+          FOR UPDATE OF post
+        `,
+        [currentPost.combined_role_id, input.organizationId]
+      )
+    : current
+  if (!targets.rows.length) {
+    throw new Error("The combined role has no active approved posts.")
+  }
+  const existingAssignment =
+    targets.rows.find(
+      (post) => optional(post.employee_name) || optional(post.employee_code)
+    ) ?? currentPost
+  const employeeEvent = optional(input.employeeEvent) ?? "Appointed"
+  const currentEmployeeName = optional(existingAssignment.employee_name)
+  const currentEmployeeCode = optional(existingAssignment.employee_code)
+  const requestedEmployeeName =
+    optionalProperCase(input.employeeName) ?? currentEmployeeName
+  const requestedEmployeeCode =
+    optional(input.employeeCode) ?? currentEmployeeCode
+  const normal = (value: string | null) => value?.trim().toLowerCase() ?? ""
+  const changesAssignedPerson =
+    normal(requestedEmployeeName) !== normal(currentEmployeeName) ||
+    normal(requestedEmployeeCode) !== normal(currentEmployeeCode)
+  const canAssignNewPerson = existingAssignment.can_replace
+  if (
+    (employeeEvent === "Appointed" || employeeEvent === "Joined") &&
+    Boolean(currentEmployeeName || currentEmployeeCode) &&
+    changesAssignedPerson &&
+    !canAssignNewPerson
+  ) {
+    throw new Error(
+      "This post is assigned to another employee. Mark the current employee as Removed or Resigned and vacate the post before assigning a different person."
+    )
+  }
+  const assignment = deriveRecruitmentEmployeeAssignment({
+    currentEmployeeCode,
+    currentEmployeeName,
+    employeeCode:
+      employeeEvent === "Appointed" || employeeEvent === "Joined"
+        ? input.employeeCode
+        : null,
+    employeeEvent,
+    employeeName:
+      employeeEvent === "Appointed" || employeeEvent === "Joined"
+        ? optionalProperCase(input.employeeName)
+        : null,
+    lastWorkingDate: input.lastWorkingDate,
+  })
+  const targetIds = targets.rows.map((post) => post.id)
+  const result = await client.query<{ id: string }>(
+    `
+      UPDATE recruitment.posts
+      SET employee_name = $1, employee_code = $2,
+        status = $3, last_working_date = migration.try_date($4),
+        joining_date = CASE
+          WHEN $3 = 'Appointed' THEN migration.try_date($5)
+          WHEN $3 = 'Occupied' THEN
+            COALESCE(migration.try_date($5), joining_date)
+          ELSE NULL
+        END,
+        appointed_application_id = CASE
+          WHEN $3 IN ('Appointed', 'Occupied') THEN
+            COALESCE($6::uuid, appointed_application_id)
+          ELSE NULL
+        END,
+        updated_by_user_id = $7, updated_at = now(),
+        row_version = row_version + 1
+      WHERE id = ANY($8::uuid[]) AND organization_id = $9
+      RETURNING id
+    `,
+    [
+      assignment.employeeName,
+      assignment.employeeCode,
+      assignment.status,
+      assignment.lastWorkingDate,
+      optional(input.joiningDate),
+      optional(input.appointedApplicationId),
+      input.actorUserId ?? null,
+      targetIds,
+      input.organizationId,
+    ]
+  )
+  if (result.rows.length !== targetIds.length) {
+    throw new Error("Not every approved post in the assignment was updated.")
+  }
+  const updatedIds = new Set(result.rows.map((post) => post.id))
+  const orderedAudits = targets.rows.map((post, commandOrdinal) => {
+    if (!updatedIds.has(post.id)) {
+      throw new Error("Not every approved post in the assignment was updated.")
+    }
+    return recruitmentAssignmentAudit(
+      {
+        ...input,
+        eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
+        metadata: {
+          assignmentScope: currentPost.combined_role_id
+            ? "combined-role"
+            : "approved-post",
+          combinedRoleId: currentPost.combined_role_id,
+          appointedApplicationId: optional(input.appointedApplicationId),
+          joiningDate: optional(input.joiningDate),
+          postId: post.id,
+          status: assignment.status,
+          lastWorkingDate: assignment.lastWorkingDate,
+        },
+        targetId: post.id,
+        targetTable: "posts",
+      },
+      commandId,
+      commandOrdinal
+    )
+  })
+  await auditMany(client, orderedAudits)
+  if (!updatedIds.has(currentPost.id)) {
+    throw new Error("Approved post was not found.")
+  }
+  const selectedPost = { id: currentPost.id }
+  return { selectedPost, updatedPostCount: result.rows.length }
+}
+
+type CandidateAppointmentTermsInput = {
+  joiningDate?: string | null
+  salaryAfterProbationMaximum?: string | number | null
+  salaryAfterProbationMinimum?: string | number | null
+  salaryBeforeProbation?: string | number | null
+  willingToJoin?: boolean | string | null
+}
+
+type CandidateAppointmentTerms = {
+  joiningDate: string | null
+  salaryAfterProbationMaximum: number | null
+  salaryAfterProbationMinimum: number | null
+  salaryBeforeProbation: number | null
+  willingToJoin: boolean
+}
+
+function candidateAppointmentTerms(
+  input: CandidateAppointmentTermsInput
+): CandidateAppointmentTerms {
+  const willingToJoin = requiredYesNo(
+    input.willingToJoin,
+    "Candidate willingness"
+  )
+  if (!willingToJoin) {
+    return {
+      joiningDate: null,
+      salaryAfterProbationMaximum: null,
+      salaryAfterProbationMinimum: null,
+      salaryBeforeProbation: null,
+      willingToJoin,
+    }
+  }
+  const salaryAfterProbationMinimum = requiredMoney(
+    input.salaryAfterProbationMinimum,
+    "Minimum salary after probation"
+  )
+  const salaryAfterProbationMaximum = requiredMoney(
+    input.salaryAfterProbationMaximum,
+    "Maximum salary after probation"
+  )
+  if (salaryAfterProbationMaximum < salaryAfterProbationMinimum) {
+    throw new Error(
+      "Maximum salary after probation must be at least the minimum salary."
+    )
+  }
+  return {
+    joiningDate: required(input.joiningDate, "Joining date"),
+    salaryAfterProbationMaximum,
+    salaryAfterProbationMinimum,
+    salaryBeforeProbation: requiredMoney(
+      input.salaryBeforeProbation,
+      "Salary before probation"
+    ),
+    willingToJoin,
+  }
+}
+
+async function completeCandidateAppointmentInTransaction(
+  client: PoolClient,
+  input: MutationContext & {
+    applicationId: string
+    terms: CandidateAppointmentTerms
+  }
+) {
+  const applicationResult = await client.query<{
+    candidate_name: string
+    id: string
+    job_id: string
+    post_id: string | null
+    status: string
+    willing_to_join: boolean | null
+  }>(
+    `
+      SELECT application.id, application.status,
+        application.willing_to_join,
+        candidate.name AS candidate_name,
+        job.id AS job_id, job.post_id
+      FROM recruitment.applications application
+      JOIN recruitment.candidates candidate
+        ON candidate.id = application.candidate_id
+      JOIN recruitment.job_posts job
+        ON job.id = application.job_post_id
+      WHERE application.id = $1
+        AND application.organization_id = $2
+      FOR UPDATE OF application, job
+    `,
+    [
+      required(input.applicationId, "Candidate application"),
+      input.organizationId,
+    ]
+  )
+  const application = applicationResult.rows[0]
+  if (!application) throw new Error("Candidate application was not found.")
+  if (
+    application.status !== "Approved" &&
+    !isActiveRecruitmentApplicationStatus(application.status)
+  ) {
+    throw new Error("This candidate application cannot be appointed.")
+  }
+  if (application.willing_to_join !== null) {
+    throw new Error("Appointment details are already completed.")
+  }
+  const interviews = await client.query<{
+    round_name: string
+    status: string
+  }>(
+    `
+      SELECT round_name, status
+      FROM recruitment.interviews
+      WHERE application_id = $1 AND organization_id = $2
+      FOR UPDATE
+    `,
+    [application.id, input.organizationId]
+  )
+  if (
+    nextRecruitmentInterviewRound(
+      interviews.rows.map((interview) => ({
+        roundName: interview.round_name,
+        status: interview.status,
+      }))
+    )
+  ) {
+    throw new Error(
+      "All three interview rounds must be approved before completing appointment details."
+    )
+  }
+  await client.query(
+    `
+      UPDATE recruitment.applications
+      SET status = $1, joining_date = migration.try_date($2),
+        willing_to_join = $3,
+        salary_before_probation = $4,
+        salary_after_probation_minimum = $5,
+        salary_after_probation_maximum = $6,
+        updated_by_user_id = $7, updated_at = now(),
+        row_version = row_version + 1
+      WHERE id = $8 AND organization_id = $9
+    `,
+    [
+      input.terms.willingToJoin ? "Approved" : "Withdrawn",
+      input.terms.joiningDate,
+      input.terms.willingToJoin,
+      input.terms.salaryBeforeProbation,
+      input.terms.salaryAfterProbationMinimum,
+      input.terms.salaryAfterProbationMaximum,
+      input.actorUserId ?? null,
+      application.id,
+      input.organizationId,
+    ]
+  )
+  if (input.terms.willingToJoin) {
+    if (!application.post_id) {
+      throw new Error(
+        "The recruitment opening is not linked to an approved post."
+      )
+    }
+    await assignEmployeeInTransaction(
+      client,
+      {
+        actorUserId: input.actorUserId,
+        appointedApplicationId: application.id,
+        employeeEvent: "Appointed",
+        employeeName: application.candidate_name,
+        joiningDate: input.terms.joiningDate,
+        organizationId: input.organizationId,
+        postId: application.post_id,
+      },
+      randomUUID()
+    )
+    await client.query(
+      `
+        UPDATE recruitment.job_posts
+        SET status = 'Closed', closed_on = current_date,
+          updated_by_user_id = $1, updated_at = now(),
+          row_version = row_version + 1
+        WHERE id = $2 AND organization_id = $3
+      `,
+      [input.actorUserId ?? null, application.job_id, input.organizationId]
+    )
+  }
+  await audit(client, {
+    ...input,
+    eventType: "recruitment.application.appointment_completed",
+    metadata: {
+      joiningDate: input.terms.joiningDate,
+      willingToJoin: input.terms.willingToJoin,
+    },
+    targetId: application.id,
+    targetTable: "applications",
+  })
+  return { id: application.id }
 }
 
 async function organizationIdForCode(pool: Pool, code: string) {
@@ -188,8 +920,50 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               WHERE organization_id = $1) AS posts,
             (SELECT count(*)::int FROM recruitment.requirement_templates
               WHERE organization_id = $1 AND active) AS templates,
-            (SELECT count(*)::int FROM recruitment.posts
-              WHERE organization_id = $1 AND status = 'Vacant') AS vacant_posts
+            (
+              SELECT count(*)::int
+              FROM (
+                SELECT post.id
+                FROM recruitment.posts post
+                WHERE post.organization_id = $1
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM recruitment.combined_roles combined
+                    WHERE combined.id = post.combined_role_id
+                      AND combined.organization_id = $1
+                      AND combined.status = 'Active'
+                  )
+                  AND (
+                    post.status = 'Resigned'
+                    OR (
+                      post.status <> 'Inactive'
+                      AND NULLIF(BTRIM(post.employee_name), '') IS NULL
+                      AND NULLIF(BTRIM(post.employee_code), '') IS NULL
+                    )
+                  )
+                UNION ALL
+                SELECT combined.id
+                FROM recruitment.combined_roles combined
+                JOIN recruitment.combined_role_posts link
+                  ON link.combined_role_id = combined.id
+                JOIN recruitment.posts post ON post.id = link.post_id
+                WHERE combined.organization_id = $1
+                  AND combined.status = 'Active'
+                  AND post.organization_id = $1
+                GROUP BY combined.id
+                HAVING count(*) FILTER (
+                    WHERE post.status <> 'Inactive'
+                  ) > 0
+                  AND count(*) FILTER (
+                    WHERE post.status <> 'Inactive'
+                      AND post.status <> 'Resigned'
+                      AND (
+                        NULLIF(BTRIM(post.employee_name), '') IS NOT NULL
+                        OR NULLIF(BTRIM(post.employee_code), '') IS NOT NULL
+                      )
+                  ) = 0
+              ) vacancy
+            ) AS vacant_posts
         `,
         [organizationId]
       )
@@ -235,8 +1009,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       organizationId: string
     ): Promise<RecruitmentTemplateRow[]> {
       const result = await pool.query<{
+        combined_role_id: string | null
+        combined_role_name: string | null
         department: string | null
+        department_code: string | null
         designation: string
+        designation_code: string
         education: string | null
         experience_requirement: string | null
         gender: string | null
@@ -249,13 +1027,19 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }>(
         `
           SELECT template.id, template.template_code, template.name,
-            department.name AS department, designation.name AS designation,
+            combined.id AS combined_role_id,
+            combined.name AS combined_role_name,
+            department.name AS department, department.code AS department_code,
+            designation.name AS designation,
+            designation.code AS designation_code,
             template.gender, template.experience_requirement,
             template.education, template.minimum_salary,
             template.maximum_salary, template.role_responsibilities
           FROM recruitment.requirement_templates template
           LEFT JOIN recruitment.departments department
             ON department.id = template.department_id
+          LEFT JOIN recruitment.combined_roles combined
+            ON combined.id = template.combined_role_id
           JOIN recruitment.designations designation
             ON designation.id = template.designation_id
           WHERE template.organization_id = $1 AND template.active
@@ -264,8 +1048,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         [organizationId]
       )
       return result.rows.map((row) => ({
+        combinedRoleId: row.combined_role_id,
+        combinedRoleName: row.combined_role_name,
         department: row.department,
+        departmentCode: row.department_code,
         designation: row.designation,
+        designationCode: row.designation_code,
         education: row.education,
         experienceRequirement: row.experience_requirement,
         gender: row.gender,
@@ -282,11 +1070,18 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
     async listPosts(organizationId: string): Promise<RecruitmentPostRow[]> {
       const result = await pool.query<{
+        combined_role_id: string | null
+        combined_role_name: string | null
+        combined_vacancy_code: string | null
         department: string
         designation: string
         employee_code: string | null
         employee_name: string | null
+        current_date: string
         id: string
+        is_primary_combined_post: boolean
+        joining_date: string | null
+        last_working_date: string | null
         post_code: string
         requirement_template_code: string | null
         status: string
@@ -295,8 +1090,20 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }>(
         `
           SELECT post.id, post.post_code, post.vacancy_code,
-            post.vacancy_number, post.status, post.employee_name,
-            post.employee_code, department.name AS department,
+            post.vacancy_number, post.status, current_date::text,
+            CASE WHEN post.status = 'Resigned'
+                AND post.last_working_date < current_date
+              THEN NULL ELSE post.employee_name END AS employee_name,
+            CASE WHEN post.status = 'Resigned'
+                AND post.last_working_date < current_date
+              THEN NULL ELSE post.employee_code END AS employee_code,
+            post.joining_date::text, post.last_working_date::text,
+            combined.id AS combined_role_id,
+            combined.name AS combined_role_name,
+            combined.vacancy_code AS combined_vacancy_code,
+            COALESCE(combined_link.is_primary, false)
+              AS is_primary_combined_post,
+            department.name AS department,
             designation.name AS designation,
             template.template_code AS requirement_template_code
           FROM recruitment.posts post
@@ -304,22 +1111,82 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           JOIN recruitment.designations designation ON designation.id = post.designation_id
           LEFT JOIN recruitment.requirement_templates template
             ON template.id = post.requirement_template_id
+          LEFT JOIN recruitment.combined_roles combined
+            ON combined.id = post.combined_role_id
+           AND combined.status = 'Active'
+          LEFT JOIN recruitment.combined_role_posts combined_link
+            ON combined_link.combined_role_id = combined.id
+           AND combined_link.post_id = post.id
           WHERE post.organization_id = $1
           ORDER BY department.name, designation.name, post.vacancy_number
         `,
         [organizationId]
       )
       return result.rows.map((row) => ({
+        combinedRoleId: row.combined_role_id,
+        combinedRoleName: row.combined_role_name,
+        combinedVacancyCode: row.combined_vacancy_code,
         department: row.department,
         designation: row.designation,
         employeeCode: row.employee_code,
         employeeName: row.employee_name,
         id: row.id,
+        isPrimaryCombinedPost: row.is_primary_combined_post,
+        joiningDate: row.joining_date,
+        lastWorkingDate: row.last_working_date,
         postCode: row.post_code,
         requirementTemplateCode: row.requirement_template_code,
-        status: row.status,
+        status: deriveRecruitmentPostStatus({
+          employeeCode: row.employee_code,
+          employeeName: row.employee_name,
+          currentDate: row.current_date,
+          joiningDate: row.joining_date,
+          storedStatus: row.status,
+        }),
         vacancyCode: row.vacancy_code,
         vacancyNumber: row.vacancy_number,
+      }))
+    },
+
+    async listCombinedRoles(
+      organizationId: string
+    ): Promise<RecruitmentCombinedRoleRow[]> {
+      const result = await pool.query<{
+        id: string
+        name: string
+        post_codes: string[] | null
+        primary_post_code: string | null
+        status: string
+        vacancy_code: string | null
+      }>(
+        `
+          SELECT combined.id, combined.name, combined.vacancy_code,
+            combined.status,
+            COALESCE(
+              array_agg(post.post_code ORDER BY post.post_code)
+                FILTER (WHERE post.id IS NOT NULL),
+              '{}'
+            ) AS post_codes,
+            max(post.post_code) FILTER (WHERE link.is_primary)
+              AS primary_post_code
+          FROM recruitment.combined_roles combined
+          LEFT JOIN recruitment.combined_role_posts link
+            ON link.combined_role_id = combined.id
+          LEFT JOIN recruitment.posts post ON post.id = link.post_id
+          WHERE combined.organization_id = $1
+          GROUP BY combined.id
+          ORDER BY (combined.status = 'Active') DESC,
+            combined.vacancy_code, combined.name
+        `,
+        [organizationId]
+      )
+      return result.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        postCodes: row.post_codes ?? [],
+        primaryPostCode: row.primary_post_code,
+        status: row.status,
+        vacancyCode: row.vacancy_code,
       }))
     },
 
@@ -327,24 +1194,37 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       organizationId: string
     ): Promise<RecruitmentCandidateRow[]> {
       const result = await pool.query<{
+        active_application_job_ids: string[] | null
         application_count: number
         current_company: string | null
         departments: string[] | null
         email: string | null
         event_count: number
         experience: string | null
+        has_resume: boolean
         id: string
         name: string
         phone: string
+        preferred_department_code: string | null
+        preferred_designation: string | null
+        preferred_designation_code: string | null
+        resume_file_name: string | null
         source: string | null
         status: string
       }>(
         `
           SELECT candidate.id, candidate.name, candidate.phone, candidate.email,
             candidate.current_company, candidate.experience, candidate.source,
-            candidate.status,
+            candidate.status, resume.file_name AS resume_file_name,
+            preferred_department.code AS preferred_department_code,
+            preferred_designation.name AS preferred_designation,
+            preferred_designation.code AS preferred_designation_code,
+            (resume.id IS NOT NULL) AS has_resume,
             COALESCE(array_agg(DISTINCT department.name)
               FILTER (WHERE department.id IS NOT NULL), '{}') AS departments,
+            COALESCE(array_agg(DISTINCT application.job_post_id)
+              FILTER (WHERE application.status IN ('Assigned', 'Interview', 'Hold')),
+              ARRAY[]::uuid[]) AS active_application_job_ids,
             count(DISTINCT application.id)::int AS application_count,
             count(DISTINCT event.id)::int AS event_count
           FROM recruitment.candidates candidate
@@ -352,30 +1232,151 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             ON candidate_department.candidate_id = candidate.id
           LEFT JOIN recruitment.departments department
             ON department.id = candidate_department.department_id
+          LEFT JOIN recruitment.departments preferred_department
+            ON preferred_department.id = candidate.preferred_department_id
+          LEFT JOIN recruitment.designations preferred_designation
+            ON preferred_designation.id = candidate.preferred_designation_id
           LEFT JOIN recruitment.applications application
             ON application.candidate_id = candidate.id
           LEFT JOIN recruitment.candidate_events event
             ON event.candidate_id = candidate.id
+          LEFT JOIN LATERAL (
+            SELECT file.id, file.file_name
+            FROM core.file_links file_link
+            JOIN core.files file ON file.id = file_link.file_id
+            WHERE file_link.organization_id = candidate.organization_id
+              AND file_link.target_schema = 'recruitment'
+              AND file_link.target_table = 'candidates'
+              AND file_link.target_id = candidate.id
+              AND file_link.purpose = 'resume'
+            ORDER BY file.created_at DESC, file.id DESC
+            LIMIT 1
+          ) resume ON true
           WHERE candidate.organization_id = $1
-          GROUP BY candidate.id
+          GROUP BY candidate.id, resume.id, resume.file_name,
+            preferred_department.code, preferred_designation.name,
+            preferred_designation.code
           ORDER BY candidate.updated_at DESC, candidate.name
           LIMIT 500
         `,
         [organizationId]
       )
       return result.rows.map((row) => ({
+        activeApplicationJobIds: row.active_application_job_ids ?? [],
         applicationCount: row.application_count,
         currentCompany: row.current_company,
         departments: row.departments ?? [],
         email: row.email,
         eventCount: row.event_count,
         experience: row.experience,
+        hasResume: row.has_resume,
         id: row.id,
         name: row.name,
         phone: row.phone,
+        preferredDepartmentCode: row.preferred_department_code,
+        preferredDesignation: row.preferred_designation,
+        preferredDesignationCode: row.preferred_designation_code,
+        resumeFileName: row.resume_file_name,
         source: row.source,
         status: row.status,
       }))
+    },
+
+    async listCandidateEvents(
+      organizationId: string,
+      candidateId?: string
+    ): Promise<RecruitmentCandidateEventRow[]> {
+      const result = await pool.query<{
+        candidate_id: string
+        candidate_name: string
+        candidate_phone: string
+        department: string | null
+        event_type: string
+        id: string
+        job_number: string | null
+        notes: string | null
+        occurred_at: string
+        title: string
+      }>(
+        `
+          SELECT event.id, event.candidate_id,
+            candidate.name AS candidate_name,
+            candidate.phone AS candidate_phone,
+            department.name AS department,
+            event.event_type, event.title, event.notes,
+            event.occurred_at::text, job.job_number
+          FROM recruitment.candidate_events event
+          JOIN recruitment.candidates candidate
+            ON candidate.id = event.candidate_id
+          LEFT JOIN recruitment.departments department
+            ON department.id = candidate.preferred_department_id
+          LEFT JOIN recruitment.job_posts job ON job.id = event.job_post_id
+          WHERE event.organization_id = $1
+            AND ($2::uuid IS NULL OR event.candidate_id = $2::uuid)
+          ORDER BY event.occurred_at DESC, event.id DESC
+          LIMIT 1000
+        `,
+        [organizationId, candidateId ?? null]
+      )
+      return result.rows.map((row) => ({
+        candidateId: row.candidate_id,
+        candidateName: row.candidate_name,
+        candidatePhone: row.candidate_phone,
+        department: row.department,
+        eventType: row.event_type,
+        id: row.id,
+        jobNumber: row.job_number,
+        notes: row.notes,
+        occurredAt: row.occurred_at,
+        title: row.title,
+      }))
+    },
+
+    async getCandidateWorkspace(
+      organizationId: string,
+      candidateId: string
+    ): Promise<RecruitmentCandidateWorkspace | null> {
+      const [candidates, events, applications] = await Promise.all([
+        this.listCandidates(organizationId),
+        this.listCandidateEvents(organizationId, candidateId),
+        pool.query<{
+          application_id: string
+          interview_count: number
+          job_id: string
+          job_number: string
+          job_title: string
+          status: string
+        }>(
+          `
+            SELECT application.id AS application_id, job.id AS job_id,
+              job.job_number, job.title AS job_title, application.status,
+              count(interview.id)::int AS interview_count
+            FROM recruitment.applications application
+            JOIN recruitment.job_posts job ON job.id = application.job_post_id
+            LEFT JOIN recruitment.interviews interview
+              ON interview.application_id = application.id
+            WHERE application.organization_id = $1
+              AND application.candidate_id = $2
+            GROUP BY application.id, job.id
+            ORDER BY application.updated_at DESC
+          `,
+          [organizationId, required(candidateId, "Candidate")]
+        ),
+      ])
+      const candidate = candidates.find((row) => row.id === candidateId)
+      if (!candidate) return null
+      return {
+        applications: applications.rows.map((row) => ({
+          applicationId: row.application_id,
+          interviewCount: row.interview_count,
+          jobId: row.job_id,
+          jobNumber: row.job_number,
+          jobTitle: row.job_title,
+          status: row.status,
+        })),
+        candidate,
+        events,
+      }
     },
 
     async listJobs(organizationId: string): Promise<RecruitmentJobRow[]> {
@@ -417,29 +1418,261 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }))
     },
 
+    async getJobWorkspace(
+      organizationId: string,
+      jobId: string
+    ): Promise<RecruitmentJobWorkspace | null> {
+      const [jobResult, applicationResult, interviewResult] = await Promise.all(
+        [
+          pool.query<{
+            applicant_count: number
+            id: string
+            job_number: string
+            post_code: string | null
+            post_date: string
+            status: string
+            target_date: string | null
+            title: string
+            vacancy_code: string
+          }>(
+            `
+              SELECT job.id, job.job_number, job.vacancy_code, job.title,
+                job.post_date::text, job.target_date::text, job.status,
+                post.post_code, count(application.id)::int AS applicant_count
+              FROM recruitment.job_posts job
+              LEFT JOIN recruitment.posts post ON post.id = job.post_id
+              LEFT JOIN recruitment.applications application
+                ON application.job_post_id = job.id
+              WHERE job.organization_id = $1 AND job.id = $2
+              GROUP BY job.id, post.post_code
+            `,
+            [organizationId, jobId]
+          ),
+          pool.query<{
+            candidate_email: string | null
+            candidate_id: string
+            candidate_name: string
+            candidate_phone: string
+            current_company: string | null
+            experience: string | null
+            id: string
+            interview_at: string | null
+            interview_count: number
+            joining_date: string | null
+            planned_round: string | null
+            salary_after_probation_maximum: string | null
+            salary_after_probation_minimum: string | null
+            salary_before_probation: string | null
+            status: string
+            willing_to_join: boolean | null
+          }>(
+            `
+              SELECT application.id, application.candidate_id,
+                candidate.name AS candidate_name,
+                candidate.phone AS candidate_phone,
+                candidate.email AS candidate_email,
+                candidate.current_company, candidate.experience,
+                application.status, application.interview_at::text,
+                application.planned_round, application.joining_date::text,
+                application.willing_to_join,
+                application.salary_before_probation,
+                application.salary_after_probation_minimum,
+                application.salary_after_probation_maximum,
+                count(interview.id)::int AS interview_count
+              FROM recruitment.applications application
+              JOIN recruitment.candidates candidate
+                ON candidate.id = application.candidate_id
+              LEFT JOIN recruitment.interviews interview
+                ON interview.application_id = application.id
+              WHERE application.organization_id = $1
+                AND application.job_post_id = $2
+              GROUP BY application.id, candidate.id
+              ORDER BY application.updated_at DESC, candidate.name
+              LIMIT 500
+            `,
+            [organizationId, jobId]
+          ),
+          pool.query<{
+            application_id: string
+            candidate_name: string
+            comments: string | null
+            created_at: string
+            id: string
+            interviewer_name: string | null
+            joining_date: string | null
+            question_scores: unknown
+            round_name: string
+            salary_after_probation_maximum: string | null
+            salary_after_probation_minimum: string | null
+            salary_before_probation: string | null
+            scheduled_at: string | null
+            score: string | null
+            status: string
+            updated_at: string
+            willing_to_join: boolean | null
+          }>(
+            `
+              SELECT interview.id, interview.application_id,
+                candidate.name AS candidate_name, interview.round_name,
+                interview.status, interview.scheduled_at::text,
+                interview.interviewer_name,
+                interview.scores ->> 'overall' AS score,
+                interview.scores -> 'questions' AS question_scores,
+                interview.comments, interview.joining_date::text,
+                application.willing_to_join,
+                application.salary_before_probation,
+                application.salary_after_probation_minimum,
+                application.salary_after_probation_maximum,
+                interview.created_at::text, interview.updated_at::text
+              FROM recruitment.interviews interview
+              JOIN recruitment.applications application
+                ON application.id = interview.application_id
+              JOIN recruitment.candidates candidate
+                ON candidate.id = application.candidate_id
+              WHERE interview.organization_id = $1
+                AND application.job_post_id = $2
+              ORDER BY interview.scheduled_at DESC NULLS LAST,
+                interview.updated_at DESC, candidate.name
+              LIMIT 1000
+            `,
+            [organizationId, jobId]
+          ),
+        ]
+      )
+
+      const job = jobResult.rows[0]
+      if (!job) return null
+      const interviewProgress = new Map<
+        string,
+        Array<{ roundName: string; status: string }>
+      >()
+      for (const interview of interviewResult.rows) {
+        const rows = interviewProgress.get(interview.application_id) ?? []
+        rows.push({ roundName: interview.round_name, status: interview.status })
+        interviewProgress.set(interview.application_id, rows)
+      }
+      return {
+        applications: applicationResult.rows.map((row) => {
+          const history = interviewProgress.get(row.id) ?? []
+          const requiredRound = nextRecruitmentInterviewRound(history)
+          const allRoundsApproved = requiredRound === null
+          const nextRound = isActiveRecruitmentApplicationStatus(row.status)
+            ? (requiredRound?.name ?? null)
+            : null
+          return {
+            allRoundsApproved,
+            candidateEmail: row.candidate_email,
+            candidateId: row.candidate_id,
+            candidateName: row.candidate_name,
+            candidatePhone: row.candidate_phone,
+            currentCompany: row.current_company,
+            experience: row.experience,
+            id: row.id,
+            interviewAt: row.interview_at,
+            interviewCount: row.interview_count,
+            joiningDate: row.joining_date,
+            nextRound,
+            plannedRound: row.planned_round,
+            salaryAfterProbationMaximum:
+              row.salary_after_probation_maximum === null
+                ? null
+                : Number(row.salary_after_probation_maximum),
+            salaryAfterProbationMinimum:
+              row.salary_after_probation_minimum === null
+                ? null
+                : Number(row.salary_after_probation_minimum),
+            salaryBeforeProbation:
+              row.salary_before_probation === null
+                ? null
+                : Number(row.salary_before_probation),
+            scoreableRound:
+              nextRound &&
+              history.some(
+                (interview) =>
+                  canonicalRecruitmentInterviewRound(interview.roundName) ===
+                    nextRound && interview.status === "Scheduled"
+              )
+                ? nextRound
+                : null,
+            status: row.status,
+            willingToJoin: row.willing_to_join,
+          }
+        }),
+        interviews: interviewResult.rows.map((row) => ({
+          applicationId: row.application_id,
+          candidateName: row.candidate_name,
+          comments: row.comments,
+          createdAt: row.created_at,
+          id: row.id,
+          interviewerName: row.interviewer_name,
+          joiningDate: row.joining_date,
+          questionScores: normalizedQuestionScores(row.question_scores),
+          roundName: row.round_name,
+          salaryAfterProbationMaximum:
+            row.salary_after_probation_maximum === null
+              ? null
+              : Number(row.salary_after_probation_maximum),
+          salaryAfterProbationMinimum:
+            row.salary_after_probation_minimum === null
+              ? null
+              : Number(row.salary_after_probation_minimum),
+          salaryBeforeProbation:
+            row.salary_before_probation === null
+              ? null
+              : Number(row.salary_before_probation),
+          scheduledAt: row.scheduled_at,
+          score: row.score === null ? null : Number(row.score),
+          status: row.status,
+          updatedAt: row.updated_at,
+          willingToJoin: row.willing_to_join,
+        })),
+        job: {
+          applicantCount: job.applicant_count,
+          id: job.id,
+          jobNumber: job.job_number,
+          postCode: job.post_code,
+          postDate: job.post_date,
+          status: job.status,
+          targetDate: job.target_date,
+          title: job.title,
+          vacancyCode: job.vacancy_code,
+        },
+      }
+    },
+
     async listInterviews(
       organizationId: string
     ): Promise<RecruitmentInterviewRow[]> {
       const result = await pool.query<{
         application_id: string
+        approved_rounds: string[]
+        candidate_id: string
         candidate_name: string
         interview_at: string | null
+        job_id: string
+        job_number: string
         job_title: string
         joining_date: string | null
         latest_round: string | null
         latest_status: string | null
         planned_round: string | null
+        post_code: string | null
+        scheduled_rounds: string[]
         status: string
       }>(
         `
           SELECT application.id AS application_id,
-            candidate.name AS candidate_name, job.title AS job_title,
+            candidate.id AS candidate_id, candidate.name AS candidate_name,
+            job.title AS job_title,
+            job.id AS job_id, job.job_number, post.post_code,
             application.status, application.interview_at::text,
             application.planned_round, application.joining_date::text,
-            latest.round_name AS latest_round, latest.status AS latest_status
+            latest.round_name AS latest_round, latest.status AS latest_status,
+            progress.approved_rounds, progress.scheduled_rounds
           FROM recruitment.applications application
           JOIN recruitment.candidates candidate ON candidate.id = application.candidate_id
           JOIN recruitment.job_posts job ON job.id = application.job_post_id
+          LEFT JOIN recruitment.posts post ON post.id = job.post_id
           LEFT JOIN LATERAL (
             SELECT interview.round_name, interview.status
             FROM recruitment.interviews interview
@@ -447,22 +1680,146 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             ORDER BY interview.updated_at DESC
             LIMIT 1
           ) latest ON true
+          LEFT JOIN LATERAL (
+            SELECT coalesce(
+              array_agg(interview.round_name)
+                FILTER (WHERE interview.status = 'Approved'),
+              ARRAY[]::text[]
+            ) AS approved_rounds,
+            coalesce(
+              array_agg(interview.round_name)
+                FILTER (WHERE interview.status = 'Scheduled'
+                  AND interview.scheduled_at IS NOT NULL),
+              ARRAY[]::text[]
+            ) AS scheduled_rounds
+            FROM recruitment.interviews interview
+            WHERE interview.application_id = application.id
+          ) progress ON true
           WHERE application.organization_id = $1
           ORDER BY application.interview_at NULLS LAST, application.updated_at DESC
           LIMIT 500
         `,
         [organizationId]
       )
+      return result.rows.map((row) => {
+        const nextRound = isActiveRecruitmentApplicationStatus(row.status)
+          ? (nextRecruitmentInterviewRound(
+              (row.approved_rounds ?? []).map((roundName) => ({
+                roundName,
+                status: "Approved",
+              }))
+            )?.name ?? null)
+          : null
+        return {
+          applicationId: row.application_id,
+          candidateId: row.candidate_id,
+          candidateName: row.candidate_name,
+          interviewAt: row.interview_at,
+          jobId: row.job_id,
+          jobNumber: row.job_number,
+          joiningDate: row.joining_date,
+          jobTitle: row.job_title,
+          latestRound: row.latest_round,
+          latestStatus: row.latest_status,
+          nextRound,
+          plannedRound: row.planned_round,
+          postCode: row.post_code,
+          scoreableRound:
+            nextRound &&
+            (row.scheduled_rounds ?? []).some(
+              (roundName) =>
+                canonicalRecruitmentInterviewRound(roundName) === nextRound
+            )
+              ? nextRound
+              : null,
+          status: row.status,
+        }
+      })
+    },
+
+    async listInterviewRecords(
+      organizationId: string
+    ): Promise<RecruitmentInterviewRecordRow[]> {
+      const result = await pool.query<{
+        application_id: string
+        candidate_name: string
+        comments: string | null
+        created_at: string
+        id: string
+        interviewer_name: string | null
+        job_id: string
+        job_number: string
+        job_title: string
+        joining_date: string | null
+        question_scores: unknown
+        round_name: string
+        salary_after_probation_maximum: string | null
+        salary_after_probation_minimum: string | null
+        salary_before_probation: string | null
+        scheduled_at: string | null
+        score: string | null
+        status: string
+        updated_at: string
+        willing_to_join: boolean | null
+      }>(
+        `
+          SELECT interview.id, interview.application_id,
+            candidate.name AS candidate_name, job.id AS job_id,
+            job.job_number, job.title AS job_title, interview.round_name,
+            interview.status, interview.scheduled_at::text,
+            interview.interviewer_name,
+            interview.scores ->> 'overall' AS score,
+            interview.scores -> 'questions' AS question_scores,
+            interview.comments, interview.joining_date::text,
+            application.willing_to_join,
+            application.salary_before_probation,
+            application.salary_after_probation_minimum,
+            application.salary_after_probation_maximum,
+            interview.created_at::text, interview.updated_at::text
+          FROM recruitment.interviews interview
+          JOIN recruitment.applications application
+            ON application.id = interview.application_id
+          JOIN recruitment.candidates candidate
+            ON candidate.id = application.candidate_id
+          JOIN recruitment.job_posts job
+            ON job.id = application.job_post_id
+          WHERE interview.organization_id = $1
+          ORDER BY interview.scheduled_at DESC NULLS LAST,
+            interview.updated_at DESC, candidate.name
+          LIMIT 2000
+        `,
+        [organizationId]
+      )
       return result.rows.map((row) => ({
         applicationId: row.application_id,
         candidateName: row.candidate_name,
-        interviewAt: row.interview_at,
-        joiningDate: row.joining_date,
+        comments: row.comments,
+        createdAt: row.created_at,
+        id: row.id,
+        interviewerName: row.interviewer_name,
+        jobId: row.job_id,
+        jobNumber: row.job_number,
         jobTitle: row.job_title,
-        latestRound: row.latest_round,
-        latestStatus: row.latest_status,
-        plannedRound: row.planned_round,
+        joiningDate: row.joining_date,
+        questionScores: normalizedQuestionScores(row.question_scores),
+        roundName: row.round_name,
+        salaryAfterProbationMaximum:
+          row.salary_after_probation_maximum === null
+            ? null
+            : Number(row.salary_after_probation_maximum),
+        salaryAfterProbationMinimum:
+          row.salary_after_probation_minimum === null
+            ? null
+            : Number(row.salary_after_probation_minimum),
+        salaryBeforeProbation:
+          row.salary_before_probation === null
+            ? null
+            : Number(row.salary_before_probation),
+        scheduledAt: row.scheduled_at,
+        score: row.score === null ? null : Number(row.score),
         status: row.status,
+        updatedAt: row.updated_at,
+        willingToJoin: row.willing_to_join,
       }))
     },
 
@@ -475,6 +1832,36 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
     ) {
       const table = input.kind === "department" ? "departments" : "designations"
       return transaction(pool, async (client) => {
+        const code = required(input.code, `${input.kind} code`)
+        const name = requiredProperCase(input.name, `${input.kind} name`)
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+          [`${input.organizationId}:${table}:master`]
+        )
+        const duplicate = await client.query<{ code: string; name: string }>(
+          `
+            SELECT code, name FROM recruitment.${table}
+            WHERE organization_id = $1
+              AND (
+                lower(btrim(code)) = lower(btrim($2))
+                OR lower(btrim(name)) = lower(btrim($3))
+              )
+            LIMIT 1
+          `,
+          [input.organizationId, code, name]
+        )
+        if (duplicate.rows[0]) {
+          const label =
+            input.kind === "department" ? "Department" : "Designation"
+          const duplicateField =
+            duplicate.rows[0].code.trim().toLowerCase() ===
+            code.trim().toLowerCase()
+              ? `code ${code}`
+              : `name "${name}"`
+          throw new Error(
+            `${label} ${duplicateField} is already used by ${duplicate.rows[0].code} - ${duplicate.rows[0].name}.`
+          )
+        }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.${table} (
@@ -482,17 +1869,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               updated_by_user_id, source_system, source_table, source_id
             )
             VALUES ($1, upper($2), $3, $4, $4, 'mrm-dashboard', $5, $6)
-            ON CONFLICT (organization_id, lower(code)) DO UPDATE SET
-              name = EXCLUDED.name,
-              updated_by_user_id = EXCLUDED.updated_by_user_id,
-              updated_at = now(),
-              row_version = recruitment.${table}.row_version + 1
             RETURNING id
           `,
           [
             input.organizationId,
-            required(input.code, `${input.kind} code`),
-            required(input.name, `${input.kind} name`),
+            code,
+            name,
             input.actorUserId ?? null,
             table,
             randomUUID(),
@@ -510,7 +1892,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
     async upsertTemplate(
       input: MutationContext & {
-        departmentCode: string
+        combinedRoleId?: string | null
+        departmentCode?: string | null
         designationCode: string
         education?: string | null
         experienceRequirement?: string | null
@@ -523,27 +1906,42 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }
     ) {
       return transaction(pool, async (client) => {
+        const departmentCode = optional(input.departmentCode)
+        const combinedRoleId = optional(input.combinedRoleId)
+        if ((departmentCode ? 1 : 0) + (combinedRoleId ? 1 : 0) !== 1) {
+          throw new Error(
+            "Select either one department or one combined job for the template."
+          )
+        }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.requirement_templates (
               organization_id, template_code, name, department_id,
-              designation_id, gender, experience_requirement, education,
+              combined_role_id, designation_id, gender,
+              experience_requirement, education,
               minimum_salary, maximum_salary, role_responsibilities,
               created_by_user_id, updated_by_user_id, source_system,
               source_table, source_id
             )
-            SELECT $1, upper($2), $3, department.id, designation.id,
-              $4, $5, $6, $7, $8, $9, $10, $10, 'mrm-dashboard',
-              'requirementTemplates', $11
-            FROM recruitment.departments department
-            JOIN recruitment.designations designation
-              ON designation.organization_id = $1
-             AND lower(designation.code) = lower($12)
-            WHERE department.organization_id = $1
-              AND lower(department.code) = lower($13)
+            SELECT $1, upper($2), $3, department.id, combined.id,
+              designation.id, $4, $5, $6, $7, $8, $9, $10, $10,
+              'mrm-dashboard', 'requirementTemplates', $11
+            FROM recruitment.designations designation
+            LEFT JOIN recruitment.departments department
+              ON department.organization_id = $1
+             AND lower(department.code) = lower($13)
+            LEFT JOIN recruitment.combined_roles combined
+              ON combined.organization_id = $1
+             AND combined.id = nullif($14, '')::uuid
+             AND combined.status = 'Active'
+            WHERE designation.organization_id = $1
+              AND lower(designation.code) = lower($12)
+              AND (($13 <> '' AND department.id IS NOT NULL AND combined.id IS NULL)
+                OR ($14 <> '' AND combined.id IS NOT NULL AND department.id IS NULL))
             ON CONFLICT (organization_id, lower(template_code)) DO UPDATE SET
               name = EXCLUDED.name,
               department_id = EXCLUDED.department_id,
+              combined_role_id = EXCLUDED.combined_role_id,
               designation_id = EXCLUDED.designation_id,
               gender = EXCLUDED.gender,
               experience_requirement = EXCLUDED.experience_requirement,
@@ -559,7 +1957,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           [
             input.organizationId,
             required(input.templateCode, "Template code"),
-            required(input.name, "Template name"),
+            requiredProperCase(input.name, "Template name"),
             optional(input.gender),
             optional(input.experienceRequirement),
             optional(input.education),
@@ -569,11 +1967,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             input.actorUserId ?? null,
             randomUUID(),
             required(input.designationCode, "Designation"),
-            required(input.departmentCode, "Department"),
+            departmentCode ?? "",
+            combinedRoleId ?? "",
           ]
         )
         if (!result.rows[0]) {
-          throw new Error("Department or designation was not found.")
+          throw new Error(
+            "Department, combined job, or designation was not found."
+          )
         }
         await audit(client, {
           ...input,
@@ -589,13 +1990,45 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       input: MutationContext & {
         departmentCode: string
         designationCode: string
-        postCode: string
         requirementTemplateCode?: string | null
-        vacancyCode: string
-        vacancyNumber: string
       }
     ) {
       return transaction(pool, async (client) => {
+        const departmentCode = required(input.departmentCode, "Department")
+        const designationCode = required(input.designationCode, "Designation")
+        await client.query(
+          `
+            SELECT pg_advisory_xact_lock(
+              hashtextextended($1::text, 0)
+            )
+          `,
+          [
+            recruitmentAdvisoryLockKey([
+              input.organizationId,
+              departmentCode,
+              designationCode,
+            ]),
+          ]
+        )
+        const existingPosts = await client.query<{ post_code: string }>(
+          `
+            SELECT post.post_code
+            FROM recruitment.posts post
+            JOIN recruitment.departments department
+              ON department.id = post.department_id
+            JOIN recruitment.designations designation
+              ON designation.id = post.designation_id
+            WHERE post.organization_id = $1
+              AND lower(department.code) = lower($2)
+              AND lower(designation.code) = lower($3)
+          `,
+          [input.organizationId, departmentCode, designationCode]
+        )
+        const identity = nextRecruitmentPostIdentity({
+          departmentCode,
+          designationCode,
+          existingPostCodes: existingPosts.rows.map((row) => row.post_code),
+        })!
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.posts (
@@ -626,14 +2059,14 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `,
           [
             input.organizationId,
-            required(input.vacancyNumber, "Vacancy number"),
-            required(input.postCode, "Post code"),
-            required(input.vacancyCode, "Vacancy code"),
+            identity.vacancyNumber,
+            identity.postCode,
+            identity.vacancyCode,
             input.actorUserId ?? null,
             randomUUID(),
-            required(input.designationCode, "Designation"),
+            designationCode,
             optional(input.requirementTemplateCode) ?? "",
-            required(input.departmentCode, "Department"),
+            departmentCode,
           ]
         )
         if (!result.rows[0]) {
@@ -642,6 +2075,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         await audit(client, {
           ...input,
           eventType: "recruitment.post.saved",
+          metadata: identity,
           targetId: result.rows[0].id,
           targetTable: "posts",
         })
@@ -649,43 +2083,773 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       })
     },
 
-    async assignEmployee(
+    async updatePost(
       input: MutationContext & {
-        employeeCode?: string | null
-        employeeName?: string | null
         postId: string
+        requirementTemplateCode?: string | null
       }
     ) {
       return transaction(pool, async (client) => {
-        const employeeName = optional(input.employeeName)
-        const result = await client.query<{ id: string }>(
+        const postId = required(input.postId, "Approved post")
+        const templateCode = optional(input.requirementTemplateCode)
+        const existing = await client.query<Record<string, unknown>>(
+          `
+            SELECT post.*
+            FROM recruitment.posts post
+            WHERE post.id = $1 AND post.organization_id = $2
+            FOR UPDATE
+          `,
+          [postId, input.organizationId]
+        )
+        if (!existing.rows[0]) throw new Error("Approved post was not found.")
+
+        let templateId: string | null = null
+        if (templateCode) {
+          const template = await client.query<{ id: string }>(
+            `
+              SELECT id
+              FROM recruitment.requirement_templates
+              WHERE organization_id = $1 AND active
+                AND lower(template_code) = lower($2)
+            `,
+            [input.organizationId, templateCode]
+          )
+          if (!template.rows[0]) throw new Error("Job template was not found.")
+          templateId = template.rows[0].id
+        }
+
+        const updated = await client.query<
+          Record<string, unknown> & { id: string }
+        >(
           `
             UPDATE recruitment.posts
-            SET employee_name = $1, employee_code = $2,
-              status = CASE WHEN $1 IS NULL THEN 'Vacant' ELSE 'Occupied' END,
-              updated_by_user_id = $3, updated_at = now(),
+            SET requirement_template_id = $1, updated_by_user_id = $2,
+              updated_at = now(), row_version = row_version + 1
+            WHERE id = $3 AND organization_id = $4
+            RETURNING *
+          `,
+          [templateId, input.actorUserId ?? null, postId, input.organizationId]
+        )
+        await audit(client, {
+          ...input,
+          afterState: updated.rows[0],
+          beforeState: existing.rows[0],
+          eventType: "recruitment.post.updated",
+          metadata: { requirementTemplateCode: templateCode },
+          targetId: postId,
+          targetTable: "posts",
+        })
+        return updated.rows[0]!
+      })
+    },
+
+    async deletePost(input: MutationContext & { postId: string }) {
+      return transaction(pool, async (client) => {
+        const postId = required(input.postId, "Approved post")
+        const existing = await client.query<
+          Record<string, unknown> & {
+            combined_role_links: number
+            employee_code: string | null
+            employee_name: string | null
+            id: string
+            job_post_links: number
+            post_code: string
+          }
+        >(
+          `
+            SELECT post.*,
+              (SELECT count(*)::int
+                FROM recruitment.combined_role_posts link
+                WHERE link.post_id = post.id) AS combined_role_links,
+              (SELECT count(*)::int
+                FROM recruitment.job_posts job
+                WHERE job.post_id = post.id) AS job_post_links
+            FROM recruitment.posts post
+            WHERE post.id = $1 AND post.organization_id = $2
+            FOR UPDATE OF post
+          `,
+          [postId, input.organizationId]
+        )
+        const post = existing.rows[0]
+        if (!post) throw new Error("Approved post was not found.")
+        const blocker = recruitmentPostDeletionBlocker({
+          combinedRoleLinks: post.combined_role_links,
+          employeeCode: post.employee_code,
+          employeeName: post.employee_name,
+          jobPostLinks: post.job_post_links,
+        })
+        if (blocker) throw new Error(blocker)
+
+        await client.query(
+          `SELECT recruitment.delete_approved_post($1, $2, $3)`,
+          [input.organizationId, postId, input.actorUserId ?? null]
+        )
+        return { id: post.id, postCode: post.post_code }
+      })
+    },
+
+    async updateCombinedRole(
+      input: MutationContext & {
+        combinedRoleId: string
+        name?: string | null
+        postIds: string[]
+        primaryPostId: string
+        requirementTemplateCode?: string | null
+      }
+    ) {
+      return transaction(pool, async (client) => {
+        const combinedRoleId = required(input.combinedRoleId, "Combined role")
+        const postIds = [
+          ...new Set(
+            input.postIds.map((postId) => postId.trim()).filter(Boolean)
+          ),
+        ]
+        if (postIds.length < 2) {
+          throw new Error("Select at least two approved posts to combine.")
+        }
+        const primaryPostId = required(input.primaryPostId, "Primary post")
+        if (!postIds.includes(primaryPostId)) {
+          throw new Error("The primary post must be one of the selected posts.")
+        }
+
+        await client.query(
+          `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`,
+          [recruitmentAdvisoryLockKey([input.organizationId, "combined-roles"])]
+        )
+        const roleResult = await client.query<
+          Record<string, unknown> & {
+            id: string
+            name: string
+            status: string
+            vacancy_code: string | null
+          }
+        >(
+          `
+            SELECT * FROM recruitment.combined_roles
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [combinedRoleId, input.organizationId]
+        )
+        const role = roleResult.rows[0]
+        if (!role) throw new Error("Combined role was not found.")
+        if (role.status !== "Active") {
+          throw new Error("Only an active combined role can be edited.")
+        }
+        const vacancyCode = required(role.vacancy_code, "Combined vacancy code")
+        const templateCode = optional(input.requirementTemplateCode)
+        let templateId: string | null = null
+        if (templateCode) {
+          const template = await client.query<{ id: string }>(
+            `
+              SELECT id FROM recruitment.requirement_templates
+              WHERE organization_id = $1 AND active
+                AND lower(template_code) = lower($2)
+            `,
+            [input.organizationId, templateCode]
+          )
+          if (!template.rows[0]) throw new Error("Job template was not found.")
+          templateId = template.rows[0].id
+        }
+
+        const selectedPosts = await client.query<{
+          id: string
+          post_code: string
+          status: string
+        }>(
+          `
+            SELECT id, post_code, status
+            FROM recruitment.posts
+            WHERE organization_id = $1 AND id = ANY($2::uuid[])
+            ORDER BY post_code
+            FOR UPDATE
+          `,
+          [input.organizationId, postIds]
+        )
+        if (selectedPosts.rows.length !== postIds.length) {
+          throw new Error("One or more selected approved posts were not found.")
+        }
+        if (selectedPosts.rows.some((post) => post.status === "Inactive")) {
+          throw new Error("Inactive approved posts cannot be combined.")
+        }
+
+        const conflictingMembership = await client.query<{ post_code: string }>(
+          `
+            SELECT DISTINCT post.post_code
+            FROM recruitment.combined_role_posts link
+            JOIN recruitment.combined_roles combined
+              ON combined.id = link.combined_role_id
+            JOIN recruitment.posts post ON post.id = link.post_id
+            WHERE link.post_id = ANY($1::uuid[])
+              AND combined.id <> $2
+              AND combined.status = 'Active'
+          `,
+          [postIds, combinedRoleId]
+        )
+        if (conflictingMembership.rows[0]) {
+          throw new Error(
+            `${conflictingMembership.rows[0].post_code} already belongs to another active combined role.`
+          )
+        }
+
+        const existingMembers = await client.query<{ post_id: string }>(
+          `SELECT post_id FROM recruitment.combined_role_posts WHERE combined_role_id = $1`,
+          [combinedRoleId]
+        )
+        const existingPostIds = new Set(
+          existingMembers.rows.map((member) => member.post_id)
+        )
+        const changedPostIds = [
+          ...postIds.filter((postId) => !existingPostIds.has(postId)),
+          ...[...existingPostIds].filter((postId) => !postIds.includes(postId)),
+        ]
+        if (changedPostIds.length > 0) {
+          const linkedJobs = await client.query<{ post_code: string }>(
+            `
+              SELECT DISTINCT post.post_code
+              FROM recruitment.job_posts job
+              JOIN recruitment.posts post ON post.id = job.post_id
+              WHERE job.post_id = ANY($1::uuid[])
+            `,
+            [changedPostIds]
+          )
+          if (linkedJobs.rows[0]) {
+            throw new Error(
+              `Combined-role membership cannot change because ${linkedJobs.rows[0].post_code} has a linked job post.`
+            )
+          }
+        }
+
+        const removedPostIds = [...existingPostIds].filter(
+          (postId) => !postIds.includes(postId)
+        )
+        if (removedPostIds.length > 0) {
+          await client.query(
+            `
+              UPDATE recruitment.posts
+              SET combined_role_id = NULL, vacancy_code = post_code,
+                updated_by_user_id = $1, updated_at = now(),
+                row_version = row_version + 1
+              WHERE organization_id = $2
+                AND combined_role_id = $3
+                AND id = ANY($4::uuid[])
+            `,
+            [
+              input.actorUserId ?? null,
+              input.organizationId,
+              combinedRoleId,
+              removedPostIds,
+            ]
+          )
+        }
+
+        await client.query(
+          `SELECT recruitment.clear_combined_role_members($1, $2)`,
+          [input.organizationId, combinedRoleId]
+        )
+        await client.query(
+          `
+            INSERT INTO recruitment.combined_role_posts (
+              combined_role_id, post_id, is_primary
+            )
+            SELECT $1, selected.id, selected.id = $3
+            FROM unnest($2::uuid[]) AS selected(id)
+          `,
+          [combinedRoleId, postIds, primaryPostId]
+        )
+        await client.query(
+          `
+            UPDATE recruitment.posts
+            SET combined_role_id = $1, vacancy_code = $2,
+              requirement_template_id = $3, updated_by_user_id = $4,
+              updated_at = now(),
               row_version = row_version + 1
-            WHERE id = $4 AND organization_id = $5
-            RETURNING id
+            WHERE organization_id = $5 AND id = ANY($6::uuid[])
           `,
           [
-            employeeName,
-            employeeName ? optional(input.employeeCode) : null,
+            combinedRoleId,
+            vacancyCode,
+            templateId,
             input.actorUserId ?? null,
-            required(input.postId, "Approved post"),
+            input.organizationId,
+            postIds,
+          ]
+        )
+        const updatedRole = await client.query<
+          Record<string, unknown> & { id: string }
+        >(
+          `
+            UPDATE recruitment.combined_roles
+            SET name = $1, updated_by_user_id = $2, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $3 AND organization_id = $4
+            RETURNING *
+          `,
+          [
+            optionalProperCase(input.name) ?? role.name,
+            input.actorUserId ?? null,
+            combinedRoleId,
             input.organizationId,
           ]
         )
-        if (!result.rows[0]) throw new Error("Approved post was not found.")
         await audit(client, {
           ...input,
-          eventType: employeeName
-            ? "recruitment.employee.assigned"
-            : "recruitment.employee.removed",
-          targetId: result.rows[0].id,
-          targetTable: "posts",
+          afterState: updatedRole.rows[0],
+          beforeState: role,
+          eventType: "recruitment.combined_role.updated",
+          metadata: {
+            postCodes: selectedPosts.rows.map((post) => post.post_code),
+            primaryPostCode: selectedPosts.rows.find(
+              (post) => post.id === primaryPostId
+            )?.post_code,
+            requirementTemplateCode: templateCode,
+          },
+          targetId: combinedRoleId,
+          targetTable: "combined_roles",
         })
-        return result.rows[0]
+        return updatedRole.rows[0]!
+      })
+    },
+
+    async createCombinedRole(
+      input: MutationContext & {
+        name?: string | null
+        postIds: string[]
+        primaryPostId: string
+      }
+    ) {
+      return transaction(pool, async (client) => {
+        const postIds = [
+          ...new Set(
+            input.postIds.map((postId) => postId.trim()).filter(Boolean)
+          ),
+        ]
+        if (postIds.length < 2) {
+          throw new Error("Select at least two approved posts to combine.")
+        }
+        const primaryPostId = required(input.primaryPostId, "Primary post")
+        if (!postIds.includes(primaryPostId)) {
+          throw new Error("The primary post must be one of the selected posts.")
+        }
+
+        await client.query(
+          `
+            SELECT pg_advisory_xact_lock(
+              hashtextextended($1::text, 0)
+            )
+          `,
+          [recruitmentAdvisoryLockKey([input.organizationId, "combined-roles"])]
+        )
+        const selectedPosts = await client.query<{
+          belongs_to_active_combined_role: boolean
+          id: string
+          post_code: string
+        }>(
+          `
+            SELECT post.id, post.post_code,
+              EXISTS (
+                SELECT 1
+                FROM recruitment.combined_role_posts active_link
+                JOIN recruitment.combined_roles active_combined
+                  ON active_combined.id = active_link.combined_role_id
+                 AND active_combined.status = 'Active'
+                WHERE active_link.post_id = post.id
+              ) AS belongs_to_active_combined_role
+            FROM recruitment.posts post
+            WHERE post.organization_id = $1
+              AND post.id = ANY($2::uuid[])
+              AND post.status <> 'Inactive'
+            FOR UPDATE OF post
+          `,
+          [input.organizationId, postIds]
+        )
+        if (selectedPosts.rows.length !== postIds.length) {
+          throw new Error("One or more selected approved posts were not found.")
+        }
+        if (
+          selectedPosts.rows.some(
+            (post) => post.belongs_to_active_combined_role
+          )
+        ) {
+          throw new Error(
+            "One or more selected posts already belong to an active combined role."
+          )
+        }
+
+        const existingCodes = await client.query<{
+          vacancy_code: string | null
+        }>(
+          `
+            SELECT vacancy_code FROM recruitment.combined_roles
+            WHERE organization_id = $1
+          `,
+          [input.organizationId]
+        )
+        const identity = nextRecruitmentCombinedRoleIdentity(
+          existingCodes.rows.flatMap((row) =>
+            row.vacancy_code ? [row.vacancy_code] : []
+          )
+        )
+        const combinedRole = await client.query<{ id: string }>(
+          `
+            INSERT INTO recruitment.combined_roles (
+              organization_id, name, vacancy_code, status,
+              created_by_user_id, updated_by_user_id,
+              source_system, source_table, source_id
+            )
+            VALUES ($1, $2, $3, 'Active', $4, $4,
+              'mrm-dashboard', 'combined_roles', $5)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            optionalProperCase(input.name) ?? identity.defaultName,
+            identity.vacancyCode,
+            input.actorUserId ?? null,
+            randomUUID(),
+          ]
+        )
+        const combinedRoleId = combinedRole.rows[0]!.id
+        await client.query(
+          `
+            INSERT INTO recruitment.combined_role_posts (
+              combined_role_id, post_id, is_primary
+            )
+            SELECT $1, selected.post_id, selected.post_id = $3::uuid
+            FROM unnest($2::uuid[]) AS selected(post_id)
+          `,
+          [combinedRoleId, postIds, primaryPostId]
+        )
+        await client.query(
+          `
+            UPDATE recruitment.posts
+            SET combined_role_id = $1, vacancy_code = $2,
+              updated_by_user_id = $3, updated_at = now(),
+              row_version = row_version + 1
+            WHERE organization_id = $4 AND id = ANY($5::uuid[])
+          `,
+          [
+            combinedRoleId,
+            identity.vacancyCode,
+            input.actorUserId ?? null,
+            input.organizationId,
+            postIds,
+          ]
+        )
+        await audit(client, {
+          ...input,
+          eventType: "recruitment.combined_role.created",
+          metadata: {
+            postCodes: selectedPosts.rows.map((post) => post.post_code),
+            primaryPostCode: selectedPosts.rows.find(
+              (post) => post.id === primaryPostId
+            )?.post_code,
+            vacancyCode: identity.vacancyCode,
+          },
+          targetId: combinedRoleId,
+          targetTable: "combined_roles",
+        })
+        return { id: combinedRoleId }
+      })
+    },
+
+    async assignEmployee(input: EmployeeAssignmentInput) {
+      const commandId = randomUUID()
+      return transaction(pool, async (client) => {
+        const result = await assignEmployeeInTransaction(
+          client,
+          input,
+          commandId
+        )
+        return result.selectedPost
+      })
+    },
+
+    async bulkAssignEmployees(
+      input: MutationContext & {
+        assignments: Array<{
+          employeeCode?: string | null
+          employeeEvent: string
+          employeeName?: string | null
+          lastWorkingDate?: string | null
+          rowNumber: number
+          targetCode: string
+          targetType: "combined" | "individual"
+        }>
+      }
+    ) {
+      if (!input.assignments.length) {
+        throw new Error("At least one employee assignment is required.")
+      }
+      if (input.assignments.length > recruitmentAssignmentCommandLimit) {
+        throw new Error(
+          `At most ${recruitmentAssignmentCommandLimit} employee assignments are allowed.`
+        )
+      }
+      const orderedAssignments = input.assignments
+        .map((assignment, inputOrdinal) => ({
+          ...assignment,
+          inputOrdinal,
+        }))
+        .sort(
+          (left, right) =>
+            left.rowNumber - right.rowNumber ||
+            (left.targetType === right.targetType
+              ? left.inputOrdinal - right.inputOrdinal
+              : left.targetType === "combined"
+                ? -1
+                : 1)
+        )
+      const seenWorkbookRows = new Set<string>()
+      for (const assignment of orderedAssignments) {
+        const rowKey = `${assignment.targetType}:${assignment.rowNumber}`
+        if (seenWorkbookRows.has(rowKey)) {
+          const sheet =
+            assignment.targetType === "combined"
+              ? "Combined Jobs"
+              : "Individual Posts"
+          throw new Error(
+            `${sheet} row ${assignment.rowNumber} appears more than once.`
+          )
+        }
+        seenWorkbookRows.add(rowKey)
+      }
+      const commandId = randomUUID()
+      return transaction(pool, async (client) => {
+        type TargetPost = {
+          combined_role_id: string | null
+          employee_code: string | null
+          employee_name: string | null
+          is_primary: boolean
+          post_code: string
+          post_id: string
+          target_code: string
+          target_type: "combined" | "individual"
+        }
+        const combinedCodes = [
+          ...new Set(
+            orderedAssignments
+              .filter((row) => row.targetType === "combined")
+              .map((row) => row.targetCode.toLowerCase())
+          ),
+        ]
+        const individualCodes = [
+          ...new Set(
+            orderedAssignments
+              .filter((row) => row.targetType === "individual")
+              .map((row) => row.targetCode.toLowerCase())
+          ),
+        ]
+        const combinedTargets = combinedCodes.length
+          ? await client.query<TargetPost>(
+              `
+                  SELECT lower(combined.vacancy_code) AS target_code,
+                  'combined'::text AS target_type,
+                  combined.id AS combined_role_id, post.id AS post_id,
+                  link.is_primary, post.post_code,
+                  post.employee_name, post.employee_code
+                FROM recruitment.combined_roles combined
+                JOIN recruitment.combined_role_posts link
+                  ON link.combined_role_id = combined.id
+                JOIN recruitment.posts post ON post.id = link.post_id
+                WHERE combined.organization_id = $1
+                  AND combined.status = 'Active'
+                  AND lower(combined.vacancy_code) = ANY($2::text[])
+                  AND post.status <> 'Inactive'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM recruitment.combined_role_posts primary_link
+                    JOIN recruitment.posts primary_post
+                      ON primary_post.id = primary_link.post_id
+                    WHERE primary_link.combined_role_id = combined.id
+                      AND primary_link.is_primary
+                      AND primary_post.organization_id = $1
+                      AND primary_post.status <> 'Inactive'
+                  )
+                ORDER BY lower(combined.vacancy_code),
+                  link.is_primary DESC, post.post_code, post.id
+                FOR UPDATE OF post
+              `,
+              [input.organizationId, combinedCodes]
+            )
+          : { rows: [] }
+        const individualTargets = individualCodes.length
+          ? await client.query<TargetPost>(
+              `
+                SELECT post.id AS post_id,
+                  lower(post.post_code) AS target_code,
+                  'individual'::text AS target_type,
+                  post.combined_role_id, false AS is_primary, post.post_code,
+                  post.employee_name, post.employee_code
+                FROM recruitment.posts post
+                WHERE post.organization_id = $1
+                  AND post.status <> 'Inactive'
+                  AND post.combined_role_id IS NULL
+                  AND lower(post.post_code) = ANY($2::text[])
+                ORDER BY lower(post.post_code), post.id
+                FOR UPDATE OF post
+              `,
+              [input.organizationId, individualCodes]
+            )
+          : { rows: [] }
+        const targetsByCode = new Map<string, TargetPost[]>()
+        for (const target of [
+          ...combinedTargets.rows,
+          ...individualTargets.rows,
+        ]) {
+          const key = `${target.target_type}:${target.target_code}`
+          const targets = targetsByCode.get(key) ?? []
+          targets.push(target)
+          targetsByCode.set(key, targets)
+        }
+        for (const targets of targetsByCode.values()) {
+          targets.sort(
+            (left, right) =>
+              Number(right.is_primary) - Number(left.is_primary) ||
+              compareText(left.post_code, right.post_code) ||
+              compareText(left.post_id, right.post_id)
+          )
+        }
+        for (const row of orderedAssignments) {
+          const key = `${row.targetType}:${row.targetCode.toLowerCase()}`
+          if (!targetsByCode.get(key)?.length) {
+            const sheet =
+              row.targetType === "combined"
+                ? "Combined Jobs"
+                : "Individual Posts"
+            throw new Error(
+              `${sheet} row ${row.rowNumber}: ${row.targetCode} is not an available ${
+                row.targetType === "combined"
+                  ? "combined job"
+                  : "individual post"
+              }.`
+            )
+          }
+        }
+
+        const currentByPostId = new Map(
+          [...combinedTargets.rows, ...individualTargets.rows].map((post) => [
+            post.post_id,
+            {
+              employeeCode: post.employee_code,
+              employeeName: post.employee_name,
+            },
+          ])
+        )
+        const updatesByPostId = new Map<
+          string,
+          {
+            actorUserId: string | null
+            employeeCode: string | null
+            employeeName: string | null
+            id: string
+            lastWorkingDate: string | null
+            status: string
+            updateCount: number
+          }
+        >()
+        const auditEvents: AuditInput[] = []
+        let updatedPostCount = 0
+        for (const row of orderedAssignments) {
+          const key = `${row.targetType}:${row.targetCode.toLowerCase()}`
+          const targets = targetsByCode.get(key)!
+          const current =
+            targets
+              .map((target) => currentByPostId.get(target.post_id)!)
+              .find(
+                (post) =>
+                  optional(post.employeeName) || optional(post.employeeCode)
+              ) ?? currentByPostId.get(targets[0]!.post_id)!
+          const assignment = deriveRecruitmentEmployeeAssignment({
+            currentEmployeeCode: current.employeeCode,
+            currentEmployeeName: current.employeeName,
+            employeeCode: row.employeeCode,
+            employeeEvent: row.employeeEvent,
+            employeeName: optionalProperCase(row.employeeName),
+            lastWorkingDate: row.lastWorkingDate,
+          })
+          for (const target of targets) {
+            currentByPostId.set(target.post_id, {
+              employeeCode: assignment.employeeCode,
+              employeeName: assignment.employeeName,
+            })
+            const previousUpdate = updatesByPostId.get(target.post_id)
+            updatesByPostId.set(target.post_id, {
+              actorUserId: input.actorUserId ?? null,
+              employeeCode: assignment.employeeCode,
+              employeeName: assignment.employeeName,
+              id: target.post_id,
+              lastWorkingDate: assignment.lastWorkingDate,
+              status: assignment.status,
+              updateCount: (previousUpdate?.updateCount ?? 0) + 1,
+            })
+            const commandOrdinal = auditEvents.length
+            auditEvents.push(
+              recruitmentAssignmentAudit(
+                {
+                  actorUserId: input.actorUserId,
+                  eventType: `recruitment.employee.${assignment.status.toLowerCase()}`,
+                  metadata: {
+                    assignmentScope: target.combined_role_id
+                      ? "combined-role"
+                      : "approved-post",
+                    combinedRoleId: target.combined_role_id,
+                    postId: target.post_id,
+                    rowNumber: row.rowNumber,
+                    status: assignment.status,
+                    lastWorkingDate: assignment.lastWorkingDate,
+                    targetCode: row.targetCode,
+                    targetType: row.targetType,
+                  },
+                  organizationId: input.organizationId,
+                  targetId: target.post_id,
+                  targetTable: "posts",
+                },
+                commandId,
+                commandOrdinal
+              )
+            )
+          }
+          updatedPostCount += targets.length
+        }
+        const updates = [...updatesByPostId.values()]
+        const updated = await client.query<{ id: string }>(
+          `
+            WITH updates AS (
+              SELECT
+                (value->>'id')::uuid AS id,
+                value->>'employeeName' AS employee_name,
+                value->>'employeeCode' AS employee_code,
+                value->>'status' AS status,
+                migration.try_date(value->>'lastWorkingDate') AS last_working_date,
+                nullif(value->>'actorUserId', '')::uuid AS actor_user_id,
+                (value->>'updateCount')::bigint AS update_count
+              FROM jsonb_array_elements($1::jsonb) AS entry(value)
+            )
+            UPDATE recruitment.posts post
+            SET employee_name = updates.employee_name,
+              employee_code = updates.employee_code,
+              status = updates.status,
+              last_working_date = updates.last_working_date,
+              updated_by_user_id = updates.actor_user_id,
+              updated_at = now(),
+              row_version = post.row_version + updates.update_count
+            FROM updates
+            WHERE post.id = updates.id AND post.organization_id = $2
+            RETURNING post.id
+          `,
+          [JSON.stringify(updates), input.organizationId]
+        )
+        if (updated.rows.length !== updates.length) {
+          throw new Error(
+            "Not every approved post in the assignment was updated."
+          )
+        }
+        await auditMany(client, auditEvents)
+        return {
+          assignmentCount: orderedAssignments.length,
+          updatedPostCount,
+        }
       })
     },
 
@@ -693,15 +2857,47 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       input: MutationContext & { postId: string; targetDate?: string | null }
     ) {
       return transaction(pool, async (client) => {
+        const target = await client.query<{
+          combined_role_id: string | null
+          post_id: string
+        }>(
+          `
+            SELECT selected.combined_role_id,
+              COALESCE(primary_post.id, selected.id) AS post_id
+            FROM recruitment.posts selected
+            LEFT JOIN recruitment.combined_roles combined
+              ON combined.id = selected.combined_role_id
+             AND combined.status = 'Active'
+            LEFT JOIN recruitment.combined_role_posts primary_link
+              ON primary_link.combined_role_id = combined.id
+             AND primary_link.is_primary
+            LEFT JOIN recruitment.posts primary_post
+              ON primary_post.id = primary_link.post_id
+            WHERE selected.organization_id = $1 AND selected.id = $2
+            FOR UPDATE OF selected
+          `,
+          [input.organizationId, required(input.postId, "Approved post")]
+        )
+        const targetPost = target.rows[0]
+        if (!targetPost) throw new Error("Approved post was not found.")
         const existing = await client.query(
           `
-            SELECT 1 FROM recruitment.job_posts
-            WHERE organization_id = $1 AND post_id = $2 AND status = 'Open'
+            SELECT 1
+            FROM recruitment.job_posts job
+            JOIN recruitment.posts job_post ON job_post.id = job.post_id
+            WHERE job.organization_id = $1 AND job.status = 'Open'
+              AND (
+                job.post_id = $2
+                OR ($3::uuid IS NOT NULL
+                  AND job_post.combined_role_id = $3::uuid)
+              )
           `,
-          [input.organizationId, input.postId]
+          [input.organizationId, input.postId, targetPost.combined_role_id]
         )
         if (existing.rowCount) {
-          throw new Error("This approved post already has an open job.")
+          throw new Error(
+            "This approved post or combined job already has an open job."
+          )
         }
         const result = await client.query<{ id: string }>(
           `
@@ -712,9 +2908,11 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               description, created_by_user_id, updated_by_user_id,
               source_system, source_table, source_id
             )
-            SELECT post.organization_id, post.id, template.id,
-              post.vacancy_code, post.vacancy_code,
-              designation.name || ' / ' || department.name,
+            SELECT selected.organization_id, post.id, template.id,
+              COALESCE(combined.vacancy_code, post.vacancy_code),
+              COALESCE(combined.vacancy_code, post.vacancy_code),
+              COALESCE(combined.name,
+                designation.name || ' / ' || department.name),
               migration.try_date($1), template.minimum_salary,
               template.maximum_salary,
               COALESCE(template.gender, post.gender),
@@ -722,19 +2920,51 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               COALESCE(template.experience_requirement, post.experience_requirement),
               COALESCE(template.role_responsibilities, post.role_responsibilities),
               $2, $2, 'mrm-dashboard', 'jobs', $3
-            FROM recruitment.posts post
+            FROM recruitment.posts selected
+            LEFT JOIN recruitment.combined_roles combined
+              ON combined.id = selected.combined_role_id
+             AND combined.status = 'Active'
+            LEFT JOIN recruitment.combined_role_posts primary_link
+              ON primary_link.combined_role_id = combined.id
+             AND primary_link.is_primary
+            LEFT JOIN recruitment.posts primary_post
+              ON primary_post.id = primary_link.post_id
+            JOIN recruitment.posts post
+              ON post.id = COALESCE(primary_post.id, selected.id)
             JOIN recruitment.departments department ON department.id = post.department_id
             JOIN recruitment.designations designation ON designation.id = post.designation_id
-            LEFT JOIN recruitment.requirement_templates template
-              ON template.id = post.requirement_template_id
-            WHERE post.id = $4 AND post.organization_id = $5
+            LEFT JOIN LATERAL (
+              SELECT candidate.*
+              FROM recruitment.requirement_templates candidate
+              WHERE candidate.organization_id = selected.organization_id
+                AND candidate.active
+                AND (
+                  candidate.id = post.requirement_template_id
+                  OR (combined.id IS NOT NULL
+                    AND candidate.combined_role_id = combined.id)
+                )
+              ORDER BY
+                (candidate.id = post.requirement_template_id) DESC NULLS LAST,
+                (candidate.combined_role_id = combined.id) DESC NULLS LAST,
+                candidate.updated_at DESC, candidate.id
+              LIMIT 1
+            ) template ON true
+            WHERE selected.id = $4 AND selected.organization_id = $5
+              AND (
+                selected.status = 'Resigned'
+                OR (
+                  selected.status <> 'Inactive'
+                  AND NULLIF(BTRIM(selected.employee_name), '') IS NULL
+                  AND NULLIF(BTRIM(selected.employee_code), '') IS NULL
+                )
+              )
             RETURNING id
           `,
           [
             optional(input.targetDate),
             input.actorUserId ?? null,
             randomUUID(),
-            required(input.postId, "Approved post"),
+            targetPost.post_id,
             input.organizationId,
           ]
         )
@@ -751,8 +2981,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
     async upsertCandidate(
       input: MutationContext & {
+        candidateId?: string | null
         currentCompany?: string | null
         departmentCode?: string | null
+        designationCode?: string | null
         email?: string | null
         experience?: string | null
         name: string
@@ -762,57 +2994,108 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }
     ) {
       return transaction(pool, async (client) => {
-        const result = await client.query<{ id: string }>(
-          `
-            INSERT INTO recruitment.candidates (
-              organization_id, name, phone, email, current_company,
-              experience, source, preferred_department_id,
-              created_by_user_id, updated_by_user_id, source_system,
-              source_table, source_id
-            )
-            SELECT $1, $2, $3, $4, $5, $6, $7, department.id,
-              $8, $8, 'mrm-dashboard', 'candidates', $9
-            FROM (SELECT 1) seed
-            LEFT JOIN recruitment.departments department
-              ON department.organization_id = $1
-             AND lower(department.code) = lower($10)
-            ON CONFLICT (organization_id, phone) DO UPDATE SET
-              name = EXCLUDED.name, email = EXCLUDED.email,
-              current_company = EXCLUDED.current_company,
-              experience = EXCLUDED.experience, source = EXCLUDED.source,
-              preferred_department_id = EXCLUDED.preferred_department_id,
-              updated_by_user_id = EXCLUDED.updated_by_user_id,
-              updated_at = now(),
-              row_version = recruitment.candidates.row_version + 1
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            required(input.name, "Candidate name"),
-            required(input.phone, "Candidate phone"),
-            optional(input.email),
-            optional(input.currentCompany),
-            optional(input.experience),
-            optional(input.source),
-            input.actorUserId ?? null,
-            randomUUID(),
-            optional(input.departmentCode) ?? "",
-          ]
-        )
-        const candidateId = result.rows[0]!.id
-        if (optional(input.departmentCode)) {
-          await client.query(
+        const candidateId = optional(input.candidateId)
+        const departmentCode = optional(input.departmentCode)
+        const designationCode = optional(input.designationCode)
+        let departmentId: string | null = null
+        let designationId: string | null = null
+        if (departmentCode) {
+          const department = await client.query<{ id: string }>(
             `
-              INSERT INTO recruitment.candidate_departments (
-                candidate_id, department_id
-              )
-              SELECT $1, id FROM recruitment.departments
-              WHERE organization_id = $2 AND lower(code) = lower($3)
-              ON CONFLICT DO NOTHING
+              SELECT id FROM recruitment.departments
+              WHERE organization_id = $1 AND lower(code) = lower($2)
             `,
-            [candidateId, input.organizationId, input.departmentCode]
+            [input.organizationId, departmentCode]
           )
+          if (!department.rows[0]) {
+            throw new Error("Preferred department was not found in the master.")
+          }
+          departmentId = department.rows[0].id
         }
+        if (designationCode) {
+          const designation = await client.query<{ id: string }>(
+            `
+              SELECT id FROM recruitment.designations
+              WHERE organization_id = $1 AND lower(code) = lower($2)
+            `,
+            [input.organizationId, designationCode]
+          )
+          if (!designation.rows[0]) {
+            throw new Error(
+              "Preferred designation was not found in the master."
+            )
+          }
+          designationId = designation.rows[0].id
+        }
+        const parameters = [
+          input.organizationId,
+          requiredProperCase(input.name, "Candidate name"),
+          required(input.phone, "Candidate phone"),
+          optional(input.email),
+          optionalProperCase(input.currentCompany),
+          optional(input.experience),
+          optional(input.source),
+          departmentId,
+          designationId,
+          input.actorUserId ?? null,
+        ]
+        if (candidateId) {
+          const duplicatePhone = await client.query<{ id: string }>(
+            `
+              SELECT id FROM recruitment.candidates
+              WHERE organization_id = $1 AND phone = $2 AND id <> $3
+              LIMIT 1
+            `,
+            [input.organizationId, parameters[2], candidateId]
+          )
+          if (duplicatePhone.rows[0]) {
+            throw new Error("Another candidate already uses this phone number.")
+          }
+        }
+        const result = candidateId
+          ? await client.query<{ id: string }>(
+              `
+                UPDATE recruitment.candidates
+                SET name = $2, phone = $3, email = $4, current_company = $5,
+                  experience = $6, source = $7, preferred_department_id = $8,
+                  preferred_designation_id = $9, updated_by_user_id = $10,
+                  updated_at = now(),
+                  row_version = row_version + 1
+                WHERE organization_id = $1 AND id = $11
+                RETURNING id
+              `,
+              [...parameters, candidateId]
+            )
+          : await client.query<{ id: string }>(
+              `
+                INSERT INTO recruitment.candidates (
+                  organization_id, name, phone, email, current_company,
+                  experience, source, preferred_department_id,
+                  preferred_designation_id, created_by_user_id,
+                  updated_by_user_id, source_system,
+                  source_table, source_id
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10,
+                  'mrm-dashboard', 'candidates', $11)
+                ON CONFLICT (organization_id, phone) DO UPDATE SET
+                  name = EXCLUDED.name, email = EXCLUDED.email,
+                  current_company = EXCLUDED.current_company,
+                  experience = EXCLUDED.experience, source = EXCLUDED.source,
+                  preferred_department_id = EXCLUDED.preferred_department_id,
+                  preferred_designation_id = EXCLUDED.preferred_designation_id,
+                  updated_by_user_id = EXCLUDED.updated_by_user_id,
+                  updated_at = now(),
+                  row_version = recruitment.candidates.row_version + 1
+                RETURNING id
+              `,
+              [...parameters, randomUUID()]
+            )
+        if (!result.rows[0]) throw new Error("Candidate was not found.")
+        const savedCandidateId = result.rows[0].id
+        await client.query(
+          `SELECT recruitment.replace_candidate_department($1, $2, $3)`,
+          [input.organizationId, savedCandidateId, departmentId]
+        )
         if (optional(input.notes)) {
           await client.query(
             `
@@ -825,7 +3108,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             `,
             [
               input.organizationId,
-              candidateId,
+              savedCandidateId,
               optional(input.notes),
               input.actorUserId ?? null,
               randomUUID(),
@@ -835,54 +3118,272 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         await audit(client, {
           ...input,
           eventType: "recruitment.candidate.saved",
-          targetId: candidateId,
+          targetId: savedCandidateId,
           targetTable: "candidates",
         })
-        return { id: candidateId }
+        return { id: savedCandidateId }
       })
+    },
+
+    async recordCandidateResume(
+      input: MutationContext & {
+        byteSize: number
+        candidateId: string
+        fileName: string
+        mediaType: string
+        sha256: string
+        sourceId: string
+        storageKey: string
+      }
+    ) {
+      const storageKey = required(input.storageKey, "Resume storage key")
+      if (
+        storageKey.startsWith("/") ||
+        storageKey.includes("..") ||
+        storageKey.includes("\\")
+      ) {
+        throw new Error("Resume storage key is invalid.")
+      }
+      return transaction(pool, async (client) => {
+        const candidate = await client.query<{ id: string }>(
+          `
+            SELECT id FROM recruitment.candidates
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [required(input.candidateId, "Candidate"), input.organizationId]
+        )
+        if (!candidate.rows[0]) throw new Error("Candidate was not found.")
+        const file = await client.query<{ id: string }>(
+          `
+            INSERT INTO core.files (
+              organization_id, file_name, media_type, byte_size, sha256,
+              storage_key, created_by_user_id, updated_by_user_id,
+              source_system, source_table, source_id, source_payload
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $7,
+              'mrm-dashboard', 'candidate_resumes', $8, $9)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            required(input.fileName, "Resume file name"),
+            input.mediaType,
+            input.byteSize,
+            input.sha256,
+            storageKey,
+            input.actorUserId ?? null,
+            input.sourceId,
+            input,
+          ]
+        )
+        await client.query(
+          `
+            INSERT INTO core.file_links (
+              organization_id, file_id, target_schema, target_table,
+              target_id, purpose, created_by_user_id, updated_by_user_id
+            )
+            VALUES ($1, $2, 'recruitment', 'candidates', $3, 'resume', $4, $4)
+          `,
+          [
+            input.organizationId,
+            file.rows[0]!.id,
+            input.candidateId,
+            input.actorUserId ?? null,
+          ]
+        )
+        await client.query(
+          `
+            UPDATE recruitment.candidates
+            SET resume_reference = $1, updated_by_user_id = $2,
+              updated_at = now(), row_version = row_version + 1
+            WHERE id = $3 AND organization_id = $4
+          `,
+          [
+            file.rows[0]!.id,
+            input.actorUserId ?? null,
+            input.candidateId,
+            input.organizationId,
+          ]
+        )
+        await audit(client, {
+          ...input,
+          eventType: "recruitment.candidate.resume_recorded",
+          metadata: { fileId: file.rows[0]!.id, fileName: input.fileName },
+          targetId: input.candidateId,
+          targetTable: "candidates",
+        })
+        return { id: file.rows[0]!.id }
+      })
+    },
+
+    async getCandidateResume(organizationId: string, candidateId: string) {
+      const result = await pool.query<{
+        file_name: string
+        media_type: string | null
+        storage_key: string
+      }>(
+        `
+          SELECT file.file_name, file.media_type, file.storage_key
+          FROM core.file_links file_link
+          JOIN core.files file ON file.id = file_link.file_id
+          WHERE file_link.organization_id = $1
+            AND file_link.target_schema = 'recruitment'
+            AND file_link.target_table = 'candidates'
+            AND file_link.target_id = $2
+            AND file_link.purpose = 'resume'
+          ORDER BY file.created_at DESC, file.id DESC
+          LIMIT 1
+        `,
+        [organizationId, required(candidateId, "Candidate")]
+      )
+      const file = result.rows[0]
+      if (!file) throw new Error("Candidate resume was not found.")
+      return {
+        fileName: file.file_name,
+        mediaType: file.media_type,
+        storageKey: file.storage_key,
+      }
     },
 
     async assignCandidate(
       input: MutationContext & { candidateId: string; jobId: string }
     ) {
+      const candidateId = required(input.candidateId, "Candidate")
+      const jobId = required(input.jobId, "Recruitment opening")
+      const commandId = randomUUID()
+      const applications = await transaction(pool, (client) =>
+        assignCandidatesInTransaction(client, {
+          ...input,
+          candidateIds: [candidateId],
+          commandId,
+          jobId,
+        })
+      )
+      return { id: applications[0]!.id }
+    },
+
+    async assignCandidates(input: CandidateAssignmentInput) {
+      const candidateIds = normalizedCandidateAssignmentIds(input.candidateIds)
+      assertCandidateAssignmentCount(candidateIds)
+      const jobId = required(input.jobId, "Recruitment opening")
+      const commandId = randomUUID()
+      return transaction(pool, (client) =>
+        assignCandidatesInTransaction(client, {
+          ...input,
+          candidateIds,
+          commandId,
+          jobId,
+        })
+      )
+    },
+
+    async completeCandidateAppointment(
+      input: MutationContext &
+        CandidateAppointmentTermsInput & { applicationId: string }
+    ) {
+      const terms = candidateAppointmentTerms(input)
+      return transaction(pool, (client) =>
+        completeCandidateAppointmentInTransaction(client, {
+          ...input,
+          applicationId: required(input.applicationId, "Candidate application"),
+          terms,
+        })
+      )
+    },
+
+    async withdrawCandidateApplication(
+      input: MutationContext & { applicationId: string; reason: string }
+    ) {
       return transaction(pool, async (client) => {
-        const result = await client.query<{ id: string }>(
+        const applicationId = required(
+          input.applicationId,
+          "Candidate application"
+        )
+        const reason = required(input.reason, "Withdrawal reason")
+        const beforeResult = await client.query<{
+          candidate_id: string
+          candidate_name: string
+          id: string
+          job_id: string
+          job_title: string
+          status: string
+        }>(
           `
-            INSERT INTO recruitment.applications (
-              organization_id, candidate_id, job_post_id,
-              created_by_user_id, updated_by_user_id, source_system,
+            SELECT application.id, application.status,
+              candidate.id AS candidate_id,
+              candidate.name AS candidate_name,
+              job.id AS job_id, job.title AS job_title
+            FROM recruitment.applications application
+            JOIN recruitment.candidates candidate
+              ON candidate.id = application.candidate_id
+            JOIN recruitment.job_posts job
+              ON job.id = application.job_post_id
+            WHERE application.id = $1
+              AND application.organization_id = $2
+            FOR UPDATE OF application
+          `,
+          [applicationId, input.organizationId]
+        )
+        const before = beforeResult.rows[0]
+        if (!before) throw new Error("Candidate application was not found.")
+        if (!isActiveRecruitmentApplicationStatus(before.status)) {
+          throw new Error(
+            "Only an active candidate application can be withdrawn."
+          )
+        }
+        const afterResult = await client.query<{
+          id: string
+          status: string
+        }>(
+          `
+            UPDATE recruitment.applications
+            SET status = 'Withdrawn', interview_at = NULL,
+              planned_round = NULL, updated_by_user_id = $1,
+              updated_at = now(), row_version = row_version + 1
+            WHERE id = $2 AND organization_id = $3
+            RETURNING id, status
+          `,
+          [input.actorUserId ?? null, applicationId, input.organizationId]
+        )
+        const candidateEvent = await client.query<{ id: string }>(
+          `
+            INSERT INTO recruitment.candidate_events (
+              organization_id, candidate_id, job_post_id, application_id,
+              event_type, title, notes, actor_user_id, source_system,
               source_table, source_id
             )
-            SELECT $1, candidate.id, job.id, $2, $2, 'mrm-dashboard',
-              'assignments', $3
-            FROM recruitment.candidates candidate
-            JOIN recruitment.job_posts job
-              ON job.id = $4 AND job.organization_id = $1
-             AND job.status = 'Open'
-            WHERE candidate.id = $5 AND candidate.organization_id = $1
-            ON CONFLICT (candidate_id, job_post_id) DO UPDATE SET
-              updated_at = now(),
-              updated_by_user_id = EXCLUDED.updated_by_user_id
+            VALUES ($1, $2, $3, $4, 'Candidate Withdrawal', $5, $6, $7,
+              'mrm-dashboard', 'application-withdrawals', $8)
             RETURNING id
           `,
           [
             input.organizationId,
+            before.candidate_id,
+            before.job_id,
+            applicationId,
+            `Withdrew from ${before.job_title}`,
+            reason,
             input.actorUserId ?? null,
             randomUUID(),
-            required(input.jobId, "Recruitment opening"),
-            required(input.candidateId, "Candidate"),
           ]
         )
-        if (!result.rows[0]) {
-          throw new Error("Candidate or open recruitment job was not found.")
-        }
         await audit(client, {
           ...input,
-          eventType: "recruitment.application.assigned",
-          targetId: result.rows[0].id,
+          afterState: afterResult.rows[0],
+          beforeState: { id: before.id, status: before.status },
+          eventType: "recruitment.application.withdrawn",
+          metadata: {
+            candidateEventId: candidateEvent.rows[0]!.id,
+            candidateId: before.candidate_id,
+            candidateName: before.candidate_name,
+            jobId: before.job_id,
+          },
+          reason,
+          targetId: applicationId,
           targetTable: "applications",
         })
-        return result.rows[0]
+        return afterResult.rows[0]!
       })
     },
 
@@ -928,14 +3429,149 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    async updateCandidateEvent(
+      input: MutationContext & {
+        eventId: string
+        eventType?: string | null
+        notes?: string | null
+        title: string
+      }
+    ) {
+      return transaction(pool, async (client) => {
+        const eventId = required(input.eventId, "Conversation log")
+        const before = await client.query<
+          Record<string, unknown> & { id: string }
+        >(
+          `
+            SELECT * FROM recruitment.candidate_events
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [eventId, input.organizationId]
+        )
+        if (!before.rows[0]) {
+          throw new Error("Conversation log was not found.")
+        }
+        const after = await client.query<
+          Record<string, unknown> & { id: string }
+        >(
+          `
+            UPDATE recruitment.candidate_events
+            SET event_type = $1, title = $2, notes = $3
+            WHERE id = $4 AND organization_id = $5
+            RETURNING *
+          `,
+          [
+            optional(input.eventType) ?? "Conversation",
+            required(input.title, "Conversation title"),
+            optional(input.notes),
+            eventId,
+            input.organizationId,
+          ]
+        )
+        await audit(client, {
+          ...input,
+          afterState: after.rows[0],
+          beforeState: before.rows[0],
+          eventType: "recruitment.candidate_event.updated",
+          targetId: eventId,
+          targetTable: "candidate_events",
+        })
+        return after.rows[0]!
+      })
+    },
+
+    async deleteCandidateEvent(input: MutationContext & { eventId: string }) {
+      return transaction(pool, async (client) => {
+        const eventId = required(input.eventId, "Conversation log")
+        const deleted = await client.query<{
+          deleted_event: Record<string, unknown> & { id: string }
+        }>(
+          `
+            SELECT recruitment.delete_candidate_event($1, $2)
+              AS deleted_event
+          `,
+          [input.organizationId, eventId]
+        )
+        const deletedEvent = deleted.rows[0]?.deleted_event
+        if (!deletedEvent) {
+          throw new Error("Conversation log was not found.")
+        }
+        await audit(client, {
+          ...input,
+          beforeState: deletedEvent,
+          eventType: "recruitment.candidate_event.deleted",
+          targetId: eventId,
+          targetTable: "candidate_events",
+        })
+        return { id: eventId }
+      })
+    },
+
     async scheduleInterview(
       input: MutationContext & {
         applicationId: string
         interviewAt: string
-        plannedRound: string
+        roundName: string
       }
     ) {
       return transaction(pool, async (client) => {
+        const applicationResult = await client.query<{
+          id: string
+          status: string
+        }>(
+          `
+            SELECT id, status
+            FROM recruitment.applications
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [
+            required(input.applicationId, "Candidate application"),
+            input.organizationId,
+          ]
+        )
+        const application = applicationResult.rows[0]
+        if (!application) {
+          throw new Error("Candidate application was not found.")
+        }
+        if (!isActiveRecruitmentApplicationStatus(application.status)) {
+          throw new Error(
+            "This candidate application is closed. Create a new application before scheduling another interview."
+          )
+        }
+        const historyResult = await client.query<{
+          round_name: string
+          scheduled_at: string | null
+          status: string
+        }>(
+          `
+            SELECT round_name, status, scheduled_at::text
+            FROM recruitment.interviews
+            WHERE application_id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [application.id, input.organizationId]
+        )
+        const nextRound = nextRecruitmentInterviewRound(
+          historyResult.rows.map((row) => ({
+            roundName: row.round_name,
+            status: row.status,
+          }))
+        )
+        if (!nextRound) {
+          throw new Error("All three interview rounds are already approved.")
+        }
+        const selectedRound = required(input.roundName, "Interview round")
+        if (
+          canonicalRecruitmentInterviewRound(selectedRound) !== nextRound.name
+        ) {
+          throw new Error(`The next required round is ${nextRound.name}.`)
+        }
+        const interviewAt = required(
+          input.interviewAt,
+          "Interview date and time"
+        )
         const result = await client.query<{ id: string }>(
           `
             UPDATE recruitment.applications
@@ -946,23 +3582,50 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             RETURNING id
           `,
           [
-            required(input.interviewAt, "Interview date and time"),
-            required(input.plannedRound, "Interview round"),
+            interviewAt,
+            nextRound.name,
             input.actorUserId ?? null,
-            required(input.applicationId, "Candidate application"),
+            application.id,
             input.organizationId,
           ]
         )
-        if (!result.rows[0]) {
-          throw new Error("Candidate application was not found.")
-        }
+        const updatedApplication = result.rows[0]!
+        await client.query(
+          `
+            INSERT INTO recruitment.interviews (
+              organization_id, application_id, round_name, status,
+              scheduled_at, created_by_user_id, updated_by_user_id,
+              source_system, source_table, source_id
+            )
+            VALUES ($1, $2, $3, 'Scheduled', $4::timestamptz, $5, $5,
+              'mrm-dashboard', 'interview-schedules', $6)
+            ON CONFLICT (application_id, round_name) DO UPDATE SET
+              scheduled_at = EXCLUDED.scheduled_at,
+              status = CASE
+                WHEN recruitment.interviews.status = 'Scheduled'
+                  THEN 'Scheduled'
+                ELSE recruitment.interviews.status
+              END,
+              updated_by_user_id = EXCLUDED.updated_by_user_id,
+              updated_at = now(),
+              row_version = recruitment.interviews.row_version + 1
+          `,
+          [
+            input.organizationId,
+            updatedApplication.id,
+            nextRound.name,
+            interviewAt,
+            input.actorUserId ?? null,
+            randomUUID(),
+          ]
+        )
         await audit(client, {
           ...input,
           eventType: "recruitment.interview.scheduled",
-          targetId: result.rows[0].id,
+          targetId: updatedApplication.id,
           targetTable: "applications",
         })
-        return result.rows[0]
+        return updatedApplication
       })
     },
 
@@ -971,20 +3634,78 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         applicationId: string
         comments?: string | null
         interviewerName?: string | null
-        joiningDate?: string | null
+        questionScores: Record<string, unknown>
         roundName: string
-        score?: string | number | null
         status: "Approved" | "Hold" | "Rejected"
       }
     ) {
       return transaction(pool, async (client) => {
-        if (
-          input.status === "Approved" &&
-          input.roundName === "Final HR Round" &&
-          !optional(input.joiningDate)
-        ) {
-          throw new Error("Joining date is required for final approval.")
+        const applicationResult = await client.query<{
+          id: string
+          status: string
+        }>(
+          `
+            SELECT id, status
+            FROM recruitment.applications
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [
+            required(input.applicationId, "Candidate application"),
+            input.organizationId,
+          ]
+        )
+        const application = applicationResult.rows[0]
+        if (!application) {
+          throw new Error("Candidate application was not found.")
         }
+        if (!isActiveRecruitmentApplicationStatus(application.status)) {
+          throw new Error(
+            "This candidate application is closed. Create a new application before recording another interview."
+          )
+        }
+        const historyResult = await client.query<{
+          round_name: string
+          scheduled_at: string | null
+          status: string
+        }>(
+          `
+            SELECT round_name, status, scheduled_at::text
+            FROM recruitment.interviews
+            WHERE application_id = $1 AND organization_id = $2
+            FOR UPDATE
+          `,
+          [application.id, input.organizationId]
+        )
+        const nextRound = nextRecruitmentInterviewRound(
+          historyResult.rows.map((row) => ({
+            roundName: row.round_name,
+            status: row.status,
+          }))
+        )
+        if (!nextRound) {
+          throw new Error("All three interview rounds are already approved.")
+        }
+        if (required(input.roundName, "Interview round") !== nextRound.name) {
+          throw new Error(`The next required round is ${nextRound.name}.`)
+        }
+        const scheduledInterview = historyResult.rows.find(
+          (interview) =>
+            interview.round_name === nextRound.name &&
+            interview.status === "Scheduled" &&
+            interview.scheduled_at !== null
+        )
+        if (!scheduledInterview) {
+          throw new Error(
+            `${nextRound.name} must be scheduled before scoring is allowed.`
+          )
+        }
+        const assessment = scoreRecruitmentInterview(
+          nextRound.name,
+          input.questionScores
+        )
+        const finalApproval =
+          input.status === "Approved" && nextRound.name === "HR Round"
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO recruitment.interviews (
@@ -993,12 +3714,9 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               created_by_user_id, updated_by_user_id, source_system,
               source_table, source_id
             )
-            SELECT $1, application.id, $2, $3, $4,
-              jsonb_build_object('overall', $5::numeric), $6,
-              migration.try_date($7), $8, $8, 'mrm-dashboard',
-              'interviews', $9
-            FROM recruitment.applications application
-            WHERE application.id = $10 AND application.organization_id = $1
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7,
+              migration.try_date($8), $9, $9, 'mrm-dashboard',
+              'interviews', $10)
             ON CONFLICT (application_id, round_name) DO UPDATE SET
               status = EXCLUDED.status,
               interviewer_name = EXCLUDED.interviewer_name,
@@ -1011,29 +3729,27 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `,
           [
             input.organizationId,
-            required(input.roundName, "Interview round"),
+            application.id,
+            nextRound.name,
             input.status,
-            optional(input.interviewerName),
-            money(input.score) ?? 0,
+            optionalProperCase(input.interviewerName),
+            JSON.stringify({
+              overall: assessment.overall,
+              questions: assessment.questionScores,
+            }),
             optional(input.comments),
-            optional(input.joiningDate),
+            null,
             input.actorUserId ?? null,
             randomUUID(),
-            required(input.applicationId, "Candidate application"),
           ]
         )
-        if (!result.rows[0]) {
-          throw new Error("Candidate application was not found.")
-        }
-        const finalApproval =
-          input.status === "Approved" && input.roundName === "Final HR Round"
+        const recordedInterview = result.rows[0]!
         await client.query(
           `
             UPDATE recruitment.applications
-            SET status = $1, joining_date = migration.try_date($2),
-              updated_by_user_id = $3, updated_at = now(),
-              row_version = row_version + 1
-            WHERE id = $4 AND organization_id = $5
+            SET status = $1, updated_by_user_id = $2,
+              updated_at = now(), row_version = row_version + 1
+            WHERE id = $3 AND organization_id = $4
           `,
           [
             finalApproval
@@ -1041,7 +3757,6 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
               : input.status === "Approved"
                 ? "Interview"
                 : input.status,
-            optional(input.joiningDate),
             input.actorUserId ?? null,
             input.applicationId,
             input.organizationId,
@@ -1050,10 +3765,11 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         await audit(client, {
           ...input,
           eventType: "recruitment.interview.recorded",
-          targetId: result.rows[0].id,
+          metadata: { finalApproval },
+          targetId: recordedInterview.id,
           targetTable: "interviews",
         })
-        return result.rows[0]
+        return recordedInterview
       })
     },
   }

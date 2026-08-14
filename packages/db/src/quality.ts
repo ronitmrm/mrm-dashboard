@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto"
 import type { Pool, PoolClient } from "pg"
 
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  normalizeProductionFloorCode,
+  type ProductionFloorCode,
+} from "./production-floors"
 
 type RepositoryOptions = RepositoryPoolOptions
 
@@ -42,6 +46,41 @@ function requiredText(value: unknown, label: string) {
   const result = String(value ?? "").trim()
   if (!result) throw new Error(`${label} is required.`)
   return result
+}
+
+async function generatedQualityMasterCode(
+  client: PoolClient,
+  organizationId: string,
+  requestedCode: string,
+  kind:
+    | "rejection-reason"
+    | "rejection-remark"
+    | "rejection-type"
+    | "setup-checklist"
+) {
+  const cleaned = requestedCode.trim()
+  if (cleaned) return cleaned
+  const definition = {
+    "rejection-type": { prefix: "RT", table: "quality.rejection_types" },
+    "rejection-reason": { prefix: "DC", table: "quality.rejection_reasons" },
+    "rejection-remark": { prefix: "RR", table: "quality.rejection_remarks" },
+    "setup-checklist": { prefix: "SC", table: "quality.setup_checklist_templates" },
+  }[kind]
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtext('quality.master-code'), hashtext($1))",
+    [`${organizationId}:${kind}`]
+  )
+  const result = await client.query<{ nextNumber: number }>(
+    `
+      SELECT COALESCE(MAX(
+        CASE WHEN code ~* $2 THEN substring(code from '([0-9]+)$')::integer END
+      ), 0) + 1 AS "nextNumber"
+      FROM ${definition.table}
+      WHERE organization_id = $1
+    `,
+    [organizationId, `^${definition.prefix}[0-9]+$`]
+  )
+  return `${definition.prefix}${String(result.rows[0]?.nextNumber ?? 1).padStart(3, "0")}`
 }
 
 async function transaction<T>(
@@ -111,7 +150,8 @@ async function routeAndSetupFor(
   organizationId: string,
   itemUid: string,
   routeCode: string,
-  operationSetupCode: string
+  operationSetupCode: string,
+  productionFloorCode: ProductionFloorCode
 ) {
   const result = await client.query<{
     item_id: string
@@ -123,16 +163,19 @@ async function routeAndSetupFor(
         setup.id AS operation_setup_id
       FROM catalog.items item
       JOIN manufacturing.route_options route ON route.item_id = item.id
+      JOIN manufacturing.production_floors floor
+        ON floor.id = route.production_floor_id
       JOIN manufacturing.operation_setups setup ON setup.route_option_id = route.id
       WHERE item.organization_id = $1 AND lower(item.uid) = lower($2)
         AND (
           lower(route.route_code) = lower($3)
           OR lower(COALESCE(route.legacy_option_number, '')) = lower($3)
         )
+        AND floor.code = $4
         AND (
-          lower(COALESCE(setup.legacy_setup_code, '')) = lower($4)
+          lower(COALESCE(setup.legacy_setup_code, '')) = lower($5)
           OR setup.setup_number = CASE
-            WHEN $4 ~ '^[0-9]+$' THEN $4::integer ELSE -1 END
+            WHEN $5 ~ '^[0-9]+$' THEN $5::integer ELSE -1 END
         )
         AND route.active AND setup.active
       ORDER BY route.revision DESC
@@ -142,6 +185,7 @@ async function routeAndSetupFor(
       organizationId,
       requiredText(itemUid, "Item"),
       requiredText(routeCode, "Route"),
+      productionFloorCode,
       requiredText(operationSetupCode, "Operation setup"),
     ]
   )
@@ -157,7 +201,8 @@ async function qualityContextFor(
   client: PoolClient,
   organizationId: string,
   jobCardNumber: string,
-  operationSetupCode: string
+  operationSetupCode: string,
+  productionFloorCode: ProductionFloorCode
 ) {
   const result = await client.query<QualityContext>(
     `
@@ -169,8 +214,13 @@ async function qualityContextFor(
         AND selection.reversed_at IS NULL
       JOIN manufacturing.operation_setups setup
         ON setup.route_option_id = selection.route_option_id
+      JOIN manufacturing.route_options route
+        ON route.id = setup.route_option_id
+      JOIN manufacturing.production_floors floor
+        ON floor.id = route.production_floor_id
       WHERE work_order.organization_id = $1
         AND lower(work_order.job_card_number) = lower($2)
+        AND floor.code = $4
         AND (
           lower(COALESCE(setup.legacy_setup_code, '')) = lower($3)
           OR setup.setup_number = CASE
@@ -182,6 +232,7 @@ async function qualityContextFor(
       organizationId,
       requiredText(jobCardNumber, "Job card"),
       requiredText(operationSetupCode, "Operation setup"),
+      productionFloorCode,
     ]
   )
   if (!result.rows[0]) {
@@ -193,15 +244,20 @@ async function qualityContextFor(
 async function machineIdFor(
   client: PoolClient,
   organizationId: string,
-  machineNumber?: string | null
+  machineNumber: string | null | undefined,
+  productionFloorCode: ProductionFloorCode
 ) {
   if (!machineNumber) return null
   const result = await client.query<{ id: string }>(
     `
-      SELECT id FROM catalog.machines
-      WHERE organization_id = $1 AND lower(machine_number) = lower($2)
+      SELECT machine.id FROM catalog.machines machine
+      JOIN manufacturing.production_floors floor
+        ON floor.id = machine.production_floor_id
+      WHERE machine.organization_id = $1
+        AND lower(machine.machine_number) = lower($2)
+        AND floor.code = $3
     `,
-    [organizationId, machineNumber]
+    [organizationId, machineNumber, productionFloorCode]
   )
   if (!result.rows[0]) throw new Error("Machine was not found.")
   return result.rows[0].id
@@ -367,6 +423,7 @@ async function upsertChecklistItems(
     actorUserId?: string | null
     items: ChecklistItemInput[]
     organizationId: string
+    payload: Record<string, unknown>
     templateId: string
   }
 ) {
@@ -402,7 +459,7 @@ async function upsertChecklistItems(
         item.active ?? true,
         input.actorUserId ?? null,
         randomUUID(),
-        item,
+        { ...input.payload, ...item },
       ]
     )
   }
@@ -521,7 +578,11 @@ export function createQualityRepository(options: RepositoryOptions) {
     async readHourlyQualityPage(input: {
       checkKey?: string | null
       organizationId: string
+      productionFloorCode?: string
     }) {
+      const productionFloorCode = normalizeProductionFloorCode(
+        input.productionFloorCode
+      )
       const runningRows = await pool.query<{
         jcNo: string
         jobCard: string
@@ -549,16 +610,19 @@ export function createQualityRepository(options: RepositoryOptions) {
           JOIN catalog.items item ON item.id = work_order.item_id
           JOIN manufacturing.route_options route
             ON route.id = state.route_option_id
+          JOIN manufacturing.production_floors floor
+            ON floor.id = route.production_floor_id
           JOIN manufacturing.operation_setups setup
             ON setup.id = state.operation_setup_id
           JOIN catalog.machines machine ON machine.id = state.machine_id
           LEFT JOIN catalog.machine_types machine_type
             ON machine_type.id = machine.machine_type_id
-          WHERE state.organization_id = $1 AND state.active
+          WHERE state.organization_id = $1 AND floor.code = $2
+            AND state.active
           ORDER BY machine.machine_number, work_order.job_card_number
           LIMIT 500
         `,
-        [input.organizationId]
+        [input.organizationId, productionFloorCode]
       )
       const parameterRows = await pool.query<{
         code: string
@@ -605,14 +669,16 @@ export function createQualityRepository(options: RepositoryOptions) {
           FROM quality.parameter_definitions parameter
           JOIN catalog.items item ON item.id = parameter.item_id
           JOIN manufacturing.route_options route ON route.id = parameter.route_option_id
+          JOIN manufacturing.production_floors floor
+            ON floor.id = route.production_floor_id
           JOIN manufacturing.operation_setups setup
             ON setup.id = parameter.operation_setup_id
-          WHERE parameter.organization_id = $1
+          WHERE parameter.organization_id = $1 AND floor.code = $2
           ORDER BY item.uid, route.route_code, setup.setup_number,
             parameter.sequence, parameter.parameter_code
           LIMIT 2000
         `,
-        [input.organizationId]
+        [input.organizationId, productionFloorCode]
       )
       const qualityParameterMasterRows = parameterRows.rows.map(
         ({ sourcePayload, ...row }) => ({
@@ -659,16 +725,19 @@ export function createQualityRepository(options: RepositoryOptions) {
             JOIN manufacturing.operation_setups setup
               ON setup.id = check_row.operation_setup_id
             JOIN manufacturing.route_options route ON route.id = setup.route_option_id
+            JOIN manufacturing.production_floors floor
+              ON floor.id = route.production_floor_id
             LEFT JOIN catalog.machines machine ON machine.id = check_row.machine_id
             LEFT JOIN catalog.machine_types machine_type
               ON machine_type.id = machine.machine_type_id
             LEFT JOIN identity.users checker ON checker.id = check_row.checker_user_id
             WHERE check_row.organization_id = $1
               AND lower(check_row.check_key) = lower($2)
+              AND floor.code = $3
               AND check_row.reversed_at IS NULL
             LIMIT 1
           `,
-          [input.organizationId, input.checkKey]
+          [input.organizationId, input.checkKey, productionFloorCode]
         )
         const check = checks.rows[0]
         if (check) {
@@ -735,8 +804,12 @@ export function createQualityRepository(options: RepositoryOptions) {
 
     async readSetupChecklistPage(input: {
       organizationId: string
+      productionFloorCode?: string
       sessionKey?: string | null
     }) {
+      const productionFloorCode = normalizeProductionFloorCode(
+        input.productionFloorCode
+      )
       const masters = await pool.query<{
         checkPoint: string
         createdAt: Date
@@ -825,6 +898,8 @@ export function createQualityRepository(options: RepositoryOptions) {
             JOIN manufacturing.operation_setups setup
               ON setup.id = session.operation_setup_id
             JOIN manufacturing.route_options route ON route.id = setup.route_option_id
+            JOIN manufacturing.production_floors floor
+              ON floor.id = route.production_floor_id
             LEFT JOIN catalog.machines machine ON machine.id = session.machine_id
             LEFT JOIN catalog.machine_types machine_type
               ON machine_type.id = machine.machine_type_id
@@ -832,10 +907,11 @@ export function createQualityRepository(options: RepositoryOptions) {
               ON completer.id = session.completed_by_user_id
             WHERE session.organization_id = $1
               AND lower(session.session_key) = lower($2)
+              AND floor.code = $3
               AND session.reversed_at IS NULL
             LIMIT 1
           `,
-          [input.organizationId, input.sessionKey]
+          [input.organizationId, input.sessionKey, productionFloorCode]
         )
         const session = sessions.rows[0]
         if (session) {
@@ -925,33 +1001,35 @@ export function createQualityRepository(options: RepositoryOptions) {
       organizationId: string
       payload: Record<string, unknown>
     }) {
-      const code = requiredText(input.code, "Rejection type code")
-      const result = await pool.query<{ id: string }>(
-        `
-          INSERT INTO quality.rejection_types (
-            organization_id, code, name, active,
-            created_by_user_id, updated_by_user_id,
-            source_system, source_table, source_id, source_payload
-          ) VALUES ($1, $2, $3, $4, $5, $5,
-            'mrm-dashboard', 'rejection_type_master', $6, $7)
-          ON CONFLICT (organization_id, lower(code))
-          DO UPDATE SET name = EXCLUDED.name, active = EXCLUDED.active,
-            updated_by_user_id = EXCLUDED.updated_by_user_id,
-            source_payload = EXCLUDED.source_payload, updated_at = now(),
-            row_version = quality.rejection_types.row_version + 1
-          RETURNING id
-        `,
-        [
-          input.organizationId,
-          code,
-          requiredText(input.name, "Rejection type name"),
-          input.active ?? true,
-          input.actorUserId ?? null,
-          `rejection_type_master:${input.organizationId}:${code.toLowerCase()}`,
-          input.payload,
-        ]
-      )
-      return result.rows[0]!
+      return transaction(pool, async (client) => {
+        const code = await generatedQualityMasterCode(client, input.organizationId, input.code, "rejection-type")
+        const result = await client.query<{ id: string }>(
+          `
+            INSERT INTO quality.rejection_types (
+              organization_id, code, name, active,
+              created_by_user_id, updated_by_user_id,
+              source_system, source_table, source_id, source_payload
+            ) VALUES ($1, $2, $3, $4, $5, $5,
+              'mrm-dashboard', 'rejection_type_master', $6, $7)
+            ON CONFLICT (organization_id, lower(code))
+            DO UPDATE SET name = EXCLUDED.name, active = EXCLUDED.active,
+              updated_by_user_id = EXCLUDED.updated_by_user_id,
+              source_payload = EXCLUDED.source_payload, updated_at = now(),
+              row_version = quality.rejection_types.row_version + 1
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            code,
+            requiredText(input.name, "Rejection type name"),
+            input.active ?? true,
+            input.actorUserId ?? null,
+            `rejection_type_master:${input.organizationId}:${code.toLowerCase()}`,
+            { ...input.payload, code },
+          ]
+        )
+        return result.rows[0]!
+      })
     },
 
     async upsertRejectionReason(input: {
@@ -967,7 +1045,7 @@ export function createQualityRepository(options: RepositoryOptions) {
           client,
           input.organizationId
         )
-        const code = requiredText(input.code, "Rejection reason code")
+        const code = await generatedQualityMasterCode(client, input.organizationId, input.code, "rejection-reason")
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO quality.rejection_reasons (
@@ -991,7 +1069,7 @@ export function createQualityRepository(options: RepositoryOptions) {
             input.active ?? true,
             input.actorUserId ?? null,
             `rejection_reason_master:${input.organizationId}:${code.toLowerCase()}`,
-            input.payload,
+            { ...input.payload, code },
           ]
         )
         return result.rows[0]!
@@ -1011,7 +1089,7 @@ export function createQualityRepository(options: RepositoryOptions) {
           client,
           input.organizationId
         )
-        const code = requiredText(input.code, "Rejection remark code")
+        const code = await generatedQualityMasterCode(client, input.organizationId, input.code, "rejection-remark")
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO quality.rejection_remarks (
@@ -1035,7 +1113,7 @@ export function createQualityRepository(options: RepositoryOptions) {
             input.active ?? true,
             input.actorUserId ?? null,
             `rejection_remark_master:${input.organizationId}:${code.toLowerCase()}`,
-            input.payload,
+            { ...input.payload, code },
           ]
         )
         return result.rows[0]!
@@ -1054,6 +1132,7 @@ export function createQualityRepository(options: RepositoryOptions) {
       organizationId: string
       parameterCode: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
       routeCode: string
       sequence?: number
       unit?: string | null
@@ -1066,7 +1145,8 @@ export function createQualityRepository(options: RepositoryOptions) {
           input.organizationId,
           input.itemUid,
           input.routeCode,
-          input.operationSetupCode
+          input.operationSetupCode,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const result = await client.query<{ id: string }>(
           `
@@ -1131,6 +1211,7 @@ export function createQualityRepository(options: RepositoryOptions) {
       operationSetupCode: string
       organizationId: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
       status: string
     }) {
       return transaction(pool, async (client) => {
@@ -1146,20 +1227,23 @@ export function createQualityRepository(options: RepositoryOptions) {
           client,
           input.organizationId,
           input.jobCardNumber,
-          input.operationSetupCode
+          input.operationSetupCode,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const machineId = await machineIdFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const existing = await client.query<{ id: string }>(
           `
             SELECT id FROM quality.first_piece_inspections
             WHERE organization_id = $1 AND lower(check_key) = lower($2)
+              AND operation_setup_id = $3
               AND reversed_at IS NULL FOR UPDATE
           `,
-          [input.organizationId, inspectionKey]
+          [input.organizationId, inspectionKey, context.operation_setup_id]
         )
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
@@ -1231,6 +1315,7 @@ export function createQualityRepository(options: RepositoryOptions) {
       operationSetupCode: string
       organizationId: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
       readings: Array<{
         actualReading: boolean | number | string | null
         parameterCode: string
@@ -1249,20 +1334,23 @@ export function createQualityRepository(options: RepositoryOptions) {
           client,
           input.organizationId,
           input.jobCardNumber,
-          input.operationSetupCode
+          input.operationSetupCode,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const machineId = await machineIdFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const existing = await client.query<{ id: string }>(
           `
             SELECT id FROM quality.hourly_checks
             WHERE organization_id = $1 AND lower(check_key) = lower($2)
+              AND operation_setup_id = $3
               AND reversed_at IS NULL FOR UPDATE
           `,
-          [input.organizationId, checkKey]
+          [input.organizationId, checkKey, context.operation_setup_id]
         )
         const result = existing.rows[0]
           ? await client.query<{ id: string }>(
@@ -1332,6 +1420,17 @@ export function createQualityRepository(options: RepositoryOptions) {
       revision: number
     }) {
       return transaction(pool, async (client) => {
+        const code = await generatedQualityMasterCode(
+          client,
+          input.organizationId,
+          input.code,
+          "setup-checklist"
+        )
+        const payload = {
+          ...input.payload,
+          checklistCode: code,
+          version: code,
+        }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO quality.setup_checklist_templates (
@@ -1350,19 +1449,20 @@ export function createQualityRepository(options: RepositoryOptions) {
           `,
           [
             input.organizationId,
-            requiredText(input.code, "Setup checklist code"),
+            code,
             requiredText(input.name, "Setup checklist name"),
             input.revision,
             input.active ?? true,
             input.actorUserId ?? null,
             randomUUID(),
-            input.payload,
+            payload,
           ]
         )
         await upsertChecklistItems(client, {
           actorUserId: input.actorUserId,
           items: input.items,
           organizationId: input.organizationId,
+          payload,
           templateId: result.rows[0]!.id,
         })
         return result.rows[0]!
@@ -1379,6 +1479,7 @@ export function createQualityRepository(options: RepositoryOptions) {
       organizationId: string
       payload: Record<string, unknown>
       phase: "end" | "start"
+      productionFloorCode?: string
       results: ResultInput[]
       sessionKey: string
       status: string
@@ -1397,12 +1498,14 @@ export function createQualityRepository(options: RepositoryOptions) {
           client,
           input.organizationId,
           input.jobCardNumber,
-          input.operationSetupCode
+          input.operationSetupCode,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const machineId = await machineIdFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const template = await client.query<{ id: string }>(
           `
@@ -1422,9 +1525,10 @@ export function createQualityRepository(options: RepositoryOptions) {
           `
             SELECT id FROM quality.setup_checklist_sessions
             WHERE organization_id = $1 AND lower(session_key) = lower($2)
+              AND operation_setup_id = $3
               AND reversed_at IS NULL FOR UPDATE
           `,
-          [input.organizationId, sessionKey]
+          [input.organizationId, sessionKey, context.operation_setup_id]
         )
         const completedAt =
           input.phase === "end"

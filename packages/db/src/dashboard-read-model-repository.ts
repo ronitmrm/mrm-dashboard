@@ -8,8 +8,14 @@ import {
   type CorrectionTargetRow,
   type DataEntryCorrectionRow,
 } from "./dashboard-corrections"
+import { normalizeSourceCoverage } from "./dashboard-coverage"
+import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 import { readCanonicalDashboardSource } from "./dashboard-read-model"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  defaultProductionFloorCode,
+  type ProductionFloorCode,
+} from "./production-floors"
 
 type RepositoryOptions = RepositoryPoolOptions
 type JsonRecord = Record<string, unknown>
@@ -55,11 +61,47 @@ function correctionCandidate(table: string, row: JsonRecord) {
     createdAt: typeof row.createdAt === "string" ? row.createdAt : "",
     details: table === "dataEntries" ? payload : row,
     entryType,
+    productionFloorCode: text(
+      row.productionFloorCode || payload.productionFloorCode
+    ),
     targetId: String(row._id),
     targetKey,
     targetLabel,
     targetTable: table,
   }
+}
+
+function activeCorrectionCandidates(
+  source: Awaited<ReturnType<typeof readCanonicalDashboardSource>>
+) {
+  const corrections = source.corrections as CorrectionTargetRow[]
+  const directTargets = activeCorrectionTargetKeys(corrections)
+  const dataEntryTargets = dataEntryCorrectionTargetsWithWorkflowCascade(
+    source.allDataEntries as DataEntryCorrectionRow[],
+    directTargets,
+    corrections
+  )
+  const groups: Array<[string, JsonRecord[]]> = [
+    ["routeSelections", source.routeSelections],
+    ["plannerPriorities", source.plannerPriorities],
+    ["machineConstraints", source.machineConstraints],
+    ["planOverrides", source.planOverrides],
+    ["routeChanges", source.routeChanges],
+    ["dispatchApprovals", source.dispatchApprovals],
+    ["setupCompletions", source.setupCompletions],
+    ["dataEntries", source.allDataEntries],
+  ]
+  return groups
+    .flatMap(([table, rows]) =>
+      rows
+        .filter((row) => {
+          const targets =
+            table === "dataEntries" ? dataEntryTargets : directTargets
+          return !targets.has(`${table}:${String(row._id)}`)
+        })
+        .map((row) => correctionCandidate(table, row))
+    )
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 }
 
 async function transaction<T>(
@@ -96,7 +138,11 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
       return result.rows[0].id
     },
 
-    async latest(organizationId: string, filters: JsonRecord = {}) {
+    async latest(
+      organizationId: string,
+      filters: JsonRecord = {},
+      productionFloorCode: ProductionFloorCode = defaultProductionFloorCode
+    ) {
       const result = await pool.query<{
         created_at: Date
         payload: JsonRecord
@@ -104,60 +150,197 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
         version: string
       }>(
         `
-          SELECT version::text AS version, payload, source_watermark, created_at
-          FROM derived.dashboard_read_models
-          WHERE organization_id = $1
-          ORDER BY version DESC
+          SELECT version::text AS version,
+            COALESCE(
+              jsonb_extract_path(
+                payload,
+                'productionFloorSnapshots',
+                $2::text
+              ),
+              CASE
+                WHEN $2 = 'conventional'
+                  THEN payload - 'productionFloorSnapshots'
+                ELSE '{}'::jsonb
+              END
+            ) AS payload,
+            jsonb_build_object(
+              'changedAt', source_watermark -> 'changedAt',
+              'sourceCoverage', COALESCE(
+                payload #> ARRAY[
+                  'productionFloorSnapshots',
+                  $2::text,
+                  'sourceCoverage'
+                ],
+                CASE
+                  WHEN $2 = 'conventional' THEN payload -> 'sourceCoverage'
+                  ELSE NULL
+                END,
+                '{}'::jsonb
+              )
+            ) AS source_watermark,
+            created_at
+          FROM derived.dashboard_read_models AS dashboard_model
+          WHERE dashboard_model.organization_id = $1
+          ORDER BY dashboard_model.version DESC
           LIMIT 1
         `,
-        [organizationId]
+        [organizationId, productionFloorCode]
       )
       const row = result.rows[0]
       if (!row) return null
+      const sourceCoverage = normalizeSourceCoverage(row.payload.sourceCoverage)
       return {
         ...row.payload,
         filters,
+        productionFloorCode,
         readModelVersion: Number(row.version),
         snapshotCacheUpdatedAt: row.created_at.toISOString(),
-        sourceWatermark: row.source_watermark,
+        sourceCoverage,
+        sourceWatermark: {
+          ...row.source_watermark,
+          sourceCoverage,
+        },
+      }
+    },
+
+    async state(
+      organizationId: string,
+      filters: JsonRecord = {},
+      productionFloorCode: ProductionFloorCode = defaultProductionFloorCode,
+      knownVersion?: number
+    ) {
+      const result = await pool.query<{
+        attempts: number | null
+        completed_at: Date | null
+        job_status: string | null
+        last_error: string | null
+        model_created_at: Date | null
+        model_payload: JsonRecord | null
+        model_source_watermark: JsonRecord | null
+        model_version: string | null
+        requested_at: Date | null
+        started_at: Date | null
+      }>(
+        `
+          SELECT model.version::text AS model_version,
+            model.payload AS model_payload,
+            model.source_watermark AS model_source_watermark,
+            model.created_at AS model_created_at,
+            job.status AS job_status, job.attempts,
+            job.created_at AS requested_at, job.started_at,
+            job.completed_at, job.last_error
+          FROM (SELECT $1::uuid AS organization_id) requested
+          LEFT JOIN LATERAL (
+            SELECT version,
+              CASE
+                WHEN $3::bigint IS NOT NULL AND version = $3::bigint
+                  THEN NULL
+                ELSE COALESCE(
+                  jsonb_extract_path(
+                    payload,
+                    'productionFloorSnapshots',
+                    $2::text
+                  ),
+                  CASE
+                    WHEN $2 = 'conventional'
+                      THEN payload - 'productionFloorSnapshots'
+                    ELSE '{}'::jsonb
+                  END
+                )
+              END AS payload,
+              CASE
+                WHEN $3::bigint IS NOT NULL AND version = $3::bigint
+                  THEN NULL
+                ELSE jsonb_build_object(
+                  'changedAt', source_watermark -> 'changedAt',
+                  'sourceCoverage', COALESCE(
+                    payload #> ARRAY[
+                      'productionFloorSnapshots',
+                      $2::text,
+                      'sourceCoverage'
+                    ],
+                    CASE
+                      WHEN $2 = 'conventional'
+                        THEN payload -> 'sourceCoverage'
+                      ELSE NULL
+                    END,
+                    '{}'::jsonb
+                  )
+                )
+              END AS source_watermark,
+              created_at
+            FROM derived.dashboard_read_models
+            WHERE organization_id = requested.organization_id
+            ORDER BY version DESC
+            LIMIT 1
+          ) model ON true
+          LEFT JOIN LATERAL (
+            SELECT status, attempts, created_at, started_at,
+              completed_at, last_error
+            FROM derived.refresh_jobs
+            WHERE organization_id = requested.organization_id
+              AND queue_key = 'dashboard'
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT 1
+          ) job ON true
+        `,
+        [organizationId, productionFloorCode, knownVersion ?? null]
+      )
+      const row = result.rows[0]!
+      const version = row.model_version ? Number(row.model_version) : null
+      const coverage = row.model_payload
+        ? normalizeSourceCoverage(row.model_payload.sourceCoverage)
+        : null
+      return {
+        coverage,
+        dashboard:
+          row.model_version && row.model_payload && row.model_created_at
+            ? {
+                ...row.model_payload,
+                filters,
+                productionFloorCode,
+                readModelVersion: version,
+                snapshotCacheUpdatedAt: row.model_created_at.toISOString(),
+                sourceCoverage: coverage,
+                sourceWatermark: {
+                  ...(row.model_source_watermark ?? {}),
+                  sourceCoverage: coverage,
+                },
+              }
+            : null,
+        notModified:
+          knownVersion !== undefined &&
+          row.model_version === String(knownVersion) &&
+          row.model_payload === null,
+        productionFloorCode,
+        status: row.job_status
+          ? {
+              attempts: row.attempts ?? 0,
+              completedAtMs: row.completed_at?.getTime(),
+              isRefreshing:
+                row.job_status === "pending" || row.job_status === "running",
+              lastError: row.last_error ?? undefined,
+              requestedAtMs: row.requested_at?.getTime(),
+              startedAtMs: row.started_at?.getTime(),
+              status: row.job_status,
+            }
+          : {
+              attempts: 0,
+              completedAtMs: undefined,
+              isRefreshing: false,
+              lastError: undefined,
+              requestedAtMs: undefined,
+              startedAtMs: undefined,
+              status: "idle",
+            },
+        version,
       }
     },
 
     async requestRefresh(organizationId: string) {
-      return transaction(pool, async (client) => {
-        const result = await client.query<{ id: string; status: string }>(
-          `
-            INSERT INTO derived.refresh_jobs (
-              organization_id, queue_key, idempotency_key, status, run_after
-            )
-            VALUES ($1, 'dashboard', $2, 'pending', now())
-            ON CONFLICT (organization_id, queue_key)
-              WHERE status IN ('pending', 'running')
-            DO UPDATE SET run_after = LEAST(derived.refresh_jobs.run_after, now()),
-              updated_at = now(), last_error = NULL
-            RETURNING id, status
-          `,
-          [organizationId, randomUUID()]
-        )
-        const job = result.rows[0]!
-        await client.query(
-          `
-            INSERT INTO derived.outbox_events (
-              organization_id, topic, aggregate_type, aggregate_id,
-              payload, idempotency_key
-            )
-            VALUES ($1, 'dashboard.refresh.requested', 'refresh_job',
-              $2, $3, $4)
-          `,
-          [
-            organizationId,
-            job.id,
-            { organizationId, queueKey: "dashboard", refreshJobId: job.id },
-            randomUUID(),
-          ]
-        )
-        return { jobId: job.id, queued: true, skipped: false }
-      })
+      return transaction(pool, (client) =>
+        queueDashboardRefresh(client, organizationId)
+      )
     },
 
     async status(organizationId: string) {
@@ -203,54 +386,71 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
     },
 
     async reverseEntry(input: {
-      correctedBy: string
+      actorUserId: string
+      correctionKind: string
       organizationId: string
       reason: string
-      targetId: string
-      targetKey?: string
-      targetLabel?: string
-      targetTable: string
+      recordId: string
     }) {
-      const targetTable = text(input.targetTable)
-      const targetId = text(input.targetId)
+      const correctionKind = text(input.correctionKind)
+      const recordId = text(input.recordId)
       const reason = text(input.reason)
-      const correctedBy = text(input.correctedBy)
-      if (!targetTable) throw new Error("Correction target table is required.")
-      if (!targetId) throw new Error("Correction target id is required.")
+      const actorUserId = text(input.actorUserId)
+      if (!correctionKind) throw new Error("Correction kind is required.")
+      if (!recordId) throw new Error("Correction record id is required.")
       if (!reason) throw new Error("Correction reason is required.")
-      if (!correctedBy) throw new Error("Corrected by is required.")
+      if (!actorUserId) throw new Error("Correction actor is required.")
 
-      const createdAt = new Date().toISOString()
-      const sourceId = `correction-${randomUUID()}`
-      await pool.query(
-        `
-          INSERT INTO audit.legacy_convex_corrections (
-            organization_id, source_id, target_source_table, target_source_id,
-            correction_type, reason, legacy_actor, original_timestamp,
-            resolved, source_payload
-          ) VALUES ($1, $2, $3, $4, 'reverse', $5, $6, $7, true, $8)
-        `,
-        [
-          input.organizationId,
-          sourceId,
-          targetTable,
-          targetId,
-          reason,
-          correctedBy,
-          createdAt,
-          {
-            action: "reverse",
-            correctedBy,
-            createdAt,
+      return transaction(pool, async (client) => {
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+          [`${input.organizationId}:${correctionKind}:${recordId}`]
+        )
+        const source = await readCanonicalDashboardSource(
+          client,
+          input.organizationId
+        )
+        const candidate = activeCorrectionCandidates(source).find(
+          (row) =>
+            row.targetTable === correctionKind && row.targetId === recordId
+        )
+        if (!candidate) {
+          throw new Error("Active correction target was not found.")
+        }
+
+        const createdAt = new Date().toISOString()
+        const sourceId = `correction-${randomUUID()}`
+        await client.query(
+          `INSERT INTO audit.legacy_convex_corrections (
+             organization_id, source_id, target_source_table, target_source_id,
+             correction_type, reason, legacy_actor, original_timestamp,
+             resolved, source_payload
+           ) VALUES ($1, $2, $3, $4, 'reverse', $5, $6, $7, true, $8)`,
+          [
+            input.organizationId,
+            sourceId,
+            candidate.targetTable,
+            candidate.targetId,
             reason,
-            targetId,
-            targetKey: text(input.targetKey),
-            targetLabel: text(input.targetLabel),
-            targetTable,
-          },
-        ]
-      )
-      return { reversed: true }
+            actorUserId,
+            createdAt,
+            {
+              action: "reverse",
+              actorUserId,
+              createdAt,
+              reason,
+              target: {
+                id: candidate.targetId,
+                kind: candidate.targetTable,
+              },
+              targetId: candidate.targetId,
+              targetTable: candidate.targetTable,
+            },
+          ]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { reversed: true }
+      })
     },
 
     async correctionCandidates(organizationId: string, limit = 200) {
@@ -260,35 +460,10 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
           client,
           organizationId
         )
-        const corrections = source.corrections as CorrectionTargetRow[]
-        const directTargets = activeCorrectionTargetKeys(corrections)
-        const dataEntryTargets = dataEntryCorrectionTargetsWithWorkflowCascade(
-          source.allDataEntries as DataEntryCorrectionRow[],
-          directTargets,
-          corrections
+        return activeCorrectionCandidates(source).slice(
+          0,
+          Math.min(Math.max(Math.floor(limit), 1), 200)
         )
-        const groups: Array<[string, JsonRecord[]]> = [
-          ["routeSelections", source.routeSelections],
-          ["plannerPriorities", source.plannerPriorities],
-          ["machineConstraints", source.machineConstraints],
-          ["planOverrides", source.planOverrides],
-          ["routeChanges", source.routeChanges],
-          ["dispatchApprovals", source.dispatchApprovals],
-          ["setupCompletions", source.setupCompletions],
-          ["dataEntries", source.allDataEntries],
-        ]
-        return groups
-          .flatMap(([table, rows]) =>
-            rows
-              .filter((row) => {
-                const targets =
-                  table === "dataEntries" ? dataEntryTargets : directTargets
-                return !targets.has(`${table}:${String(row._id)}`)
-              })
-              .map((row) => correctionCandidate(table, row))
-          )
-          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-          .slice(0, Math.min(Math.max(Math.floor(limit), 1), 200))
       } finally {
         client.release()
       }

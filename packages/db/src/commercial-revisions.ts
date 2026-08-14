@@ -94,6 +94,13 @@ type RevisedQuote = {
   replacementQuoteItemId: string
 }
 
+type QuoteGraph = {
+  componentsByQuoteId: Map<string, ComponentRow[]>
+  nextRevisionByQuoteId: Map<string, number>
+  productsById: Map<string, ProductRow>
+  quotesById: Map<string, QuoteRow>
+}
+
 export const bulkRevisionFields = {
   casting: { label: "Casting", route: "product", valueType: "number" },
   scrap_rate: {
@@ -780,6 +787,7 @@ async function createRevisedQuote(
     cache: Map<string, RevisedQuote>
     quoteItemId: string
     overrides: Map<string, QuoteOverride>
+    quoteGraph?: QuoteGraph
     sourceKind: "Bulk Revision" | "ECN"
     sourceRecordId: string
     visiting?: Set<string>
@@ -793,9 +801,16 @@ async function createRevisedQuote(
   }
   visiting.add(input.quoteItemId)
 
-  const quote = await getQuote(client, input.quoteItemId, true)
-  const product = await getProduct(client, quote.item_id)
-  const components = await getComponents(client, input.quoteItemId)
+  const quote = input.quoteGraph
+    ? quoteFromGraph(input.quoteGraph, input.quoteItemId)
+    : await getQuote(client, input.quoteItemId, true)
+  const product = input.quoteGraph
+    ? input.quoteGraph.productsById.get(quote.item_id)
+    : await getProduct(client, quote.item_id)
+  if (!product) throw new Error("Quote product was not found.")
+  const components = input.quoteGraph
+    ? (input.quoteGraph.componentsByQuoteId.get(input.quoteItemId) ?? [])
+    : await getComponents(client, input.quoteItemId)
   const revisedChildren = new Map<string, RevisedQuote>()
   for (const component of components) {
     if (
@@ -822,17 +837,24 @@ async function createRevisedQuote(
   )
   const override = input.overrides.get(quote.id)
   const revisedProduct = productWithOverrides(product, override)
-  const nextRevision = await client.query<{ revision: number }>(
-    `
-      SELECT COALESCE(max(revision), 0)::integer + 1 AS revision
-      FROM sales.quote_items
-      WHERE organization_id = (
-        SELECT organization_id FROM sales.quote_items WHERE id = $1
-      )
-        AND quote_number = $2
-    `,
-    [quote.id, quote.quote_number]
-  )
+  const nextRevision = input.quoteGraph
+    ? input.quoteGraph.nextRevisionByQuoteId.get(quote.id)
+    : (
+        await client.query<{ revision: number }>(
+          `
+            SELECT COALESCE(max(revision), 0)::integer + 1 AS revision
+            FROM sales.quote_items
+            WHERE organization_id = (
+              SELECT organization_id FROM sales.quote_items WHERE id = $1
+            )
+              AND quote_number = $2
+          `,
+          [quote.id, quote.quote_number]
+        )
+      ).rows[0]!.revision
+  if (nextRevision === undefined) {
+    throw new Error("Quote revision number was not loaded.")
+  }
   const sourceId = randomUUID()
   const created = await client.query<{ id: string }>(
     `
@@ -860,7 +882,7 @@ async function createRevisedQuote(
       RETURNING id
     `,
     [
-      nextRevision.rows[0]!.revision,
+      nextRevision,
       revised.totalRateUsd,
       overrideNumber(override, "scrap_rate", quote.scrap_rate),
       asNumber(revisedProduct.alloy_premium),
@@ -1304,13 +1326,106 @@ async function activeAffectedQuoteIds(
   return result.rows.map((row) => row.quote_item_id)
 }
 
-async function collectAffectedQuotePath(
+async function loadQuoteGraph(
   client: PoolClient,
+  rootQuoteItemIds: string[],
+  lockQuotes = false
+): Promise<QuoteGraph> {
+  const quotes = await client.query<QuoteRow & { next_revision: number }>(
+    `
+      WITH RECURSIVE quote_tree (quote_item_id) AS (
+        SELECT unnest($1::uuid[])
+        UNION
+        SELECT component.child_quote_item_id
+        FROM quote_tree
+        JOIN sales.quote_product_snapshots snapshot
+          ON snapshot.quote_item_id = quote_tree.quote_item_id
+        JOIN sales.quote_package_components component
+          ON component.quote_product_snapshot_id = snapshot.id
+        WHERE component.child_quote_item_id IS NOT NULL
+      )
+      SELECT quote.id, quote.quote_number, quote.revision,
+        quote.enquiry_id, quote.enquiry_item_id, quote.customer_id,
+        quote.item_id, quote.lineage_item_id, quote.customer_part_code,
+        quote.quantity, quote.quote_type, quote.packaging,
+        quote.shipping_terms, quote.scrap_rate, quote.alloy_premium,
+        quote.extrusion_cost, quote.forging_cost, quote.packing_cost,
+        quote.shipping_cost, quote.overhead_cost_input, quote.purchase_times,
+        quote.profit_percent, quote.conversion_rate,
+        quote.assembled_part_inr, quote.rate_inr, quote.total_rate_inr,
+        quote.rate_usd, quote.approved_price_usd, quote.calculation_json,
+        quote.price_lineage_key, snapshot.id AS snapshot_id,
+        snapshot.product_snapshot AS snapshot_product_json,
+        snapshot.calculation_json AS snapshot_calculation_json,
+        (
+          SELECT COALESCE(max(revision.revision), 0)::integer + 1
+          FROM sales.quote_items revision
+          WHERE revision.organization_id = quote.organization_id
+            AND revision.quote_number = quote.quote_number
+        ) AS next_revision
+      FROM quote_tree
+      JOIN sales.quote_items quote ON quote.id = quote_tree.quote_item_id
+      JOIN sales.quote_product_snapshots snapshot
+        ON snapshot.quote_item_id = quote.id
+      ${lockQuotes ? "FOR UPDATE OF quote" : ""}
+    `,
+    [rootQuoteItemIds]
+  )
+  const quoteIds = quotes.rows.map((quote) => quote.id)
+  const productIds = [...new Set(quotes.rows.map((quote) => quote.item_id))]
+  const components = await client.query<
+    ComponentRow & { quote_item_id: string }
+  >(
+    `
+      SELECT snapshot.quote_item_id, component.id,
+        component.component_item_id, component.component_uid,
+        component.description, component.quantity, component.unit_cost,
+        component.extended_cost, component.sequence,
+        component.child_quote_item_id
+      FROM sales.quote_product_snapshots snapshot
+      JOIN sales.quote_package_components component
+        ON component.quote_product_snapshot_id = snapshot.id
+      WHERE snapshot.quote_item_id = ANY($1::uuid[])
+      ORDER BY snapshot.quote_item_id, component.sequence,
+        component.created_at, component.id
+    `,
+    [quoteIds]
+  )
+  const products = await client.query<ProductRow>(
+    "SELECT * FROM catalog.items WHERE id = ANY($1::uuid[])",
+    [productIds]
+  )
+  const componentsByQuoteId = new Map<string, ComponentRow[]>()
+  for (const component of components.rows) {
+    const current = componentsByQuoteId.get(component.quote_item_id) ?? []
+    current.push(component)
+    componentsByQuoteId.set(component.quote_item_id, current)
+  }
+  return {
+    componentsByQuoteId,
+    nextRevisionByQuoteId: new Map(
+      quotes.rows.map((quote) => [quote.id, quote.next_revision])
+    ),
+    productsById: new Map(
+      products.rows.map((product) => [product.id, product])
+    ),
+    quotesById: new Map(quotes.rows.map((quote) => [quote.id, quote])),
+  }
+}
+
+function quoteFromGraph(graph: QuoteGraph, quoteItemId: string) {
+  const quote = graph.quotesById.get(quoteItemId)
+  if (!quote) throw new Error("Quote revision source was not found.")
+  return quote
+}
+
+function collectAffectedQuotePathFromGraph(
+  graph: QuoteGraph,
   rootQuoteItemId: string,
   affectedItemId: string,
   depth = 0,
   visiting = new Set<string>()
-): Promise<{ affected: Set<string>; containsAffectedItem: boolean }> {
+): { affected: Set<string>; containsAffectedItem: boolean } {
   if (depth > 20) {
     throw new Error("ECN quote tree exceeds the supported depth of 20.")
   }
@@ -1319,13 +1434,14 @@ async function collectAffectedQuotePath(
   }
   const nextVisiting = new Set(visiting)
   nextVisiting.add(rootQuoteItemId)
-  const quote = await getQuote(client, rootQuoteItemId)
+  const quote = quoteFromGraph(graph, rootQuoteItemId)
   const affected = new Set<string>()
   let containsAffectedItem = quote.item_id === affectedItemId
-  for (const component of await getComponents(client, rootQuoteItemId)) {
+  for (const component of graph.componentsByQuoteId.get(rootQuoteItemId) ??
+    []) {
     if (!component.child_quote_item_id) continue
-    const child = await collectAffectedQuotePath(
-      client,
+    const child = collectAffectedQuotePathFromGraph(
+      graph,
       component.child_quote_item_id,
       affectedItemId,
       depth + 1,
@@ -1340,8 +1456,8 @@ async function collectAffectedQuotePath(
   return { affected, containsAffectedItem }
 }
 
-async function previewRevisedQuote(
-  client: PoolClient,
+function previewRevisedQuoteFromGraph(
+  graph: QuoteGraph,
   input: {
     affectedQuoteIds: Set<string>
     cache: Map<string, { newPrice: number; newProfitPercent: number }>
@@ -1349,7 +1465,7 @@ async function previewRevisedQuote(
     quoteItemId: string
     visiting?: Set<string>
   }
-): Promise<{ newPrice: number; newProfitPercent: number }> {
+): { newPrice: number; newProfitPercent: number } {
   const cached = input.cache.get(input.quoteItemId)
   if (cached) return cached
   const visiting = input.visiting ?? new Set<string>()
@@ -1358,16 +1474,17 @@ async function previewRevisedQuote(
   }
   const nextVisiting = new Set(visiting)
   nextVisiting.add(input.quoteItemId)
-  const quote = await getQuote(client, input.quoteItemId)
-  const product = await getProduct(client, quote.item_id)
-  const components = await getComponents(client, input.quoteItemId)
+  const quote = quoteFromGraph(graph, input.quoteItemId)
+  const product = graph.productsById.get(quote.item_id)
+  if (!product) throw new Error("Revision product was not found.")
+  const components = graph.componentsByQuoteId.get(input.quoteItemId) ?? []
   const revisedChildren = new Map<string, RevisedQuote>()
   for (const component of components) {
     if (
       component.child_quote_item_id &&
       input.affectedQuoteIds.has(component.child_quote_item_id)
     ) {
-      const child = await previewRevisedQuote(client, {
+      const child = previewRevisedQuoteFromGraph(graph, {
         ...input,
         quoteItemId: component.child_quote_item_id,
         visiting: nextVisiting,
@@ -1393,7 +1510,9 @@ async function previewRevisedQuote(
   return result
 }
 
-export function createCommercialRevisionsRepository(options: RepositoryOptions) {
+export function createCommercialRevisionsRepository(
+  options: RepositoryOptions
+) {
   const { close, pool } = repositoryPool(options)
 
   return {
@@ -2464,13 +2583,14 @@ export function createCommercialRevisionsRepository(options: RepositoryOptions) 
           [engineeringChangeNoteId, affectedQuoteItemIds]
         )
         const result = []
+        const graph = await loadQuoteGraph(client, affectedQuoteItemIds)
         for (const price of prices.rows) {
-          const path = await collectAffectedQuotePath(
-            client,
+          const path = collectAffectedQuotePathFromGraph(
+            graph,
             price.quote_item_id,
             row.item_id
           )
-          const revise = await previewRevisedQuote(client, {
+          const revise = previewRevisedQuoteFromGraph(graph, {
             affectedQuoteIds: path.affected,
             cache: new Map(),
             overrides: new Map(),
@@ -2484,7 +2604,7 @@ export function createCommercialRevisionsRepository(options: RepositoryOptions) 
               ]),
             ],
           ])
-          const keep = await previewRevisedQuote(client, {
+          const keep = previewRevisedQuoteFromGraph(graph, {
             affectedQuoteIds: path.affected,
             cache: new Map(),
             overrides: keepOverrides,
@@ -2547,9 +2667,14 @@ export function createCommercialRevisionsRepository(options: RepositoryOptions) 
         ) {
           throw new Error("This price is outside the ECN affected set.")
         }
-        const source = await getQuote(client, input.sourceQuoteItemId, true)
-        const path = await collectAffectedQuotePath(
+        const quoteGraph = await loadQuoteGraph(
           client,
+          row.affected_quote_item_ids_json,
+          true
+        )
+        const source = quoteFromGraph(quoteGraph, input.sourceQuoteItemId)
+        const path = collectAffectedQuotePathFromGraph(
+          quoteGraph,
           input.sourceQuoteItemId,
           row.item_id
         )
@@ -2572,6 +2697,7 @@ export function createCommercialRevisionsRepository(options: RepositoryOptions) 
           cache,
           overrides,
           quoteItemId: input.sourceQuoteItemId,
+          quoteGraph,
           sourceKind: "ECN",
           sourceRecordId: input.engineeringChangeNoteId,
         })

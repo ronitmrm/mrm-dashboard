@@ -99,6 +99,20 @@ export function priorityPlanStepWindows(
   return windows;
 }
 
+export function priorityPlanStepPreviewState(
+  stepKey: string,
+  confirmedSteps: Record<string, boolean>,
+  activeStepKey: string,
+) {
+  if (confirmedSteps[stepKey]) {
+    return { datesVisible: true, label: "Confirmed" } as const;
+  }
+  if (stepKey === activeStepKey) {
+    return { datesVisible: true, label: "Editing" } as const;
+  }
+  return { datesVisible: false, label: "Waiting" } as const;
+}
+
 export function priorityPlanHeldBlockers(step: PriorityPlanStep, queueAfterKey?: string) {
   if (!queueAfterKey) return [];
   const queuedBlockers = step.blockers.filter((blocker) => blocker.state === "queued");

@@ -134,10 +134,10 @@ export default async function CommercialRevisionsPage() {
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Start a bulk price revision</CardTitle>
+            <CardTitle>Start A Bulk Price Revision</CardTitle>
             <CardDescription>
-              Stage active sent prices, then complete once. Every affected
-              package parent receives a new immutable quote revision.
+              Stage Active Sent Prices, Then Complete Once. Every Affected
+              Package Parent Receives A New Immutable Quote Revision.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -149,7 +149,7 @@ export default async function CommercialRevisionsPage() {
                   value={reference.organizationId}
                 />
                 <FieldSet>
-                  <FieldLegend>Revision request</FieldLegend>
+                  <FieldLegend>Revision Request</FieldLegend>
                   <FieldGroup>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <Field>
@@ -160,16 +160,16 @@ export default async function CommercialRevisionsPage() {
                           required
                         >
                           <NativeSelectOption value="Customer Parameter Bulk Revision">
-                            Customer parameters
+                            Customer Parameters
                           </NativeSelectOption>
                           <NativeSelectOption value="Product Parameter Bulk Revision">
-                            Product parameters
+                            Product Parameters
                           </NativeSelectOption>
                         </NativeSelect>
                       </Field>
                       <Field>
                         <FieldLabel htmlFor="bulk-effective">
-                          Effective date
+                          Effective Date
                         </FieldLabel>
                         <Input
                           defaultValue={localDate()}
@@ -182,11 +182,11 @@ export default async function CommercialRevisionsPage() {
                     </div>
                     <Field>
                       <FieldLabel htmlFor="bulk-customer">
-                        Customer · required for customer route
+                        Customer · Required For Customer Route
                       </FieldLabel>
                       <NativeSelect id="bulk-customer" name="customer_id">
                         <NativeSelectOption value="">
-                          No customer · product route
+                          No Customer · Product Route
                         </NativeSelectOption>
                         {reference.customers.map((customer) => (
                           <NativeSelectOption
@@ -203,14 +203,14 @@ export default async function CommercialRevisionsPage() {
                       <Textarea id="bulk-reason" name="reason" required />
                     </Field>
                     <Button className="w-fit" type="submit">
-                      Create revision
+                      Create Revision
                     </Button>
                   </FieldGroup>
                 </FieldSet>
               </form>
             ) : (
               <p className="text-sm text-muted-foreground">
-                The MRMPL organization must be loaded first.
+                The Mrmpl Organization Must Be Loaded First.
               </p>
             )}
           </CardContent>
@@ -218,10 +218,10 @@ export default async function CommercialRevisionsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Open an engineering change note</CardTitle>
+            <CardTitle>Open An Engineering Change Note</CardTitle>
             <CardDescription>
-              Design completes first. Costing then records one keep-or-revise
-              decision for every recursively affected customer price.
+              Design Completes First. Costing Then Records One Keep-Or-Revise
+              Decision For Every Recursively Affected Customer Price.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -233,7 +233,7 @@ export default async function CommercialRevisionsPage() {
                   value={reference.organizationId}
                 />
                 <FieldSet>
-                  <FieldLegend>Engineering request</FieldLegend>
+                  <FieldLegend>Engineering Request</FieldLegend>
                   <FieldGroup>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <Field>
@@ -248,7 +248,7 @@ export default async function CommercialRevisionsPage() {
                       </Field>
                       <Field>
                         <FieldLabel htmlFor="ecn-effective">
-                          Effective date
+                          Effective Date
                         </FieldLabel>
                         <Input
                           defaultValue={localDate()}
@@ -263,7 +263,7 @@ export default async function CommercialRevisionsPage() {
                       <Textarea id="ecn-reason" name="reason" required />
                     </Field>
                     <Button className="w-fit" type="submit">
-                      Create ECN
+                      Create Ecn
                     </Button>
                   </FieldGroup>
                 </FieldSet>
@@ -275,9 +275,9 @@ export default async function CommercialRevisionsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Bulk revision workbench</CardTitle>
+          <CardTitle>Bulk Revision Workbench</CardTitle>
           <CardDescription>
-            Percent fields accept whole percentages, such as 30 for 30%.
+            Percent Fields Accept Whole Percentages, Such As 30 For 30%.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -319,14 +319,14 @@ export default async function CommercialRevisionsPage() {
                       </div>
                       <p className="font-semibold">{revision.revisionNumber}</p>
                       <p className="text-sm text-muted-foreground">
-                        {revision.companyName ?? "All customers"} · effective{" "}
+                        {revision.companyName ?? "All customers"} · Effective{" "}
                         {revision.effectiveOn}
                       </p>
                       <p className="mt-1 text-sm">{revision.reason}</p>
                     </div>
                     <p className="text-sm text-muted-foreground tabular-nums">
-                      {revision.changeCount} staged ·{" "}
-                      {revision.revisedQuoteCount} revised
+                      {revision.changeCount} Staged ·{" "}
+                      {revision.revisedQuoteCount} Revised
                     </p>
                   </div>
                   {revision.status !== "Completed" ? (
@@ -340,7 +340,7 @@ export default async function CommercialRevisionsPage() {
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                           <Field>
                             <FieldLabel htmlFor={`bulk-price-${revision.id}`}>
-                              Active prices
+                              Active Prices
                             </FieldLabel>
                             <NativeSelect
                               disabled={!eligiblePrices.length}
@@ -379,7 +379,7 @@ export default async function CommercialRevisionsPage() {
                           </Field>
                           <Field>
                             <FieldLabel htmlFor={`bulk-value-${revision.id}`}>
-                              New value
+                              New Value
                             </FieldLabel>
                             <Input
                               id={`bulk-value-${revision.id}`}
@@ -406,7 +406,7 @@ export default async function CommercialRevisionsPage() {
                           type="submit"
                           variant="outline"
                         >
-                          Stage selected prices
+                          Stage Selected Prices
                         </Button>
                       </form>
                       <form
@@ -419,7 +419,7 @@ export default async function CommercialRevisionsPage() {
                           value={revision.id}
                         />
                         <Button disabled={!revision.changeCount} type="submit">
-                          Complete revision
+                          Complete Revision
                         </Button>
                       </form>
                       {stagedChanges.length ? (
@@ -437,7 +437,7 @@ export default async function CommercialRevisionsPage() {
                                     : money(stage.newValue)}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {stage.selectedCount} selected
+                                  {stage.selectedCount} Selected
                                   {stage.skippedCount
                                     ? ` · ${stage.skippedCount} skipped by process guard`
                                     : ""}
@@ -465,7 +465,7 @@ export default async function CommercialRevisionsPage() {
                                   value={stage.stageGroupId}
                                 />
                                 <Button size="sm" type="submit" variant="ghost">
-                                  Delete staged change
+                                  Delete Staged Change
                                 </Button>
                               </form>
                             </div>
@@ -479,7 +479,7 @@ export default async function CommercialRevisionsPage() {
             })
           ) : (
             <p className="rounded-3xl border p-8 text-center text-sm text-muted-foreground">
-              No bulk price revisions have been created.
+              No Bulk Price Revisions Have Been Created.
             </p>
           )}
         </CardContent>
@@ -487,9 +487,9 @@ export default async function CommercialRevisionsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Engineering change workbench</CardTitle>
+          <CardTitle>Engineering Change Workbench</CardTitle>
           <CardDescription>
-            Design and costing remain separate, matching the source workflow.
+            Design And Costing Remain Separate, Matching The Source Workflow.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -517,7 +517,7 @@ export default async function CommercialRevisionsPage() {
                       <p className="mt-1 text-sm">{ecn.reason}</p>
                     </div>
                     <p className="text-sm text-muted-foreground tabular-nums">
-                      {ecn.decisionCount} decisions
+                      {ecn.decisionCount} Decisions
                     </p>
                   </div>
                   {ecn.status === "Pending Design" ? (
@@ -532,14 +532,14 @@ export default async function CommercialRevisionsPage() {
                       />
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <Field className="sm:col-span-2">
-                          <FieldLabel>Revised product description</FieldLabel>
+                          <FieldLabel>Revised Product Description</FieldLabel>
                           <Input
                             defaultValue={ecn.description}
                             name="description"
                           />
                         </Field>
                         <Field>
-                          <FieldLabel>Item type</FieldLabel>
+                          <FieldLabel>Item Type</FieldLabel>
                           <NativeSelect
                             defaultValue={ecn.itemType}
                             name="item_type"
@@ -556,11 +556,11 @@ export default async function CommercialRevisionsPage() {
                           </NativeSelect>
                         </Field>
                         <Field>
-                          <FieldLabel>Production type</FieldLabel>
+                          <FieldLabel>Production Type</FieldLabel>
                           <Input name="production_type" />
                         </Field>
                         <Field>
-                          <FieldLabel>One-piece weight (g)</FieldLabel>
+                          <FieldLabel>One-Piece Weight (G)</FieldLabel>
                           <Input
                             min="0"
                             name="weight_100_pcs"
@@ -578,15 +578,15 @@ export default async function CommercialRevisionsPage() {
                           />
                         </Field>
                         <Field>
-                          <FieldLabel>Rod size</FieldLabel>
+                          <FieldLabel>Rod Size</FieldLabel>
                           <Input name="rod_size" />
                         </Field>
                         <Field>
-                          <FieldLabel>Die code</FieldLabel>
+                          <FieldLabel>Die Code</FieldLabel>
                           <Input name="die_code" />
                         </Field>
                         <Field className="sm:col-span-2 xl:col-span-4">
-                          <FieldLabel>Design/process remarks</FieldLabel>
+                          <FieldLabel>Design/Process Remarks</FieldLabel>
                           <Textarea name="remarks" />
                         </Field>
                       </div>
@@ -595,7 +595,7 @@ export default async function CommercialRevisionsPage() {
                         parentItemId={ecn.itemId}
                       />
                       <Button className="w-fit" type="submit">
-                        Complete Design and send to Product Costing
+                        Complete Design And Send To Product Costing
                       </Button>
                     </form>
                   ) : null}
@@ -611,11 +611,11 @@ export default async function CommercialRevisionsPage() {
                       />
                       <div>
                         <p className="text-sm font-medium">
-                          Product Costing changes
+                          Product Costing Changes
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Blank values preserve the Design-stage product.
-                          Percent fields accept whole percentages.
+                          Blank Values Preserve The Design-Stage Product.
+                          Percent Fields Accept Whole Percentages.
                         </p>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -626,10 +626,10 @@ export default async function CommercialRevisionsPage() {
                           </Field>
                         ))}
                         <Field>
-                          <FieldLabel>Pricing method</FieldLabel>
+                          <FieldLabel>Pricing Method</FieldLabel>
                           <NativeSelect name="pricing_method">
                             <NativeSelectOption value="">
-                              Preserve current
+                              Preserve Current
                             </NativeSelectOption>
                             <NativeSelectOption value="Derived">
                               Derived
@@ -640,7 +640,7 @@ export default async function CommercialRevisionsPage() {
                           </NativeSelect>
                         </Field>
                         <Field>
-                          <FieldLabel>Pieces / kg</FieldLabel>
+                          <FieldLabel>Pieces / Kg</FieldLabel>
                           <Input
                             name="pieces_per_kg"
                             step="any"
@@ -648,7 +648,7 @@ export default async function CommercialRevisionsPage() {
                           />
                         </Field>
                         <Field>
-                          <FieldLabel>Direct purchase / kg</FieldLabel>
+                          <FieldLabel>Direct Purchase / Kg</FieldLabel>
                           <Input
                             name="direct_purchase_price_per_kg"
                             step="any"
@@ -656,7 +656,7 @@ export default async function CommercialRevisionsPage() {
                           />
                         </Field>
                         <Field>
-                          <FieldLabel>Direct purchase / piece</FieldLabel>
+                          <FieldLabel>Direct Purchase / Piece</FieldLabel>
                           <Input
                             name="direct_purchase_price_per_piece"
                             step="any"
@@ -664,7 +664,7 @@ export default async function CommercialRevisionsPage() {
                           />
                         </Field>
                         <Field>
-                          <FieldLabel>Stored product cost INR</FieldLabel>
+                          <FieldLabel>Stored Product Cost Inr</FieldLabel>
                           <Input
                             name="product_cost_inr"
                             step="any"
@@ -690,20 +690,20 @@ export default async function CommercialRevisionsPage() {
                                 {price.customerPartCode}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                Current USD {money(price.approvedPriceUsd)}
+                                Current Usd {money(price.approvedPriceUsd)}
                               </p>
                             </div>
                             <div className="text-sm">
                               <p className="font-medium">Keep Price Same</p>
                               <p className="text-muted-foreground">
-                                USD {money(price.keepSamePriceUsd)} · profit{" "}
+                                Usd {money(price.keepSamePriceUsd)} · Profit{" "}
                                 {money(price.keepSameProfitPercent * 100)}%
                               </p>
                             </div>
                             <div className="text-sm">
                               <p className="font-medium">Revise Price</p>
                               <p className="text-muted-foreground">
-                                USD {money(price.revisePriceUsd)} · profit{" "}
+                                Usd {money(price.revisePriceUsd)} · Profit{" "}
                                 {money(price.reviseProfitPercent * 100)}%
                               </p>
                             </div>
@@ -728,15 +728,15 @@ export default async function CommercialRevisionsPage() {
                                 />
                                 <NativeSelect name="decision" required>
                                   <NativeSelectOption value="Keep Price Same">
-                                    Keep price same
+                                    Keep Price Same
                                   </NativeSelectOption>
                                   <NativeSelectOption value="Revise Price">
-                                    Revise price
+                                    Revise Price
                                   </NativeSelectOption>
                                 </NativeSelect>
                                 <Input
                                   name="notes"
-                                  placeholder="Decision note"
+                                  placeholder="Decision Note"
                                 />
                                 <Button type="submit">Record</Button>
                               </form>
@@ -746,7 +746,7 @@ export default async function CommercialRevisionsPage() {
                       </div>
                     ) : (
                       <p className="border-t pt-4 text-sm text-muted-foreground">
-                        No active customer price contains this product.
+                        No Active Customer Price Contains This Product.
                       </p>
                     )
                   ) : null}
@@ -755,7 +755,7 @@ export default async function CommercialRevisionsPage() {
             })
           ) : (
             <p className="rounded-3xl border p-8 text-center text-sm text-muted-foreground">
-              No engineering change notes have been created.
+              No Engineering Change Notes Have Been Created.
             </p>
           )}
         </CardContent>

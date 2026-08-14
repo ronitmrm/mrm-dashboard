@@ -1,4 +1,5 @@
 import { createCustomerRepository } from "@workspace/db"
+import { redirect } from "next/navigation"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -28,12 +29,18 @@ import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
+import { customerPageBounds } from "@/lib/customer-pagination"
 
 import { createCustomerAction, updateCustomerAction } from "./actions"
 
 export const dynamic = "force-dynamic"
 
-export default async function CustomersPage() {
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string | string[] }>
+}) {
+  const bounds = customerPageBounds((await searchParams).page)
   const session = await requireCapability(
     "pricing.masters.read",
     "/commercial/customers"
@@ -46,18 +53,24 @@ export default async function CustomersPage() {
   const repository = createCustomerRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const customers = await repository
-    .listForOrganization("MRMPL")
+  const customerPage = await repository
+    .listPageForOrganization("MRMPL", bounds)
     .finally(() => repository.close())
+  const visibleCustomers = customerPage.rows
+  if (!visibleCustomers.length && bounds.page > 1) {
+    redirect("/commercial/customers")
+  }
+  const totalCount = customerPage.coverage.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalCount / bounds.limit))
 
   return (
     <div className="flex flex-col gap-6">
       {canWrite ? (
         <Card>
           <CardHeader>
-            <CardTitle>Add customer</CardTitle>
+            <CardTitle>Add Customer</CardTitle>
             <CardDescription>
-              Customer IDs are allocated from the Pricing customer sequence.
+              Customer Ids Are Allocated From The Pricing Customer Sequence.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -65,7 +78,7 @@ export default async function CustomersPage() {
               <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <Field>
                   <FieldLabel htmlFor="new-company-name">
-                    Company name
+                    Company Name
                   </FieldLabel>
                   <Input id="new-company-name" name="company_name" required />
                 </Field>
@@ -98,7 +111,7 @@ export default async function CustomersPage() {
                 </Field>
               </FieldGroup>
               <Button className="mt-6" type="submit">
-                Add customer
+                Add Customer
               </Button>
             </form>
           </CardContent>
@@ -109,15 +122,49 @@ export default async function CustomersPage() {
         <CardHeader>
           <CardTitle>Customers</CardTitle>
           <CardDescription>
-            Canonical customer masters with immutable Pricing source provenance.
+            Canonical Customer Masters With Immutable Pricing Source Provenance.
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+            <span>
+              Showing {visibleCustomers.length ? bounds.offset + 1 : 0}–
+              {Math.min(bounds.offset + visibleCustomers.length, totalCount)} Of{" "}
+              {totalCount} Customers
+            </span>
+            <div className="flex items-center gap-2">
+              {bounds.page > 1 ? (
+                <Button asChild size="sm" variant="outline">
+                  <a href={`/commercial/customers?page=${bounds.page - 1}`}>
+                    Previous
+                  </a>
+                </Button>
+              ) : (
+                <Button disabled size="sm" variant="outline">
+                  Previous
+                </Button>
+              )}
+              <span>
+                Page {Math.min(bounds.page, totalPages)} Of {totalPages}
+              </span>
+              {bounds.page < totalPages ? (
+                <Button asChild size="sm" variant="outline">
+                  <a href={`/commercial/customers?page=${bounds.page + 1}`}>
+                    Next
+                  </a>
+                </Button>
+              ) : (
+                <Button disabled size="sm" variant="outline">
+                  Next
+                </Button>
+              )}
+            </div>
+          </div>
           <div className="overflow-x-auto rounded-3xl border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Customer ID</TableHead>
+                  <TableHead>Customer Id</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
@@ -127,8 +174,8 @@ export default async function CustomersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {customers.length ? (
-                  customers.map((customer) => {
+                {visibleCustomers.length ? (
+                  visibleCustomers.map((customer) => {
                     const formId = `customer-${customer.id}`
                     return (
                       <TableRow key={customer.id}>
@@ -151,7 +198,7 @@ export default async function CustomersPage() {
                                 className="sr-only"
                                 htmlFor={`${formId}-company`}
                               >
-                                Company name for {customer.customerUid}
+                                Company Name For {customer.customerUid}
                               </FieldLabel>
                               <Input
                                 defaultValue={customer.companyName}
@@ -172,7 +219,7 @@ export default async function CustomersPage() {
                                 className="sr-only"
                                 htmlFor={`${formId}-email`}
                               >
-                                Email for {customer.customerUid}
+                                Email For {customer.customerUid}
                               </FieldLabel>
                               <Input
                                 defaultValue={customer.email ?? ""}
@@ -193,7 +240,7 @@ export default async function CustomersPage() {
                                 className="sr-only"
                                 htmlFor={`${formId}-phone`}
                               >
-                                Phone for {customer.customerUid}
+                                Phone For {customer.customerUid}
                               </FieldLabel>
                               <Input
                                 defaultValue={customer.phone ?? ""}
@@ -213,7 +260,7 @@ export default async function CustomersPage() {
                                 className="sr-only"
                                 htmlFor={`${formId}-country`}
                               >
-                                Country for {customer.customerUid}
+                                Country For {customer.customerUid}
                               </FieldLabel>
                               <Input
                                 defaultValue={customer.country ?? ""}
@@ -233,7 +280,7 @@ export default async function CustomersPage() {
                                 className="sr-only"
                                 htmlFor={`${formId}-status`}
                               >
-                                Status for {customer.customerUid}
+                                Status For {customer.customerUid}
                               </FieldLabel>
                               <NativeSelect
                                 className="w-full"
@@ -275,7 +322,7 @@ export default async function CustomersPage() {
                       className="h-32 text-center text-muted-foreground"
                       colSpan={canWrite ? 7 : 6}
                     >
-                      No customers have been loaded into PostgreSQL yet.
+                      No Customers Have Been Loaded Into Postgresql Yet.
                     </TableCell>
                   </TableRow>
                 )}

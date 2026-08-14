@@ -10,7 +10,15 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises"
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path"
 
 const MANIFEST_NAME = "manifest.json"
 const MANIFEST_VERSION = 1
@@ -45,6 +53,22 @@ function containsPath(parent: string, candidate: string) {
     child === "" ||
     (!child.startsWith(`..${sep}`) && child !== ".." && !isAbsolute(child))
   )
+}
+
+async function canonicalFuturePath(path: string) {
+  let ancestor = resolve(path)
+  const missingSegments: string[] = []
+  while (true) {
+    try {
+      return join(await realpath(ancestor), ...missingSegments.reverse())
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+      const parent = dirname(ancestor)
+      if (parent === ancestor) throw error
+      missingSegments.push(basename(ancestor))
+      ancestor = parent
+    }
+  }
 }
 
 function assertSafeRelativePath(path: string) {
@@ -139,7 +163,7 @@ export async function backupFileStorage(
   if (!sourceStats.isDirectory())
     throw new Error("File storage root must be a directory")
 
-  const backupPath = resolve(options.backupPath)
+  const backupPath = await canonicalFuturePath(options.backupPath)
   if (containsPath(sourcePath, backupPath)) {
     throw new Error("Backup path must be outside the storage root")
   }
@@ -214,7 +238,7 @@ export async function restoreFileStorage(
   options: RestoreOptions
 ): Promise<FileStorageBackupManifest> {
   const backupPath = await realpath(options.backupPath)
-  const destinationPath = resolve(options.destinationPath)
+  const destinationPath = await canonicalFuturePath(options.destinationPath)
   if (containsPath(backupPath, destinationPath)) {
     throw new Error("Restore destination must be outside the backup")
   }

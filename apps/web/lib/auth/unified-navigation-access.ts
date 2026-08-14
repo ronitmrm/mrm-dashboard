@@ -1,6 +1,7 @@
 import { commercialNavigationAccess } from "./commercial-capabilities"
 import { listGrantedCapabilities } from "./require-capability"
 import { hrNavigation } from "../unified-navigation"
+import { productionModuleIsEnabled } from "../production-module"
 
 const operationsCapability = "operations.dashboard.read"
 const administrationCapability = "administration.roles.manage"
@@ -35,6 +36,8 @@ export async function getUnifiedNavigationAccess(
         grantedCapabilities.has(requiredCapability)
       )
       .map(({ href }) => href),
-    operations: grantedCapabilities.has(operationsCapability),
+    operations:
+      productionModuleIsEnabled() &&
+      grantedCapabilities.has(operationsCapability),
   }
 }

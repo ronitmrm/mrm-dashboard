@@ -10,6 +10,7 @@ import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { validateUserAttachment } from "@/lib/user-attachment-security"
 
 import {
   parseEnquiryImportFile,
@@ -59,10 +60,6 @@ async function withWorkflow<T>(
   }
 }
 
-function safeFileName(fileName: string) {
-  return fileName.replace(/[<>:"/\\|?*]+/g, "_")
-}
-
 async function persistAttachment(
   file: File,
   input: {
@@ -77,38 +74,39 @@ async function persistAttachment(
   if (file.size > 25 * 1024 * 1024) {
     throw new Error("Drawing files must not exceed 25 MB.")
   }
-  const fileName = safeFileName(file.name)
-  if (!fileName || fileName === "." || fileName === "..") {
-    throw new Error("Drawing file name is invalid.")
-  }
-  const bytes = Buffer.from(await file.arrayBuffer())
-  const sha256 = createHash("sha256").update(bytes).digest("hex")
-  const sourceId = randomUUID()
-  const storageKey = path.posix.join(
-    "attachments",
-    input.enquiryId,
-    input.targetId,
-    sourceId,
-    fileName
-  )
-  const storageRoot =
-    process.env.LOCAL_FILE_STORAGE_PATH ??
-    path.join(/*turbopackIgnore: true*/ process.cwd(), "local-data")
-  const filePath = path.join(
-    /*turbopackIgnore: true*/ storageRoot,
-    ...storageKey.split("/")
-  )
-  await mkdir(path.dirname(filePath), { recursive: true })
-  await writeFile(filePath, bytes, { flag: "wx" })
-  try {
-    await withWorkflow(
-      input.capability ?? "pricing.enquiries.write",
-      `${enquiriesPath}/${input.enquiryId}`,
-      (workflow) =>
-        workflow.recordAttachment({
+  await withWorkflow(
+    input.capability ?? "pricing.enquiries.write",
+    `${enquiriesPath}/${input.enquiryId}`,
+    async (workflow) => {
+      const bytes = Buffer.from(await file.arrayBuffer())
+      const { fileName, mediaType } = validateUserAttachment({
+        bytes,
+        fileName: file.name,
+        purpose: "drawing",
+      })
+      const sha256 = createHash("sha256").update(bytes).digest("hex")
+      const sourceId = randomUUID()
+      const storageKey = path.posix.join(
+        "attachments",
+        input.enquiryId,
+        input.targetId,
+        sourceId,
+        fileName
+      )
+      const storageRoot =
+        process.env.LOCAL_FILE_STORAGE_PATH ??
+        path.join(/*turbopackIgnore: true*/ process.cwd(), "local-data")
+      const filePath = path.join(
+        /*turbopackIgnore: true*/ storageRoot,
+        ...storageKey.split("/")
+      )
+      await mkdir(path.dirname(filePath), { recursive: true })
+      await writeFile(filePath, bytes, { flag: "wx" })
+      try {
+        await workflow.recordAttachment({
           byteSize: bytes.byteLength,
           fileName,
-          mediaType: file.type || null,
+          mediaType,
           organizationId: input.organizationId,
           sha256,
           sourceId,
@@ -117,11 +115,12 @@ async function persistAttachment(
           targetId: input.targetId,
           targetTable: input.targetTable,
         })
-    )
-  } catch (error) {
-    await unlink(filePath).catch(() => undefined)
-    throw error
-  }
+      } catch (error) {
+        await unlink(filePath).catch(() => undefined)
+        throw error
+      }
+    }
+  )
 }
 
 export async function createEnquiryAction(formData: FormData) {

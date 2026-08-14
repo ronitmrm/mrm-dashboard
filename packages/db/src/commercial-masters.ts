@@ -751,12 +751,16 @@ async function upsertCustomerClient(
   return row
 }
 
-export function createCommercialMasterRepository(options: RepositoryPoolOptions) {
+export function createCommercialMasterRepository(
+  options: RepositoryPoolOptions
+) {
   const { close, pool } = repositoryPool(options)
 
   async function snapshot(organizationId: string) {
-    const client = await pool.connect()
-    try {
+    return transaction(pool, async (client) => {
+      await client.query(
+        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+      )
       const applications = await client.query(
         `SELECT name, sort_order FROM catalog.website_applications WHERE organization_id = $1 ORDER BY sort_order, lower(name)`,
         [organizationId]
@@ -883,9 +887,7 @@ export function createCommercialMasterRepository(options: RepositoryPoolOptions)
           sortOrder: row.sequence,
         })),
       } as CommercialMasterSnapshot
-    } finally {
-      client.release()
-    }
+    })
   }
 
   return {

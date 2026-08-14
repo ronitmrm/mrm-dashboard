@@ -19,6 +19,7 @@ import {
 } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
+import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import {
   Table,
   TableBody,
@@ -42,58 +43,58 @@ const columns: Array<{
   label: string
   value: (row: WebsiteProductRow) => ReactNode
 }> = [
-  { label: "UID", value: (row) => row.uid },
-  { label: "partCode", value: (row) => row.partCode },
+  { label: "Uid", value: (row) => row.uid },
+  { label: "Partcode", value: (row) => row.partCode },
   { label: "Product Description", value: (row) => row.productDescription },
-  { label: "category", value: (row) => row.category },
-  { label: "subCategory", value: (row) => row.subCategory },
-  { label: "size", value: (row) => row.size },
+  { label: "Category", value: (row) => row.category },
+  { label: "Subcategory", value: (row) => row.subCategory },
+  { label: "Size", value: (row) => row.size },
   { label: "Grade", value: (row) => row.grade },
-  { label: "material", value: (row) => row.material },
+  { label: "Material", value: (row) => row.material },
   {
-    label: "MATERIAL CONSTRUCTION",
+    label: "Material Construction",
     value: (row) => row.materialConstruction,
   },
-  { label: "finishPlating", value: (row) => row.finishPlating },
-  { label: "DRAWING CATEGORY", value: (row) => row.drawingCategory },
-  { label: "dimensions", value: (row) => row.dimensions },
-  { label: "THREAD SIZE 1", value: (row) => row.threadSize1 },
-  { label: "THREAD SIZE 2", value: (row) => row.threadSize2 },
-  { label: "THREAD SIZE 3", value: (row) => row.threadSize3 },
-  { label: "THREAD SIZE 4", value: (row) => row.threadSize4 },
-  { label: "threadStandard", value: (row) => row.threadStandard },
-  { label: "connections", value: (row) => row.connections },
+  { label: "Finishplating", value: (row) => row.finishPlating },
+  { label: "Drawing Category", value: (row) => row.drawingCategory },
+  { label: "Dimensions", value: (row) => row.dimensions },
+  { label: "Thread Size 1", value: (row) => row.threadSize1 },
+  { label: "Thread Size 2", value: (row) => row.threadSize2 },
+  { label: "Thread Size 3", value: (row) => row.threadSize3 },
+  { label: "Thread Size 4", value: (row) => row.threadSize4 },
+  { label: "Threadstandard", value: (row) => row.threadStandard },
+  { label: "Connections", value: (row) => row.connections },
   { label: "Pressure", value: (row) => row.pressure },
-  { label: "temperature", value: (row) => row.temperature },
-  { label: "sealant", value: (row) => row.sealant },
+  { label: "Temperature", value: (row) => row.temperature },
+  { label: "Sealant", value: (row) => row.sealant },
   {
     label: "Final Assemblies Code",
     value: (row) => row.finalAssembliesCode,
   },
-  { label: "description", value: (row) => row.description },
-  { label: "applications", value: (row) => row.applications },
-  { label: "certifications", value: (row) => row.certifications },
-  { label: "additiolNotes", value: (row) => row.additionalNotes },
-  { label: "Assembly 1 UID", value: (row) => row.assemblyUid1 },
+  { label: "Description", value: (row) => row.description },
+  { label: "Applications", value: (row) => row.applications },
+  { label: "Certifications", value: (row) => row.certifications },
+  { label: "Additiolnotes", value: (row) => row.additionalNotes },
+  { label: "Assembly 1 Uid", value: (row) => row.assemblyUid1 },
   { label: "Assembly 1 Code", value: (row) => row.assemblyCode1 },
-  { label: "Assembly 2 UID", value: (row) => row.assemblyUid2 },
+  { label: "Assembly 2 Uid", value: (row) => row.assemblyUid2 },
   { label: "Assembly 2 Code", value: (row) => row.assemblyCode2 },
-  { label: "Assembly 3 UID", value: (row) => row.assemblyUid3 },
+  { label: "Assembly 3 Uid", value: (row) => row.assemblyUid3 },
   { label: "Assembly 3 Code", value: (row) => row.assemblyCode3 },
-  { label: "Assembly 4 UID", value: (row) => row.assemblyUid4 },
+  { label: "Assembly 4 Uid", value: (row) => row.assemblyUid4 },
   { label: "Assembly 4 Code", value: (row) => row.assemblyCode4 },
-  { label: "Assembly 5 UID", value: (row) => row.assemblyUid5 },
+  { label: "Assembly 5 Uid", value: (row) => row.assemblyUid5 },
   { label: "Assembly 5 Code", value: (row) => row.assemblyCode5 },
-  { label: "Assembly 6 UID", value: (row) => row.assemblyUid6 },
+  { label: "Assembly 6 Uid", value: (row) => row.assemblyUid6 },
   { label: "Assembly 6 Code", value: (row) => row.assemblyCode6 },
   { label: "Remark", value: (row) => row.remark },
   {
     label: "Website Active",
     value: (row) => (row.isActive ? "TRUE" : "FALSE"),
   },
-  { label: "createdAt", value: (row) => row.entryCreatedAt },
+  { label: "Createdat", value: (row) => row.entryCreatedAt },
   {
-    label: "STATUS FOR WEBSIT",
+    label: "Status For Websit",
     value: (row) => (
       <Badge
         variant={row.websiteStatus === "Completed" ? "default" : "secondary"}
@@ -147,7 +148,7 @@ function SelectField({
   return (
     <div className="grid gap-2">
       <Label htmlFor={name}>{label}</Label>
-      <select
+      <SearchableSelect
         className={selectClassName}
         defaultValue={current ?? ""}
         id={name}
@@ -159,7 +160,7 @@ function SelectField({
             {option.label ?? option.value}
           </option>
         ))}
-      </select>
+      </SearchableSelect>
     </div>
   )
 }
@@ -199,7 +200,7 @@ function OptionChecklist({
       </div>
       {!options.length ? (
         <p className="text-xs text-muted-foreground">
-          Add options in Pricing masters before selecting values.
+          Add Options In Pricing Masters Before Selecting Values.
         </p>
       ) : null}
     </fieldset>
@@ -263,8 +264,8 @@ export default async function WebsiteProductsPage({
             <div>
               <CardTitle>Website Product Data</CardTitle>
               <CardDescription>
-                Ordered products and BOM-adjacent parts with source-equivalent
-                derived codes, status, thread standards, and assembly slots.
+                Ordered Products And Bom-Adjacent Parts With Source-Equivalent
+                Derived Codes, Status, Thread Standards, And Assembly Slots.
               </CardDescription>
             </div>
             <Button asChild variant="outline">
@@ -277,45 +278,45 @@ export default async function WebsiteProductsPage({
         <CardContent>
           <form className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_12rem_12rem_12rem_auto_auto]">
             <Input
-              aria-label="Search website products"
+              aria-label="Search Website Products"
               defaultValue={filters.q}
               name="q"
-              placeholder="Search UID, code, description or grade"
+              placeholder="Search Uid, Code, Description Or Grade"
             />
-            <select
-              aria-label="Filter category"
+            <SearchableSelect
+              aria-label="Filter Category"
               className={selectClassName}
               defaultValue={filters.category ?? ""}
               name="category"
             >
-              <option value="">All categories</option>
+              <option value="">All Categories</option>
               {masters.categories.map((category) => (
                 <option key={category.name} value={category.name}>
                   {category.name}
                 </option>
               ))}
-            </select>
-            <select
-              aria-label="Filter website status"
+            </SearchableSelect>
+            <SearchableSelect
+              aria-label="Filter Website Status"
               className={selectClassName}
               defaultValue={filters.status ?? ""}
               name="status"
             >
-              <option value="">All statuses</option>
+              <option value="">All Statuses</option>
               <option value="In Progress">In Progress</option>
               <option value="Completed">Completed</option>
-            </select>
-            <select
-              aria-label="Filter website active"
+            </SearchableSelect>
+            <SearchableSelect
+              aria-label="Filter Website Active"
               className={selectClassName}
               defaultValue={filters.active ?? ""}
               name="active"
             >
-              <option value="">All activation states</option>
-              <option value="true">TRUE</option>
-              <option value="false">FALSE</option>
-            </select>
-            <Button type="submit">Apply filters</Button>
+              <option value="">All Activation States</option>
+              <option value="true">True</option>
+              <option value="false">False</option>
+            </SearchableSelect>
+            <Button type="submit">Apply Filters</Button>
             <Button asChild variant="ghost">
               <Link href={websiteProductsPath}>
                 <RotateCcw /> Reset
@@ -330,9 +331,9 @@ export default async function WebsiteProductsPage({
           <CardHeader>
             <CardTitle>Edit {editing.uid}</CardTitle>
             <CardDescription>
-              Part code, product description, material construction, thread
-              standard, assembly slots, and completion status are derived on
-              save.
+              Part Code, Product Description, Material Construction, Thread
+              Standard, Assembly Slots, And Completion Status Are Derived On
+              Save.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -344,7 +345,7 @@ export default async function WebsiteProductsPage({
               />
               <div className="grid gap-3 rounded-xl border bg-muted/30 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 <p>
-                  <span className="text-muted-foreground">partCode:</span>{" "}
+                  <span className="text-muted-foreground">Partcode:</span>{" "}
                   {editing.partCode || "Auto"}
                 </p>
                 <p>
@@ -367,7 +368,7 @@ export default async function WebsiteProductsPage({
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <SelectField
                   current={editing.category}
-                  label="category"
+                  label="Category"
                   name="category"
                   options={masters.categories.map((row) => ({
                     label: row.code ? `${row.code} - ${row.name}` : row.name,
@@ -376,14 +377,14 @@ export default async function WebsiteProductsPage({
                 />
                 <SelectField
                   current={editing.subCategory}
-                  label="subCategory"
+                  label="Subcategory"
                   name="sub_category"
                   options={masters.subcategories.map((row) => ({
                     label: `${row.category} / ${row.name}`,
                     value: row.name,
                   }))}
                 />
-                <Field defaultValue={editing.size} label="size" name="size" />
+                <Field defaultValue={editing.size} label="Size" name="size" />
                 <SelectField
                   current={editing.grade}
                   label="Grade"
@@ -394,48 +395,48 @@ export default async function WebsiteProductsPage({
                 />
                 <SelectField
                   current={editing.material}
-                  label="material"
+                  label="Material"
                   name="material"
                   options={websiteOptions("material")}
                 />
                 <Field
                   defaultValue={editing.finishPlating}
-                  label="finishPlating"
+                  label="Finishplating"
                   name="finish_plating"
                 />
                 <Field
                   defaultValue={editing.drawingCategory}
-                  label="DRAWING CATEGORY"
+                  label="Drawing Category"
                   name="drawing_category"
                 />
                 <Field
                   defaultValue={editing.dimensions}
-                  label="dimensions"
+                  label="Dimensions"
                   name="dimensions"
                 />
                 <Field
                   defaultValue={editing.threadSize1}
-                  label="THREAD SIZE 1"
+                  label="Thread Size 1"
                   name="thread_size_1"
                 />
                 <Field
                   defaultValue={editing.threadSize2}
-                  label="THREAD SIZE 2"
+                  label="Thread Size 2"
                   name="thread_size_2"
                 />
                 <Field
                   defaultValue={editing.threadSize3}
-                  label="THREAD SIZE 3"
+                  label="Thread Size 3"
                   name="thread_size_3"
                 />
                 <Field
                   defaultValue={editing.threadSize4}
-                  label="THREAD SIZE 4"
+                  label="Thread Size 4"
                   name="thread_size_4"
                 />
                 <SelectField
                   current={editing.connections}
-                  label="connections"
+                  label="Connections"
                   name="connections"
                   options={websiteOptions("connections")}
                 />
@@ -447,41 +448,41 @@ export default async function WebsiteProductsPage({
                 />
                 <SelectField
                   current={editing.temperature}
-                  label="temperature"
+                  label="Temperature"
                   name="temperature"
                   options={websiteOptions("temperature")}
                 />
                 <SelectField
                   current={editing.sealant}
-                  label="sealant"
+                  label="Sealant"
                   name="sealant"
                   options={websiteOptions("sealant")}
                 />
                 <Field
                   defaultValue={editing.websiteCategory}
-                  label="Website category"
+                  label="Website Category"
                   name="website_category"
                 />
                 <Field
                   defaultValue={editing.websiteSubCategory}
-                  label="Website sub category"
+                  label="Website Sub Category"
                   name="website_sub_category"
                 />
                 <div className="grid gap-2">
                   <Label htmlFor="is_active">Website Active</Label>
-                  <select
+                  <SearchableSelect
                     className={selectClassName}
                     defaultValue={editing.isActive ? "TRUE" : "FALSE"}
                     id="is_active"
                     name="is_active"
                   >
-                    <option value="TRUE">TRUE</option>
-                    <option value="FALSE">FALSE</option>
-                  </select>
+                    <option value="TRUE">True</option>
+                    <option value="FALSE">False</option>
+                  </SearchableSelect>
                 </div>
                 <Field
                   defaultValue={editing.entryCreatedAt}
-                  label="createdAt"
+                  label="Createdat"
                   name="entry_created_at"
                   type="date"
                 />
@@ -489,20 +490,20 @@ export default async function WebsiteProductsPage({
               <div className="grid gap-4 lg:grid-cols-2">
                 <OptionChecklist
                   current={editing.applications}
-                  label="applications"
+                  label="Applications"
                   name="applications"
                   options={masters.applications.map((row) => row.name)}
                 />
                 <OptionChecklist
                   current={editing.certifications}
-                  label="certifications"
+                  label="Certifications"
                   name="certifications"
                   options={masters.certifications.map((row) => row.name)}
                 />
               </div>
               <div className="grid gap-4 lg:grid-cols-3">
                 <div className="grid gap-2">
-                  <Label htmlFor="description">description</Label>
+                  <Label htmlFor="description">Description</Label>
                   <Textarea
                     defaultValue={editing.description ?? ""}
                     id="description"
@@ -510,7 +511,7 @@ export default async function WebsiteProductsPage({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="additional_notes">additiolNotes</Label>
+                  <Label htmlFor="additional_notes">Additiolnotes</Label>
                   <Textarea
                     defaultValue={editing.additionalNotes ?? ""}
                     id="additional_notes"
@@ -541,7 +542,7 @@ export default async function WebsiteProductsPage({
         <CardHeader>
           <CardTitle>Website Product Excel View</CardTitle>
           <CardDescription>
-            Showing {rows.length} ordered product rows.
+            Showing {rows.length} Ordered Product Rows.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -586,7 +587,7 @@ export default async function WebsiteProductsPage({
                       className="h-32 text-center text-muted-foreground"
                       colSpan={columns.length + 1}
                     >
-                      No website products match these filters.
+                      No Website Products Match These Filters.
                     </TableCell>
                   </TableRow>
                 )}

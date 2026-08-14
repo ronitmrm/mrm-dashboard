@@ -1,20 +1,17 @@
 import {
   createRecruitmentRepository,
+  type RecruitmentCandidateEventRow,
   type RecruitmentCandidateRow,
+  type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
+  type RecruitmentInterviewRecordRow,
   type RecruitmentJobRow,
   type RecruitmentMasterSnapshot,
   type RecruitmentPostRow,
   type RecruitmentTemplateRow,
 } from "@workspace/db"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card"
+import { MetricCard } from "@workspace/ui/components/card"
 import { BriefcaseBusiness } from "lucide-react"
 import { redirect } from "next/navigation"
 
@@ -32,9 +29,13 @@ export default async function HrRecruitmentPage({
   searchParams,
 }: {
   searchParams: Promise<{
+    appointment?: string
     error?: string
+    job?: string
     panel?: string
+    returnJob?: string
     success?: string
+    template?: string
   }>
 }) {
   const feedback = await searchParams
@@ -59,7 +60,10 @@ export default async function HrRecruitmentPage({
     connectionString: readAuthEnvironment().connectionString,
   })
   let candidates: RecruitmentCandidateRow[] = []
+  let candidateEvents: RecruitmentCandidateEventRow[] = []
+  let combinedRoles: RecruitmentCombinedRoleRow[] = []
   let interviews: RecruitmentInterviewRow[] = []
+  let interviewRecords: RecruitmentInterviewRecordRow[] = []
   let jobs: RecruitmentJobRow[] = []
   let posts: RecruitmentPostRow[] = []
   let templates: RecruitmentTemplateRow[] = []
@@ -77,10 +81,18 @@ export default async function HrRecruitmentPage({
       "approvedPostPanel",
       "candidatesPanel",
     ].includes(panelId)
-    const needsTemplates = ["postMasterPanel", "approvedPostPanel"].includes(
-      panelId
-    )
+    const needsTemplates = [
+      "postMasterPanel",
+      "approvedPostPanel",
+      "employeeMasterPanel",
+    ].includes(panelId)
     const needsPosts = [
+      "approvedPostPanel",
+      "employeeMasterPanel",
+      "jobsPanel",
+    ].includes(panelId)
+    const needsCombinedRoles = [
+      "postMasterPanel",
       "approvedPostPanel",
       "employeeMasterPanel",
       "jobsPanel",
@@ -89,16 +101,24 @@ export default async function HrRecruitmentPage({
       "candidatesPanel",
       "candidateSearchPanel",
     ].includes(panelId)
-    const needsJobs = ["jobsPanel", "candidateSearchPanel"].includes(panelId)
+    const needsJobs = [
+      "approvedPostPanel",
+      "jobsPanel",
+      "candidateSearchPanel",
+      "employeeMasterPanel",
+    ].includes(panelId)
 
     const [
       loadedStats,
       loadedMasters,
       loadedTemplates,
       loadedPosts,
+      loadedCombinedRoles,
       loadedCandidates,
       loadedJobs,
       loadedInterviews,
+      loadedInterviewRecords,
+      loadedCandidateEvents,
     ] = await Promise.all([
       repository.count(organizationId),
       needsMasters
@@ -110,21 +130,33 @@ export default async function HrRecruitmentPage({
       needsPosts
         ? repository.listPosts(organizationId)
         : Promise.resolve(posts),
+      needsCombinedRoles
+        ? repository.listCombinedRoles(organizationId)
+        : Promise.resolve(combinedRoles),
       needsCandidates
         ? repository.listCandidates(organizationId)
         : Promise.resolve(candidates),
       needsJobs ? repository.listJobs(organizationId) : Promise.resolve(jobs),
-      panelId === "interviewsPanel"
+      ["interviewsPanel", "interviewWorkspacePanel"].includes(panelId)
         ? repository.listInterviews(organizationId)
         : Promise.resolve(interviews),
+      panelId === "interviewWorkspacePanel"
+        ? repository.listInterviewRecords(organizationId)
+        : Promise.resolve(interviewRecords),
+      panelId === "conversationLogsPanel"
+        ? repository.listCandidateEvents(organizationId)
+        : Promise.resolve(candidateEvents),
     ])
     stats = loadedStats
     masters = loadedMasters
     templates = loadedTemplates
     posts = loadedPosts
+    combinedRoles = loadedCombinedRoles
     candidates = loadedCandidates
     jobs = loadedJobs
     interviews = loadedInterviews
+    interviewRecords = loadedInterviewRecords
+    candidateEvents = loadedCandidateEvents
   } finally {
     await repository.close()
   }
@@ -135,12 +167,12 @@ export default async function HrRecruitmentPage({
         <div className="flex items-center gap-2">
           <BriefcaseBusiness className="size-5 text-primary" />
           <h2 className="text-2xl font-semibold tracking-tight">
-            HR Recruitment
+            Hr Recruitment
           </h2>
         </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          {activeItem.label} is part of the authenticated MRMPL dashboard and
-          uses the same account, permissions, and PostgreSQL records.
+          {activeItem.label} Is Part Of The Authenticated Mrmpl Dashboard And
+          Uses The Same Account, Permissions, And Postgresql Records.
         </p>
       </section>
 
@@ -155,35 +187,38 @@ export default async function HrRecruitmentPage({
         </Alert>
       ) : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        {[
-          ["Approved posts", stats.posts],
-          ["Vacant posts", stats.vacantPosts],
-          ["Templates", stats.templates],
-          ["Open jobs", stats.openJobs],
-          ["Candidates", stats.candidates],
-          ["Interviews", stats.interviews],
-        ].map(([label, value]) => (
-          <Card key={label}>
-            <CardHeader className="pb-1">
-              <CardDescription>{label}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <CardTitle className="font-mono text-2xl">{value}</CardTitle>
-            </CardContent>
-          </Card>
-        ))}
-      </section>
+      {activeItem.panelId !== "interviewsPanel" &&
+      activeItem.panelId !== "interviewWorkspacePanel" ? (
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          {[
+            ["Approved Posts", stats.posts],
+            ["Vacant Posts", stats.vacantPosts],
+            ["Templates", stats.templates],
+            ["Open Jobs", stats.openJobs],
+            ["Candidates", stats.candidates],
+            ["Interviews", stats.interviews],
+          ].map(([label, value]) => (
+            <MetricCard key={label} label={label} value={value} />
+          ))}
+        </section>
+      ) : null}
 
       <RecruitmentPanel
         canManageEmployees={canManageEmployees}
         canWrite={canWrite}
         candidates={candidates}
+        candidateEvents={candidateEvents}
+        combinedRoles={combinedRoles}
         interviews={interviews}
+        interviewRecords={interviewRecords}
         jobs={jobs}
         masters={masters}
         panelId={activeItem.panelId}
         posts={posts}
+        returnJobId={feedback.returnJob}
+        selectedAppointmentApplicationId={feedback.appointment}
+        selectedJobId={feedback.job}
+        selectedTemplateCode={feedback.template}
         templates={templates}
       />
     </div>

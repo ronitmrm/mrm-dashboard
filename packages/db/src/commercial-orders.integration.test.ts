@@ -554,4 +554,16 @@ describe("commercial purchase orders and proforma invoices", () => {
       (await repository.getPurchaseOrder(order.id)).lines[0]
     ).toMatchObject({ matchStatus: "Quote Required" })
   })
+
+  test("exports every purchase-order report row across stable batches", async () => {
+    const canonical = await repository.listPurchaseOrderReportRows("MRMPL")
+    const exported = await repository.listPurchaseOrderReportRowsForExport(
+      "MRMPL",
+      {},
+      1
+    )
+
+    expect(exported).toEqual(canonical)
+    expect(exported.length).toBeGreaterThan(1)
+  })
 })

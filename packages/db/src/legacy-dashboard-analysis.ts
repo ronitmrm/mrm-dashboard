@@ -26,6 +26,7 @@ export type LegacyDashboardInput = {
   dispatchApprovals?: ActionRow[];
   setupCompletions?: ActionRow[];
   previousMachinePlanDetailRows?: Array<Record<string, unknown>>;
+  previousProductionDashboardRows?: Array<Record<string, unknown>>;
   filters?: DashboardFilters;
   updatedAt?: string;
 };
@@ -55,6 +56,7 @@ type PlanningCalendar = {
   holidayDates: Set<string>;
 };
 type WipProductionStream = {
+  machine: string;
   startDate: string;
   endDate: string;
   quantity: number;
@@ -62,6 +64,7 @@ type WipProductionStream = {
 };
 
 type PlanningProductionActual = {
+  machine?: string;
   startDate: string;
   latestDate: string;
   outputQty: number;
@@ -198,9 +201,9 @@ function mergeSourceActionRows(sourceRows: ActionRow[], liveRows: ActionRow[], k
 
 function routeSelectionDecisionKey(row: ActionRow) {
   return [
-    canonicalKey(rowText(row, "jcNo", "JC NO.", "JC NO")),
+    canonicalKey(rowText(row, "jcNo", "jobCardNumber", "JC NO.", "JC NO")),
     canonicalKey(rowText(row, "partCode", "PART CODE", "PART NO")),
-    canonicalKey(rowText(row, "optionNumber", "SELECTED ROUTE OPTION", "OPTION NUMBER")),
+    canonicalKey(rowText(row, "optionNumber", "routeCode", "SELECTED ROUTE OPTION", "OPTION NUMBER")),
   ].join("|");
 }
 
@@ -332,6 +335,7 @@ export function buildLegacyDashboardSnapshot(input: LegacyDashboardInput) {
     dispatchApprovals: input.dispatchApprovals ?? [],
     setupCompletions: mergeSourceActionRows(sourcePlannerDecisions.setupCompletions, input.setupCompletions ?? [], setupCompletionDecisionKey),
     previousMachinePlanDetailRows: input.previousMachinePlanDetailRows ?? [],
+    previousProductionDashboardRows: input.previousProductionDashboardRows ?? [],
     filters: input.filters ?? {},
     workbookName: input.workbookName,
     updatedAt: input.updatedAt ?? "",
@@ -399,6 +403,7 @@ function buildProductionAnalysis({
   dispatchApprovals,
   setupCompletions,
   previousMachinePlanDetailRows,
+  previousProductionDashboardRows,
   filters,
   workbookName,
   updatedAt,
@@ -443,6 +448,7 @@ function buildProductionAnalysis({
   dispatchApprovals: ActionRow[];
   setupCompletions: ActionRow[];
   previousMachinePlanDetailRows: Array<Record<string, unknown>>;
+  previousProductionDashboardRows: Array<Record<string, unknown>>;
   filters: DashboardFilters;
   workbookName: string;
   updatedAt: string;
@@ -759,6 +765,7 @@ function buildProductionAnalysis({
     dispatchApprovals,
     setupCompletions,
     previousMachinePlanDetailRows,
+    previousProductionDashboardRows,
   });
   const routingStatus = buildRoutingStatus(routeRows, productionRows);
   const toolFixtureNumbers = buildToolFixtureNumbers(toolingRows);
@@ -945,6 +952,7 @@ function buildProductionControl({
   dispatchApprovals,
   setupCompletions,
   previousMachinePlanDetailRows,
+  previousProductionDashboardRows,
 }: {
   productionRows: ProductionRow[];
   routeRows: Record<string, unknown>[];
@@ -981,6 +989,7 @@ function buildProductionControl({
   dispatchApprovals: ActionRow[];
   setupCompletions: ActionRow[];
   previousMachinePlanDetailRows: Array<Record<string, unknown>>;
+  previousProductionDashboardRows: Array<Record<string, unknown>>;
 }) {
   const routeGroups = groupRouteRows(routeRows);
   const dedupedRouteRows = [...routeGroups.values()].flat();
@@ -993,7 +1002,7 @@ function buildProductionControl({
   const routeChangeByTarget = latestRouteChangeByTarget(routeChanges);
   const priorityByTarget = latestPlannerPriorityByTarget(plannerPriorities);
   const rawByJc = new Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines: Set<string>; operators: Set<string> }>();
-  const rawBySetup = new Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string> }>();
+  const rawBySetup = new Map<string, PlanningProductionActual>();
   const rawBySetupAnyMachine = new Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string>; machines: Set<string> }>();
   let latestRawDate = "";
   for (const row of productionRows) {
@@ -1040,7 +1049,7 @@ function buildProductionControl({
     const plannerPriority = plannerPriorityForWorkOrder(priorityByTarget, jcNo, partCode);
     const plannerPriorityValue = plannerPriority ? rowText(plannerPriority, "priority", "PRIORITY") : "";
     const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
-    const selectedOptionNumber = rowText(selectedRouteByJc.get(canonicalKey(jcNo)) ?? {}, "optionNumber", "SELECTED ROUTE OPTION", "OPTION NUMBER");
+    const selectedOptionNumber = rowText(selectedRouteByJc.get(canonicalKey(jcNo)) ?? {}, "optionNumber", "routeCode", "SELECTED ROUTE OPTION", "OPTION NUMBER");
     const routeChange = routeChangeForWorkOrder(routeChangeByTarget, jcNo, partCode);
     const routeChangeOption = rowText(routeChange ?? {}, "newOption", "NEW ROUTE OPTION", "NEW OPTION");
     const routeChangeRemainingSetups = routeChangeRemainingPlan(routeChange);
@@ -1075,6 +1084,8 @@ function buildProductionControl({
     const actual = rawByJc.get(canonicalKey(jcNo));
     const orderPcs = safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"));
     const dispatchStatus = dispatchJcKeys.has(canonicalKey(jcNo)) ? "Shifted to dispatch" : "In production";
+    const planningItemPending = rowValue(row, "planningItemPending") === true
+      || rowText(row, "planningItemPending").toLowerCase() === "true";
     const routeReadyForPlanning = ["Ready", "Auto single option", "Route change plan"].includes(routeStatus);
     const machineFamily = rowText(firstMissingRoute, "MACHINE USED", "machineUsed", "machine", "M/C NO", "MACHINE NO");
     return {
@@ -1083,6 +1094,7 @@ function buildProductionControl({
       rmPoNo: rowText(row, "RM PO NO.", "rmPoNo"),
       poDate: rowText(row, "PO DATE", "poDate"),
       partCode,
+      planningItemPending,
       description: rowText(row, "DESCRIPTION", "description"),
       optionNumber: effectiveOption || "Not selected",
       optionSource: routeChange ? "Route change" : (optionNumber ? "Excel" : (selectedOptionNumber ? "Planner selected" : (effectiveOption ? "Auto single route" : "Planner required"))),
@@ -1120,7 +1132,9 @@ function buildProductionControl({
       rawRejectQty: round(actual?.rejectQty ?? 0),
       rawRows: actual?.rows ?? 0,
       dispatchStatus,
-      planningBlocker: routeReadyForPlanning
+      planningBlocker: planningItemPending
+        ? "Create the Product Route in Master Readiness"
+        : routeReadyForPlanning
         ? (missingCycle.length
             ? `Add cycle time for setup ${compactJoin(missingCycle)}`
             : (missingTooling.length
@@ -1133,13 +1147,15 @@ function buildProductionControl({
   const allWorkOrderGaps = workOrderOutputRows
     .map((row) => ({
       ...row,
-      routeSelectionMissing: row.optionSource === "Planner required",
+      planningItemMissing: row.planningItemPending,
+      routeSelectionMissing: row.optionSource === "Planner required" && row.availableOptions.length > 1,
       routeMasterMissing: row.routeStatus === "Route master missing",
       cycleTimeMissing: row.cycleStatus.startsWith("Missing"),
       toolingPlanMissing: row.toolingStatus.startsWith("Missing"),
       machineMasterMissing: row.machineMasterStatus.startsWith("Missing"),
       missingAreas: [
-        row.optionSource === "Planner required" ? "Route option" : "",
+        row.planningItemPending ? "Planning item" : "",
+        row.optionSource === "Planner required" && row.availableOptions.length > 1 ? "Route option" : "",
         row.routeStatus === "Route master missing" ? "Route master" : "",
         row.cycleStatus.startsWith("Missing") ? "Cycle time" : "",
         row.toolingStatus.startsWith("Missing") ? "Tooling plan" : "",
@@ -1147,10 +1163,17 @@ function buildProductionControl({
       ].filter(Boolean).join(", "),
       nextAction: row.planningBlocker,
     }))
-    .filter((row) => row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing || row.machineMasterMissing);
+    .filter((row) => row.planningItemMissing || row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing || row.machineMasterMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
   const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
+  const productionDashboardRows = buildProductionDashboardRows({
+    dispatchApprovals,
+    dispatchRows,
+    machinePlanDetailRows,
+    previousRows: previousProductionDashboardRows,
+    workOrderRows: prioritizedWorkOrderRows,
+  });
   const workflowExceptionRows = machinePlanDetailRows.filter((row) => row.rawProductionWithoutWorkflow);
   const plannerActionConflicts = plannerActionConflictRows(machinePlanDetailRows);
   const setupChecklistHistoryRows: Record<string, unknown>[] = [];
@@ -1225,6 +1248,7 @@ function buildProductionControl({
       issues: masterGaps.map((row) => ({ severity: "warning", sourceSheet: "Work_Order_Import", key: row.jcNo || row.partCode, message: row.nextAction })),
     },
     workOrders: prioritizedWorkOrderRows,
+    productionDashboardRows,
     jobCardStatusTiles: workOrderOutputRows,
     routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus === "Received"),
     routeSelectionWaitingRm: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus !== "Received"),
@@ -1283,6 +1307,75 @@ function buildProductionControl({
     firstPieceInspectionMasterRows,
     firstPieceInspectionReportRows,
   };
+}
+
+function buildProductionDashboardRows({
+  dispatchApprovals,
+  dispatchRows,
+  machinePlanDetailRows,
+  previousRows,
+  workOrderRows,
+}: {
+  dispatchApprovals: ActionRow[];
+  dispatchRows: Record<string, unknown>[];
+  machinePlanDetailRows: Record<string, unknown>[];
+  previousRows: Record<string, unknown>[];
+  workOrderRows: Record<string, unknown>[];
+}) {
+  const plansByWorkOrder = groupByRecord(machinePlanDetailRows, productionDashboardRowKey);
+  const previousByWorkOrder = new Map(
+    previousRows.map((row) => [productionDashboardRowKey(row), row]),
+  );
+  const dispatchedByJobCard = new Map<string, string>();
+  for (const row of [...dispatchRows, ...dispatchApprovals]) {
+    const jobCardKey = canonicalKey(rowText(row, "jobCardNumber", "jcNo", "JC NO.", "JC NO"));
+    if (!jobCardKey) continue;
+    const dispatchedDate = parseDate(rowValue(row, "dispatchedDate", "dispatchDate", "date", "createdAt"));
+    const existingDate = dispatchedByJobCard.get(jobCardKey) ?? "";
+    if (!dispatchedByJobCard.has(jobCardKey) || dispatchedDate > existingDate) {
+      dispatchedByJobCard.set(jobCardKey, dispatchedDate);
+    }
+  }
+
+  return workOrderRows.map((workOrder) => {
+    const key = productionDashboardRowKey(workOrder);
+    const plans = plansByWorkOrder.get(key) ?? [];
+    const currentProbableDate = maxDateValue(...plans.map((row) =>
+      parseDate(rowValue(row, "plannedProductionEndDate")) || rowText(row, "plannedProductionEndDate")
+    ));
+    const rmReceivedDate = parseDate(rowValue(workOrder, "rmInwardDate"));
+    const previous = previousByWorkOrder.get(key);
+    const previousRmReceivedDate = previous ? parseDate(rowValue(previous, "rmReceivedDate")) : "";
+    const previousInitialDate = previous && previousRmReceivedDate === rmReceivedDate
+      ? rowText(previous, "plannedDispatchDateAtRmReceipt")
+      : "";
+    const dispatchedDate = dispatchedByJobCard.get(canonicalKey(rowText(workOrder, "jcNo"))) ?? "";
+    const orderPcs = safeNumber(rowValue(workOrder, "orderPcs"));
+    const orderKg = safeNumber(rowValue(workOrder, "orderKg"));
+
+    return {
+      jcNo: rowText(workOrder, "jcNo"),
+      fgPoNo: rowText(workOrder, "fgPoNo"),
+      partCode: rowText(workOrder, "partCode"),
+      orderedQty: orderPcs > 0 ? orderPcs : orderKg,
+      unit: orderPcs > 0 ? "PCS" : orderKg > 0 ? "KG" : "-",
+      rmReceivedDate: dateLabel(rmReceivedDate),
+      plannedDispatchDateAtRmReceipt: previousInitialDate || dateLabel(currentProbableDate),
+      currentProbableDispatchDate: dateLabel(currentProbableDate),
+      status: dispatchedByJobCard.has(canonicalKey(rowText(workOrder, "jcNo"))) ? "Dispatched" : "Pending",
+      dispatchedDate: dateLabel(dispatchedDate),
+    };
+  }).sort((left, right) =>
+    Number(left.status === "Dispatched") - Number(right.status === "Dispatched") ||
+    compareDateValues(left.currentProbableDispatchDate, right.currentProbableDispatchDate) ||
+    left.jcNo.localeCompare(right.jcNo, undefined, { numeric: true }),
+  );
+}
+
+function productionDashboardRowKey(row: Record<string, unknown>) {
+  return [rowText(row, "jcNo", "jobCardNumber", "JC NO.", "JC NO"), rowText(row, "partCode", "PART CODE")]
+    .map(canonicalKey)
+    .join("|");
 }
 
 function plannerActionConflictRows(machinePlanDetailRows: Record<string, unknown>[]) {
@@ -2335,7 +2428,7 @@ function latestRmInwardByJobCard(rows: Array<Record<string, unknown>>) {
 function latestRouteSelectionByJobCard(rows: Array<Record<string, unknown>>) {
   const byJc = new Map<string, Record<string, unknown>>();
   for (const row of rows) {
-    const key = canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo"));
+    const key = canonicalKey(rowText(row, "JC NO.", "JC NO", "jcNo", "jobCardNumber"));
     if (!key) continue;
     const current = byJc.get(key);
     if (!current || rowText(row, "createdAt") >= rowText(current, "createdAt")) {
@@ -2445,7 +2538,7 @@ function isRmReceived(workOrder: Record<string, unknown>, rmInward?: Record<stri
 function machinePlanDetails(
   workOrderRows: Array<Record<string, unknown>>,
   rawByJc: Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines?: Set<string> }>,
-  rawBySetup: Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string> }>,
+  rawBySetup: Map<string, PlanningProductionActual>,
   rawBySetupAnyMachine: Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string>; machines: Set<string> }>,
   routeGroups: Map<string, Record<string, unknown>[]>,
   cycleRows: Array<Record<string, unknown>>,
@@ -2601,7 +2694,7 @@ function machinePlanDetails(
       const fallbackMachineOrderPcs = assignedMachineOrderPcs(setupOrderPcs, assignedMachines.length);
       const routeProductionEndDates: string[] = [];
       const routeProductionStreams: WipProductionStream[] = [];
-      const routeProductionActuals: Array<{ latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }> = [];
+      const routeProductionActuals: PlanningProductionActual[] = [];
       const machineAssignments = unavailableSplitPlan?.assignments.length
         ? unavailableSplitPlan.assignments
         : assignedMachines.map((machine) => ({ machine, role: "" as MachineUnavailableSplitRole | "", orderPcs: fallbackMachineOrderPcs }));
@@ -2631,6 +2724,7 @@ function machinePlanDetails(
         productionActual = splitRole === "remaining_delayed_on_same_machine"
           ? undefined
           : mergedProductionActual(productionActual, unavailableSplitPlan?.producedActualByMachine.get(machineKeyValue));
+        productionActual = productionActual ? { ...productionActual, machine } : undefined;
         const taskWorkflowStage = normalizeSetupLifecycleStage(shopFloorStatus ? rowText(shopFloorStatus, "stage") : "");
         const taskWorkflowStarted = setupLifecycleStageRank(taskWorkflowStage) >= setupLifecycleStageRank("operator_started");
         const rawProductionWithoutWorkflow = Boolean(productionActual?.rows && !taskWorkflowStarted);
@@ -2657,6 +2751,7 @@ function machinePlanDetails(
         if (plannedProductionEndDate) routeProductionEndDates.push(parseDate(plannedProductionEndDate) || plannedProductionEndDate);
         if (plannedProductionStartDate && plannedProductionEndDate) {
           routeProductionStreams.push({
+            machine,
             startDate: parseDate(plannedProductionStartDate) || plannedProductionStartDate,
             endDate: parseDate(plannedProductionEndDate) || plannedProductionEndDate,
             quantity: machineOrderPcs,
@@ -3157,7 +3252,7 @@ function refreshSetupDependencyReadyDates(details: Array<Record<string, unknown>
       const nextCycle = nextGroup ? planningMeta(nextGroup.rows[0] ?? {}).cycle : undefined;
       const productionStreams = wipProductionStreamsFromRows(group.rows, planningCalendar);
       const productionEndDates = group.rows.map((row) => parseDate(rowText(row, "plannedProductionEndDate"))).filter(Boolean);
-      const actuals = uniqueProductionActuals(group.rows.map((row) => planningMeta(row).productionActual).filter(Boolean) as Array<{ latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }>);
+      const actuals = uniqueProductionActuals(group.rows.map((row) => planningMeta(row).productionActual).filter(Boolean) as PlanningProductionActual[]);
       const setupOrderPcs = Math.max(...group.rows.map((row) => planningMeta(row).totalOrderPcs ?? planningMeta(row).orderPcs ?? 0), 0);
       const bufferReadyDate = nextGroup ? plannedWipBufferReadyDate({
         productionStreams,
@@ -3187,6 +3282,7 @@ function wipProductionStreamsFromRows(rows: Array<Record<string, unknown>>, plan
       const startDate = addDays(parseDate(rowText(row, "plannedProductionStartDate", "setupPlannedDate", "plannedStartDate")) || "", 0, planningCalendar);
       const endDate = parseDate(rowText(row, "plannedProductionEndDate", "setupPlannedDate", "plannedDate"));
       return {
+        machine: rowText(row, "machine"),
         startDate,
         endDate,
         quantity: meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs")),
@@ -3196,10 +3292,10 @@ function wipProductionStreamsFromRows(rows: Array<Record<string, unknown>>, plan
     .filter((stream) => stream.startDate && stream.endDate && stream.endDate >= stream.startDate && stream.quantity > 0 && stream.dailyQty > 0);
 }
 
-function uniqueProductionActuals(actuals: Array<{ startDate?: string; latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }>) {
+function uniqueProductionActuals(actuals: PlanningProductionActual[]) {
   const seen = new Set<string>();
   return actuals.filter((actual) => {
-    const key = [actual.startDate, actual.latestDate, actual.outputQty, actual.actualQty, [...actual.dates].sort().join(",")].join("|");
+    const key = [actual.machine, actual.startDate, actual.latestDate, actual.outputQty, actual.actualQty, [...actual.dates].sort().join(",")].join("|");
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -3232,7 +3328,7 @@ function rescheduleMachineQueues(details: Array<Record<string, unknown>>, planni
   }
 
   for (const rows of byMachine.values()) {
-    const queue = [...rows].sort(machineQueueSort);
+    const queue = applyMachineUnavailableQueuePlacementOrder([...rows].sort(machineQueueSort));
     let machineNextDate = "";
     while (queue.length) {
       const row = takeNextMachineQueueRow(queue, machineNextDate);
@@ -3305,19 +3401,24 @@ function machineQueueSort(a: Record<string, unknown>, b: Record<string, unknown>
   }
   const stateRankDiff = priorityQueueStateRank(a) - priorityQueueStateRank(b);
   if (stateRankDiff) return stateRankDiff;
-  const aMachineHeldBeforeB = machineUnavailableKeepsRowBefore(b, a);
-  const bMachineHeldBeforeA = machineUnavailableKeepsRowBefore(a, b);
-  if (aMachineHeldBeforeB && !bMachineHeldBeforeA) return -1;
-  if (bMachineHeldBeforeA && !aMachineHeldBeforeB) return 1;
-  const aPlacedBeforeB = machineUnavailablePlacesRowBefore(a, b);
-  const bPlacedBeforeA = machineUnavailablePlacesRowBefore(b, a);
-  if (aPlacedBeforeB && !bPlacedBeforeA) return -1;
-  if (bPlacedBeforeA && !aPlacedBeforeB) return 1;
   const familyTargetDiff = compareFamilyIdleGapSortDates(a, b);
   return familyTargetDiff ||
     machineQueueSortDate(a).localeCompare(machineQueueSortDate(b)) ||
     rowText(a, "jcNo").localeCompare(rowText(b, "jcNo"), undefined, { numeric: true }) ||
     numericSort(rowText(a, "setupNo"), rowText(b, "setupNo"));
+}
+
+function applyMachineUnavailableQueuePlacementOrder(queue: Array<Record<string, unknown>>) {
+  const placementTargets = queue.filter((row) =>
+    machineUnavailableHasQueuePlacement(row) && !planOverrideInterruptionHasFinishedQty(row));
+  let ordered = [...queue];
+  for (const target of placementTargets) {
+    const remaining = ordered.filter((row) => row !== target);
+    const rowsBeforeTarget = remaining.filter((row) => shouldHoldMachineQueuePosition(row, target));
+    const rowsAfterTarget = remaining.filter((row) => !shouldHoldMachineQueuePosition(row, target));
+    ordered = [...rowsBeforeTarget, target, ...rowsAfterTarget];
+  }
+  return ordered;
 }
 
 function machineUnavailableKeepsRowBefore(targetRow: Record<string, unknown>, blockingRow: Record<string, unknown>) {
@@ -3363,9 +3464,12 @@ function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, u
       if (!matchingInterruption || matchingInterruption.finishedQty <= 0) continue;
       const meta = planningMeta(row);
       const currentActual = meta.productionActual ?? {
+        machine: rowText(row, "machine"),
+        startDate: actualProductionStartDate(meta) || parseDate(rowText(row, "setupPlannedDate")) || "",
         latestDate: actualProductionStartDate(meta) || parseDate(rowText(row, "setupPlannedDate")) || "",
         outputQty: 0,
         actualQty: 0,
+        rows: 0,
         dates: new Set<string>(),
       };
       const actualQty = Math.max(currentActual.actualQty ?? 0, matchingInterruption.finishedQty);
@@ -3422,9 +3526,12 @@ function applyPriorityInterruptionQuantities(details: Array<Record<string, unkno
       if (!priorityInterruptsRow(approval, row)) continue;
       const meta = planningMeta(row);
       const currentActual = meta.productionActual ?? {
+        machine: rowText(row, "machine"),
+        startDate: actualProductionStartDate(meta) || parseDate(rowText(row, "setupPlannedDate")) || "",
         latestDate: actualProductionStartDate(meta) || parseDate(rowText(row, "setupPlannedDate")) || "",
         outputQty: 0,
         actualQty: 0,
+        rows: 0,
         dates: new Set<string>(),
       };
       const matchingInterruption = setupInterruptions.find((interruption) => priorityInterruptionMatchesRow(interruption, row));
@@ -3674,7 +3781,7 @@ function planningMeta(row: Record<string, unknown>) {
     orderPcs?: number;
     totalOrderPcs?: number;
     cycle?: Record<string, unknown>;
-    productionActual?: { startDate?: string; latestDate: string; outputQty: number; actualQty: number; dates: Set<string> };
+    productionActual?: PlanningProductionActual;
     machineUnavailableWindows?: MachineUnavailableWindow[];
   };
 }
@@ -4513,22 +4620,24 @@ function plannedWipBufferReadyDate({
   previousCycle: Record<string, unknown> | undefined;
   nextCycle: Record<string, unknown> | undefined;
   nextMachineCount?: number;
-  actuals?: Array<{ latestDate: string; outputQty: number; actualQty: number; dates: Set<string> }>;
+  actuals?: PlanningProductionActual[];
   planningCalendar?: PlanningCalendar;
 }) {
   const streams = productionStreams
     .map((stream) => ({
+      machine: stream.machine,
       startDate: parseDate(stream.startDate) || stream.startDate,
       endDate: parseDate(stream.endDate) || stream.endDate,
       quantity: Math.max(stream.quantity, 0),
       dailyQty: Math.max(stream.dailyQty, 0),
     }))
     .filter((stream) => stream.startDate && stream.endDate && stream.endDate >= stream.startDate && stream.quantity > 0 && stream.dailyQty > 0);
-  const actualStreams = actuals
+  const actualStreams = uniqueProductionActuals(actuals)
     .map((actual) => {
       const quantity = Math.max(actual.actualQty || actual.outputQty, 0);
       const dateCount = actual.dates.size || 1;
       return {
+        machine: actual.machine ?? "",
         startDate: parseDate((actual as { startDate?: string }).startDate) || parseDate(actual.latestDate) || actual.latestDate,
         endDate: parseDate(actual.latestDate) || actual.latestDate,
         quantity,
@@ -4536,10 +4645,20 @@ function plannedWipBufferReadyDate({
       };
     })
     .filter((stream) => stream.startDate && stream.endDate && stream.endDate >= stream.startDate && stream.quantity > 0 && stream.dailyQty > 0);
-  const latestActualDate = maxDateValue(...actuals.map((actual) => actual.latestDate));
-  const futurePlannedStreams = latestActualDate
-    ? streams.filter((stream) => stream.startDate > latestActualDate)
-    : streams;
+  const actualByMachine = new Map(actualStreams.map((stream) => [canonicalKey(stream.machine), stream]));
+  const futurePlannedStreams = streams.flatMap((stream) => {
+    const actual = actualByMachine.get(canonicalKey(stream.machine));
+    if (!actual) return [stream];
+    const remainingQuantity = Math.max(stream.quantity - actual.quantity, 0);
+    const remainingStartDate = addDays(actual.endDate, 1, planningCalendar);
+    if (!remainingQuantity || !remainingStartDate || remainingStartDate > stream.endDate) return [];
+    return [{
+      ...stream,
+      startDate: remainingStartDate,
+      quantity: remainingQuantity,
+      dailyQty: actual.dailyQty || stream.dailyQty,
+    }];
+  });
   const supplyStreams = actualStreams.length
     ? [...actualStreams, ...futurePlannedStreams]
     : streams;
@@ -4910,6 +5029,14 @@ function masterKey(row: Record<string, unknown>) {
 function routeMasterTableRow(row: Record<string, unknown>) {
   const optionNumber = rowText(row, "OPTION NUMBER", "optionNumber");
   const setupNo = rowText(row, "SETUP NO.", "SETUP NO", "SETUP CODE", "setupNo");
+  const machineFamily = rowText(
+    row,
+    "MACHINE FAMILY",
+    "machineFamily",
+    "MACHINE USED",
+    "machineUsed",
+    "machine",
+  );
   return {
     partNo: rowText(row, "PART NO", "PART CODE", "partNo", "partCode"),
     optionNumber,
@@ -4917,25 +5044,34 @@ function routeMasterTableRow(row: Record<string, unknown>) {
     displaySetupNo: setupStepKey(setupNo, optionNumber),
     numberOfSetups: rowValue(row, "NO. OF SETUP", "NO OF SETUP", "numberOfSetups"),
     setupName: rowText(row, "SETUP NAME", "setupName"),
-    machineUsed: rowText(row, "MACHINE USED", "machineUsed", "machine"),
+    machineFamily,
+    machineUsed: machineFamily,
     machineType: rowText(row, "MACHINE TYPE", "machineType"),
     stageWeight: rowValue(row, "STAGE WEIGHT", "STAGE WEIGHT GRAM", "stageWeight"),
-    rodSize: rowText(row, "ROD SIZE", "rodSize"),
-    cuttingLength: rowValue(row, "CUTTING LENGTH", "cuttingLength"),
-    finishedGoodsLength: rowValue(row, "FG LENGTH", "FINISHED GOODS LENGTH", "finishedGoodsLength"),
   };
 }
 
 function cycleMasterTableRow(row: Record<string, unknown>) {
+  const cycleTime = rowValue(row, "CYCLE TIME", "CYCLE TIME SEC", "cycleTime");
+  const loading = rowValue(row, "LOADING", "LOADING SEC", "loading");
+  const unloading = rowValue(row, "UNLOADING", "UNLOADING SEC", "unloading");
+  const loadingUnloading = rowValue(row, "LOADING/UNLOADING", "LOADING UNLOADING", "LOADING/UNLOADING SEC", "loadingUnloading");
+  const hasSplitTimings = loading !== undefined || unloading !== undefined;
+  const totalTime = rowValue(row, "TOTAL TIME", "TOTAL TIME SEC", "totalTime") ?? (
+    safeNumber(cycleTime) + (hasSplitTimings
+      ? safeNumber(loading) + safeNumber(unloading)
+      : safeNumber(loadingUnloading))
+  );
   return {
     partNo: rowText(row, "PART NO", "PART CODE", "partNo", "partCode"),
     optionNumber: rowText(row, "OPTION NUMBER", "optionNumber"),
     setupNo: rowText(row, "SETUP NO.", "SETUP NO", "SETUP CODE", "setupNo"),
     setupName: rowText(row, "SETUP NAME", "setupName"),
-    machineUsed: rowText(row, "MACHINE USED", "machineUsed", "machine"),
-    operationWeight: rowValue(row, "OPERATION WEIGHT", "OPERATION WEIGHT GRAM", "operationWeight"),
-    cycleTime: rowValue(row, "CYCLE TIME", "CYCLE TIME SEC", "cycleTime"),
-    loadingUnloading: rowValue(row, "LOADING/UNLOADING", "LOADING UNLOADING", "LOADING/UNLOADING SEC", "loadingUnloading"),
+    cycleTime,
+    loading,
+    unloading,
+    totalTime,
+    loadingUnloading,
   };
 }
 
@@ -4945,7 +5081,6 @@ function toolingMasterTableRow(row: Record<string, unknown>) {
     optionNumber: rowText(row, "OPTION NUMBER", "optionNumber"),
     setupNo: rowText(row, "SETUP NO.", "SETUP NO", "SETUP CODE", "setupNo"),
     setupName: rowText(row, "SETUP NAME", "setupName"),
-    machineUsed: rowText(row, "MACHINE USED", "machineUsed", "machine"),
     fixture: rowText(row, "FIXTURE", "fixture"),
     fixtureQty: rowValue(row, "FIXTURE QTY", "fixtureQty"),
     tooling: rowText(row, "TOOLING", "tooling"),

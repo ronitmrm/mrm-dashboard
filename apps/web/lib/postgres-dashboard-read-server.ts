@@ -1,10 +1,14 @@
-import {
-  createAuthorizationRepository,
-  createDashboardReadModelRepository,
-} from "@workspace/db"
+import { createDashboardReadModelRepository } from "@workspace/db"
+import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 import type { NextRequest } from "next/server"
 
-import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
+import { readAuthEnvironment } from "@/lib/auth/auth"
+import { authorizationRequestTelemetryForCurrentScope } from "./auth/authorization-request-telemetry"
+import {
+  readRequestAuthenticatedSession,
+  readRequestGrantedCapabilitySet,
+} from "./auth/request-authorization"
+import { telemetryRequestId } from "./request-telemetry"
 
 export class DashboardReadError extends Error {
   constructor(
@@ -18,42 +22,50 @@ export class DashboardReadError extends Error {
 async function withDashboardReadRepository<T>(
   request: NextRequest,
   operation: (context: {
-    actorEmail: string
+    actorUserId: string
     organizationId: string
     repository: ReturnType<typeof createDashboardReadModelRepository>
-  }) => Promise<T>
+  }) => Promise<T>,
+  capability = "operations.dashboard.read"
 ) {
-  const session = await getAuth().api.getSession({ headers: request.headers })
-  if (!session) {
-    throw new DashboardReadError(
-      401,
-      "Authentication is required to access the dashboard API."
-    )
-  }
-
-  const connectionString = readAuthEnvironment().connectionString
-  const authorization = createAuthorizationRepository({ connectionString })
+  const authorizationTelemetry = authorizationRequestTelemetryForCurrentScope({
+    requestId: telemetryRequestId(request),
+  })
+  const { telemetry } = authorizationTelemetry
+  let connectionString = ""
+  let session: Awaited<ReturnType<typeof readRequestAuthenticatedSession>>
   try {
-    if (
-      !(await authorization.hasCapability(
-        session.user.id,
-        "operations.dashboard.read"
-      ))
-    ) {
+    session = await readRequestAuthenticatedSession(request.headers, telemetry)
+    if (!session) {
+      telemetry.setOutcome("unauthenticated")
       throw new DashboardReadError(
-        403,
-        "You do not have permission to view the operations dashboard."
+        401,
+        "Authentication is required to access the dashboard API."
       )
     }
+
+    connectionString = readAuthEnvironment().connectionString
+    const granted = await readRequestGrantedCapabilitySet(
+      session.user.id,
+      telemetry
+    )
+    if (!granted.has(capability)) {
+      telemetry.setOutcome("unauthorized")
+      throw new DashboardReadError(
+        403,
+        "You do not have permission to perform this dashboard action."
+      )
+    }
+    telemetry.setOutcome("allowed")
   } finally {
-    await authorization.close()
+    authorizationTelemetry.finish()
   }
 
   const repository = createDashboardReadModelRepository({ connectionString })
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     return await operation({
-      actorEmail: session.user.email || session.user.name || session.user.id,
+      actorUserId: session.user.id,
       organizationId,
       repository,
     })
@@ -64,17 +76,83 @@ async function withDashboardReadRepository<T>(
 
 export async function readPostgresDashboard(
   request: NextRequest,
-  filters: Record<string, string | undefined>
+  filters: Record<string, string | undefined>,
+  requestedProductionFloor?: string | null
 ) {
   return withDashboardReadRepository(
     request,
     async ({ organizationId, repository }) => {
-      const payload = await repository.latest(organizationId, filters)
+      const payload = await repository.latest(
+        organizationId,
+        filters,
+        normalizeProductionFloorCode(requestedProductionFloor)
+      )
       if (payload) return payload
       await repository.requestRefresh(organizationId)
       return { cacheStatus: "missing", filters }
     }
   )
+}
+
+export async function readPostgresDashboardState(
+  request: NextRequest,
+  filters: Record<string, string | undefined>,
+  requestedProductionFloor?: string | null,
+  knownVersion?: number
+) {
+  return withDashboardReadRepository(
+    request,
+    async ({ organizationId, repository }) => {
+      const productionFloorCode = normalizeProductionFloorCode(
+        requestedProductionFloor
+      )
+      const state = await repository.state(
+        organizationId,
+        filters,
+        productionFloorCode,
+        knownVersion
+      )
+      const envelope = {
+        productionFloorCode,
+        status: state.status,
+        version: state.version,
+      }
+      if (state.notModified) {
+        return {
+          ...envelope,
+          coverage: null,
+          dashboard: null,
+          notModified: true,
+        }
+      }
+      if (state.dashboard) {
+        return {
+          ...envelope,
+          coverage: state.coverage,
+          dashboard: state.dashboard,
+          notModified: false,
+        }
+      }
+      await repository.requestRefresh(organizationId)
+      return {
+        ...envelope,
+        coverage: null,
+        dashboard: {
+          cacheStatus: "missing",
+          filters,
+          productionFloorCode,
+        },
+        notModified: false,
+        status: { ...state.status, isRefreshing: true },
+      }
+    }
+  )
+}
+
+export async function authorizePostgresDashboardEvents(request: NextRequest) {
+  return withDashboardReadRepository(request, async ({ organizationId }) => ({
+    organizationId,
+  }))
 }
 
 export async function readPostgresDashboardStatus(request: NextRequest) {
@@ -106,21 +184,33 @@ export async function readPostgresCorrectionCandidates(
 export async function requestPostgresDashboardCorrection(
   request: NextRequest,
   input: {
-    correctedBy?: string
+    correctionKind: string
     reason: string
-    targetId: string
-    targetKey?: string
-    targetLabel?: string
-    targetTable: string
+    recordId: string
   }
 ) {
-  return withDashboardReadRepository(
-    request,
-    ({ actorEmail, organizationId, repository }) =>
-      repository.reverseEntry({
-        ...input,
-        correctedBy: input.correctedBy || actorEmail,
-        organizationId,
-      })
-  )
+  try {
+    return await withDashboardReadRepository(
+      request,
+      ({ actorUserId, organizationId, repository }) =>
+        repository.reverseEntry({
+          ...input,
+          actorUserId,
+          organizationId,
+        }),
+      "operations.corrections.write"
+    )
+  } catch (error) {
+    const correctableMessages = new Set([
+      "Active correction target was not found.",
+      "Correction actor is required.",
+      "Correction kind is required.",
+      "Correction reason is required.",
+      "Correction record id is required.",
+    ])
+    if (error instanceof Error && correctableMessages.has(error.message)) {
+      throw new DashboardReadError(400, error.message)
+    }
+    throw error
+  }
 }

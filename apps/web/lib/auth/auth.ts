@@ -1,12 +1,9 @@
-import { createHash } from "node:crypto"
-
 import { drizzleAdapter } from "@better-auth/drizzle-adapter"
-import { createDatabase, identitySchema } from "@workspace/db"
 import {
-  consumeOptionalRateLimit,
-  readRedisAccelerationEnvironment,
-  type RedisAccelerationOptions,
-} from "@workspace/runtime"
+  createDatabase,
+  identitySchema,
+} from "@workspace/db"
+import { readRedisAccelerationEnvironment } from "@workspace/runtime"
 import { betterAuth } from "better-auth"
 import { admin } from "better-auth/plugins"
 import type { Pool } from "pg"
@@ -21,63 +18,32 @@ type CreateAuthSystemOptions = {
   baseURL: string
   connectionString?: string
   pool?: Pool
-  redisUrl?: string
   secret: string
-  upstashRedisRestToken?: string
-  upstashRedisRestUrl?: string
 }
 
 type AuthEnvironment = Record<string, string | undefined>
-
-type RateLimitConsumer = typeof consumeOptionalRateLimit
-
-export function createAuthRateLimitStorage(
-  redisOptions: RedisAccelerationOptions | string,
-  consume: RateLimitConsumer = consumeOptionalRateLimit
-) {
-  const options =
-    typeof redisOptions === "string"
-      ? { redisUrl: redisOptions }
-      : redisOptions
-  return {
-    consume: async (key: string, rule: { max: number; window: number }) => {
-      const digest = createHash("sha256").update(key).digest("hex")
-      const result = await consume({
-        key: `mrm:auth:rate:${digest}`,
-        limit: rule.max,
-        ...options,
-        windowSeconds: rule.window,
-      })
-      return {
-        allowed: result.allowed,
-        retryAfter: result.retryAfterSeconds || null,
-      }
-    },
-    get: async () => null,
-    set: async () => undefined,
-  }
-}
 
 function configureAuth({
   allowSignUp,
   baseURL,
   database,
-  redisOptions,
   secret,
 }: {
   allowSignUp: boolean
   baseURL: string
   database: ReturnType<typeof createDatabase>["database"]
-  redisOptions: RedisAccelerationOptions
   secret: string
 }) {
+  const origin = new URL(baseURL).origin
+
   return betterAuth({
     advanced: {
       database: {
         generateId: "uuid",
       },
+      useSecureCookies: origin.startsWith("https://"),
     },
-    baseURL,
+    baseURL: origin,
     database: drizzleAdapter(database, {
       provider: "pg",
       schema: identitySchema,
@@ -85,11 +51,12 @@ function configureAuth({
     emailAndPassword: {
       disableSignUp: !allowSignUp,
       enabled: true,
+      minPasswordLength: 12,
     },
     plugins: [admin()],
     rateLimit: {
-      customStorage: createAuthRateLimitStorage(redisOptions),
       enabled: true,
+      storage: "database",
     },
     secret,
     session: {
@@ -97,6 +64,7 @@ function configureAuth({
         enabled: false,
       },
     },
+    trustedOrigins: [origin],
   })
 }
 
@@ -113,10 +81,7 @@ export function createAuthSystem({
   baseURL,
   connectionString,
   pool,
-  redisUrl = "redis://localhost:6380",
   secret,
-  upstashRedisRestToken,
-  upstashRedisRestUrl,
 }: CreateAuthSystemOptions): AuthSystem {
   if (!pool && !connectionString) {
     throw new Error("A PostgreSQL connection is required for Better Auth")
@@ -128,11 +93,6 @@ export function createAuthSystem({
     allowSignUp,
     baseURL,
     database: connection.database,
-    redisOptions: {
-      redisUrl,
-      upstashRedisRestToken,
-      upstashRedisRestUrl,
-    },
     secret,
   })
 
@@ -154,11 +114,31 @@ export function readAuthEnvironment(
     throw new Error("BETTER_AUTH_SECRET must contain at least 32 characters")
   }
 
-  return {
-    baseURL:
-      environment.BETTER_AUTH_URL ??
+  if (postgres.hosted && !environment.BETTER_AUTH_URL) {
+    throw new Error("BETTER_AUTH_URL is required in managed runtime mode")
+  }
+  if (postgres.hosted && !environment.NEXT_PUBLIC_APP_URL) {
+    throw new Error("NEXT_PUBLIC_APP_URL is required in managed runtime mode")
+  }
+
+  const baseURL = new URL(
+    environment.BETTER_AUTH_URL ??
       environment.NEXT_PUBLIC_APP_URL ??
-      "http://localhost:3001",
+      "http://localhost:3001"
+  )
+  const publicURL = new URL(environment.NEXT_PUBLIC_APP_URL ?? baseURL.origin)
+
+  if (postgres.hosted && baseURL.protocol !== "https:") {
+    throw new Error("BETTER_AUTH_URL must use HTTPS in managed runtime mode")
+  }
+  if (baseURL.origin !== publicURL.origin) {
+    throw new Error(
+      "BETTER_AUTH_URL and NEXT_PUBLIC_APP_URL must use the same origin"
+    )
+  }
+
+  return {
+    baseURL: baseURL.origin,
     connectionString: postgres.connectionString,
     hosted: postgres.hosted,
     redisUrl: redis.redisUrl,
@@ -173,8 +153,10 @@ let runtimeAuth: ReturnType<typeof createAuthSystem> | undefined
 export function getAuth(): AuthSystem["auth"] {
   const environment = readAuthEnvironment()
   runtimeAuth ??= createAuthSystem({
-    ...environment,
+    baseURL: environment.baseURL,
+    connectionString: environment.connectionString,
     pool: environment.hosted ? getWebPostgresPool() : undefined,
+    secret: environment.secret,
   })
   return runtimeAuth.auth
 }

@@ -38,6 +38,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { BoundedResultNotice } from "@/components/bounded-result-notice"
 
 import { createPurchaseOrderAction } from "./actions"
 
@@ -50,7 +51,11 @@ function money(value: number) {
   }).format(value)
 }
 
-export default async function PurchaseOrdersPage() {
+export default async function PurchaseOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ customer?: string }>
+}) {
   await requireCapability(
     commercialCapabilities.purchaseOrders.read,
     "/commercial/orders"
@@ -60,27 +65,61 @@ export default async function PurchaseOrdersPage() {
     connectionString,
   })
   const customersRepository = createCustomerRepository({ connectionString })
-  const [orders, customers] = await Promise.all([
-    ordersRepository.listPurchaseOrders("MRMPL"),
-    customersRepository.listForOrganization("MRMPL"),
-  ]).finally(async () => {
-    await Promise.all([ordersRepository.close(), customersRepository.close()])
-  })
-  const organizationId = customers[0]?.organizationId
+  const customerSearch = (await searchParams).customer?.trim() ?? ""
+  const { customerOptions, orders, organizationId } = await (async () => {
+    try {
+      return {
+        customerOptions: await customersRepository.searchForOrganization(
+          "MRMPL",
+          customerSearch
+        ),
+        orders: await ordersRepository.listPurchaseOrders("MRMPL"),
+        organizationId:
+          await customersRepository.organizationIdForCode("MRMPL"),
+      }
+    } finally {
+      await ordersRepository.close()
+      await customersRepository.close()
+    }
+  })()
 
   return (
     <div className="grid gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Import purchase order</CardTitle>
+          <CardTitle>Import Purchase Order</CardTitle>
           <CardDescription>
-            Create the PO header first. Add lines manually or import its Excel
-            worksheet on the order page; matching always uses active sent quote
-            lineages.
+            Create The Po Header First. Add Lines Manually Or Import Its Excel
+            Worksheet On The Order Page; Matching Always Uses Active Sent Quote
+            Lineages.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {organizationId ? (
+        <CardContent className="grid gap-5">
+          <form
+            className="flex flex-col gap-2 sm:flex-row sm:items-end"
+            id="po-customer-search"
+          >
+            <Field className="max-w-md flex-1">
+              <FieldLabel htmlFor="po-customer-query">Find Customer</FieldLabel>
+              <Input
+                defaultValue={customerSearch}
+                id="po-customer-query"
+                name="customer"
+                placeholder="Customer Uid Or Company"
+              />
+            </Field>
+            <Button type="submit" variant="outline">
+              Search
+            </Button>
+          </form>
+          <BoundedResultNotice
+            actionHref="#po-customer-search"
+            actionLabel="Refine customer search"
+            coverage={customerOptions.coverage}
+            searchQuery={customerSearch}
+            section="Customer options"
+          />
+          {organizationId && customerOptions.rows.length ? (
             <form action={createPurchaseOrderAction}>
               <input
                 name="organization_id"
@@ -88,7 +127,7 @@ export default async function PurchaseOrdersPage() {
                 value={organizationId}
               />
               <FieldSet>
-                <FieldLegend>Purchase-order header</FieldLegend>
+                <FieldLegend>Purchase-Order Header</FieldLegend>
                 <FieldGroup>
                   <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <Field>
@@ -98,7 +137,7 @@ export default async function PurchaseOrdersPage() {
                         name="customer_id"
                         required
                       >
-                        {customers.map((customer) => (
+                        {customerOptions.rows.map((customer) => (
                           <NativeSelectOption
                             key={customer.id}
                             value={customer.id}
@@ -109,11 +148,11 @@ export default async function PurchaseOrdersPage() {
                       </NativeSelect>
                     </Field>
                     <Field>
-                      <FieldLabel htmlFor="po-number">PO number</FieldLabel>
+                      <FieldLabel htmlFor="po-number">Po Number</FieldLabel>
                       <Input id="po-number" name="po_number" required />
                     </Field>
                     <Field>
-                      <FieldLabel htmlFor="po-date">PO date</FieldLabel>
+                      <FieldLabel htmlFor="po-date">Po Date</FieldLabel>
                       <Input
                         defaultValue={new Date().toISOString().slice(0, 10)}
                         id="po-date"
@@ -129,9 +168,9 @@ export default async function PurchaseOrdersPage() {
                         id="po-currency"
                         name="currency_code"
                       >
-                        <NativeSelectOption value="USD">USD</NativeSelectOption>
-                        <NativeSelectOption value="INR">INR</NativeSelectOption>
-                        <NativeSelectOption value="EUR">EUR</NativeSelectOption>
+                        <NativeSelectOption value="USD">Usd</NativeSelectOption>
+                        <NativeSelectOption value="INR">Inr</NativeSelectOption>
+                        <NativeSelectOption value="EUR">Eur</NativeSelectOption>
                       </NativeSelect>
                     </Field>
                   </div>
@@ -140,14 +179,16 @@ export default async function PurchaseOrdersPage() {
                     <Textarea id="po-notes" name="notes" />
                   </Field>
                   <Button className="w-fit" type="submit">
-                    Create purchase order
+                    Create Purchase Order
                   </Button>
                 </FieldGroup>
               </FieldSet>
             </form>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Load at least one customer before creating a purchase order.
+              {customerSearch
+                ? "No Customers Match This Search."
+                : "Load At Least One Customer Before Creating A Purchase Order."}
             </p>
           )}
         </CardContent>
@@ -155,25 +196,25 @@ export default async function PurchaseOrdersPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Purchase-order register</CardTitle>
+          <CardTitle>Purchase-Order Register</CardTitle>
           <CardDescription>
-            Imported, matched, PI, approved, and cancelled orders with their
-            retained source prices.
+            Imported, Matched, Pi, Approved, And Cancelled Orders With Their
+            Retained Source Prices.
           </CardDescription>
           <div className="flex flex-wrap gap-2 pt-2">
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/orders/master/export.xlsx">
-                Export PO master
+                Export Po Master
               </Link>
             </Button>
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/orders/pi-master/export.xlsx">
-                Export approved PI master
+                Export Approved Pi Master
               </Link>
             </Button>
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/orders/template.xlsx">
-                Download PO template
+                Download Po Template
               </Link>
             </Button>
           </div>
@@ -183,12 +224,12 @@ export default async function PurchaseOrdersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>PO</TableHead>
+                  <TableHead>Po</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Lines</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">PO total</TableHead>
+                  <TableHead className="text-right">Po Total</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -231,7 +272,7 @@ export default async function PurchaseOrdersPage() {
                       className="h-32 text-center text-muted-foreground"
                       colSpan={7}
                     >
-                      No purchase orders have been imported.
+                      No Purchase Orders Have Been Imported.
                     </TableCell>
                   </TableRow>
                 )}

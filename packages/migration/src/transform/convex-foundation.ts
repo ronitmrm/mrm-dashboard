@@ -2,6 +2,17 @@ import type { PoolClient } from "pg"
 
 const FOUNDATION_STATEMENTS = [
   `
+    INSERT INTO manufacturing.production_floors (
+      organization_id, code, name
+    )
+    SELECT $2, 'conventional', 'Production Planning & Control Conventional-01'
+    WHERE $1::uuid IS NOT NULL
+    ON CONFLICT (organization_id, code) DO UPDATE SET
+      name = EXCLUDED.name,
+      active = true,
+      updated_at = now()
+  `,
+  `
     WITH source_refs AS (
       SELECT btrim(
         CASE document->>'entryType'
@@ -60,10 +71,11 @@ const FOUNDATION_STATEMENTS = [
   `,
   `
     INSERT INTO catalog.machines (
-      organization_id, machine_number, name, machine_type_id, active,
-      source_system, source_table, source_id, source_payload
+      organization_id, production_floor_id, machine_number, name,
+      machine_type_id, active, source_system, source_table, source_id,
+      source_payload
     )
-    SELECT $2,
+    SELECT $2, production_floor.id,
       btrim(COALESCE(
         source.document->'payload'->>'M/C NO',
         source.document->'payload'->>'machineNo'
@@ -80,6 +92,9 @@ const FOUNDATION_STATEMENTS = [
       )) NOT IN ('inactive', 'disabled'),
       'convex', 'dataEntries', source.source_id, source.document
     FROM migration.convex_documents AS source
+    JOIN manufacturing.production_floors AS production_floor
+      ON production_floor.organization_id = $2
+     AND production_floor.code = 'conventional'
     LEFT JOIN catalog.machine_types AS machine_type
       ON machine_type.organization_id = $2
      AND lower(machine_type.name) = lower(btrim(COALESCE(
@@ -96,6 +111,7 @@ const FOUNDATION_STATEMENTS = [
       )) <> ''
     ON CONFLICT (source_system, source_table, source_id) DO UPDATE SET
       organization_id = EXCLUDED.organization_id,
+      production_floor_id = EXCLUDED.production_floor_id,
       machine_number = EXCLUDED.machine_number,
       name = EXCLUDED.name,
       machine_type_id = EXCLUDED.machine_type_id,
@@ -116,16 +132,20 @@ const FOUNDATION_STATEMENTS = [
       WHERE migration_run_id = $1
     )
     INSERT INTO catalog.machines (
-      organization_id, machine_number, name, active, source_system,
-      source_table, source_id, source_payload
+      organization_id, production_floor_id, machine_number, name, active,
+      source_system, source_table, source_id, source_payload
     )
-    SELECT $2, machine_number, machine_number, true, 'convex',
+    SELECT $2, production_floor.id, machine_number, machine_number, true,
+      'convex',
       'machine_reference', lower(machine_number),
       jsonb_build_object(
         'machineNumber', machine_number,
         'generatedFrom', 'convex reference'
       )
     FROM source_refs AS reference
+    JOIN manufacturing.production_floors AS production_floor
+      ON production_floor.organization_id = $2
+     AND production_floor.code = 'conventional'
     WHERE machine_number IS NOT NULL AND machine_number <> ''
       AND NOT EXISTS (
         SELECT 1 FROM catalog.machines AS machine
@@ -197,10 +217,12 @@ const FOUNDATION_STATEMENTS = [
         )
     )
     INSERT INTO manufacturing.route_options (
-      organization_id, item_id, route_code, name, legacy_option_number,
-      source_system, source_table, source_id, source_payload
+      organization_id, production_floor_id, item_id, route_code, name,
+      legacy_option_number, source_system, source_table, source_id,
+      source_payload
     )
-    SELECT $2, item.id, 'OPTION-' || reference.option_number,
+    SELECT $2, production_floor.id, item.id,
+      'OPTION-' || reference.option_number,
       'Option ' || reference.option_number, reference.option_number,
       'convex', 'route_reference',
       lower(reference.part_code) || '|' || lower(reference.option_number),
@@ -210,11 +232,15 @@ const FOUNDATION_STATEMENTS = [
         'generatedFrom', 'convex'
       )
     FROM source_refs AS reference
+    JOIN manufacturing.production_floors AS production_floor
+      ON production_floor.organization_id = $2
+     AND production_floor.code = 'conventional'
     JOIN catalog.items AS item
       ON item.organization_id = $2
      AND lower(item.uid) = lower(reference.part_code)
     WHERE reference.part_code IS NOT NULL AND reference.part_code <> ''
     ON CONFLICT (source_system, source_table, source_id) DO UPDATE SET
+      production_floor_id = EXCLUDED.production_floor_id,
       item_id = EXCLUDED.item_id,
       route_code = EXCLUDED.route_code,
       name = EXCLUDED.name,

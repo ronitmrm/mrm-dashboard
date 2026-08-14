@@ -33,6 +33,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { BoundedResultNotice } from "@/components/bounded-result-notice"
 
 import {
   addEnquiryItemAction,
@@ -60,10 +61,15 @@ const checklist = [
 
 export default async function EnquiryDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ customer?: string; product?: string }>
 }) {
   const { id } = await params
+  const selectorParams = await searchParams
+  const customerSearch = selectorParams.customer?.trim() ?? ""
+  const productSearch = selectorParams.product?.trim() ?? ""
   await requireCapability(
     "pricing.enquiries.read",
     `/commercial/enquiries/${id}`
@@ -94,21 +100,48 @@ export default async function EnquiryDetailPage({
   const drawingHistory = new Map(loaded.drawingHistoryEntries)
   const customerRepository = createCustomerRepository({ connectionString })
   const productRepository = createProductRepository({ connectionString })
-  const [customers, products] = await Promise.all([
-    customerRepository
-      .listForOrganization("MRMPL")
-      .finally(() => customerRepository.close()),
-    productRepository
-      .list(snapshot.enquiry.organizationId)
-      .finally(() => productRepository.close()),
-  ])
+  const { customerOptions, productOptions, selectedCustomerOptions } =
+    await (async () => {
+      try {
+        return {
+          customerOptions: await customerRepository.searchForOrganization(
+            "MRMPL",
+            customerSearch
+          ),
+          productOptions: await productRepository.searchForOrganization(
+            "MRMPL",
+            productSearch
+          ),
+          selectedCustomerOptions:
+            await customerRepository.searchForOrganization(
+              "MRMPL",
+              snapshot.enquiry.customerUid
+            ),
+        }
+      } finally {
+        await customerRepository.close()
+        await productRepository.close()
+      }
+    })()
+  const selectedCustomer = selectedCustomerOptions.rows[0]
+  const customers = customerOptions.rows.some(
+    (customer) => customer.id === snapshot.enquiry.customerId
+  )
+    ? customerOptions.rows
+    : selectedCustomer
+      ? [selectedCustomer, ...customerOptions.rows].slice(
+          0,
+          customerOptions.coverage.limit
+        )
+      : customerOptions.rows
+  const products = productOptions.rows
 
   return (
     <div className="grid gap-6">
       <section className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="grid gap-2">
           <Button asChild className="w-fit" size="sm" variant="ghost">
-            <Link href="/commercial/enquiries">Back to enquiries</Link>
+            <Link href="/commercial/enquiries">Back To Enquiries</Link>
           </Button>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-semibold tracking-tight">
@@ -120,18 +153,18 @@ export default async function EnquiryDetailPage({
             </Badge>
           </div>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Each mutation below repeats its Better Auth capability check and
-            commits the workflow transition atomically in PostgreSQL.
+            Each Mutation Below Repeats Its Better Auth Capability Check And
+            Commits The Workflow Transition Atomically In Postgresql.
           </p>
           <div className="flex flex-wrap gap-2 pt-2">
             <Button asChild size="sm" variant="outline">
               <Link href={`/commercial/enquiries/${id}/lines/export.xlsx`}>
-                Export logged lines
+                Export Logged Lines
               </Link>
             </Button>
             <Button asChild size="sm" variant="outline">
               <Link href="/commercial/enquiries/template.csv">
-                Line import template
+                Line Import Template
               </Link>
             </Button>
           </div>
@@ -139,20 +172,47 @@ export default async function EnquiryDetailPage({
         {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" ? (
           <form action={handOverEnquiryAction}>
             <input type="hidden" name="enquiry_id" value={id} />
-            <Button type="submit">Hand over to Technical Review</Button>
+            <Button type="submit">Hand Over To Technical Review</Button>
           </form>
         ) : null}
       </section>
 
       <Card>
         <CardHeader>
-          <CardTitle>Enquiry register details</CardTitle>
+          <CardTitle>Enquiry Register Details</CardTitle>
           <CardDescription>
-            Corrections remain available only while the source downstream-work
-            gate permits them.
+            Corrections Remain Available Only While The Source Downstream-Work
+            Gate Permits Them.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="grid gap-5">
+          <form
+            className="flex flex-col gap-2 sm:flex-row sm:items-end"
+            id="enquiry-customer-search"
+          >
+            <input name="product" type="hidden" value={productSearch} />
+            <Field className="max-w-md flex-1">
+              <FieldLabel htmlFor="enquiry-customer-query">
+                Find Customer
+              </FieldLabel>
+              <Input
+                defaultValue={customerSearch}
+                id="enquiry-customer-query"
+                name="customer"
+                placeholder="Customer Uid Or Company"
+              />
+            </Field>
+            <Button type="submit" variant="outline">
+              Search
+            </Button>
+          </form>
+          <BoundedResultNotice
+            actionHref="#enquiry-customer-search"
+            actionLabel="Refine customer search"
+            coverage={customerOptions.coverage}
+            searchQuery={customerSearch}
+            section="Customer options"
+          />
           <form action={updateEnquiryAction}>
             <input type="hidden" name="enquiry_id" value={id} />
             <input
@@ -180,7 +240,7 @@ export default async function EnquiryDetailPage({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="edit-enquiry-received">
-                    Received on
+                    Received On
                   </FieldLabel>
                   <Input
                     id="edit-enquiry-received"
@@ -217,7 +277,7 @@ export default async function EnquiryDetailPage({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="edit-enquiry-buyer">
-                    Buyer name
+                    Buyer Name
                   </FieldLabel>
                   <Input
                     id="edit-enquiry-buyer"
@@ -237,7 +297,7 @@ export default async function EnquiryDetailPage({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="edit-enquiry-payment">
-                    Payment terms
+                    Payment Terms
                   </FieldLabel>
                   <Input
                     id="edit-enquiry-payment"
@@ -247,7 +307,7 @@ export default async function EnquiryDetailPage({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="edit-enquiry-shipment">
-                    Shipment mode
+                    Shipment Mode
                   </FieldLabel>
                   <Input
                     id="edit-enquiry-shipment"
@@ -278,7 +338,7 @@ export default async function EnquiryDetailPage({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="edit-enquiry-fx">
-                    FX / exchange rate
+                    Fx / Exchange Rate
                   </FieldLabel>
                   <Input
                     id="edit-enquiry-fx"
@@ -300,14 +360,14 @@ export default async function EnquiryDetailPage({
                 />
               </Field>
               <div className="flex flex-wrap gap-3">
-                <Button type="submit">Update enquiry</Button>
+                <Button type="submit">Update Enquiry</Button>
                 {snapshot.enquiry.technicalHandoverStatus !== "Handed Over" ? (
                   <Button
                     formAction={deleteEnquiryAction}
                     type="submit"
                     variant="destructive"
                   >
-                    Delete enquiry
+                    Delete Enquiry
                   </Button>
                 ) : null}
               </div>
@@ -319,10 +379,10 @@ export default async function EnquiryDetailPage({
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Add line item</CardTitle>
+            <CardTitle>Add Line Item</CardTitle>
             <CardDescription>
-              Drawings are stored locally; PostgreSQL keeps the checksum,
-              metadata, and relational link.
+              Drawings Are Stored Locally; Postgresql Keeps The Checksum,
+              Metadata, And Relational Link.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -358,7 +418,7 @@ export default async function EnquiryDetailPage({
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="line-target-price">
-                      Target price
+                      Target Price
                     </FieldLabel>
                     <Input
                       id="line-target-price"
@@ -375,7 +435,7 @@ export default async function EnquiryDetailPage({
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="line-drawing-reference">
-                      Drawing reference
+                      Drawing Reference
                     </FieldLabel>
                     <Input
                       id="line-drawing-reference"
@@ -384,20 +444,20 @@ export default async function EnquiryDetailPage({
                   </Field>
                 </div>
                 <Field>
-                  <FieldLabel htmlFor="line-drawing">Drawing file</FieldLabel>
+                  <FieldLabel htmlFor="line-drawing">Drawing File</FieldLabel>
                   <Input
                     id="line-drawing"
                     name="drawing_file"
                     type="file"
                     accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg"
                   />
-                  <FieldDescription>Maximum file size: 25 MB.</FieldDescription>
+                  <FieldDescription>Maximum File Size: 25 Mb.</FieldDescription>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="line-remarks">Remarks</FieldLabel>
                   <Textarea id="line-remarks" name="remarks" />
                 </Field>
-                <Button type="submit">Add line</Button>
+                <Button type="submit">Add Line</Button>
               </FieldGroup>
             </form>
           </CardContent>
@@ -405,10 +465,10 @@ export default async function EnquiryDetailPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Import line items</CardTitle>
+            <CardTitle>Import Line Items</CardTitle>
             <CardDescription>
-              Upload CSV, XLS, or XLSX. Every nonblank row is classified before
-              an explicit review decision.
+              Upload Csv, Xls, Or Xlsx. Every Nonblank Row Is Classified Before
+              An Explicit Review Decision.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -421,7 +481,7 @@ export default async function EnquiryDetailPage({
               />
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="import-file">Import file</FieldLabel>
+                  <FieldLabel htmlFor="import-file">Import File</FieldLabel>
                   <Input
                     id="import-file"
                     name="template_file"
@@ -430,15 +490,15 @@ export default async function EnquiryDetailPage({
                     required
                   />
                   <FieldDescription>
-                    The content hash is the idempotency key; uploading the same
-                    file reopens the same review.
+                    The Content Hash Is The Idempotency Key; Uploading The Same
+                    File Reopens The Same Review.
                   </FieldDescription>
                 </Field>
                 <div className="flex flex-wrap gap-3">
-                  <Button type="submit">Classify import rows</Button>
+                  <Button type="submit">Classify Import Rows</Button>
                   <Button asChild type="button" variant="outline">
                     <Link href="/commercial/enquiries/template.csv">
-                      Download CSV template
+                      Download Csv Template
                     </Link>
                   </Button>
                 </div>
@@ -451,10 +511,10 @@ export default async function EnquiryDetailPage({
       {snapshot.importReviews.some((review) => review.status === "Pending") ? (
         <section className="grid gap-4">
           <div>
-            <h3 className="text-lg font-semibold">Pending import reviews</h3>
+            <h3 className="text-lg font-semibold">Pending Import Reviews</h3>
             <p className="text-sm text-muted-foreground">
-              The source match order is preserved. Review each row before any
-              enquiry line is created.
+              The Source Match Order Is Preserved. Review Each Row Before Any
+              Enquiry Line Is Created.
             </p>
           </div>
           {snapshot.importReviews
@@ -464,7 +524,7 @@ export default async function EnquiryDetailPage({
                 <CardHeader>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <CardTitle>Import review</CardTitle>
+                      <CardTitle>Import Review</CardTitle>
                       <CardDescription>{review.id}</CardDescription>
                     </div>
                     <Badge variant="secondary">{review.status}</Badge>
@@ -520,7 +580,7 @@ export default async function EnquiryDetailPage({
                               <FieldLabel
                                 htmlFor={`import-${review.id}-${row.rowNumber}`}
                               >
-                                Review decision
+                                Review Decision
                               </FieldLabel>
                               <NativeSelect
                                 id={`import-${review.id}-${row.rowNumber}`}
@@ -529,7 +589,7 @@ export default async function EnquiryDetailPage({
                                 required
                               >
                                 <NativeSelectOption value="" disabled>
-                                  Choose an action
+                                  Choose An Action
                                 </NativeSelectOption>
                                 <NativeSelectOption value="Add New Line">
                                   Add New Line
@@ -541,7 +601,7 @@ export default async function EnquiryDetailPage({
                                 ) : null}
                                 {row.matchedEnquiryItemId ? (
                                   <NativeSelectOption value="Link to existing work">
-                                    Link to existing work
+                                    Link To Existing Work
                                   </NativeSelectOption>
                                 ) : null}
                                 {hasMatch ? (
@@ -560,7 +620,7 @@ export default async function EnquiryDetailPage({
                           </FieldSet>
                         )
                       })}
-                      <Button type="submit">Apply reviewed decisions</Button>
+                      <Button type="submit">Apply Reviewed Decisions</Button>
                     </FieldGroup>
                   </form>
                 </CardContent>
@@ -571,12 +631,39 @@ export default async function EnquiryDetailPage({
 
       <section className="grid gap-4">
         <div>
-          <h3 className="text-lg font-semibold">Line workflow</h3>
+          <h3 className="text-lg font-semibold">Line Workflow</h3>
           <p className="text-sm text-muted-foreground">
-            Technical review and design retain the recovered Pricing status
-            values and handoff gates.
+            Technical Review And Design Retain The Recovered Pricing Status
+            Values And Handoff Gates.
           </p>
         </div>
+        <form
+          className="flex flex-col gap-2 sm:flex-row sm:items-end"
+          id="enquiry-product-search"
+        >
+          <input name="customer" type="hidden" value={customerSearch} />
+          <Field className="max-w-md flex-1">
+            <FieldLabel htmlFor="enquiry-product-query">
+              Find Portfolio Product
+            </FieldLabel>
+            <Input
+              defaultValue={productSearch}
+              id="enquiry-product-query"
+              name="product"
+              placeholder="Product Uid Or Description"
+            />
+          </Field>
+          <Button type="submit" variant="outline">
+            Search
+          </Button>
+        </form>
+        <BoundedResultNotice
+          actionHref="#enquiry-product-search"
+          actionLabel="Refine product search"
+          coverage={productOptions.coverage}
+          searchQuery={productSearch}
+          section="Portfolio product options"
+        />
         {snapshot.items.length ? (
           snapshot.items.map((item) => {
             const clarification = snapshot.clarifications.find(
@@ -626,10 +713,10 @@ export default async function EnquiryDetailPage({
                     />
                     <FieldGroup>
                       <FieldSet>
-                        <FieldLegend>Sales line correction</FieldLegend>
+                        <FieldLegend>Sales Line Correction</FieldLegend>
                         <FieldDescription>
-                          Corrections after handover reset Technical and pending
-                          Design state. Downstream quotes and orders lock edits.
+                          Corrections After Handover Reset Technical And Pending
+                          Design State. Downstream Quotes And Orders Lock Edits.
                         </FieldDescription>
                       </FieldSet>
                       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -680,7 +767,7 @@ export default async function EnquiryDetailPage({
                         </Field>
                         <Field>
                           <FieldLabel htmlFor={`${item.id}-edit-target`}>
-                            Target price
+                            Target Price
                           </FieldLabel>
                           <Input
                             id={`${item.id}-edit-target`}
@@ -693,7 +780,7 @@ export default async function EnquiryDetailPage({
                         </Field>
                         <Field>
                           <FieldLabel htmlFor={`${item.id}-edit-drawing-ref`}>
-                            Drawing reference
+                            Drawing Reference
                           </FieldLabel>
                           <Input
                             id={`${item.id}-edit-drawing-ref`}
@@ -703,7 +790,7 @@ export default async function EnquiryDetailPage({
                         </Field>
                         <Field>
                           <FieldLabel htmlFor={`${item.id}-edit-drawing-file`}>
-                            Replacement drawing
+                            Replacement Drawing
                           </FieldLabel>
                           <Input
                             id={`${item.id}-edit-drawing-file`}
@@ -724,7 +811,7 @@ export default async function EnquiryDetailPage({
                         </Field>
                       </div>
                       <div className="flex flex-wrap gap-3">
-                        <Button type="submit">Update line</Button>
+                        <Button type="submit">Update Line</Button>
                         {item.drawingFileId ? (
                           <Button asChild type="button" variant="outline">
                             <Link
@@ -737,8 +824,8 @@ export default async function EnquiryDetailPage({
                       </div>
                       {(drawingHistory.get(item.id)?.length ?? 0) > 0 ? (
                         <div className="grid gap-2 rounded-2xl bg-muted/40 p-3">
-                          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                            Drawing history
+                          <p className="text-xs font-medium tracking-wide text-muted-foreground">
+                            Drawing History
                           </p>
                           {drawingHistory
                             .get(item.id)!
@@ -752,7 +839,7 @@ export default async function EnquiryDetailPage({
                                     ? "Current"
                                     : `Revision ${index}`}{" "}
                                   · {drawing.fileName} · {drawing.byteSize}{" "}
-                                  bytes
+                                  Bytes
                                 </span>
                                 {index === 0 ? (
                                   <Link
@@ -778,7 +865,7 @@ export default async function EnquiryDetailPage({
                       />
                       <FieldGroup>
                         <FieldSet>
-                          <FieldLegend>Technical review</FieldLegend>
+                          <FieldLegend>Technical Review</FieldLegend>
                           <div className="grid gap-3 sm:grid-cols-2">
                             {checklist.map(([key, label]) => (
                               <Field
@@ -796,7 +883,7 @@ export default async function EnquiryDetailPage({
                         </FieldSet>
                         <Field>
                           <FieldLabel htmlFor={`${item.id}-review-status`}>
-                            Review status
+                            Review Status
                           </FieldLabel>
                           <NativeSelect
                             id={`${item.id}-review-status`}
@@ -824,7 +911,7 @@ export default async function EnquiryDetailPage({
                           <FieldLabel
                             htmlFor={`${item.id}-missing-information`}
                           >
-                            Missing information
+                            Missing Information
                           </FieldLabel>
                           <Textarea
                             id={`${item.id}-missing-information`}
@@ -833,14 +920,14 @@ export default async function EnquiryDetailPage({
                         </Field>
                         <Field>
                           <FieldLabel htmlFor={`${item.id}-technical-remarks`}>
-                            Technical remarks
+                            Technical Remarks
                           </FieldLabel>
                           <Textarea
                             id={`${item.id}-technical-remarks`}
                             name="technical_remarks"
                           />
                         </Field>
-                        <Button type="submit">Save technical review</Button>
+                        <Button type="submit">Save Technical Review</Button>
                       </FieldGroup>
                     </form>
 
@@ -858,17 +945,17 @@ export default async function EnquiryDetailPage({
                       />
                       <FieldGroup>
                         <FieldSet>
-                          <FieldLegend>Design handoff</FieldLegend>
+                          <FieldLegend>Design Handoff</FieldLegend>
                           <FieldDescription>
-                            Existing portfolio matches skip product design. New
-                            list designs retain their first material line for
-                            costing.
+                            Existing Portfolio Matches Skip Product Design. New
+                            List Designs Retain Their First Material Line For
+                            Costing.
                           </FieldDescription>
                         </FieldSet>
                         <div className="grid gap-4 sm:grid-cols-2">
                           <Field>
                             <FieldLabel htmlFor={`${item.id}-portfolio-status`}>
-                              Portfolio decision
+                              Portfolio Decision
                             </FieldLabel>
                             <NativeSelect
                               id={`${item.id}-portfolio-status`}
@@ -885,7 +972,7 @@ export default async function EnquiryDetailPage({
                           </Field>
                           <Field>
                             <FieldLabel htmlFor={`${item.id}-design-status`}>
-                              Design status
+                              Design Status
                             </FieldLabel>
                             <NativeSelect
                               id={`${item.id}-design-status`}
@@ -907,7 +994,7 @@ export default async function EnquiryDetailPage({
                           </Field>
                           <Field>
                             <FieldLabel htmlFor={`${item.id}-matched-product`}>
-                              Matched product
+                              Matched Product
                             </FieldLabel>
                             <NativeSelect
                               id={`${item.id}-matched-product`}
@@ -915,7 +1002,7 @@ export default async function EnquiryDetailPage({
                               defaultValue=""
                             >
                               <NativeSelectOption value="">
-                                No portfolio match
+                                No Portfolio Match
                               </NativeSelectOption>
                               {products.map((product) => (
                                 <NativeSelectOption
@@ -929,7 +1016,7 @@ export default async function EnquiryDetailPage({
                           </Field>
                           <Field>
                             <FieldLabel htmlFor={`${item.id}-quoted-uid`}>
-                              New Q part
+                              New Q Part
                             </FieldLabel>
                             <Input
                               id={`${item.id}-quoted-uid`}
@@ -938,7 +1025,7 @@ export default async function EnquiryDetailPage({
                           </Field>
                           <Field>
                             <FieldLabel htmlFor={`${item.id}-item-type`}>
-                              Item type
+                              Item Type
                             </FieldLabel>
                             <NativeSelect
                               id={`${item.id}-item-type`}
@@ -958,7 +1045,7 @@ export default async function EnquiryDetailPage({
                           </Field>
                           <Field>
                             <FieldLabel htmlFor={`${item.id}-process`}>
-                              Manufacturing process
+                              Manufacturing Process
                             </FieldLabel>
                             <Input
                               id={`${item.id}-process`}
@@ -967,19 +1054,19 @@ export default async function EnquiryDetailPage({
                           </Field>
                           <Field>
                             <FieldLabel htmlFor={`${item.id}-rod-size`}>
-                              Rod size
+                              Rod Size
                             </FieldLabel>
                             <Input id={`${item.id}-rod-size`} name="rod_size" />
                           </Field>
                           <Field>
                             <FieldLabel htmlFor={`${item.id}-rod-type`}>
-                              Rod type
+                              Rod Type
                             </FieldLabel>
                             <Input id={`${item.id}-rod-type`} name="rod_type" />
                           </Field>
                           <Field>
                             <FieldLabel htmlFor={`${item.id}-piece-weight`}>
-                              Piece weight
+                              Piece Weight
                             </FieldLabel>
                             <Input
                               id={`${item.id}-piece-weight`}
@@ -1004,7 +1091,7 @@ export default async function EnquiryDetailPage({
                             />
                           </Field>
                         </div>
-                        <Button type="submit">Save design decision</Button>
+                        <Button type="submit">Save Design Decision</Button>
                       </FieldGroup>
                     </form>
                   </div>
@@ -1014,12 +1101,12 @@ export default async function EnquiryDetailPage({
                       <Separator />
                       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
                         <p className="text-sm text-muted-foreground">
-                          {clarification.sourceStage} requested a Sales match
-                          decision for this line.
+                          {clarification.sourceStage} Requested A Sales Match
+                          Decision For This Line.
                         </p>
                         <Button asChild>
                           <Link href="/commercial/sales">
-                            Resolve in Sales queue
+                            Resolve In Sales Queue
                           </Link>
                         </Button>
                       </div>
@@ -1036,7 +1123,7 @@ export default async function EnquiryDetailPage({
                           name="enquiry_item_id"
                           value={item.id}
                         />
-                        <Button type="submit">Prepare product costing</Button>
+                        <Button type="submit">Prepare Product Costing</Button>
                       </form>
                     </>
                   ) : null}
@@ -1047,7 +1134,7 @@ export default async function EnquiryDetailPage({
         ) : (
           <Card>
             <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              Add at least one line before handing the enquiry to Technical
+              Add At Least One Line Before Handing The Enquiry To Technical
               Review.
             </CardContent>
           </Card>

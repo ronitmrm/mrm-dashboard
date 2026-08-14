@@ -51,10 +51,10 @@ export default async function PricingRevisionsPage({
       <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <CardTitle>
-            {code ? "Price revisions — " + code : "Price revisions"}
+            {code ? "Price revisions — " + code : "Price Revisions"}
           </CardTitle>
           <CardDescription>
-            Every retained quote revision and its historical snapshot tree.
+            Every Retained Quote Revision And Its Historical Snapshot Tree.
           </CardDescription>
         </div>
         <div className="flex gap-2">
@@ -64,7 +64,7 @@ export default async function PricingRevisionsPage({
             </Link>
           </Button>
           <Button asChild variant="secondary">
-            <Link href="/commercial/pricing">Back to Pricing</Link>
+            <Link href="/commercial/pricing">Back To Pricing</Link>
           </Button>
         </div>
       </CardHeader>

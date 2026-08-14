@@ -1,10 +1,11 @@
-**Always start each response with the word "mayank".**
-**Save the handoff docs in this directory under `./.handoff/`. Create it if not present and add it to .gitignore as well.**
-**While running powershell commands, run this for execution policy bypass: `Set-ExecutionPolicy Bypass -Scope Process -Force`.**
-
 # Agent Rules: MRMPL Dashboard
 
-This repo is meant to be iterated on by non-technical users through AI agents. Keep changes boring, traceable, and easy to verify.
+- This repo is meant to be iterated on by non-technical users through AI agents. Keep changes boring, traceable, and easy to verify.
+- Save the handoff docs in this directory under `./.handoff/`. Create it if not present and add it to .gitignore as well.
+- While running powershell commands, run this for execution policy bypass: `Set-ExecutionPolicy Bypass -Scope Process -Force`.
+- Be extremely concise when responding to me with information. Sacrifice grammar for the sake of concision.
+- reach for the `neon`, `upstash` and `gh` cli's when needed.
+- For Neon work, always use the installed Neon Postgres plugin instead of the Neon CLI.
 
 ## Project Shape
 
@@ -59,7 +60,7 @@ This repo is meant to be iterated on by non-technical users through AI agents. K
 
 ## Environment
 
-- Copy `apps/web/.env.example` to `apps/web/.env.local`.
+- Copy `apps/web/.env.example` to `apps/web/.env`.
 - Required env vars:
   - `DATABASE_URL`
   - `REDIS_URL`
@@ -102,21 +103,23 @@ pnpm --filter web test
 pnpm build
 ```
 
-For UI changes, also smoke-test `pnpm dev` in a browser when possible.
+For UI changes, also smoke-test `pnpm dev:managed` in a browser when possible.
 Always kill dev server/s after testing, unless the user specifies to have them up and running.
-
-### Vercel Plugin Pointers
-
-- While debugging, make sure to view the build AND runtime logs for a full picture.
-- DO NOT alter deployments directly. always treat GitHub as the source of truth and commit changes for them to be picked up by Vercel, not the other way around.
 
 ## Git Discipline
 
+- working branch: `staging`.
 - Check `git status --short` before and after every change set.
 - Regularly check git fetch origin for upstream changes.
-- Commit every completed change set with a clear, specific message.
-- Never commit secrets, `.env.local`, workbook files, generated caches, or ignored files.
-- After every 3 local commits, ask the user if they want to push upstream to `main` aka deploy the latest changes:
-  `git push origin main`
-- Reset the push counter after a successful push.
-- If commit or push fails, stop and report the exact failure instead of continuing silently.
+- Commit every completed change set with a clear, specific message. Be proactive in committing changes and keep the commits small and traceable.
+- Never commit secrets, `.env.local/.env`, workbook files, generated caches, or ignored files.
+- After every 5 local commits, ask the user if they want to push upstream to `staging` aka deploy the latest changes (in a non-technical language).
+- If commit or push fails, stop and investigate the exact failure instead of continuing silently.
+- When the user prompts to **deploy** the changes:
+  - commit the remaining changes and push the commits upstream to `staging`.
+  - create a PR from staging to `main`.
+  - if there are NO conflicts:
+    - merge the PR using `rebase` strategy.
+    - update the refs of the local `staging` branch with main and push the updated refs upstream to the remote `staging` branch.
+  - if there are conflicts:
+    - resolve the conflicts and then follow the steps of the previous case.

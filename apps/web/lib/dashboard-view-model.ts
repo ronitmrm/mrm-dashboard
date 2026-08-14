@@ -1,4 +1,147 @@
+import {
+  defaultProductionFloorCode,
+  normalizeProductionFloorCode,
+  productionFloors,
+  type ProductionFloorCode,
+} from "@workspace/db/production-floors";
+import {
+  normalizeSourceCoverage,
+  type SourceCoverage,
+} from "@workspace/db/dashboard-coverage";
+
 export type DashboardRecord = Record<string, unknown>;
+
+export {
+  defaultProductionFloorCode,
+  normalizeProductionFloorCode,
+  productionFloors,
+  type ProductionFloorCode,
+};
+
+export class DashboardStateNormalizationError extends Error {}
+
+function canonicalFloor(value: unknown): ProductionFloorCode | null {
+  return typeof value === "string" && productionFloors.some((floor) => floor.code === value)
+    ? (value as ProductionFloorCode)
+    : null;
+}
+
+function canonicalVersion(value: unknown) {
+  const version = Number(value);
+  return Number.isSafeInteger(version) && version > 0 ? version : null;
+}
+
+export function mergeDashboardStateResponse(
+  currentState: DashboardRecord | undefined,
+  nextState: DashboardRecord,
+  requestedFloor: unknown = nextState.productionFloorCode,
+) {
+  const expectedFloor = normalizeProductionFloorCode(requestedFloor);
+  const nextDashboard = isRecord(nextState.dashboard) ? nextState.dashboard : null;
+  const responseFloor =
+    canonicalFloor(nextState.productionFloorCode) ??
+    canonicalFloor(nextDashboard?.productionFloorCode);
+  if (responseFloor !== expectedFloor) {
+    throw new DashboardStateNormalizationError(
+      "Dashboard state did not match the requested floor.",
+    );
+  }
+
+  const nextVersion =
+    canonicalVersion(nextState.version) ??
+    canonicalVersion(nextDashboard?.readModelVersion);
+  const currentDashboard =
+    currentState && isRecord(currentState.dashboard) ? currentState.dashboard : null;
+  const currentFloor =
+    canonicalFloor(currentState?.productionFloorCode) ??
+    canonicalFloor(currentDashboard?.productionFloorCode);
+  const currentVersion =
+    canonicalVersion(currentState?.version) ??
+    canonicalVersion(currentDashboard?.readModelVersion);
+
+  if (nextState.notModified === true) {
+    if (
+      !currentState ||
+      !currentDashboard ||
+      currentFloor !== expectedFloor ||
+      nextVersion === null ||
+      nextVersion !== currentVersion
+    ) {
+      throw new DashboardStateNormalizationError(
+        "An unchanged dashboard response requires the exact retained same-floor payload.",
+      );
+    }
+    return {
+      ...currentState,
+      ...nextState,
+      coverage: dashboardCoverageFromState(currentState),
+      dashboard: currentDashboard,
+      productionFloorCode: expectedFloor,
+      version: nextVersion,
+    };
+  }
+
+  if (!nextDashboard) {
+    throw new DashboardStateNormalizationError(
+      "A changed dashboard response requires a floor payload.",
+    );
+  }
+  if ("productionFloorSnapshots" in nextDashboard) {
+    throw new DashboardStateNormalizationError(
+      "A changed dashboard response cannot contain all floor snapshots.",
+    );
+  }
+  if (canonicalFloor(nextDashboard.productionFloorCode) !== expectedFloor) {
+    throw new DashboardStateNormalizationError(
+      "Dashboard payload did not match the requested floor.",
+    );
+  }
+  const payloadVersion = canonicalVersion(nextDashboard.readModelVersion);
+  if (nextVersion !== null && payloadVersion !== nextVersion) {
+    throw new DashboardStateNormalizationError(
+      "Dashboard response version metadata did not match its payload.",
+    );
+  }
+  if (
+    currentFloor === expectedFloor &&
+    currentVersion !== null &&
+    nextVersion !== null &&
+    nextVersion < currentVersion
+  ) {
+    throw new DashboardStateNormalizationError(
+      "Dashboard response contained a regressive version.",
+    );
+  }
+
+  const coverage = dashboardCoverageFromState(nextState);
+  return {
+    ...nextState,
+    coverage,
+    dashboard: {
+      ...nextDashboard,
+      ...(coverage ? { sourceCoverage: coverage } : {}),
+      productionFloorCode: expectedFloor,
+      ...(nextVersion === null ? {} : { readModelVersion: nextVersion }),
+    },
+    productionFloorCode: expectedFloor,
+    version: nextVersion,
+  };
+}
+
+export function dashboardPayloadFromState(state: unknown) {
+  return isRecord(state) ? isRecord(state.dashboard) ? state.dashboard : {} : undefined;
+}
+
+export function dashboardRefreshStatusFromState(state: unknown) {
+  return isRecord(state) ? isRecord(state.status) ? state.status : {} : undefined;
+}
+
+export function dashboardCoverageFromState(state: unknown): SourceCoverage | null {
+  if (!isRecord(state)) return null;
+  const dashboard = isRecord(state.dashboard) ? state.dashboard : {};
+  const coverage = state.coverage ?? dashboard.sourceCoverage;
+  return isRecord(coverage) ? normalizeSourceCoverage(coverage) : null;
+}
 
 export type DashboardRankedRow = {
   label: string;
@@ -51,6 +194,75 @@ const numberFormatter = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 1,
 });
 
+export function dashboardPayloadForProductionFloor(
+  payload: unknown,
+  requestedFloor: unknown,
+): DashboardRecord {
+  const dashboard = isRecord(payload) ? payload : {};
+  const floorCode = normalizeProductionFloorCode(requestedFloor);
+  const snapshots = isRecord(dashboard.productionFloorSnapshots)
+    ? dashboard.productionFloorSnapshots
+    : {};
+  const payloadFloorCode =
+    typeof dashboard.productionFloorCode === "string"
+      ? normalizeProductionFloorCode(dashboard.productionFloorCode)
+      : undefined;
+  const selected = isRecord(snapshots[floorCode])
+    ? snapshots[floorCode]
+    : payloadFloorCode === floorCode
+      ? dashboard
+    : floorCode === defaultProductionFloorCode
+      ? dashboard
+      : {};
+  const selectedPayload = { ...selected };
+  delete selectedPayload.productionFloorSnapshots;
+  delete selectedPayload.productionFloors;
+  return {
+    ...selectedPayload,
+    productionFloorCode: floorCode,
+    productionFloors,
+  };
+}
+
+export function universalProductionDashboardRows(
+  floorPayloads: readonly {
+    productionFloorCode: ProductionFloorCode;
+    payload: unknown;
+  }[],
+): DashboardRecord[] {
+  const payloadByFloor = new Map<ProductionFloorCode, DashboardRecord>();
+  for (const value of floorPayloads) {
+    if (!isRecord(value.payload)) continue;
+    payloadByFloor.set(value.productionFloorCode, value.payload);
+  }
+
+  return productionFloors
+    .flatMap((floor) => {
+      const payload = payloadByFloor.get(floor.code);
+      const productionControl = isRecord(payload?.productionControl)
+        ? payload.productionControl
+        : {};
+      const rows = Array.isArray(productionControl.productionDashboardRows)
+        ? productionControl.productionDashboardRows.filter(isRecord)
+        : [];
+      return rows.map((row): DashboardRecord => ({
+        ...row,
+        productionFloorCode: floor.code,
+        productionUnit: floor.label,
+      }));
+    })
+    .sort((left, right) =>
+      Number(str(left.status).toLowerCase() === "dispatched") -
+        Number(str(right.status).toLowerCase() === "dispatched") ||
+      dateSortValue(left.currentProbableDispatchDate) -
+        dateSortValue(right.currentProbableDispatchDate) ||
+      str(left.productionUnit).localeCompare(str(right.productionUnit)) ||
+      str(left.jcNo).localeCompare(str(right.jcNo), undefined, {
+        numeric: true,
+      }),
+    );
+}
+
 export function toDashboardViewModel(payload: unknown): DashboardViewModel {
   const data = isRecord(payload) ? payload : {};
   const summary = isRecord(data.summary) ? data.summary : data;
@@ -99,43 +311,43 @@ export function toDashboardViewModel(payload: unknown): DashboardViewModel {
   });
 
   return {
-    workbook: str(data.workbook) || str(data.workbookName) || "MRMPL workbook",
+    workbook: str(data.workbook) || str(data.workbookName) || "Mrmpl Workbook",
     updatedAt: str(data.updatedAt) || "",
     metrics: [
       {
-        label: "Total output",
+        label: "Total Output",
         value: formatNumber(totalOutput),
-        detail: `${formatNumber(totalTarget)} target`,
+        detail: `${formatNumber(totalTarget)} Target`,
         tone: "default",
       },
       {
         label: "Target",
         value: formatNumber(totalTarget),
-        detail: "Planned production quantity",
+        detail: "Planned Production Quantity",
         tone: "default",
       },
       {
         label: "Efficiency",
         value: formatPercent(efficiency),
-        detail: "Actual output vs target",
+        detail: "Actual Output Vs Target",
         tone: efficiency >= 0.9 ? "good" : efficiency >= 0.75 ? "default" : "warning",
       },
       {
-        label: "Reject pcs / rate",
+        label: "Reject Pcs / Rate",
         value: `${formatNumber(totalReject)} | ${formatPercent(rejectRate)}`,
-        detail: "Rejected quantity and rejection rate",
+        detail: "Rejected Quantity And Rejection Rate",
         tone: rejectRate > 0.05 ? "warning" : "good",
       },
       {
-        label: "Active operators",
+        label: "Active Operators",
         value: formatNumber(num(summary, ["activeOperators"]) || operators.length),
-        detail: `${formatNumber(num(summary, ["activeMachines"]) || machines.length)} machines tracked`,
+        detail: `${formatNumber(num(summary, ["activeMachines"]) || machines.length)} Machines Tracked`,
         tone: "default",
       },
       {
         label: "Attendance",
-        value: attendancePct ? formatPercent(attendancePct) : "No data",
-        detail: str(summary.attendanceScope) || "Selected attendance scope",
+        value: attendancePct ? formatPercent(attendancePct) : "No Data",
+        detail: str(summary.attendanceScope) || "Selected Attendance Scope",
         tone: attendancePct >= 0.9 ? "good" : attendancePct > 0 ? "warning" : "default",
       },
     ],

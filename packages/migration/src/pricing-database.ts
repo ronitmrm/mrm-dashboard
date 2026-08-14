@@ -2,8 +2,8 @@ import { createHash } from "node:crypto"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { DatabaseSync } from "node:sqlite"
 
-import Database from "better-sqlite3"
 import { unzipSync } from "fflate"
 
 import { normalizeArchive, normalizeArchivePath } from "./archive-safety"
@@ -187,13 +187,12 @@ export async function inspectPricingDatabase(
   artifactPath: string
 ): Promise<PricingDatabaseInventory> {
   const artifact = await readFile(artifactPath)
-  const database = new Database(artifactPath, {
-    fileMustExist: true,
-    readonly: true,
+  const database = new DatabaseSync(artifactPath, {
+    readOnly: true,
   })
 
   try {
-    database.pragma("query_only = ON")
+    database.exec("PRAGMA query_only = ON")
 
     const integrityRows = database
       .prepare("PRAGMA integrity_check")

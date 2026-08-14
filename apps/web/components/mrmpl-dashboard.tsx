@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type DragEvent, type FormEvent, type ReactNode, type SetStateAction } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type DragEvent, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -11,9 +11,11 @@ import {
   ChevronRight,
   CheckCircle2,
   Download,
+  FileText,
   Gauge,
   GripVertical,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Moon,
   Plus,
@@ -35,9 +37,11 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  MetricCard,
 } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
+import { SearchableSelect } from "@workspace/ui/components/searchable-select";
 import { Separator } from "@workspace/ui/components/separator";
 import {
   Sidebar,
@@ -60,15 +64,55 @@ import {
 } from "@workspace/ui/components/table";
 
 import {
+  dashboardConnectionLabel,
+  dashboardCoverageNotice,
+  dashboardDeliveryNotice,
+} from "@/lib/dashboard-delivery-client";
+import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery";
+import {
+  dashboardPayloadFromState,
+  dashboardPayloadForProductionFloor,
+  dashboardRefreshStatusFromState,
   dateSortValue,
+  defaultProductionFloorCode,
   formatNumber,
   jobCardScheduleSummary,
+  normalizeProductionFloorCode,
+  productionFloors,
   toDashboardViewModel,
+  universalProductionDashboardRows,
+  type ProductionFloorCode,
 } from "@/lib/dashboard-view-model";
+import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
+import {
+  checklistWorkspaceEntryTypes,
+  companyWideQualityMasterEntryTypes,
+  columnsForProductionMaster,
+  dataEntryRowsForProductionMaster,
+  productionMasterTableEntryTypes,
+  productionMasterRowSources,
+  qualityWorkspaceEntryTypes,
+  rowsForProductionMaster,
+} from "@/lib/production-master-tables";
+import {
+  refreshLockFromStatus,
+  refreshLockHasSettled,
+  type PlanningRefreshLock,
+} from "@/lib/dashboard-live-state";
+import {
+  mergeFirstPieceInspectionTasks as mergeStoredFirstPieceInspectionTasks,
+  readFirstPieceInspectionDraft as readFirstPieceInspectionDraftFromStorage,
+  readFirstPieceInspectionTasks as readFirstPieceInspectionTasksFromStorage,
+  removeFirstPieceInspectionDraft as removeFirstPieceInspectionDraftFromStorage,
+  writeFirstPieceInspectionDraft as writeFirstPieceInspectionDraftToStorage,
+  writeFirstPieceInspectionTasks as writeFirstPieceInspectionTasksToStorage,
+  type FirstPieceInspectionDraft,
+} from "@/lib/first-piece-inspection-draft";
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
+import { maintenanceChecklistRowsForSchedule } from "@/lib/maintenance-schedule-options";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { shopFloorNoPendingActionLabel } from "@/lib/shop-floor-workflow";
-import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
+import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepPreviewState, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
 import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
   applyShopFloorStatusPatches,
@@ -86,6 +130,7 @@ import {
   dashboardTabHref,
   type DashboardTabId,
 } from "@/lib/unified-navigation";
+import { normalizeUserEnteredPayload } from "@/lib/user-entry-text";
 
 type DashboardPayload = Record<string, unknown>;
 
@@ -98,11 +143,6 @@ type DashboardApiResult = {
   message: string;
   queued?: boolean;
   skipped?: boolean;
-};
-
-type PlanningRefreshLock = {
-  baselineRequestedAtMs: number | null;
-  baselineCompletedAtMs: number | null;
 };
 
 type DataEntrySpec = {
@@ -133,320 +173,311 @@ type MaintenanceChecklistStepDraft = {
   remark: string;
 };
 
-function initialDashboardTabFromLocation(): DashboardTabId {
-  if (typeof window === "undefined") return "productionControlTab";
-  const tab = new URLSearchParams(window.location.search).get("tab") as DashboardTabId | null;
-  return validDashboardTab(tab) ?? "productionControlTab";
+type SetupChecklistStepDraft = {
+  draftId: string;
+  persisted?: boolean;
+  sequence: string;
+  checkPoint: string;
+  inputType: string;
+  required: string;
+  section: string;
+  remark: string;
+};
+
+function productionFloorFromLocation(): ProductionFloorCode {
+  if (typeof window === "undefined") return defaultProductionFloorCode;
+  return normalizeProductionFloorCode(
+    new URLSearchParams(window.location.search).get("floor"),
+  );
 }
 
 function dashboardReturnHref(defaultTab: DashboardTabId) {
-  if (typeof window === "undefined") return dashboardTabHref(defaultTab);
+  if (typeof window === "undefined") {
+    return dashboardTabHref(defaultTab, defaultProductionFloorCode);
+  }
   const returnTab = new URLSearchParams(window.location.search).get("returnTab") as DashboardTabId | null;
-  return dashboardTabHref(validDashboardTab(returnTab) ?? defaultTab);
+  return dashboardTabHref(
+    validDashboardTab(returnTab) ?? defaultTab,
+    productionFloorFromLocation(),
+  );
 }
 
 function validDashboardTab(tab: DashboardTabId | null) {
   return tab && navItems.some((item) => item.id === tab) ? tab : undefined;
 }
+
+function dataEntryDestination(entryType: string): DashboardTabId {
+  if (entryType === "machine_master") return "machineMasterTab";
+  if (entryType === "planning_holiday") return "planningHolidayTab";
+  return "dataEntryTab";
+}
 const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "route",
-    title: "Route master",
-    description: "Part route, option, setup, and route-level machine details.",
+    title: "Route Master",
+    description: "Part Route, Option, Setup, And Route-Level Machine Family.",
     fields: [
-      { name: "partNo", label: "Part no.", required: true },
-      { name: "optionNumber", label: "Option no.", required: true },
-      { name: "setupNo", label: "Setup no.", required: true },
-      { name: "numberOfSetups", label: "No. of setup", type: "number" },
-      { name: "setupName", label: "Setup name" },
-      { name: "machineUsed", label: "Machine family" },
-      { name: "machineType", label: "Machine type" },
-      { name: "stageWeight", label: "Stage weight gram", type: "number", step: "0.01" },
-      { name: "rodSize", label: "Rod size" },
-      { name: "cuttingLength", label: "Cutting length" },
-      { name: "finishedGoodsLength", label: "FG length" },
+      { name: "partNo", label: "Part No.", required: true },
+      { name: "optionNumber", label: "Option No.", required: true },
+      { name: "setupNo", label: "Setup No.", required: true },
+      { name: "numberOfSetups", label: "No. Of Setup", type: "number" },
+      { name: "setupName", label: "Setup Name" },
+      { name: "machineFamily", label: "Machine Family" },
+      { name: "machineType", label: "Machine Type" },
+      { name: "stageWeight", label: "Stage Weight Gram", type: "number", step: "0.01" },
     ],
   },
   {
     entryType: "cycle",
-    title: "Cycle time",
-    description: "Setup cycle and loading/unloading timings used by planning.",
+    title: "Cycle Time",
+    description: "Setup Cycle, Loading, Unloading, And Total Timings Used By Planning.",
     fields: [
-      { name: "partNo", label: "Part no.", required: true },
-      { name: "optionNumber", label: "Option no.", required: true },
-      { name: "setupNo", label: "Setup no.", required: true },
-      { name: "setupName", label: "Setup name" },
-      { name: "machineUsed", label: "Machine family" },
-      { name: "operationWeight", label: "Operation weight gram", type: "number", step: "0.01" },
-      { name: "cycleTime", label: "Cycle time sec", type: "number", step: "0.01", required: true },
-      { name: "loadingUnloading", label: "Loading/unloading sec", type: "number", step: "0.01", required: true },
+      { name: "partNo", label: "Part No.", required: true },
+      { name: "optionNumber", label: "Option No.", required: true },
+      { name: "setupNo", label: "Setup No.", required: true },
+      { name: "setupName", label: "Setup Name" },
+      { name: "cycleTime", label: "Cycle Time Sec", type: "number", step: "0.01", required: true },
+      { name: "loading", label: "Loading Sec", type: "number", step: "0.01", required: true },
+      { name: "unloading", label: "Unloading Sec", type: "number", step: "0.01", required: true },
+      { name: "totalTime", label: "Total Time Sec", type: "number", step: "0.01" },
     ],
   },
   {
     entryType: "tooling",
     title: "Tooling",
-    description: "Fixture, tooling, foam tool, and planning remarks.",
+    description: "Fixture, Tooling, Foam Tool, And Planning Remarks.",
     fields: [
-      { name: "partNo", label: "Part no.", required: true },
-      { name: "optionNumber", label: "Option no.", required: true },
-      { name: "setupNo", label: "Setup no.", required: true },
-      { name: "setupName", label: "Setup name" },
-      { name: "machineUsed", label: "Machine family" },
+      { name: "partNo", label: "Part No.", required: true },
+      { name: "optionNumber", label: "Option No.", required: true },
+      { name: "setupNo", label: "Setup No.", required: true },
+      { name: "setupName", label: "Setup Name" },
       { name: "fixture", label: "Fixture" },
-      { name: "fixtureQty", label: "Fixture qty", type: "number" },
+      { name: "fixtureQty", label: "Fixture Qty", type: "number" },
       { name: "tooling", label: "Tooling" },
-      { name: "toolingQty", label: "Tooling qty", type: "number" },
-      { name: "foamTool", label: "Foam tool" },
-      { name: "foamToolQty", label: "Foam qty", type: "number" },
+      { name: "toolingQty", label: "Tooling Qty", type: "number" },
+      { name: "foamTool", label: "Foam Tool" },
+      { name: "foamToolQty", label: "Foam Qty", type: "number" },
       { name: "remarks", label: "Remarks" },
     ],
   },
   {
     entryType: "work_order",
-    title: "Work order",
-    description: "JC, part, PO, RM inward, delivery, and priority metadata.",
+    title: "Work Order",
+    description: "Jc, Part, Po, And Order Quantities.",
     fields: [
-      { name: "jcNo", label: "JC no.", required: true },
-      { name: "partCode", label: "Part code", required: true },
-      { name: "fgPoNo", label: "FG PO no." },
-      { name: "rmPoNo", label: "RM PO no." },
-      { name: "poDate", label: "PO date", type: "date" },
-      { name: "orderPcs", label: "Order pcs", type: "number", required: true },
-      { name: "orderKg", label: "Order kg", type: "number", step: "0.01" },
-      { name: "numberOfSetups", label: "No. of setup", type: "number" },
-      { name: "optionNumber", label: "Selected option" },
-      { name: "rmInwardKg", label: "RM inward kg", type: "number", step: "0.01" },
-      { name: "rmInwardDate", label: "RM inward date", type: "date" },
-      { name: "deliveryDate", label: "Delivery date", type: "date" },
-      { name: "plannerPriority", label: "Priority", options: ["", "Urgent", "High", "Low"], defaultValue: "" },
-      { name: "description", label: "Description" },
-      { name: "deliveryRemark", label: "Remark" },
+      { name: "jcNo", label: "Jc No.", required: true },
+      { name: "partCode", label: "Part Code", required: true },
+      { name: "fgPoNo", label: "Fg Po No." },
+      { name: "rmPoNo", label: "Rm Po No." },
+      { name: "poDate", label: "Po Date", type: "date" },
+      { name: "orderPcs", label: "Order Pcs", type: "number", required: true },
+      { name: "orderKg", label: "Order Kg", type: "number", step: "0.01" },
     ],
   },
   {
     entryType: "rm_inward",
-    title: "RM inward",
-    description: "Raw-material inward status against job card.",
+    title: "Rm Inward",
+    description: "Raw-Material Inward Status Against Job Card.",
     fields: [
-      { name: "jcNo", label: "JC no.", required: true },
-      { name: "rmInwardDate", label: "RM inward date", type: "date", required: true },
-      { name: "rmInwardKg", label: "RM inward kg", type: "number", step: "0.01" },
-      { name: "status", label: "Status" },
-      { name: "remark", label: "Remark" },
-    ],
-  },
-  {
-    entryType: "employee",
-    title: "Employee master",
-    description: "Operator and shop-floor employee master data.",
-    fields: [
-      { name: "empId", label: "Emp ID", required: true },
-      { name: "employeeType", label: "Employee type" },
-      { name: "employeeName", label: "Employee name", required: true },
-      { name: "location", label: "Location" },
-      { name: "doj", label: "DOJ", type: "date" },
-      { name: "terminatedDate", label: "Terminated date", type: "date" },
-      { name: "status", label: "Status", options: ["Active", "Inactive", "Terminated"], defaultValue: "Active" },
+      { name: "jcNo", label: "Jc No.", required: true },
+      { name: "rmInwardDate", label: "Rm Inward Date", type: "date", required: true },
+      { name: "rmInwardKg", label: "Rm Inward Kg", type: "number", step: "0.01" },
     ],
   },
   {
     entryType: "machine_master",
-    title: "Machine master",
-    description: "Machine number, type, location, and active status used by planning and machine filters.",
+    title: "Machine Master",
+    description: "Machines For The Currently Selected Production Unit. Each Machine Is Kept Separate By Production Unit And Location.",
     fields: [
-      { name: "machineNo", label: "Machine no.", required: true },
-      { name: "machineType", label: "Machine type", required: true },
-      { name: "machineName", label: "Machine name" },
-      { name: "location", label: "Location" },
-      { name: "capacity", label: "Capacity", type: "number", step: "0.01" },
+      { name: "machineNo", label: "Machine No.", required: true },
+      { name: "productionFloorCode", label: "Production Unit", options: productionFloors.map((floor) => floor.code), required: true },
+      { name: "machineFamily", label: "Machine Family", required: true },
+      { name: "machineType", label: "Machine Type", required: true },
+      { name: "machineName", label: "Machine Name" },
+      { name: "location", label: "Machine Location Within Unit", required: true },
       { name: "status", label: "Status", options: ["Active", "Inactive", "Maintenance"], defaultValue: "Active" },
       { name: "remarks", label: "Remarks" },
     ],
   },
   {
     entryType: "maintenance_master",
-    title: "Maintenance schedule master",
-    description: "Reusable weekly, monthly, or custom maintenance schedules. Machine numbers are assigned later from Machine Master.",
+    title: "Maintenance Schedule Master",
+    description: "Reusable Weekly, Monthly, Or Custom Maintenance Schedules. Machine Numbers Are Assigned Later From Machine Master.",
     fields: [
-      { name: "maintenanceCode", label: "Maintenance code", required: true },
-      { name: "maintenanceTitle", label: "Maintenance schedule title", required: true },
-      { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
-      { name: "frequencyBasis", label: "Frequency basis", options: ["Calendar days", "Running days"], defaultValue: "Calendar days" },
-      { name: "checklistCode", label: "Checklist code" },
-      { name: "estimatedMinutes", label: "Estimated minutes", type: "number", min: "0" },
+      { name: "maintenanceCode", label: "Maintenance Code", required: true },
+      { name: "maintenanceTitle", label: "Maintenance Schedule Title", required: true },
+      { name: "frequencyDays", label: "Frequency Days", type: "number", min: "1", required: true },
+      { name: "frequencyBasis", label: "Frequency Basis", options: ["Calendar days", "Running days"], defaultValue: "Calendar days" },
+      { name: "checklistCode", label: "Checklist Code" },
+      { name: "estimatedMinutes", label: "Estimated Minutes", type: "number", min: "0" },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "maintenance_checklist_master",
-    title: "Maintenance checklist master",
-    description: "Reusable maintenance checklist steps assigned to machine maintenance schedules.",
+    title: "Maintenance Checklist",
+    description: "Reusable Maintenance Checklist Steps Assigned To Machine Maintenance Schedules.",
     fields: [
-      { name: "checklistCode", label: "Checklist code", required: true },
-      { name: "checklistTitle", label: "Checklist title", required: true },
-      { name: "sequence", label: "Step no.", type: "number", min: "1", required: true },
-      { name: "stepDescription", label: "Step description", required: true },
-      { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
+      { name: "checklistCode", label: "Checklist Code", required: true },
+      { name: "checklistTitle", label: "Checklist Title", required: true },
+      { name: "sequence", label: "Step No.", type: "number", min: "1", required: true },
+      { name: "stepDescription", label: "Step Description", required: true },
+      { name: "inputType", label: "Input Type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "planning_holiday",
-    title: "Planning holiday",
-    description: "Plant shutdown dates and vacation days that planning should skip.",
+    title: "Planning Holiday",
+    description: "Plant Shutdown Dates And Vacation Days That Planning Should Skip.",
     fields: [
-      { name: "date", label: "Holiday date", type: "date", required: true },
+      { name: "date", label: "Holiday Date", type: "date", required: true },
       { name: "reason", label: "Reason", options: ["Plant holiday", "Vacation", "Maintenance shutdown", "Other"], defaultValue: "Plant holiday" },
-      { name: "scope", label: "Scope", options: ["Plant", "Machine", "Department"], defaultValue: "Plant" },
-      { name: "machine", label: "Machine no." },
+      { name: "scope", label: "Scope", options: ["Factory", "Department"], defaultValue: "Factory" },
       { name: "department", label: "Department" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "setup_checklist_master",
-    title: "Setup checklist master",
-    description: "Versioned machinist checklist used from pre setting start through setting completion.",
+    title: "Setup Checklist",
+    description: "Coded Machinist Checklists Used From Pre Setting Start Through Setting Completion.",
     fields: [
-      { name: "version", label: "Version", required: true },
+      { name: "checklistCode", label: "Checklist Code", required: true, readOnly: true },
+      { name: "checklistTitle", label: "Checklist Title", required: true },
       { name: "sequence", label: "Sequence", type: "number", required: true },
-      { name: "checkPoint", label: "Check point", required: true },
-      { name: "inputType", label: "Input type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
+      { name: "checkPoint", label: "Check Point", required: true },
+      { name: "inputType", label: "Input Type", options: ["checkbox", "text", "number"], defaultValue: "checkbox" },
       { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
       { name: "section", label: "Section", defaultValue: "Pre setting / setting" },
-      { name: "effectiveFrom", label: "Effective from", type: "date" },
+      { name: "effectiveFrom", label: "Effective From", type: "date" },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "rejection_type_master",
-    title: "Rejection type master",
-    description: "Quality rejection type codes used in QC rejection entry.",
+    title: "Rejection Type Master",
+    description: "Quality Rejection Type Codes Used In Qc Rejection Entry.",
     fields: [
-      { name: "code", label: "Code", required: true },
-      { name: "typeOfRejection", label: "Type of rejection", required: true },
+      { name: "code", label: "Code", required: true, readOnly: true },
+      { name: "typeOfRejection", label: "Type Of Rejection", required: true },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "rejection_remark_master",
-    title: "Rejection remark master",
-    description: "Quality rejection remark codes used in QC rejection entry.",
+    title: "Rejection Remark Master",
+    description: "Quality Rejection Remark Codes Used In Qc Rejection Entry.",
     fields: [
-      { name: "code", label: "Code", required: true },
-      { name: "rejectionRemark", label: "Rejection remark", required: true },
+      { name: "code", label: "Code", required: true, readOnly: true },
+      { name: "rejectionRemark", label: "Rejection Remark", required: true },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "rejection_reason_master",
-    title: "Defect / downtime reason master",
-    description: "Shared defect and downtime reason codes used by QC rejection and downtime entries.",
+    title: "Defect / Downtime Reason Master",
+    description: "Shared Defect And Downtime Reason Codes Used By Qc Rejection And Downtime Entries.",
     fields: [
-      { name: "code", label: "Code", required: true },
-      { name: "rejectionReason", label: "Defect / downtime reason", required: true },
+      { name: "code", label: "Code", required: true, readOnly: true },
+      { name: "rejectionReason", label: "Defect / Downtime Reason", required: true },
       { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "quality_parameter_master",
-    title: "Quality inspection parameter master",
-    description: "Shared FPIR and hourly quality check parameters by item, option, and setup.",
+    title: "Quality Inspection Parameter Master",
+    description: "Shared Fpir And Hourly Quality Check Parameters By Item, Option, And Setup.",
     fields: [
-      { name: "partNo", label: "Part no.", required: true },
-      { name: "optionNumber", label: "Option no.", required: true },
-      { name: "setupNo", label: "Setup no.", required: true },
+      { name: "partNo", label: "Part No.", required: true },
+      { name: "optionNumber", label: "Option No.", required: true },
+      { name: "setupNo", label: "Setup No.", required: true },
       { name: "sequence", label: "Sequence", type: "number", min: "1" },
-      { name: "parameterName", label: "Parameter name", required: true },
+      { name: "parameterName", label: "Parameter Name", required: true },
       { name: "specification", label: "Specification", required: true },
-      { name: "instrumentUsed", label: "Instrument used" },
+      { name: "instrumentUsed", label: "Instrument Used" },
       { name: "tolerancePlus", label: "Tolerance +", type: "number", step: "0.001" },
       { name: "toleranceMinus", label: "Tolerance -", type: "number", step: "0.001" },
-      { name: "inputType", label: "Input type", options: ["number", "text", "pass_fail"], defaultValue: "number" },
+      { name: "inputType", label: "Input Type", options: ["number", "text", "pass_fail"], defaultValue: "number" },
       { name: "remark", label: "Remark" },
     ],
   },
   {
     entryType: "software_raw",
-    title: "Software production output",
-    description: "Daily production rows from the shop-floor software.",
+    title: "Software Production Output",
+    description: "Daily Production Rows From The Shop-Floor Software.",
     fields: [
-      { name: "prodDate", label: "Production date", type: "date", required: true },
-      { name: "operatorId", label: "Operator ID", required: true },
-      { name: "operatorName", label: "Operator name" },
-      { name: "machineType", label: "Machine type" },
-      { name: "machine", label: "Machine no.", required: true },
-      { name: "partCode", label: "Part code", required: true },
-      { name: "jobCard", label: "JC no." },
-      { name: "setupNo", label: "Setup no." },
-      { name: "outputQty", label: "Output qty", type: "number", required: true },
-      { name: "actualQty", label: "Actual qty", type: "number" },
-      { name: "targetQty", label: "Target qty", type: "number" },
-      { name: "rejectQty", label: "Reject qty", type: "number" },
-      { name: "rejectionType", label: "Rejection type" },
-      { name: "rejectionRemark", label: "Rejection remark" },
-      { name: "downtimeMinutes", label: "Downtime minutes", type: "number" },
-      { name: "downtimeReason", label: "Downtime reason" },
+      { name: "prodDate", label: "Production Date", type: "date", required: true },
+      { name: "operatorId", label: "Operator Id", required: true },
+      { name: "operatorName", label: "Operator Name" },
+      { name: "machineType", label: "Machine Type" },
+      { name: "machine", label: "Machine No.", required: true },
+      { name: "partCode", label: "Part Code", required: true },
+      { name: "jobCard", label: "Jc No." },
+      { name: "setupNo", label: "Setup No." },
+      { name: "outputQty", label: "Output Qty", type: "number", required: true },
+      { name: "actualQty", label: "Actual Qty", type: "number" },
+      { name: "targetQty", label: "Target Qty", type: "number" },
+      { name: "rejectQty", label: "Reject Qty", type: "number" },
+      { name: "rejectionType", label: "Rejection Type" },
+      { name: "rejectionRemark", label: "Rejection Remark" },
+      { name: "downtimeMinutes", label: "Downtime Minutes", type: "number" },
+      { name: "downtimeReason", label: "Downtime Reason" },
     ],
   },
 ];
-const masterTableEntryTypes = [
+const generalDataEntryTypes = [
   "route",
   "cycle",
   "tooling",
-  "employee",
-  "machine_master",
-  "maintenance_master",
-  "maintenance_checklist_master",
-  "planning_holiday",
-  "setup_checklist_master",
-  "rejection_type_master",
-  "rejection_remark_master",
-  "rejection_reason_master",
-  "quality_parameter_master",
+  "work_order",
+  "rm_inward",
+  "software_raw",
 ] as const;
 
-const masterTableRowSources: Record<string, string[]> = {
-  route: ["routeMasterRows", "routeRows"],
-  cycle: ["cycleMasterRows", "cycleRows"],
-  tooling: ["toolingMasterRows", "toolingRows"],
-  employee: ["employeeMasterRows", "employeeRows"],
-  machine_master: ["machinePlanningRows", "machineRows"],
-  maintenance_master: ["maintenanceMasterRows"],
-  maintenance_checklist_master: ["maintenanceChecklistMasterRows"],
-  planning_holiday: ["planningHolidayRows"],
-  setup_checklist_master: ["setupChecklistMasterRows"],
-  rejection_type_master: ["rejectionTypeMasterRows"],
-  rejection_remark_master: ["rejectionRemarkMasterRows"],
-  rejection_reason_master: ["rejectionReasonMasterRows"],
-  quality_parameter_master: ["qualityParameterMasterRows"],
-};
+const maintenanceMasterEntryTypes = ["maintenance_master"] as const;
+
+const universalDataEntryTypes = [
+  ...generalDataEntryTypes,
+  ...checklistWorkspaceEntryTypes,
+  ...maintenanceMasterEntryTypes,
+  ...qualityWorkspaceEntryTypes,
+] as const;
 
 function masterTableSpecs() {
-  const allowed = new Set<string>(masterTableEntryTypes);
+  const allowed = new Set<string>(productionMasterTableEntryTypes);
   return dataEntrySpecs.filter((spec) => allowed.has(spec.entryType));
 }
 const subscribeToHydration = () => () => {};
 const clientHydrationSnapshot = () => true;
 const serverHydrationSnapshot = () => false;
 
-function usePostgresDashboardPage(url: string | null, pollIntervalMs = 0) {
+function usePostgresOperationalPage(
+  url: string | null,
+  pollIntervalMs = 0,
+  onData?: (data: DashboardPayload) => void,
+  activePollIntervalMs = pollIntervalMs,
+  reloadKey = 0,
+) {
   const [result, setResult] = useState<{
     data?: DashboardPayload;
     error?: string;
     url: string;
   }>({ url: "" });
-
   useEffect(() => {
     if (!url) return;
     const controller = new AbortController();
     let nextLoad: number | undefined;
+    let loading = false;
     const load = async () => {
+      if (loading || document.visibilityState === "hidden") return;
+      loading = true;
+      let nextPollIntervalMs = pollIntervalMs;
       try {
         const response = await fetch(url, {
           cache: "no-store",
@@ -458,6 +489,10 @@ function usePostgresDashboardPage(url: string | null, pollIntervalMs = 0) {
           throw new Error(str(body.error) || "Dashboard data could not be loaded.");
         }
         setResult({ data: body, url });
+        onData?.(body);
+        if (asRecord(body.status).isRefreshing === true) {
+          nextPollIntervalMs = activePollIntervalMs;
+        }
       } catch (error: unknown) {
         if (controller.signal.aborted) return;
         setResult({
@@ -465,24 +500,45 @@ function usePostgresDashboardPage(url: string | null, pollIntervalMs = 0) {
           url,
         });
       } finally {
-        if (!controller.signal.aborted && pollIntervalMs > 0) {
-          nextLoad = window.setTimeout(load, pollIntervalMs);
+        loading = false;
+        const nextDelay = nextDashboardPollDelay(
+          nextPollIntervalMs,
+          document.visibilityState,
+        );
+        if (!controller.signal.aborted && nextDelay !== null) {
+          nextLoad = window.setTimeout(load, nextDelay);
         }
       }
     };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") {
+        if (nextLoad !== undefined) window.clearTimeout(nextLoad);
+        nextLoad = undefined;
+        return;
+      }
+      void load();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     void load();
     return () => {
       controller.abort();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (nextLoad !== undefined) window.clearTimeout(nextLoad);
     };
-  }, [pollIntervalMs, url]);
+  }, [activePollIntervalMs, onData, pollIntervalMs, reloadKey, url]);
 
   return result.url === url ? result : { url: url ?? "" };
 }
 
 async function savePostgresDashboardEntry(entryType: string, payload: DashboardPayload) {
+  const productionFloorCode = productionFloorFromLocation();
+  const normalizedPayload = normalizeUserEnteredPayload(payload);
   const response = await fetch("/api/data-entry", {
-    body: JSON.stringify({ entryType, payload }),
+    body: JSON.stringify({
+      entryType,
+      productionFloorCode,
+      payload: { ...normalizedPayload, productionFloorCode },
+    }),
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     method: "POST",
@@ -495,22 +551,147 @@ async function savePostgresDashboardEntry(entryType: string, payload: DashboardP
 }
 
 export function MrmplDashboard({
+  initialDashboardTab = "productionControlTab",
+  initialProductionFloor = defaultProductionFloorCode,
   navigationAccess,
   user,
 }: {
+  initialDashboardTab?: DashboardTabId;
+  initialProductionFloor?: ProductionFloorCode;
   navigationAccess: UnifiedNavigationAccess;
   user: { email: string; name: string };
 }) {
-  return <DashboardShell navigationAccess={navigationAccess} user={user} />;
+  return (
+    <DashboardShell
+      initialDashboardTab={initialDashboardTab}
+      initialProductionFloor={initialProductionFloor}
+      navigationAccess={navigationAccess}
+      user={user}
+    />
+  );
 }
 
 
-export function HourlyQualityCheckPage() {
-  return <HourlyQualityCheckShell />;
+export function HourlyQualityCheckPage({
+  productionFloorCode = defaultProductionFloorCode,
+}: {
+  productionFloorCode?: ProductionFloorCode;
+}) {
+  return (
+    <HourlyQualityCheckShell productionFloorCode={productionFloorCode} />
+  );
 }
 
-function HourlyQualityCheckShell() {
-  const hourlyQualityPage = usePostgresDashboardPage("/api/hourly-quality");
+export function FirstPieceInspectionPage({
+  productionFloorCode = defaultProductionFloorCode,
+}: {
+  productionFloorCode?: ProductionFloorCode;
+}) {
+  return <FirstPieceInspectionShell productionFloorCode={productionFloorCode} />;
+}
+
+function FirstPieceInspectionShell({
+  productionFloorCode,
+}: {
+  productionFloorCode: ProductionFloorCode;
+}) {
+  const { state: dashboardDeliveryState } = useDashboardDelivery({ floor: productionFloorCode });
+  const [storedTasks, setStoredTasks] = useState<DashboardPayload[]>([]);
+  const [completedTaskKeys, setCompletedTaskKeys] = useState<Set<string>>(() => new Set());
+  const [processingAction, setProcessingAction] = useState<string | null>(null);
+  const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
+  const dashboardPayload = dashboardPayloadFromState(dashboardDeliveryState.data ?? undefined);
+  const payload = useMemo(() => dashboardDeliveryState.data === null
+    ? ({} as DashboardPayload)
+    : dashboardPayloadForProductionFloor(dashboardPayload, productionFloorCode),
+  [dashboardDeliveryState.data, dashboardPayload, productionFloorCode]);
+  const productionControl = asRecord(payload.productionControl);
+  const liveTasks = useMemo(() => shopFloorQueueRows(productionControl)
+    .filter((row) => roleTaskMatches(row, "quality"))
+    .map((row) => row.next), [productionControl]);
+  const tasks = useMemo(() => mergeFirstPieceInspectionTasks(liveTasks, storedTasks)
+    .filter((task) => !completedTaskKeys.has(shopFloorPlanKey(task))),
+  [completedTaskKeys, liveTasks, storedTasks]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setStoredTasks(readStoredFirstPieceInspectionTasks()), 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  async function submitAction(path: string, body: Record<string, unknown>) {
+    const normalizedBody = normalizeUserEnteredPayload(body);
+    setProcessingAction(dashboardActionProcessingMessage(path, normalizedBody));
+    setActionStatus(null);
+    try {
+      const result = await postDashboardApi(path, normalizedBody);
+      setActionStatus({ tone: "default", message: result.message });
+    } catch (error) {
+      const actionError = error instanceof Error ? error : new Error("Inspection save failed.");
+      setActionStatus({ tone: "destructive", message: actionError.message });
+      throw actionError;
+    } finally {
+      setProcessingAction(null);
+    }
+  }
+
+  function completeTask(row: DashboardPayload) {
+    const taskKey = shopFloorPlanKey(row);
+    setCompletedTaskKeys((current) => new Set(current).add(taskKey));
+    setStoredTasks((current) => {
+      const remaining = current.filter((task) => shopFloorPlanKey(task) !== taskKey);
+      writeStoredFirstPieceInspectionTasks(remaining);
+      return remaining;
+    });
+  }
+
+  const isLoading = dashboardDeliveryState.data === null && dashboardDeliveryState.request !== "error";
+
+  return (
+    <section className="grid w-full min-w-0 gap-4 text-foreground">
+      <div className="grid gap-3 @3xl/main:grid-cols-[minmax(0,1fr)_auto] @3xl/main:items-start">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold">First Piece Inspection</h1>
+          <p className="text-sm text-muted-foreground">Select A Pending Setup, Enter Five Readings, Then Approve It.</p>
+        </div>
+        <Button className="w-full @3xl/main:w-auto" type="button" variant="outline" onClick={() => window.location.assign(dashboardTabHref("qualityControlTasksTab", productionFloorCode))}>
+          <LayoutDashboard className="size-4" />
+          Quality Control
+        </Button>
+      </div>
+
+      <div className="grid gap-3 @2xl/main:grid-cols-2 @5xl/main:grid-cols-3">
+        <MetricCard label="Pending Reports" value={formatNumber(tasks.length)} />
+        <MetricCard label="Inspection Parameters" value={formatNumber(combinedQualityInspectionMasterRows(productionControl).length)} />
+        <MetricCard label="Required Readings" value="5 Per Dimension" />
+      </div>
+
+      {processingAction ? <ProcessingNotice message={processingAction} /> : null}
+      {actionStatus ? <AlertMessage tone={actionStatus.tone}>{actionStatus.message}</AlertMessage> : null}
+      {isLoading ? <Skeleton className="h-64 w-full" /> : null}
+      {dashboardDeliveryState.request === "error" ? (
+        <AlertMessage tone="destructive">Live Inspection Tasks Could Not Be Loaded. Refresh And Try Again.</AlertMessage>
+      ) : null}
+      {!isLoading ? (
+        <FirstPieceInspectionPanel
+          tasks={tasks}
+          productionControl={productionControl}
+          submitAction={submitAction}
+          openDataEntry={() => window.location.assign(dashboardTabHref("qualityMastersTab", productionFloorCode))}
+          onTaskComplete={completeTask}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function HourlyQualityCheckShell({
+  productionFloorCode,
+}: {
+  productionFloorCode: ProductionFloorCode;
+}) {
+  const hourlyQualityPage = usePostgresOperationalPage(
+    `/api/hourly-quality?floor=${encodeURIComponent(productionFloorCode)}`,
+  );
   const hourlyQualityPageData = hourlyQualityPage.data;
   const [prodDate, setProdDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [shift, setShift] = useState("Day");
@@ -534,8 +715,10 @@ function HourlyQualityCheckShell() {
     [qualityParameterRows, selectedRow],
   );
   const selectedCheckKey = selectedRow ? hourlyQualityCheckId(selectedRow, prodDate, shift, hourSlot) : "";
-  const existingCheckPage = usePostgresDashboardPage(
-    selectedCheckKey ? `/api/hourly-quality?checkKey=${encodeURIComponent(selectedCheckKey)}` : null,
+  const existingCheckPage = usePostgresOperationalPage(
+    selectedCheckKey
+      ? `/api/hourly-quality?checkKey=${encodeURIComponent(selectedCheckKey)}&floor=${encodeURIComponent(productionFloorCode)}`
+      : null,
   );
   const existingCheck = selectedCheckKey
     ? existingCheckPage.data?.existingCheck as DashboardPayload | null | undefined
@@ -589,45 +772,47 @@ function HourlyQualityCheckShell() {
   }));
 
   return (
-    <main className="min-h-screen bg-background p-4 text-foreground md:p-6">
-      <div className="mx-auto grid max-w-7xl gap-4">
+    <section className="grid w-full gap-4 text-foreground">
+      <div className="mx-auto grid w-full max-w-7xl gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold">Hourly quality check</h1>
-            <p className="text-sm text-muted-foreground">Select the running machine, then record the hourly inspection against the active item, option, and setup.</p>
+            <h1 className="text-2xl font-semibold">Hourly Quality Check</h1>
+            <p className="text-sm text-muted-foreground">Select The Running Machine, Then Record The Hourly Inspection Against The Active Item, Option, And Setup.</p>
           </div>
           <Button type="button" variant="outline" onClick={() => { window.location.assign(dashboardReturnHref("qualityControlTasksTab")); }}>
             <LayoutDashboard className="size-4" />
             Quality Control
           </Button>
         </div>
+        {isSaving ? <ProcessingNotice message="Saving hourly quality check..." /> : null}
+        <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
         <Card>
           <CardContent className="grid gap-3 pt-4 md:grid-cols-5">
             <LabeledInput label="Date" value={prodDate} onChange={setProdDate} type="date" />
             <LabeledSelect label="Shift" value={shift} onChange={setShift} options={["Day", "Night"]} />
-            <LabeledSelect label="Machine no." value={selectedKey} onChange={setSelectedKey} options={runningRows.map((row) => ({ value: shopFloorPlanKey(row), label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}` }))} placeholder="Select machine" />
-            <LabeledSelect label="Hour slot" value={hourSlot} onChange={setHourSlot} options={hourSlotOptions()} />
-            <label className="grid gap-1 text-xs font-medium text-muted-foreground">Checked by<Input value={performerDisplay || "Loading user..."} readOnly /></label>
+            <LabeledSelect label="Machine No." value={selectedKey} onChange={setSelectedKey} options={runningRows.map((row) => ({ value: shopFloorPlanKey(row), label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}` }))} placeholder="Select Machine" />
+            <LabeledSelect label="Hour Slot" value={hourSlot} onChange={setHourSlot} options={hourSlotOptions()} />
+            <label className="grid gap-1 text-xs font-medium text-muted-foreground">Checked By<Input value={performerDisplay || "Loading user..."} readOnly /></label>
           </CardContent>
         </Card>
         {selectedRow ? (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">{displayValue(selectedRow.machine)} running details</CardTitle>
+              <CardTitle className="text-base">{displayValue(selectedRow.machine)} Running Details</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2 text-sm md:grid-cols-5">
-              <TileField label="Item code" value={itemCode(selectedRow)} />
-              <TileField label="JC no." value={jobCardNumber(selectedRow)} />
+              <TileField label="Item Code" value={itemCode(selectedRow)} />
+              <TileField label="Jc No." value={jobCardNumber(selectedRow)} />
               <TileField label="Option" value={selectedRow.optionNumber} />
-              <TileField label="Setup no." value={selectedRow.setupNo} />
-              <TileField label="Setup name" value={selectedRow.setupName} />
+              <TileField label="Setup No." value={selectedRow.setupNo} />
+              <TileField label="Setup Name" value={selectedRow.setupName} />
             </CardContent>
           </Card>
         ) : null}
         <Card>
           <CardHeader>
-            <CardTitle>Inspection readings</CardTitle>
-            <CardDescription>{existingCheck ? "Existing hourly card loaded for editing." : "Readings are saved against the selected date, shift, hour, machine, item, and setup."}</CardDescription>
+            <CardTitle>Inspection Readings</CardTitle>
+            <CardDescription>{existingCheck ? "Existing Hourly Card Loaded For Editing." : "Readings Are Saved Against The Selected Date, Shift, Hour, Machine, Item, And Setup."}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             {selectedRow && existingCheck === undefined && selectedCheckKey ? (
@@ -642,7 +827,7 @@ function HourlyQualityCheckShell() {
                       <TableHead className="min-w-36">Specification</TableHead>
                       <TableHead className="min-w-32">Tolerance</TableHead>
                       <TableHead className="min-w-40">Instrument</TableHead>
-                      <TableHead className="min-w-44">Actual reading</TableHead>
+                      <TableHead className="min-w-44">Actual Reading</TableHead>
                       <TableHead className="min-w-24">Result</TableHead>
                       <TableHead className="min-w-56">Remark</TableHead>
                     </TableRow>
@@ -662,11 +847,11 @@ function HourlyQualityCheckShell() {
                           <TableCell>{displayValue(parameter.instrumentUsed)}</TableCell>
                           <TableCell>
                             {qualityParameterInputType(parameter) === "pass_fail" ? (
-                              <select className={`h-9 w-full rounded-md border bg-background px-3 text-sm ${readingClass}`} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))}>
+                              <SearchableSelect className={`h-9 w-full rounded-md border bg-background px-3 text-sm ${readingClass}`} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))}>
                                 <option value="">Select</option>
-                                <option value="OK">OK</option>
-                                <option value="Not OK">Not OK</option>
-                              </select>
+                                <option value="OK">Ok</option>
+                                <option value="Not OK">Not Ok</option>
+                              </SearchableSelect>
                             ) : (
                               <Input className={readingClass} value={readings[code] ?? ""} onChange={(event) => setReadings((current) => ({ ...current, [code]: event.target.value }))} type={qualityParameterInputType(parameter) === "number" ? "number" : "text"} step="0.001" />
                             )}
@@ -680,9 +865,9 @@ function HourlyQualityCheckShell() {
                 </Table>
               </div>
             ) : selectedRow ? (
-              <EmptyRowsMessage>No active quality parameter master rows match this item, option, and setup.</EmptyRowsMessage>
+              <EmptyRowsMessage>No Active Quality Parameter Master Rows Match This Item, Option, And Setup.</EmptyRowsMessage>
             ) : (
-              <EmptyRowsMessage>Select a machine to start the hourly check.</EmptyRowsMessage>
+              <EmptyRowsMessage>Select A Machine To Start The Hourly Check.</EmptyRowsMessage>
             )}
             {hourlyQualityPage.error || existingCheckPage.error ? (
               <AlertMessage tone="destructive">{hourlyQualityPage.error || existingCheckPage.error}</AlertMessage>
@@ -691,19 +876,24 @@ function HourlyQualityCheckShell() {
             <div className="flex justify-end">
               <Button type="button" disabled={!canSave || isSaving} onClick={saveHourlyCheck}>
                 <CheckCircle2 className="size-4" />
-                {isSaving ? "Saving" : "Save hourly check"}
+                {isSaving ? "Saving" : "Save Hourly Check"}
               </Button>
             </div>
           </CardContent>
         </Card>
+        </fieldset>
       </div>
-    </main>
+    </section>
   );
 }
 
 
-export function SetupChecklistPage() {
-  return <SetupChecklistShell />;
+export function SetupChecklistPage({
+  productionFloorCode = defaultProductionFloorCode,
+}: {
+  productionFloorCode?: ProductionFloorCode;
+}) {
+  return <SetupChecklistShell productionFloorCode={productionFloorCode} />;
 }
 
 function setupChecklistQueryFromLocation() {
@@ -726,11 +916,17 @@ function setupChecklistQueryFromLocation() {
   };
 }
 
-function SetupChecklistShell() {
+function SetupChecklistShell({
+  productionFloorCode,
+}: {
+  productionFloorCode: ProductionFloorCode;
+}) {
   const isClientHydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
   const { sessionId, phase, row } = isClientHydrated ? setupChecklistQueryFromLocation() : { sessionId: "", phase: "", row: {} as DashboardPayload };
-  const checklistPage = usePostgresDashboardPage(
-    sessionId ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}` : null,
+  const checklistPage = usePostgresOperationalPage(
+    sessionId
+      ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}&floor=${encodeURIComponent(productionFloorCode)}`
+      : null,
   );
   const checklistPageData = checklistPage.data;
   const [localChecklistSession, setLocalChecklistSession] = useState<DashboardPayload | undefined>(undefined);
@@ -814,36 +1010,38 @@ function SetupChecklistShell() {
   }
 
   return (
-    <main className="min-h-screen bg-background p-4 text-foreground md:p-6">
-      <div className="mx-auto grid max-w-6xl gap-4">
+    <section className="grid w-full gap-4 text-foreground">
+      <div className="mx-auto grid w-full max-w-6xl gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold">Setup checklist</h1>
-            <p className="text-sm text-muted-foreground">Save pre setting and setting checklist progress outside the machinist task list.</p>
+            <h1 className="text-2xl font-semibold">Setup Checklist</h1>
+            <p className="text-sm text-muted-foreground">Save Pre Setting And Setting Checklist Progress Outside The Machinist Task List.</p>
           </div>
           <Button type="button" variant="outline" onClick={() => { window.location.assign(dashboardReturnHref("machinistTasksTab")); }}>
             <LayoutDashboard className="size-4" />
             Machinist
           </Button>
         </div>
+        {isSaving ? <ProcessingNotice message="Saving checklist progress..." /> : null}
+        <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
         {sessionId ? (
           <>
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">{phase === "end" ? "Setting completion" : "Pre setting start"}</CardTitle>
-                <CardDescription>Running setup details</CardDescription>
+                <CardTitle className="text-base">{phase === "end" ? "Setting Completion" : "Pre Setting Start"}</CardTitle>
+                <CardDescription>Running Setup Details</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3">
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-                  <TileField label="Item code" value={itemCode(row)} />
-                  <TileField label="JC no." value={jobCardNumber(row)} />
+                  <TileField label="Item Code" value={itemCode(row)} />
+                  <TileField label="Jc No." value={jobCardNumber(row)} />
                   <TileField label="Option" value={row.optionNumber} />
-                  <TileField label="Setup no." value={row.setupNo} />
+                  <TileField label="Setup No." value={row.setupNo} />
                   <TileField label="Machine" value={row.machine} />
                   <TileField label="Phase" value={phase === "end" ? "Completion" : "Start"} />
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <LabeledInput label={phase === "end" ? "Completed by" : "Started by"} value={doneBy} onChange={setDoneBy} />
+                  <LabeledInput label={phase === "end" ? "Completed By" : "Started By"} value={doneBy} onChange={setDoneBy} />
                   <LabeledInput label="Remark" value={remark} onChange={setRemark} />
                 </div>
               </CardContent>
@@ -866,30 +1064,38 @@ function SetupChecklistShell() {
               <StatusBadge value={isComplete ? "Checklist complete" : "Progress can be saved"} />
               <Button type="button" disabled={!canSave || isSaving} onClick={() => void saveProgress()}>
                 <CheckCircle2 className="size-4" />
-                {isSaving ? "Saving" : "Save checklist progress"}
+                {isSaving ? "Saving" : "Save Checklist Progress"}
               </Button>
             </div>
           </>
         ) : (
           <Card>
             <CardContent className="pt-6">
-              <EmptyRowsMessage>Checklist setup was not found. Open this page from a machinist task row.</EmptyRowsMessage>
+              <EmptyRowsMessage>Checklist Setup Was Not Found. Open This Page From A Machinist Task Row.</EmptyRowsMessage>
             </CardContent>
           </Card>
         )}
+        </fieldset>
       </div>
-    </main>
+    </section>
   );
 }
 
 function DashboardShell({
+  initialDashboardTab,
+  initialProductionFloor,
   navigationAccess,
   user,
 }: {
+  initialDashboardTab: DashboardTabId;
+  initialProductionFloor: ProductionFloorCode;
   navigationAccess: UnifiedNavigationAccess;
   user: { email: string; name: string };
 }) {
-  const [activeTab, setActiveTab] = useState<DashboardTabId>(() => initialDashboardTabFromLocation());
+  const [activeTab, setActiveTab] = useState<DashboardTabId>(initialDashboardTab);
+  const [activeProductionFloor] = useState<ProductionFloorCode>(
+    initialProductionFloor,
+  );
   const [preferredDataEntryType, setPreferredDataEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
   const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
@@ -899,20 +1105,50 @@ function DashboardShell({
   const [planningRefreshLock, setPlanningRefreshLock] = useState<PlanningRefreshLock | null>(null);
   const lastStalePlanningRefreshKeyRef = useRef<string | undefined>(undefined);
   const lastSnapshotUpdatedAtRef = useRef<string | undefined>(undefined);
+  const actionInFlightRef = useRef(false);
   const [actionStatus, setActionStatus] = useState<ActionStatus>(null);
+  const [processingAction, setProcessingAction] = useState<string | null>(null);
   const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState(false);
-  const dashboardPage = usePostgresDashboardPage("/api/dashboard", 5_000);
-  const dashboardStatusPage = usePostgresDashboardPage("/api/dashboard-refresh-status", 2_000);
-  const correctionCandidatesPage = usePostgresDashboardPage(
+  const [dashboardReloadKey, setDashboardReloadKey] = useState(0);
+  const handleDashboardStateData = useCallback((state: DashboardPayload) => {
+    const status = asRecord(state.status);
+    setPlanningRefreshLock((current) =>
+      current && refreshLockHasSettled(current, status) ? null : current,
+    );
+  }, []);
+  const {
+    refreshFailed: markDashboardRefreshFailed,
+    refreshRequested: markDashboardRefreshRequested,
+    retry: retryDashboardDelivery,
+    state: dashboardDeliveryState,
+  } = useDashboardDelivery({
+    floor: activeProductionFloor,
+    onData: handleDashboardStateData,
+  });
+  const correctionCandidatesPage = usePostgresOperationalPage(
     activeTab === "correctionsTab" ? "/api/correction-candidates?limit=200" : null,
     5_000,
+    undefined,
+    5_000,
+    dashboardReloadKey,
   );
-  const dashboardPayload = dashboardPage.data;
-  const dashboardRefreshStatus = dashboardStatusPage.data;
+  const dashboardPayload = dashboardPayloadFromState(dashboardDeliveryState.data ?? undefined);
+  const dashboardRefreshStatus = dashboardRefreshStatusFromState(
+    dashboardDeliveryState.data ?? undefined,
+  );
   const correctionCandidates = asArray(correctionCandidatesPage.data?.rows);
   const isPlanningRefreshLockActive = planningRefreshLock
     ? !refreshLockHasSettled(planningRefreshLock, dashboardRefreshStatus)
     : false;
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setFirstPieceInspectionTasks((currentTasks) =>
+        mergeFirstPieceInspectionTasks(readStoredFirstPieceInspectionTasks(), currentTasks)
+      );
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   useEffect(() => {
     const dashboardRecord = asRecord(dashboardPayload);
@@ -921,8 +1157,16 @@ function DashboardShell({
     const staleRefreshKey = stalePlanningRefreshKey(dashboardRecord);
     if (lastStalePlanningRefreshKeyRef.current === staleRefreshKey) return;
     lastStalePlanningRefreshKeyRef.current = staleRefreshKey;
-    void postDashboardApi("dashboard-refresh", {});
-  }, [dashboardPayload, dashboardRefreshStatus?.isRefreshing, isPlanningRefreshLockActive]);
+    void postDashboardApi("dashboard-refresh", {})
+      .then(() => markDashboardRefreshRequested())
+      .catch((error: unknown) =>
+        markDashboardRefreshFailed(
+          error instanceof Error
+            ? error.message
+            : "Planning recalculation could not be queued.",
+        ),
+      );
+  }, [dashboardPayload, dashboardRefreshStatus?.isRefreshing, isPlanningRefreshLockActive, markDashboardRefreshFailed, markDashboardRefreshRequested]);
 
   async function refreshDashboardSnapshot(force = true) {
     setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus));
@@ -930,6 +1174,8 @@ function DashboardShell({
     setActionStatus(null);
     try {
       const result = await postDashboardApi("dashboard-refresh", { force });
+      setDashboardReloadKey((current) => current + 1);
+      markDashboardRefreshRequested();
       setActionStatus({
         tone: "default",
         message: result.queued
@@ -946,6 +1192,9 @@ function DashboardShell({
       if (result.skipped) setPlanningRefreshLock(null);
     } catch (err) {
       setPlanningRefreshLock(null);
+      markDashboardRefreshFailed(
+        err instanceof Error ? err.message : "Snapshot refresh failed.",
+      );
       setActionStatus({
         tone: "destructive",
         message: err instanceof Error ? err.message : "Snapshot refresh failed.",
@@ -955,48 +1204,65 @@ function DashboardShell({
     }
   }
 
-  async function submitAction(path: string, body: Record<string, unknown>) {
+  async function submitAction(
+    path: string,
+    body: Record<string, unknown>,
+    options: { throwOnError?: boolean } = {},
+  ) {
+    if (actionInFlightRef.current) return;
+    const normalizedBody = normalizeUserEnteredPayload(body);
+    actionInFlightRef.current = true;
+    setProcessingAction(dashboardActionProcessingMessage(path, normalizedBody));
     setActionStatus(null);
-    const queuePlanningRefresh = shouldQueuePlanningRefresh(path, body);
+    const queuePlanningRefresh = shouldQueuePlanningRefresh(path, normalizedBody);
     if (queuePlanningRefresh) {
       setPlanningRefreshLock(refreshLockFromStatus(dashboardRefreshStatus));
     }
     try {
-      const apiResult = await postDashboardApi(path, body);
+      const apiResult = await postDashboardApi(path, normalizedBody);
       const message = apiResult.message;
-      const shopFloorPatch = shopFloorStatusPatchFromAction(path, body);
+      const shopFloorPatch = shopFloorStatusPatchFromAction(path, normalizedBody);
       if (shopFloorPatch) {
         setOptimisticShopFloorStatuses((current) => upsertShopFloorStatusPatch(current, shopFloorPatch));
       }
-      const setupChecklistSessionPatch = setupChecklistSessionPatchFromAction(path, body);
+      const setupChecklistSessionPatch = setupChecklistSessionPatchFromAction(path, normalizedBody);
       if (setupChecklistSessionPatch) {
         setOptimisticSetupChecklistSessions((current) => upsertSetupChecklistSessionPatch(current, setupChecklistSessionPatch));
       }
-      const productionCardPatch = productionCardPatchFromAction(path, body);
+      const productionCardPatch = productionCardPatchFromAction(path, normalizedBody);
       if (productionCardPatch) {
         setOptimisticProductionCards((current) => upsertProductionCardPatch(current, productionCardPatch));
       }
       setActionStatus({
         tone: "default",
-        message: `${message} ${planningRefreshStatusMessage(queuePlanningRefresh, path, body)}`,
+        message: `${message} ${planningRefreshStatusMessage(queuePlanningRefresh, path, normalizedBody)}`,
       });
-      const returnTab = str(body.returnTab) as DashboardTabId;
+      if (queuePlanningRefresh) markDashboardRefreshRequested();
+      const returnTab = str(normalizedBody.returnTab) as DashboardTabId;
       if (returnTab && navItems.some((item) => item.id === returnTab)) {
         setActiveTab(returnTab);
       }
     } catch (err) {
       if (queuePlanningRefresh) setPlanningRefreshLock(null);
+      const actionError = err instanceof Error ? err : new Error("Action failed.");
       setActionStatus({
         tone: "destructive",
-        message: err instanceof Error ? err.message : "Action failed.",
+        message: actionError.message,
       });
+      if (options.throwOnError) throw actionError;
+    } finally {
+      actionInFlightRef.current = false;
+      setProcessingAction(null);
     }
   }
 
   function openDataEntry(entryType: string, defaults: Record<string, unknown> = {}) {
     setPreferredDataEntryType(entryType);
-    setPreferredDataEntryDefaults(defaults);
-    setActiveTab("dataEntryTab");
+    setPreferredDataEntryDefaults({
+      productionFloorCode: activeProductionFloor,
+      ...defaults,
+    });
+    setActiveTab(dataEntryDestination(entryType));
   }
 
   function openMasterReadiness() {
@@ -1004,23 +1270,67 @@ function DashboardShell({
   }
 
   function openFirstPieceInspection(row: DashboardPayload) {
+    const scopedRow = {
+      ...row,
+      productionFloorCode: activeProductionFloor,
+    };
     setFirstPieceInspectionTasks((openTasks) => {
-      const key = shopFloorPlanKey(row);
+      const key = shopFloorPlanKey(scopedRow);
       if (openTasks.some((task) => shopFloorPlanKey(task) === key)) return openTasks;
-      return [...openTasks, row];
+      const nextTasks = [...openTasks, scopedRow];
+      writeStoredFirstPieceInspectionTasks(nextTasks);
+      return nextTasks;
     });
-    setActiveTab("firstPieceInspectionTab");
+    window.location.assign(`/dashboard/first-piece-inspection?${new URLSearchParams({ floor: activeProductionFloor }).toString()}`);
+  }
+
+  function selectDashboardDestination(
+    tab: DashboardTabId,
+    productionFloorCode: ProductionFloorCode,
+  ) {
+    if (tab === "machineMasterTab" || tab === "correctionsTab" || tab === "productionDashboardTab") {
+      setActiveTab(tab);
+      window.history.replaceState({}, "", dashboardTabHref(tab));
+      return;
+    }
+    if (tab === "firstPieceInspectionTab") {
+      window.location.assign(`/dashboard/first-piece-inspection?${new URLSearchParams({ floor: productionFloorCode }).toString()}`);
+      return;
+    }
+    if (productionFloorCode !== activeProductionFloor) {
+      window.location.assign(dashboardTabHref(tab, productionFloorCode));
+      return;
+    }
+    setActiveTab(tab);
+    window.history.replaceState(
+      {},
+      "",
+      dashboardTabHref(tab, productionFloorCode),
+    );
   }
 
   function closeFirstPieceInspection(row: DashboardPayload) {
     const key = shopFloorPlanKey(row);
-    setFirstPieceInspectionTasks((openTasks) => openTasks.filter((task) => shopFloorPlanKey(task) !== key));
+    setFirstPieceInspectionTasks((openTasks) => {
+      const nextTasks = openTasks.filter((task) => shopFloorPlanKey(task) !== key);
+      writeStoredFirstPieceInspectionTasks(nextTasks);
+      return nextTasks;
+    });
   }
 
-  const isDashboardLoading = dashboardPayload === undefined;
+  const hasDashboardData = dashboardDeliveryState.data !== null;
+  const isDashboardLoading = !hasDashboardData && dashboardDeliveryState.request !== "error";
+  const isDashboardUnavailable = !hasDashboardData && dashboardDeliveryState.request === "error";
   const basePayload = useMemo(
-    () => (isDashboardLoading ? {} : asRecord(dashboardPayload)),
-    [dashboardPayload, isDashboardLoading],
+    () => (
+      !hasDashboardData
+        ? ({} as DashboardPayload)
+        : dashboardPayloadForProductionFloor(
+            dashboardPayload,
+            activeProductionFloor,
+          )
+    ),
+    [activeProductionFloor, dashboardPayload, hasDashboardData],
   );
   const snapshotUpdatedAt = str(basePayload.updatedAt);
   const planningRecalculatedAt = str(basePayload.snapshotCacheUpdatedAt)
@@ -1038,7 +1348,20 @@ function DashboardShell({
     [basePayload, optimisticShopFloorStatuses, optimisticSetupChecklistSessions, optimisticProductionCards],
   );
   const selectedTab = navItems.find((item) => item.id === activeTab) ?? navItems[0]!;
+  const selectedProductionFloor = productionFloors.find(
+    (floor) => floor.code === activeProductionFloor,
+  ) ?? productionFloors[0];
+  const isAllProductionUnitsTab = activeTab === "machineMasterTab" || activeTab === "productionDashboardTab";
   const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
+  const dashboardStatusLabel = dashboardConnectionLabel(dashboardDeliveryState);
+  const dashboardStatusNotice = dashboardDeliveryNotice(dashboardDeliveryState);
+  const dashboardPartialCoverageNotice =
+    activeTab === "masterTablesTab"
+      ? null
+      : dashboardCoverageNotice(
+          dashboardDeliveryState.data,
+          selectedProductionFloor.shortLabel,
+        );
 
   const view = useMemo(
     () => toDashboardViewModel(payload),
@@ -1054,12 +1377,15 @@ function DashboardShell({
         } as React.CSSProperties
       }
     >
-      <Sidebar variant="inset">
-        <SidebarHeader>
-          <Link className="flex items-center px-2 py-2" href="/">
+      <Sidebar variant="sidebar">
+        <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
+          <Link
+            className="flex items-center px-2 py-2"
+            href={dashboardTabHref("productionControlTab", activeProductionFloor)}
+          >
             <Image
               src="/mrm-green.svg"
-              alt="MRMPL"
+              alt="Mrmpl"
               width={792}
               height={176}
               priority
@@ -1070,14 +1396,20 @@ function DashboardShell({
         <SidebarContent>
           <UnifiedSidebarNavigation
             activeDashboardTab={activeTab}
+            activeProductionFloor={activeProductionFloor}
             navigationAccess={navigationAccess}
-            onDashboardTabSelect={setActiveTab}
+            onDashboardTabSelect={selectDashboardDestination}
           />
         </SidebarContent>
-        <SidebarFooter>
-          <div className="grid gap-0.5 px-2 py-2">
-            <span className="truncate text-sm font-medium">{user.name}</span>
-            <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+        <SidebarFooter className="border-t border-sidebar-border p-3">
+          <div className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/12 text-sm font-semibold text-sidebar-primary">
+              {(user.name || user.email).trim().charAt(0).toUpperCase()}
+            </span>
+            <span className="grid min-w-0 flex-1 gap-0.5">
+              <span className="truncate text-sm font-semibold">{user.name}</span>
+              <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+            </span>
           </div>
         </SidebarFooter>
         <SidebarRail />
@@ -1087,68 +1419,90 @@ function DashboardShell({
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-5" />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-semibold">{selectedTab.title}</h1>
+           <h1 className="truncate text-base font-semibold">{selectedTab.title}</h1>
             <p className="truncate text-xs text-muted-foreground">
-              <span>{planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live workbook snapshot"}</span>
-              {planningRecalculatedAt && view.updatedAt ? <span> - Workbook updated {formatDate(view.updatedAt)}</span> : null}
+              <span>{isAllProductionUnitsTab ? "All Production Units" : `${selectedProductionFloor.label} · ${planningRecalculatedAt ? `Planning recalculated ${formatDate(planningRecalculatedAt)}` : view.updatedAt ? `Workbook updated ${formatDate(view.updatedAt)}` : "Live Postgresql Records"}`}</span>
+              {planningRecalculatedAt && view.updatedAt ? <span> - Workbook Updated {formatDate(view.updatedAt)}</span> : null}
             </p>
           </div>
+          {isAllProductionUnitsTab ? null : <Badge className="hidden sm:inline-flex" variant="outline">
+            {selectedProductionFloor.shortLabel}
+          </Badge>}
           <Badge variant="outline">
-            {isDashboardLoading ? "Loading" : "Connected"}
+            {dashboardStatusLabel}
           </Badge>
           <HeaderActions
+            canRefreshSnapshot={hasDashboardData}
             isRefreshingSnapshot={isSnapshotRefreshActive}
             onRefreshSnapshot={() => void refreshDashboardSnapshot(true)}
           />
         </header>
         <main className="@container/main flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
-          {actionStatus ? (
+          {processingAction ? (
+            <ProcessingNotice message={processingAction} />
+          ) : actionStatus ? (
             <Badge variant={actionStatus.tone === "destructive" ? "destructive" : "outline"} className="w-fit">
               {actionStatus.message}
             </Badge>
           ) : null}
-          {isDashboardLoading ? (
+          {dashboardStatusNotice || dashboardPartialCoverageNotice ? (
+            <div
+              className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/35 px-3 py-2 text-sm"
+              role="status"
+              aria-atomic="true"
+              aria-live="polite"
+            >
+              <div className="min-w-0 flex-1 space-y-1">
+                {dashboardStatusNotice ? <p>{dashboardStatusNotice}</p> : null}
+                {dashboardPartialCoverageNotice ? (
+                  <p className="text-muted-foreground">{dashboardPartialCoverageNotice}</p>
+                ) : null}
+              </div>
+              {dashboardDeliveryState.lastError ? (
+                <Button type="button" variant="outline" size="sm" onClick={retryDashboardDelivery}>
+                  Retry
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {isDashboardUnavailable ? (
+            <Card className="max-w-xl">
+              <CardHeader>
+                <CardTitle>Dashboard Unavailable</CardTitle>
+                <CardDescription>
+                  {dashboardDeliveryState.lastError ?? "Dashboard data could not be loaded."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button type="button" onClick={retryDashboardDelivery}>
+                  Retry Dashboard Load
+                </Button>
+              </CardContent>
+            </Card>
+          ) : isDashboardLoading ? (
             <DashboardSkeleton />
           ) : (
-            <DashboardContent
-              activeTab={activeTab}
-              payload={payload}
-              submitAction={submitAction}
-              correctionCandidates={correctionCandidates}
-              openDataEntry={openDataEntry}
-              openMasterReadiness={openMasterReadiness}
-              openFirstPieceInspection={openFirstPieceInspection}
-              closeFirstPieceInspection={closeFirstPieceInspection}
-              firstPieceInspectionTasks={firstPieceInspectionTasks}
-              preferredDataEntryType={preferredDataEntryType}
-              preferredDataEntryDefaults={preferredDataEntryDefaults}
-            />
+            <fieldset aria-busy={Boolean(processingAction)} className="contents" disabled={Boolean(processingAction)}>
+              <DashboardContent
+                activeTab={activeTab}
+                payload={payload}
+                submitAction={submitAction}
+                correctionCandidates={correctionCandidates}
+                openDataEntry={openDataEntry}
+                openMasterReadiness={openMasterReadiness}
+                openFirstPieceInspection={openFirstPieceInspection}
+                closeFirstPieceInspection={closeFirstPieceInspection}
+                firstPieceInspectionTasks={firstPieceInspectionTasks}
+                preferredDataEntryType={preferredDataEntryType}
+                preferredDataEntryDefaults={preferredDataEntryDefaults}
+                productionFloorCode={activeProductionFloor}
+                onProductionFloorChange={(floorCode) => selectDashboardDestination(activeTab, floorCode)}
+              />
+            </fieldset>
           )}
         </main>
       </SidebarInset>
-      {isSnapshotRefreshActive ? (
-        <PlanningRecalculationOverlay status={str(dashboardRefreshStatus?.status)} />
-      ) : null}
     </SidebarProvider>
-  );
-}
-
-function PlanningRecalculationOverlay({ status }: { status: string }) {
-  const title = status === "queued"
-    ? "Planning recalculation queued"
-    : status === "running"
-    ? "Recalculating planning"
-    : "Checking planning recalculation";
-  return (
-    <div className="fixed inset-0 z-50 grid cursor-wait place-items-center bg-background/70 p-4 backdrop-blur-sm" aria-live="polite" aria-busy="true">
-      <div className="flex max-w-sm items-center gap-3 rounded-md border bg-background px-4 py-3 shadow-lg">
-        <RefreshCw className="size-5 shrink-0 animate-spin text-primary" />
-        <div className="grid gap-1">
-          <div className="text-sm font-medium">{title}</div>
-          <div className="text-xs text-muted-foreground">Please wait before saving another task.</div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -1244,9 +1598,11 @@ function setupChecklistSessionPatchKey(row: DashboardPayload) {
   return parts.length >= 5 ? parts.join("|") : "";
 }
 function HeaderActions({
+  canRefreshSnapshot,
   isRefreshingSnapshot,
   onRefreshSnapshot,
 }: {
+  canRefreshSnapshot: boolean;
   isRefreshingSnapshot: boolean;
   onRefreshSnapshot: () => void;
 }) {
@@ -1261,18 +1617,18 @@ function HeaderActions({
         variant="outline"
         size="sm"
         className="gap-2"
-        disabled={isRefreshingSnapshot}
+        disabled={!canRefreshSnapshot || isRefreshingSnapshot}
         onClick={onRefreshSnapshot}
       >
         <RefreshCw className={`size-4${isRefreshingSnapshot ? " animate-spin" : ""}`} />
-        <span className="hidden sm:inline">{isRefreshingSnapshot ? "Recalculating" : "Recalculate planning"}</span>
+        <span className="hidden sm:inline">{isRefreshingSnapshot ? "Recalculating" : "Recalculate Planning"}</span>
       </Button>
       <Button
         type="button"
         variant="outline"
         size="icon"
-        aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-        title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+        aria-label={isDark ? "Switch To Light Mode" : "Switch To Dark Mode"}
+        title={isDark ? "Switch To Light Mode" : "Switch To Dark Mode"}
         onClick={() => setTheme(isDark ? "light" : "dark")}
       >
         {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
@@ -1285,7 +1641,7 @@ function HeaderActions({
         onClick={() => void authClient.signOut().then(() => window.location.assign("/sign-in"))}
       >
         <LogOut className="size-4" />
-        <span className="hidden sm:inline">Sign out</span>
+        <span className="hidden sm:inline">Sign Out</span>
       </Button>
     </div>
   );
@@ -1303,6 +1659,8 @@ function DashboardContent({
   firstPieceInspectionTasks,
   preferredDataEntryType,
   preferredDataEntryDefaults,
+  productionFloorCode,
+  onProductionFloorChange,
 }: {
   activeTab: DashboardTabId;
   payload: DashboardPayload;
@@ -1315,8 +1673,14 @@ function DashboardContent({
   firstPieceInspectionTasks: DashboardPayload[];
   preferredDataEntryType: string;
   preferredDataEntryDefaults: Record<string, unknown>;
+  productionFloorCode: ProductionFloorCode;
+  onProductionFloorChange: (floorCode: ProductionFloorCode) => void;
 }) {
   const productionControl = asRecord(payload.productionControl);
+
+  if (activeTab === "productionDashboardTab") {
+    return <ProductionDashboardPanel payload={payload} />;
+  }
 
   if (activeTab === "jobCardStatusTab") {
     return <JobCardsPanel productionControl={productionControl} submitAction={submitAction} openMasterReadiness={openMasterReadiness} />;
@@ -1327,7 +1691,7 @@ function DashboardContent({
   }
 
   if (activeTab === "machineMasterTab") {
-    return <MachineMasterPanel productionControl={productionControl} submitAction={submitAction} openDataEntry={openDataEntry} />;
+    return <CentralMachineMasterWorkspace payload={payload} submitAction={submitAction} openDataEntry={openDataEntry} preferredDefaults={preferredDataEntryDefaults} />;
   }
 
   if (activeTab === "masterGapsTab") {
@@ -1335,15 +1699,27 @@ function DashboardContent({
   }
 
   if (activeTab === "dataEntryTab") {
-    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} />;
+    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={universalDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} />;
   }
 
   if (activeTab === "masterTablesTab") {
-    return <MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} />;
+    return <MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} />;
   }
 
   if (activeTab === "planningHolidayTab") {
     return <PlanningHolidayPanel productionControl={productionControl} submitAction={submitAction} />;
+  }
+
+  if (activeTab === "setupChecklistMasterTab") {
+    return <DataEntryPanel key={`checklists-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={checklistWorkspaceEntryTypes} title="Checklist Workspace" description="Create And Maintain All Coded Setup And Maintenance Checklists In One Place." />;
+  }
+
+  if (activeTab === "maintenanceMastersTab") {
+    return <DataEntryPanel key={`maintenance-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={maintenanceMasterEntryTypes} title="Maintenance Master Workspace" description="Create Reusable Maintenance Schedules And Assign Checklists Created In The Checklists Tab." />;
+  }
+
+  if (activeTab === "qualityMastersTab") {
+    return <DataEntryPanel key={`quality-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={qualityWorkspaceEntryTypes} title="Quality Master Workspace" description="Maintain Inspection Parameters Only For Existing Route Lines And Manage Generated Quality Codes." />;
   }
 
   if (activeTab === "maintenanceTab") {
@@ -1389,6 +1765,101 @@ function DashboardContent({
   return <ProductionControlPanel productionControl={productionControl} submitAction={submitAction} />;
 }
 
+function ProductionDashboardPanel({
+  payload,
+}: {
+  payload: DashboardPayload;
+}) {
+  const conventional = usePostgresOperationalPage("/api/dashboard?floor=conventional", 30_000, undefined, 3_000);
+  const conventional02 = usePostgresOperationalPage("/api/dashboard?floor=conventional-02", 30_000, undefined, 3_000);
+  const cnc = usePostgresOperationalPage("/api/dashboard?floor=cnc", 30_000, undefined, 3_000);
+  const forging = usePostgresOperationalPage("/api/dashboard?floor=forging", 30_000, undefined, 3_000);
+  const floorPayloads = useMemo(
+    () => ([
+      { productionFloorCode: "conventional", payload: conventional.data ?? (payload.productionFloorCode === "conventional" ? payload : undefined) },
+      { productionFloorCode: "conventional-02", payload: conventional02.data ?? (payload.productionFloorCode === "conventional-02" ? payload : undefined) },
+      { productionFloorCode: "cnc", payload: cnc.data ?? (payload.productionFloorCode === "cnc" ? payload : undefined) },
+      { productionFloorCode: "forging", payload: forging.data ?? (payload.productionFloorCode === "forging" ? payload : undefined) },
+    ] as const),
+    [cnc.data, conventional.data, conventional02.data, forging.data, payload],
+  );
+  const rows = useMemo(
+    () => universalProductionDashboardRows(floorPayloads),
+    [floorPayloads],
+  );
+  const pending = rows.filter((row) => displayValue(row.status) === "Pending").length;
+  const dispatched = rows.filter((row) => displayValue(row.status) === "Dispatched").length;
+  const rmReceived = rows.filter((row) => displayValue(row.rmReceivedDate) !== "-").length;
+  const floorLoadErrors = [conventional.error, conventional02.error, cnc.error, forging.error].filter(Boolean);
+
+  return (
+    <section className="grid gap-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MetricCard label="Total Work Orders" value={formatNumber(rows.length)} />
+        <MetricCard label="Pending Dispatch" value={formatNumber(pending)} />
+        <MetricCard label="Dispatched" value={formatNumber(dispatched)} />
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Production Dashboard</CardTitle>
+          <CardDescription>
+            {formatNumber(rmReceived)} Work Orders Have Received Raw Material. Current Probable Dates Recalculate With Live Production Progress.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {floorLoadErrors.length ? (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="status">
+              Some Production Units Could Not Be Loaded. The Table Will Retry Automatically.
+            </div>
+          ) : null}
+          <div className="overflow-x-auto rounded-md border">
+            <Table excelFilters>
+              <TableHeader className="sticky top-0 z-10 bg-background">
+                <TableRow>
+                  <TableHead className="min-w-28">JC No.</TableHead>
+                  <TableHead className="min-w-32">FG PO No.</TableHead>
+                  <TableHead className="min-w-28">Part Code</TableHead>
+                  <TableHead className="min-w-36">Production Unit</TableHead>
+                  <TableHead className="min-w-28 text-right">Ordered Qty</TableHead>
+                  <TableHead className="min-w-20">Unit</TableHead>
+                  <TableHead className="min-w-36">RM Received Date</TableHead>
+                  <TableHead className="min-w-52">Planned Dispatch Date During RM Receipt</TableHead>
+                  <TableHead className="min-w-52">Current Probable Dispatch Date</TableHead>
+                  <TableHead className="min-w-28">Status</TableHead>
+                  <TableHead className="min-w-36">Dispatched Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.length ? rows.map((row) => (
+                  <TableRow key={`${displayValue(row.jcNo)}-${displayValue(row.partCode)}`}>
+                    <TableCell className="font-medium">{displayValue(row.jcNo)}</TableCell>
+                    <TableCell>{displayValue(row.fgPoNo)}</TableCell>
+                    <TableCell>{displayValue(row.partCode)}</TableCell>
+                    <TableCell>{displayValue(row.productionUnit)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(Number(row.orderedQty) || 0)}</TableCell>
+                    <TableCell>{displayValue(row.unit)}</TableCell>
+                    <TableCell>{displayValue(row.rmReceivedDate)}</TableCell>
+                    <TableCell>{displayValue(row.plannedDispatchDateAtRmReceipt)}</TableCell>
+                    <TableCell>{displayValue(row.currentProbableDispatchDate)}</TableCell>
+                    <TableCell><StatusBadge value={row.status} /></TableCell>
+                    <TableCell>{displayValue(row.dispatchedDate)}</TableCell>
+                  </TableRow>
+                )) : (
+                  <TableRow>
+                    <TableCell colSpan={11} className="h-28 text-center text-sm text-muted-foreground">
+                      No Work Orders Available.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
 function ProductionControlPanel({
   productionControl,
   submitAction,
@@ -1401,7 +1872,7 @@ function ProductionControlPanel({
       <PlannerDecisionConsole productionControl={productionControl} submitAction={submitAction} />
       <ActionLogTable rows={asArray(productionControl.plannerActionLog)} />
       <section className="grid gap-4">
-        <DataRowsCard title="Machine issues" rows={asArray(productionControl.machineConstraintRows)} empty="No machine constraints yet" />
+        <DataRowsCard title="Machine Issues" rows={asArray(productionControl.machineConstraintRows)} empty="No machine constraints yet" />
       </section>
     </>
   );
@@ -1417,8 +1888,8 @@ function PlannerDecisionConsole({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Planner decision console</CardTitle>
-        <CardDescription>Priority changes, machine breakdowns, part-specific machine switches, and mid-route changes.</CardDescription>
+        <CardTitle>Planner Decision Console</CardTitle>
+        <CardDescription>Priority Changes, Machine Breakdowns, Part-Specific Machine Switches, And Mid-Route Changes.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <PlannerActionConflictPanel productionControl={productionControl} submitAction={submitAction} />
@@ -1576,22 +2047,22 @@ function MachineConstraintPlannerForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={saveMachineIssue}>
       <div>
-        <div className="text-sm font-medium">2. Machine unavailable / breakdown</div>
-        <div className="text-xs text-muted-foreground">Running rows need produced quantity before remaining quantity is planned elsewhere.</div>
+        <div className="text-sm font-medium">2. Machine Unavailable / Breakdown</div>
+        <div className="text-xs text-muted-foreground">Running Rows Need Produced Quantity Before Remaining Quantity Is Planned Elsewhere.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-        <Field label="Machine unavailable">
-          <select
+        <Field label="Machine Unavailable">
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={machineNo}
             required
             onChange={(event) => updateField(setMachineNo, event.target.value)}
           >
-            <option value="">Select machine</option>
+            <option value="">Select Machine</option>
             {machineOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="From">
           <Input type="date" value={unavailableFrom} required onChange={(event) => updateField(setUnavailableFrom, event.target.value)} />
@@ -1599,30 +2070,30 @@ function MachineConstraintPlannerForm({
         <Field label="To">
           <Input type="date" value={unavailableTo} onChange={(event) => updateField(setUnavailableTo, event.target.value)} />
         </Field>
-        <Field label="Plan action">
-          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={rescheduleAction} onChange={(event) => updateField(setRescheduleAction, event.target.value)}>
-            <option value="shift_required">shift required</option>
-            <option value="shift_all">shift all</option>
-            <option value="delay">delay plan</option>
-          </select>
+        <Field label="Plan Action">
+          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={rescheduleAction} onChange={(event) => updateField(setRescheduleAction, event.target.value)}>
+            <option value="shift_required">Shift Required</option>
+            <option value="shift_all">Shift All</option>
+            <option value="delay">Delay Plan</option>
+          </SearchableSelect>
         </Field>
-        <Field label="Planning confirmation">
-          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={planningMode} onChange={(event) => updatePlanningInput(setPlanningMode, event.target.value)}>
-            <option value="system_recalculate">System recalculation (all planning rules)</option>
-            <option value="review_then_plan">Review queue before saving</option>
-          </select>
+        <Field label="Planning Confirmation">
+          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={planningMode} onChange={(event) => updatePlanningInput(setPlanningMode, event.target.value)}>
+            <option value="system_recalculate">System Recalculation (All Planning Rules)</option>
+            <option value="review_then_plan">Review Queue Before Saving</option>
+          </SearchableSelect>
         </Field>
         <Field label="Reason">
-          <Input value={reason} placeholder="Breakdown / quality hold" required onChange={(event) => setReason(event.target.value)} />
+          <Input value={reason} placeholder="Breakdown / Quality Hold" required onChange={(event) => setReason(event.target.value)} />
         </Field>
       </div>
       {reviewReady ? (
         <div className="grid gap-2 rounded-md border bg-muted/15 p-3">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{formatNumber(affectedRows.length)} affected setup rows</span>
-            <span>{formatNumber(lockedCount)} locked on machine</span>
-            <span>{formatNumber(plannedCount)} planned/unlocked</span>
-            <span>{formatNumber(runningRows.length)} running quantity inputs</span>
+            <span>{formatNumber(affectedRows.length)} Affected Setup Rows</span>
+            <span>{formatNumber(lockedCount)} Locked On Machine</span>
+            <span>{formatNumber(plannedCount)} Planned/Unlocked</span>
+            <span>{formatNumber(runningRows.length)} Running Quantity Inputs</span>
           </div>
           {affectedRows.length ? (
             <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
@@ -1637,10 +2108,10 @@ function MachineConstraintPlannerForm({
                       <StatusBadge value={needsProducedQty ? "Produced qty required" : machineIssueRowIsLocked(row) ? "Delay locked setup" : "Shift if alternate exists"} />
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} Of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} To {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
                     </div>
                     {needsProducedQty ? (
-                      <Field label="Produced qty">
+                      <Field label="Produced Qty">
                         <Input
                           type="number"
                           min="0"
@@ -1658,12 +2129,12 @@ function MachineConstraintPlannerForm({
               })}
             </div>
           ) : (
-            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup rows overlap this unavailable window.</div>
+            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No Planned Setup Rows Overlap This Unavailable Window.</div>
           )}
           <PlannerPreSaveConflictReview
             conflicts={machineConstraintConflicts}
-            title="Conflicting machine action found"
-            description="This machine action cannot be saved while another active unavailable/breakdown decision overlaps the same machine with a different action or queue choice."
+            title="Conflicting Machine Action Found"
+            description="This Machine Action Cannot Be Saved While Another Active Unavailable/Breakdown Decision Overlaps The Same Machine With A Different Action Or Queue Choice."
             onKeepExisting={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}
             onReverseExisting={reverseMachineConstraintConflict}
           />
@@ -1687,7 +2158,7 @@ function MachineConstraintPlannerForm({
                   checked={queueReviewConfirmed}
                   onChange={(event) => setQueueReviewConfirmed(event.target.checked)}
                 />
-                <span>Queue reviewed; save this breakdown and recalculate planning.</span>
+                <span>Queue Reviewed; Save This Breakdown And Recalculate Planning.</span>
               </label>
             </>
           ) : null}
@@ -1696,11 +2167,11 @@ function MachineConstraintPlannerForm({
       <div className="flex flex-wrap gap-2">
         <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && !canSave)}>
           <Wrench className="size-4" />
-          {reviewReady ? queueReviewRequired ? "Save after queue review" : "Save and replan remaining qty" : "Review affected queue"}
+          {reviewReady ? queueReviewRequired ? "Save After Queue Review" : "Save And Replan Remaining Qty" : "Review Affected Queue"}
         </Button>
         {reviewReady ? (
           <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
-            Recheck inputs
+            Recheck Inputs
           </Button>
         ) : null}
       </div>
@@ -1889,12 +2360,12 @@ function PartMachineSwitchPlannerForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
       <div>
-        <div className="text-sm font-medium">3. Part-specific machine switch</div>
-        <div className="text-xs text-muted-foreground">Move only the selected part/setup to another machine after reviewing that target queue and downstream WIP queues.</div>
+        <div className="text-sm font-medium">3. Part-Specific Machine Switch</div>
+        <div className="text-xs text-muted-foreground">Move Only The Selected Part/Setup To Another Machine After Reviewing That Target Queue And Downstream Wip Queues.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-6">
-        <Field label="Item code">
-          <select
+        <Field label="Item Code">
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={selectedItem}
             required
@@ -1906,14 +2377,14 @@ function PartMachineSwitchPlannerForm({
               setToMachine("");
             }}
           >
-            <option value="">Select item</option>
+            <option value="">Select Item</option>
             {itemOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
-        <Field label="Job card">
-          <select
+        <Field label="Job Card">
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={target}
             required
@@ -1924,14 +2395,14 @@ function PartMachineSwitchPlannerForm({
               setToMachine("");
             }}
           >
-            <option value="">Select job card</option>
+            <option value="">Select Job Card</option>
             {jobCardOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
-        <Field label="Setup no.">
-          <select
+        <Field label="Setup No.">
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={setupNo}
             required
@@ -1941,14 +2412,14 @@ function PartMachineSwitchPlannerForm({
               setToMachine("");
             }}
           >
-            <option value="">Select setup</option>
+            <option value="">Select Setup</option>
             {setupOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
-        <Field label="From machine">
-          <select
+        <Field label="From Machine">
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={fromMachine}
             required
@@ -1957,36 +2428,36 @@ function PartMachineSwitchPlannerForm({
               setToMachine("");
             }}
           >
-            <option value="">Select source machine</option>
+            <option value="">Select Source Machine</option>
             {fromMachineOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
-        <Field label="Plan on machine">
-          <select
+        <Field label="Plan On Machine">
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={toMachine}
             required
             onChange={(event) => updateField(setToMachine, event.target.value)}
           >
-            <option value="">Select target machine</option>
+            <option value="">Select Target Machine</option>
             {targetMachineOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Reason">
-          <Input value={reason} placeholder="Planner approved machine switch" required onChange={(event) => setReason(event.target.value)} />
+          <Input value={reason} placeholder="Planner Approved Machine Switch" required onChange={(event) => setReason(event.target.value)} />
         </Field>
       </div>
       {reviewReady ? (
         <div className="grid gap-2 rounded-md border bg-muted/15 p-3">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{formatNumber(selectedRows.length)} selected setup rows</span>
-            <span>{displayValue(fromMachine)} to {displayValue(toMachine)}</span>
-            <span>{formatNumber(runningRows.length)} source running quantity inputs</span>
-            <span>{formatNumber(targetInterruptionRows.length)} target running blockers</span>
+            <span>{formatNumber(selectedRows.length)} Selected Setup Rows</span>
+            <span>{displayValue(fromMachine)} To {displayValue(toMachine)}</span>
+            <span>{formatNumber(runningRows.length)} Source Running Quantity Inputs</span>
+            <span>{formatNumber(targetInterruptionRows.length)} Target Running Blockers</span>
           </div>
           {selectedRows.length ? (
             <div className="grid max-h-56 gap-2 overflow-y-auto pr-1">
@@ -2001,10 +2472,10 @@ function PartMachineSwitchPlannerForm({
                       <StatusBadge value={needsProducedQty ? "Produced qty required" : "Selected setup"} />
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+                      {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} Of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} To {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
                     </div>
                     {needsProducedQty ? (
-                      <Field label="Produced qty">
+                      <Field label="Produced Qty">
                         <Input
                           type="number"
                           min="0"
@@ -2022,13 +2493,13 @@ function PartMachineSwitchPlannerForm({
               })}
             </div>
           ) : (
-            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No planned setup row matches this job card/part, setup number, and source machine.</div>
+            <div className="rounded-md border border-dashed bg-background p-3 text-sm text-muted-foreground">No Planned Setup Row Matches This Job Card/Part, Setup Number, And Source Machine.</div>
           )}
           {targetInterruptionRows.length ? (
             <div className="grid gap-2 rounded-md border bg-background p-3">
               <div>
-                <div className="text-sm font-medium">Target machine running setup</div>
-                <div className="text-xs text-muted-foreground">Choose whether to stop the running setup on the target machine before saving this switch.</div>
+                <div className="text-sm font-medium">Target Machine Running Setup</div>
+                <div className="text-xs text-muted-foreground">Choose Whether To Stop The Running Setup On The Target Machine Before Saving This Switch.</div>
               </div>
               {targetInterruptionRows.map((row) => {
                 const rowKey = machineIssueRowKey(row);
@@ -2038,7 +2509,7 @@ function PartMachineSwitchPlannerForm({
                   <div key={rowKey} className="grid gap-2 rounded-md border bg-muted/10 p-2 md:grid-cols-[1fr_auto] md:items-end">
                     <div>
                       <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-                      <div className="text-xs text-muted-foreground">{machineValue(row, "machine")} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}</div>
+                      <div className="text-xs text-muted-foreground">{machineValue(row, "machine")} | Production {displayValue(row.plannedProductionStartDate)} To {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}</div>
                     </div>
                     <div className="flex flex-wrap items-end gap-2">
                       <Button
@@ -2046,10 +2517,10 @@ function PartMachineSwitchPlannerForm({
                         variant={selected ? "default" : "outline"}
                         onClick={() => setSelectedTargetInterruptions((current) => ({ ...current, [rowKey]: !selected }))}
                       >
-                        {selected ? "Stop selected" : "Do not stop / click to stop"}
+                        {selected ? "Stop Selected" : "Do Not Stop / Click To Stop"}
                       </Button>
                       {selected ? (
-                        <Field label="Produced qty">
+                        <Field label="Produced Qty">
                           <Input
                             className="w-28"
                             type="number"
@@ -2080,13 +2551,13 @@ function PartMachineSwitchPlannerForm({
             })}
           />
           {missingTargetFinishedQty ? (
-            <div className="text-xs text-destructive">Enter produced quantity for every target running setup selected to stop.</div>
+            <div className="text-xs text-destructive">Enter Produced Quantity For Every Target Running Setup Selected To Stop.</div>
           ) : null}
           {switchConflicts.length ? (
             <div className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
               <div>
-                <div className="text-sm font-medium text-destructive">Conflicting planner action found</div>
-                <div className="text-xs text-muted-foreground">This switch cannot be saved while another active switch exists for the same setup with a different target or queue position.</div>
+                <div className="text-sm font-medium text-destructive">Conflicting Planner Action Found</div>
+                <div className="text-xs text-muted-foreground">This Switch Cannot Be Saved While Another Active Switch Exists For The Same Setup With A Different Target Or Queue Position.</div>
               </div>
               {switchConflicts.map((conflict, index) => (
                 <div key={`${displayValue(conflict.targetId)}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-2">
@@ -2096,11 +2567,11 @@ function PartMachineSwitchPlannerForm({
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" size="sm" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
-                      Keep existing
+                      Keep Existing
                     </Button>
                     <Button type="button" size="sm" variant="outline" disabled={isSubmitting} onClick={() => void reverseSwitchConflict(conflict)}>
                       <Undo2 className="size-4" />
-                      Reverse existing
+                      Reverse Existing
                     </Button>
                   </div>
                 </div>
@@ -2114,18 +2585,18 @@ function PartMachineSwitchPlannerForm({
               checked={queueReviewConfirmed}
               onChange={(event) => setQueueReviewConfirmed(event.target.checked)}
             />
-            <span>Queue reviewed; save this part-specific machine switch and recalculate planning.</span>
+            <span>Queue Reviewed; Save This Part-Specific Machine Switch And Recalculate Planning.</span>
           </label>
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button className="w-fit" type="submit" disabled={!canReview || isSubmitting || (reviewReady && !canSave)}>
           <Route className="size-4" />
-          {reviewReady ? "Save machine switch" : "Review switch queue"}
+          {reviewReady ? "Save Machine Switch" : "Review Switch Queue"}
         </Button>
         {reviewReady ? (
           <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => { setReviewReady(false); setQueueReviewConfirmed(false); }}>
-            Recheck inputs
+            Recheck Inputs
           </Button>
         ) : null}
       </div>
@@ -2151,8 +2622,8 @@ function MachineConstraintQueueReviewPanel({
     <div className="grid gap-2 rounded-md border border-dashed bg-background p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-medium">Replanned queue review</div>
-          {canPlaceTiles ? <div className="text-xs text-muted-foreground">Drag each affected setup tile to the planned position before saving.</div> : null}
+          <div className="text-sm font-medium">Replanned Queue Review</div>
+          {canPlaceTiles ? <div className="text-xs text-muted-foreground">Drag Each Affected Setup Tile To The Planned Position Before Saving.</div> : null}
         </div>
         <StatusBadge value={`${formatNumber(groups.length)} queue groups`} />
       </div>
@@ -2180,7 +2651,7 @@ function MachineConstraintQueueReviewPanel({
           ))}
         </div>
       ) : (
-        <div className="rounded-md border border-dashed bg-background p-2 text-sm text-muted-foreground">No destination or downstream queues were identified from the current plan.</div>
+        <div className="rounded-md border border-dashed bg-background p-2 text-sm text-muted-foreground">No Destination Or Downstream Queues Were Identified From The Current Plan.</div>
       )}
     </div>
   );
@@ -2370,7 +2841,7 @@ function MachineConstraintMoveTile({
       <GripVertical className="size-4 text-primary" aria-hidden="true" />
       <div>
         <div className="text-sm font-semibold">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-        <div className="text-xs text-muted-foreground">Move remaining/planned quantity to {targetMachine} | Current {machineValue(row, "machine")} | Preview {displayValue(previewWindow?.startDate || row.plannedProductionStartDate)} to {displayValue(previewWindow?.endDate || row.plannedProductionEndDate)}</div>
+        <div className="text-xs text-muted-foreground">Move Remaining/Planned Quantity To {targetMachine} | Current {machineValue(row, "machine")} | Preview {displayValue(previewWindow?.startDate || row.plannedProductionStartDate)} To {displayValue(previewWindow?.endDate || row.plannedProductionEndDate)}</div>
       </div>
       <Badge>Move</Badge>
     </div>
@@ -2382,7 +2853,7 @@ function MachineConstraintQueueRowTile({ row }: { row: DashboardPayload }) {
     <div className="grid gap-1 rounded border bg-background px-2 py-1">
       <div className="text-xs font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
       <div className="text-xs text-muted-foreground">
-        {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} to {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
+        {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} Of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} To {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
       </div>
     </div>
   );
@@ -2436,14 +2907,14 @@ function PlannerActionConflictPanel({
   return (
     <div className="grid gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
       <div>
-        <div className="text-sm font-semibold text-destructive">Planner action conflicts</div>
-        <div className="text-xs text-muted-foreground">Choose which active planner decision should remain. Other conflicting switch rows will be reversed with history preserved.</div>
+        <div className="text-sm font-semibold text-destructive">Planner Action Conflicts</div>
+        <div className="text-xs text-muted-foreground">Choose Which Active Planner Decision Should Remain. Other Conflicting Switch Rows Will Be Reversed With History Preserved.</div>
       </div>
       {conflicts.map((conflict, index) => (
         <div key={`${displayValue(conflict.jcNo)}-${displayValue(conflict.setupNo)}-${index}`} className="grid gap-2 rounded-md border bg-background p-3">
           <div className="text-sm font-medium">{displayValue(conflict.message)}</div>
           <div className="text-xs text-muted-foreground">
-            {displayValue(conflict.partCode)} / {displayValue(conflict.jcNo)} / setup {displayValue(conflict.setupNo)}
+            {displayValue(conflict.partCode)} / {displayValue(conflict.jcNo)} / Setup {displayValue(conflict.setupNo)}
           </div>
           <div className="flex flex-wrap gap-2">
             {asArray(conflict.choices).map((choice, choiceIndex) => {
@@ -2488,10 +2959,10 @@ function PlannerPreSaveConflictReview({
             <div className="text-xs text-muted-foreground">{displayValue(conflict.targetKey)} | {displayValue(conflict.createdAt)}</div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={onKeepExisting}>Keep existing</Button>
+            <Button type="button" size="sm" variant="outline" onClick={onKeepExisting}>Keep Existing</Button>
             <Button type="button" size="sm" variant="outline" onClick={() => void onReverseExisting(conflict)}>
               <Undo2 className="size-4" />
-              Reverse existing
+              Reverse Existing
             </Button>
           </div>
         </div>
@@ -2625,6 +3096,7 @@ function PlannerPriorityForm({
       partCode: selectedPart,
       priority,
       approvalMode,
+      confirmedSetupNumbers: priorityPlan.steps.map((step) => step.setupNo),
       interruptedJcNo: firstInterruption?.jcNo || "",
       interruptedSetupNo: firstInterruption?.setupNo || "",
       interruptedMachine: firstInterruption?.machine || "",
@@ -2640,12 +3112,12 @@ function PlannerPriorityForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
       <div>
-        <div className="text-sm font-medium">1. Priority change</div>
-        <div className="text-xs text-muted-foreground">Review the setup-wise machine impact before applying a priority change.</div>
+        <div className="text-sm font-medium">1. Priority Change</div>
+        <div className="text-xs text-muted-foreground">Review The Setup-Wise Machine Impact Before Applying A Priority Change.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
-        <Field label="Item code">
-          <select
+        <Field label="Item Code">
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={partCode}
             required
@@ -2655,14 +3127,14 @@ function PlannerPriorityForm({
               resetPlanReview();
             }}
           >
-            <option value="">Select item</option>
+            <option value="">Select Item</option>
             {itemOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
-        <Field label="JC number">
-          <select
+        <Field label="Jc Number">
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={jcNo}
             onChange={(event) => {
@@ -2670,14 +3142,14 @@ function PlannerPriorityForm({
               resetPlanReview();
             }}
           >
-            <option value="">All JCs for item</option>
+            <option value="">All Jcs For Item</option>
             {jobCardOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Priority">
-          <select
+          <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={priority}
             onChange={(event) => {
@@ -2688,10 +3160,10 @@ function PlannerPriorityForm({
             {["Urgent", "High", "Normal", "Low"].map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
-          </select>
+          </SearchableSelect>
         </Field>
         <Field label="Reason">
-          <Input value={remark} placeholder="Customer urgent / dispatch commitment" onChange={(event) => setRemark(event.target.value)} />
+          <Input value={remark} placeholder="Customer Urgent / Dispatch Commitment" onChange={(event) => setRemark(event.target.value)} />
         </Field>
       </div>
 
@@ -2699,20 +3171,20 @@ function PlannerPriorityForm({
         <div className="grid gap-3 rounded-lg border bg-muted/20 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <div className="text-sm font-medium">Probable priority plan</div>
-              <div className="text-xs text-muted-foreground">{priorityPlan.steps.length} target setup{priorityPlan.steps.length === 1 ? "" : "s"} checked from the current machine queue.</div>
-              <div className="text-xs text-muted-foreground">Confirm each setup in sequence. Later setup dates open only after the previous setup action is confirmed.</div>
+              <div className="text-sm font-medium">Probable Priority Plan</div>
+              <div className="text-xs text-muted-foreground">{priorityPlan.steps.length} Target Setup{priorityPlan.steps.length === 1 ? "" : "s"} Checked From The Current Machine Queue.</div>
+              <div className="text-xs text-muted-foreground">Confirm Each Setup In Sequence. Later Setup Dates Open Only After The Previous Setup Action Is Confirmed.</div>
             </div>
-            <Button type="button" variant="outline" onClick={resetPlanReview}>Recheck inputs</Button>
+            <Button type="button" variant="outline" onClick={resetPlanReview}>Recheck Inputs</Button>
           </div>
           {itemPlanWindow ? (
             <div className="grid gap-1 rounded-md border bg-background p-3">
-              <div className="text-xs font-medium text-muted-foreground">Complete item plan</div>
-              <div className="text-sm font-semibold">{itemPlanWindow.startDate || "-"} to {itemPlanWindow.endDate || "-"}</div>
+              <div className="text-xs font-medium text-muted-foreground">Complete Item Plan</div>
+              <div className="text-sm font-semibold">{itemPlanWindow.startDate || "-"} To {itemPlanWindow.endDate || "-"}</div>
             </div>
           ) : (
             <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
-              Complete item dates will appear after all setup actions are confirmed.
+              Complete Item Dates Will Appear After All Setup Actions Are Confirmed.
             </div>
           )}
           {priorityPlan.steps.length ? (
@@ -2749,15 +3221,15 @@ function PlannerPriorityForm({
               </div>
             </>
           ) : (
-            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">No planned setup was found for this item / JC in the current machine plan.</div>
+            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">No Planned Setup Was Found For This Item / Jc In The Current Machine Plan.</div>
           )}
           {hasSelectedRunningWithoutQty ? (
-            <div className="text-xs text-destructive">Enter finished quantity for every running setup selected to stop.</div>
+            <div className="text-xs text-destructive">Enter Finished Quantity For Every Running Setup Selected To Stop.</div>
           ) : null}
           <PlannerPreSaveConflictReview
             conflicts={priorityConflicts}
-            title="Conflicting priority action found"
-            description="This priority cannot be applied while another active priority decision exists for the same item or job card with different priority or queue choices."
+            title="Conflicting Priority Action Found"
+            description="This Priority Cannot Be Applied While Another Active Priority Decision Exists For The Same Item Or Job Card With Different Priority Or Queue Choices."
             onKeepExisting={resetPlanReview}
             onReverseExisting={reversePriorityConflict}
           />
@@ -2766,7 +3238,7 @@ function PlannerPriorityForm({
 
       <Button className="w-fit" type="submit" disabled={planReady && (priorityPlan.steps.length === 0 || hasSelectedRunningWithoutQty || !allStepsConfirmed || priorityConflicts.length > 0)}>
         <Wrench className="size-4" />
-        {planReady ? "Apply confirmed priority" : "Show probable plan"}
+        {planReady ? "Apply Confirmed Priority" : "Show Probable Plan"}
       </Button>
     </form>
   );
@@ -2785,22 +3257,22 @@ function PrioritySetupPreviewSummary({
 }) {
   return (
     <div className="grid gap-2 rounded-md border bg-background p-3">
-      <div className="text-xs font-medium text-muted-foreground">Probable setup dates</div>
+      <div className="text-xs font-medium text-muted-foreground">Probable Setup Dates</div>
       <div className="grid gap-2 md:grid-cols-3">
         {steps.map((step) => {
           const window = windows.get(step.key) ?? { startDate: step.startDate, endDate: step.endDate };
-          const stateLabel = confirmedSteps[step.key]
-            ? "Confirmed"
-            : step.key === activeStepKey
-              ? "Editing"
-              : "Queued preview";
+          const previewState = priorityPlanStepPreviewState(step.key, confirmedSteps, activeStepKey);
           return (
             <div key={step.key} className="grid gap-1 rounded-md border bg-muted/20 p-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-sm font-medium">Setup {step.setupNo}</div>
-                <Badge variant={confirmedSteps[step.key] ? "outline" : "secondary"}>{stateLabel}</Badge>
+                <Badge variant={confirmedSteps[step.key] ? "outline" : "secondary"}>{previewState.label}</Badge>
               </div>
-              <div className="text-sm font-semibold">{window.startDate || "-"} to {window.endDate || "-"}</div>
+              <div className="text-sm font-semibold">
+                {previewState.datesVisible
+                  ? `${window.startDate || "-"} To ${window.endDate || "-"}`
+                  : "Available After Previous Setup Confirmation"}
+              </div>
               <div className="text-xs text-muted-foreground">{step.machine} - {step.itemCode} / {step.jcNo}</div>
             </div>
           );
@@ -2878,7 +3350,7 @@ function PriorityPlanStepReview({
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          <Badge variant={step.blockers.length ? "secondary" : "outline"}>{step.blockers.length ? step.blockers.length + " queue impact" : "No stop needed"}</Badge>
+          <Badge variant={step.blockers.length ? "secondary" : "outline"}>{step.blockers.length ? step.blockers.length + " queue impact" : "No Stop Needed"}</Badge>
           {state === "confirmed" ? <Badge variant="outline">Confirmed</Badge> : null}
           {state === "locked" ? <Badge variant="outline">Locked</Badge> : null}
         </div>
@@ -2886,26 +3358,26 @@ function PriorityPlanStepReview({
 
       {state === "locked" ? (
         <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
-          Confirm {previousSetupLabel || "the previous setup"} before planning this setup.
+          Confirm {previousSetupLabel || "the previous setup"} Before Planning This Setup.
         </div>
       ) : null}
 
       {state === "confirmed" ? (
         <div className="grid gap-2">
           <PriorityScenarioCard
-            title="Confirmed setup plan"
+            title="Confirmed Setup Plan"
             window={plannedWindow}
             detail={planMode}
           />
           <Button type="button" variant="outline" size="sm" className="w-fit" onClick={onEdit}>
-            Edit setup action
+            Edit Setup Action
           </Button>
         </div>
       ) : null}
 
       {state === "active" ? (
         <PriorityScenarioCard
-          title="Probable setup plan"
+          title="Probable Setup Plan"
           window={plannedWindow}
           detail={planMode || "No queue impact"}
         />
@@ -2928,7 +3400,7 @@ function PriorityPlanStepReview({
               <div key={blocker.key} className="grid gap-2 rounded-md border p-2 md:grid-cols-[1fr_auto] md:items-center">
                 <div>
                   <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
-                  <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} to {blocker.endDate} - {blocker.label}</div>
+                  <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} To {blocker.endDate} - {blocker.label}</div>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
                   <Button
@@ -2936,10 +3408,10 @@ function PriorityPlanStepReview({
                     variant={selected ? "default" : "outline"}
                     onClick={() => setSelectedInterruptions((current) => ({ ...current, [blocker.key]: !selected }))}
                   >
-                    {blocker.state === "running" ? (selected ? "Stop selected" : "Stop this setup") : (selected ? "Move approved" : "Approve queue move")}
+                    {blocker.state === "running" ? (selected ? "Stop Selected" : "Stop This Setup") : (selected ? "Move Approved" : "Approve Queue Move")}
                   </Button>
                   {selected && blocker.state === "running" ? (
-                    <Field label="Finished qty">
+                    <Field label="Finished Qty">
                       <Input
                         className="w-28"
                         min="0"
@@ -2959,16 +3431,16 @@ function PriorityPlanStepReview({
       ) : null}
 
       {state === "active" && selectedRunningWithoutQty ? (
-        <div className="text-xs text-destructive">Enter finished quantity for every running setup selected to stop.</div>
+        <div className="text-xs text-destructive">Enter Finished Quantity For Every Running Setup Selected To Stop.</div>
       ) : null}
 
       {state === "active" ? (
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" onClick={onConfirm} disabled={selectedRunningWithoutQty}>
-            Confirm setup action
+            Confirm Setup Action
           </Button>
           <span className="text-xs text-muted-foreground">
-            {runningBlockerCount ? "Leaving running blockers unselected keeps them running." : "No running setup blocks this target."}
+            {runningBlockerCount ? "Leaving Running Blockers Unselected Keeps Them Running." : "No Running Setup Blocks This Target."}
           </span>
         </div>
       ) : null}
@@ -3021,8 +3493,8 @@ function PriorityQueuePlacementBoard({
     <div className="grid gap-2 rounded-md border bg-muted/20 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-xs font-medium text-muted-foreground">{step.machine} queue placement</div>
-          <div className="text-sm font-semibold">{plannedWindow.startDate || "-"} to {plannedWindow.endDate || "-"}</div>
+          <div className="text-xs font-medium text-muted-foreground">{step.machine} Queue Placement</div>
+          <div className="text-sm font-semibold">{plannedWindow.startDate || "-"} To {plannedWindow.endDate || "-"}</div>
         </div>
         <Badge variant="secondary">{placementIndex === 0 ? "Position 1" : `After ${placementIndex} setup${placementIndex === 1 ? "" : "s"}`}</Badge>
       </div>
@@ -3121,7 +3593,7 @@ function PriorityQueuePriorityTile({
       <GripVertical className="size-4 text-primary" aria-hidden="true" />
       <div>
         <div className="text-sm font-semibold">{step.itemCode} / {step.jcNo} / Setup {step.setupNo}</div>
-        <div className="text-xs text-muted-foreground">{step.machine} - {plannedWindow.startDate || "-"} to {plannedWindow.endDate || "-"}</div>
+        <div className="text-xs text-muted-foreground">{step.machine} - {plannedWindow.startDate || "-"} To {plannedWindow.endDate || "-"}</div>
       </div>
       <Badge>Priority</Badge>
     </div>
@@ -3143,15 +3615,15 @@ function PriorityQueueBlockerTile({
     <div className="grid gap-2 rounded-md border bg-background p-2 md:grid-cols-[1fr_auto] md:items-center">
       <div>
         <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
-        <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} to {blocker.endDate}</div>
+        <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} To {blocker.endDate}</div>
       </div>
       <div className="flex items-center gap-2">
-        <Badge variant={keptAhead ? "secondary" : "outline"}>{keptAhead ? "Ahead of priority" : "After priority"}</Badge>
+        <Badge variant={keptAhead ? "secondary" : "outline"}>{keptAhead ? "Ahead Of Priority" : "After Priority"}</Badge>
         <div className="flex gap-1">
-          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority before ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place priority before this setup" onClick={onPlaceBefore}>
+          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority before ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place Priority Before This Setup" onClick={onPlaceBefore}>
             <ArrowUp className="size-3" />
           </Button>
-          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority after ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place priority after this setup" onClick={onPlaceAfter}>
+          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority after ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place Priority After This Setup" onClick={onPlaceAfter}>
             <ArrowDown className="size-3" />
           </Button>
         </div>
@@ -3183,7 +3655,7 @@ function PriorityScenarioCard({
   return (
     <div className="grid gap-1 rounded-md border bg-muted/20 p-3">
       <div className="text-xs font-medium text-muted-foreground">{title}</div>
-      <div className="text-sm font-semibold">{window.startDate || "-"} to {window.endDate || "-"}</div>
+      <div className="text-sm font-semibold">{window.startDate || "-"} To {window.endDate || "-"}</div>
       <div className="text-xs text-muted-foreground">{detail}</div>
     </div>
   );
@@ -3255,12 +3727,12 @@ function RouteChangePlannerForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
       <div>
-        <div className="text-sm font-medium">4. Mid-route change</div>
-        <div className="text-xs text-muted-foreground">Planner selects the new route option and enters remaining setup quantities.</div>
+        <div className="text-sm font-medium">4. Mid-Route Change</div>
+        <div className="text-xs text-muted-foreground">Planner Selects The New Route Option And Enters Remaining Setup Quantities.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
-        <Field label="Job card / part">
-          <Input list="route-change-targets" value={target} placeholder="JC-003 or M6" required onChange={(event) => setTarget(event.target.value)} />
+        <Field label="Job Card / Part">
+          <Input list="route-change-targets" value={target} placeholder="Jc-003 Or M6" required onChange={(event) => setTarget(event.target.value)} />
           <datalist id="route-change-targets">
             {workOrders.map((row) => (
               <option key={`${str(row.jcNo)}-${str(row.partCode)}`} value={str(row.jcNo)}>
@@ -3269,15 +3741,15 @@ function RouteChangePlannerForm({
             ))}
           </datalist>
         </Field>
-        <Field label="New route option">
-          <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedOption} required onChange={(event) => setNewOption(event.target.value)}>
+        <Field label="New Route Option">
+          <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedOption} required onChange={(event) => setNewOption(event.target.value)}>
             {optionNumbers.length ? optionNumbers.map((option) => (
               <option key={option} value={option}>{option}</option>
-            )) : <option value="">Select job card first</option>}
-          </select>
+            )) : <option value="">Select Job Card First</option>}
+          </SearchableSelect>
         </Field>
         <Field label="Reason">
-          <Input value={reason} placeholder="Why route is changing" required onChange={(event) => setReason(event.target.value)} />
+          <Input value={reason} placeholder="Why Route Is Changing" required onChange={(event) => setReason(event.target.value)} />
         </Field>
       </div>
       <div className="overflow-x-auto rounded-md border">
@@ -3287,7 +3759,7 @@ function RouteChangePlannerForm({
               <TableHead>Setup</TableHead>
               <TableHead>Machine</TableHead>
               <TableHead>Plan</TableHead>
-              <TableHead>Qty to plan</TableHead>
+              <TableHead>Qty To Plan</TableHead>
               <TableHead>Remark</TableHead>
             </TableRow>
           </TableHeader>
@@ -3326,14 +3798,14 @@ function RouteChangePlannerForm({
                     />
                   </TableCell>
                   <TableCell>
-                    <Input value={state.remark} placeholder="optional" onChange={(event) => updateSetup(setupNo, { remark: event.target.value })} />
+                    <Input value={state.remark} placeholder="Optional" onChange={(event) => updateSetup(setupNo, { remark: event.target.value })} />
                   </TableCell>
                 </TableRow>
               );
             }) : (
               <TableRow>
                 <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
-                  Select a job card and route option to load setups.
+                  Select A Job Card And Route Option To Load Setups.
                 </TableCell>
               </TableRow>
             )}
@@ -3342,7 +3814,7 @@ function RouteChangePlannerForm({
       </div>
       <Button className="w-fit" type="submit" disabled={!target || !selectedOption || !selectedSetups.length}>
         <Route className="size-4" />
-        Save route change plan
+        Save Route Change Plan
       </Button>
     </form>
   );
@@ -3368,30 +3840,30 @@ function JobCardsPanel({
       />
       <Card>
         <CardHeader>
-          <CardTitle>Job card actions</CardTitle>
-          <CardDescription>Setup completion and dispatch approval actions.</CardDescription>
+          <CardTitle>Job Card Actions</CardTitle>
+          <CardDescription>Setup Completion And Dispatch Approval Actions.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 @5xl/main:grid-cols-2">
           <LegacyActionForm
-            title="Mark setup complete"
-            description="Equivalent to the legacy running job-card completion action."
+            title="Mark Setup Complete"
+            description="Equivalent To The Legacy Running Job-Card Completion Action."
             fields={[
-              { name: "jcNo", label: "Job card", placeholder: "JC-1001", required: true },
-              { name: "setupNo", label: "Setup no.", placeholder: "10" },
+              { name: "jcNo", label: "Job Card", placeholder: "JC-1001", required: true },
+              { name: "setupNo", label: "Setup No.", placeholder: "10" },
               { name: "machine", label: "Machine", placeholder: "CNC-01" },
-              { name: "completedBy", label: "Completed by", placeholder: "Name or code", required: true },
-              { name: "remark", label: "Completion remark", placeholder: "Optional" },
+              { name: "completedBy", label: "Completed By", placeholder: "Name or code", required: true },
+              { name: "remark", label: "Completion Remark", placeholder: "Optional" },
             ]}
             buttonLabel="Mark complete"
             onSubmit={(body) => submitAction("mark-complete", body)}
           />
           <LegacyActionForm
-            title="Dispatch approval"
-            description="Only completed job cards should be approved for dispatch."
+            title="Dispatch Approval"
+            description="Only Completed Job Cards Should Be Approved For Dispatch."
             fields={[
-              { name: "jcNo", label: "Job card", placeholder: "JC-1001", required: true },
-              { name: "approvedBy", label: "Approved by", placeholder: "Name or code", required: true },
-              { name: "remark", label: "Dispatch remark", placeholder: "Optional" },
+              { name: "jcNo", label: "Job Card", placeholder: "JC-1001", required: true },
+              { name: "approvedBy", label: "Approved By", placeholder: "Name or code", required: true },
+              { name: "remark", label: "Dispatch Remark", placeholder: "Optional" },
             ]}
             buttonLabel="Approve dispatch"
             onSubmit={(body) => submitAction("dispatch-approval", body)}
@@ -3414,7 +3886,7 @@ function MachineDetailPanel({
         plannedRows={asArray(productionControl.machinePlanDetailRows)}
       />
       <section className="grid gap-4">
-        <DataRowsCard title="Machine unavailable / breakdown" rows={asArray(productionControl.machineConstraintRows)} empty="No machine issues saved yet" />
+        <DataRowsCard title="Machine Unavailable / Breakdown" rows={asArray(productionControl.machineConstraintRows)} empty="No machine issues saved yet" />
       </section>
     </>
   );
@@ -3429,11 +3901,11 @@ type ShopFloorStageId =
   | "item_complete";
 
 const shopFloorStages: Array<{ id: ShopFloorStageId; label: string; role: string; button: string }> = [
-  { id: "raw_material_at_machine", label: "Raw material at the machine", role: "Shop floor", button: "RM at machine" },
-  { id: "presetting", label: "Pre setting started", role: "Assistant machinist", button: "Start pre setting" },
-  { id: "setting", label: "Setting done", role: "Assistant machinist", button: "Setting done" },
-  { id: "quality_approval", label: "Quality approval", role: "Quality", button: "Quality approved" },
-  { id: "operator_started", label: "Operator assigned and machine started", role: "Machinist", button: "Start machine" },
+  { id: "raw_material_at_machine", label: "Raw Material At The Machine", role: "Shop floor", button: "RM at machine" },
+  { id: "presetting", label: "Pre Setting Started", role: "Assistant machinist", button: "Start pre setting" },
+  { id: "setting", label: "Setting Done", role: "Assistant machinist", button: "Setting done" },
+  { id: "quality_approval", label: "Quality Approval", role: "Quality", button: "Quality approved" },
+  { id: "operator_started", label: "Operator Assigned And Machine Started", role: "Machinist", button: "Start machine" },
 ];
 
 type RoleTaskKind = "shopFloor" | "machinist" | "quality";
@@ -3441,17 +3913,17 @@ type RoleTaskKind = "shopFloor" | "machinist" | "quality";
 const roleTaskCopy: Record<RoleTaskKind, { title: string; description: string; empty: string }> = {
   shopFloor: {
     title: "Shop Floor Tasks",
-    description: "Items waiting for raw material to be placed at the planned machine.",
+    description: "Items Waiting For Raw Material To Be Placed At The Planned Machine.",
     empty: "No raw-material placement tasks are pending.",
   },
   machinist: {
     title: "Machinist Tasks",
-    description: "Items waiting for pre setting, setting, or operator assignment after quality approval.",
+    description: "Items Waiting For Pre Setting, Setting, Or Operator Assignment After Quality Approval.",
     empty: "No machinist tasks are pending.",
   },
   quality: {
     title: "Quality Control Tasks",
-    description: "Items waiting for quality approval after setting is complete.",
+    description: "Items Waiting For Quality Approval After Setting Is Complete.",
     empty: "No quality approval tasks are pending.",
   },
 };
@@ -3540,7 +4012,7 @@ function ShopFloorStatusPanel({
     <Card>
       <CardHeader>
         <CardTitle>Shop Floor Status</CardTitle>
-        <CardDescription>Machine-wise current item and next planned setup for floor teams.</CardDescription>
+        <CardDescription>Machine-Wise Current Item And Next Planned Setup For Floor Teams.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
@@ -3555,7 +4027,7 @@ function ShopFloorStatusPanel({
           filters={[
             {
               id: "shop-floor-status-machine",
-              label: "Machine no.",
+              label: "Machine No.",
               value: machineFilter,
               placeholder: "Type or select machine",
               options: machineOptions,
@@ -3563,7 +4035,7 @@ function ShopFloorStatusPanel({
             },
             {
               id: "shop-floor-status-location",
-              label: "Master location",
+              label: "Master Location",
               value: locationFilter,
               placeholder: "Type or select master location",
               options: locationOptions,
@@ -3571,7 +4043,7 @@ function ShopFloorStatusPanel({
             },
             {
               id: "shop-floor-status-current",
-              label: "Current item",
+              label: "Current Item",
               value: currentFilter,
               placeholder: "Type or select current item",
               options: currentOptions,
@@ -3579,7 +4051,7 @@ function ShopFloorStatusPanel({
             },
             {
               id: "shop-floor-status-next",
-              label: "Next item",
+              label: "Next Item",
               value: nextFilter,
               placeholder: "Type or select next item",
               options: nextOptions,
@@ -3600,11 +4072,11 @@ function ShopFloorStatusPanel({
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
-                  <TableHead className="min-w-32">Machine no.</TableHead>
-                  <TableHead className="min-w-36">Master location</TableHead>
-                  <TableHead className="min-w-64">Current item running</TableHead>
-                  <TableHead className="min-w-64">Next item planned</TableHead>
-                  <TableHead className="min-w-80">Status / action</TableHead>
+                  <TableHead className="min-w-32">Machine No.</TableHead>
+                  <TableHead className="min-w-36">Master Location</TableHead>
+                  <TableHead className="min-w-64">Current Item Running</TableHead>
+                  <TableHead className="min-w-64">Next Item Planned</TableHead>
+                  <TableHead className="min-w-80">Status / Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -3619,14 +4091,14 @@ function ShopFloorStatusPanel({
                       {row.current ? (
                         <ShopFloorItemSummary row={row.current} tone="current" productionCardRows={productionCardRows} />
                       ) : (
-                        <EmptyShopFloorSlot label={row.next ? "Setup required" : "No running item"} compact />
+                        <EmptyShopFloorSlot label={row.next ? "Setup Required" : "No Running Item"} compact />
                       )}
                     </TableCell>
                     <TableCell className="align-middle">
                       {row.next ? (
                         <ShopFloorItemSummary row={row.next} tone="next" />
                       ) : (
-                        <EmptyShopFloorSlot label="No next plan" compact />
+                        <EmptyShopFloorSlot label="No Next Plan" compact />
                       )}
                     </TableCell>
                     <TableCell className="align-middle">
@@ -3645,7 +4117,7 @@ function ShopFloorStatusPanel({
             </Table>
           </div>
         ) : (
-          <EmptyRowsMessage>No machines match the current filter</EmptyRowsMessage>
+          <EmptyRowsMessage>No Machines Match The Current Filter</EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
@@ -3671,10 +4143,17 @@ function RoleTaskPanel({
   const [locationFilter, setLocationFilter] = useState("");
   const [itemFilter, setItemFilter] = useState("");
   const [taskFilter, setTaskFilter] = useState("");
+  const employeeMasterPage = usePostgresOperationalPage(
+    role === "shopFloor" ? "/api/employee-master" : null,
+  );
+  const employeeMasterRows = useMemo(
+    () => asArray(employeeMasterPage.data?.rows),
+    [employeeMasterPage.data?.rows],
+  );
   const copy = enableFirstPieceInspection
     ? {
         title: "First Piece Inspection",
-        description: "Quality approval tasks that require a first-piece inspection report with five piece readings.",
+        description: "Quality Approval Tasks That Require A First-Piece Inspection Report With Five Piece Readings.",
         empty: "No first-piece inspection tasks are pending.",
       }
     : roleTaskCopy[role];
@@ -3786,9 +4265,15 @@ function RoleTaskPanel({
         <CardContent className="grid gap-4">
           {role === "quality" ? (
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => { window.location.assign("/dashboard/hourly-quality-check?returnTab=qualityControlTasksTab"); }}>
+              <Button type="button" variant="outline" size="sm" onClick={() => {
+                const params = new URLSearchParams({
+                  floor: productionFloorFromLocation(),
+                  returnTab: "qualityControlTasksTab",
+                });
+                window.location.assign(`/dashboard/hourly-quality-check?${params.toString()}`);
+              }}>
                 <Gauge className="size-4" />
-                Hourly quality check
+                Hourly Quality Check
               </Button>
             </div>
           ) : null}
@@ -3796,6 +4281,9 @@ function RoleTaskPanel({
             role={role}
             rows={productionCardRows}
             existingCardRows={existingProductionCardRows}
+            employeeMasterError={employeeMasterPage.error}
+            employeeMasterLoaded={employeeMasterPage.data !== undefined}
+            employeeMasterRows={employeeMasterRows}
             onSaveProductionCard={saveProductionCard}
             rejectionTypeRows={asArray(productionControl.rejectionTypeMasterRows)}
             rejectionReasonRows={asArray(productionControl.rejectionReasonMasterRows)}
@@ -3813,7 +4301,7 @@ function RoleTaskPanel({
             filters={[
               {
                 id: `${role}-machine`,
-                label: "Machine no.",
+                label: "Machine No.",
                 value: machineFilter,
                 placeholder: "Type or select machine",
                 options: machineOptions,
@@ -3821,7 +4309,7 @@ function RoleTaskPanel({
               },
               {
                 id: `${role}-location`,
-                label: "Master location",
+                label: "Master Location",
                 value: locationFilter,
                 placeholder: "Type or select master location",
                 options: locationOptions,
@@ -3829,7 +4317,7 @@ function RoleTaskPanel({
               },
               {
                 id: `${role}-item`,
-                label: "Item setup",
+                label: "Item Setup",
                 value: itemFilter,
                 placeholder: "Type or select setup",
                 options: itemOptions,
@@ -3850,10 +4338,10 @@ function RoleTaskPanel({
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
-                    <TableHead className="min-w-32">Machine no.</TableHead>
-                    <TableHead className="min-w-36">Master location</TableHead>
-                    <TableHead className="min-w-72">Item setup</TableHead>
-                    <TableHead className="min-w-52">Pending task</TableHead>
+                    <TableHead className="min-w-32">Machine No.</TableHead>
+                    <TableHead className="min-w-36">Master Location</TableHead>
+                    <TableHead className="min-w-72">Item Setup</TableHead>
+                    <TableHead className="min-w-52">Pending Task</TableHead>
                     <TableHead className="min-w-80">Entry</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -3875,7 +4363,7 @@ function RoleTaskPanel({
                         {role === "quality" && onStartFirstPieceInspection ? (
                           <Button type="button" size="sm" onClick={() => onStartFirstPieceInspection(row.next)}>
                             <CheckCircle2 className="size-4" />
-                            Start quality approval
+                            Start Quality Approval
                           </Button>
                         ) : (
                           <ShopFloorRowAction
@@ -3902,8 +4390,8 @@ function RoleTaskPanel({
       </Card>
       {enableFirstPieceInspection ? (
         <>
-          <DataRowsCard title="First piece inspection reports" rows={asArray(productionControl.firstPieceInspectionReportRows)} empty="No first-piece reports saved yet" />
-          <DataRowsCard title="Quality inspection parameter master" rows={combinedQualityInspectionMasterRows(productionControl)} empty="No quality inspection parameters saved yet" />
+          <DataRowsCard title="First Piece Inspection Reports" rows={asArray(productionControl.firstPieceInspectionReportRows)} empty="No first-piece reports saved yet" />
+          <DataRowsCard title="Quality Inspection Parameter Master" rows={combinedQualityInspectionMasterRows(productionControl)} empty="No quality inspection parameters saved yet" />
         </>
       ) : null}
     </section>
@@ -3924,6 +4412,8 @@ function FirstPieceInspectionPanel({
   onTaskComplete: (row: DashboardPayload) => void;
 }) {
   const masters = combinedQualityInspectionMasterRows(productionControl);
+  const reportRows = asArray(productionControl.firstPieceInspectionReportRows);
+  const [activeView, setActiveView] = useState<"tasks" | "reports">("tasks");
   const [expandedTaskKey, setExpandedTaskKey] = useState<string | null>(null);
   const defaultExpandedTaskKey = tasks[0] ? shopFloorPlanKey(tasks[0]) : "";
   const activeExpandedTaskKey = expandedTaskKey ?? defaultExpandedTaskKey;
@@ -3973,71 +4463,113 @@ function FirstPieceInspectionPanel({
     });
   }
   return (
-    <section className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>First Piece Inspection Report</CardTitle>
-          <CardDescription>Open quality approval reports stay here until they are saved. Saving the report completes the quality approval task.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {tasks.length ? (
-            <div className="overflow-hidden rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12"></TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Job card</TableHead>
-                    <TableHead>Machine</TableHead>
-                    <TableHead>Setup</TableHead>
-                    <TableHead>Option</TableHead>
-                    <TableHead>Task assigned</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tasks.map((task) => {
-                    const taskKey = shopFloorPlanKey(task);
-                    const expanded = activeExpandedTaskKey === taskKey;
-                    return (
-                      <Fragment key={taskKey}>
-                        <TableRow className="cursor-pointer" onClick={() => setExpandedTaskKey(expanded ? "" : taskKey)}>
-                          <TableCell>
-                            <Button type="button" variant="ghost" size="sm" className="size-8 p-0" aria-label={expanded ? "Collapse report" : "Expand report"}>
-                              {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-                            </Button>
-                          </TableCell>
-                          <TableCell className="font-medium">{itemCode(task)}</TableCell>
-                          <TableCell>{jobCardNumber(task)}</TableCell>
-                          <TableCell>{displayValue(task.machine)}</TableCell>
-                          <TableCell>{displayValue(task.setupNo)}</TableCell>
-                          <TableCell>{displayValue(task.optionNumber)}</TableCell>
-                          <TableCell>{displayValue(task.shopFloorUpdatedAt)}</TableCell>
-                        </TableRow>
-                        {expanded ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="bg-muted/15 p-4">
-                              <ShopFloorRowAction
-                                next={task}
-                                onSaveStage={saveStage}
-                                onSaveFirstPieceReport={saveFirstPieceReport}
-                                inspectionMasters={masters}
-                                openDataEntry={openDataEntry}
-                              />
+    <section className="grid min-w-0 gap-4">
+      <div
+        aria-label="First Piece Inspection Views"
+        className="grid w-full grid-cols-2 items-center gap-1 rounded-xl border bg-muted/40 p-1 @2xl/main:flex @2xl/main:w-fit"
+        role="tablist"
+      >
+        <Button
+          aria-controls="first-piece-task-list"
+          aria-selected={activeView === "tasks"}
+          className="min-w-0 justify-center gap-2 rounded-lg"
+          onClick={() => setActiveView("tasks")}
+          role="tab"
+          size="sm"
+          type="button"
+          variant={activeView === "tasks" ? "default" : "ghost"}
+        >
+          <ListChecks className="size-4" />
+          Task List
+          <Badge variant="secondary">{tasks.length}</Badge>
+        </Button>
+        <Button
+          aria-controls="first-piece-saved-reports"
+          aria-selected={activeView === "reports"}
+          className="min-w-0 justify-center gap-2 rounded-lg"
+          onClick={() => setActiveView("reports")}
+          role="tab"
+          size="sm"
+          type="button"
+          variant={activeView === "reports" ? "default" : "ghost"}
+        >
+          <FileText className="size-4" />
+          Saved Reports
+          <Badge variant="secondary">{reportRows.length}</Badge>
+        </Button>
+      </div>
+
+      {activeView === "tasks" ? (
+        <Card aria-labelledby="first-piece-task-list-title" id="first-piece-task-list" role="tabpanel">
+          <CardHeader>
+            <CardTitle id="first-piece-task-list-title">First Piece Inspection Task List</CardTitle>
+            <CardDescription>
+              Open Reports Stay On This Page Until They Are Submitted. Partially Completed Readings Are Saved Automatically In This Browser.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {tasks.length ? (
+              <div className="overflow-x-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-14"></TableHead>
+                      <TableHead>Item</TableHead>
+                      <TableHead>Job Card</TableHead>
+                      <TableHead className="hidden @3xl/main:table-cell">Machine</TableHead>
+                      <TableHead className="hidden @4xl/main:table-cell">Setup</TableHead>
+                      <TableHead className="hidden @5xl/main:table-cell">Option</TableHead>
+                      <TableHead className="hidden @6xl/main:table-cell">Task Assigned</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tasks.map((task) => {
+                      const taskKey = shopFloorPlanKey(task);
+                      const expanded = activeExpandedTaskKey === taskKey;
+                      return (
+                        <Fragment key={taskKey}>
+                          <TableRow className="cursor-pointer" onClick={() => setExpandedTaskKey(expanded ? "" : taskKey)}>
+                            <TableCell>
+                              <Button type="button" variant="ghost" size="sm" className="size-10 p-0" aria-label={expanded ? "Collapse Report" : "Expand Report"}>
+                                {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                              </Button>
                             </TableCell>
+                            <TableCell className="font-medium">{itemCode(task)}</TableCell>
+                            <TableCell>{jobCardNumber(task)}</TableCell>
+                            <TableCell className="hidden @3xl/main:table-cell">{displayValue(task.machine)}</TableCell>
+                            <TableCell className="hidden @4xl/main:table-cell">{displayValue(task.setupNo)}</TableCell>
+                            <TableCell className="hidden @5xl/main:table-cell">{displayValue(task.optionNumber)}</TableCell>
+                            <TableCell className="hidden @6xl/main:table-cell">{displayValue(task.shopFloorUpdatedAt)}</TableCell>
                           </TableRow>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <EmptyRowsMessage>Start a quality approval task from the Quality Control tab to open its first-piece report.</EmptyRowsMessage>
-          )}
-        </CardContent>
-      </Card>
-      <DataRowsCard title="First piece inspection reports" rows={asArray(productionControl.firstPieceInspectionReportRows)} empty="No first-piece reports saved yet" />
+                          {expanded ? (
+                            <TableRow>
+                              <TableCell colSpan={7} className="bg-muted/15 p-2 @2xl/main:p-4">
+                                <ShopFloorRowAction
+                                  next={task}
+                                  onSaveStage={saveStage}
+                                  onSaveFirstPieceReport={saveFirstPieceReport}
+                                  inspectionMasters={masters}
+                                  openDataEntry={openDataEntry}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <EmptyRowsMessage>Start A Quality Approval Task From The Quality Control Tab To Open Its First-Piece Report Here.</EmptyRowsMessage>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div aria-label="Saved First Piece Inspection Reports" id="first-piece-saved-reports" role="tabpanel">
+          <DataRowsCard title="Saved First Piece Inspection Reports" rows={reportRows} empty="No first-piece reports saved yet" />
+        </div>
+      )}
     </section>
   );
 }
@@ -4062,7 +4594,7 @@ function ShopFloorItemSummary({
         <span>{jobCardNumber(row)}</span>
         <span>Setup {displayValue(row.setupNo)}</span>
         <span>Option {displayValue(row.optionNumber)}</span>
-        <span>RM: {displayValue(row.rmStatus)}</span>
+        <span>Rm: {displayValue(row.rmStatus)}</span>
       </div>
     );
   }
@@ -4074,7 +4606,7 @@ function ShopFloorItemSummary({
       </div>
       <div className="text-xs text-muted-foreground">{jobCardNumber(row)} | Setup {displayValue(row.setupNo)} | Option {displayValue(row.optionNumber)}</div>
       <div className="text-xs text-muted-foreground">Setup: {displayValue(row.setupPlannedDate || row.plannedDate)} | Production: {displayValue(row.plannedProductionStartDate)} - {displayValue(row.plannedProductionEndDate)}</div>
-      <div className="text-xs text-muted-foreground">RM: {displayValue(row.rmStatus)}</div>
+      <div className="text-xs text-muted-foreground">Rm: {displayValue(row.rmStatus)}</div>
     </div>
   );
 }
@@ -4137,8 +4669,34 @@ function ShopFloorRowAction({
     ? matchingFirstPieceInspectionMasters(inspectionMasters, next)
     : [], [inspectionMasters, next, nextStage?.id]);
   const needsFirstPieceInspection = nextStage?.id === "quality_approval" && Boolean(onSaveFirstPieceReport);
+  const firstPieceDraftKey = needsFirstPieceInspection && next ? firstPieceReportKey(next) : "";
+  const [loadedFirstPieceDraftKey, setLoadedFirstPieceDraftKey] = useState("");
   const canSubmitInspection = !needsFirstPieceInspection
     || (firstPieceMasters.length > 0 && firstPieceMasters.every((master) => firstPieceReadingsFor(inspectionReadings, master).every(Boolean)));
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (!firstPieceDraftKey) {
+        setLoadedFirstPieceDraftKey("");
+        return;
+      }
+      const draft = readStoredFirstPieceInspectionDraft(firstPieceDraftKey);
+      setDoneBy(draft?.approvedBy ?? "");
+      setRemark(draft?.remark ?? "");
+      setInspectionReadings(draft?.readings ?? {});
+      setLoadedFirstPieceDraftKey(firstPieceDraftKey);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [firstPieceDraftKey]);
+
+  useEffect(() => {
+    if (!firstPieceDraftKey || loadedFirstPieceDraftKey !== firstPieceDraftKey) return;
+    writeStoredFirstPieceInspectionDraft(firstPieceDraftKey, {
+      approvedBy: doneBy,
+      readings: inspectionReadings,
+      remark,
+    });
+  }, [doneBy, firstPieceDraftKey, inspectionReadings, loadedFirstPieceDraftKey, remark]);
 
   function updateInspectionReading(master: DashboardPayload, pieceIndex: number, value: string) {
     const masterKey = firstPieceMasterKey(master);
@@ -4188,6 +4746,7 @@ function ShopFloorRowAction({
         firstPieceInspection,
         setupChecklist,
       });
+      if (firstPieceDraftKey) removeStoredFirstPieceInspectionDraft(firstPieceDraftKey);
       setDoneBy("");
       setWorker("");
       setRemark("");
@@ -4217,14 +4776,14 @@ function ShopFloorRowAction({
 
         <Button type="button" size="sm" variant="outline" className="w-fit" disabled={isSubmitting} onClick={() => void submitCurrentStageComplete()}>
           <CheckCircle2 className="size-4" />
-          Item finished
+          Item Finished
         </Button>
       </div>
     );
   }
 
   if (!next) {
-    return <span className="text-sm text-muted-foreground">No action pending</span>;
+    return <span className="text-sm text-muted-foreground">No Action Pending</span>;
   }
 
   if (nextStage && next.shopFloorTaskReady === false) {
@@ -4246,7 +4805,7 @@ function ShopFloorRowAction({
           <div className="grid gap-2 sm:grid-cols-2">
             <Input className="h-8" value={doneBy} placeholder={`${nextStage.role} name/code`} onChange={(event) => setDoneBy(event.target.value)} />
             {nextStage.id === "operator_started" ? (
-              <Input className="h-8" value={worker} placeholder="Worker name/code" onChange={(event) => setWorker(event.target.value)} />
+              <Input className="h-8" value={worker} placeholder="Worker Name/Code" onChange={(event) => setWorker(event.target.value)} />
             ) : (
               <Input className="h-8" value={remark} placeholder="Remark" onChange={(event) => setRemark(event.target.value)} />
             )}
@@ -4257,16 +4816,16 @@ function ShopFloorRowAction({
           {needsSetupChecklist ? (
             <div className="grid gap-2 rounded-md border bg-background p-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-medium">Setup checklist</div>
+                <div className="text-sm font-medium">Setup Checklist</div>
                 <StatusBadge value={setupChecklistStatus} />
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => { window.location.href = checklistPageHref; }}>
-                  Open checklist
+                  Open Checklist
                 </Button>
                 {checklistPhase === "start" && !activeChecklistMasters.length && openDataEntry ? (
                   <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("setup_checklist_master", setupChecklistMasterDefaults())}>
-                    Add checklist master
+                    Add Setup Checklist
                   </Button>
                 ) : null}
               </div>
@@ -4279,6 +4838,7 @@ function ShopFloorRowAction({
               readings={inspectionReadings}
               onReadingChange={updateInspectionReading}
               onAddMaster={openDataEntry}
+              showDraftSaved={loadedFirstPieceDraftKey === firstPieceDraftKey}
             />
           ) : null}
           <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection || !setupChecklistReady || isSubmitting} onClick={() => void submitNextStage()}>
@@ -4310,7 +4870,7 @@ const DEFAULT_REJECTION_REMARK_OPTIONS = [
   { code: "R4", label: "Drawing Error" },
   { code: "R5", label: "Parameter Missed" },
   { code: "R6", label: "Measuring Instrument Issue" },
-  { code: "R7", label: "QC Inspection Error" },
+  { code: "R7", label: "Qc Inspection Error" },
 ];
 
 const DEFAULT_REJECTION_REASON_OPTIONS = [
@@ -4321,38 +4881,38 @@ const DEFAULT_REJECTION_REASON_OPTIONS = [
   { code: "D5", label: "Tap Marks" },
   { code: "D6", label: "Flat Barb" },
   { code: "D7", label: "Hex Bent" },
-  { code: "D8", label: "Step in Hole" },
+  { code: "D8", label: "Step In Hole" },
   { code: "D9", label: "Incomplete Hole" },
-  { code: "D10", label: "Dent on Thread" },
+  { code: "D10", label: "Dent On Thread" },
   { code: "D11", label: "Forging Defect" },
   { code: "D12", label: "Thread Gauge Fail" },
   { code: "D13", label: "Hole Missing" },
-  { code: "D14", label: "Dent on Degree" },
+  { code: "D14", label: "Dent On Degree" },
   { code: "D15", label: "Plating Defect" },
   { code: "D16", label: "Knurling Defect" },
   { code: "D17", label: "Broken Part" },
-  { code: "D18", label: "Dent on Face" },
+  { code: "D18", label: "Dent On Face" },
   { code: "D19", label: "Coating Defect" },
   { code: "D20", label: "Hole Shifted" },
   { code: "D21", label: "Thread Not Straight" },
-  { code: "D22", label: "Vibration on Thread" },
+  { code: "D22", label: "Vibration On Thread" },
   { code: "D23", label: "Incomplete Thread" },
   { code: "D24", label: "Flat Thread" },
   { code: "D25", label: "Face Uneven" },
   { code: "D26", label: "Turning Bent" },
-  { code: "D27", label: "Vibration on Face" },
-  { code: "D28", label: "Dent on Hex" },
-  { code: "D29", label: "Burr on Hex" },
-  { code: "D30", label: "Vibration on Barb" },
-  { code: "D31", label: "Dent on Barb" },
+  { code: "D27", label: "Vibration On Face" },
+  { code: "D28", label: "Dent On Hex" },
+  { code: "D29", label: "Burr On Hex" },
+  { code: "D30", label: "Vibration On Barb" },
+  { code: "D31", label: "Dent On Barb" },
   { code: "D32", label: "Barb Deformed" },
-  { code: "D33", label: "Burr on Barb" },
-  { code: "D34", label: "Dent on Turning" },
-  { code: "D35", label: "Vibration on Turning" },
-  { code: "D36", label: "Burr in Hole" },
-  { code: "D37", label: "Vibration in Hole" },
+  { code: "D33", label: "Burr On Barb" },
+  { code: "D34", label: "Dent On Turning" },
+  { code: "D35", label: "Vibration On Turning" },
+  { code: "D36", label: "Burr In Hole" },
+  { code: "D37", label: "Vibration In Hole" },
   { code: "D38", label: "Die Marks" },
-  { code: "D39", label: "Vibration on Degree" },
+  { code: "D39", label: "Vibration On Degree" },
   { code: "D40", label: "Degree Bent" },
   { code: "D41", label: "Outer Diameter Plus" },
   { code: "D42", label: "Outer Diameter Minus" },
@@ -4372,9 +4932,9 @@ const DEFAULT_REJECTION_REASON_OPTIONS = [
   { code: "D56", label: "Barb Length Minus" },
   { code: "D57", label: "Inner Diameter Plus" },
   { code: "D58", label: "Inner Diameter Minus" },
-  { code: "D59", label: "Electricity failure" },
-  { code: "D60", label: "No raw material" },
-  { code: "D61", label: "No operator" },
+  { code: "D59", label: "Electricity Failure" },
+  { code: "D60", label: "No Raw Material" },
+  { code: "D61", label: "No Operator" },
 ];
 
 function codedMasterOptions(rows: DashboardPayload[], defaults: Array<{ code: string; label: string }>, labelFields: string[]) {
@@ -4393,10 +4953,30 @@ function codedMasterLabel(options: Array<{ code: string; label: string }>, code:
   return options.find((option) => option.code === code)?.label ?? code;
 }
 
+function CompactEntryField({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Label className={`grid min-w-0 gap-0.5 text-[11px] font-medium text-muted-foreground ${className}`}>
+      <span>{label}</span>
+      {children}
+    </Label>
+  );
+}
+
 function ProductionCardRoleEntryForm({
   role,
   rows,
   existingCardRows = [],
+  employeeMasterError,
+  employeeMasterLoaded = false,
+  employeeMasterRows = [],
   bulkRows = [],
   rejectionTypeRows = [],
   rejectionReasonRows = [],
@@ -4406,6 +4986,9 @@ function ProductionCardRoleEntryForm({
   role: RoleTaskKind;
   rows: DashboardPayload[];
   existingCardRows?: DashboardPayload[];
+  employeeMasterError?: string;
+  employeeMasterLoaded?: boolean;
+  employeeMasterRows?: DashboardPayload[];
   bulkRows?: DashboardPayload[];
   rejectionTypeRows?: DashboardPayload[];
   rejectionReasonRows?: DashboardPayload[];
@@ -4448,6 +5031,12 @@ function ProductionCardRoleEntryForm({
     key: shopFloorPlanKey(row),
     label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}`,
   })), [rows]);
+  const employeeOptions = useMemo(() => employeeMasterRows.map((row) => ({
+    code: displayValue(row.empId),
+    name: displayValue(row.employeeName),
+  })).filter((row) => row.code !== "-" && row.name !== "-")
+    .sort((left, right) => left.name.localeCompare(right.name, "en-IN", { numeric: true })), [employeeMasterRows]);
+  const selectedEmployee = employeeOptions.find((employee) => employee.code === operatorNumber);
   const rejectionTypeOptions = useMemo(() => codedMasterOptions(rejectionTypeRows, DEFAULT_REJECTION_TYPE_OPTIONS, ["typeOfRejection", "rejectionType", "name"]), [rejectionTypeRows]);
   const rejectionReasonOptions = useMemo(() => codedMasterOptions(rejectionReasonRows, DEFAULT_REJECTION_REASON_OPTIONS, ["rejectionReason", "reason", "name", "downtimeReason", "description"]), [rejectionReasonRows]);
   const downtimeReasonOptions = useMemo(() => rejectionReasonOptions.map((option) => ({ code: option.code, reason: option.label, label: `${option.code} - ${option.label}` })).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })), [rejectionReasonOptions]);
@@ -4563,7 +5152,7 @@ useEffect(() => {
         prodDate,
         shift,
         operatorId: role === "shopFloor" ? operatorNumber : "",
-        operatorName: "",
+        operatorName: role === "shopFloor" ? selectedEmployee?.name ?? "" : "",
         qcName: "",
         cycleTime: role === "shopFloor" ? cycleSeconds : 0,
         loadingUnloading: 0,
@@ -4661,189 +5250,263 @@ useEffect(() => {
     }
   }
 
+  const entryTabClass = "h-7 rounded px-3 text-xs shadow-none";
+  const compactInputClass = "h-8 text-xs";
+  const compactSelectClass = "h-8 w-full min-w-0 rounded-md border bg-background px-2 text-xs";
+
   return (
-    <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
+    <div className="grid gap-2 rounded-md border bg-muted/10 p-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <div className="text-sm font-medium">{roleLabel}</div>
-          <div className="text-xs text-muted-foreground">Select the machine first; item and setup details are filled from the current plan.</div>
+          <div className="hidden text-[11px] text-muted-foreground sm:block">
+            Select A Machine; Item And Setup Details Come From The Current Plan.
+          </div>
         </div>
         {role === "shopFloor" ? <StatusBadge value={isShopFloorProductionEntry && producedPcs > 0 ? `${formatNumber(producedPcs)} pcs` : isShopFloorBulkDowntimeEntry ? `${formatNumber(bulkRows.length)} machines` : "Select entry"} /> : null}
         {role === "quality" ? <StatusBadge value={isQualityRejectionEntry && rejectQty > 0 ? `${formatNumber(rejectQty)} rejected pcs` : isQualityDowntimeEntry && downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : qualityEntryKind ? "Quality pending" : "Select entry"} /> : null}
         {role === "machinist" ? <StatusBadge value={downtimeDurationMinutes > 0 ? `${formatNumber(downtimeDurationMinutes)} min downtime` : "Downtime pending"} /> : null}
       </div>
+
+      {role === "shopFloor" ? (
+        <div aria-label="Shop Floor Entry Type" className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5" role="group">
+          <Button
+            aria-pressed={shopFloorEntryKind === "production"}
+            className={entryTabClass}
+            onClick={() => setShopFloorEntryKind("production")}
+            type="button"
+            variant={shopFloorEntryKind === "production" ? "default" : "ghost"}
+          >
+            Production
+          </Button>
+          <Button
+            aria-pressed={shopFloorEntryKind === "bulkDowntime"}
+            className={entryTabClass}
+            onClick={() => setShopFloorEntryKind("bulkDowntime")}
+            type="button"
+            variant={shopFloorEntryKind === "bulkDowntime" ? "default" : "ghost"}
+          >
+            Bulk Downtime
+          </Button>
+        </div>
+      ) : null}
+
       {role !== "shopFloor" ? (
-        <div className="grid gap-2 md:grid-cols-3">
-          <Field label={role === "quality" || role === "machinist" ? "Machine no." : "Machine / item"}>
-            <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
-              <option value="">Select machine</option>
+        <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-6">
+          <CompactEntryField className="lg:col-span-2" label="Machine No.">
+            <SearchableSelect className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+              <option value="">Select Machine</option>
               {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-            </select>
-          </Field>
-<Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
-          <Field label="Shift">
-            <select className="h-8 rounded-md border bg-background px-2 text-sm" value={shift} onChange={(event) => setShift(event.target.value)}>
+            </SearchableSelect>
+          </CompactEntryField>
+          <CompactEntryField label="Date">
+            <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+          </CompactEntryField>
+          <CompactEntryField label="Shift">
+            <SearchableSelect className={compactSelectClass} value={shift} onChange={(event) => setShift(event.target.value)}>
               <option value="Day">Day</option>
               <option value="Night">Night</option>
               <option value="General">General</option>
-            </select>
-          </Field>        </div>
-      ) : null}
-      {role === "shopFloor" ? (
-        <>
-          <div className="grid gap-2 rounded-md border bg-background p-2.5 sm:grid-cols-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={shopFloorEntryKind === "production" ? "default" : "outline"}
-              onClick={() => setShopFloorEntryKind("production")}
-            >
-              Production entry
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={shopFloorEntryKind === "bulkDowntime" ? "default" : "outline"}
-              onClick={() => setShopFloorEntryKind("bulkDowntime")}
-            >
-              Bulk downtime entry
-            </Button>
-          </div>
-          {isShopFloorProductionEntry ? (
-            <>
-              <div className="grid gap-2 md:grid-cols-3">
-                <Field label="Machine no.">
-                  <select className="h-8 rounded-md border bg-background px-2 text-sm" value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
-                    <option value="">Select machine</option>
-                    {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-                  </select>
-                </Field>
-<Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
-                <Field label="Shift">
-                  <select className="h-8 rounded-md border bg-background px-2 text-sm" value={shift} onChange={(event) => setShift(event.target.value)}>
-                    <option value="Day">Day</option>
-                    <option value="Night">Night</option>
-                    <option value="General">General</option>
-                  </select>
-                </Field>
-                {selectedRow ? (
-                  <div className="self-end md:col-span-3">
-                    <ShopFloorItemSummary row={selectedRow} tone="current" compact />
-                  </div>
-                ) : null}            <Field label="Cycle time sec"><Input className="h-8" type="number" step="0.01" value={cycleSecondsInput} onChange={(event) => setCycleSecondsByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
-            <Field label="1 piece weight gm"><Input className="h-8" type="number" step="0.01" value={pieceWeightInput} onChange={(event) => setPieceWeightByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} /></Field>
-            <Field label="Operator number"><Input className="h-8" value={operatorNumber} onChange={(event) => setOperatorNumber(event.target.value)} /></Field>
-            <Field label="Machine start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} /></Field>
-            <Field label="Machine end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} /></Field>
-            <Field label="Produced kg gross"><Input className="h-8" type="number" step="0.001" value={producedGrossKg} onChange={(event) => setProducedGrossKg(event.target.value)} /></Field>
-            <Field label="Crates used"><Input className="h-8" type="number" step="1" value={cratesUsed} onChange={(event) => setCratesUsed(event.target.value)} /></Field>
-            <Field label="Crate weight kg">
-              <select className="h-8 rounded-md border bg-background px-2 text-sm" value={crateWeightKg} onChange={(event) => setCrateWeightKg(event.target.value)}>
-                {CRATE_WEIGHT_OPTIONS_KG.map((weight) => <option key={weight} value={String(weight)}>{formatNumber(weight)} kg</option>)}
-              </select>
-            </Field>
-            <Field label="Net produced kg"><Input className="h-8" value={formatNumber(netProducedKg)} readOnly /></Field>
-            <Field label="Produced pcs"><Input className="h-8" value={formatNumber(producedPcs)} readOnly /></Field>
-              </div>
-            </>
-          ) : null}
-          {isShopFloorBulkDowntimeEntry ? (
-            <div className="grid gap-3 rounded-md border bg-background p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-medium">Bulk downtime for running machines</div>
-              <StatusBadge value={`${formatNumber(bulkRows.length)} machines`} />
-            </div>
-            <div className="grid gap-2 md:grid-cols-4">
-              <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
-              <Field label="Downtime code">
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={bulkDowntimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setBulkDowntimeCode(event.target.value)}>
-                  <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add defect / downtime reason master"}</option>
-                  {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Downtime start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(time24Input(event.target.value))} /></Field>
-              <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={bulkDowntimeEnd} onChange={(event) => setBulkDowntimeEnd(time24Input(event.target.value))} /></Field>
-              <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(bulkDowntimeMinutes)} readOnly /></Field>
-            </div>
-            <Button type="button" size="sm" variant="outline" className="w-fit" disabled={!canSaveBulkDowntime || isBulkSaving} onClick={() => void submitBulkDowntime()}>
-              <CheckCircle2 className="size-4" />
-              Save downtime for running machines
-            </Button>
-            </div>
-          ) : null}
-        </>
-      ) : null}
-
-      {role === "quality" || role === "machinist" ? (
-        <>
+            </SearchableSelect>
+          </CompactEntryField>
           {selectedRow ? (
-            <div className="rounded-md border bg-background px-2.5 py-2">
+            <div className="flex min-h-8 items-center rounded-md border bg-background px-2 sm:col-span-2 lg:col-span-2">
               <ShopFloorItemSummary row={selectedRow} tone="current" compact />
             </div>
           ) : null}
-          {role === "quality" ? (
-            <div className="grid gap-2 rounded-md border bg-background p-2.5 sm:grid-cols-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={qualityEntryKind === "downtime" ? "default" : "outline"}
-                onClick={() => setQualityEntryKind("downtime")}
+        </div>
+      ) : null}
+
+      {role === "shopFloor" && isShopFloorProductionEntry ? (
+        <>
+          <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-6">
+            <CompactEntryField className="lg:col-span-2" label="Machine No.">
+              <SearchableSelect className={compactSelectClass} value={selectedOptionKey} onChange={(event) => setSelectedKey(event.target.value)}>
+                <option value="">Select Machine</option>
+                {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+              </SearchableSelect>
+            </CompactEntryField>
+            <CompactEntryField label="Date">
+              <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+            </CompactEntryField>
+            <CompactEntryField label="Shift">
+              <SearchableSelect className={compactSelectClass} value={shift} onChange={(event) => setShift(event.target.value)}>
+                <option value="Day">Day</option>
+                <option value="Night">Night</option>
+                <option value="General">General</option>
+              </SearchableSelect>
+            </CompactEntryField>
+            {selectedRow ? (
+              <div className="flex min-h-8 items-center rounded-md border bg-background px-2 sm:col-span-2 lg:col-span-2">
+                <ShopFloorItemSummary row={selectedRow} tone="current" compact />
+              </div>
+            ) : null}
+          </div>
+          <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
+            <CompactEntryField label="Cycle Time Sec">
+              <Input className={compactInputClass} type="number" step="0.01" value={cycleSecondsInput} onChange={(event) => setCycleSecondsByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} />
+            </CompactEntryField>
+            <CompactEntryField label="Piece Weight Gm">
+              <Input className={compactInputClass} type="number" step="0.01" value={pieceWeightInput} onChange={(event) => setPieceWeightByKey((current) => ({ ...current, [selectedOptionKey]: event.target.value }))} />
+            </CompactEntryField>
+            <CompactEntryField label="Operator No.">
+              <SearchableSelect
+                className={compactSelectClass}
+                disabled={!employeeOptions.length}
+                value={operatorNumber}
+                onChange={(event) => setOperatorNumber(event.target.value)}
               >
-                Downtime entry
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={qualityEntryKind === "rejection" ? "default" : "outline"}
-                onClick={() => setQualityEntryKind("rejection")}
-              >
-                Rejection entry
-              </Button>
-            </div>
-          ) : null}
-          {isDowntimeEntry ? (
-            <div className="grid gap-2 md:grid-cols-4">
-              <Field label="Date"><Input className="h-8" type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} /></Field>
-              <Field label="Downtime code">
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
-                  <option value="">{downtimeReasonOptions.length ? "Select downtime code" : "Add defect / downtime reason master"}</option>
-                  {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Downtime start"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} /></Field>
-              <Field label="Downtime end"><Input className="h-8" type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-hour time as HH:mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} /></Field>
-              <Field label="Downtime minutes"><Input className="h-8" value={formatNumber(downtimeDurationMinutes)} readOnly /></Field>
-            </div>
-          ) : null}
-          {isRejectionEntry ? (
-            <div className="grid gap-2 rounded-md border bg-background p-2.5 md:grid-cols-4">
-              <Field label="Rejection type">
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={rejectionTypeCode} onChange={(event) => setRejectionTypeCode(event.target.value)}>
-                  <option value="">Select type</option>
-                  {rejectionTypeOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Rejection reason">
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}>
-                  <option value="">Select reason</option>
-                  {rejectionReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Rejection remark">
-                <select className="h-8 rounded-md border bg-background px-2 text-sm" value={rejectionRemarkCode} onChange={(event) => setRejectionRemarkCode(event.target.value)}>
-                  <option value="">Select remark</option>
-                  {rejectionRemarkOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Rejected pcs"><Input className="h-8" type="number" step="1" min="0" value={rejectedPieces} onChange={(event) => setRejectedPieces(event.target.value)} /></Field>
-            </div>
-          ) : null}
+                <option value="">
+                  {employeeMasterError
+                    ? "Employee Master Unavailable"
+                    : !employeeMasterLoaded
+                      ? "Loading Employee Master"
+                      : employeeOptions.length
+                        ? "Select Employee"
+                        : "No Joined Employees"}
+                </option>
+                {operatorNumber && !selectedEmployee ? <option value={operatorNumber}>{operatorNumber}</option> : null}
+                {employeeOptions.map((employee) => (
+                  <option key={employee.code} value={employee.code}>{employee.code} - {employee.name}</option>
+                ))}
+              </SearchableSelect>
+            </CompactEntryField>
+            <CompactEntryField label="Machine Start">
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />
+            </CompactEntryField>
+            <CompactEntryField label="Machine End">
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} />
+            </CompactEntryField>
+            <CompactEntryField label="Gross Produced Kg">
+              <Input className={compactInputClass} type="number" step="0.001" value={producedGrossKg} onChange={(event) => setProducedGrossKg(event.target.value)} />
+            </CompactEntryField>
+            <CompactEntryField label="Crates Used">
+              <Input className={compactInputClass} type="number" step="1" value={cratesUsed} onChange={(event) => setCratesUsed(event.target.value)} />
+            </CompactEntryField>
+            <CompactEntryField label="Crate Weight Kg">
+              <SearchableSelect className={compactSelectClass} value={crateWeightKg} onChange={(event) => setCrateWeightKg(event.target.value)}>
+                {CRATE_WEIGHT_OPTIONS_KG.map((weight) => <option key={weight} value={String(weight)}>{formatNumber(weight)} Kg</option>)}
+              </SearchableSelect>
+            </CompactEntryField>
+            <CompactEntryField label="Net Produced Kg">
+              <Input className={compactInputClass} value={formatNumber(netProducedKg)} readOnly />
+            </CompactEntryField>
+            <CompactEntryField label="Produced Pcs">
+              <Input className={compactInputClass} value={formatNumber(producedPcs)} readOnly />
+            </CompactEntryField>
+          </div>
         </>
       ) : null}
+
+      {role === "shopFloor" && isShopFloorBulkDowntimeEntry ? (
+        <div className="grid gap-2 rounded-md border bg-background p-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs font-medium">Running-Machine Downtime</div>
+            <StatusBadge value={`${formatNumber(bulkRows.length)} machines`} />
+          </div>
+          <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            <CompactEntryField label="Date">
+              <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+            </CompactEntryField>
+            <CompactEntryField label="Downtime Code">
+              <SearchableSelect className={compactSelectClass} value={bulkDowntimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setBulkDowntimeCode(event.target.value)}>
+                <option value="">{downtimeReasonOptions.length ? "Select Code" : "Add Downtime Reason Master"}</option>
+                {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+              </SearchableSelect>
+            </CompactEntryField>
+            <CompactEntryField label="Start">
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={bulkDowntimeStart} onChange={(event) => setBulkDowntimeStart(time24Input(event.target.value))} />
+            </CompactEntryField>
+            <CompactEntryField label="End">
+              <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={bulkDowntimeEnd} onChange={(event) => setBulkDowntimeEnd(time24Input(event.target.value))} />
+            </CompactEntryField>
+            <CompactEntryField label="Minutes">
+              <Input className={compactInputClass} value={formatNumber(bulkDowntimeMinutes)} readOnly />
+            </CompactEntryField>
+          </div>
+          <Button type="button" size="sm" variant="outline" className="h-7 w-fit px-2.5 text-xs" disabled={!canSaveBulkDowntime || isBulkSaving} onClick={() => void submitBulkDowntime()}>
+            <CheckCircle2 className="size-3.5" />
+            Save Running-Machine Downtime
+          </Button>
+        </div>
+      ) : null}
+
+      {role === "quality" ? (
+        <div aria-label="Quality Entry Type" className="inline-flex w-fit gap-0.5 rounded-md border bg-background p-0.5" role="group">
+          <Button
+            aria-pressed={qualityEntryKind === "downtime"}
+            className={entryTabClass}
+            onClick={() => setQualityEntryKind("downtime")}
+            type="button"
+            variant={qualityEntryKind === "downtime" ? "default" : "ghost"}
+          >
+            Downtime
+          </Button>
+          <Button
+            aria-pressed={qualityEntryKind === "rejection"}
+            className={entryTabClass}
+            onClick={() => setQualityEntryKind("rejection")}
+            type="button"
+            variant={qualityEntryKind === "rejection" ? "default" : "ghost"}
+          >
+            Rejection
+          </Button>
+        </div>
+      ) : null}
+
+      {isDowntimeEntry ? (
+        <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          <CompactEntryField label="Date">
+            <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+          </CompactEntryField>
+          <CompactEntryField label="Downtime Code">
+            <SearchableSelect className={compactSelectClass} value={downtimeCode} disabled={!downtimeReasonOptions.length} onChange={(event) => setDowntimeCode(event.target.value)}>
+              <option value="">{downtimeReasonOptions.length ? "Select Code" : "Add Downtime Reason Master"}</option>
+              {downtimeReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+            </SearchableSelect>
+          </CompactEntryField>
+          <CompactEntryField label="Start">
+            <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={startTime} onChange={(event) => setStartTime(time24Input(event.target.value))} />
+          </CompactEntryField>
+          <CompactEntryField label="End">
+            <Input className={compactInputClass} type="text" inputMode="numeric" placeholder="HH:mm" pattern="[0-2][0-9]:[0-5][0-9]" title="Use 24-Hour Time As Hh:Mm" value={endTime} onChange={(event) => setEndTime(time24Input(event.target.value))} />
+          </CompactEntryField>
+          <CompactEntryField label="Minutes">
+            <Input className={compactInputClass} value={formatNumber(downtimeDurationMinutes)} readOnly />
+          </CompactEntryField>
+        </div>
+      ) : null}
+
+      {isRejectionEntry ? (
+        <div className="grid gap-1.5 rounded-md border bg-background p-2 sm:grid-cols-2 lg:grid-cols-4">
+          <CompactEntryField label="Rejection Type">
+            <SearchableSelect className={compactSelectClass} value={rejectionTypeCode} onChange={(event) => setRejectionTypeCode(event.target.value)}>
+              <option value="">Select Type</option>
+              {rejectionTypeOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+            </SearchableSelect>
+          </CompactEntryField>
+          <CompactEntryField label="Rejection Reason">
+            <SearchableSelect className={compactSelectClass} value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}>
+              <option value="">Select Reason</option>
+              {rejectionReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+            </SearchableSelect>
+          </CompactEntryField>
+          <CompactEntryField label="Rejection Remark">
+            <SearchableSelect className={compactSelectClass} value={rejectionRemarkCode} onChange={(event) => setRejectionRemarkCode(event.target.value)}>
+              <option value="">Select Remark</option>
+              {rejectionRemarkOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}
+            </SearchableSelect>
+          </CompactEntryField>
+          <CompactEntryField label="Rejected Pcs">
+            <Input className={compactInputClass} type="number" step="1" min="0" value={rejectedPieces} onChange={(event) => setRejectedPieces(event.target.value)} />
+          </CompactEntryField>
+        </div>
+      ) : null}
+
       {showSaveButton ? (
-        <Button type="button" size="sm" className="w-fit" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
-          <CheckCircle2 className="size-4" />
-          {role === "shopFloor" ? "Save production" : isQualityRejectionEntry ? "Save rejection" : "Save downtime"}
+        <Button type="button" size="sm" className="h-7 w-fit px-2.5 text-xs" disabled={!canSave || isSaving} onClick={() => void submitProductionCard()}>
+          <CheckCircle2 className="size-3.5" />
+          {role === "shopFloor" ? "Save Production" : isQualityRejectionEntry ? "Save Rejection" : "Save Downtime"}
         </Button>
       ) : null}
     </div>
@@ -4871,11 +5534,11 @@ function SetupChecklistForm({
   if (phase === "start" && !items.length) {
     return (
       <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
-        <div className="font-medium text-amber-900 dark:text-amber-100">Setup checklist master missing</div>
-        <div className="text-amber-800 dark:text-amber-200">Add active checklist master rows before pre setting can start.</div>
+        <div className="font-medium text-amber-900 dark:text-amber-100">Setup Checklist Missing</div>
+        <div className="text-amber-800 dark:text-amber-200">Create An Active Setup Checklist Before Pre Setting Can Start.</div>
         {onAddMaster ? (
           <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onAddMaster("setup_checklist_master", defaults)}>
-            Add checklist master
+            Add Setup Checklist
           </Button>
         ) : null}
       </div>
@@ -4884,7 +5547,7 @@ function SetupChecklistForm({
   if (phase === "end" && !session) {
     return (
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
-        Pre setting checklist session is missing. Start pre setting for this setup before saving setting done.
+        Pre Setting Checklist Session Is Missing. Start Pre Setting For This Setup Before Saving Setting Done.
       </div>
     );
   }
@@ -4893,9 +5556,9 @@ function SetupChecklistForm({
     <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-medium">Setup checklist {phase === "start" ? "start" : "completion"}</div>
+          <div className="text-sm font-medium">Setup Checklist {phase === "start" ? "start" : "completion"}</div>
           <div className="text-xs text-muted-foreground">
-            {itemCode(row)} / JC {jobCardNumber(row)} / Option {displayValue(row.optionNumber)} / Setup {displayValue(row.setupNo)} / Machine {displayValue(row.machine)} / {formatDate(new Date().toISOString())}
+            {itemCode(row)} / Jc {jobCardNumber(row)} / Option {displayValue(row.optionNumber)} / Setup {displayValue(row.setupNo)} / Machine {displayValue(row.machine)} / {formatDate(new Date().toISOString())}
           </div>
         </div>
         <StatusBadge value={`Version ${displayValue(session?.masterVersion || items[0]?.version)}`} />
@@ -4905,7 +5568,7 @@ function SetupChecklistForm({
           <TableHeader>
             <TableRow>
               <TableHead className="min-w-12">Seq</TableHead>
-              <TableHead className="min-w-72">Check point</TableHead>
+              <TableHead className="min-w-72">Check Point</TableHead>
               <TableHead className="min-w-36">Entry</TableHead>
               <TableHead className="min-w-28">Required</TableHead>
             </TableRow>
@@ -4925,11 +5588,11 @@ function SetupChecklistForm({
                   </TableCell>
                   <TableCell>
                     {inputType === "checkbox" ? (
-                      <select className="h-8 rounded-md border bg-background px-2 text-sm" value={value} onChange={(event) => onValueChange(item, event.target.value)}>
+                      <SearchableSelect className="h-8 rounded-md border bg-background px-2 text-sm" value={value} onChange={(event) => onValueChange(item, event.target.value)}>
                         <option value="">Select</option>
                         <option value="Yes">Yes</option>
                         <option value="No">No</option>
-                      </select>
+                      </SearchableSelect>
                     ) : (
                       <Input className="h-8 min-w-28" type={inputType === "number" ? "number" : "text"} value={value} onChange={(event) => onValueChange(item, event.target.value)} />
                     )}
@@ -4950,22 +5613,24 @@ function FirstPieceInspectionForm({
   readings,
   onReadingChange,
   onAddMaster,
+  showDraftSaved = false,
 }: {
   row: DashboardPayload;
   masters: DashboardPayload[];
   readings: Record<string, string[]>;
   onReadingChange: (master: DashboardPayload, pieceIndex: number, value: string) => void;
   onAddMaster?: (entryType: string, defaults?: Record<string, unknown>) => void;
+  showDraftSaved?: boolean;
 }) {
   const defaults = firstPieceMasterDefaults(row);
   if (!masters.length) {
     return (
       <div className="grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/20">
-        <div className="font-medium text-amber-900 dark:text-amber-100">First piece inspection master missing</div>
-        <div className="text-amber-800 dark:text-amber-200">Add dimensions for this part, option, and setup before quality approval.</div>
+        <div className="font-medium text-amber-900 dark:text-amber-100">First Piece Inspection Master Missing</div>
+        <div className="text-amber-800 dark:text-amber-200">Add Dimensions For This Part, Option, And Setup Before Quality Approval.</div>
         {onAddMaster ? (
           <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onAddMaster("quality_parameter_master", defaults)}>
-            Add inspection master
+            Add Inspection Master
           </Button>
         ) : null}
       </div>
@@ -4976,16 +5641,46 @@ function FirstPieceInspectionForm({
     <div className="grid gap-3 rounded-md border bg-muted/15 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-medium">First piece inspection report</div>
-          <div className="text-xs text-muted-foreground">Task assigned: {displayValue(row.shopFloorUpdatedAt)}</div>
+          <div className="text-sm font-medium">First Piece Inspection Report</div>
+          <div className="text-xs text-muted-foreground">Task Assigned: {displayValue(row.shopFloorUpdatedAt)}</div>
+          {showDraftSaved ? (
+            <div className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              Unfinished Readings Are Saved Automatically.
+            </div>
+          ) : null}
         </div>
         {onAddMaster ? (
           <Button type="button" size="sm" variant="outline" onClick={() => onAddMaster("quality_parameter_master", defaults)}>
-            Add dimension
+            Add Dimension
           </Button>
         ) : null}
       </div>
-      <div className="overflow-auto">
+      <div className="grid gap-3 @5xl/main:hidden">
+        {masters.map((master) => (
+          <div className="grid gap-3 rounded-lg border bg-background p-3" key={`mobile-${firstPieceMasterKey(master)}`}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <div className="font-medium">{qualityParameterName(master)}</div>
+                <div className="text-xs text-muted-foreground">{qualityParameterCode(master)} / {displayValue(master.instrumentUsed)}</div>
+              </div>
+              <Badge variant="outline">{displayValue(master.specification)} ({qualityParameterTolerance(master)})</Badge>
+            </div>
+            <div className="grid gap-2 @lg/main:grid-cols-2 @2xl/main:grid-cols-3 @4xl/main:grid-cols-5">
+              {[0, 1, 2, 3, 4].map((pieceIndex) => (
+                <label className="grid gap-1 text-xs font-medium" key={pieceIndex}>
+                  Piece {pieceIndex + 1}
+                  <FirstPieceReadingControl
+                    master={master}
+                    value={firstPieceReadingsFor(readings, master)[pieceIndex] ?? ""}
+                    onChange={(value) => onReadingChange(master, pieceIndex, value)}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="hidden overflow-auto @5xl/main:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -5012,28 +5707,9 @@ function FirstPieceInspectionForm({
                 <TableCell>{displayValue(master.toleranceMinus)}</TableCell>
                 {[0, 1, 2, 3, 4].map((pieceIndex) => {
                   const value = firstPieceReadingsFor(readings, master)[pieceIndex] ?? "";
-                  const result = qualityReadingResult(master, value);
                   return (
-                    <TableCell key={pieceIndex} className={qualityResultTone(result) === "bad" ? "bg-red-50/70 dark:bg-red-950/20" : ""}>
-                      <div className="grid gap-1">
-                        {qualityParameterInputType(master) === "pass_fail" ? (
-                          <select className={`h-8 min-w-20 rounded-md border bg-background px-2 text-sm ${qualityReadingInputClass(result)}`} value={value} onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)} required>
-                            <option value="">Select</option>
-                            <option value="OK">OK</option>
-                            <option value="Not OK">Not OK</option>
-                          </select>
-                        ) : (
-                          <Input
-                            className={`h-8 min-w-20 ${qualityReadingInputClass(result)}`}
-                            type={qualityParameterInputType(master) === "number" ? "number" : "text"}
-                            step="0.001"
-                            value={value}
-                            onChange={(event) => onReadingChange(master, pieceIndex, event.target.value)}
-                            required
-                          />
-                        )}
-                        <StatusBadge value={result || "Pending"} />
-                      </div>
+                    <TableCell key={pieceIndex}>
+                      <FirstPieceReadingControl master={master} value={value} onChange={(nextValue) => onReadingChange(master, pieceIndex, nextValue)} />
                     </TableCell>
                   );
                 })}
@@ -5042,6 +5718,40 @@ function FirstPieceInspectionForm({
           </TableBody>
         </Table>
       </div>
+    </div>
+  );
+}
+
+function FirstPieceReadingControl({
+  master,
+  onChange,
+  value,
+}: {
+  master: DashboardPayload;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  const result = qualityReadingResult(master, value);
+  return (
+    <div className={`grid gap-1 rounded-md ${qualityResultTone(result) === "bad" ? "bg-red-50/70 dark:bg-red-950/20" : ""}`}>
+      {qualityParameterInputType(master) === "pass_fail" ? (
+        <SearchableSelect className={`h-11 min-w-20 rounded-md border bg-background px-2 text-sm @5xl/main:h-8 ${qualityReadingInputClass(result)}`} value={value} onChange={(event) => onChange(event.target.value)} required>
+          <option value="">Select</option>
+          <option value="OK">Ok</option>
+          <option value="Not OK">Not Ok</option>
+        </SearchableSelect>
+      ) : (
+        <Input
+          className={`h-11 min-w-20 @5xl/main:h-8 ${qualityReadingInputClass(result)}`}
+          type={qualityParameterInputType(master) === "number" ? "number" : "text"}
+          inputMode={qualityParameterInputType(master) === "number" ? "decimal" : undefined}
+          step="0.001"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          required
+        />
+      )}
+      <StatusBadge value={result || "Pending"} />
     </div>
   );
 }
@@ -5083,16 +5793,16 @@ function MasterReadinessPanel({
   return (
     <section className="grid gap-4">
       <WorkOrderGapTable
-        title="Production validation"
-        description="Immediate attention: RM received and at least one planning gap exists."
+        title="Production Validation"
+        description="Immediate Attention: Rm Received And At Least One Planning Gap Exists."
         rows={masterGaps}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
         showFilters={false}
       />
       <WorkOrderGapTable
-        title="Whole work-order missing details"
-        description="Planner view for every work order with missing route option, route master, cycle time, tooling, or machine master."
+        title="Whole Work-Order Missing Details"
+        description="Planner View For Every Accepted Work Order With A Missing Planning Item, Route Option, Route Master, Cycle Time, Tooling, Or Machine Master."
         rows={allWorkOrderGaps}
         submitAction={submitAction}
         openDataEntry={openDataEntry}
@@ -5122,6 +5832,7 @@ function WorkOrderGapTable({
   const filteredRows = rows.filter((row) => {
     const matchesGap = gapFilter === "all"
       || (gapFilter === "route_option" && Boolean(row.routeSelectionMissing))
+      || (gapFilter === "planning_item" && Boolean(row.planningItemMissing))
       || (gapFilter === "route_master" && Boolean(row.routeMasterMissing))
       || (gapFilter === "cycle_time" && Boolean(row.cycleTimeMissing))
       || (gapFilter === "tooling" && Boolean(row.toolingPlanMissing))
@@ -5135,27 +5846,28 @@ function WorkOrderGapTable({
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{description} {formatNumber(filteredRows.length)} of {formatNumber(rows.length)} rows shown.</CardDescription>
+        <CardDescription>{description} {formatNumber(filteredRows.length)} Of {formatNumber(rows.length)} Rows Shown.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {showFilters ? (
           <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Gap type">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={gapFilter} onChange={(event) => setGapFilter(event.target.value)}>
-              <option value="all">All gaps</option>
-              <option value="route_option">Route option missing</option>
-              <option value="route_master">Route master missing</option>
-              <option value="cycle_time">Cycle time missing</option>
-              <option value="tooling">Tooling missing</option>
-              <option value="machine_master">Machine master missing</option>
-            </select>
+          <Field label="Gap Type">
+            <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={gapFilter} onChange={(event) => setGapFilter(event.target.value)}>
+              <option value="all">All Gaps</option>
+              <option value="planning_item">Planning Item Missing</option>
+              <option value="route_option">Route Option Missing</option>
+              <option value="route_master">Route Master Missing</option>
+              <option value="cycle_time">Cycle Time Missing</option>
+              <option value="tooling">Tooling Missing</option>
+              <option value="machine_master">Machine Master Missing</option>
+            </SearchableSelect>
           </Field>
-          <Field label="RM status">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={rmFilter} onChange={(event) => setRmFilter(event.target.value)}>
-              <option value="all">All work orders</option>
-              <option value="received">RM received</option>
-              <option value="waiting">Waiting RM</option>
-            </select>
+          <Field label="Rm Status">
+            <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={rmFilter} onChange={(event) => setRmFilter(event.target.value)}>
+              <option value="all">All Work Orders</option>
+              <option value="received">Rm Received</option>
+              <option value="waiting">Waiting Rm</option>
+            </SearchableSelect>
           </Field>
           </div>
         ) : null}
@@ -5163,10 +5875,10 @@ function WorkOrderGapTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Job card</TableHead>
+                <TableHead>Job Card</TableHead>
                 <TableHead>Item</TableHead>
-                <TableHead>RM</TableHead>
-                <TableHead>Missing details</TableHead>
+                <TableHead>Rm</TableHead>
+                <TableHead>Missing Details</TableHead>
                 <TableHead>Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -5183,7 +5895,7 @@ function WorkOrderGapTable({
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                    No work-order gaps match the selected filters
+                    No Work-Order Gaps Match The Selected Filters
                   </TableCell>
                 </TableRow>
               )}
@@ -5234,10 +5946,10 @@ function WorkOrderGapRow({
         <div className="grid gap-2">
           {row.routeSelectionMissing ? (
             <form className="grid gap-1.5" onSubmit={(event) => void submitRoute(event)}>
-              <Label className="text-xs text-muted-foreground">Select option number</Label>
+              <Label className="text-xs text-muted-foreground">Select Option Number</Label>
               <div className="grid gap-2 sm:grid-cols-[minmax(12rem,1fr)_7.5rem]">
-                <select className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm" name="optionNumber" defaultValue="" required>
-                  <option value="">Select option</option>
+                <SearchableSelect className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm" name="optionNumber" defaultValue="" required>
+                  <option value="">Select Option</option>
                   {options.map((option, optionIndex) => {
                     const record = asRecord(option);
                     const value = str(record.optionNumber || record.option || option) || String(optionIndex + 1);
@@ -5247,23 +5959,23 @@ function WorkOrderGapRow({
                       </option>
                     );
                   })}
-                </select>
-                <Button type="submit" size="sm" className="w-full">Save option</Button>
+                </SearchableSelect>
+                <Button type="submit" size="sm" className="w-full">Save Option</Button>
               </div>
             </form>
           ) : null}
           <div className="grid gap-2 sm:grid-cols-4">
             {row.routeMasterMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("route", dataEntryDefaultsFromGap(row, "route"))}>Add routing</Button>
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("route", dataEntryDefaultsFromGap(row, "route"))}>{row.planningItemMissing ? "Create Product Route" : "Add Routing"}</Button>
             ) : null}
             {row.cycleTimeMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("cycle", dataEntryDefaultsFromGap(row, "cycle"))}>Add cycle time</Button>
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("cycle", dataEntryDefaultsFromGap(row, "cycle"))}>Add Cycle Time</Button>
             ) : null}
             {row.toolingPlanMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("tooling", dataEntryDefaultsFromGap(row, "tooling"))}>Add tooling</Button>
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("tooling", dataEntryDefaultsFromGap(row, "tooling"))}>Add Tooling</Button>
             ) : null}
             {row.machineMasterMissing ? (
-              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("machine_master", dataEntryDefaultsFromGap(row, "machine_master"))}>Add machine</Button>
+              <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => openDataEntry("machine_master", dataEntryDefaultsFromGap(row, "machine_master"))}>Add Machine</Button>
             ) : null}
           </div>
         </div>
@@ -5274,6 +5986,7 @@ function WorkOrderGapRow({
 
 function workOrderGapLabels(row: DashboardPayload) {
   return [
+    row.planningItemMissing ? "Planning item" : "",
     row.routeSelectionMissing ? "Route option" : "",
     row.routeMasterMissing ? "Route master" : "",
     row.cycleTimeMissing ? "Cycle time" : "",
@@ -5290,6 +6003,7 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
   if (entryType === "machine_master") {
     return {
       machineNo: "",
+      machineFamily: machineUsed,
       machineType: str(row.machineType),
       status: "Active",
       remarks: machineUsed ? `Active machine required for route family ${machineUsed}` : "Active machine required for route family",
@@ -5301,12 +6015,12 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
     optionNumber: optionNumber && optionNumber !== "Not selected" ? optionNumber : "",
     setupNo,
     setupName,
-    machineUsed,
   };
 
   if (entryType === "route") {
     return {
       ...defaults,
+      machineFamily: machineUsed,
       machineType: str(row.machineType),
       numberOfSetups: str(row.numberOfSetups),
     };
@@ -5315,9 +6029,10 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
   if (entryType === "cycle") {
     return {
       ...defaults,
-      operationWeight: row.operationWeight || row.stageWeight || "",
       cycleTime: "",
-      loadingUnloading: "",
+      loading: "",
+      unloading: "",
+      totalTime: "",
     };
   }
 
@@ -5338,59 +6053,127 @@ function DataEntryPanel({
   submitAction,
   preferredEntryType,
   preferredDefaults,
+  allowedEntryTypes,
+  productionFloorCode,
+  onProductionFloorChange,
+  title = "Production data entry",
+  description = "Use focused forms for manual entry or download the matching CSV template for a small import.",
 }: {
   payload: DashboardPayload;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  submitAction: (
+    path: string,
+    body: Record<string, unknown>,
+    options?: { throwOnError?: boolean },
+  ) => Promise<void>;
   preferredEntryType: string;
   preferredDefaults: Record<string, unknown>;
+  allowedEntryTypes?: readonly string[];
+  productionFloorCode?: ProductionFloorCode;
+  onProductionFloorChange?: (floorCode: ProductionFloorCode) => void;
+  title?: string;
+  description?: string;
 }) {
   const dataEntry = asRecord(payload.dataEntry);
-  const [bulkEntryType, setBulkEntryType] = useState(preferredEntryType || dataEntrySpecs[0]?.entryType || "route");
-  const selectedSpec = dataEntrySpecs.find((spec) => spec.entryType === bulkEntryType) ?? dataEntrySpecs[0];
+  const productionControl = asRecord(payload.productionControl);
+  const availableSpecs = useMemo(
+    () => allowedEntryTypes?.length
+      ? dataEntrySpecs.filter((spec) => allowedEntryTypes.includes(spec.entryType))
+      : dataEntrySpecs,
+    [allowedEntryTypes],
+  );
+  const initialEntryType = availableSpecs.some((spec) => spec.entryType === preferredEntryType)
+    ? preferredEntryType
+    : availableSpecs[0]?.entryType || "route";
+  const [bulkEntryType, setBulkEntryType] = useState(initialEntryType);
+  const [isImporting, setIsImporting] = useState(false);
+  const selectedSpec = availableSpecs.find((spec) => spec.entryType === bulkEntryType) ?? availableSpecs[0];
+  const selectedMasterIsCompanyWide = companyWideQualityMasterEntryTypes.includes(
+    bulkEntryType as typeof companyWideQualityMasterEntryTypes[number],
+  );
+  const selectedMasterRows = useMemo(
+    () => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [],
+    [payload, productionControl, selectedSpec],
+  );
 
   async function importEntryTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isImporting) return;
     const form = event.currentTarget;
     const file = new FormData(form).get("file");
     if (!(file instanceof File) || !file.name) return;
-    const fileBase64 = await readFileAsDataUrl(file);
-    await submitAction("data-import", { entryType: bulkEntryType, fileName: file.name, fileBase64 });
-    if (typeof form.reset === "function") form.reset();
+    setIsImporting(true);
+    try {
+      const fileBase64 = await readFileAsDataUrl(file);
+      await submitAction(
+        "data-import",
+        { entryType: bulkEntryType, productionFloorCode, fileName: file.name, fileBase64 },
+        { throwOnError: true },
+      );
+      if (typeof form.reset === "function") form.reset();
+    } catch {
+      // submitAction already shows the import error; keep the file selected for correction.
+    } finally {
+      setIsImporting(false);
+    }
   }
 
   return (
     <section className="grid gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Production data entry</CardTitle>
-          <CardDescription>Manual entries write through authenticated Convex mutations. Upload filled CSV templates here for small targeted imports; use the local script only for large full-workbook uploads.</CardDescription>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
         </CardHeader>
+        {isImporting ? <div className="px-6"><ProcessingNotice message="Reading and importing the CSV file..." /></div> : null}
+        <fieldset aria-busy={isImporting} className="contents" disabled={isImporting}>
         <CardContent className="grid gap-4">
+          {productionFloorCode && onProductionFloorChange ? (
+            <div className="grid gap-2 @3xl/main:grid-cols-[minmax(240px,360px)_1fr] @3xl/main:items-end">
+              <Field label="Production Unit">
+                <SearchableSelect
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  required
+                  value={productionFloorCode}
+                  onChange={(event) => onProductionFloorChange(normalizeProductionFloorCode(event.target.value))}
+                >
+                  {productionFloors.map((floor) => (
+                    <option key={floor.code} value={floor.code}>{floor.label}</option>
+                  ))}
+                </SearchableSelect>
+              </Field>
+              <p className="pb-2 text-sm text-muted-foreground">
+                {selectedMasterIsCompanyWide
+                  ? "This quality code master is shared by every Production Unit."
+                  : "Uploads and manual entries are saved for the selected Production Unit."}
+              </p>
+            </div>
+          ) : null}
           <form className="grid gap-3 @3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]" onSubmit={importEntryTemplate}>
-            <Field label="Select entry form">
-              <select
+            <Field label="Select Entry Form">
+              <SearchableSelect
                 className="h-9 rounded-md border bg-background px-3 text-sm"
                 value={bulkEntryType}
                 onChange={(event) => setBulkEntryType(event.target.value)}
               >
-                {dataEntrySpecs.map((spec) => (
+                {availableSpecs.map((spec) => (
                   <option key={spec.entryType} value={spec.entryType}>
                     {spec.title}
                   </option>
                 ))}
-              </select>
+              </SearchableSelect>
             </Field>
-            <Field label="Filled CSV template">
+            <Field label="Filled Csv Template">
               <Input name="file" type="file" accept=".csv,text/csv" />
             </Field>
-            <Button className="self-end" type="submit">Import CSV</Button>
+            <Button className="self-end" type="submit" disabled={isImporting}>{isImporting ? "Importing..." : "Import Csv"}</Button>
           </form>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => downloadApi("data-template", bulkEntryType)}>
-              Download template
+              Download Template
             </Button>
           </div>
         </CardContent>
+        </fieldset>
       </Card>
       {selectedSpec ? (
         <DataEntryForm
@@ -5399,6 +6182,9 @@ function DataEntryPanel({
           submitAction={submitAction}
           defaults={selectedSpec.entryType === preferredEntryType ? preferredDefaults : {}}
           dataEntry={dataEntry}
+          masterRows={selectedMasterRows}
+          productionControl={productionControl}
+          productionFloorCode={productionFloorCode}
         />
       ) : null}
     </section>
@@ -5409,22 +6195,29 @@ function MasterTablesPanel({
   payload,
   productionControl,
   openDataEntry,
+  productionFloorCode,
+  onProductionFloorChange,
 }: {
   payload: DashboardPayload;
   productionControl: DashboardPayload;
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  productionFloorCode: ProductionFloorCode;
+  onProductionFloorChange: (floorCode: ProductionFloorCode) => void;
 }) {
   const specs = useMemo(() => masterTableSpecs(), []);
   const [entryType, setEntryType] = useState(() => specs[0]?.entryType ?? "");
   const [searchQuery, setSearchQuery] = useState("");
-  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [tableResetKey, setTableResetKey] = useState(0);
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
+  const selectedMasterIsCompanyWide = companyWideQualityMasterEntryTypes.includes(
+    selectedSpec?.entryType as typeof companyWideQualityMasterEntryTypes[number],
+  );
   const dataEntry = asRecord(payload.dataEntry);
   const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [], [payload, productionControl, selectedSpec]);
-  const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec, rows) : [], [selectedSpec, rows]);
+  const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec) : [], [selectedSpec]);
   const filteredRows = useMemo(
-    () => rows.filter((row) => masterTableRowMatches(row, columns, searchQuery, columnFilters)),
-    [rows, columns, searchQuery, columnFilters],
+    () => rows.filter((row) => masterTableRowMatches(row, columns, searchQuery)),
+    [rows, columns, searchQuery],
   );
   const summaryRows = useMemo(
     () => selectedSpec ? masterTableKeySummaryRows(selectedSpec, dataEntry, rows, filteredRows) : [],
@@ -5435,8 +6228,8 @@ function MasterTablesPanel({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Master tables</CardTitle>
-          <CardDescription>No master definitions are configured.</CardDescription>
+          <CardTitle>Master Tables</CardTitle>
+          <CardDescription>No Master Definitions Are Configured.</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -5446,36 +6239,52 @@ function MasterTablesPanel({
     <section className="grid gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Master tables</CardTitle>
-          <CardDescription>Search saved master data in tabular format. Use Data Entry only when you need to add or edit rows.</CardDescription>
+          <CardTitle>Master Tables</CardTitle>
+          <CardDescription>Search Saved Master Data In Tabular Format. Use Data Entry Only When You Need To Add Or Edit Rows.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(260px,1fr)_auto]">
+        <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(220px,320px)_minmax(260px,1fr)]">
+          <Field label="Production Unit">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              required
+              value={productionFloorCode}
+              onChange={(event) => onProductionFloorChange(normalizeProductionFloorCode(event.target.value))}
+            >
+              {productionFloors.map((floor) => (
+                <option key={floor.code} value={floor.code}>{floor.label}</option>
+              ))}
+            </SearchableSelect>
+          </Field>
           <Field label="Master">
-            <select
+            <SearchableSelect
               className="h-9 rounded-md border bg-background px-3 text-sm"
               value={selectedSpec.entryType}
-              onChange={(event) => { setEntryType(event.target.value); setSearchQuery(""); setColumnFilters({}); }}
+              onChange={(event) => { setEntryType(event.target.value); setSearchQuery(""); setTableResetKey((current) => current + 1); }}
             >
               {specs.map((spec) => (
                 <option key={spec.entryType} value={spec.entryType}>{spec.title}</option>
               ))}
-            </select>
+            </SearchableSelect>
           </Field>
-          <Field label="Search all visible columns">
+          <Field label="Search All Visible Columns">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="pl-9" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search saved rows" />
+              <Input className="pl-9" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search Saved Rows" />
             </div>
           </Field>
-          <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); setColumnFilters({}); }}>Clear filters</Button>
-            <Button type="button" variant="outline" disabled={!filteredRows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, filteredRows, columns)}>
+          <div className="flex flex-wrap items-end gap-2 @4xl/main:col-span-3">
+            <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); setTableResetKey((current) => current + 1); }}>Clear Filters</Button>
+            <Button type="button" variant="outline" disabled={!rows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, rows, columns, "all-rows")}>
               <Download className="size-4" />
-              Export visible rows
+              Download All Rows
+            </Button>
+            <Button type="button" variant="outline" disabled={!filteredRows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, filteredRows, columns, "visible-rows")}>
+              <Download className="size-4" />
+              Export Visible Rows
             </Button>
             <Button type="button" onClick={() => openDataEntry(selectedSpec.entryType, { __returnTab: "masterTablesTab" })}>
               <Plus className="size-4" />
-              Add row
+              Add Row
             </Button>
           </div>
         </CardContent>
@@ -5486,33 +6295,23 @@ function MasterTablesPanel({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle>{selectedSpec.title}</CardTitle>
-              <CardDescription>{selectedSpec.description}</CardDescription>
+              <CardDescription>
+                {selectedSpec.description} {selectedMasterIsCompanyWide ? "Shared Across All Production Units." : `Showing ${productionFloors.find((floor) => floor.code === productionFloorCode)?.label ?? productionFloorCode}.`}
+              </CardDescription>
             </div>
-            <Badge variant="outline">{formatNumber(filteredRows.length)} / {formatNumber(rows.length)} rows</Badge>
+            <Badge variant="outline">{formatNumber(filteredRows.length)} / {formatNumber(rows.length)} Rows</Badge>
           </div>
         </CardHeader>
         <CardContent>
           {!rows.length ? (
-            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No saved rows found for this master.</div>
+            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">No Saved Rows Found For This Master.</div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
-              <Table>
+              <Table key={`${selectedSpec.entryType}-${tableResetKey}`}>
                 <TableHeader>
                   <TableRow>
                     {columns.map((column) => (
-                      <TableHead key={column.key} className="min-w-36 whitespace-nowrap">{column.label}</TableHead>
-                    ))}
-                  </TableRow>
-                  <TableRow>
-                    {columns.map((column) => (
-                      <TableHead key={`${column.key}-filter`} className="min-w-36 whitespace-nowrap">
-                        <MachineMasterColumnFilter
-                          label={column.label}
-                          value={columnFilters[column.key] ?? ""}
-                          options={masterTableColumnOptions(rows, column.key)}
-                          onChange={(value) => setColumnFilters((current) => ({ ...current, [column.key]: value }))}
-                        />
-                      </TableHead>
+                      <TableHead key={column.key} className="h-10 min-w-28 px-2 py-1 text-xs">{column.label}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
@@ -5520,7 +6319,7 @@ function MasterTablesPanel({
                   {filteredRows.map((row, index) => (
                     <TableRow key={masterTableRowKey(selectedSpec.entryType, row, index)}>
                       {columns.map((column) => (
-                        <TableCell key={column.key} className="align-top text-xs">
+                        <TableCell key={column.key} className="max-w-64 whitespace-normal px-2 py-1.5 align-top text-xs leading-5">
                           {masterTableCellText(row, column.key)}
                         </TableCell>
                       ))}
@@ -5535,8 +6334,8 @@ function MasterTablesPanel({
       {summaryRows.length ? (
         <Card>
           <CardHeader>
-            <CardTitle>{selectedSpec.title} summary</CardTitle>
-            <CardDescription>Key summary for the selected master only.</CardDescription>
+            <CardTitle>{selectedSpec.title} Summary</CardTitle>
+            <CardDescription>Key Summary For The Selected Master Only.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto rounded-md border">
@@ -5591,18 +6390,19 @@ function masterTableRows(entryType: string, payload: DashboardPayload, productio
   if (directRows) {
     rows.push(...directRows);
   } else {
-    for (const source of masterTableRowSources[entryType] ?? []) {
+    for (const source of productionMasterRowSources[entryType] ?? []) {
       rows.push(...asArray(productionControl[source]));
       rows.push(...asArray(dataEntry[source]));
     }
-    rows.push(...asArray(dataEntry.rows).filter((row) => str(row.entryType) === entryType));
-    rows.push(...asArray(dataEntry.templates).filter((row) => str(row.entryType) === entryType));
+    rows.push(...dataEntryRowsForProductionMaster(entryType, dataEntry));
   }
 
-  if (entryType === "quality_parameter_master") return mergeQualityParameterRows(rows);
-  if (entryType === "maintenance_master") return activeMaintenanceMasterRows(rows);
-  if (entryType === "maintenance_checklist_master") return activeMaintenanceChecklistRows(rows);
-  return dedupeMasterTableRows(entryType, rows);
+  const matchingRows = rowsForProductionMaster(entryType, rows);
+  if (entryType === "quality_parameter_master") return mergeQualityParameterRows(matchingRows);
+  if (entryType === "maintenance_master") return activeMaintenanceMasterRows(dedupeMasterTableRows(entryType, matchingRows));
+  if (entryType === "maintenance_checklist_master") return mergeMaintenanceChecklistRows(matchingRows);
+  if (entryType === "setup_checklist_master") return mergeSetupChecklistRows(matchingRows);
+  return dedupeMasterTableRows(entryType, matchingRows);
 }
 
 function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
@@ -5614,17 +6414,8 @@ function dedupeMasterTableRows(entryType: string, rows: DashboardPayload[]) {
   return [...byKey.values()].sort((a, b) => masterTableRowKey(entryType, a, 0).localeCompare(masterTableRowKey(entryType, b, 0), undefined, { numeric: true }));
 }
 
-function masterTableColumns(spec: DataEntrySpec, rows: DashboardPayload[]): MasterTableColumn[] {
-  const ignored = new Set(["_id", "_creationTime", "entryType", "payload", "key", "dataEntryKey"]);
-  const columns = new Map<string, MasterTableColumn>();
-  for (const field of spec.fields) columns.set(field.name, { key: field.name, label: field.label });
-  for (const row of rows) {
-    for (const key of Object.keys(row)) {
-      if (ignored.has(key) || columns.has(key)) continue;
-      columns.set(key, { key, label: humanizeMasterTableColumn(key) });
-    }
-  }
-  return [...columns.values()];
+function masterTableColumns(spec: DataEntrySpec): MasterTableColumn[] {
+  return columnsForProductionMaster(spec.fields);
 }
 
 function humanizeMasterTableColumn(key: string) {
@@ -5639,14 +6430,14 @@ function masterTableCellText(row: DashboardPayload, key: string) {
 }
 
 
-function downloadMasterTableCsv(spec: DataEntrySpec, rows: DashboardPayload[], columns: MasterTableColumn[]) {
+function downloadMasterTableCsv(spec: DataEntrySpec, rows: DashboardPayload[], columns: MasterTableColumn[], scope: "all-rows" | "visible-rows") {
   const header = columns.map((column) => csvCell(column.label)).join(",");
   const body = rows.map((row) => columns.map((column) => csvCell(masterTableCellText(row, column.key))).join(","));
   const blob = new Blob(["\ufeff", [header, ...body].join("\r\n"), "\r\n"], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${safeExportFileName(spec.title)}-${new Date().toISOString().slice(0, 10)}-visible-rows.csv`;
+  anchor.download = `${safeExportFileName(spec.title)}-${new Date().toISOString().slice(0, 10)}-${scope}.csv`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -5663,19 +6454,84 @@ function csvCell(value: unknown) {
 function safeExportFileName(value: unknown) {
   return str(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "master-table";
 }
-function masterTableColumnOptions(rows: DashboardPayload[], key: string) {
-  return uniqueValues(rows.map((row) => masterTableCellText(row, key)).filter((value) => value !== "-"));
-}
-
-function masterTableRowMatches(row: DashboardPayload, columns: MasterTableColumn[], searchQuery: string, columnFilters: Record<string, string>) {
+function masterTableRowMatches(row: DashboardPayload, columns: MasterTableColumn[], searchQuery: string) {
   const query = searchQuery.trim().toLowerCase();
-  if (query && !columns.some((column) => masterTableCellText(row, column.key).toLowerCase().includes(query))) return false;
-  return columns.every((column) => typedFilterMatches(masterTableCellText(row, column.key), columnFilters[column.key] ?? ""));
+  return !query || columns.some((column) => masterTableCellText(row, column.key).toLowerCase().includes(query));
 }
 
 function masterTableRowKey(entryType: string, row: DashboardPayload, index: number) {
   return `${entryType}|${dataEntryKey(entryType, row) || JSON.stringify(row) || index}`;
 }
+
+const centralMachineMasterRowKeys = [
+  "machinePlanningRows",
+  "maintenanceScheduleRows",
+  "maintenanceTaskRows",
+  "maintenanceMasterRows",
+  "maintenanceChecklistMasterRows",
+] as const;
+
+function combinedMachineMasterProductionControl(pages: DashboardPayload[]) {
+  const controls = pages.map((page) => asRecord(page.productionControl));
+  return Object.fromEntries(
+    centralMachineMasterRowKeys.map((key) => [
+      key,
+      controls.flatMap((control) => asArray(control[key])),
+    ]),
+  );
+}
+
+function CentralMachineMasterWorkspace({
+  payload,
+  submitAction,
+  openDataEntry,
+  preferredDefaults,
+}: {
+  payload: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  preferredDefaults: Record<string, unknown>;
+}) {
+  const [reloadKey, setReloadKey] = useState(0);
+  const conventional = usePostgresOperationalPage("/api/dashboard?floor=conventional", 0, undefined, 0, reloadKey);
+  const conventional02 = usePostgresOperationalPage("/api/dashboard?floor=conventional-02", 0, undefined, 0, reloadKey);
+  const cnc = usePostgresOperationalPage("/api/dashboard?floor=cnc", 0, undefined, 0, reloadKey);
+  const forging = usePostgresOperationalPage("/api/dashboard?floor=forging", 0, undefined, 0, reloadKey);
+  const floorPages = useMemo(
+    () => [conventional.data, conventional02.data, cnc.data, forging.data].filter((page): page is DashboardPayload => Boolean(page)),
+    [cnc.data, conventional.data, conventional02.data, forging.data],
+  );
+  const productionControl = useMemo(
+    () => combinedMachineMasterProductionControl(floorPages.length ? floorPages : [payload]),
+    [floorPages, payload],
+  );
+  const workspacePayload = useMemo(
+    () => ({ ...payload, productionControl }),
+    [payload, productionControl],
+  );
+
+  async function saveAndReload(path: string, body: Record<string, unknown>) {
+    await submitAction(path, body);
+    setReloadKey((current) => current + 1);
+  }
+
+  return (
+    <div className="grid gap-6">
+      <DataEntryPanel
+        key={`central-machine-master-${JSON.stringify(preferredDefaults)}`}
+        payload={workspacePayload}
+        submitAction={saveAndReload}
+        preferredEntryType="machine_master"
+        preferredDefaults={preferredDefaults}
+        allowedEntryTypes={["machine_master"]}
+        title="Central Machine Master"
+        description="Create, import, or reallocate machines here. Production screens only receive machines assigned to their Production unit."
+      />
+      <MachineMasterPanel productionControl={productionControl} submitAction={saveAndReload} openDataEntry={openDataEntry} />
+    </div>
+  );
+}
+
 function MachineMasterPanel({
   productionControl,
   submitAction,
@@ -5700,11 +6556,6 @@ function MachineMasterPanel({
   const [historyCodeFilter, setHistoryCodeFilter] = useState("");
   const [historyResultFilter, setHistoryResultFilter] = useState("");
   const [selectedReportKey, setSelectedReportKey] = useState("");
-  const [machineNoFilter, setMachineNoFilter] = useState("");
-  const [machineNameFilter, setMachineNameFilter] = useState("");
-  const [machineTypeFilter, setMachineTypeFilter] = useState("");
-  const [machineLocationFilter, setMachineLocationFilter] = useState("");
-  const [machineStatusFilter, setMachineStatusFilter] = useState("");
   const [isScheduleFormOpen, setIsScheduleFormOpen] = useState(false);
   const [scheduleCodeFilter, setScheduleCodeFilter] = useState("");
   const [scheduleTitleFilter, setScheduleTitleFilter] = useState("");
@@ -5712,17 +6563,6 @@ function MachineMasterPanel({
   const [scheduleFrequencyFilter, setScheduleFrequencyFilter] = useState("");
   const [scheduleFirstDueFilter, setScheduleFirstDueFilter] = useState("");
   const [scheduleStatusFilter, setScheduleStatusFilter] = useState("");
-
-  const machineNoOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineNo)).filter((value) => value !== "-")), [machineRows]);
-  const machineNameOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineName)).filter((value) => value !== "-")), [machineRows]);
-  const machineTypeOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.machineType)).filter((value) => value !== "-")), [machineRows]);
-  const machineLocationOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.location)).filter((value) => value !== "-")), [machineRows]);
-  const machineStatusOptions = useMemo(() => uniqueValues(machineRows.map((row) => displayValue(row.status || "Active")).filter((value) => value !== "-")), [machineRows]);
-  const hasMachineFilters = Boolean(machineNoFilter || machineNameFilter || machineTypeFilter || machineLocationFilter || machineStatusFilter);
-  const filteredMachineRows = useMemo(
-    () => machineRows.filter((row) => machineMasterMatches(row, machineNoFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter)),
-    [machineRows, machineNoFilter, machineNameFilter, machineTypeFilter, machineLocationFilter, machineStatusFilter],
-  );
 
   const selectedMaintenance = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(selectedMaintenanceCode));
   const selectedMachine = machineRows.find((row) => machineKey(row.machineNo) === machineKey(selectedMachineNo));
@@ -5771,8 +6611,10 @@ function MachineMasterPanel({
       frequencyDays: optionalNumber(selectedMaintenance.frequencyDays) ?? displayValue(selectedMaintenance.frequencyDays),
       frequencyBasis: displayValue(selectedMaintenance.frequencyBasis) !== "-" ? displayValue(selectedMaintenance.frequencyBasis) : "Calendar days",
       estimatedMinutes: optionalNumber(selectedMaintenance.estimatedMinutes) ?? displayValue(selectedMaintenance.estimatedMinutes),
+      machineFamily: displayValue(selectedMachine.machineFamily) !== "-" ? displayValue(selectedMachine.machineFamily) : "",
       machineType: displayValue(selectedMachine.machineType) !== "-" ? displayValue(selectedMachine.machineType) : "",
       machineName: displayValue(selectedMachine.machineName) !== "-" ? displayValue(selectedMachine.machineName) : "",
+      productionFloorCode: normalizeProductionFloorCode(selectedMachine.productionFloorCode),
       location: displayValue(selectedMachine.location) !== "-" ? displayValue(selectedMachine.location) : "",
       updatedAt: new Date().toISOString(),
     };
@@ -5786,27 +6628,25 @@ function MachineMasterPanel({
   if (!selectedMachineNo) {
     return (
       <section className="grid gap-4">
-        <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Filtered", formatNumber(filteredMachineRows.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)]]} />
+        <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)], ["Schedules", formatNumber(scheduleRows.length)], ["Records", formatNumber(completionRows.length)]]} />
         <Card>
           <CardHeader>
-            <CardTitle>Machines</CardTitle>
-            <CardDescription>Select a machine to open its maintenance page.</CardDescription>
+            <CardTitle>All Machines</CardTitle>
+            <CardDescription>One Company-Wide Machine Master. Production Unit Allocation Controls Where Each Machine Is Available.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              {!machineRows.length ? <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => openDataEntry("machine_master", { status: "Active", __returnTab: "machineMasterTab" })}>Add machine</Button> : <div className="text-xs text-muted-foreground">Showing {formatNumber(filteredMachineRows.length)} of {formatNumber(machineRows.length)} machines</div>}
-              {hasMachineFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setMachineNoFilter(""); setMachineNameFilter(""); setMachineTypeFilter(""); setMachineLocationFilter(""); setMachineStatusFilter(""); }}>Clear filters</Button> : null}
+              <div className="flex flex-wrap items-center gap-2"><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("machine_master", { status: "Active", productionFloorCode: "conventional", __returnTab: "machineMasterTab" })}>Add Machine</Button><div className="text-xs text-muted-foreground">{formatNumber(machineRows.length)} Machines</div></div>
             </div>
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow><TableHead>Machine</TableHead><TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Location</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow>
-                  <TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Machine" value={machineNoFilter} onChange={setMachineNoFilter} options={machineNoOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Name" value={machineNameFilter} onChange={setMachineNameFilter} options={machineNameOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Type" value={machineTypeFilter} onChange={setMachineTypeFilter} options={machineTypeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Location" value={machineLocationFilter} onChange={setMachineLocationFilter} options={machineLocationOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={machineStatusFilter} onChange={setMachineStatusFilter} options={machineStatusOptions} /></TableHead><TableHead></TableHead></TableRow>
+                  <TableRow><TableHead>Machine No.</TableHead><TableHead>Machine Family</TableHead><TableHead>Machine Type</TableHead><TableHead>Machine Name</TableHead><TableHead>Production Unit</TableHead><TableHead>Machine Location</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow>
                 </TableHeader>
-                <TableBody>{filteredMachineRows.length ? filteredMachineRows.map((row) => {
+                <TableBody>{machineRows.length ? machineRows.map((row) => {
                   const machineNo = displayValue(row.machineNo);
-                  return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></TableCell></TableRow>;
-                }) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">No machines match the selected filters.</TableCell></TableRow>}</TableBody>
+                  return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineFamily)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{machineProductionUnitLabel(row)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><div className="flex justify-end gap-2"><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("machine_master", { ...row, productionFloorCode: normalizeProductionFloorCode(row.productionFloorCode), __returnTab: "machineMasterTab" })}>Edit</Button><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></div></TableCell></TableRow>;
+                }) : <TableRow><TableCell colSpan={8} className="h-24 text-center text-sm text-muted-foreground">No Machines Match The Selected Filters.</TableCell></TableRow>}</TableBody>
               </Table>
             </div>
           </CardContent>
@@ -5820,10 +6660,10 @@ function MachineMasterPanel({
       <section className="grid gap-4">
         <Card>
           <CardHeader>
-            <CardTitle>Machine not found</CardTitle>
-            <CardDescription>The selected machine is not available in machine master.</CardDescription>
+            <CardTitle>Machine Not Found</CardTitle>
+            <CardDescription>The Selected Machine Is Not Available In Machine Master.</CardDescription>
           </CardHeader>
-          <CardContent><Button type="button" variant="outline" onClick={closeMachine}>Back to machines</Button></CardContent>
+          <CardContent><Button type="button" variant="outline" onClick={closeMachine}>Back To Machines</Button></CardContent>
         </Card>
       </section>
     );
@@ -5834,61 +6674,61 @@ function MachineMasterPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Machine {displayValue(selectedMachine.machineNo)}</h2>
-          <p className="text-sm text-muted-foreground">Maintenance schedule, history, and reports for this machine.</p>
+          <p className="text-sm text-muted-foreground">Maintenance Schedule, History, And Reports For This Machine.</p>
         </div>
-        <Button type="button" variant="outline" onClick={closeMachine}>Back to machines</Button>
+        <Button type="button" variant="outline" onClick={closeMachine}>Back To Machines</Button>
       </div>
       <TrackingSummary items={[["Schedules", formatNumber(machineSchedules.length)], ["Records", formatNumber(machineHistory.length)], ["Filtered", formatNumber(filteredHistory.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)]]} />
       <Card>
-        <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine maintenance schedules and records.</CardDescription></CardHeader>
-        <CardContent><div className="grid gap-3 md:grid-cols-4"><TileField label="Machine type" value={selectedMachine.machineType} important /><TileField label="Machine name" value={selectedMachine.machineName} /><TileField label="Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
+        <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine Maintenance Schedules And Records.</CardDescription></CardHeader>
+        <CardContent><div className="grid gap-3 md:grid-cols-6"><TileField label="Machine Family" value={selectedMachine.machineFamily} important /><TileField label="Machine Type" value={selectedMachine.machineType} /><TileField label="Machine Name" value={selectedMachine.machineName} /><TileField label="Production Unit" value={machineProductionUnitLabel(selectedMachine)} /><TileField label="Machine Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
       </Card>
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div>
-            <CardTitle>Assigned maintenance schedules</CardTitle>
-            <CardDescription>{machineSchedules.length ? `${formatNumber(filteredMachineSchedules.length)} of ${formatNumber(machineSchedules.length)} schedules shown` : "No schedules assigned yet"}</CardDescription>
+            <CardTitle>Assigned Maintenance Schedules</CardTitle>
+            <CardDescription>{machineSchedules.length ? `${formatNumber(filteredMachineSchedules.length)} of ${formatNumber(machineSchedules.length)} schedules shown` : "No Schedules Assigned Yet"}</CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {hasScheduleFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setScheduleCodeFilter(""); setScheduleTitleFilter(""); setScheduleChecklistFilter(""); setScheduleFrequencyFilter(""); setScheduleFirstDueFilter(""); setScheduleStatusFilter(""); }}>Clear filters</Button> : null}
-            <Button type="button" size="sm" variant={isScheduleFormOpen ? "secondary" : "default"} onClick={() => setIsScheduleFormOpen((open) => !open)}><CalendarDays className="size-4" />{isScheduleFormOpen ? "Close entry" : "Assign schedule"}</Button>
+            {hasScheduleFilters ? <Button type="button" size="sm" variant="outline" onClick={() => { setScheduleCodeFilter(""); setScheduleTitleFilter(""); setScheduleChecklistFilter(""); setScheduleFrequencyFilter(""); setScheduleFirstDueFilter(""); setScheduleStatusFilter(""); }}>Clear Filters</Button> : null}
+            <Button type="button" size="sm" variant={isScheduleFormOpen ? "secondary" : "default"} onClick={() => setIsScheduleFormOpen((open) => !open)}><CalendarDays className="size-4" />{isScheduleFormOpen ? "Close Entry" : "Assign Schedule"}</Button>
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
           {isScheduleFormOpen ? (
             <div className="grid gap-4 rounded-lg border p-3">
-              {!maintenanceMasterRows.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No maintenance schedule master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_master", {})}>Add schedule in Data Entry</Button></div> : null}
-              {!checklistOptions.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No checklist master saved yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_checklist_master", maintenanceChecklistMasterDefaults("machineMasterTab"))}>Add checklist in Data Entry</Button></div> : null}
+              {!maintenanceMasterRows.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No Maintenance Schedule Master Saved Yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_master", {})}>Add Schedule In Data Entry</Button></div> : null}
+              {!checklistOptions.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No Maintenance Checklist Saved Yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_checklist_master", maintenanceChecklistMasterDefaults("machineMasterTab"))}>Open Checklists</Button></div> : null}
               {selectedChecklistRows.length ? <MaintenanceChecklistPreview rows={selectedChecklistRows} /> : null}
               <form className="grid gap-3" onSubmit={saveSchedule}>
                 <input type="hidden" name="machineNo" value={displayValue(selectedMachine.machineNo)} />
                 <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-                  <Field label="Maintenance schedule">
-                    <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedMaintenanceCode} onChange={(event) => { const code = event.target.value; setSelectedMaintenanceCode(code); const master = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(code)); setSelectedChecklistCode(displayValue(master?.checklistCode) !== "-" ? displayValue(master?.checklistCode) : ""); }} required>
-                      <option value="">Select schedule</option>
+                  <Field label="Maintenance Schedule">
+                    <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedMaintenanceCode} onChange={(event) => { const code = event.target.value; setSelectedMaintenanceCode(code); const master = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(code)); setSelectedChecklistCode(displayValue(master?.checklistCode) !== "-" ? displayValue(master?.checklistCode) : ""); }} required>
+                      <option value="">Select Schedule</option>
                       {maintenanceMasterRows.map((row) => <option key={displayValue(row.maintenanceCode)} value={displayValue(row.maintenanceCode)}>{displayValue(row.maintenanceTitle)}</option>)}
-                    </select>
+                    </SearchableSelect>
                   </Field>
-                  <Field label="Schedule code"><Input value={displayValue(selectedMaintenance?.maintenanceCode)} readOnly /></Field>
-                  <Field label="Frequency days"><Input value={displayValue(selectedMaintenance?.frequencyDays)} readOnly /></Field>
-                  <Field label="Checklist code"><Input value={displayValue(selectedMaintenance?.checklistCode)} readOnly /></Field>
-                  <Field label="First due date"><Input name="firstDueDate" type="date" defaultValue={todayIsoDate()} required /></Field>
-                  <Field label="Estimated minutes"><Input value={displayValue(selectedMaintenance?.estimatedMinutes)} readOnly /></Field>
-                  <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue="Active"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
+                  <Field label="Schedule Code"><Input value={displayValue(selectedMaintenance?.maintenanceCode)} readOnly /></Field>
+                  <Field label="Frequency Days"><Input value={displayValue(selectedMaintenance?.frequencyDays)} readOnly /></Field>
+                  <Field label="Checklist Code"><Input value={displayValue(selectedMaintenance?.checklistCode)} readOnly /></Field>
+                  <Field label="First Due Date"><Input name="firstDueDate" type="date" defaultValue={todayIsoDate()} required /></Field>
+                  <Field label="Estimated Minutes"><Input value={displayValue(selectedMaintenance?.estimatedMinutes)} readOnly /></Field>
+                  <Field label="Status"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue="Active"><option value="Active">Active</option><option value="Inactive">Inactive</option></SearchableSelect></Field>
                   <Field label="Remark"><Input name="remark" /></Field>
                 </div>
-                <Button type="submit" className="w-fit" disabled={!selectedMaintenance}><CalendarDays className="size-4" />Save schedule</Button>
+                <Button type="submit" className="w-fit" disabled={!selectedMaintenance}><CalendarDays className="size-4" />Save Schedule</Button>
               </form>
             </div>
           ) : null}
-          {machineSchedules.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Code</TableHead><TableHead>Title</TableHead><TableHead>Checklist</TableHead><TableHead>Frequency</TableHead><TableHead>First due</TableHead><TableHead>Status</TableHead></TableRow><TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Code" value={scheduleCodeFilter} onChange={setScheduleCodeFilter} options={scheduleCodeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Title" value={scheduleTitleFilter} onChange={setScheduleTitleFilter} options={scheduleTitleOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Checklist" value={scheduleChecklistFilter} onChange={setScheduleChecklistFilter} options={scheduleChecklistOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Frequency" value={scheduleFrequencyFilter} onChange={setScheduleFrequencyFilter} options={scheduleFrequencyOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="First due" value={scheduleFirstDueFilter} onChange={setScheduleFirstDueFilter} options={scheduleFirstDueOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={scheduleStatusFilter} onChange={setScheduleStatusFilter} options={scheduleStatusOptions} /></TableHead></TableRow></TableHeader><TableBody>{filteredMachineSchedules.length ? filteredMachineSchedules.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell>{displayValue(row.maintenanceCode)}</TableCell><TableCell>{displayValue(row.maintenanceTitle)}</TableCell><TableCell>{displayValue(row.checklistCode)}</TableCell><TableCell>{maintenanceFrequencyLabel(row)}</TableCell><TableCell>{displayValue(row.firstDueDate)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">No machine schedules match the selected filters.</TableCell></TableRow>}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved for this machine.</EmptyRowsMessage>}
+          {machineSchedules.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Code</TableHead><TableHead>Title</TableHead><TableHead>Checklist</TableHead><TableHead>Frequency</TableHead><TableHead>First Due</TableHead><TableHead>Status</TableHead></TableRow><TableRow className="bg-muted/40"><TableHead><MachineMasterColumnFilter label="Code" value={scheduleCodeFilter} onChange={setScheduleCodeFilter} options={scheduleCodeOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Title" value={scheduleTitleFilter} onChange={setScheduleTitleFilter} options={scheduleTitleOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Checklist" value={scheduleChecklistFilter} onChange={setScheduleChecklistFilter} options={scheduleChecklistOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Frequency" value={scheduleFrequencyFilter} onChange={setScheduleFrequencyFilter} options={scheduleFrequencyOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="First Due" value={scheduleFirstDueFilter} onChange={setScheduleFirstDueFilter} options={scheduleFirstDueOptions} /></TableHead><TableHead><MachineMasterColumnFilter label="Status" value={scheduleStatusFilter} onChange={setScheduleStatusFilter} options={scheduleStatusOptions} /></TableHead></TableRow></TableHeader><TableBody>{filteredMachineSchedules.length ? filteredMachineSchedules.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell>{displayValue(row.maintenanceCode)}</TableCell><TableCell>{displayValue(row.maintenanceTitle)}</TableCell><TableCell>{displayValue(row.checklistCode)}</TableCell><TableCell>{maintenanceFrequencyLabel(row)}</TableCell><TableCell>{displayValue(row.firstDueDate)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-sm text-muted-foreground">No Machine Schedules Match The Selected Filters.</TableCell></TableRow>}</TableBody></Table></div> : <EmptyRowsMessage>No Maintenance Schedules Saved For This Machine.</EmptyRowsMessage>}
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Maintenance history</CardTitle><CardDescription>Planned and breakdown maintenance saved against this machine.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Maintenance History</CardTitle><CardDescription>Planned And Breakdown Maintenance Saved Against This Machine.</CardDescription></CardHeader>
         <CardContent className="grid gap-4">
-          <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_repeat(3,180px)]"><Label className="grid gap-1 text-xs font-medium text-muted-foreground"><span>Search</span><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={historyQuery} placeholder="Search maintenance report" onChange={(event) => setHistoryQuery(event.target.value)} /></div></Label><FilterSelect label="Type" value={historyTypeFilter} onChange={setHistoryTypeFilter} options={[["", "All types"], ...typeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Code" value={historyCodeFilter} onChange={setHistoryCodeFilter} options={[["", "All codes"], ...codeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Result" value={historyResultFilter} onChange={setHistoryResultFilter} options={[["", "All results"], ...resultOptions.map((value) => [value, value] as [string, string])]} /></div>
-          {filteredHistory.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Maintenance</TableHead><TableHead>Changed parts</TableHead><TableHead>Done by</TableHead><TableHead>Result</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{filteredHistory.map((row) => { const key = maintenanceRecordKey(row); return <TableRow key={key} className={key === selectedReportKey ? "bg-muted/50" : ""}><TableCell>{displayValue(row.completedDate)}</TableCell><TableCell><StatusBadge value={row.maintenanceType || "Planned"} /></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)}</div><div className="text-xs text-muted-foreground">{displayValue(row.maintenanceTitle)}</div></TableCell><TableCell className="max-w-64 truncate">{displayValue(row.partsChanged)}</TableCell><TableCell>{displayValue(row.completedBy)}</TableCell><TableCell><StatusBadge value={row.result} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => setSelectedReportKey(key)}>Report</Button></TableCell></TableRow>; })}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance records match this machine and filter.</EmptyRowsMessage>}
+          <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_repeat(3,180px)]"><Label className="grid gap-1 text-xs font-medium text-muted-foreground"><span>Search</span><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={historyQuery} placeholder="Search Maintenance Report" onChange={(event) => setHistoryQuery(event.target.value)} /></div></Label><FilterSelect label="Type" value={historyTypeFilter} onChange={setHistoryTypeFilter} options={[["", "All types"], ...typeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Code" value={historyCodeFilter} onChange={setHistoryCodeFilter} options={[["", "All codes"], ...codeOptions.map((value) => [value, value] as [string, string])]} /><FilterSelect label="Result" value={historyResultFilter} onChange={setHistoryResultFilter} options={[["", "All results"], ...resultOptions.map((value) => [value, value] as [string, string])]} /></div>
+          {filteredHistory.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Maintenance</TableHead><TableHead>Changed Parts</TableHead><TableHead>Done By</TableHead><TableHead>Result</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{filteredHistory.map((row) => { const key = maintenanceRecordKey(row); return <TableRow key={key} className={key === selectedReportKey ? "bg-muted/50" : ""}><TableCell>{displayValue(row.completedDate)}</TableCell><TableCell><StatusBadge value={row.maintenanceType || "Planned"} /></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)}</div><div className="text-xs text-muted-foreground">{displayValue(row.maintenanceTitle)}</div></TableCell><TableCell className="max-w-64 truncate">{displayValue(row.partsChanged)}</TableCell><TableCell>{displayValue(row.completedBy)}</TableCell><TableCell><StatusBadge value={row.result} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => setSelectedReportKey(key)}>Report</Button></TableCell></TableRow>; })}</TableBody></Table></div> : <EmptyRowsMessage>No Maintenance Records Match This Machine And Filter.</EmptyRowsMessage>}
           {selectedReport ? <MaintenanceReportDetail row={selectedReport} /> : null}
         </CardContent>
       </Card>
@@ -5936,12 +6776,12 @@ function MaintenancePanel
     <section className="grid gap-4">
       <TrackingSummary items={[["Machines", formatNumber(machineRows.length)], ["Saved schedules", formatNumber(scheduleRows.length)], ["Due now", formatNumber(dueNowRows.length)], ["Breakdowns", formatNumber(breakdownRows.length)]]} />
       <Card className={dueNowRows.length ? "border-amber-300/80" : ""}>
-        <CardHeader><CardTitle>Maintenance pending tasks</CardTitle><CardDescription>Due and overdue planned maintenance appears here from Machine Master schedules.</CardDescription></CardHeader>
-        <CardContent>{dueRows.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Machine</TableHead><TableHead>Maintenance</TableHead><TableHead>Checklist</TableHead><TableHead>Due date</TableHead><TableHead>Status</TableHead><TableHead>Last done</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{dueRows.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell><div className="font-medium">{displayValue(row.machineNo)}</div><div className="text-xs text-muted-foreground">{displayValue(row.machineType)}</div></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</div><div className="text-xs text-muted-foreground">Every {maintenanceFrequencyLabel(row)}</div></TableCell><TableCell><div>{displayValue(row.checklistCode)}</div><div className="text-xs text-muted-foreground">{formatNumber(asArray(row.checklistSteps).length)} steps</div></TableCell><TableCell><div>{displayValue(row.nextDueDate)}</div>{displayValue(row.dueProgress) !== "-" ? <div className="text-xs text-muted-foreground">{displayValue(row.dueProgress)}</div> : null}</TableCell><TableCell><StatusBadge value={row.status} /></TableCell><TableCell>{displayValue(row.lastCompletedDate)}</TableCell><TableCell><Button type="button" size="sm" variant={row.status === "Upcoming" ? "outline" : "default"} onClick={() => void markMaintenanceDone(row)}><CheckCircle2 className="size-4" />Mark done</Button></TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No maintenance schedules saved yet. Add schedules from Machine Master.</EmptyRowsMessage>}</CardContent>
+        <CardHeader><CardTitle>Maintenance Pending Tasks</CardTitle><CardDescription>Due And Overdue Planned Maintenance Appears Here From Machine Master Schedules.</CardDescription></CardHeader>
+        <CardContent>{dueRows.length ? <div className="overflow-auto rounded-lg border"><Table><TableHeader><TableRow><TableHead>Machine</TableHead><TableHead>Maintenance</TableHead><TableHead>Checklist</TableHead><TableHead>Due Date</TableHead><TableHead>Status</TableHead><TableHead>Last Done</TableHead><TableHead></TableHead></TableRow></TableHeader><TableBody>{dueRows.map((row) => <TableRow key={maintenanceScheduleKey(row)}><TableCell><div className="font-medium">{displayValue(row.machineNo)}</div><div className="text-xs text-muted-foreground">{displayValue(row.machineType)}</div></TableCell><TableCell><div className="font-medium">{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</div><div className="text-xs text-muted-foreground">Every {maintenanceFrequencyLabel(row)}</div></TableCell><TableCell><div>{displayValue(row.checklistCode)}</div><div className="text-xs text-muted-foreground">{formatNumber(asArray(row.checklistSteps).length)} Steps</div></TableCell><TableCell><div>{displayValue(row.nextDueDate)}</div>{displayValue(row.dueProgress) !== "-" ? <div className="text-xs text-muted-foreground">{displayValue(row.dueProgress)}</div> : null}</TableCell><TableCell><StatusBadge value={row.status} /></TableCell><TableCell>{displayValue(row.lastCompletedDate)}</TableCell><TableCell><Button type="button" size="sm" variant={row.status === "Upcoming" ? "outline" : "default"} onClick={() => void markMaintenanceDone(row)}><CheckCircle2 className="size-4" />Mark Done</Button></TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No Maintenance Schedules Saved Yet. Add Schedules From Machine Master.</EmptyRowsMessage>}</CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Breakdown maintenance entry</CardTitle><CardDescription>Use this for maintenance not against a planned schedule.</CardDescription></CardHeader>
-        <CardContent><form className="grid gap-3" onSubmit={saveBreakdownMaintenance}><div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3"><Field label="Machine no."><select className="h-9 rounded-md border bg-background px-3 text-sm" name="machineNo" required><option value="">Select machine</option>{machineRows.map((row) => <option key={displayValue(row.machineNo)} value={displayValue(row.machineNo)}>{displayValue(row.machineNo)}</option>)}</select></Field><Field label="Date"><Input name="completedDate" type="date" defaultValue={todayIsoDate()} required /></Field><Field label="Completed by"><Input name="completedBy" required /></Field><Field label="Actual minutes"><Input name="actualMinutes" type="number" min="0" /></Field><Field label="Maintenance code"><Input name="maintenanceCode" defaultValue="BREAKDOWN" /></Field><Field label="Maintenance title"><Input name="maintenanceTitle" defaultValue="Breakdown maintenance" /></Field><Field label="Result"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="result" defaultValue="Completed"><option value="Completed">Completed</option><option value="Needs follow up">Needs follow up</option><option value="Skipped">Skipped</option></select></Field><Field label="Breakdown reason"><Input name="breakdownReason" required /></Field><Field label="Parts changed"><Input name="partsChanged" /></Field><Field label="Work done"><Input name="workDone" /></Field><Field label="Remark"><Input name="remark" /></Field></div><Button type="submit" className="w-fit" disabled={!machineRows.length}><Wrench className="size-4" />Save breakdown</Button></form></CardContent>
+        <CardHeader><CardTitle>Breakdown Maintenance Entry</CardTitle><CardDescription>Use This For Maintenance Not Against A Planned Schedule.</CardDescription></CardHeader>
+        <CardContent><form className="grid gap-3" onSubmit={saveBreakdownMaintenance}><div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3"><Field label="Machine No."><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="machineNo" required><option value="">Select Machine</option>{machineRows.map((row) => <option key={displayValue(row.machineNo)} value={displayValue(row.machineNo)}>{displayValue(row.machineNo)}</option>)}</SearchableSelect></Field><Field label="Date"><Input name="completedDate" type="date" defaultValue={todayIsoDate()} required /></Field><Field label="Completed By"><Input name="completedBy" required /></Field><Field label="Actual Minutes"><Input name="actualMinutes" type="number" min="0" /></Field><Field label="Maintenance Code"><Input name="maintenanceCode" defaultValue="BREAKDOWN" /></Field><Field label="Maintenance Title"><Input name="maintenanceTitle" defaultValue="Breakdown maintenance" /></Field><Field label="Result"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="result" defaultValue="Completed"><option value="Completed">Completed</option><option value="Needs follow up">Needs Follow Up</option><option value="Skipped">Skipped</option></SearchableSelect></Field><Field label="Breakdown Reason"><Input name="breakdownReason" required /></Field><Field label="Parts Changed"><Input name="partsChanged" /></Field><Field label="Work Done"><Input name="workDone" /></Field><Field label="Remark"><Input name="remark" /></Field></div><Button type="submit" className="w-fit" disabled={!machineRows.length}><Wrench className="size-4" />Save Breakdown</Button></form></CardContent>
       </Card>
     </section>
   );
@@ -5951,8 +6791,8 @@ function MaintenanceReportDetail({ row }: { row: DashboardPayload }) {
   const checklistSteps = asArray(row.checklistSteps);
   return (
     <div className="grid gap-3 rounded-lg border bg-muted/15 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><div className="text-sm font-semibold">Maintenance report</div><div className="text-xs text-muted-foreground">{displayValue(row.machineNo)} / {displayValue(row.completedDate)} / {displayValue(row.maintenanceCode)}</div></div><StatusBadge value={row.maintenanceType || "Planned"} /></div>
-      <div className="grid gap-3 md:grid-cols-4"><TileField label="Maintenance" value={`${displayValue(row.maintenanceCode)} - ${displayValue(row.maintenanceTitle)}`} important /><TileField label="Completed by" value={row.completedBy} /><TileField label="Actual minutes" value={row.actualMinutes} numeric /><TileField label="Result" value={row.result} /><TileField label="Parts changed" value={row.partsChanged} /><TileField label="Breakdown reason" value={row.breakdownReason} /><TileField label="Work done" value={row.workDone} /><TileField label="Next due" value={row.nextDueDate} /></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><div className="text-sm font-semibold">Maintenance Report</div><div className="text-xs text-muted-foreground">{displayValue(row.machineNo)} / {displayValue(row.completedDate)} / {displayValue(row.maintenanceCode)}</div></div><StatusBadge value={row.maintenanceType || "Planned"} /></div>
+      <div className="grid gap-3 md:grid-cols-4"><TileField label="Maintenance" value={`${displayValue(row.maintenanceCode)} - ${displayValue(row.maintenanceTitle)}`} important /><TileField label="Completed By" value={row.completedBy} /><TileField label="Actual Minutes" value={row.actualMinutes} numeric /><TileField label="Result" value={row.result} /><TileField label="Parts Changed" value={row.partsChanged} /><TileField label="Breakdown Reason" value={row.breakdownReason} /><TileField label="Work Done" value={row.workDone} /><TileField label="Next Due" value={row.nextDueDate} /></div>
       {displayValue(row.remark) !== "-" ? <div className="text-sm text-muted-foreground">{displayValue(row.remark)}</div> : null}
       {checklistSteps.length ? <div className="overflow-auto rounded-md border bg-background"><Table><TableHeader><TableRow><TableHead>Step</TableHead><TableHead>Description</TableHead><TableHead>Value</TableHead><TableHead>Result</TableHead></TableRow></TableHeader><TableBody>{checklistSteps.map((step, index) => <TableRow key={`${displayValue(step.sequence)}-${index}`}><TableCell>{displayValue(step.sequence)}</TableCell><TableCell>{displayValue(step.stepDescription)}</TableCell><TableCell>{displayValue(step.value)}</TableCell><TableCell><StatusBadge value={step.result || "Recorded"} /></TableCell></TableRow>)}</TableBody></Table></div> : null}
     </div>
@@ -5972,7 +6812,7 @@ function MaintenanceChecklistPreview({ rows }: { rows: DashboardPayload[] }) {
             <span>{displayValue(row.stepDescription)}</span>
           </div>
         ))}
-        {rows.length > 6 ? <div className="text-xs text-muted-foreground">{formatNumber(rows.length - 6)} more steps</div> : null}
+        {rows.length > 6 ? <div className="text-xs text-muted-foreground">{formatNumber(rows.length - 6)} More Steps</div> : null}
       </div>
     </div>
   );
@@ -5984,9 +6824,42 @@ function PlanningHolidayPanel({
   productionControl: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
 }) {
-  const spec = dataEntrySpecs.find((item) => item.entryType === "planning_holiday");
   const holidayRows = asArray(productionControl.planningHolidayRows);
   const calendar = asRecord(productionControl.planningCalendar);
+  const [isSaving, setIsSaving] = useState(false);
+
+  async function saveHoliday(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSaving) return;
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const coverage = str(formData.get("coverage"));
+    const targets = coverage === "all"
+      ? productionFloors
+      : productionFloors.filter((floor) => floor.code === coverage);
+    setIsSaving(true);
+    try {
+      for (const floor of targets) {
+        await submitAction("data-entry", {
+          entryType: "planning_holiday",
+          productionFloorCode: floor.code,
+          returnTab: "planningHolidayTab",
+          payload: {
+            date: str(formData.get("date")),
+            reason: str(formData.get("reason")) || "Plant holiday",
+            scope: coverage === "all" ? "Factory" : "Department",
+            department: floor.code,
+            departmentLabel: floor.shortLabel,
+            factoryWide: coverage === "all",
+            remark: str(formData.get("remark")),
+          },
+        });
+      }
+      form.reset();
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
     <section className="grid gap-4">
@@ -5997,10 +6870,27 @@ function PlanningHolidayPanel({
           ["Next saved date", nextPlanningHolidayLabel(holidayRows)],
         ]}
       />
-      {spec ? (
-        <DataEntryForm spec={spec} submitAction={submitAction} defaults={{ scope: "Plant", reason: "Plant holiday", __returnTab: "planningHolidayTab" }} />
-      ) : null}
-      <DataRowsCard title="Saved planning holidays" rows={holidayRows} empty="No manual planning holidays saved yet" />
+      <Card>
+        <CardHeader><CardTitle>Plan A Holiday</CardTitle><CardDescription>All Factory Applies The Date To Every Production Department. A Department Choice Affects Only That Production Floor.</CardDescription></CardHeader>
+        {isSaving ? <div className="px-6"><ProcessingNotice message="Saving the planning holiday..." /></div> : null}
+        <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
+        <CardContent>
+          <form className="grid gap-3" onSubmit={saveHoliday}>
+            <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
+              <Field label="Holiday Date"><Input name="date" type="date" required /></Field>
+              <Field label="Reason"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="reason" defaultValue="Plant holiday"><option value="Plant holiday">Plant Holiday</option><option value="Vacation">Vacation</option><option value="Maintenance shutdown">Maintenance Shutdown</option><option value="Other">Other</option></SearchableSelect></Field>
+              <Field label="Applies To"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="coverage" defaultValue="all"><option value="all">All Factory</option>{productionFloors.map((floor) => <option key={floor.code} value={floor.code}>{floor.shortLabel}</option>)}</SearchableSelect></Field>
+              <Field label="Remark"><Input name="remark" /></Field>
+            </div>
+            <Button className="w-fit" type="submit" disabled={isSaving}><CalendarDays className="size-4" />{isSaving ? "Saving..." : "Save Holiday"}</Button>
+          </form>
+        </CardContent>
+        </fieldset>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Saved Planning Holidays</CardTitle><CardDescription>Dates Affecting The Selected Department / Production Floor.</CardDescription></CardHeader>
+        <CardContent>{holidayRows.length ? <div className="overflow-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Reason</TableHead><TableHead>Applies To</TableHead><TableHead>Remark</TableHead></TableRow></TableHeader><TableBody>{holidayRows.map((row, index) => <TableRow key={`${displayValue(row.dateValue || row.date)}-${index}`}><TableCell>{displayValue(row.date)}</TableCell><TableCell>{displayValue(row.reason)}</TableCell><TableCell>{planningHolidayCoverageLabel(row)}</TableCell><TableCell>{displayValue(row.remark)}</TableCell></TableRow>)}</TableBody></Table></div> : <EmptyRowsMessage>No Manual Planning Holidays Saved Yet.</EmptyRowsMessage>}</CardContent>
+      </Card>
     </section>
   );
 }
@@ -6010,21 +6900,36 @@ function DataEntryForm({
   submitAction,
   defaults,
   dataEntry,
+  masterRows = [],
+  productionControl = {},
+  productionFloorCode,
 }: {
   spec: DataEntrySpec;
-  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  submitAction: (path: string, body: Record<string, unknown>, options?: { throwOnError?: boolean }) => Promise<void>;
   defaults: Record<string, unknown>;
   dataEntry?: DashboardPayload;
+  masterRows?: DashboardPayload[];
+  productionControl?: DashboardPayload;
+  productionFloorCode?: ProductionFloorCode;
 }) {
-  const defaultsKey = JSON.stringify(defaults);
+  const [locallyGeneratedCodes, setLocallyGeneratedCodes] = useState<string[]>([]);
+  const generatedCode = nextAutomaticMasterCode(spec.entryType, [
+    ...masterRows,
+    ...locallyGeneratedCodes.map((code) => ({ code })),
+  ]);
+  const resolvedDefaults = generatedCode ? { ...defaults, code: generatedCode } : defaults;
+  const defaultsKey = JSON.stringify(resolvedDefaults);
   if (spec.entryType === "maintenance_master") {
-    return <MaintenanceMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} />;
+    return <MaintenanceMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} productionControl={productionControl} />;
   }
   if (spec.entryType === "maintenance_checklist_master") {
     return <MaintenanceChecklistMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} />;
   }
+  if (spec.entryType === "setup_checklist_master") {
+    return <SetupChecklistMasterForm spec={spec} submitAction={submitAction} defaults={defaults} rows={masterRows} />;
+  }
   if (spec.entryType === "quality_parameter_master") {
-    return <QualityParameterMasterForm spec={spec} defaults={defaults} dataEntry={dataEntry} />;
+    return <QualityParameterMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} masterRows={masterRows} productionControl={productionControl} />;
   }
   return (
     <Card>
@@ -6036,17 +6941,23 @@ function DataEntryForm({
         <LegacyActionForm
           key={`${spec.entryType}-${defaultsKey}`}
           title={`Save ${spec.title}`}
-          description="Writes the same entry type and payload shape used by the legacy form."
+          description="Writes The Same Entry Type And Payload Shape Used By The Legacy Form."
           fields={spec.fields}
-          defaults={defaults}
+          defaults={resolvedDefaults}
           buttonLabel={`Save ${spec.title}`}
-          onSubmit={(body) => void submitAction("data-entry", {
-            entryType: spec.entryType,
-            id: defaults.__entryId,
-            key: defaults.__entryKey,
-            returnTab: defaults.__returnTab,
-            payload: body,
-          })}
+          onSubmit={async (body) => {
+            await submitAction("data-entry", {
+              entryType: spec.entryType,
+              id: defaults.__entryId,
+              key: defaults.__entryKey,
+              returnTab: defaults.__returnTab,
+              payload: {
+                ...body,
+                ...(productionFloorCode ? { productionFloorCode } : {}),
+              },
+            });
+            if (generatedCode) setLocallyGeneratedCodes((current) => [...current, generatedCode]);
+          }}
         />
       </CardContent>
     </Card>
@@ -6055,14 +6966,20 @@ function DataEntryForm({
 
 function QualityParameterMasterForm({
   spec,
+  submitAction,
   defaults,
   dataEntry,
+  masterRows,
+  productionControl,
 }: {
   spec: DataEntrySpec;
+  submitAction: (path: string, body: Record<string, unknown>, options?: { throwOnError?: boolean }) => Promise<void>;
   defaults: Record<string, unknown>;
   dataEntry?: DashboardPayload;
+  masterRows: DashboardPayload[];
+  productionControl: DashboardPayload;
 }) {
-  const hourlyQualityPageData = usePostgresDashboardPage("/api/hourly-quality", 5_000).data;
+  const hourlyQualityPageData = usePostgresOperationalPage("/api/hourly-quality", 5_000).data;
   const hourlyQualityPageRecord = asRecord(hourlyQualityPageData);
   const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
   const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([]);
@@ -6070,50 +6987,44 @@ function QualityParameterMasterForm({
   const [isSaving, setIsSaving] = useState(false);
   const persistedRows = useMemo(() => {
     return mergeQualityParameterRows([
+      ...masterRows,
       ...qualityParameterRowsFromDataEntry(dataEntry),
       ...asArray(hourlyQualityPageRecord.qualityParameterMasterRows),
     ]);
-  }, [dataEntry, hourlyQualityPageRecord.qualityParameterMasterRows]);
+  }, [dataEntry, hourlyQualityPageRecord.qualityParameterMasterRows, masterRows]);
   const savedRows = useMemo(() => mergeQualityParameterRows([...persistedRows, ...localRows]), [persistedRows, localRows]);
-  const setupOptions = useMemo(() => qualityParameterSetupOptions(savedRows), [savedRows]);
-  const defaultSetupKey = qualityParameterSetupKey(defaults);
-  const [selectedSetupKey, setSelectedSetupKey] = useState(defaultSetupKey || setupOptions[0]?.key || "");
-  const selectedOption = setupOptions.find((option) => option.key === selectedSetupKey);
-  const selectedRows = useMemo(() => selectedSetupKey ? sortQualityParameterRows(savedRows.filter((row) => qualityParameterSetupKey(row) === selectedSetupKey && str(row.status || "Active").toLowerCase() !== "inactive")) : [], [savedRows, selectedSetupKey]);
   const [setupFields, setSetupFields] = useState(() => ({
-    partNo: str(defaults.partNo || selectedOption?.partNo),
-    optionNumber: str(defaults.optionNumber || selectedOption?.optionNumber),
-    setupNo: str(defaults.setupNo || selectedOption?.setupNo),
+    partNo: str(defaults.partNo),
+    optionNumber: str(defaults.optionNumber),
+    setupNo: str(defaults.setupNo),
   }));
-  const [drafts, setDrafts] = useState<QualityParameterDraft[]>(() => selectedRows.map(qualityParameterDraftFromRow));
+  const selectedSetupKey = qualityParameterSetupKey(setupFields);
+  const selectedRows = useMemo(() => selectedSetupKey.replaceAll("|", "") ? sortQualityParameterRows(savedRows.filter((row) => qualityParameterSetupKey(row) === selectedSetupKey && str(row.status || "Active").toLowerCase() !== "inactive")) : [], [savedRows, selectedSetupKey]);
+  const [drafts, setDrafts] = useState<QualityParameterDraft[]>(() => selectedRows.length ? selectedRows.map(qualityParameterDraftFromRow) : [newQualityParameterDraft(1)]);
+  const loadedParameterSetRef = useRef("");
 
   useEffect(() => {
-    const firstSetupKey = setupOptions[0]?.key;
-    if (selectedSetupKey || !firstSetupKey) return;
-    const timeout = window.setTimeout(() => setSelectedSetupKey(firstSetupKey), 0);
-    return () => window.clearTimeout(timeout);
-  }, [selectedSetupKey, setupOptions]);
-
-  useEffect(() => {
+    const nextSignature = `${selectedSetupKey}|${qualityParameterRowsSignature(selectedRows)}`;
+    if (loadedParameterSetRef.current === nextSignature) return;
+    loadedParameterSetRef.current = nextSignature;
     const timeout = window.setTimeout(() => {
-      const option = setupOptions.find((item) => item.key === selectedSetupKey);
-      const nextRows = selectedSetupKey ? sortQualityParameterRows(savedRows.filter((row) => qualityParameterSetupKey(row) === selectedSetupKey && str(row.status || "Active").toLowerCase() !== "inactive")) : [];
-      setSetupFields({
-        partNo: str(defaults.partNo || option?.partNo),
-        optionNumber: str(defaults.optionNumber || option?.optionNumber),
-        setupNo: str(defaults.setupNo || option?.setupNo),
-      });
-      setDrafts(nextRows.length ? nextRows.map(qualityParameterDraftFromRow) : [newQualityParameterDraft(1)]);
+      setDrafts(selectedRows.length ? selectedRows.map(qualityParameterDraftFromRow) : [newQualityParameterDraft(1)]);
       setRemovedRows([]);
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [defaults.partNo, defaults.optionNumber, defaults.setupNo, savedRows, selectedSetupKey, setupOptions]);
+  }, [selectedRows, selectedSetupKey]);
 
-  const datalistValues = useMemo(() => ({
-    partNos: uniqueValues(savedRows.map((row) => displayValue(row.partNo || row.partCode)).filter((value) => value !== "-")),
-    optionNumbers: uniqueValues(savedRows.map((row) => displayValue(row.optionNumber)).filter((value) => value !== "-")),
-    setupNos: uniqueValues(savedRows.map((row) => displayValue(row.setupNo)).filter((value) => value !== "-")),
-  }), [savedRows]);
+  const routeLines = useMemo(() => qualityParameterRouteLines(asArray(productionControl.routeMasterRows)), [productionControl.routeMasterRows]);
+  const itemOptions = useMemo(() => uniqueValues(routeLines.map((row) => row.partNo)), [routeLines]);
+  const optionOptions = useMemo(
+    () => uniqueValues(routeLines.filter((row) => machineKey(row.partNo) === machineKey(setupFields.partNo)).map((row) => row.optionNumber)),
+    [routeLines, setupFields.partNo],
+  );
+  const setupNumberOptions = useMemo(
+    () => uniqueValues(routeLines.filter((row) => machineKey(row.partNo) === machineKey(setupFields.partNo) && machineKey(row.optionNumber) === machineKey(setupFields.optionNumber)).map((row) => row.setupNo)),
+    [routeLines, setupFields.optionNumber, setupFields.partNo],
+  );
+  const selectedRouteLineExists = routeLines.some((row) => qualityParameterSetupKey(row) === qualityParameterSetupKey(setupFields));
 
   function updateDraft(draftId: string, field: keyof QualityParameterDraft, value: string) {
     setDrafts((current) => current.map((draft) => draft.draftId === draftId ? { ...draft, [field]: value } : draft));
@@ -6131,8 +7042,8 @@ function QualityParameterMasterForm({
   async function saveParameterSet() {
     const activeDrafts = drafts.filter((draft) => draft.parameterName.trim());
     const duplicateSequences = activeDrafts.map((draft, index) => str(optionalNumber(draft.sequence) ?? index + 1)).filter((sequence, index, sequences) => sequence && sequences.indexOf(sequence) !== index);
-    if (!setupFields.partNo.trim() || !setupFields.optionNumber.trim() || !setupFields.setupNo.trim()) {
-      setStatus({ tone: "destructive", message: "Item, option, and setup are required." });
+    if (!selectedRouteLineExists) {
+      setStatus({ tone: "destructive", message: "Select an item, option, and setup that already exists in Route Master." });
       return;
     }
     if (!activeDrafts.length) {
@@ -6146,14 +7057,23 @@ function QualityParameterMasterForm({
     setIsSaving(true);
     setStatus(null);
     try {
-      const activePayloads = activeDrafts.map((draft, index) => qualityParameterPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, setupFields, "Active"));
-      const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
+      const activePayloads = activeDrafts.map((draft, index) => normalizeUserEnteredPayload(
+        qualityParameterPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, setupFields, "Active"),
+      ));
+      const inactivePayloads = removedRows
+        .filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)))
+        .map((row) => normalizeUserEnteredPayload(row));
       for (const payload of [...activePayloads, ...inactivePayloads]) {
-        await savePostgresDashboardEntry(spec.entryType, payload);
+        await submitAction("data-entry", {
+          entryType: spec.entryType,
+          key: dataEntryKey(spec.entryType, payload),
+          returnTab: "qualityParameterMasterTab",
+          payload,
+        }, { throwOnError: true });
       }
       setLocalRows((current) => mergeQualityParameterRows([...current, ...activePayloads, ...inactivePayloads]));
+      setDrafts(activePayloads.map(qualityParameterDraftFromRow));
       setRemovedRows([]);
-      setSelectedSetupKey(qualityParameterSetupKey(activePayloads[0] ?? setupFields));
       setStatus({ tone: "default", message: "Quality inspection parameter set saved." });
     } catch (err) {
       setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Quality parameter save failed." });
@@ -6166,31 +7086,17 @@ function QualityParameterMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>Maintain one parameter set for an item, option, and setup. The same rows are used by first-piece inspection and hourly quality checks.</CardDescription>
+        <CardDescription>Maintain One Parameter Set For An Item, Option, And Setup. The Same Rows Are Used By First-Piece Inspection And Hourly Quality Checks.</CardDescription>
       </CardHeader>
+      {isSaving ? <div className="px-6"><ProcessingNotice message="Saving quality inspection parameters..." /></div> : null}
+      <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
       <CardContent className="grid gap-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-          <Field label="Saved parameter set">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedSetupKey} onChange={(event) => setSelectedSetupKey(event.target.value)}>
-              <option value="">New parameter set</option>
-              {setupOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-            </select>
-          </Field>
-          <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" onClick={() => { setSelectedSetupKey(""); setSetupFields({ partNo: "", optionNumber: "", setupNo: "" }); setDrafts([newQualityParameterDraft(1)]); setRemovedRows([]); }}>
-              <Plus className="size-4" />
-              New set
-            </Button>
-          </div>
-        </div>
+        {!routeLines.length ? <AlertMessage tone="destructive">Create The Item, Option, And Setup Line In Route Master Before Adding Quality Inspection Parameters.</AlertMessage> : null}
         <div className="grid gap-3 md:grid-cols-3">
-          <Field label="Item code"><Input list="quality-part-options" value={setupFields.partNo} onChange={(event) => setSetupFields((current) => ({ ...current, partNo: event.target.value }))} required /></Field>
-          <Field label="Option no."><Input list="quality-option-options" value={setupFields.optionNumber} onChange={(event) => setSetupFields((current) => ({ ...current, optionNumber: event.target.value }))} required /></Field>
-          <Field label="Setup no."><Input list="quality-setup-options" value={setupFields.setupNo} onChange={(event) => setSetupFields((current) => ({ ...current, setupNo: event.target.value }))} required /></Field>
+          <Field label="Item Code"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.partNo} onChange={(event) => { setSetupFields({ partNo: event.target.value, optionNumber: "", setupNo: "" }); setStatus(null); }} required><option value="">Select Route Master Item</option>{itemOptions.map((value) => <option key={value} value={value}>{value}</option>)}</SearchableSelect></Field>
+          <Field label="Option No."><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.optionNumber} onChange={(event) => { setSetupFields((current) => ({ ...current, optionNumber: event.target.value, setupNo: "" })); setStatus(null); }} required disabled={!setupFields.partNo}><option value="">Select Option</option>{optionOptions.map((value) => <option key={value} value={value}>{value}</option>)}</SearchableSelect></Field>
+          <Field label="Setup No."><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={setupFields.setupNo} onChange={(event) => { setSetupFields((current) => ({ ...current, setupNo: event.target.value })); setStatus(null); }} required disabled={!setupFields.optionNumber}><option value="">Select Setup</option>{setupNumberOptions.map((value) => <option key={value} value={value}>{value}</option>)}</SearchableSelect></Field>
         </div>
-        <datalist id="quality-part-options">{datalistValues.partNos.map((value) => <option key={value} value={value} />)}</datalist>
-        <datalist id="quality-option-options">{datalistValues.optionNumbers.map((value) => <option key={value} value={value} />)}</datalist>
-        <datalist id="quality-setup-options">{datalistValues.setupNos.map((value) => <option key={value} value={value} />)}</datalist>
         <div className="overflow-auto rounded-lg border">
           <Table>
             <TableHeader>
@@ -6215,22 +7121,23 @@ function QualityParameterMasterForm({
                   <TableCell><Input className="h-8 min-w-36" value={draft.instrumentUsed} onChange={(event) => updateDraft(draft.draftId, "instrumentUsed", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.tolerancePlus} onChange={(event) => updateDraft(draft.draftId, "tolerancePlus", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.toleranceMinus} onChange={(event) => updateDraft(draft.draftId, "toleranceMinus", event.target.value)} /></TableCell>
-                  <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="number">Number</option><option value="text">Text</option><option value="pass_fail">OK / Not OK</option></select></TableCell>
+                  <TableCell><SearchableSelect className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="number">Number</option><option value="text">Text</option><option value="pass_fail">Ok / Not Ok</option></SearchableSelect></TableCell>
                   <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
-                  <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove parameter" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
+                  <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Parameter" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button type="button" variant="outline" onClick={addDraft}><Plus className="size-4" />Add parameter</Button>
+          <Button type="button" variant="outline" onClick={addDraft}><Plus className="size-4" />Add Parameter</Button>
           <div className="flex flex-wrap items-center gap-2">
             {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
-            <Button type="button" disabled={isSaving} onClick={() => void saveParameterSet()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save parameter set"}</Button>
+            <Button type="button" disabled={isSaving} onClick={() => void saveParameterSet()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save Parameter Set"}</Button>
           </div>
         </div>
       </CardContent>
+      </fieldset>
     </Card>
   );
 }
@@ -6239,11 +7146,13 @@ function MaintenanceMasterForm({
   submitAction,
   defaults,
   dataEntry,
+  productionControl,
 }: {
   spec: DataEntrySpec;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   defaults: Record<string, unknown>;
   dataEntry?: DashboardPayload;
+  productionControl?: DashboardPayload;
 }) {
   const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
   const persistedRows = useMemo(() => maintenanceMasterRowsFromDataEntry(dataEntry), [dataEntry]);
@@ -6252,7 +7161,10 @@ function MaintenanceMasterForm({
     return [...persistedRows, ...localRows.filter((row) => !persistedKeys.has(maintenanceMasterKey(row)))];
   }, [persistedRows, localRows]);
   const scheduleOptions = useMemo(() => activeMaintenanceMasterRows(savedRows), [savedRows]);
-  const checklistRows = useMemo(() => activeMaintenanceChecklistRows(maintenanceChecklistMasterRowsFromDataEntry(dataEntry)), [dataEntry]);
+  const checklistRows = useMemo(
+    () => activeMaintenanceChecklistRows(maintenanceChecklistRowsForSchedule(dataEntry, productionControl)),
+    [dataEntry, productionControl],
+  );
   const checklistOptions = useMemo(() => maintenanceChecklistOptions(checklistRows), [checklistRows]);
   const defaultCode = displayValue(defaults.maintenanceCode) !== "-" ? displayValue(defaults.maintenanceCode) : nextMaintenanceMasterCode(savedRows);
   const [selectedCode, setSelectedCode] = useState(defaultCode);
@@ -6304,35 +7216,35 @@ function MaintenanceMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>Create reusable maintenance schedules here, then assign them to machines from Machine Master.</CardDescription>
+        <CardDescription>Create Reusable Maintenance Schedules Here, Then Assign Them To Machines From Machine Master.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
-          <Field label="Maintenance schedule">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => { setSelectedCode(event.target.value); setChecklistCodeOverride(""); }}>
-              <option value={nextMaintenanceMasterCode(savedRows)}>New schedule ({nextMaintenanceMasterCode(savedRows)})</option>
+          <Field label="Maintenance Schedule">
+            <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => { setSelectedCode(event.target.value); setChecklistCodeOverride(""); }}>
+              <option value={nextMaintenanceMasterCode(savedRows)}>New Schedule ({nextMaintenanceMasterCode(savedRows)})</option>
               {scheduleOptions.map((row) => <option key={displayValue(row.maintenanceCode)} value={displayValue(row.maintenanceCode)}>{displayValue(row.maintenanceCode)} - {displayValue(row.maintenanceTitle)}</option>)}
-            </select>
+            </SearchableSelect>
           </Field>
-          <TileField label="Saved schedules" value={scheduleOptions.length} numeric />
+          <TileField label="Saved Schedules" value={scheduleOptions.length} numeric />
         </div>
         {previewChecklistRows.length ? <MaintenanceChecklistPreview rows={previewChecklistRows} /> : null}
         <form key={`${spec.entryType}-${selectedCode}`} className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
           <div>
-            <div className="text-sm font-medium">{isExistingSchedule ? "Update maintenance schedule" : "Create maintenance schedule"}</div>
-            <div className="text-xs text-muted-foreground">The generated code identifies this reusable schedule; the title is what users select when assigning it to machines.</div>
+            <div className="text-sm font-medium">{isExistingSchedule ? "Update Maintenance Schedule" : "Create Maintenance Schedule"}</div>
+            <div className="text-xs text-muted-foreground">The Generated Code Identifies This Reusable Schedule; The Title Is What Users Select When Assigning It To Machines.</div>
           </div>
           <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
-            <Field label="Maintenance code"><Input name="maintenanceCode" value={selectedCode} readOnly /></Field>
-            <Field label="Maintenance schedule title"><Input name="maintenanceTitle" defaultValue={selectedTitle !== "-" ? selectedTitle : ""} required /></Field>
+            <Field label="Maintenance Code"><Input name="maintenanceCode" value={selectedCode} readOnly /></Field>
+            <Field label="Maintenance Schedule Title"><Input name="maintenanceTitle" defaultValue={selectedTitle !== "-" ? selectedTitle : ""} required /></Field>
             <Field label="Frequency"><Input name="frequencyDays" type="number" min="1" defaultValue={selectedFrequency !== "-" ? selectedFrequency : ""} required /></Field>
-            <Field label="Frequency basis"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="frequencyBasis" defaultValue={selectedFrequencyBasis !== "-" ? selectedFrequencyBasis : "Calendar days"}><option value="Calendar days">Calendar days</option><option value="Running days">Running days</option></select></Field>
-            <Field label="Checklist"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={previewChecklistCode} onChange={(event) => setChecklistCodeOverride(event.target.value)}><option value="">No checklist</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</select></Field>
-            <Field label="Estimated minutes"><Input name="estimatedMinutes" type="number" min="0" defaultValue={selectedEstimatedMinutes !== "-" ? selectedEstimatedMinutes : ""} /></Field>
-            <Field label="Status"><select className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue={selectedStatus !== "-" ? selectedStatus : "Active"}><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
+            <Field label="Frequency Basis"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="frequencyBasis" defaultValue={selectedFrequencyBasis !== "-" ? selectedFrequencyBasis : "Calendar Days"}><option value="Calendar days">Calendar Days</option><option value="Running days">Running Days</option></SearchableSelect></Field>
+            <Field label="Checklist"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={previewChecklistCode} onChange={(event) => setChecklistCodeOverride(event.target.value)}><option value="">No Checklist</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</SearchableSelect></Field>
+            <Field label="Estimated Minutes"><Input name="estimatedMinutes" type="number" min="0" defaultValue={selectedEstimatedMinutes !== "-" ? selectedEstimatedMinutes : ""} /></Field>
+            <Field label="Status"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue={selectedStatus !== "-" ? selectedStatus : "Active"}><option value="Active">Active</option><option value="Inactive">Inactive</option></SearchableSelect></Field>
             <Field label="Remark"><Input name="remark" defaultValue={selectedRemark !== "-" ? selectedRemark : ""} /></Field>
           </div>
-          <Button className="w-fit" type="submit"><Wrench className="size-4" />{isExistingSchedule ? "Update schedule" : "Create schedule"}</Button>
+          <Button className="w-fit" type="submit"><Wrench className="size-4" />{isExistingSchedule ? "Update Schedule" : "Create Schedule"}</Button>
         </form>
       </CardContent>
     </Card>
@@ -6422,8 +7334,12 @@ function MaintenanceChecklistMasterForm({
     setIsSaving(true);
     setStatus(null);
     try {
-      const activePayloads = activeDrafts.map((draft, index) => maintenanceChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, "Active"));
-      const inactivePayloads = removedRows.filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)));
+      const activePayloads = activeDrafts.map((draft, index) => normalizeUserEnteredPayload(
+        maintenanceChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, "Active"),
+      ));
+      const inactivePayloads = removedRows
+        .filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)))
+        .map((row) => normalizeUserEnteredPayload(row));
       for (const payload of [...activePayloads, ...inactivePayloads]) {
         await submitAction("data-entry", {
           entryType: spec.entryType,
@@ -6434,6 +7350,8 @@ function MaintenanceChecklistMasterForm({
         });
       }
       setLocalRows((current) => mergeMaintenanceChecklistRows([...current, ...activePayloads, ...inactivePayloads]));
+      setChecklistTitle(str(activePayloads[0]?.checklistTitle));
+      setDrafts(activePayloads.map(maintenanceChecklistDraftFromRow));
       setRemovedRows([]);
       setSelectedCode(code);
       setStatus({ tone: "default", message: "Maintenance checklist saved." });
@@ -6448,31 +7366,34 @@ function MaintenanceChecklistMasterForm({
     <Card>
       <CardHeader>
         <CardTitle>{spec.title}</CardTitle>
-        <CardDescription>Create the checklist once, then add all steps in the table. Step codes are not required.</CardDescription>
+        <CardDescription>Create The Checklist Once, Then Add All Steps In The Table. Step Codes Are Not Required.</CardDescription>
       </CardHeader>
+      {isSaving ? <div className="px-6"><ProcessingNotice message="Saving maintenance checklist..." /></div> : null}
+      <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
       <CardContent className="grid gap-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px]">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px_140px]">
           <Field label="Checklist">
-            <select className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}>
-              <option value={nextMaintenanceChecklistCode(savedRows)}>New checklist ({nextMaintenanceChecklistCode(savedRows)})</option>
+            <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}>
+              <option value={nextMaintenanceChecklistCode(savedRows)}>New Checklist ({nextMaintenanceChecklistCode(savedRows)})</option>
               {checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}
-            </select>
+            </SearchableSelect>
           </Field>
           <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New checklist</Button>
+            <Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New Checklist</Button>
           </div>
+          <TileField label="Checklists" value={checklistOptions.length} numeric />
           <TileField label="Steps" value={drafts.filter((draft) => draft.stepDescription.trim()).length} numeric />
         </div>
         <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
-          <Field label="Checklist code"><Input value={selectedCode} readOnly /></Field>
-          <Field label="Checklist title"><Input value={checklistTitle} onChange={(event) => setChecklistTitle(event.target.value)} required /></Field>
+          <Field label="Checklist Code"><Input value={selectedCode} readOnly /></Field>
+          <Field label="Checklist Title"><Input value={checklistTitle} onChange={(event) => setChecklistTitle(event.target.value)} required /></Field>
         </div>
         <div className="overflow-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="min-w-20">Step no.</TableHead>
-                <TableHead className="min-w-80">Step description</TableHead>
+                <TableHead className="min-w-20">Step No.</TableHead>
+                <TableHead className="min-w-80">Step Description</TableHead>
                 <TableHead className="min-w-32">Input</TableHead>
                 <TableHead className="min-w-44">Remark</TableHead>
                 <TableHead className="w-12"></TableHead>
@@ -6483,22 +7404,158 @@ function MaintenanceChecklistMasterForm({
                 <TableRow key={draft.draftId}>
                   <TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-72" value={draft.stepDescription} onChange={(event) => updateDraft(draft.draftId, "stepDescription", event.target.value)} /></TableCell>
-                  <TableCell><select className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></select></TableCell>
+                  <TableCell><SearchableSelect className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></SearchableSelect></TableCell>
                   <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
-                  <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove checklist step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
+                  <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Checklist Step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button type="button" variant="outline" onClick={addDraft}><Plus className="size-4" />Add step</Button>
+          <Button type="button" variant="outline" onClick={addDraft}><Plus className="size-4" />Add Step</Button>
           <div className="flex flex-wrap items-center gap-2">
             {status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}
-            <Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save checklist"}</Button>
+            <Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save Checklist"}</Button>
           </div>
         </div>
       </CardContent>
+      </fieldset>
+    </Card>
+  );
+}
+
+function SetupChecklistMasterForm({
+  spec,
+  submitAction,
+  defaults,
+  rows,
+}: {
+  spec: DataEntrySpec;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+  defaults: Record<string, unknown>;
+  rows: DashboardPayload[];
+}) {
+  const [localRows, setLocalRows] = useState<DashboardPayload[]>([]);
+  const [removedRows, setRemovedRows] = useState<DashboardPayload[]>([]);
+  const [status, setStatus] = useState<ActionStatus>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const savedRows = useMemo(() => mergeSetupChecklistRows([...rows, ...localRows]), [localRows, rows]);
+  const checklistOptions = useMemo(() => setupChecklistOptions(savedRows), [savedRows]);
+  const defaultCode = displayValue(defaults.checklistCode) !== "-" ? displayValue(defaults.checklistCode) : nextSetupChecklistCode(savedRows);
+  const [selectedCode, setSelectedCode] = useState(defaultCode);
+  const selectedRows = useMemo(() => setupChecklistRowsForCode(savedRows, selectedCode), [savedRows, selectedCode]);
+  const selectedChecklist = checklistOptions.find((row) => machineKey(row.code) === machineKey(selectedCode));
+  const [checklistTitle, setChecklistTitle] = useState(selectedChecklist?.title || str(defaults.checklistTitle));
+  const [effectiveFrom, setEffectiveFrom] = useState(displayValue(selectedRows[0]?.effectiveFrom ?? defaults.effectiveFrom) !== "-" ? displayValue(selectedRows[0]?.effectiveFrom ?? defaults.effectiveFrom) : todayIsoDate());
+  const [drafts, setDrafts] = useState<SetupChecklistStepDraft[]>(() => selectedRows.length ? selectedRows.map(setupChecklistDraftFromRow) : [newSetupChecklistDraft(1)]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const matchingRows = setupChecklistRowsForCode(savedRows, selectedCode);
+      const option = checklistOptions.find((item) => machineKey(item.code) === machineKey(selectedCode));
+      setChecklistTitle(option?.title || "");
+      setEffectiveFrom(displayValue(matchingRows[0]?.effectiveFrom) !== "-" ? displayValue(matchingRows[0]?.effectiveFrom) : todayIsoDate());
+      setDrafts(matchingRows.length ? matchingRows.map(setupChecklistDraftFromRow) : [newSetupChecklistDraft(1)]);
+      setRemovedRows([]);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [checklistOptions, savedRows, selectedCode]);
+
+  function startNewChecklist() {
+    setSelectedCode(nextSetupChecklistCode(savedRows));
+    setChecklistTitle("");
+    setEffectiveFrom(todayIsoDate());
+    setDrafts([newSetupChecklistDraft(1)]);
+    setRemovedRows([]);
+    setStatus(null);
+  }
+
+  function updateDraft(draftId: string, field: keyof SetupChecklistStepDraft, value: string) {
+    setDrafts((current) => current.map((draft) => draft.draftId === draftId ? { ...draft, [field]: value } : draft));
+  }
+
+  function removeDraft(draft: SetupChecklistStepDraft) {
+    if (draft.persisted) setRemovedRows((current) => [...current, setupChecklistPayload(draft, selectedCode, checklistTitle, effectiveFrom, "Inactive")]);
+    setDrafts((current) => current.filter((item) => item.draftId !== draft.draftId));
+  }
+
+  async function saveChecklist() {
+    const code = selectedCode || nextSetupChecklistCode(savedRows);
+    const title = checklistTitle.trim();
+    const activeDrafts = drafts.filter((draft) => draft.checkPoint.trim());
+    const duplicateSequences = activeDrafts.map((draft, index) => str(optionalNumber(draft.sequence) ?? index + 1)).filter((sequence, index, sequences) => sequence && sequences.indexOf(sequence) !== index);
+    if (!title) {
+      setStatus({ tone: "destructive", message: "Checklist title is required." });
+      return;
+    }
+    if (!activeDrafts.length) {
+      setStatus({ tone: "destructive", message: "Add at least one checklist step." });
+      return;
+    }
+    if (duplicateSequences.length) {
+      setStatus({ tone: "destructive", message: "Step numbers must be unique in one checklist." });
+      return;
+    }
+    setIsSaving(true);
+    setStatus(null);
+    try {
+      const activePayloads = activeDrafts.map((draft, index) => normalizeUserEnteredPayload(
+        setupChecklistPayload({ ...draft, sequence: draft.sequence || String(index + 1) }, code, title, effectiveFrom, "Active"),
+      ));
+      const inactivePayloads = removedRows
+        .filter((row) => !activePayloads.some((payload) => dataEntryKey(spec.entryType, payload) === dataEntryKey(spec.entryType, row)))
+        .map((row) => normalizeUserEnteredPayload(row));
+      for (const payload of [...activePayloads, ...inactivePayloads]) {
+        await submitAction("data-entry", {
+          entryType: spec.entryType,
+          key: dataEntryKey(spec.entryType, payload),
+          returnTab: "setupChecklistMasterTab",
+          payload,
+        });
+      }
+      setLocalRows((current) => mergeSetupChecklistRows([...current, ...activePayloads, ...inactivePayloads]));
+      setChecklistTitle(str(activePayloads[0]?.checklistTitle));
+      setDrafts(activePayloads.map(setupChecklistDraftFromRow));
+      setRemovedRows([]);
+      setSelectedCode(code);
+      setStatus({ tone: "default", message: "Setup checklist saved." });
+    } catch (err) {
+      setStatus({ tone: "destructive", message: err instanceof Error ? err.message : "Setup checklist save failed." });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{spec.title}</CardTitle>
+        <CardDescription>Create One Generated Checklist Code, Then Maintain All Machinist Steps Under It.</CardDescription>
+      </CardHeader>
+      {isSaving ? <div className="px-6"><ProcessingNotice message="Saving setup checklist..." /></div> : null}
+      <fieldset aria-busy={isSaving} className="contents" disabled={isSaving}>
+      <CardContent className="grid gap-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_140px_140px]">
+          <Field label="Checklist"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" value={selectedCode} onChange={(event) => setSelectedCode(event.target.value)}><option value={nextSetupChecklistCode(savedRows)}>New Checklist ({nextSetupChecklistCode(savedRows)})</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</SearchableSelect></Field>
+          <div className="flex items-end"><Button type="button" variant="outline" onClick={startNewChecklist}><Plus className="size-4" />New Checklist</Button></div>
+          <TileField label="Checklists" value={checklistOptions.length} numeric />
+          <TileField label="Steps" value={drafts.filter((draft) => draft.checkPoint.trim()).length} numeric />
+        </div>
+        <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_180px]">
+          <Field label="Checklist Code"><Input value={selectedCode} readOnly /></Field>
+          <Field label="Checklist Title"><Input value={checklistTitle} onChange={(event) => setChecklistTitle(event.target.value)} required /></Field>
+          <Field label="Effective From"><Input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></Field>
+        </div>
+        <div className="overflow-auto rounded-lg border">
+          <Table>
+            <TableHeader><TableRow><TableHead className="min-w-20">Step</TableHead><TableHead className="min-w-72">Check Point</TableHead><TableHead className="min-w-32">Input</TableHead><TableHead className="min-w-28">Required</TableHead><TableHead className="min-w-52">Section</TableHead><TableHead className="min-w-44">Remark</TableHead><TableHead className="w-12"></TableHead></TableRow></TableHeader>
+            <TableBody>{drafts.map((draft, index) => <TableRow key={draft.draftId}><TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-64" value={draft.checkPoint} onChange={(event) => updateDraft(draft.draftId, "checkPoint", event.target.value)} /></TableCell><TableCell><SearchableSelect className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></SearchableSelect></TableCell><TableCell><SearchableSelect className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.required} onChange={(event) => updateDraft(draft.draftId, "required", event.target.value)}><option value="Yes">Yes</option><option value="No">No</option></SearchableSelect></TableCell><TableCell><Input className="h-8 min-w-48" value={draft.section} onChange={(event) => updateDraft(draft.draftId, "section", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell><TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Setup Checklist Step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell></TableRow>)}</TableBody>
+          </Table>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><Button type="button" variant="outline" onClick={() => setDrafts((current) => [...current, newSetupChecklistDraft(current.length + 1)])}><Plus className="size-4" />Add Step</Button><div className="flex flex-wrap items-center gap-2">{status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}<Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save Checklist"}</Button></div></div>
+      </CardContent>
+      </fieldset>
     </Card>
   );
 }
@@ -6555,9 +7612,9 @@ function PlannerWorkflowExceptionPanel({
   return (
     <Card className={rows.length ? "border-amber-300/80" : ""}>
       <CardHeader>
-        <CardTitle>Workflow exceptions</CardTitle>
+        <CardTitle>Workflow Exceptions</CardTitle>
         <CardDescription>
-          Raw production exists, but the machinist task workflow has not recorded operator assignment and machine start.
+          Raw Production Exists, But The Machinist Task Workflow Has Not Recorded Operator Assignment And Machine Start.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -6567,8 +7624,8 @@ function PlannerWorkflowExceptionPanel({
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead>Machine</TableHead>
-                  <TableHead>Item setup</TableHead>
-                  <TableHead>Raw production</TableHead>
+                  <TableHead>Item Setup</TableHead>
+                  <TableHead>Raw Production</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -6580,13 +7637,13 @@ function PlannerWorkflowExceptionPanel({
                       <ShopFloorItemSummary row={row} tone="next" />
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm">{formatNumber(numValue(row, "rawRows"))} row{numValue(row, "rawRows") === 1 ? "" : "s"}</div>
+                      <div className="text-sm">{formatNumber(numValue(row, "rawRows"))} Row{numValue(row, "rawRows") === 1 ? "" : "s"}</div>
                       <div className="text-xs text-muted-foreground">Output {displayValue(row.rawOutputQty, true)} / Actual {displayValue(row.rawActualQty, true)}</div>
                     </TableCell>
                     <TableCell>
                       <Button type="button" size="sm" variant="outline" onClick={() => void resolveWorkflow(row)}>
                         <CheckCircle2 className="size-4" />
-                        Resolve workflow
+                        Resolve Workflow
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -6595,7 +7652,7 @@ function PlannerWorkflowExceptionPanel({
             </Table>
           </div>
         ) : (
-          <EmptyRowsMessage>No workflow exceptions found</EmptyRowsMessage>
+          <EmptyRowsMessage>No Workflow Exceptions Found</EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
@@ -6611,16 +7668,19 @@ function CorrectionsPanel({
 }) {
   const [tableFilter, setTableFilter] = useState("");
   const [entryTypeFilter, setEntryTypeFilter] = useState("");
+  const [productionUnitFilter, setProductionUnitFilter] = useState("");
   const [query, setQuery] = useState("");
   const [correctedBy, setCorrectedBy] = useState("Planner");
   const [reasonById, setReasonById] = useState<Record<string, string>>({});
   const tableOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.targetTable)).filter((value) => value !== "-")), [rows]);
   const entryTypeOptions = useMemo(() => uniqueValues(rows.map((row) => displayValue(row.entryType)).filter((value) => value !== "-")), [rows]);
+  const productionUnitOptions = useMemo(() => uniqueValues(rows.map(correctionProductionUnitLabel)), [rows]);
   const filteredRows = useMemo(() => rows.filter((row) =>
     typedFilterMatches(displayValue(row.targetTable), tableFilter) &&
     typedFilterMatches(displayValue(row.entryType), entryTypeFilter) &&
+    typedFilterMatches(correctionProductionUnitLabel(row), productionUnitFilter) &&
     correctionRowMatchesQuery(row, query),
-  ), [entryTypeFilter, query, rows, tableFilter]);
+  ), [entryTypeFilter, productionUnitFilter, query, rows, tableFilter]);
 
   async function reverseRow(row: DashboardPayload) {
     const targetId = displayValue(row.targetId);
@@ -6639,28 +7699,30 @@ function CorrectionsPanel({
     <Card>
       <CardHeader>
         <CardTitle>Corrections</CardTitle>
-        <CardDescription>Reverse wrong entries without deleting history. Reversed entries stop affecting live status and task queues.</CardDescription>
+        <CardDescription>Review Every Production Unit In One Place. Reverse Wrong Entries Without Deleting History; Reversed Entries Stop Affecting Live Status And Task Queues.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <TrackingSummary
           items={[
             ["Active entries", formatNumber(filteredRows.length)],
+            ["Production units", formatNumber(productionUnitOptions.length)],
             ["Modules", formatNumber(tableOptions.length)],
             ["Entry types", formatNumber(entryTypeOptions.length)],
           ]}
         />
-        <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_180px_220px_220px]">
+        <div className="grid gap-3 @4xl/main:grid-cols-[minmax(0,1fr)_180px_180px_200px_220px]">
           <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
             <span>Search</span>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="pl-9" value={query} placeholder="Search entry, machine, job card, setup, remark..." onChange={(event) => setQuery(event.target.value)} />
+              <Input className="pl-9" value={query} placeholder="Search Entry, Machine, Job Card, Setup, Remark..." onChange={(event) => setQuery(event.target.value)} />
             </div>
           </Label>
+          <FilterSelect label="Production Unit" value={productionUnitFilter} onChange={setProductionUnitFilter} options={[["", "All production units"], ...productionUnitOptions.map((value) => [value, value] as [string, string])]} />
           <FilterSelect label="Module" value={tableFilter} onChange={setTableFilter} options={[["", "All modules"], ...tableOptions.map((value) => [value, value] as [string, string])]} />
-          <FilterSelect label="Entry type" value={entryTypeFilter} onChange={setEntryTypeFilter} options={[["", "All entry types"], ...entryTypeOptions.map((value) => [value, value] as [string, string])]} />
-          <Field label="Corrected by">
-            <Input value={correctedBy} placeholder="Planner/admin name" onChange={(event) => setCorrectedBy(event.target.value)} />
+          <FilterSelect label="Entry Type" value={entryTypeFilter} onChange={setEntryTypeFilter} options={[["", "All entry types"], ...entryTypeOptions.map((value) => [value, value] as [string, string])]} />
+          <Field label="Corrected By">
+            <Input value={correctedBy} placeholder="Planner/Admin Name" onChange={(event) => setCorrectedBy(event.target.value)} />
           </Field>
         </div>
         {filteredRows.length ? (
@@ -6668,6 +7730,7 @@ function CorrectionsPanel({
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
+                  <TableHead className="min-w-40">Production Unit</TableHead>
                   <TableHead className="min-w-44">Module</TableHead>
                   <TableHead className="min-w-80">Entry</TableHead>
                   <TableHead className="min-w-44">Created</TableHead>
@@ -6681,6 +7744,7 @@ function CorrectionsPanel({
                   const reason = reasonById[targetId] ?? "";
                   return (
                     <TableRow key={`${displayValue(row.targetTable)}-${targetId}`}>
+                      <TableCell>{correctionProductionUnitLabel(row)}</TableCell>
                       <TableCell>
                         <div className="font-medium">{displayValue(row.targetTable)}</div>
                         <div className="text-xs text-muted-foreground">{displayValue(row.entryType)}</div>
@@ -6691,7 +7755,7 @@ function CorrectionsPanel({
                       </TableCell>
                       <TableCell>{displayValue(row.createdAt)}</TableCell>
                       <TableCell>
-                        <Input value={reason} placeholder="Mandatory correction reason" onChange={(event) => setReasonById((current) => ({ ...current, [targetId]: event.target.value }))} />
+                        <Input value={reason} placeholder="Mandatory Correction Reason" onChange={(event) => setReasonById((current) => ({ ...current, [targetId]: event.target.value }))} />
                       </TableCell>
                       <TableCell>
                         <Button type="button" size="sm" variant="outline" onClick={() => void reverseRow(row)} disabled={!str(reason)}>
@@ -6706,30 +7770,34 @@ function CorrectionsPanel({
             </Table>
           </div>
         ) : (
-          <EmptyRowsMessage>No active entries match the current filters</EmptyRowsMessage>
+          <EmptyRowsMessage>No Active Entries Match The Current Filters</EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
   );
 }
 
+function correctionProductionUnitLabel(row: DashboardPayload) {
+  const floorCode = str(row.productionFloorCode);
+  return productionFloors.find((floor) => floor.code === floorCode)?.shortLabel ?? "Unassigned";
+}
+
 function ToolFixturePanel({ rows }: { rows: DashboardPayload[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Next tool / fixture number</CardTitle>
-        <CardDescription>First missing number, otherwise next new.</CardDescription>
+        <CardTitle>Next Tool / Fixture Number</CardTitle>
+        <CardDescription>First Missing Number, Otherwise Next New.</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         <section className="grid gap-3 sm:grid-cols-2 @5xl/main:grid-cols-5">
           {rows.map((row) => (
-            <div key={str(row.category)} className="rounded-lg border p-3">
-              <div className="truncate text-xs text-muted-foreground">{str(row.category)}</div>
-              <div className="text-xl font-semibold tabular-nums">{str(row.recommendedNumber || row.nextNew)}</div>
-              <div className="text-xs text-muted-foreground">
-                {str(row.recommendationType || "Next number")} | {formatNumber(numValue(row, "usedCount"))} used
-              </div>
-            </div>
+            <MetricCard
+              description={`${str(row.recommendationType || "Next Number")} | ${formatNumber(numValue(row, "usedCount"))} Used`}
+              key={str(row.category)}
+              label={str(row.category)}
+              value={str(row.recommendedNumber || row.nextNew)}
+            />
           ))}
         </section>
       </CardContent>
@@ -6763,17 +7831,26 @@ function LegacyActionForm({
   fields: LegacyField[];
   defaults?: Record<string, unknown>;
   buttonLabel: string;
-  onSubmit: (body: Record<string, unknown>) => void;
+  onSubmit: (body: Record<string, unknown>) => void | Promise<void>;
 }) {
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmitting) return;
     const form = event.currentTarget;
-    onSubmit(formPayload(new FormData(form), fields));
-    form.reset();
+    setIsSubmitting(true);
+    try {
+      await onSubmit(formPayload(new FormData(form), fields));
+      form.reset();
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
-    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
+    <form aria-busy={isSubmitting} className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={(event) => void submit(event)}>
+      <fieldset className="contents" disabled={isSubmitting}>
       <div>
         <div className="text-sm font-medium">{title}</div>
         <div className="text-xs text-muted-foreground">{description}</div>
@@ -6782,7 +7859,7 @@ function LegacyActionForm({
         {fields.map((field) => (
           <Field key={field.name} label={field.label}>
             {field.options ? (
-              <select
+              <SearchableSelect
                 className="h-9 rounded-md border bg-background px-3 text-sm"
                 name={field.name}
                 defaultValue={str(defaults[field.name]) || field.defaultValue || field.options[0]}
@@ -6790,10 +7867,12 @@ function LegacyActionForm({
               >
                 {field.options.map((option) => (
                   <option key={option} value={option}>
-                    {option ? option.replaceAll("_", " ") : "Normal"}
+                    {field.name === "productionFloorCode"
+                      ? productionFloors.find((floor) => floor.code === option)?.shortLabel ?? option
+                      : option ? option.replaceAll("_", " ") : "Normal"}
                   </option>
                 ))}
-              </select>
+              </SearchableSelect>
             ) : (
               <Input
                 name={field.name}
@@ -6809,16 +7888,17 @@ function LegacyActionForm({
           </Field>
         ))}
       </div>
-      <Button className="w-fit" type="submit">
+      <Button className="w-fit" type="submit" disabled={isSubmitting}>
         <Wrench className="size-4" />
-        {buttonLabel}
+        {isSubmitting ? "Processing..." : buttonLabel}
       </Button>
+      </fieldset>
     </form>
   );
 }
 
 function ActionLogTable({ rows }: { rows: DashboardPayload[] }) {
-  return <DataRowsCard title="Planner action log" rows={rows} empty="No planner actions saved yet" />;
+  return <DataRowsCard title="Planner Action Log" rows={rows} empty="No planner actions saved yet" />;
 }
 
 function JobCardTileBoard({
@@ -6880,8 +7960,8 @@ function JobCardTileBoard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Job-card tiles</CardTitle>
-        <CardDescription>{rows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(rows.length)} job cards shown` : "No job-card status rows returned"}</CardDescription>
+        <CardTitle>Job-Card Tiles</CardTitle>
+        <CardDescription>{rows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(rows.length)} job cards shown` : "No Job-Card Status Rows Returned"}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {rows.length ? (
@@ -6924,7 +8004,7 @@ function JobCardTileBoard({
             />
             <div className="grid gap-3 @4xl/main:grid-cols-2">
               <FilterSelect
-                label="RM status"
+                label="Rm Status"
                 value={rmStatusFilter}
                 onChange={setRmStatusFilter}
                 options={[
@@ -6934,7 +8014,7 @@ function JobCardTileBoard({
                 ]}
               />
               <FilterSelect
-                label="Production status"
+                label="Production Status"
                 value={productionStatusFilter}
                 onChange={setProductionStatusFilter}
                 options={[
@@ -6948,7 +8028,7 @@ function JobCardTileBoard({
               filters={[
                 {
                   id: "job-card-filter",
-                  label: "Job card no.",
+                  label: "Job Card No.",
                   value: jobCardFilter,
                   placeholder: "Type or select job card",
                   options: jobCardOptions,
@@ -6956,7 +8036,7 @@ function JobCardTileBoard({
                 },
                 {
                   id: "item-code-filter",
-                  label: "Item code",
+                  label: "Item Code",
                   value: itemCodeFilter,
                   placeholder: "Type or select item code",
                   options: itemCodeOptions,
@@ -6964,7 +8044,7 @@ function JobCardTileBoard({
                 },
                 {
                   id: "job-card-machine-filter",
-                  label: "Machine no.",
+                  label: "Machine No.",
                   value: machineFilter,
                   placeholder: "Type or select planned/running machine",
                   options: machineOptions,
@@ -6974,7 +8054,7 @@ function JobCardTileBoard({
             />
             <div>
               <Button type="button" variant="outline" size="sm" onClick={clearJobCardFilters}>
-                Clear filters
+                Clear Filters
               </Button>
             </div>
             {filteredRows.length ? (
@@ -6988,11 +8068,11 @@ function JobCardTileBoard({
                 ))}
               </div>
             ) : (
-              <EmptyRowsMessage>No job cards match the current filters</EmptyRowsMessage>
+              <EmptyRowsMessage>No Job Cards Match The Current Filters</EmptyRowsMessage>
             )}
           </>
         ) : (
-          <EmptyRowsMessage>No job-card status rows returned</EmptyRowsMessage>
+          <EmptyRowsMessage>No Job-Card Status Rows Returned</EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
@@ -7021,26 +8101,26 @@ function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: Das
       </div>
       <TileField label="Description" value={row.description || row.DESCRIPTION} />
       <div className="grid gap-2 rounded-md border bg-muted/20 p-2 sm:grid-cols-2">
-        <TileField label="Planned production start" value={schedule.plannedStart} />
-        <TileField label="Planned production end" value={schedule.plannedEnd} />
-        <TileField label="Actual production start" value={schedule.actualStart} />
-        <TileField label="Actual production end" value={schedule.actualEnd} />
+        <TileField label="Planned Production Start" value={schedule.plannedStart} />
+        <TileField label="Planned Production End" value={schedule.plannedEnd} />
+        <TileField label="Actual Production Start" value={schedule.actualStart} />
+        <TileField label="Actual Production End" value={schedule.actualEnd} />
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        <TileField label="FG PO" value={row.fgPoNo || row["FG PO NO."]} />
-        <TileField label="Order pcs" value={row.orderPcs || row["ORD. PCS."]} numeric />
-        <TileField label="Route option" value={option} />
-        <TileField label="Option source" value={row.optionSource} />
+        <TileField label="Fg Po" value={row.fgPoNo || row["FG PO NO."]} />
+        <TileField label="Order Pcs" value={row.orderPcs || row["ORD. PCS."]} numeric />
+        <TileField label="Route Option" value={option} />
+        <TileField label="Option Source" value={row.optionSource} />
         <TileField label="Route" value={row.routeStatus} />
         <TileField label="Cycle" value={row.cycleStatus} />
         <TileField label="Tooling" value={row.toolingStatus} />
-        <TileField label="Actual / output" value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`} />
+        <TileField label="Actual / Output" value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`} />
         <TileField label="Rejected" value={row.rawRejectQty} numeric />
-        <TileField label="Raw rows" value={row.rawRows} numeric />
+        <TileField label="Raw Rows" value={row.rawRows} numeric />
       </div>
       {setupRows.length ? (
         <div className="grid gap-2">
-          <div className="text-[11px] font-medium uppercase text-muted-foreground">Setup jobs</div>
+          <div className="text-[11px] font-medium text-muted-foreground">Setup Jobs</div>
           <div className="grid max-h-48 gap-2 overflow-y-auto pr-1">
             {setupRows.map((setup, index) => (
               <div key={`${displayValue(setup.setupNo)}-${displayValue(setup.machine)}-${index}`} className="rounded-md border bg-muted/10 p-2">
@@ -7049,20 +8129,20 @@ function JobCardTile({ row, setupRows }: { row: DashboardPayload; setupRows: Das
                   <StatusBadge value={setup.runningStatus} />
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <TileField label="Setup planned date" value={setup.setupPlannedDate || setup.plannedDate} />
-                  <TileField label="Setup completion date" value={setup.setupCompletionDate || setup.completionDate} />
-                  <TileField label="Plan vs actual" value={setup.planVsActual} />
-                  <TileField label="Planned production start" value={setup.plannedProductionStartDate} />
-                  <TileField label="Planned production end" value={setup.plannedProductionEndDate} />
-                  <TileField label="Actual production start" value={setup.actualProductionStartDate} />
-                  <TileField label="Actual production end" value={setup.actualProductionEndDate} />
+                  <TileField label="Setup Planned Date" value={setup.setupPlannedDate || setup.plannedDate} />
+                  <TileField label="Setup Completion Date" value={setup.setupCompletionDate || setup.completionDate} />
+                  <TileField label="Plan Vs Actual" value={setup.planVsActual} />
+                  <TileField label="Planned Production Start" value={setup.plannedProductionStartDate} />
+                  <TileField label="Planned Production End" value={setup.plannedProductionEndDate} />
+                  <TileField label="Actual Production Start" value={setup.actualProductionStartDate} />
+                  <TileField label="Actual Production End" value={setup.actualProductionEndDate} />
                 </div>
               </div>
             ))}
           </div>
         </div>
       ) : null}
-      <TileField label="Planning action" value={blocker} important />
+      <TileField label="Planning Action" value={blocker} important />
     </article>
   );
 }
@@ -7123,8 +8203,8 @@ function MachinePlanningBoard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Machine planning board</CardTitle>
-        <CardDescription>{boardRows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(boardRows.length)} machines shown` : "No machine planning board rows returned"}</CardDescription>
+        <CardTitle>Machine Planning Board</CardTitle>
+        <CardDescription>{boardRows.length ? `${formatNumber(filteredRows.length)} of ${formatNumber(boardRows.length)} machines shown` : "No Machine Planning Board Rows Returned"}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {boardRows.length ? (
@@ -7169,7 +8249,7 @@ function MachinePlanningBoard({
               filters={[
                 {
                   id: "machine-number-filter",
-                  label: "Machine no.",
+                  label: "Machine No.",
                   value: machineFilter,
                   placeholder: "Type or select planned/running machine",
                   options: machineOptions,
@@ -7177,7 +8257,7 @@ function MachinePlanningBoard({
                 },
                 {
                   id: "machine-job-card-filter",
-                  label: "Job card no.",
+                  label: "Job Card No.",
                   value: jobCardFilter,
                   placeholder: "Type or select job card",
                   options: jobCardOptions,
@@ -7185,7 +8265,7 @@ function MachinePlanningBoard({
                 },
                 {
                   id: "machine-item-code-filter",
-                  label: "Item code",
+                  label: "Item Code",
                   value: itemCodeFilter,
                   placeholder: "Type or select item code",
                   options: itemCodeOptions,
@@ -7195,7 +8275,7 @@ function MachinePlanningBoard({
             />
             <div>
               <Button type="button" variant="outline" size="sm" onClick={clearMachineFilters}>
-                Clear filters
+                Clear Filters
               </Button>
             </div>
             {filteredRows.length ? (
@@ -7212,12 +8292,12 @@ function MachinePlanningBoard({
                 ))}
               </div>
             ) : (
-              <EmptyRowsMessage>No machines match the current filters</EmptyRowsMessage>
+              <EmptyRowsMessage>No Machines Match The Current Filters</EmptyRowsMessage>
             )}
             <MachinePlannedPartsPanel machine={selectedMachine} rows={selectedPlans} />
           </>
         ) : (
-          <EmptyRowsMessage>No machine planning board rows returned</EmptyRowsMessage>
+          <EmptyRowsMessage>No Machine Planning Board Rows Returned</EmptyRowsMessage>
         )}
       </CardContent>
     </Card>
@@ -7266,14 +8346,13 @@ function MachinePlanningTile({
       </div>
       <div className="grid gap-x-2 gap-y-1.5 sm:grid-cols-2">
         <TileField label="Location" value={row.location || row.LOCATION || row.Location} />
-        <TileField label="Capacity" value={row.capacity || row.CAPACITY || row.Capacity} numeric />
         <TileField label="Operator" value={row.operator || row.operatorName || row["OPERATOR NAME"]} />
-        <TileField label="Planned setups" value={plannedCount} numeric />
+        <TileField label="Planned Setups" value={plannedCount} numeric />
         <TileField label="Priority" value={row.priority || row.PRIORITY} />
-        <TileField label={focusIsCurrent ? "Current job card" : "Next job card"} value={focusSetup?.jcNo || row.jcNo || row.jobCard || row.JobCardNo} />
-        <TileField label={focusIsCurrent ? "Current part" : "Next part to setup"} value={focusSetup?.partCode || row.partCode || row["PART CODE"] || row.itemCode} />
+        <TileField label={focusIsCurrent ? "Current Job Card" : "Next Job Card"} value={focusSetup?.jcNo || row.jcNo || row.jobCard || row.JobCardNo} />
+        <TileField label={focusIsCurrent ? "Current Part" : "Next Part To Setup"} value={focusSetup?.partCode || row.partCode || row["PART CODE"] || row.itemCode} />
         <TileField label="Setup" value={focusSetup ? `${displayValue(focusSetup.setupNo)} / Option ${displayValue(focusSetup.optionNumber)}` : "-"} />
-        <TileField label={focusIsCurrent ? "Setup completion date" : "Setup planned date"} value={focusIsCurrent ? focusSetup?.setupCompletionDate || focusSetup?.completionDate : focusSetup?.setupPlannedDate || focusSetup?.plannedDate} />
+        <TileField label={focusIsCurrent ? "Setup Completion Date" : "Setup Planned Date"} value={focusIsCurrent ? focusSetup?.setupCompletionDate || focusSetup?.completionDate : focusSetup?.setupPlannedDate || focusSetup?.plannedDate} />
         <TileField label="Remarks" value={row.remark || row.remarks || row.REMARKS} important />
       </div>
     </button>
@@ -7284,9 +8363,9 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
   return (
     <section className="grid gap-3 rounded-lg border bg-muted/20 p-3">
       <div>
-        <div className="text-sm font-semibold">{machine ? `Planned parts on ${machine}` : "Select a machine to see planned parts"}</div>
+        <div className="text-sm font-semibold">{machine ? `Planned parts on ${machine}` : "Select A Machine To See Planned Parts"}</div>
         <div className="text-xs text-muted-foreground">
-          {machine ? `${formatNumber(rows.length)} planned setup rows` : "Click any machine tile above to open its route-level part plan."}
+          {machine ? `${formatNumber(rows.length)} planned setup rows` : "Click Any Machine Tile Above To Open Its Route-Level Part Plan."}
         </div>
       </div>
       {machine ? (
@@ -7305,19 +8384,19 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
                   </div>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 @6xl/main:grid-cols-4">
-                  <TileField label="Job card" value={row.jcNo} />
-                  <TileField label="FG PO" value={row.fgPoNo} />
+                  <TileField label="Job Card" value={row.jcNo} />
+                  <TileField label="Fg Po" value={row.fgPoNo} />
                   <TileField label="Option" value={row.optionNumber} />
                   <TileField label="Setup" value={`${displayValue(row.setupNo)} ${displayValue(row.setupName) !== "-" ? displayValue(row.setupName) : ""}`} />
-                  <TileField label="Order pcs" value={row.orderPcs} numeric />
-                  <TileField label="Actual / output" value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`} />
-                  <TileField label="Setup planned date" value={row.setupPlannedDate || row.plannedDate} />
-                  <TileField label="Setup completion date" value={row.setupCompletionDate || row.completionDate} />
-                  <TileField label="Planned production start" value={row.plannedProductionStartDate} />
-                  <TileField label="Planned production end" value={row.plannedProductionEndDate} />
-                  <TileField label="Actual production start" value={row.actualProductionStartDate} />
-                  <TileField label="Actual production end" value={row.actualProductionEndDate} />
-                  <TileField label="Plan vs actual" value={row.planVsActual} />
+                  <TileField label="Order Pcs" value={row.orderPcs} numeric />
+                  <TileField label="Actual / Output" value={`${displayValue(row.rawActualQty, true)} / ${displayValue(row.rawOutputQty, true)}`} />
+                  <TileField label="Setup Planned Date" value={row.setupPlannedDate || row.plannedDate} />
+                  <TileField label="Setup Completion Date" value={row.setupCompletionDate || row.completionDate} />
+                  <TileField label="Planned Production Start" value={row.plannedProductionStartDate} />
+                  <TileField label="Planned Production End" value={row.plannedProductionEndDate} />
+                  <TileField label="Actual Production Start" value={row.actualProductionStartDate} />
+                  <TileField label="Actual Production End" value={row.actualProductionEndDate} />
+                  <TileField label="Plan Vs Actual" value={row.planVsActual} />
                   <TileField label="Cycle" value={row.cycleStatus} />
                   <TileField label="Tooling" value={row.toolingStatus} />
                 </div>
@@ -7325,7 +8404,7 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
             ))}
           </div>
         ) : (
-          <EmptyRowsMessage>No planned parts found for this machine</EmptyRowsMessage>
+          <EmptyRowsMessage>No Planned Parts Found For This Machine</EmptyRowsMessage>
         )
       ) : null}
     </section>
@@ -7335,24 +8414,9 @@ function MachinePlannedPartsPanel({ machine, rows }: { machine: string; rows: Da
 function TrackingSummary({ items }: { items: Array<[string, string, (() => void)?]> }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2 @4xl/main:grid-cols-5">
-      {items.map(([label, value, onClick]) => {
-        const className = "rounded-lg border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-background to-green-100/70 p-2.5 text-left shadow-sm shadow-emerald-950/5 dark:border-emerald-900/50 dark:from-emerald-950/35 dark:via-background dark:to-green-950/25";
-        const content = (
-          <>
-            <div className="text-[10px] font-medium uppercase text-emerald-800 dark:text-emerald-200">{label}</div>
-            <div className="text-base font-semibold tabular-nums">{value}</div>
-          </>
-        );
-        return onClick ? (
-          <button key={label} type="button" className={`${className} transition hover:border-emerald-400 hover:shadow-md focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30`} onClick={onClick}>
-            {content}
-          </button>
-        ) : (
-          <div key={label} className={className}>
-            {content}
-          </div>
-        );
-      })}
+      {items.map(([label, value, onClick]) => (
+        <MetricCard key={label} label={label} onClick={onClick} value={value} />
+      ))}
     </div>
   );
 }
@@ -7422,8 +8486,8 @@ function FilterSelect({
   return (
       <Label className="grid gap-1 text-xs font-medium text-muted-foreground">
         <span>{label}</span>
-        <select
-          className="h-9 rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+        <SearchableSelect
+          className="h-9 rounded-3xl border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors hover:border-primary/45 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 dark:bg-input/20"
           value={value}
           onChange={(event) => onChange(event.target.value)}
         >
@@ -7432,7 +8496,7 @@ function FilterSelect({
               {label}
             </option>
           ))}
-        </select>
+        </SearchableSelect>
       </Label>
   );
 }
@@ -7449,7 +8513,7 @@ function MachineMasterColumnFilter({
   options: string[];
 }) {
   return (
-    <select
+    <SearchableSelect
       aria-label={`Filter ${label}`}
       className="h-8 w-full min-w-32 rounded-md border bg-background px-2 text-xs font-normal outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
       value={value}
@@ -7459,7 +8523,7 @@ function MachineMasterColumnFilter({
       {options.map((option) => (
         <option key={option} value={option}>{option}</option>
       ))}
-    </select>
+    </SearchableSelect>
   );
 }
 
@@ -7480,8 +8544,8 @@ function ExcelStyleFilters({
       {filters.map((filter) => (
         <Label key={filter.id} className="grid gap-1 text-xs font-medium text-muted-foreground">
           <span>{filter.label}</span>
-          <select
-            className="h-9 rounded-3xl border border-transparent bg-input/50 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+          <SearchableSelect
+            className="h-9 rounded-3xl border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors hover:border-primary/45 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 dark:bg-input/20"
             value={filter.value}
             onChange={(event) => filter.onChange(event.target.value)}
           >
@@ -7491,7 +8555,7 @@ function ExcelStyleFilters({
                 {option}
               </option>
             ))}
-          </select>
+          </SearchableSelect>
         </Label>
       ))}
     </div>
@@ -7512,7 +8576,7 @@ function TileField({
   const text = displayValue(value, numeric);
   return (
     <div className="min-w-0">
-      <div className="text-[11px] font-medium uppercase text-muted-foreground">{label}</div>
+      <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
       <div className={important ? "break-words text-sm font-medium" : "break-words text-sm"}>{text}</div>
     </div>
   );
@@ -7569,7 +8633,7 @@ function MachineStateBadge({
   }[tone];
   return (
     <Badge variant="outline" className={`gap-1 ${toneClass}`}>
-      <span className="text-[10px] font-semibold uppercase opacity-75">{label}</span>
+      <span className="text-[10px] font-semibold opacity-75">{label}</span>
       <span>{value}</span>
     </Badge>
   );
@@ -7873,10 +8937,19 @@ function downloadApi(kind: "data-template", entryType: string) {
 }
 
 async function postDashboardApi(path: string, body: Record<string, unknown>): Promise<DashboardApiResult> {
+  const bodyPayload = asRecord(body.payload);
+  const productionFloorCode = normalizeProductionFloorCode(body.productionFloorCode ?? bodyPayload.productionFloorCode ?? productionFloorFromLocation());
+  const scopedBody = {
+    ...body,
+    productionFloorCode,
+    ...(Object.keys(bodyPayload).length
+      ? { payload: { ...bodyPayload, productionFloorCode } }
+      : {}),
+  };
   const response = await fetch(`/api/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(scopedBody),
   });
   const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) {
@@ -7966,28 +9039,6 @@ function optionalNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function numberOrNull(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function refreshLockFromStatus(status: { requestedAtMs?: unknown; completedAtMs?: unknown } | undefined): PlanningRefreshLock {
-  return {
-    baselineRequestedAtMs: numberOrNull(status?.requestedAtMs),
-    baselineCompletedAtMs: numberOrNull(status?.completedAtMs),
-  };
-}
-
-function refreshLockHasSettled(lock: PlanningRefreshLock, status: { status?: unknown; isRefreshing?: unknown; requestedAtMs?: unknown; completedAtMs?: unknown } | undefined) {
-  if (!status || status.isRefreshing) return false;
-  const currentStatus = str(status.status);
-  if (currentStatus !== "idle" && currentStatus !== "failed") return false;
-  const requestedAtMs = numberOrNull(status.requestedAtMs);
-  const completedAtMs = numberOrNull(status.completedAtMs);
-  const sawNewRequest = requestedAtMs !== lock.baselineRequestedAtMs;
-  const sawNewCompletion = completedAtMs !== lock.baselineCompletedAtMs;
-  return sawNewRequest && (sawNewCompletion || currentStatus === "failed");
-}
-
 function numeric(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -8039,13 +9090,13 @@ function DashboardSkeleton() {
     <div className="grid gap-4">
       <div className="grid gap-4 md:grid-cols-2 @5xl/main:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-32 rounded-4xl" />
+          <Skeleton key={index} className="h-32 rounded-lg" />
         ))}
       </div>
-      <Skeleton className="h-96 rounded-4xl" />
+      <Skeleton className="h-96 rounded-lg" />
       <div className="grid gap-4 md:grid-cols-2">
-        <Skeleton className="h-72 rounded-4xl" />
-        <Skeleton className="h-72 rounded-4xl" />
+        <Skeleton className="h-72 rounded-lg" />
+        <Skeleton className="h-72 rounded-lg" />
       </div>
     </div>
   );
@@ -8098,6 +9149,13 @@ function nextPlanningHolidayLabel(rows: DashboardPayload[]) {
     .filter((row) => row.value && row.value >= today)
     .sort((a, b) => a.value.localeCompare(b.value))[0];
   return next?.label ?? "-";
+}
+
+function planningHolidayCoverageLabel(row: DashboardPayload) {
+  if (row.factoryWide === true || str(row.scope).toLowerCase() === "factory") return "All factory";
+  const department = str(row.departmentLabel || row.department);
+  const floor = productionFloors.find((item) => item.code === department);
+  return floor?.shortLabel || department || "Selected production floor";
 }
 
 type MachineConstraintQueuePlacementPayload = {
@@ -8903,14 +9961,14 @@ function LabeledSelect({
   return (
     <label className="grid gap-1 text-xs font-medium text-muted-foreground">
       {label}
-      <select className="h-9 rounded-md border bg-background px-3 text-sm text-foreground" value={value} onChange={(event) => onChange(event.target.value)}>
+      <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm text-foreground" value={value} onChange={(event) => onChange(event.target.value)}>
         {placeholder ? <option value="">{placeholder}</option> : null}
         {options.map((option) => {
           const optionValue = typeof option === "string" ? option : option.value;
           const optionLabel = typeof option === "string" ? option : option.label;
           return <option key={optionValue} value={optionValue}>{optionLabel}</option>;
         })}
-      </select>
+      </SearchableSelect>
     </label>
   );
 }
@@ -8921,6 +9979,36 @@ function AlertMessage({ tone, children }: { tone: NonNullable<ActionStatus>["ton
       {children}
     </Badge>
   );
+}
+
+function ProcessingNotice({ message }: { message: string }) {
+  return (
+    <div
+      aria-atomic="true"
+      aria-live="polite"
+      className="flex w-fit items-center gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
+      role="status"
+    >
+      <span aria-hidden="true" className="animate-spin text-primary">
+        <RefreshCw className="size-4" />
+      </span>
+      <div>
+        <div className="font-medium">{message}</div>
+        <div className="text-xs text-muted-foreground">Please Wait. Data-Entry Controls Are Locked Until Processing Finishes.</div>
+      </div>
+    </div>
+  );
+}
+
+function dashboardActionProcessingMessage(path: string, body: Record<string, unknown>) {
+  if (path === "data-import") return "Importing entered data...";
+  if (path === "reverse-entry") return "Applying the correction...";
+  if (path === "data-entry") {
+    const entryType = str(body.entryType);
+    const title = dataEntrySpecs.find((spec) => spec.entryType === entryType)?.title;
+    return title ? `Saving ${title.toLowerCase()}...` : "Saving entered data...";
+  }
+  return "Processing entered data...";
 }
 
 function hourSlotOptions() {
@@ -9150,9 +10238,8 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   }
   if (entryType === "setup_checklist_master") {
     return [
-      payload.version,
+      payload.checklistCode || payload.version,
       payload.sequence,
-      payload.checkPoint,
     ].map((value) => str(value).toLowerCase()).join("|");
   }
   if (entryType === "setup_checklist_session") {
@@ -9245,26 +10332,19 @@ function mergeQualityParameterRows(rows: DashboardPayload[]) {
   return sortQualityParameterRows([...byKey.values()]);
 }
 
-function qualityParameterSetupOptions(rows: DashboardPayload[]) {
-  const byKey = new Map<string, { key: string; label: string; partNo: string; optionNumber: string; setupNo: string; count: number }>();
-  for (const row of rows) {
-    if (str(row.status || "Active").toLowerCase() === "inactive") continue;
-    const key = qualityParameterSetupKey(row);
-    if (!key.replaceAll("|", "")) continue;
-    const partNo = displayValue(row.partNo || row.partCode);
-    const optionNumber = displayValue(row.optionNumber);
-    const setupNo = displayValue(row.setupNo);
-    const current = byKey.get(key);
-    byKey.set(key, {
-      key,
-      partNo,
-      optionNumber,
-      setupNo,
-      label: `${partNo} | Option ${optionNumber} | Setup ${setupNo}`,
-      count: (current?.count ?? 0) + 1,
-    });
-  }
-  return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+function qualityParameterRowsSignature(rows: DashboardPayload[]) {
+  return rows.map((row) => [
+    qualityParameterMasterKey(row),
+    row.sequence,
+    qualityParameterName(row),
+    row.specification,
+    row.instrumentUsed,
+    row.tolerancePlus,
+    row.toleranceMinus,
+    qualityParameterInputType(row),
+    row.status,
+    row.remark,
+  ].map((value) => str(value)).join("|")).join("||");
 }
 
 function newQualityParameterDraft(sequence: number): QualityParameterDraft {
@@ -9329,6 +10409,129 @@ function combinedQualityInspectionMasterRows(productionControl: DashboardPayload
     ...asArray(productionControl.firstPieceInspectionMasterRows),
   ];
 }
+
+function qualityParameterRouteLines(rows: DashboardPayload[]) {
+  const byKey = new Map<string, { partNo: string; optionNumber: string; setupNo: string }>();
+  for (const row of rows) {
+    const line = {
+      partNo: displayValue(row.partNo || row.partCode),
+      optionNumber: displayValue(row.optionNumber),
+      setupNo: displayValue(row.setupNo),
+    };
+    if (Object.values(line).some((value) => value === "-")) continue;
+    byKey.set(qualityParameterSetupKey(line), line);
+  }
+  return [...byKey.values()].sort((a, b) => qualityParameterSetupKey(a).localeCompare(qualityParameterSetupKey(b), undefined, { numeric: true }));
+}
+
+function automaticMasterCodePrefix(entryType: string) {
+  return {
+    rejection_type_master: "RT",
+    rejection_remark_master: "RR",
+    rejection_reason_master: "DC",
+  }[entryType] ?? "";
+}
+
+function nextAutomaticMasterCode(entryType: string, rows: DashboardPayload[]) {
+  const prefix = automaticMasterCodePrefix(entryType);
+  if (!prefix) return "";
+  const expression = new RegExp(`^${prefix}(\\d+)$`, "i");
+  const max = rows.reduce((highest, row) => {
+    const match = expression.exec(displayValue(row.code));
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return `${prefix}${String(max + 1).padStart(3, "0")}`;
+}
+
+function setupChecklistCode(row: DashboardPayload) {
+  const explicitCode = displayValue(row.checklistCode);
+  if (explicitCode !== "-") return explicitCode;
+  const version = displayValue(row.version);
+  return version === "-" ? "" : /^(SC\d+|SETUP-)/i.test(version) ? version : `SETUP-${version}`;
+}
+
+function nextSetupChecklistCode(rows: DashboardPayload[]) {
+  const max = rows.reduce((highest, row) => {
+    const match = /^SC(\d+)$/i.exec(setupChecklistCode(row));
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return `SC${String(max + 1).padStart(3, "0")}`;
+}
+
+function setupChecklistRowKey(row: DashboardPayload) {
+  return [setupChecklistCode(row), row.sequence].map((value) => str(value).toLowerCase()).join("|");
+}
+
+function mergeSetupChecklistRows(rows: DashboardPayload[]) {
+  const byKey = new Map<string, DashboardPayload>();
+  for (const row of rows) {
+    const key = setupChecklistRowKey(row);
+    if (!key.replaceAll("|", "")) continue;
+    byKey.set(key, row);
+  }
+  return [...byKey.values()]
+    .filter((row) => str(row.status || "Active").toLowerCase() !== "inactive")
+    .sort((a, b) => setupChecklistCode(a).localeCompare(setupChecklistCode(b), undefined, { numeric: true }) || (optionalNumber(a.sequence) ?? 0) - (optionalNumber(b.sequence) ?? 0));
+}
+
+function setupChecklistRowsForCode(rows: DashboardPayload[], checklistCode: unknown) {
+  const code = machineKey(checklistCode);
+  return code ? rows.filter((row) => machineKey(setupChecklistCode(row)) === code) : [];
+}
+
+function setupChecklistOptions(rows: DashboardPayload[]) {
+  const byCode = new Map<string, { code: string; title: string; steps: number }>();
+  for (const row of rows) {
+    const code = setupChecklistCode(row);
+    if (!code) continue;
+    const existing = byCode.get(machineKey(code));
+    if (existing) existing.steps += 1;
+    else byCode.set(machineKey(code), { code, title: displayValue(row.checklistTitle || row.title || "Setup checklist"), steps: 1 });
+  }
+  return [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+}
+
+function newSetupChecklistDraft(sequence: number): SetupChecklistStepDraft {
+  return {
+    draftId: `setup-checklist-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    sequence: String(sequence),
+    checkPoint: "",
+    inputType: "checkbox",
+    required: "Yes",
+    section: "Pre setting / setting",
+    remark: "",
+  };
+}
+
+function setupChecklistDraftFromRow(row: DashboardPayload): SetupChecklistStepDraft {
+  return {
+    draftId: setupChecklistRowKey(row) || `setup-checklist-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    persisted: true,
+    sequence: displayValue(row.sequence) !== "-" ? displayValue(row.sequence) : "",
+    checkPoint: str(row.checkPoint),
+    inputType: str(row.inputType || "checkbox"),
+    required: str(row.required || "Yes"),
+    section: str(row.section || "Pre setting / setting"),
+    remark: str(row.remark),
+  };
+}
+
+function setupChecklistPayload(draft: SetupChecklistStepDraft, checklistCode: string, checklistTitle: string, effectiveFrom: string, status: string): DashboardPayload {
+  return {
+    checklistCode,
+    checklistTitle,
+    version: checklistCode,
+    title: checklistTitle,
+    sequence: optionalNumber(draft.sequence) ?? str(draft.sequence),
+    checkPoint: str(draft.checkPoint),
+    inputType: str(draft.inputType || "checkbox"),
+    required: str(draft.required || "Yes"),
+    section: str(draft.section || "Pre setting / setting"),
+    effectiveFrom,
+    status,
+    remark: str(draft.remark),
+  };
+}
 function maintenanceMasterRowsFromDataEntry(dataEntry: DashboardPayload | undefined) {
   return asArray(asRecord(dataEntry).maintenanceMasterRows)
     .filter((row) => displayValue(row.maintenanceCode || row.code) !== "-");
@@ -9348,12 +10551,12 @@ function nextMaintenanceMasterCode(rows: DashboardPayload[]) {
 }
 function maintenanceScheduleFields(): LegacyField[] {
   return [
-    { name: "maintenanceCode", label: "Maintenance code", required: true },
-    { name: "maintenanceTitle", label: "Maintenance schedule title", required: true },
-    { name: "checklistCode", label: "Checklist code" },
-    { name: "frequencyDays", label: "Frequency days", type: "number", min: "1", required: true },
-    { name: "firstDueDate", label: "First due date", type: "date", required: true },
-    { name: "estimatedMinutes", label: "Estimated minutes", type: "number", min: "0" },
+    { name: "maintenanceCode", label: "Maintenance Code", required: true },
+    { name: "maintenanceTitle", label: "Maintenance Schedule Title", required: true },
+    { name: "checklistCode", label: "Checklist Code" },
+    { name: "frequencyDays", label: "Frequency Days", type: "number", min: "1", required: true },
+    { name: "firstDueDate", label: "First Due Date", type: "date", required: true },
+    { name: "estimatedMinutes", label: "Estimated Minutes", type: "number", min: "0" },
     { name: "status", label: "Status" },
     { name: "remark", label: "Remark" },
   ];
@@ -9507,20 +10710,18 @@ function maintenanceMachineRows(rows: DashboardPayload[]) {
     byMachine.set(key, {
       ...row,
       machineNo,
+      machineFamily: displayValue(row.machineFamily || row["MACHINE FAMILY"]),
       machineType: displayValue(row.machineType || row["MACHINE TYPE"]),
       machineName: displayValue(row.machineName || row["MACHINE NAME"]),
-      location: displayValue(row.location || row["LOCATION"]),
+      location: displayValue(row.location || row["MACHINE LOCATION"] || row["LOCATION"]),
     });
   }
   return [...byMachine.values()].sort((a, b) => displayValue(a.machineNo).localeCompare(displayValue(b.machineNo), undefined, { numeric: true }));
 }
 
-function machineMasterMatches(row: DashboardPayload, machineNoFilter: string, machineNameFilter: string, machineTypeFilter: string, machineLocationFilter: string, machineStatusFilter: string) {
-  return typedFilterMatches(displayValue(row.machineNo), machineNoFilter) &&
-    typedFilterMatches(displayValue(row.machineName), machineNameFilter) &&
-    typedFilterMatches(displayValue(row.machineType), machineTypeFilter) &&
-    typedFilterMatches(displayValue(row.location), machineLocationFilter) &&
-    typedFilterMatches(displayValue(row.status || "Active"), machineStatusFilter);
+function machineProductionUnitLabel(row: DashboardPayload) {
+  const floorCode = normalizeProductionFloorCode(row.productionFloorCode);
+  return productionFloors.find((floor) => floor.code === floorCode)?.label ?? floorCode;
 }
 
 function maintenanceScheduleMatches(row: DashboardPayload, codeFilter: string, titleFilter: string, checklistFilter: string, frequencyFilter: string, firstDueFilter: string, statusFilter: string) {
@@ -9838,7 +11039,52 @@ function productionCardRuntimeMinutes(prodDate: string, startTime: string, endTi
 }
 
 function storedSetupChecklistSessionKey(sessionId: string) {
-  return `mrmpl:setup-checklist:${sessionId}`;
+  return `mrmpl:setup-checklist:fresh-2026-08-11:${sessionId}`;
+}
+
+function readStoredFirstPieceInspectionTasks() {
+  if (typeof window === "undefined") return [];
+  return readFirstPieceInspectionTasksFromStorage(window.localStorage)
+    .filter(
+      (task) =>
+        Boolean(shopFloorPlanKey(task)) &&
+        normalizeProductionFloorCode(task.productionFloorCode) ===
+          productionFloorFromLocation(),
+    );
+}
+
+function writeStoredFirstPieceInspectionTasks(tasks: DashboardPayload[]) {
+  if (typeof window === "undefined") return;
+  const activeFloor = productionFloorFromLocation();
+  const otherFloorTasks = readFirstPieceInspectionTasksFromStorage(
+    window.localStorage,
+  ).filter(
+    (task) =>
+      normalizeProductionFloorCode(task.productionFloorCode) !== activeFloor,
+  );
+  writeFirstPieceInspectionTasksToStorage(
+    window.localStorage,
+    [...otherFloorTasks, ...tasks],
+  );
+}
+
+function mergeFirstPieceInspectionTasks(...taskGroups: DashboardPayload[][]) {
+  return mergeStoredFirstPieceInspectionTasks(shopFloorPlanKey, ...taskGroups);
+}
+
+function readStoredFirstPieceInspectionDraft(reportId: string): FirstPieceInspectionDraft | undefined {
+  if (typeof window === "undefined" || !reportId) return undefined;
+  return readFirstPieceInspectionDraftFromStorage(window.localStorage, reportId);
+}
+
+function writeStoredFirstPieceInspectionDraft(reportId: string, draft: FirstPieceInspectionDraft) {
+  if (typeof window === "undefined" || !reportId) return;
+  writeFirstPieceInspectionDraftToStorage(window.localStorage, reportId, draft);
+}
+
+function removeStoredFirstPieceInspectionDraft(reportId: string) {
+  if (typeof window === "undefined" || !reportId) return;
+  removeFirstPieceInspectionDraftFromStorage(window.localStorage, reportId);
 }
 
 function readStoredSetupChecklistSession(sessionId: string) {
@@ -9867,6 +11113,9 @@ function setupChecklistPageHref(row: DashboardPayload, phase: string) {
     setupName: displayValue(row.setupName),
     machine: displayValue(row.machine),
     machineType: displayValue(row.machineType),
+    floor: normalizeProductionFloorCode(
+      row.productionFloorCode ?? productionFloorFromLocation(),
+    ),
     returnTab: "machinistTasksTab",
   });
   return `/dashboard/setup-checklist?${params.toString()}`;
@@ -9910,18 +11159,20 @@ function mostCompleteSetupChecklistSession(snapshotSession: DashboardPayload | u
 }
 function activeSetupChecklistMasterRows(rows: DashboardPayload[]) {
   const activeRows = rows.filter((row) => str(row.status || "Active").toLowerCase() !== "inactive");
-  const latestVersion = activeRows
-    .map((row) => str(row.version || "1"))
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  const latestChecklistCode = activeRows
+    .map((row) => setupChecklistCode(row))
+    .sort((a, b) => Number(/^SC\d+$/i.test(a)) - Number(/^SC\d+$/i.test(b)) || a.localeCompare(b, undefined, { numeric: true }))
     .at(-1);
   return activeRows
-    .filter((row) => str(row.version || "1") === latestVersion)
+    .filter((row) => setupChecklistCode(row) === latestChecklistCode)
     .sort((a, b) => (optionalNumber(a.sequence) ?? 0) - (optionalNumber(b.sequence) ?? 0));
 }
 
 function setupChecklistItemsFromMaster(rows: DashboardPayload[]) {
   return rows.map((row, index) => ({
-    version: displayValue(row.version || "1"),
+    checklistCode: setupChecklistCode(row),
+    checklistTitle: displayValue(row.checklistTitle || row.title || "Setup checklist"),
+    version: setupChecklistCode(row),
     sequence: optionalNumber(row.sequence) ?? index + 1,
     checkPoint: displayValue(row.checkPoint),
     inputType: displayValue(row.inputType || "checkbox"),
@@ -9932,7 +11183,7 @@ function setupChecklistItemsFromMaster(rows: DashboardPayload[]) {
 }
 
 function setupChecklistItemKey(item: DashboardPayload, fallbackIndex = 0) {
-  return [item.version, item.sequence ?? fallbackIndex + 1, item.checkPoint].map((value) => str(value).toLowerCase()).join("|");
+  return [item.checklistCode || item.version, item.sequence ?? fallbackIndex + 1, item.checkPoint].map((value) => str(value).toLowerCase()).join("|");
 }
 
 function setupChecklistItemRequired(item: DashboardPayload) {
@@ -9999,7 +11250,8 @@ function setupChecklistSessionForStage({
 
 function setupChecklistMasterDefaults() {
   return {
-    version: new Date().toISOString().slice(0, 10).replaceAll("-", ""),
+    checklistCode: "",
+    checklistTitle: "",
     sequence: "",
     checkPoint: "",
     inputType: "checkbox",

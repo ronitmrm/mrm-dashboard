@@ -12,5 +12,6 @@ export function createDatabase(options: RepositoryPoolOptions | string) {
   return {
     close,
     database,
+    pool,
   }
 }

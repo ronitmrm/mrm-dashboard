@@ -27,8 +27,10 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react"
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
 
 export type DashboardTabId =
+  | "productionDashboardTab"
   | "productionControlTab"
   | "jobCardStatusTab"
   | "machineDetailTab"
@@ -37,6 +39,9 @@ export type DashboardTabId =
   | "masterTablesTab"
   | "dataEntryTab"
   | "planningHolidayTab"
+  | "setupChecklistMasterTab"
+  | "maintenanceMastersTab"
+  | "qualityMastersTab"
   | "maintenanceTab"
   | "planningControlTab"
   | "shopFloorStatusTab"
@@ -54,8 +59,13 @@ type DashboardNavigationItem = {
   title: string
 }
 
-export function dashboardTabHref(tab: DashboardTabId) {
-  return `/?tab=${encodeURIComponent(tab)}`
+export function dashboardTabHref(
+  tab: DashboardTabId,
+  productionFloorCode?: ProductionFloorCode
+) {
+  const params = new URLSearchParams({ tab })
+  if (productionFloorCode) params.set("floor", productionFloorCode)
+  return `/?${params.toString()}`
 }
 
 export function navigationHrefMatches(
@@ -64,6 +74,20 @@ export function navigationHrefMatches(
   href: string
 ) {
   const destination = new URL(href, "http://mrmpl.local")
+  if (
+    pathname.startsWith("/hr/jobs/") &&
+    destination.pathname === "/hr" &&
+    destination.searchParams.get("panel") === "jobsPanel"
+  ) {
+    return true
+  }
+  if (
+    pathname.startsWith("/hr/candidates/") &&
+    destination.pathname === "/hr" &&
+    destination.searchParams.get("panel") === "candidatesPanel"
+  ) {
+    return true
+  }
   const pathMatches =
     destination.pathname === "/" || destination.pathname === "/commercial"
       ? pathname === destination.pathname
@@ -79,124 +103,189 @@ export function navigationHrefMatches(
 
 export const dashboardNavigation: readonly DashboardNavigationItem[] = [
   {
+    href: dashboardTabHref("productionDashboardTab"),
+    icon: LayoutDashboard,
+    id: "productionDashboardTab",
+    subtitle: "Orders And Dispatch Dates",
+    title: "Production Dashboard",
+  },
+  {
     href: dashboardTabHref("productionControlTab"),
     icon: ClipboardList,
     id: "productionControlTab",
-    subtitle: "priority, route, dispatch",
+    subtitle: "Priority, Route, Dispatch",
     title: "Planner Actions",
+  },
+  {
+    href: dashboardTabHref("planningControlTab"),
+    icon: Route,
+    id: "planningControlTab",
+    subtitle: "Route And Plan Checks",
+    title: "Planning Control",
   },
   {
     href: dashboardTabHref("jobCardStatusTab"),
     icon: PackageCheck,
     id: "jobCardStatusTab",
-    subtitle: "running and completed",
+    subtitle: "Running And Completed",
     title: "Job Cards",
   },
   {
     href: dashboardTabHref("machineDetailTab"),
     icon: Factory,
     id: "machineDetailTab",
-    subtitle: "setup planning",
+    subtitle: "Setup Planning",
     title: "Machine Detail",
-  },
-  {
-    href: dashboardTabHref("machineMasterTab"),
-    icon: Factory,
-    id: "machineMasterTab",
-    subtitle: "schedules and history",
-    title: "Machine Master",
-  },
-  {
-    href: dashboardTabHref("masterGapsTab"),
-    icon: Database,
-    id: "masterGapsTab",
-    subtitle: "missing planning data",
-    title: "Master Readiness",
-  },
-  {
-    href: dashboardTabHref("masterTablesTab"),
-    icon: Database,
-    id: "masterTablesTab",
-    subtitle: "search saved masters",
-    title: "Master Tables",
-  },
-  {
-    href: dashboardTabHref("dataEntryTab"),
-    icon: ListChecks,
-    id: "dataEntryTab",
-    subtitle: "imports and manual entry",
-    title: "Data Entry",
-  },
-  {
-    href: dashboardTabHref("planningHolidayTab"),
-    icon: CalendarDays,
-    id: "planningHolidayTab",
-    subtitle: "Friday shutdown, holidays",
-    title: "Planning Holidays",
-  },
-  {
-    href: dashboardTabHref("maintenanceTab"),
-    icon: Settings2,
-    id: "maintenanceTab",
-    subtitle: "machine PM schedule",
-    title: "Maintenance",
-  },
-  {
-    href: dashboardTabHref("planningControlTab"),
-    icon: Route,
-    id: "planningControlTab",
-    subtitle: "route and plan checks",
-    title: "Planning Control",
   },
   {
     href: dashboardTabHref("shopFloorStatusTab"),
     icon: Factory,
     id: "shopFloorStatusTab",
-    subtitle: "machine queue",
+    subtitle: "Machine Queue",
     title: "Shop Floor Status",
   },
   {
     href: dashboardTabHref("shopFloorTasksTab"),
     icon: PackageCheck,
     id: "shopFloorTasksTab",
-    subtitle: "raw material at machine",
+    subtitle: "Raw Material At Machine",
     title: "Shop Floor Tasks",
   },
   {
     href: dashboardTabHref("machinistTasksTab"),
     icon: Wrench,
     id: "machinistTasksTab",
-    subtitle: "pre setting, setting, start",
+    subtitle: "Pre Setting, Setting, Start",
     title: "Machinist",
   },
   {
     href: dashboardTabHref("qualityControlTasksTab"),
     icon: ShieldCheck,
     id: "qualityControlTasksTab",
-    subtitle: "setup approvals",
+    subtitle: "Setup Approvals",
     title: "Quality Control",
   },
   {
     href: dashboardTabHref("firstPieceInspectionTab"),
     icon: Gauge,
     id: "firstPieceInspectionTab",
-    subtitle: "quality readings",
+    subtitle: "Quality Readings",
     title: "First Piece Inspection",
+  },
+  {
+    href: dashboardTabHref("maintenanceTab"),
+    icon: Settings2,
+    id: "maintenanceTab",
+    subtitle: "Machine Pm Schedule",
+    title: "Maintenance",
   },
   {
     href: dashboardTabHref("correctionsTab"),
     icon: Undo2,
     id: "correctionsTab",
-    subtitle: "reverse wrong entries",
+    subtitle: "Reverse Wrong Entries",
     title: "Corrections",
   },
+  {
+    href: dashboardTabHref("dataEntryTab"),
+    icon: ListChecks,
+    id: "dataEntryTab",
+    subtitle: "Imports And Manual Entry",
+    title: "Data Entry",
+  },
+  {
+    href: dashboardTabHref("masterTablesTab"),
+    icon: Database,
+    id: "masterTablesTab",
+    subtitle: "Search Saved Masters",
+    title: "Master Tables",
+  },
+  {
+    href: dashboardTabHref("masterGapsTab"),
+    icon: Database,
+    id: "masterGapsTab",
+    subtitle: "Missing Planning Data",
+    title: "Master Readiness",
+  },
+  {
+    href: dashboardTabHref("machineMasterTab"),
+    icon: Factory,
+    id: "machineMasterTab",
+    subtitle: "Schedules And History",
+    title: "Machine Master",
+  },
+  {
+    href: dashboardTabHref("planningHolidayTab"),
+    icon: CalendarDays,
+    id: "planningHolidayTab",
+    subtitle: "Friday Shutdown, Holidays",
+    title: "Planning Holidays",
+  },
+  {
+    href: dashboardTabHref("setupChecklistMasterTab"),
+    icon: ListChecks,
+    id: "setupChecklistMasterTab",
+    subtitle: "Setup And Maintenance",
+    title: "Checklists",
+  },
+  {
+    href: dashboardTabHref("maintenanceMastersTab"),
+    icon: Settings2,
+    id: "maintenanceMastersTab",
+    subtitle: "Maintenance Schedules",
+    title: "Maintenance Masters",
+  },
+  {
+    href: dashboardTabHref("qualityMastersTab"),
+    icon: ShieldCheck,
+    id: "qualityMastersTab",
+    subtitle: "Inspection Lines And Codes",
+    title: "Quality Masters",
+  },
 ]
+
+export const planningHolidayNavigation = dashboardNavigation.find(
+  (item) => item.id === "planningHolidayTab"
+)!
+
+export const machineMasterNavigation = dashboardNavigation.find(
+  (item) => item.id === "machineMasterTab"
+)!
+
+const universalProductionNavigationIds = new Set<DashboardTabId>([
+  "productionDashboardTab",
+  "correctionsTab",
+  "dataEntryTab",
+  "masterTablesTab",
+  "machineMasterTab",
+])
+
+const consolidatedProductionNavigationIds = new Set<DashboardTabId>([
+  "setupChecklistMasterTab",
+  "maintenanceMastersTab",
+  "qualityMastersTab",
+])
+
+export const consolidatedProductionNavigation = dashboardNavigation.filter(
+  (item) => consolidatedProductionNavigationIds.has(item.id)
+)
+
+export const universalProductionNavigation = dashboardNavigation.filter(
+  (item) => universalProductionNavigationIds.has(item.id)
+)
+
+export const productionFloorNavigation = dashboardNavigation.filter(
+  (item) =>
+    item.id !== planningHolidayNavigation.id &&
+    !universalProductionNavigationIds.has(item.id) &&
+    !consolidatedProductionNavigationIds.has(item.id)
+)
 
 export const commercialNavigation = [
   {
     href: "/commercial",
     icon: LayoutDashboard,
-    label: "Commercial overview",
+    label: "Commercial Overview",
   },
   {
     href: "/commercial/customers",
@@ -226,7 +315,7 @@ export const commercialNavigation = [
   {
     href: "/commercial/masters",
     icon: ListTree,
-    label: "Pricing masters",
+    label: "Pricing Masters",
   },
   {
     href: "/commercial/products",
@@ -236,7 +325,7 @@ export const commercialNavigation = [
   {
     href: "/commercial/assemblies",
     icon: Boxes,
-    label: "Assembly / BOM",
+    label: "Assembly / Bom",
   },
   {
     href: "/commercial/drawing-history",
@@ -251,12 +340,12 @@ export const commercialNavigation = [
   {
     href: "/commercial/costing",
     icon: Calculator,
-    label: "Product costing",
+    label: "Product Costing",
   },
   {
     href: "/commercial/quotes",
     icon: ScrollText,
-    label: "Quote register",
+    label: "Quote Register",
   },
   {
     href: "/commercial/pricing",
@@ -266,12 +355,12 @@ export const commercialNavigation = [
   {
     href: "/commercial/orders",
     icon: ShoppingCart,
-    label: "Purchase orders",
+    label: "Purchase Orders",
   },
   {
     href: "/commercial/revisions",
     icon: RefreshCcw,
-    label: "Price revisions",
+    label: "Price Revisions",
   },
   {
     href: "/commercial/corrections",
@@ -331,10 +420,24 @@ export const hrNavigation = [
     requiredCapability: "hr.recruitment.read",
   },
   {
-    href: "/hr?panel=interviewsPanel",
+    href: "/hr?panel=conversationLogsPanel",
     icon: MessageSquareText,
-    label: "Interviews",
+    label: "Conversation History",
+    panelId: "conversationLogsPanel",
+    requiredCapability: "hr.recruitment.read",
+  },
+  {
+    href: "/hr?panel=interviewsPanel",
+    icon: CalendarDays,
+    label: "Interview Schedule",
     panelId: "interviewsPanel",
+    requiredCapability: "hr.recruitment.read",
+  },
+  {
+    href: "/hr?panel=interviewWorkspacePanel",
+    icon: ClipboardList,
+    label: "Interview Workspace",
+    panelId: "interviewWorkspacePanel",
     requiredCapability: "hr.recruitment.read",
   },
 ] as const
@@ -343,6 +446,6 @@ export const administrationNavigation = [
   {
     href: "/administration/access",
     icon: ShieldCheck,
-    label: "Access administration",
+    label: "Access Administration",
   },
 ] as const

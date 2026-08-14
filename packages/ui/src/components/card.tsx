@@ -12,7 +12,7 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-4xl bg-card py-(--card-spacing) text-sm text-card-foreground shadow-md ring-1 ring-foreground/5 [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] dark:ring-foreground/10 *:[img:first-child]:rounded-t-4xl *:[img:last-child]:rounded-b-4xl",
+        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-lg border border-border/80 bg-card py-(--card-spacing) text-sm text-card-foreground shadow-xs [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
         className
       )}
       {...props}
@@ -25,7 +25,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "group/card-header @container/card-header grid auto-rows-min items-start gap-1.5 rounded-t-4xl px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
+        "group/card-header @container/card-header grid auto-rows-min items-start gap-1.5 rounded-t-lg px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
         className
       )}
       {...props}
@@ -37,7 +37,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("font-heading text-base font-medium", className)}
+      className={cn("font-heading text-base font-semibold tracking-tight", className)}
       {...props}
     />
   )
@@ -81,11 +81,65 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center rounded-b-4xl px-(--card-spacing) [.border-t]:pt-(--card-spacing)",
+        "flex items-center rounded-b-lg px-(--card-spacing) [.border-t]:pt-(--card-spacing)",
         className
       )}
       {...props}
     />
+  )
+}
+
+function MetricCard({
+  className,
+  description,
+  icon,
+  label,
+  onClick,
+  value,
+}: {
+  className?: string
+  description?: React.ReactNode
+  icon?: React.ReactNode
+  label: React.ReactNode
+  onClick?: () => void
+  value: React.ReactNode
+}) {
+  const content = (
+    <>
+      <div className="min-w-0">
+        <div className="truncate text-[10px] font-medium text-emerald-800 dark:text-emerald-200">
+          {label}
+        </div>
+        <div className="text-base font-semibold tabular-nums">{value}</div>
+        {description ? (
+          <div className="truncate text-[10px] text-muted-foreground">
+            {description}
+          </div>
+        ) : null}
+      </div>
+      {icon ? <div className="shrink-0 text-primary">{icon}</div> : null}
+    </>
+  )
+  const metricClassName = cn(
+    "flex min-h-11 items-center justify-between gap-2 rounded-lg border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-background to-green-100/70 p-2.5 text-left shadow-xs shadow-emerald-950/5 dark:border-emerald-900/50 dark:from-emerald-950/35 dark:via-background dark:to-green-950/25",
+    onClick &&
+      "transition hover:border-emerald-400 hover:shadow-sm focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+    className
+  )
+
+  return onClick ? (
+    <button
+      className={metricClassName}
+      data-slot="metric-card"
+      onClick={onClick}
+      type="button"
+    >
+      {content}
+    </button>
+  ) : (
+    <div className={metricClassName} data-slot="metric-card">
+      {content}
+    </div>
   )
 }
 
@@ -97,4 +151,5 @@ export {
   CardAction,
   CardDescription,
   CardContent,
+  MetricCard,
 }

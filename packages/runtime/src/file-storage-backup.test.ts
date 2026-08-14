@@ -99,6 +99,12 @@ describe("local file-storage backup and restore", () => {
 
     const cleanBackup = join(root, "clean-backup")
     await backupFileStorage({ backupPath: cleanBackup, sourcePath: source })
+    await expect(
+      restoreFileStorage({
+        backupPath: cleanBackup,
+        destinationPath: join(cleanBackup, "nested-restore"),
+      })
+    ).rejects.toThrow("outside the backup")
     const occupied = join(root, "occupied")
     await mkdir(occupied)
     await writeFile(join(occupied, "keep.txt"), "keep")

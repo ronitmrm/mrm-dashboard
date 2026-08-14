@@ -50,6 +50,26 @@ export function isActivePlannerDecision(status: unknown) {
   return !normalized || !closedPlannerStatuses.has(normalized);
 }
 
+export function validConfirmedPrioritySetupNumbers(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const setupNumbers = value.map((entry) => String(entry).trim());
+  if (setupNumbers.some((entry) => !entry || !Number.isFinite(Number(entry)))) return null;
+  for (let index = 1; index < setupNumbers.length; index += 1) {
+    if (Number(setupNumbers[index]) <= Number(setupNumbers[index - 1])) return null;
+  }
+  return setupNumbers;
+}
+
+export function workOrderIdentityMatches(
+  existing: { itemId: string; workOrderNumber: string },
+  requested: { itemId: string; workOrderNumber: string }
+) {
+  return (
+    existing.itemId.trim().toLowerCase() === requested.itemId.trim().toLowerCase() &&
+    existing.workOrderNumber.trim().toLowerCase() === requested.workOrderNumber.trim().toLowerCase()
+  );
+}
+
 export function normalizeRescheduleAction(value: unknown) {
   const normalized = text(value).toLowerCase();
   if (["delay", "delay plan", "delay_on_machine", "delay on machine"].includes(normalized)) return "delay";

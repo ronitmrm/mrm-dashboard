@@ -12,10 +12,15 @@ const launcherArguments = seedAdmin
   : rawArguments
 const argumentsSet = new Set(launcherArguments)
 const checkOnly = argumentsSet.has("--check")
+const production = argumentsSet.has("--production")
 const webOnly = argumentsSet.has("--web-only")
 const workerOnce = argumentsSet.has("--worker-once")
 const workerStatus = argumentsSet.has("--worker-status")
 const workerOnly = workerOnce || workerStatus
+const productionModuleEnabled = ["1", "true", "yes"].includes(
+  (process.env.PRODUCTION_MODULE_ENABLED ?? "").trim().toLowerCase()
+)
+const workerEnabled = productionModuleEnabled || workerOnly
 function managedResourceName(value, label) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(value)) {
     throw new Error(`${label} contains unsupported characters`)
@@ -66,6 +71,17 @@ function neonConnectionString(role, pooled = true) {
 }
 
 function upstashCredentials() {
+  const environmentUrl = process.env.UPSTASH_REDIS_REST_URL?.trim()
+  const environmentToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim()
+  if (environmentUrl && environmentToken) {
+    return { token: environmentToken, url: environmentUrl }
+  }
+  if (environmentUrl || environmentToken) {
+    throw new Error(
+      "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must both be set"
+    )
+  }
+
   const databases = JSON.parse(capture("upstash", ["redis", "list"]))
   const target = databases.find(
     (candidate) => candidate.database_name === upstashDatabase
@@ -96,13 +112,22 @@ function spawnPnpm(args, options) {
   return spawn(process.execPath, [executable, ...args], options)
 }
 
-const webDatabaseUrl = neonConnectionString("mrmpl_staging_web")
+const webDatabaseUrl =
+  process.env.WEB_DATABASE_URL?.trim() ||
+  neonConnectionString("mrmpl_staging_web")
 const workerDatabaseUrl =
-  webOnly || seedAdmin
+  webOnly || seedAdmin || !workerEnabled
     ? undefined
-    : neonConnectionString("mrmpl_staging_worker")
+    : process.env.WORKER_DATABASE_URL?.trim() ||
+      neonConnectionString("mrmpl_staging_worker")
+const workerListenerDatabaseUrl =
+  webOnly || seedAdmin || !workerEnabled || workerOnly
+    ? undefined
+    : process.env.WORKER_LISTENER_DATABASE_URL?.trim() ||
+      neonConnectionString("mrmpl_staging_worker", false)
 const migrationDatabaseUrl = seedAdmin
-  ? neonConnectionString("mrmpl_staging_migration", false)
+  ? process.env.MIGRATION_DATABASE_URL?.trim() ||
+    neonConnectionString("mrmpl_staging_migration", false)
   : undefined
 const upstash = upstashCredentials()
 const managedEnvironment = {
@@ -113,6 +138,7 @@ const managedEnvironment = {
   MRM_MANAGED_RUNTIME: "1",
   NEXT_PUBLIC_APP_URL:
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001",
+  ...(production ? { PORT: "3001" } : {}),
   UPSTASH_REDIS_REST_TOKEN: upstash.token,
   UPSTASH_REDIS_REST_URL: upstash.url,
   WEB_DATABASE_POOL_MAX: process.env.WEB_DATABASE_POOL_MAX ?? "2",
@@ -122,12 +148,20 @@ const managedEnvironment = {
     ? { MIGRATION_DATABASE_URL: migrationDatabaseUrl }
     : {}),
   ...(workerDatabaseUrl ? { WORKER_DATABASE_URL: workerDatabaseUrl } : {}),
+  ...(workerListenerDatabaseUrl
+    ? { WORKER_LISTENER_DATABASE_URL: workerListenerDatabaseUrl }
+    : {}),
 }
 
-console.log("Managed development target resolved (credentials omitted):")
+console.log(
+  `Managed ${production ? "production" : "development"} target resolved (credentials omitted):`
+)
 console.log(`  Neon: ${branch} / ${database}`)
 console.log(`  Upstash: ${upstashDatabase}`)
 if (!workerOnly && !seedAdmin) console.log("  App: http://localhost:3001")
+console.log(
+  `  Production module: ${productionModuleEnabled ? "enabled" : "disabled"}`
+)
 
 if (checkOnly) {
   process.exit(0)
@@ -148,7 +182,7 @@ if (seedAdmin) {
   )
 } else if (!workerOnly) {
   children.push(
-    spawnPnpm(["--filter", "web", "dev"], {
+    spawnPnpm(["--filter", "web", production ? "start" : "dev"], {
       detached: process.platform !== "win32",
       env: managedEnvironment,
       stdio: "inherit",
@@ -156,7 +190,7 @@ if (seedAdmin) {
   )
 }
 
-if (!webOnly && !seedAdmin) {
+if (!webOnly && !seedAdmin && workerEnabled) {
   const workerCommand = workerOnce
     ? "worker:once"
     : workerStatus

@@ -14,6 +14,7 @@ const repository = createDashboardReadModelRepository({ connectionString })
 const suffix = randomUUID().slice(0, 8)
 const sourceId = `machine-correction-${suffix}`
 let organizationId: string
+let productionFloorId: string
 
 beforeAll(async () => {
   await migrateDatabase({ connectionString })
@@ -22,6 +23,16 @@ beforeAll(async () => {
     [`CORRECTION-${suffix}`, `Correction ${suffix}`]
   )
   organizationId = organization.rows[0]!.id
+  const productionFloor = await pool.query<{ id: string }>(
+    `
+      INSERT INTO manufacturing.production_floors (
+        organization_id, code, name
+      ) VALUES ($1, 'conventional', 'Conventional Production Floor')
+      RETURNING id
+    `,
+    [organizationId]
+  )
+  productionFloorId = productionFloor.rows[0]!.id
   const machineType = await pool.query<{ id: string }>(
     `
       INSERT INTO catalog.machine_types (
@@ -34,13 +45,15 @@ beforeAll(async () => {
   await pool.query(
     `
       INSERT INTO catalog.machines (
-        organization_id, machine_number, machine_type_id,
+        organization_id, machine_number, machine_type_id, production_floor_id,
         source_system, source_table, source_id, source_payload
-      ) VALUES ($1, 'CORRECTION-01', $2, 'mrm-dashboard', 'dataEntries', $3, $4)
+      ) VALUES ($1, 'CORRECTION-01', $2, $3,
+        'mrm-dashboard', 'dataEntries', $4, $5)
     `,
     [
       organizationId,
       machineType.rows[0]!.id,
+      productionFloorId,
       sourceId,
       {
         _id: sourceId,
@@ -59,28 +72,67 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL dashboard corrections", () => {
+  it("selects dashboard versions numerically after version 99", async () => {
+    const organization = await pool.query<{ id: string }>(
+      `INSERT INTO core.organizations (code, name) VALUES ($1, $2) RETURNING id`,
+      [`VERSION-${suffix}`, `Version ${suffix}`]
+    )
+    await pool.query(
+      `
+        INSERT INTO derived.dashboard_read_models (
+          organization_id, version, payload, source_watermark
+        ) VALUES
+          ($1, 99, $2, '{}'::jsonb),
+          ($1, 100, $3, '{}'::jsonb)
+      `,
+      [
+        organization.rows[0]!.id,
+        { marker: "version-99" },
+        { marker: "version-100" },
+      ]
+    )
+
+    const latest = await repository.latest(
+      organization.rows[0]!.id,
+      {},
+      "conventional"
+    )
+
+    expect(latest).toMatchObject({
+      marker: "version-100",
+      readModelVersion: 100,
+    })
+  })
+
   it("records a reversal and removes the source row from later candidates", async () => {
     const before = await repository.correctionCandidates(organizationId)
     expect(before).toContainEqual(
-      expect.objectContaining({ targetId: sourceId, targetTable: "dataEntries" })
+      expect.objectContaining({
+        productionFloorCode: "conventional",
+        targetId: sourceId,
+        targetTable: "dataEntries",
+      })
     )
 
     const result = await repository.reverseEntry({
-      correctedBy: "Correction Tester",
+      actorUserId: "11111111-1111-4111-8111-111111111111",
+      correctionKind: "dataEntries",
       organizationId,
       reason: "Incorrect machine row",
-      targetId: sourceId,
-      targetKey: "CORRECTION-01",
-      targetLabel: "Machine CORRECTION-01",
-      targetTable: "dataEntries",
+      recordId: sourceId,
     })
 
     expect(result).toEqual({ reversed: true })
     const after = await repository.correctionCandidates(organizationId)
     expect(after).not.toContainEqual(
-      expect.objectContaining({ targetId: sourceId, targetTable: "dataEntries" })
+      expect.objectContaining({
+        targetId: sourceId,
+        targetTable: "dataEntries",
+      })
     )
-    const stored = await pool.query<{ source_payload: Record<string, unknown> }>(
+    const stored = await pool.query<{
+      source_payload: Record<string, unknown>
+    }>(
       `
         SELECT source_payload
         FROM audit.legacy_convex_corrections
@@ -90,10 +142,209 @@ describe("PostgreSQL dashboard corrections", () => {
     )
     expect(stored.rows[0]?.source_payload).toMatchObject({
       action: "reverse",
-      correctedBy: "Correction Tester",
+      actorUserId: "11111111-1111-4111-8111-111111111111",
       reason: "Incorrect machine row",
       targetId: sourceId,
       targetTable: "dataEntries",
     })
+    const refresh = await pool.query<{ jobs: string; outbox_events: string }>(
+      `SELECT
+         (SELECT count(*)::text FROM derived.refresh_jobs
+          WHERE organization_id = $1 AND queue_key = 'dashboard') AS jobs,
+         (SELECT count(*)::text FROM derived.outbox_events
+          WHERE organization_id = $1
+            AND topic = 'dashboard.refresh.requested') AS outbox_events`,
+      [organizationId]
+    )
+    expect(refresh.rows).toEqual([{ jobs: "1", outbox_events: "1" }])
+    await expect(
+      repository.reverseEntry({
+        actorUserId: "11111111-1111-4111-8111-111111111111",
+        correctionKind: "dataEntries",
+        organizationId,
+        reason: "Duplicate correction",
+        recordId: sourceId,
+      })
+    ).rejects.toThrow("Active correction target was not found")
+    await pool.query(
+      "DELETE FROM derived.outbox_events WHERE organization_id = $1",
+      [organizationId]
+    )
+    await pool.query(
+      "DELETE FROM derived.refresh_jobs WHERE organization_id = $1",
+      [organizationId]
+    )
+  })
+
+  it("returns one floor and omits an unchanged dashboard payload", async () => {
+    const coverage = (available: number, returned: number) => ({
+      corrections: {
+        available: 0,
+        limit: 5_000,
+        returned: 0,
+        truncated: false,
+        truncatedGroups: [],
+      },
+      dataEntries: {
+        available,
+        groups: {
+          machine_master: {
+            available,
+            limit: 1_000,
+            returned,
+            truncated: available > returned,
+          },
+        },
+        limit: 1_000,
+        returned,
+        truncated: available > returned,
+        truncatedGroups: available > returned ? ["machine_master"] : [],
+      },
+      physicalRows: {
+        available: 0,
+        groups: {},
+        limit: 0,
+        returned: 0,
+        truncated: false,
+        truncatedGroups: [],
+      },
+    })
+    const cncCoverage = coverage(1_001, 1_000)
+    const conventionalCoverage = coverage(1, 1)
+    await pool.query(
+      `
+        INSERT INTO derived.dashboard_read_models (
+          organization_id, version, payload, source_watermark
+        ) VALUES ($1, 7, $2, $3)
+      `,
+      [
+        organizationId,
+        {
+          cacheStatus: "ready",
+          productionFloorSnapshots: {
+            cnc: {
+              cacheStatus: "ready",
+              marker: "cnc-only",
+              sourceCoverage: cncCoverage,
+            },
+            conventional: {
+              cacheStatus: "ready",
+              marker: "conventional-only",
+              sourceCoverage: conventionalCoverage,
+            },
+          },
+        },
+        {
+          changedAt: "2026-07-21T12:00:00.000Z",
+          sourceCoverage: conventionalCoverage,
+          sourceCoverageByFloor: {
+            cnc: cncCoverage,
+            conventional: conventionalCoverage,
+            forging: coverage(25, 25),
+          },
+        },
+      ]
+    )
+    const foreignOrganization = await pool.query<{ id: string }>(
+      `INSERT INTO core.organizations (code, name) VALUES ($1, $2) RETURNING id`,
+      [`FOREIGN-${suffix}`, `Foreign ${suffix}`]
+    )
+    await pool.query(
+      `
+        INSERT INTO derived.dashboard_read_models (
+          organization_id, version, payload, source_watermark
+        ) VALUES ($1, 99, $2, '{}'::jsonb)
+      `,
+      [
+        foreignOrganization.rows[0]!.id,
+        {
+          productionFloorSnapshots: {
+            cnc: { marker: "foreign-cnc", sourceCoverage: cncCoverage },
+          },
+        },
+      ]
+    )
+
+    const countedPool = new Pool({ connectionString })
+    const originalQuery = countedPool.query.bind(countedPool)
+    const packetBytes: number[] = []
+    let statements = 0
+    countedPool.query = (async (...args: unknown[]) => {
+      statements += 1
+      const result = await (
+        originalQuery as (
+          ...parameters: unknown[]
+        ) => Promise<{ rows: unknown[] }>
+      )(...args)
+      packetBytes.push(Buffer.byteLength(JSON.stringify(result.rows)))
+      return result
+    }) as typeof countedPool.query
+    const countedRepository = createDashboardReadModelRepository({
+      pool: countedPool,
+    })
+
+    try {
+      const changed = await countedRepository.state(
+        organizationId,
+        { month: "2026-07" },
+        "cnc"
+      )
+      expect(statements).toBe(1)
+      expect(changed).toMatchObject({
+        coverage: cncCoverage,
+        dashboard: {
+          filters: { month: "2026-07" },
+          marker: "cnc-only",
+          productionFloorCode: "cnc",
+          readModelVersion: 7,
+          sourceCoverage: cncCoverage,
+          sourceWatermark: {
+            changedAt: "2026-07-21T12:00:00.000Z",
+            sourceCoverage: cncCoverage,
+          },
+        },
+        notModified: false,
+        productionFloorCode: "cnc",
+        status: { isRefreshing: false, status: "idle" },
+        version: 7,
+      })
+      expect(changed.dashboard).not.toHaveProperty("productionFloorSnapshots")
+      expect(changed.dashboard?.sourceWatermark).not.toHaveProperty(
+        "sourceCoverageByFloor"
+      )
+      expect(packetBytes[0]).toBeLessThanOrEqual(2 * 1024 * 1024)
+
+      const unchanged = await countedRepository.state(
+        organizationId,
+        { month: "2026-07" },
+        "cnc",
+        7
+      )
+      expect(statements).toBe(2)
+      expect(unchanged).toMatchObject({
+        coverage: null,
+        dashboard: null,
+        notModified: true,
+        productionFloorCode: "cnc",
+        status: { isRefreshing: false, status: "idle" },
+        version: 7,
+      })
+      expect(packetBytes[1]).toBeLessThanOrEqual(1024)
+
+      const futureKnownVersion = await countedRepository.state(
+        organizationId,
+        {},
+        "cnc",
+        99
+      )
+      expect(futureKnownVersion).toMatchObject({
+        dashboard: { marker: "cnc-only", readModelVersion: 7 },
+        notModified: false,
+        version: 7,
+      })
+      expect(statements).toBe(3)
+    } finally {
+      await countedPool.end()
+    }
   })
 })

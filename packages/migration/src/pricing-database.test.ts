@@ -1,8 +1,8 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { DatabaseSync } from "node:sqlite"
 
-import Database from "better-sqlite3"
 import { strToU8, zipSync } from "fflate"
 import { afterEach, expect, test } from "vitest"
 
@@ -25,7 +25,7 @@ test("Pricing inventory checks integrity and excludes legacy identity tables", a
   const directory = await mkdtemp(join(tmpdir(), "mrmpl-pricing-database-"))
   temporaryDirectories.push(directory)
   const artifactPath = join(directory, "pricing_app.db")
-  const database = new Database(artifactPath)
+  const database = new DatabaseSync(artifactPath)
 
   database.exec(`
     PRAGMA foreign_keys = ON;
@@ -124,7 +124,7 @@ test("Pricing ZIP inventory verifies its manifest and embedded SQLite snapshot",
   temporaryDirectories.push(directory)
   const databasePath = join(directory, "pricing_app.db")
   const artifactPath = join(directory, "pricing-export.zip")
-  const database = new Database(databasePath)
+  const database = new DatabaseSync(databasePath)
 
   database.exec(`
     CREATE TABLE customers (

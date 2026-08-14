@@ -254,6 +254,27 @@ describe("commercial drawing, website, and analytics parity", () => {
     })
   })
 
+  test("exports complete drawing and website histories across batches", async () => {
+    const drawingCanonical = await repository.listDrawingHistory({
+      organizationId,
+    })
+    const drawingExport = await repository.listDrawingHistoryForExport(
+      { organizationId },
+      1
+    )
+    const websiteCanonical = await repository.listWebsiteProducts({
+      organizationId,
+    })
+    const websiteExport = await repository.listWebsiteProductsForExport(
+      { organizationId },
+      1
+    )
+
+    expect(drawingExport).toEqual(drawingCanonical)
+    expect(websiteExport).toEqual(websiteCanonical)
+    expect(websiteExport.length).toBeGreaterThan(1)
+  })
+
   test("reconciles source headline counts and five dashboard analytic datasets", async () => {
     const suffix = randomUUID()
     const itemId = await createItem({

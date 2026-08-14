@@ -2272,6 +2272,41 @@ describe("buildLegacyDashboardSnapshot", () => {
     ).toEqual([])
   })
 
+  it("holds an accepted work order with no planning item in Master Readiness", () => {
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: [
+        {
+          entryType: "work_order",
+          createdAt: "2026-08-12T00:00:00.000Z",
+          payload: {
+            jcNo: "JC-M3",
+            partCode: "M3",
+            orderPcs: 100,
+            planningItemPending: true,
+          },
+        },
+      ],
+    })
+    const productionControl = snapshot.productionControl as typeof snapshot.productionControl & {
+      allWorkOrderGaps: Array<Record<string, unknown>>
+      machinePlanDetailRows: Array<Record<string, unknown>>
+    }
+
+    expect(productionControl.allWorkOrderGaps).toContainEqual(
+      expect.objectContaining({
+        jcNo: "JC-M3",
+        nextAction: "Create the Product Route in Master Readiness",
+        partCode: "M3",
+        planningItemMissing: true,
+        routeMasterMissing: true,
+        routeSelectionMissing: false,
+      })
+    )
+    expect(productionControl.machinePlanDetailRows).toEqual([])
+  })
+
   it("uses day-first RM inward dates for setup planned dates", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
@@ -3306,6 +3341,168 @@ describe("buildLegacyDashboardSnapshot", () => {
     )
   })
 
+  it("pools matching actual output from every parallel upstream machine", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: ["C501", "C502"].map((machine) => ({
+          prodDate: "2026-06-29",
+          jobCard: "JC-WIP-ACTUAL",
+          partCode: "M-WIP-ACTUAL",
+          setupNo: "1",
+          machine,
+          machineType: "AUTOMATIC",
+          operatorId: "OP-1",
+          outputQty: 15,
+          actualQty: 15,
+          targetQty: 15,
+          rejectQty: 0,
+        })),
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-29T00:00:00.000Z",
+            payload: {
+              jcNo: "JC-WIP-ACTUAL",
+              partCode: "M-WIP-ACTUAL",
+              optionNumber: "1",
+              orderPcs: 30,
+              rmInwardDate: "2026-06-29",
+            },
+          },
+          ...[
+            ["1", "C5"],
+            ["2", "D3"],
+          ].map(([setupNo, machineUsed]) => ({
+            entryType: "route",
+            createdAt: "2026-06-29T00:00:00.000Z",
+            payload: {
+              partNo: "M-WIP-ACTUAL",
+              optionNumber: "1",
+              setupNo,
+              machineUsed,
+              machineType: "AUTOMATIC",
+            },
+          })),
+          ...["1", "2"].map((setupNo) => ({
+            entryType: "cycle",
+            createdAt: "2026-06-29T00:00:00.000Z",
+            payload: {
+              partNo: "M-WIP-ACTUAL",
+              optionNumber: "1",
+              setupNo,
+              cycleTime: 28800,
+              loadingUnloading: 0,
+            },
+          })),
+          ...["C501", "C502", "D301"].map((machineNo) => ({
+            entryType: "machine_master",
+            createdAt: "2026-06-29T00:00:00.000Z",
+            payload: {
+              machineNo,
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
+          })),
+        ],
+      })
+
+      expect(
+        snapshot.productionControl.machinePlanDetailRows.find(
+          (row) => row.jcNo === "JC-WIP-ACTUAL" && row.setupNo === "2"
+        )
+      ).toMatchObject({ setupPlannedDate: "30-June-26" })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("keeps planned remaining output in the WIP pool after production starts", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"))
+
+    try {
+      const snapshot = buildLegacyDashboardSnapshot({
+        workbookName: "Convex",
+        productionEntries: [
+          {
+            prodDate: "2026-06-24",
+            jobCard: "JC-WIP-REMAINING",
+            partCode: "M-WIP-REMAINING",
+            setupNo: "1",
+            machine: "C501",
+            machineType: "AUTOMATIC",
+            operatorId: "OP-1",
+            outputQty: 100,
+            actualQty: 100,
+            targetQty: 960,
+            rejectQty: 0,
+          },
+        ],
+        dataEntries: [
+          {
+            entryType: "work_order",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: {
+              jcNo: "JC-WIP-REMAINING",
+              partCode: "M-WIP-REMAINING",
+              optionNumber: "1",
+              orderPcs: 10000,
+              rmInwardDate: "2026-06-24",
+            },
+          },
+          ...[
+            ["1", "C501", 30],
+            ["2", "D301", 576],
+          ].flatMap(([setupNo, machineUsed, cycleTime]) => [
+            {
+              entryType: "route",
+              createdAt: "2026-06-24T00:00:00.000Z",
+              payload: {
+                partNo: "M-WIP-REMAINING",
+                optionNumber: "1",
+                setupNo,
+                machineUsed,
+                machineType: "AUTOMATIC",
+              },
+            },
+            {
+              entryType: "cycle",
+              createdAt: "2026-06-24T00:00:00.000Z",
+              payload: {
+                partNo: "M-WIP-REMAINING",
+                optionNumber: "1",
+                setupNo,
+                cycleTime,
+                loadingUnloading: 0,
+              },
+            },
+          ]),
+          ...["C501", "D301"].map((machineNo) => ({
+            entryType: "machine_master",
+            createdAt: "2026-06-24T00:00:00.000Z",
+            payload: {
+              machineNo,
+              machineType: "AUTOMATIC",
+              status: "Active",
+            },
+          })),
+        ],
+      })
+
+      expect(
+        snapshot.productionControl.machinePlanDetailRows.find(
+          (row) => row.jcNo === "JC-WIP-REMAINING" && row.setupNo === "2"
+        )
+      ).toMatchObject({ setupPlannedDate: "27-June-26" })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("does not count a staggered upstream split machine after its own planned end date", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-06-29T12:00:00.000Z"))
@@ -4012,6 +4209,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   })
 
   it("keeps priority behind a running machine unless the planner approves a stop", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-23T12:00:00.000Z"))
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [],
@@ -5674,6 +5874,9 @@ describe("buildLegacyDashboardSnapshot", () => {
   })
 
   it("moves a later setup when actual previous setup output is below cycle plan", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-24T12:00:00.000Z"))
+
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",
       productionEntries: [
@@ -5773,7 +5976,7 @@ describe("buildLegacyDashboardSnapshot", () => {
         (row) => row.jcNo === "JC-003" && row.setupNo === "2"
       )
     ).toMatchObject({
-      setupPlannedDate: "27-July-26",
+      setupPlannedDate: "28-July-26",
     })
   })
 
@@ -5917,7 +6120,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(
       c501Rows.find((row) => row.jcNo === "JC-A" && row.setupNo === "2")
     ).toMatchObject({
-      setupPlannedDate: "11-July-26",
+      setupPlannedDate: "12-July-26",
     })
   })
 
@@ -6020,7 +6223,7 @@ describe("buildLegacyDashboardSnapshot", () => {
       setupPlannedDate: "7-July-26",
     })
     expect(c501Rows.find((row) => row.jcNo === "JC-B")).toMatchObject({
-      setupPlannedDate: "11-July-26",
+      setupPlannedDate: "12-July-26",
       shopFloorTaskReady: false,
       shopFloorTaskBlocker: expect.stringContaining(
         "Previous setup WIP buffer is not ready"
@@ -6776,6 +6979,98 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(setupFour).toBeDefined()
     expect(dateLabelValue(setupFour!.plannedProductionEndDate)).toBeGreaterThan(
       dateLabelValue(setupThree!.plannedProductionEndDate)
+    )
+  })
+
+  it("keeps the RM-receipt dispatch promise while recalculating the current probable date", () => {
+    const dataEntries = (orderPcs: number) => [
+      {
+        entryType: "work_order",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        payload: {
+          jcNo: "JC-DASHBOARD-1",
+          fgPoNo: "FG-9001",
+          partCode: "M-DASHBOARD",
+          optionNumber: "1",
+          orderPcs,
+          rmInwardDate: "2026-06-24",
+        },
+      },
+      {
+        entryType: "route",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        payload: {
+          partNo: "M-DASHBOARD",
+          optionNumber: "1",
+          setupNo: "1",
+          machineUsed: "C5",
+          machineType: "AUTOMATIC",
+        },
+      },
+      {
+        entryType: "cycle",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        payload: {
+          partNo: "M-DASHBOARD",
+          optionNumber: "1",
+          setupNo: "1",
+          cycleTime: 60,
+          loadingUnloading: 0,
+        },
+      },
+      {
+        entryType: "machine_master",
+        createdAt: "2026-06-24T00:00:00.000Z",
+        payload: {
+          machineNo: "C501",
+          machineType: "AUTOMATIC",
+          status: "Active",
+        },
+      },
+    ]
+    const first = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: dataEntries(100),
+    })
+    const firstRow = first.productionControl.productionDashboardRows[0]!
+
+    expect(firstRow).toMatchObject({
+      jcNo: "JC-DASHBOARD-1",
+      fgPoNo: "FG-9001",
+      partCode: "M-DASHBOARD",
+      orderedQty: 100,
+      unit: "PCS",
+      rmReceivedDate: "24-June-26",
+      status: "Pending",
+      dispatchedDate: "",
+    })
+    expect(firstRow.plannedDispatchDateAtRmReceipt).toBe(
+      firstRow.currentProbableDispatchDate,
+    )
+
+    const recalculated = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      productionEntries: [],
+      dataEntries: dataEntries(100_000),
+      dispatchApprovals: [{
+        jobCardNumber: "JC-DASHBOARD-1",
+        createdAt: "2026-07-02T10:00:00.000Z",
+      }],
+      previousProductionDashboardRows:
+        first.productionControl.productionDashboardRows,
+    })
+    const recalculatedRow = recalculated.productionControl.productionDashboardRows[0]!
+
+    expect(recalculatedRow).toMatchObject({
+      orderedQty: 100_000,
+      unit: "PCS",
+      plannedDispatchDateAtRmReceipt: firstRow.plannedDispatchDateAtRmReceipt,
+      status: "Dispatched",
+      dispatchedDate: "2-July-26",
+    })
+    expect(recalculatedRow.currentProbableDispatchDate).not.toBe(
+      firstRow.currentProbableDispatchDate,
     )
   })
 })

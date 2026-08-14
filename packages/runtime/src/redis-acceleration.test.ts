@@ -1,17 +1,72 @@
-import { describe, expect, it, vi } from "vitest"
+import {
+  createTelemetryRuntime,
+  type StructuredTelemetryEvent,
+} from "@workspace/observability"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { consumeOptionalRateLimit } from "./durable-refresh-worker"
 import {
+  configureManagedRuntimeTelemetry,
   managedRuntimeTelemetrySnapshot,
   resetManagedRuntimeTelemetry,
   runtimeErrorCategory,
 } from "./managed-telemetry"
 import {
+  createRedisAcceleration,
   readRedisAccelerationEnvironment,
+  serializeInvalidation,
   type RedisAcceleration,
 } from "./redis-acceleration"
 
+const nodeRedis = vi.hoisted(() => ({
+  close: vi.fn(),
+  eval: vi.fn().mockResolvedValue(1),
+  publish: vi.fn().mockResolvedValue(1),
+}))
+
+vi.mock("redis", () => ({
+  createClient: () => ({
+    close: nodeRedis.close,
+    eval: nodeRedis.eval,
+    isOpen: true,
+    on: vi.fn(),
+    publish: nodeRedis.publish,
+  }),
+}))
+
+const emittedTelemetry: StructuredTelemetryEvent[] = []
+
+beforeEach(() => {
+  emittedTelemetry.length = 0
+  resetManagedRuntimeTelemetry()
+  configureManagedRuntimeTelemetry({
+    runtime: createTelemetryRuntime({
+      artifactCommit: "commit-redis-boundary",
+      environment: "test",
+      now: () => "2026-08-08T12:00:00.000Z",
+    }),
+    sink: (event) => emittedTelemetry.push(event),
+  })
+  vi.clearAllMocks()
+})
+
 describe("Redis acceleration environment", () => {
+  it("publishes the monotonic dashboard version to subscribers", () => {
+    expect(
+      JSON.parse(
+        serializeInvalidation({
+          aggregateId: "aggregate-1",
+          aggregateType: "dashboard",
+          idempotencyKey: "event-1",
+          organizationId: "org-1",
+          payload: {},
+          topic: "dashboard.updated",
+          version: 42,
+        })
+      )
+    ).toMatchObject({ organizationId: "org-1", version: 42 })
+  })
+
   it("keeps the Docker Redis URL as the local development default", () => {
     expect(readRedisAccelerationEnvironment({})).toEqual({
       hosted: false,
@@ -43,6 +98,46 @@ describe("Redis acceleration environment", () => {
       })
     ).toThrow(/HTTPS/)
   })
+
+  it("counts each provider command in a versioned invalidation", async () => {
+    const acceleration = createRedisAcceleration({
+      redisUrl: "redis://localhost:6380",
+    })
+
+    await acceleration.publishInvalidation({
+      aggregateId: "aggregate-1",
+      aggregateType: "dashboard",
+      idempotencyKey: "event-1",
+      organizationId: "organization-1",
+      payload: {},
+      topic: "dashboard.read_model.updated",
+      version: 42,
+    })
+
+    expect(nodeRedis.eval).toHaveBeenCalledTimes(1)
+    expect(nodeRedis.publish).toHaveBeenCalledTimes(1)
+    expect(managedRuntimeTelemetrySnapshot().redis.commands).toBe(2)
+  })
+
+  it("counts a failed provider command attempt", async () => {
+    nodeRedis.eval.mockRejectedValueOnce(new Error("provider unavailable"))
+    const acceleration = createRedisAcceleration({
+      redisUrl: "redis://localhost:6380",
+    })
+
+    await expect(
+      acceleration.publishInvalidation({
+        aggregateId: "aggregate-1",
+        aggregateType: "dashboard",
+        idempotencyKey: "event-failure",
+        organizationId: "organization-1",
+        payload: {},
+        topic: "dashboard.read_model.updated",
+        version: 43,
+      })
+    ).rejects.toThrow("provider unavailable")
+    expect(managedRuntimeTelemetrySnapshot().redis.commands).toBe(1)
+  })
 })
 
 describe("optional rate limiting", () => {
@@ -71,10 +166,15 @@ describe("optional rate limiting", () => {
       source: "redis",
     })
     expect(acceleration.close).not.toHaveBeenCalled()
+    expect(emittedTelemetry).toEqual([
+      expect.objectContaining({
+        commands: 1,
+        event: "redis.acceleration",
+      }),
+    ])
   })
 
   it("fails open when disposable Redis acceleration is unavailable", async () => {
-    resetManagedRuntimeTelemetry()
     const acceleration: RedisAcceleration = {
       close: vi.fn(),
       consumeRateLimit: vi.fn().mockRejectedValue(new Error("unavailable")),
@@ -96,11 +196,25 @@ describe("optional rate limiting", () => {
     })
     expect(managedRuntimeTelemetrySnapshot()).toEqual({
       redis: {
-        commands: 0,
+        commands: 1,
         outboxFailures: 0,
+        providerErrors: {
+          authentication: 0,
+          connectivity: 0,
+          constraint: 0,
+          timeout: 0,
+          unknown: 1,
+        },
         rateLimitFallbacks: 1,
       },
     })
+    expect(emittedTelemetry.at(-1)).toEqual(
+      expect.objectContaining({
+        event: "redis.acceleration",
+        providerErrors: expect.objectContaining({ unknown: 1 }),
+        rateLimitFallbacks: 1,
+      })
+    )
   })
 
   it("classifies errors without retaining messages, hosts, or payloads", () => {

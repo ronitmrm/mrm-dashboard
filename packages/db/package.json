@@ -7,10 +7,12 @@
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src --max-warnings 0",
     "test": "vitest run",
+    "test:controlled-search": "CONTROLLED_SEARCH_GATE=1 vitest run src/commercial-search-indexes.integration.test.ts",
     "test:integration": "vitest run src/schema-contract.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@workspace/observability": "workspace:*",
     "drizzle-orm": "0.45.2",
     "pg": "8.22.0"
   },
@@ -28,9 +30,15 @@
     ".": "./src/index.ts",
     "./dashboard-analysis": "./src/legacy-dashboard-analysis.ts",
     "./dashboard-corrections": "./src/dashboard-corrections.ts",
+    "./dashboard-coverage": "./src/dashboard-coverage.ts",
     "./dashboard-domain": "./src/dashboard-domain.ts",
     "./planning-rules": "./src/planning-rules.ts",
     "./pricing-calculation": "./src/pricing-calculation.ts",
-    "./schema": "./src/schema/index.ts"
+    "./production-floors": "./src/production-floors.ts",
+    "./recruitment-codes": "./src/recruitment-codes.ts",
+    "./recruitment-domain": "./src/recruitment-domain.ts",
+    "./recruitment-interview-workflow": "./src/recruitment-interview-workflow.ts",
+    "./schema": "./src/schema/index.ts",
+    "./user-entry-text": "./src/user-entry-text.ts"
   }
 }

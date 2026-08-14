@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { randomUUID } from "node:crypto"
-import { Pool } from "pg"
+import { Client, Pool } from "pg"
 
 import {
   createAuthorizationRepository,
@@ -8,19 +8,39 @@ import {
   migrateDatabase,
 } from "@workspace/db"
 
-import { createAuthRateLimitStorage, createAuthSystem } from "./auth"
+import { createAuthSystem } from "./auth"
 
-const connectionString =
+const baseConnectionString =
   process.env.TEST_DATABASE_URL ??
   "postgres://mrmpl:mrmpl@localhost:5434/mrmpl_test"
+const testDatabaseName = `mrmpl_auth_${randomUUID().replaceAll("-", "")}`
+const connectionUrl = new URL(baseConnectionString)
+connectionUrl.pathname = `/${testDatabaseName}`
+const connectionString = connectionUrl.toString()
+
+const maintenanceUrl = new URL(baseConnectionString)
+maintenanceUrl.pathname = "/postgres"
 
 const pool = new Pool({ connectionString })
+
+async function withMaintenanceClient(
+  operation: (client: Client) => Promise<void>
+) {
+  const client = new Client({ connectionString: maintenanceUrl.toString() })
+  await client.connect()
+  try {
+    await operation(client)
+  } finally {
+    await client.end()
+  }
+}
 
 async function resetIdentity() {
   const client = await pool.connect()
 
   try {
     await client.query("BEGIN")
+    await client.query("DELETE FROM audit.events WHERE event_type LIKE 'access.%'")
     await client.query("DELETE FROM identity.sessions")
     await client.query("DELETE FROM identity.accounts")
     await client.query("DELETE FROM identity.users")
@@ -34,16 +54,42 @@ async function resetIdentity() {
 }
 
 beforeAll(async () => {
+  await withMaintenanceClient(async (client) => {
+    await client.query(`CREATE DATABASE "${testDatabaseName}"`)
+  })
   await migrateDatabase({ connectionString })
-  await resetIdentity()
 })
+
+beforeEach(resetIdentity)
 
 afterAll(async () => {
   await resetIdentity()
   await pool.end()
+  await withMaintenanceClient(async (client) => {
+    await client.query(`DROP DATABASE "${testDatabaseName}" WITH (FORCE)`)
+  })
 })
 
 describe("PostgreSQL Better Auth", () => {
+  it("keeps session authorization in PostgreSQL with cookie caching disabled", async () => {
+    const system = createAuthSystem({
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+
+    try {
+      const options = system.auth.options as {
+        secondaryStorage?: unknown
+        session?: { cookieCache?: { enabled?: boolean } }
+      }
+      expect(options.session?.cookieCache).toEqual({ enabled: false })
+      expect(options.secondaryStorage).toBeUndefined()
+    } finally {
+      await system.close()
+    }
+  })
+
   it("resets identity rows without deleting business data", async () => {
     const organizationId = randomUUID()
     const organizationCode = `AUTH-${organizationId.slice(0, 8)}`
@@ -70,34 +116,6 @@ describe("PostgreSQL Better Auth", () => {
         organizationId,
       ])
     }
-  })
-
-  it("uses a fail-open Redis accelerator through Better Auth's atomic limiter", async () => {
-    const calls: Array<Record<string, unknown>> = []
-    const storage = createAuthRateLimitStorage(
-      "redis://localhost:6380",
-      async (input) => {
-        calls.push(input)
-        return {
-          allowed: false,
-          count: 4,
-          retryAfterSeconds: 7,
-          source: "redis" as const,
-        }
-      }
-    )
-
-    await expect(
-      storage.consume("sign-in:127.0.0.1", { max: 3, window: 10 })
-    ).resolves.toEqual({ allowed: false, retryAfter: 7 })
-    expect(calls).toEqual([
-      expect.objectContaining({
-        key: expect.stringMatching(/^mrm:auth:rate:[a-f0-9]{64}$/),
-        limit: 3,
-        redisUrl: "redis://localhost:6380",
-        windowSeconds: 10,
-      }),
-    ])
   })
 
   it("provisions a fresh user and authenticates the new credential", async () => {
@@ -163,6 +181,214 @@ describe("PostgreSQL Better Auth", () => {
     } finally {
       await authorization.close()
       await provisioner.close()
+      await system.close()
+    }
+  })
+
+  it("rejects a revoked session on the next request across instances and Redis loss", async () => {
+    const firstInstance = createAuthSystem({
+      allowSignUp: true,
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const secondInstance = createAuthSystem({
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const email = `revocation-${randomUUID()}@mrmpl.test`
+    const password = "revocation-test-password"
+
+    try {
+      await firstInstance.auth.api.signUpEmail({
+        body: { email, name: "Revocation Test", password },
+      })
+      const signedIn = await firstInstance.auth.api.signInEmail({
+        body: { email, password },
+        returnHeaders: true,
+      })
+      const cookieHeader = signedIn.headers
+        .getSetCookie()
+        .map((cookie) => cookie.split(";", 1)[0])
+        .join("; ")
+
+      for (const instance of [firstInstance, secondInstance]) {
+        await expect(
+          instance.auth.api.getSession({
+            headers: new Headers({ cookie: cookieHeader }),
+          })
+        ).resolves.toMatchObject({
+          session: { token: signedIn.response.token },
+          user: { email },
+        })
+      }
+
+      const deleted = await pool.query(
+        "DELETE FROM identity.sessions WHERE token = $1",
+        [signedIn.response.token]
+      )
+      expect(deleted.rowCount).toBe(1)
+
+      for (const instance of [firstInstance, secondInstance]) {
+        await expect(
+          instance.auth.api.getSession({
+            headers: new Headers({ cookie: cookieHeader }),
+          })
+        ).resolves.toBeNull()
+      }
+    } finally {
+      await secondInstance.close()
+      await firstInstance.close()
+    }
+  })
+
+  it("rejects a banned user's session on another instance", async () => {
+    const firstInstance = createAuthSystem({
+      allowSignUp: true,
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const secondInstance = createAuthSystem({
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const provisioner = createInitialAdministratorProvisioner({
+      connectionString,
+    })
+    const suffix = randomUUID()
+    const administratorEmail = `ban-admin-${suffix}@mrmpl.test`
+    const staffEmail = `ban-staff-${suffix}@mrmpl.test`
+
+    try {
+      const administrator = await firstInstance.auth.api.signUpEmail({
+        body: {
+          email: administratorEmail,
+          name: "Ban Administrator",
+          password: "ban-administrator-password",
+        },
+      })
+      await provisioner.promote({
+        email: administrator.user.email,
+        userId: administrator.user.id,
+      })
+      const staff = await firstInstance.auth.api.signUpEmail({
+        body: {
+          email: staffEmail,
+          name: "Banned Staff",
+          password: "banned-staff-password",
+        },
+      })
+      const administratorSignIn = await firstInstance.auth.api.signInEmail({
+        body: {
+          email: administratorEmail,
+          password: "ban-administrator-password",
+        },
+        returnHeaders: true,
+      })
+      const staffSignIn = await firstInstance.auth.api.signInEmail({
+        body: { email: staffEmail, password: "banned-staff-password" },
+        returnHeaders: true,
+      })
+      const cookie = (headers: Headers) =>
+        headers
+          .getSetCookie()
+          .map((value) => value.split(";", 1)[0])
+          .join("; ")
+
+      await firstInstance.auth.api.banUser({
+        body: {
+          banReason: "Authorization freshness test",
+          userId: staff.user.id,
+        },
+        headers: new Headers({
+          cookie: cookie(administratorSignIn.headers),
+        }),
+      })
+
+      await expect(
+        pool.query<{
+          actor_user_id: string | null
+          after_state: { banned: boolean }
+          source_table: string
+        }>(
+          `SELECT actor_user_id, after_state, source_table
+           FROM audit.events
+           WHERE event_type = 'access.user.status_changed'
+             AND target_id = $1
+           ORDER BY occurred_at DESC
+           LIMIT 1`,
+          [staff.user.id]
+        )
+      ).resolves.toMatchObject({
+        rows: [
+          {
+            actor_user_id: null,
+            after_state: { banned: true },
+            source_table: "identity_user_trigger",
+          },
+        ],
+      })
+
+      await expect(
+        secondInstance.auth.api.getSession({
+          headers: new Headers({ cookie: cookie(staffSignIn.headers) }),
+        })
+      ).resolves.toBeNull()
+    } finally {
+      await provisioner.close()
+      await secondInstance.close()
+      await firstInstance.close()
+    }
+  })
+
+  it("atomically records privileged identity changes made outside Better Auth", async () => {
+    const system = createAuthSystem({
+      allowSignUp: true,
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+
+    try {
+      const user = await system.auth.api.signUpEmail({
+        body: {
+          email: `trigger-audit-${randomUUID()}@mrmpl.test`,
+          name: "Trigger Audit",
+          password: "trigger-audit-password",
+        },
+      })
+
+      await pool.query("UPDATE identity.users SET role = 'admin' WHERE id = $1", [
+        user.user.id,
+      ])
+
+      await expect(
+        pool.query<{
+          actor_user_id: string | null
+          after_state: { role: string }
+          source_table: string
+        }>(
+          `SELECT actor_user_id, after_state, source_table
+           FROM audit.events
+           WHERE event_type = 'access.user.role_changed'
+             AND target_id = $1
+           ORDER BY occurred_at DESC
+           LIMIT 1`,
+          [user.user.id]
+        )
+      ).resolves.toMatchObject({
+        rows: [
+          {
+            actor_user_id: null,
+            after_state: { role: "admin" },
+            source_table: "identity_user_trigger",
+          },
+        ],
+      })
+    } finally {
       await system.close()
     }
   })

@@ -109,6 +109,7 @@ function parameterPlan(payload: Payload) {
       operationSetupCode: text(payload.setupNo),
       parameterCode: qualityParameterCode(payload),
       payload,
+      productionFloorCode: text(payload.productionFloorCode),
       routeCode: text(payload.optionNumber) || "1",
       sequence: numberOrUndefined(payload.sequence) ?? 0,
       unit: optionalText(payload.unit),
@@ -121,7 +122,13 @@ function parameterPlan(payload: Payload) {
 }
 
 function setupTemplateCode(payload: Payload) {
-  return `SETUP-${text(payload.masterVersion || payload.version) || "CURRENT"}`
+  const checklistCode = text(payload.checklistCode)
+  if (checklistCode) return checklistCode
+  const legacyVersion = text(payload.masterVersion || payload.version)
+  if (!legacyVersion) return ""
+  return /^(SC\d+|SETUP-)/i.test(legacyVersion)
+    ? legacyVersion
+    : `SETUP-${legacyVersion}`
 }
 
 function setupSessionPlan(payload: Payload) {
@@ -132,9 +139,10 @@ function setupSessionPlan(payload: Payload) {
     machineNumber: optionalText(payload.machine || payload.machineNo),
     operationSetupCode: text(payload.setupNo),
     payload,
+    productionFloorCode: text(payload.productionFloorCode),
     sessionKey: text(payload.sessionId),
     status: text(payload.status) || "In progress",
-    templateCode: setupTemplateCode(payload),
+    templateCode: setupTemplateCode(payload) || "SETUP-CURRENT",
   }
   const phases = [
     {
@@ -185,6 +193,7 @@ function maintenanceTaskPlan(payload: Payload) {
     completedBy: optionalText(payload.completedBy),
     machineNumber: text(payload.machineNo || payload.machine),
     payload,
+    productionFloorCode: text(payload.productionFloorCode),
     taskKey: text(payload.taskId),
   }
   if (text(payload.maintenanceType).toLowerCase() === "breakdown") {
@@ -365,6 +374,7 @@ export function operationalEntryPlan(entryType: string, payload: Payload) {
         notes: optionalText(payload.remark || payload.notes),
         operationSetupCode: text(payload.setupNo),
         payload,
+        productionFloorCode: text(payload.productionFloorCode),
         status: text(payload.status) || "Approved",
       },
     } as const
@@ -384,6 +394,7 @@ export function operationalEntryPlan(entryType: string, payload: Payload) {
         machineNumber: optionalText(payload.machine || payload.machineNo),
         operationSetupCode: text(payload.setupNo),
         payload,
+        productionFloorCode: text(payload.productionFloorCode),
         readings: records(payload.readings).map((reading) => ({
           actualReading:
             reading.actualReading === null ||
@@ -425,7 +436,7 @@ export function operationalEntryPlan(entryType: string, payload: Payload) {
             sequence,
           },
         ],
-        name: text(payload.title) || "Setup checklist",
+        name: text(payload.checklistTitle || payload.title) || "Setup checklist",
         payload,
         revision: 1,
       },
@@ -455,6 +466,7 @@ export function operationalEntryPlan(entryType: string, payload: Payload) {
         operationSetupCode: text(payload.setupNo),
         payload,
         phase: "end" as const,
+        productionFloorCode: text(payload.productionFloorCode),
         results: legacyFields
           .filter((key) => Object.hasOwn(payload, key))
           .map((key) => ({ itemKey: key, value: text(payload[key]) })),
@@ -516,6 +528,7 @@ export function operationalEntryPlan(entryType: string, payload: Payload) {
         machineNumber: text(payload.machineNo),
         nextDueOn: text(payload.firstDueDate || payload.nextDueDate),
         payload,
+        productionFloorCode: text(payload.productionFloorCode),
         scheduleKey:
           text(payload.scheduleKey) ||
           `${text(payload.machineNo)}|${text(payload.maintenanceCode)}`,

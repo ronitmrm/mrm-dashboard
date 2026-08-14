@@ -2,7 +2,17 @@ import { randomUUID } from "node:crypto"
 
 import type { Pool, PoolClient } from "pg"
 
+import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  validConfirmedPrioritySetupNumbers,
+  workOrderIdentityMatches,
+} from "./planning-rules"
+import {
+  normalizeProductionFloorCode,
+  productionFloors,
+  type ProductionFloorCode,
+} from "./production-floors"
 
 type RepositoryOptions = RepositoryPoolOptions
 
@@ -71,41 +81,27 @@ async function businessKeyLock(
   )
 }
 
-async function queueDashboardRefresh(
+async function ensureProductionFloorId(
   client: PoolClient,
-  organizationId: string
+  organizationId: string,
+  code: ProductionFloorCode
 ) {
+  const floor = productionFloors.find((candidate) => candidate.code === code)!
   const result = await client.query<{ id: string }>(
     `
-      INSERT INTO derived.refresh_jobs (
-        organization_id, queue_key, idempotency_key, status, run_after
+      INSERT INTO manufacturing.production_floors (
+        organization_id, code, name
       )
-      VALUES ($1, 'dashboard', $2, 'pending', now())
-      ON CONFLICT (organization_id, queue_key)
-        WHERE status IN ('pending', 'running')
-      DO UPDATE SET run_after = LEAST(derived.refresh_jobs.run_after, now()),
-        updated_at = now(), last_error = NULL
+      VALUES ($1, $2, $3)
+      ON CONFLICT (organization_id, code) DO UPDATE SET
+        name = EXCLUDED.name,
+        active = true,
+        updated_at = now()
       RETURNING id
     `,
-    [organizationId, randomUUID()]
+    [organizationId, floor.code, floor.label]
   )
-  const refreshJobId = result.rows[0]!.id
-  await client.query(
-    `
-      INSERT INTO derived.outbox_events (
-        organization_id, topic, aggregate_type, aggregate_id,
-        payload, idempotency_key
-      )
-      VALUES ($1, 'dashboard.refresh.requested', 'refresh_job', $2, $3, $4)
-    `,
-    [
-      organizationId,
-      refreshJobId,
-      { organizationId, queueKey: "dashboard", refreshJobId },
-      randomUUID(),
-    ]
-  )
-  return refreshJobId
+  return result.rows[0]!.id
 }
 
 async function itemIdFor(
@@ -123,6 +119,107 @@ async function itemIdFor(
   )
   if (!result.rows[0]) throw new Error("Planning item was not found.")
   return result.rows[0].id
+}
+
+async function ensureRouteItemId(
+  client: PoolClient,
+  organizationId: string,
+  itemUid: string,
+  actorUserId?: string | null
+) {
+  const uid = requiredText(itemUid, "Item UID")
+  await client.query(
+    `
+      INSERT INTO catalog.items (
+        organization_id, uid, description, created_by_user_id,
+        updated_by_user_id, source_system, source_table, source_id,
+        source_payload
+      )
+      VALUES ($1, $2, $2, $3, $3, 'mrm-dashboard', 'route_master', $4,
+        jsonb_build_object('generatedFrom', 'route_master', 'uid', $2::text))
+      ON CONFLICT DO NOTHING
+    `,
+    [organizationId, uid, actorUserId ?? null, `${organizationId}:${uid.toLowerCase()}`]
+  )
+  const itemId = await itemIdFor(client, organizationId, uid)
+  await client.query(
+    `
+      UPDATE catalog.items
+      SET source_table = 'route_master',
+        source_id = $3,
+        source_payload = jsonb_build_object(
+          'generatedFrom', 'route_master', 'uid', $2::text
+        ),
+        updated_by_user_id = $4,
+        updated_at = now(),
+        row_version = row_version + 1
+      WHERE organization_id = $1 AND id = $5
+        AND source_system = 'mrm-dashboard'
+        AND source_table = 'work_order_readiness'
+    `,
+    [
+      organizationId,
+      uid,
+      `${organizationId}:${uid.toLowerCase()}`,
+      actorUserId ?? null,
+      itemId,
+    ]
+  )
+  await client.query(
+    `
+      UPDATE manufacturing.work_orders
+      SET source_payload = source_payload ||
+          jsonb_build_object('planningItemPending', false),
+        updated_at = now(),
+        row_version = row_version + 1
+      WHERE organization_id = $1 AND item_id = $2
+        AND source_payload ->> 'planningItemPending' = 'true'
+    `,
+    [organizationId, itemId]
+  )
+  return itemId
+}
+
+async function ensureWorkOrderItemId(
+  client: PoolClient,
+  organizationId: string,
+  itemUid: string,
+  actorUserId?: string | null
+) {
+  const uid = requiredText(itemUid, "Item UID")
+  await client.query(
+    `
+      INSERT INTO catalog.items (
+        organization_id, uid, description, created_by_user_id,
+        updated_by_user_id, source_system, source_table, source_id,
+        source_payload
+      )
+      VALUES ($1, $2, $2, $3, $3, 'mrm-dashboard',
+        'work_order_readiness', $4,
+        jsonb_build_object(
+          'generatedFrom', 'work_order_readiness', 'uid', $2::text
+        ))
+      ON CONFLICT DO NOTHING
+    `,
+    [organizationId, uid, actorUserId ?? null, `${organizationId}:${uid.toLowerCase()}`]
+  )
+  const item = await client.query<{
+    id: string
+    planning_item_pending: boolean
+  }>(
+    `
+      SELECT id,
+        source_system = 'mrm-dashboard'
+          AND source_table = 'work_order_readiness'
+          AS planning_item_pending
+      FROM catalog.items
+      WHERE organization_id = $1 AND lower(uid) = lower($2)
+      FOR UPDATE
+    `,
+    [organizationId, uid]
+  )
+  if (!item.rows[0]) throw new Error("Planning item could not be created.")
+  return item.rows[0]
 }
 
 async function workOrderFor(
@@ -252,16 +349,25 @@ async function insertOverrideDetail(
 async function machineFor(
   client: PoolClient,
   organizationId: string,
-  machineNumber: string
+  machineNumber: string,
+  productionFloorCode: ProductionFloorCode
 ) {
   const result = await client.query<{ id: string }>(
     `
-      SELECT id FROM catalog.machines
-      WHERE organization_id = $1 AND lower(machine_number) = lower($2)
-        AND active
+      SELECT machine.id FROM catalog.machines machine
+      JOIN manufacturing.production_floors floor
+        ON floor.id = machine.production_floor_id
+      WHERE machine.organization_id = $1
+        AND lower(machine.machine_number) = lower($2)
+        AND floor.code = $3
+        AND machine.active
       FOR UPDATE
     `,
-    [organizationId, requiredText(machineNumber, "Machine")]
+    [
+      organizationId,
+      requiredText(machineNumber, "Machine"),
+      productionFloorCode,
+    ]
   )
   if (!result.rows[0]) throw new Error("Physical machine was not found.")
   return result.rows[0].id
@@ -271,22 +377,31 @@ async function routeFor(
   client: PoolClient,
   organizationId: string,
   itemId: string,
-  routeCode: string
+  routeCode: string,
+  productionFloorCode: ProductionFloorCode
 ) {
   const result = await client.query<{ id: string }>(
     `
-      SELECT id FROM manufacturing.route_options
-      WHERE organization_id = $1 AND item_id = $2
+      SELECT route.id FROM manufacturing.route_options route
+      JOIN manufacturing.production_floors floor
+        ON floor.id = route.production_floor_id
+      WHERE route.organization_id = $1 AND route.item_id = $2
         AND (
-          lower(route_code) = lower($3)
-          OR lower(COALESCE(legacy_option_number, '')) = lower($3)
+          lower(route.route_code) = lower($3)
+          OR lower(COALESCE(route.legacy_option_number, '')) = lower($3)
         )
-        AND active
-      ORDER BY revision DESC
+        AND floor.code = $4
+        AND route.active
+      ORDER BY route.revision DESC
       LIMIT 1
       FOR UPDATE
     `,
-    [organizationId, itemId, requiredText(routeCode, "Route option")]
+    [
+      organizationId,
+      itemId,
+      requiredText(routeCode, "Route option"),
+      productionFloorCode,
+    ]
   )
   if (!result.rows[0]) throw new Error("Route option was not found.")
   return result.rows[0].id
@@ -297,14 +412,16 @@ async function setupFor(
   organizationId: string,
   itemUid: string,
   routeCode: string,
-  setupNumber: number
+  setupNumber: number,
+  productionFloorCode: ProductionFloorCode
 ) {
   const itemId = await itemIdFor(client, organizationId, itemUid)
   const routeOptionId = await routeFor(
     client,
     organizationId,
     itemId,
-    routeCode
+    routeCode,
+    productionFloorCode
   )
   const result = await client.query<{ id: string }>(
     `
@@ -335,6 +452,28 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
   return {
     close,
 
+    async missingItemUids(organizationId: string, itemUids: string[]) {
+      const requested = [
+        ...new Set(itemUids.map((uid) => uid.trim()).filter(Boolean)),
+      ]
+      if (!requested.length) return []
+      const result = await pool.query<{ uid: string }>(
+        `
+          SELECT requested.uid
+          FROM unnest($2::text[]) WITH ORDINALITY requested(uid, position)
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM catalog.items item
+            WHERE item.organization_id = $1
+              AND lower(item.uid) = lower(requested.uid)
+          )
+          ORDER BY requested.position
+        `,
+        [organizationId, requested]
+      )
+      return result.rows.map((row) => row.uid)
+    },
+
     async organizationIdForCode(code: string) {
       const result = await pool.query<{ id: string }>(
         "SELECT id FROM core.organizations WHERE lower(code) = lower($1)",
@@ -349,6 +488,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       machineNumber: string
       name?: string | null
       organizationId: string
+      productionFloorCode?: string
       sourcePayload?: unknown
     }) {
       return transaction(pool, async (client) => {
@@ -356,11 +496,24 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           input.machineNumber,
           "Machine number"
         )
-        await businessKeyLock(client, "catalog.machine", machineNumber)
+        const productionFloorCode = normalizeProductionFloorCode(
+          input.productionFloorCode
+        )
+        const productionFloorId = await ensureProductionFloorId(
+          client,
+          input.organizationId,
+          productionFloorCode
+        )
+        await businessKeyLock(
+          client,
+          "catalog.machine",
+          machineNumber
+        )
         const existing = await client.query<{ id: string }>(
           `
-            SELECT id FROM catalog.machines
-            WHERE organization_id = $1 AND lower(machine_number) = lower($2)
+            SELECT machine.id FROM catalog.machines machine
+            WHERE machine.organization_id = $1
+              AND lower(machine.machine_number) = lower($2)
             FOR UPDATE
           `,
           [input.organizationId, machineNumber]
@@ -370,13 +523,15 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           ? await client.query<{ id: string }>(
               `
                 UPDATE catalog.machines
-                SET name = $1, active = true, updated_by_user_id = $2,
-                  source_payload = $3, updated_at = now(),
+                SET production_floor_id = $1,
+                  name = $2, active = true, updated_by_user_id = $3,
+                  source_payload = $4, updated_at = now(),
                   row_version = row_version + 1
-                WHERE id = $4
+                WHERE id = $5
                 RETURNING id
               `,
               [
+                productionFloorId,
                 input.name?.trim() || null,
                 input.actorUserId ?? null,
                 sourcePayload,
@@ -386,16 +541,17 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           : await client.query<{ id: string }>(
               `
                 INSERT INTO catalog.machines (
-                  organization_id, machine_number, name, created_by_user_id,
-                  updated_by_user_id, source_system, source_table, source_id,
-                  source_payload
+                  organization_id, production_floor_id, machine_number, name,
+                  created_by_user_id, updated_by_user_id, source_system,
+                  source_table, source_id, source_payload
                 )
-                VALUES ($1, $2, $3, $4, $4, 'mrm-dashboard',
-                  'machine_master', $5, $6)
+                VALUES ($1, $2, $3, $4, $5, $5, 'mrm-dashboard',
+                  'machine_master', $6, $7)
                 RETURNING id
               `,
               [
                 input.organizationId,
+                productionFloorId,
                 machineNumber,
                 input.name?.trim() || null,
                 input.actorUserId ?? null,
@@ -424,23 +580,54 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           throw new Error("Ordered quantity cannot be negative.")
         }
         await businessKeyLock(client, "manufacturing.work_order", jobCardNumber)
-        const itemId = await itemIdFor(
+        const planningItem = await ensureWorkOrderItemId(
           client,
           input.organizationId,
-          input.itemUid
+          input.itemUid,
+          input.actorUserId
         )
-        const existing = await client.query<{ id: string }>(
+        const workOrderNumber = requiredText(
+          input.workOrderNumber,
+          "Work order number"
+        )
+        const existing = await client.query<{
+          id: string
+          item_id: string
+          work_order_number: string
+        }>(
           `
-            SELECT id FROM manufacturing.work_orders
+            SELECT id, item_id, work_order_number
+            FROM manufacturing.work_orders
             WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
             FOR UPDATE
           `,
           [input.organizationId, jobCardNumber]
         )
-        const sourcePayload = input.sourcePayload ?? input
+        if (
+          existing.rows[0] &&
+          !workOrderIdentityMatches(
+            {
+              itemId: existing.rows[0].item_id,
+              workOrderNumber: existing.rows[0].work_order_number,
+            },
+            { itemId: planningItem.id, workOrderNumber }
+          )
+        ) {
+          throw new Error(
+            "This Job Card already belongs to another FG PO Number and Part Code."
+          )
+        }
+        const sourcePayload = {
+          ...(typeof input.sourcePayload === "object" &&
+          input.sourcePayload !== null &&
+          !Array.isArray(input.sourcePayload)
+            ? input.sourcePayload
+            : input),
+          planningItemPending: planningItem.planning_item_pending,
+        }
         const values = [
-          requiredText(input.workOrderNumber, "Work order number"),
-          itemId,
+          workOrderNumber,
+          planningItem.id,
           input.orderedQuantity,
           input.dueDate ?? null,
           input.actorUserId ?? null,
@@ -484,7 +671,10 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
               ]
             )
         await queueDashboardRefresh(client, input.organizationId)
-        return result.rows[0]!
+        return {
+          ...result.rows[0]!,
+          planningItemPending: planningItem.planning_item_pending,
+        }
       })
     },
 
@@ -492,6 +682,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       actorUserId?: string | null
       itemUid: string
       organizationId: string
+      productionFloorCode?: string
       replaceSetups?: boolean
       routeCode: string
       sourcePayload?: unknown
@@ -505,28 +696,40 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
     }) {
       return transaction(pool, async (client) => {
         const routeCode = requiredText(input.routeCode, "Route code")
-        const itemId = await itemIdFor(
+        const productionFloorCode = normalizeProductionFloorCode(
+          input.productionFloorCode
+        )
+        const productionFloorId = await ensureProductionFloorId(
           client,
           input.organizationId,
-          input.itemUid
+          productionFloorCode
+        )
+        const itemId = await ensureRouteItemId(
+          client,
+          input.organizationId,
+          input.itemUid,
+          input.actorUserId
         )
         await businessKeyLock(
           client,
           "manufacturing.route",
-          `${itemId}:${routeCode}`
+          `${productionFloorCode}:${itemId}:${routeCode}`
         )
         const existing = await client.query<{ id: string }>(
           `
-            SELECT id FROM manufacturing.route_options
-            WHERE item_id = $1
+            SELECT route.id FROM manufacturing.route_options route
+            JOIN manufacturing.production_floors floor
+              ON floor.id = route.production_floor_id
+            WHERE route.item_id = $1
               AND (
-                lower(route_code) = lower($2)
-                OR lower(COALESCE(legacy_option_number, '')) = lower($2)
+                lower(route.route_code) = lower($2)
+                OR lower(COALESCE(route.legacy_option_number, '')) = lower($2)
               )
-              AND revision = 1
+              AND floor.code = $3
+              AND route.revision = 1
             FOR UPDATE
           `,
-          [itemId, routeCode]
+          [itemId, routeCode, productionFloorCode]
         )
         const sourcePayload = input.sourcePayload ?? input
         const route = existing.rows[0]
@@ -549,16 +752,18 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           : await client.query<{ id: string }>(
               `
                 INSERT INTO manufacturing.route_options (
-                  organization_id, item_id, route_code, legacy_option_number,
-                  revision, active, created_by_user_id, updated_by_user_id,
-                  source_system, source_table, source_id, source_payload
+                  organization_id, production_floor_id, item_id, route_code,
+                  legacy_option_number, revision, active, created_by_user_id,
+                  updated_by_user_id, source_system, source_table, source_id,
+                  source_payload
                 )
-                VALUES ($1, $2, $3, $3, 1, true, $4, $4,
-                  'mrm-dashboard', 'route', $5, $6)
+                VALUES ($1, $2, $3, $4, $4, 1, true, $5, $5,
+                  'mrm-dashboard', 'route', $6, $7)
                 RETURNING id
               `,
               [
                 input.organizationId,
+                productionFloorId,
                 itemId,
                 routeCode,
                 input.actorUserId ?? null,
@@ -590,7 +795,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
                 SET operation_code = $1, operation_name = $2, sequence = $3,
                   active = true, updated_by_user_id = $4,
                   legacy_setup_code = COALESCE($5, legacy_setup_code),
-                  source_payload = $6,
+                  source_system = 'mrm-dashboard',
+                  source_table = 'dataEntries', source_payload = $6,
                   updated_at = now(), row_version = row_version + 1
                 WHERE id = $7
               `,
@@ -614,7 +820,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
                   source_system, source_table, source_id, source_payload
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $8,
-                  'mrm-dashboard', 'route_setup', $9, $10)
+                  'mrm-dashboard', 'dataEntries', $9, $10)
               `,
               [
                 input.organizationId,
@@ -654,6 +860,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       itemUid: string
       organizationId: string
       piecesPerCycle?: number
+      productionFloorCode?: string
       routeCode: string
       setupNumber: number
       setupTimeMinutes?: number
@@ -668,7 +875,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           input.organizationId,
           input.itemUid,
           input.routeCode,
-          input.setupNumber
+          input.setupNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         await businessKeyLock(client, "manufacturing.cycle", operationSetupId)
         const existing = await client.query<{ id: string }>(
@@ -730,6 +938,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       description?: string | null
       itemUid: string
       organizationId: string
+      productionFloorCode?: string
       quantity?: number
       routeCode: string
       setupNumber: number
@@ -742,7 +951,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           input.organizationId,
           input.itemUid,
           input.routeCode,
-          input.setupNumber
+          input.setupNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const toolCode = requiredText(input.toolCode, "Tool code")
         const quantity = input.quantity ?? 1
@@ -887,6 +1097,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       actorUserId?: string | null
       jobCardNumber: string
       organizationId: string
+      productionFloorCode?: string
       reason?: string | null
       routeCode: string
     }) {
@@ -900,7 +1111,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           client,
           input.organizationId,
           workOrder.item_id,
-          input.routeCode
+          input.routeCode,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const current = await client.query<{ id: string }>(
           `
@@ -946,6 +1158,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
     async recordPlannerPriority(input: {
       actorUserId?: string | null
       approvalMode?: string | null
+      confirmedSetupNumbers: string[]
       interruptedFinishedQuantity?: number | null
       interruptedJobCardNumber?: string | null
       interruptedMachineNumber?: string | null
@@ -955,10 +1168,19 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       organizationId: string
       partCode?: string | null
       priority: string
+      productionFloorCode?: string
       queueBeforeSetups?: QueueBeforeSetupInput[]
       remark?: string | null
     }) {
       return transaction(pool, async (client) => {
+        const confirmedSetupNumbers = validConfirmedPrioritySetupNumbers(
+          input.confirmedSetupNumbers
+        )
+        if (!confirmedSetupNumbers) {
+          throw new Error(
+            "Confirm every priority setup in sequence before applying the priority."
+          )
+        }
         const workOrder = await workOrderFor(
           client,
           input.organizationId,
@@ -979,7 +1201,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
             input.remark?.trim() || requiredText(input.priority, "Priority"),
             input.actorUserId ?? null,
             randomUUID(),
-            input,
+            { ...input, confirmedSetupNumbers },
           ]
         )
         await client.query(
@@ -1068,6 +1290,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       machineNumber: string
       organizationId: string
       planningMode?: string | null
+      productionFloorCode?: string
       queuePlacements?: QueuePlacementInput[]
       reason: string
       remark?: string | null
@@ -1079,7 +1302,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
         const machineId = await machineFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         await client.query(
           `
@@ -1156,6 +1380,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       interruptedSetups?: InterruptedSetupInput[]
       jobCardNumber: string
       organizationId: string
+      productionFloorCode?: string
       queuePlacements?: QueuePlacementInput[]
       reason: string
       setupNumber?: number | null
@@ -1170,13 +1395,15 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
         const targetMachineId = await machineFor(
           client,
           input.organizationId,
-          input.toMachineNumber
+          input.toMachineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const sourceMachineId = input.fromMachineNumber
           ? await machineFor(
               client,
               input.organizationId,
-              input.fromMachineNumber
+              input.fromMachineNumber,
+              normalizeProductionFloorCode(input.productionFloorCode)
             )
           : null
         const targetLock = await client.query<{ work_order_id: string }>(
@@ -1290,6 +1517,7 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
       jobCardNumber: string
       newRouteCode: string
       organizationId: string
+      productionFloorCode?: string
       remainingSetups?: RemainingSetupInput[]
       reason: string
       wipQuantity?: number | null
@@ -1312,7 +1540,8 @@ export function createDashboardPlanningRepository(options: RepositoryOptions) {
           client,
           input.organizationId,
           workOrder.item_id,
-          input.newRouteCode
+          input.newRouteCode,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const created = await client.query<{ id: string }>(
           `

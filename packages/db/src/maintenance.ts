@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto"
 import type { Pool, PoolClient } from "pg"
 
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  normalizeProductionFloorCode,
+  type ProductionFloorCode,
+} from "./production-floors"
 
 type RepositoryOptions = RepositoryPoolOptions
 
@@ -33,6 +37,7 @@ type CompleteTaskInput = {
   nextDueOn?: string | null
   organizationId: string
   payload: Record<string, unknown>
+  productionFloorCode?: string
   results: TaskResultInput[]
   scheduleKey: string
   taskKey: string
@@ -43,6 +48,31 @@ function requiredText(value: unknown, label: string) {
   const result = String(value ?? "").trim()
   if (!result) throw new Error(`${label} is required.`)
   return result
+}
+
+async function generatedMaintenanceChecklistCode(
+  client: PoolClient,
+  organizationId: string,
+  requestedCode: string
+) {
+  const cleaned = requestedCode.trim()
+  if (cleaned) return cleaned
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtext('maintenance.checklist-code'), hashtext($1))",
+    [organizationId]
+  )
+  const result = await client.query<{ nextNumber: number }>(
+    `
+      SELECT COALESCE(MAX(
+        CASE WHEN code ~* '^MC[0-9]+$'
+          THEN substring(code from '([0-9]+)$')::integer END
+      ), 0) + 1 AS "nextNumber"
+      FROM maintenance.definitions
+      WHERE organization_id = $1
+    `,
+    [organizationId]
+  )
+  return `MC${String(result.rows[0]?.nextNumber ?? 1).padStart(3, "0")}`
 }
 
 async function transaction<T>(
@@ -66,14 +96,23 @@ async function transaction<T>(
 async function machineIdFor(
   client: PoolClient,
   organizationId: string,
-  machineNumber: string
+  machineNumber: string,
+  productionFloorCode: ProductionFloorCode
 ) {
   const result = await client.query<{ id: string }>(
     `
-      SELECT id FROM catalog.machines
-      WHERE organization_id = $1 AND lower(machine_number) = lower($2)
+      SELECT machine.id FROM catalog.machines machine
+      JOIN manufacturing.production_floors floor
+        ON floor.id = machine.production_floor_id
+      WHERE machine.organization_id = $1
+        AND lower(machine.machine_number) = lower($2)
+        AND floor.code = $3
     `,
-    [organizationId, requiredText(machineNumber, "Machine")]
+    [
+      organizationId,
+      requiredText(machineNumber, "Machine"),
+      productionFloorCode,
+    ]
   )
   if (!result.rows[0]) throw new Error("Machine was not found.")
   return result.rows[0].id
@@ -156,7 +195,8 @@ async function completeMaintenanceTask(
   const machineId = await machineIdFor(
     client,
     input.organizationId,
-    input.machineNumber
+    input.machineNumber,
+    normalizeProductionFloorCode(input.productionFloorCode)
   )
   const schedule = await client.query<{
     checklist_definition_id: string
@@ -177,11 +217,13 @@ async function completeMaintenanceTask(
         )
       WHERE schedule.organization_id = $1
         AND lower(schedule.schedule_key) = lower($2)
+        AND schedule.machine_id = $3
       FOR UPDATE OF schedule
     `,
     [
       input.organizationId,
       requiredText(input.scheduleKey, "Maintenance schedule key"),
+      machineId,
     ]
   )
   if (!schedule.rows[0]) throw new Error("Maintenance schedule was not found.")
@@ -191,10 +233,12 @@ async function completeMaintenanceTask(
   const existing = await client.query<{ id: string }>(
     `
       SELECT id FROM maintenance.tasks
-      WHERE organization_id = $1 AND lower(task_key) = lower($2)
+      WHERE organization_id = $1
+        AND lower(task_key) = lower($2)
+        AND machine_schedule_id = $3
       FOR UPDATE
     `,
-    [input.organizationId, taskKey]
+    [input.organizationId, taskKey, schedule.rows[0].id]
   )
   const result = existing.rows[0]
     ? await client.query<{ id: string }>(
@@ -422,7 +466,9 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
       payload: Record<string, unknown>
     }) {
       return transaction(pool, async (client) => {
-        const code = requiredText(input.checklistCode, "Maintenance checklist")
+        const code = await generatedMaintenanceChecklistCode(client, input.organizationId, input.checklistCode)
+        const payload = { ...input.payload, checklistCode: code }
+        const normalizedItem = { ...input.item, itemKey: `${code}|${input.item.sequence}` }
         await client.query(
           `
             INSERT INTO maintenance.definitions (
@@ -441,7 +487,7 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
             requiredText(input.checklistTitle, "Maintenance checklist title"),
             input.actorUserId ?? null,
             randomUUID(),
-            input.payload,
+            payload,
           ]
         )
         const definition = await client.query<{ id: string }>(
@@ -457,18 +503,18 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
         await upsertDefinitionItems(client, {
           actorUserId: input.actorUserId,
           definitionId: definition.rows[0].id,
-          items: [input.item],
+          items: [normalizedItem],
           organizationId: input.organizationId,
-          payload: input.payload,
+          payload,
         })
-        const item = await client.query<{ id: string }>(
+        const itemResult = await client.query<{ id: string }>(
           `
             SELECT id FROM maintenance.checklist_items
             WHERE definition_id = $1 AND lower(item_key) = lower($2)
           `,
-          [definition.rows[0].id, input.item.itemKey]
+          [definition.rows[0].id, normalizedItem.itemKey]
         )
-        return item.rows[0]!
+        return itemResult.rows[0]!
       })
     },
 
@@ -480,13 +526,15 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
       nextDueOn: string
       organizationId: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
       scheduleKey: string
     }) {
       return transaction(pool, async (client) => {
         const machineId = await machineIdFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const definition = await client.query<{ id: string }>(
           `
@@ -548,13 +596,15 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
       machineNumber: string
       organizationId: string
       payload: Record<string, unknown>
+      productionFloorCode?: string
       taskKey: string
     }) {
       return transaction(pool, async (client) => {
         const machineId = await machineIdFor(
           client,
           input.organizationId,
-          input.machineNumber
+          input.machineNumber,
+          normalizeProductionFloorCode(input.productionFloorCode)
         )
         const definition = await client.query<{ id: string }>(
           `
@@ -605,6 +655,7 @@ export function createMaintenanceRepository(options: RepositoryOptions) {
           machineNumber: input.machineNumber,
           organizationId: input.organizationId,
           payload: input.payload,
+          productionFloorCode: input.productionFloorCode,
           results: [],
           scheduleKey,
           taskKey: input.taskKey,

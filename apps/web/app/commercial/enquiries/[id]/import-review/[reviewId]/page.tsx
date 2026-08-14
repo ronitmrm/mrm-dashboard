@@ -85,26 +85,26 @@ export default async function EnquiryImportReviewPage({
     <div className="grid gap-6">
       <section className="grid gap-3">
         <Button asChild className="w-fit" size="sm" variant="ghost">
-          <Link href={`/commercial/enquiries/${id}`}>Back to enquiry</Link>
+          <Link href={`/commercial/enquiries/${id}`}>Back To Enquiry</Link>
         </Button>
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-2xl font-semibold tracking-tight">
-            Import review
+            Import Review
           </h2>
           <Badge variant="secondary">{review.status}</Badge>
         </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Classification is read-only. Every nonblank source row requires an
-          explicit Sales decision before the import is applied.
+          Classification Is Read-Only. Every Nonblank Source Row Requires An
+          Explicit Sales Decision Before The Import Is Applied.
         </p>
       </section>
 
       <Card>
         <CardHeader>
-          <CardTitle>Classified rows</CardTitle>
+          <CardTitle>Classified Rows</CardTitle>
           <CardDescription>
-            Exact quoted matches, in-progress work, possible codes, description
-            matches, and new lines follow the recovered precedence.
+            Exact Quoted Matches, In-Progress Work, Possible Codes, Description
+            Matches, And New Lines Follow The Recovered Precedence.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -158,7 +158,7 @@ export default async function EnquiryImportReviewPage({
                                 className="sr-only"
                                 htmlFor={`decision-${row.rowNumber}`}
                               >
-                                Decision for row {row.rowNumber}
+                                Decision For Row {row.rowNumber}
                               </FieldLabel>
                               <NativeSelect
                                 id={`decision-${row.rowNumber}`}
@@ -186,7 +186,7 @@ export default async function EnquiryImportReviewPage({
               </div>
               {review.status === "Pending" ? (
                 <Button className="w-fit" type="submit">
-                  Apply reviewed decisions
+                  Apply Reviewed Decisions
                 </Button>
               ) : null}
             </FieldGroup>

@@ -1,20 +1,203 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 
+import {
+  ExcelColumnFilter,
+  matchesColumnFilter,
+  uniqueFilterOptions,
+} from "@workspace/ui/components/excel-column-filter"
 import { cn } from "@workspace/ui/lib/utils"
+import {
+  filtersForTableColumns,
+  type TableColumnFilters,
+  type TableFilterColumn,
+} from "@workspace/ui/lib/table-filter-state"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+type TableProps = React.ComponentProps<"table"> & {
+  excelFilters?: boolean
+}
+
+function headerLabel(cell: HTMLTableCellElement) {
+  const clone = cell.cloneNode(true) as HTMLTableCellElement
+  clone.querySelector('[data-slot="table-column-filter-host"]')?.remove()
+  return clone.textContent?.trim() ?? ""
+}
+
+function tableSnapshot(table: HTMLTableElement) {
+  const headerRows = table.tHead?.rows
+  const firstHeaderRow = headerRows?.item(0)
+  const secondHeaderRow = headerRows?.item(1)
+  const bodyRows = Array.from(table.tBodies).flatMap((body) =>
+    Array.from(body.rows)
+  )
+  const hasExcelFilterRow = Boolean(
+    secondHeaderRow?.querySelector('button[aria-label^="Filter "]')
+  )
+  const hasLegacyFilterRow = Boolean(
+    secondHeaderRow?.querySelector('select[aria-label^="Filter "]')
+  )
+
+  if (secondHeaderRow) secondHeaderRow.hidden = hasLegacyFilterRow
+
+  if (
+    !firstHeaderRow ||
+    !bodyRows.length ||
+    hasExcelFilterRow ||
+    ((headerRows?.length ?? 0) > 1 && !hasLegacyFilterRow)
+  ) {
+    return { columns: [], rows: [] }
+  }
+
+  const headerCells = Array.from(firstHeaderRow.cells)
+  const rows = bodyRows.filter(
+    (row) =>
+      row.cells.length === headerCells.length &&
+      Array.from(row.cells).every((cell) => cell.colSpan === 1)
+  )
+  const columns = headerCells.flatMap((cell, index) => {
+    const label = headerLabel(cell)
+    const cells = rows.map((row) => row.cells.item(index))
+    const isActionColumn = cells.every((rowCell) =>
+      rowCell?.querySelector("a, button, form, input, select, textarea")
+    )
+    if (!label || !rows.length || isActionColumn) return []
+
+    return [
+      {
+        index,
+        label,
+        options: uniqueFilterOptions(cells.map((rowCell) => rowCell?.textContent)),
+      },
+    ]
+  })
+
+  return { columns, rows }
+}
+
+function sameColumns(left: TableFilterColumn[], right: TableFilterColumn[]) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function Table({ className, excelFilters = true, ...props }: TableProps) {
+  const tableRef = React.useRef<HTMLTableElement>(null)
+  const previousColumnsRef = React.useRef<TableFilterColumn[]>([])
+  const [columns, setColumns] = React.useState<TableFilterColumn[]>([])
+  const [filterHosts, setFilterHosts] = React.useState<
+    Record<number, HTMLElement>
+  >({})
+  const [filters, setFilters] = React.useState<TableColumnFilters>({})
+
+  const refreshTable = React.useCallback(() => {
+    const table = tableRef.current
+    if (!table || !excelFilters) return
+
+    const snapshot = tableSnapshot(table)
+    const headerCells = Array.from(table.tHead?.rows.item(0)?.cells ?? [])
+    const nextFilterHosts = Object.fromEntries(
+      snapshot.columns.flatMap((column) => {
+        const headerCell = headerCells[column.index]
+        if (!headerCell) return []
+        let host = headerCell.querySelector<HTMLElement>(
+          '[data-slot="table-column-filter-host"]'
+        )
+        if (!host) {
+          host = document.createElement("div")
+          host.dataset.slot = "table-column-filter-host"
+          host.className = "pt-1 [&>button]:w-full"
+          headerCell.append(host)
+        }
+        return [[column.index, host]]
+      })
+    )
+    const applicableFilters = filtersForTableColumns(
+      previousColumnsRef.current,
+      snapshot.columns,
+      filters
+    )
+    previousColumnsRef.current = snapshot.columns
+    if (applicableFilters !== filters) setFilters(applicableFilters)
+    setFilterHosts((current) => {
+      const currentHosts = Object.values(current)
+      const nextHosts = Object.values(nextFilterHosts)
+      return currentHosts.length === nextHosts.length &&
+        currentHosts.every((host, index) => host === nextHosts[index])
+        ? current
+        : nextFilterHosts
+    })
+    setColumns((current) =>
+      sameColumns(current, snapshot.columns) ? current : snapshot.columns
+    )
+
+    for (const row of snapshot.rows) {
+      row.hidden = snapshot.columns.some((column) => {
+        const selected = applicableFilters[column.index] ?? null
+        const value = row.cells.item(column.index)?.textContent
+        return !matchesColumnFilter(value, selected)
+      })
+    }
+  }, [excelFilters, filters])
+
+  React.useLayoutEffect(() => {
+    refreshTable()
+  }, [props.children, refreshTable])
+
+  React.useEffect(() => {
+    const table = tableRef.current
+    if (!table || !excelFilters) return
+
+    const observer = new MutationObserver(refreshTable)
+    observer.observe(table, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    })
+    return () => observer.disconnect()
+  }, [excelFilters, refreshTable])
+
+  React.useEffect(() => {
+    if (excelFilters) return
+    const table = tableRef.current
+    if (!table) return
+    for (const body of Array.from(table.tBodies)) {
+      for (const row of Array.from(body.rows)) row.hidden = false
+    }
+  }, [excelFilters])
+
   return (
-    <div
-      data-slot="table-container"
-      className="relative w-full overflow-x-auto"
-    >
-      <table
-        data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
-      />
+    <div className="w-full" data-slot="table-shell">
+      {columns.map((column) => {
+        const host = filterHosts[column.index]
+        return host
+          ? createPortal(
+              <ExcelColumnFilter
+                label={column.label}
+                onApply={(selected) =>
+                  setFilters((current) => ({
+                    ...current,
+                    [column.index]: selected,
+                  }))
+                }
+                options={column.options}
+                selected={filters[column.index] ?? null}
+              />,
+              host,
+              String(column.index)
+            )
+          : null
+      })}
+      <div
+        data-slot="table-container"
+        className="relative w-full overflow-x-auto"
+      >
+        <table
+          ref={tableRef}
+          data-slot="table"
+          className={cn("w-full caption-bottom text-sm", className)}
+          {...props}
+        />
+      </div>
     </div>
   )
 }

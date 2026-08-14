@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto"
 
-import { asc, eq, getTableColumns, sql } from "drizzle-orm"
+import { and, asc, eq, getTableColumns, ilike, or, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import type { Pool, PoolClient } from "pg"
 
+import {
+  commercialSelectorLimit,
+  exactPageResult,
+  selectorResult,
+  selectorSearchTerm,
+} from "./commercial-bounds"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 import { customers, type Customer } from "./schema/customers"
 import { organizations } from "./schema/organizations"
@@ -356,7 +362,70 @@ export function createCustomerRepository(
         .where(
           sql`lower(${organizations.code}) = lower(${organizationCode.trim()})`
         )
-        .orderBy(asc(customers.customerUid))
+        .orderBy(asc(customers.customerUid), asc(customers.id))
+    },
+
+    async listPageForOrganization(
+      organizationCode: string,
+      options: { limit: number; offset: number }
+    ) {
+      const limit = Math.min(Math.max(Math.trunc(options.limit), 1), 200)
+      const offset = Math.max(Math.trunc(options.offset), 0)
+      const rows = await database
+        .select({
+          ...getTableColumns(customers),
+          totalCount: sql<number>`cast(count(*) over() as integer)`,
+        })
+        .from(customers)
+        .innerJoin(
+          organizations,
+          eq(customers.organizationId, organizations.id)
+        )
+        .where(
+          sql`lower(${organizations.code}) = lower(${organizationCode.trim()})`
+        )
+        .orderBy(asc(customers.customerUid), asc(customers.id))
+        .limit(limit)
+        .offset(offset)
+
+      return exactPageResult(rows, { limit, offset })
+    },
+
+    async searchForOrganization(organizationCode: string, value: string) {
+      const { containsPattern, query } = selectorSearchTerm(value)
+      const organization = sql`lower(${organizations.code}) = lower(${organizationCode.trim()})`
+      const search = query
+        ? containsPattern
+          ? or(
+              sql`lower(${customers.customerUid}) = ${query}`,
+              ilike(customers.customerUid, containsPattern),
+              ilike(customers.companyName, containsPattern)
+            )
+          : sql`lower(${customers.customerUid}) = ${query}`
+        : undefined
+      const order = query
+        ? [
+            sql`case when lower(${customers.customerUid}) = ${query} then 0 else 1 end`,
+            asc(customers.customerUid),
+            asc(customers.id),
+          ]
+        : [asc(customers.customerUid), asc(customers.id)]
+      const rows = await database
+        .select({
+          companyName: customers.companyName,
+          customerUid: customers.customerUid,
+          id: customers.id,
+        })
+        .from(customers)
+        .innerJoin(
+          organizations,
+          eq(customers.organizationId, organizations.id)
+        )
+        .where(search ? and(organization, search) : organization)
+        .orderBy(...order)
+        .limit(commercialSelectorLimit + 1)
+
+      return selectorResult(rows)
     },
   }
 }

@@ -9,6 +9,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  MetricCard,
 } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
@@ -37,16 +38,16 @@ const initialInputs = {
 type InputKey = keyof typeof initialInputs
 
 const fields: { key: InputKey; label: string; suffix: string }[] = [
-  { key: "weight100Pcs", label: "Weight input", suffix: "g" },
-  { key: "casting", label: "Casting factor", suffix: "×" },
-  { key: "scrapRate", label: "Scrap rate", suffix: "INR/kg" },
-  { key: "alloyPremium", label: "Alloy premium", suffix: "INR/kg" },
-  { key: "extCost", label: "Extrusion cost", suffix: "INR/kg" },
-  { key: "forgingCost", label: "Forging cost", suffix: "INR/kg" },
-  { key: "burningLossPercent", label: "Burning loss", suffix: "%" },
+  { key: "weight100Pcs", label: "Weight Input", suffix: "g" },
+  { key: "casting", label: "Casting Factor", suffix: "×" },
+  { key: "scrapRate", label: "Scrap Rate", suffix: "INR/kg" },
+  { key: "alloyPremium", label: "Alloy Premium", suffix: "INR/kg" },
+  { key: "extCost", label: "Extrusion Cost", suffix: "INR/kg" },
+  { key: "forgingCost", label: "Forging Cost", suffix: "INR/kg" },
+  { key: "burningLossPercent", label: "Burning Loss", suffix: "%" },
   { key: "rejectionPercent", label: "Rejection", suffix: "%" },
-  { key: "profitPercent", label: "Quote profit", suffix: "%" },
-  { key: "conversionRate", label: "Exchange rate", suffix: "INR/USD" },
+  { key: "profitPercent", label: "Quote Profit", suffix: "%" },
+  { key: "conversionRate", label: "Exchange Rate", suffix: "INR/USD" },
 ]
 
 export function CostingCalculator() {
@@ -92,10 +93,10 @@ export function CostingCalculator() {
     <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
       <Card>
         <CardHeader>
-          <CardTitle>Audited workbook inputs</CardTitle>
+          <CardTitle>Audited Workbook Inputs</CardTitle>
           <CardDescription>
-            This vertical slice runs the Pricing formula engine now owned by the
-            canonical web app.
+            This Vertical Slice Runs The Pricing Formula Engine Now Owned By The
+            Canonical Web App.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -127,37 +128,33 @@ export function CostingCalculator() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Calculation trace</CardTitle>
+          <CardTitle>Calculation Trace</CardTitle>
           <CardDescription>
-            Intermediate values remain visible for workbook reconciliation.
+            Intermediate Values Remain Visible For Workbook Reconciliation.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-3xl bg-muted p-4">
-              <p className="text-xs text-muted-foreground">INR / piece</p>
-              <p className="font-heading text-2xl font-medium">
-                {money(result.totalRateInr, 4)}
-              </p>
-            </div>
-            <div className="rounded-3xl bg-primary p-4 text-primary-foreground">
-              <p className="text-xs opacity-70">USD / piece</p>
-              <p className="font-heading text-2xl font-medium">
-                {money(result.rateUsd, 4)}
-              </p>
-            </div>
+            <MetricCard
+              label="Inr / Piece"
+              value={money(result.totalRateInr, 4)}
+            />
+            <MetricCard
+              label="Usd / Piece"
+              value={money(result.rateUsd, 4)}
+            />
           </div>
           <div className="overflow-hidden rounded-3xl border">
             <Table>
               <TableBody>
                 {[
-                  ["Pieces / kg", result.piecesPerKg],
-                  ["Net rate without alloy", result.netRateWithoutAlloy],
-                  ["Net rate with alloy", result.netRateWithAlloy],
-                  ["Raw material cost", result.rawMaterialCost],
-                  ["Scrap return price", result.scrapReturnPrice],
-                  ["Total rods cost", result.totalRodsCost],
-                  ["Rejection cost", result.rejectionCost],
+                  ["Pieces / Kg", result.piecesPerKg],
+                  ["Net Rate Without Alloy", result.netRateWithoutAlloy],
+                  ["Net Rate With Alloy", result.netRateWithAlloy],
+                  ["Raw Material Cost", result.rawMaterialCost],
+                  ["Scrap Return Price", result.scrapReturnPrice],
+                  ["Total Rods Cost", result.totalRodsCost],
+                  ["Rejection Cost", result.rejectionCost],
                   ["Total A", result.totalA],
                   ["Profit B", result.profitB],
                 ].map(([label, value]) => (
@@ -174,7 +171,7 @@ export function CostingCalculator() {
             </Table>
           </div>
           <Badge className="w-fit" variant="outline">
-            Formula regression protected
+            Formula Regression Protected
           </Badge>
         </CardContent>
       </Card>

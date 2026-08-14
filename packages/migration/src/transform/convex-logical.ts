@@ -139,11 +139,17 @@ const LOGICAL_STATEMENTS = [
   `,
   `
     INSERT INTO manufacturing.raw_material_receipts (
-      organization_id, receipt_number, received_on, quantity_kg,
+      organization_id, receipt_number, job_card_number, received_on, quantity_kg,
       remaining_quantity_kg, source_system, source_table, source_id,
       source_payload
     )
     SELECT $2, source.source_id,
+      COALESCE(
+        NULLIF(btrim(source.document->'payload'->>'jcNo'), ''),
+        NULLIF(btrim(source.document->'payload'->>'jobCard'), ''),
+        NULLIF(btrim(source.document->>'key'), ''),
+        source.source_id
+      ),
       COALESCE(
         migration.try_date(source.document->'payload'->>'rmInwardDate'),
         to_timestamp(source.source_creation_time / 1000.0)::date
@@ -162,6 +168,7 @@ const LOGICAL_STATEMENTS = [
       AND source.source_table = 'dataEntries'
       AND source.document->>'entryType' = 'rm_inward'
     ON CONFLICT (source_system, source_table, source_id) DO UPDATE SET
+      job_card_number = EXCLUDED.job_card_number,
       received_on = EXCLUDED.received_on,
       quantity_kg = EXCLUDED.quantity_kg,
       remaining_quantity_kg = EXCLUDED.remaining_quantity_kg,

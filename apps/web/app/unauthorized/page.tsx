@@ -14,15 +14,15 @@ export default function UnauthorizedPage() {
     <main className="grid min-h-svh place-items-center bg-muted/30 p-6">
       <Card className="w-full max-w-lg">
         <CardHeader>
-          <CardTitle>Access not assigned</CardTitle>
+          <CardTitle>Access Not Assigned</CardTitle>
           <CardDescription>
-            Your account is valid, but it does not have the capability required
-            for this area.
+            Your Account Is Valid, But It Does Not Have The Capability Required
+            For This Area.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild variant="outline">
-            <Link href="/">Return to operations</Link>
+            <Link href="/">Return To Operations</Link>
           </Button>
         </CardContent>
       </Card>

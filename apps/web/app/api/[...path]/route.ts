@@ -1,15 +1,35 @@
 import {
-  createAuthorizationRepository,
   createDashboardPlanningRepository,
   createProductionShopFloorRepository,
 } from "@workspace/db"
+import {
+  parseProductionFloorCode,
+} from "@workspace/db/production-floors"
+import { validConfirmedPrioritySetupNumbers } from "@workspace/db/planning-rules"
 import { NextResponse, type NextRequest } from "next/server"
 
-import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
+import { readAuthEnvironment } from "@/lib/auth/auth"
+import { planningProductionFloorPayload } from "../../../lib/planning-production-floor"
+import {
+  authorizationRequestTelemetryForCurrentScope,
+  withAuthorizationRequestTelemetry,
+} from "../../../lib/auth/authorization-request-telemetry"
+import {
+  readRequestAuthenticatedSession,
+  readRequestGrantedCapabilitySet,
+} from "../../../lib/auth/request-authorization"
 import {
   browserImportPolicy,
   exportUnavailablePayload,
 } from "@/lib/dashboard-api-policy"
+import {
+  dashboardErrorResponse,
+  dashboardMutationCapabilities,
+  DashboardRequestPolicyError,
+  requiredDashboardText,
+  readDashboardJsonBody,
+} from "../../../lib/dashboard-route-policy"
+import { executeBoundedImport } from "../../../lib/bounded-import"
 import {
   normalizeInterruptedSetups,
   normalizeQueueBeforeSetups,
@@ -17,11 +37,21 @@ import {
   normalizeRemainingSetups,
   planningSetupNumber,
 } from "@/lib/dashboard-planning-input"
+import {
+  machineMasterImportPayload,
+  planningImportRowError,
+  planningImportValidationError,
+  workOrderNumberForPayload,
+} from "@/lib/planning-master-import"
 import { shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy"
+import { productionModuleIsEnabled } from "@/lib/production-module"
+import { withHttpPerformanceOperation } from "../../../lib/http-operation-telemetry"
+import { normalizeUserEnteredPayload } from "../../../lib/user-entry-text"
 import {
   DashboardReadError,
   readPostgresCorrectionCandidates,
   readPostgresDashboard,
+  readPostgresDashboardState,
   readPostgresDashboardStatus,
   requestPostgresDashboardCorrection,
   requestPostgresDashboardRefresh,
@@ -30,9 +60,11 @@ import {
   executePostgresOperationalEntry,
   isPostgresOperationalEntryType,
   OperationalEntryError,
+  readPostgresEmployeeMaster,
   readPostgresHourlyQualityPage,
   readPostgresSetupChecklistPage,
 } from "@/lib/postgres-operational-entry-server"
+import { telemetryRequestId } from "../../../lib/request-telemetry"
 
 class RouteError extends Error {
   constructor(
@@ -56,6 +88,19 @@ function json(payload: unknown, status = 200) {
   })
 }
 
+function dashboardRouteError(err: unknown) {
+  const status =
+    err instanceof RouteError ||
+    err instanceof OperationalEntryError ||
+    err instanceof DashboardReadError ||
+    err instanceof DashboardRequestPolicyError
+      ? err.status
+      : 500
+  if (status >= 500) console.error("Dashboard API request failed", err)
+  const response = dashboardErrorResponse(err, status)
+  return json({ error: response.error }, response.status)
+}
+
 const dataEntryTemplateFields: Record<string, string[]> = {
   route: [
     "partNo",
@@ -63,29 +108,25 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "setupNo",
     "numberOfSetups",
     "setupName",
-    "machineUsed",
+    "machineFamily",
     "machineType",
     "stageWeight",
-    "rodSize",
-    "cuttingLength",
-    "finishedGoodsLength",
   ],
   cycle: [
     "partNo",
     "optionNumber",
     "setupNo",
     "setupName",
-    "machineUsed",
-    "operationWeight",
     "cycleTime",
-    "loadingUnloading",
+    "loading",
+    "unloading",
+    "totalTime",
   ],
   tooling: [
     "partNo",
     "optionNumber",
     "setupNo",
     "setupName",
-    "machineUsed",
     "fixture",
     "fixtureQty",
     "tooling",
@@ -102,50 +143,68 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "poDate",
     "orderPcs",
     "orderKg",
-    "numberOfSetups",
-    "optionNumber",
-    "rmInwardKg",
-    "rmInwardDate",
-    "deliveryDate",
-    "plannerPriority",
-    "description",
-    "deliveryRemark",
   ],
-  rm_inward: [
-    "jcNo",
-    "fgPoNo",
-    "rmPoNo",
-    "partCode",
-    "orderPcs",
-    "orderKg",
-    "rmInwardDate",
-    "rmInwardKg",
-    "status",
-    "remark",
-  ],
-  employee: [
-    "empId",
-    "employeeType",
-    "employeeName",
-    "location",
-    "doj",
-    "terminatedDate",
-    "status",
-  ],
+  rm_inward: ["jcNo", "rmPoNo", "partCode", "rmInwardDate", "rmInwardKg"],
   machine_master: [
     "machineNo",
+    "productionUnit",
+    "machineFamily",
     "machineType",
     "machineName",
     "location",
-    "capacity",
     "status",
     "remarks",
+  ],
+  maintenance_master: [
+    "maintenanceCode",
+    "maintenanceTitle",
+    "frequencyDays",
+    "frequencyBasis",
+    "checklistCode",
+    "estimatedMinutes",
+    "status",
+    "remark",
+  ],
+  maintenance_checklist_master: [
+    "checklistCode",
+    "checklistTitle",
+    "sequence",
+    "stepDescription",
+    "inputType",
+    "remark",
+  ],
+  setup_checklist_master: [
+    "checklistCode",
+    "checklistTitle",
+    "sequence",
+    "checkPoint",
+    "inputType",
+    "required",
+    "section",
+    "effectiveFrom",
+    "status",
+    "remark",
+  ],
+  rejection_type_master: ["code", "typeOfRejection", "status", "remark"],
+  rejection_remark_master: ["code", "rejectionRemark", "status", "remark"],
+  rejection_reason_master: ["code", "rejectionReason", "status", "remark"],
+  quality_parameter_master: [
+    "partNo",
+    "optionNumber",
+    "setupNo",
+    "sequence",
+    "parameterName",
+    "specification",
+    "instrumentUsed",
+    "tolerancePlus",
+    "toleranceMinus",
+    "inputType",
+    "remark",
   ],
   planning_holiday: [
     "date",
     "reason",
     "scope",
-    "machine",
     "department",
     "remark",
   ],
@@ -197,10 +256,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
   ],
 }
 
-async function dataTemplateResponse(
-  entryType: string,
-  request: NextRequest
-) {
+async function dataTemplateResponse(entryType: string, request: NextRequest) {
   const fields = dataEntryTemplateFields[entryType]
   if (!fields) {
     throw new RouteError(400, `Unknown data template entry type: ${entryType}`)
@@ -228,15 +284,10 @@ async function rmInwardTemplateResponse(
     .filter((row) => text(row.rmStatus).toLowerCase() !== "received")
     .map((row) => ({
       jcNo: row.jcNo,
-      fgPoNo: row.fgPoNo,
       rmPoNo: row.rmPoNo,
       partCode: row.partCode,
-      orderPcs: row.orderPcs,
-      orderKg: row.orderKg,
       rmInwardDate: "",
       rmInwardKg: "",
-      status: "",
-      remark: "",
     }))
   return csvResponse("rm_inward_template.csv", csvRows(fields, pendingRows))
 }
@@ -270,29 +321,98 @@ function csvRows(fields: string[], rows: Array<Record<string, unknown>>) {
   )
 }
 
-async function authenticatedPlanningContext(
+async function authorizedDashboardSession(
   request: NextRequest,
   capability: string
 ) {
-  const session = await getAuth().api.getSession({ headers: request.headers })
-  if (!session) {
-    throw new RouteError(
-      401,
-      "Authentication is required to access the dashboard API."
-    )
-  }
-  const connectionString = readAuthEnvironment().connectionString
-  const authorization = createAuthorizationRepository({ connectionString })
+  const authorizationTelemetry = authorizationRequestTelemetryForCurrentScope({
+    requestId: telemetryRequestId(request),
+  })
+  const { telemetry } = authorizationTelemetry
   try {
-    if (!(await authorization.hasCapability(session.user.id, capability))) {
+    const session = await readRequestAuthenticatedSession(
+      request.headers,
+      telemetry
+    )
+    if (!session) {
+      telemetry.setOutcome("unauthenticated")
+      throw new RouteError(
+        401,
+        "Authentication is required to access the dashboard API."
+      )
+    }
+    const connectionString = readAuthEnvironment().connectionString
+    const granted = await readRequestGrantedCapabilitySet(
+      session.user.id,
+      telemetry
+    )
+    if (!granted.has(capability)) {
+      telemetry.setOutcome("unauthorized")
       throw new RouteError(
         403,
         "You do not have permission to perform this dashboard action."
       )
     }
+    telemetry.setOutcome("allowed")
+    return { connectionString, session }
+  } catch (error) {
+    if (!(error instanceof RouteError)) telemetry.setOutcome("error")
+    throw error
   } finally {
-    await authorization.close()
+    authorizationTelemetry.finish()
   }
+}
+
+async function preauthorizeDashboardMutation(
+  request: NextRequest,
+  path: string
+) {
+  const capabilities = dashboardMutationCapabilities(path)
+  if (!capabilities) throw new RouteError(404, "Not found")
+  const authorizationTelemetry = authorizationRequestTelemetryForCurrentScope({
+    requestId: telemetryRequestId(request),
+  })
+  const { telemetry } = authorizationTelemetry
+  try {
+    const session = await readRequestAuthenticatedSession(
+      request.headers,
+      telemetry
+    )
+    if (!session) {
+      telemetry.setOutcome("unauthenticated")
+      throw new RouteError(
+        401,
+        "Authentication is required to access the dashboard API."
+      )
+    }
+    const granted = await readRequestGrantedCapabilitySet(
+      session.user.id,
+      telemetry
+    )
+    if (!capabilities.some((capability) => granted.has(capability))) {
+      telemetry.setOutcome("unauthorized")
+      throw new RouteError(
+        403,
+        "You do not have permission to perform this dashboard action."
+      )
+    }
+    telemetry.setOutcome("allowed")
+  } catch (error) {
+    if (!(error instanceof RouteError)) telemetry.setOutcome("error")
+    throw error
+  } finally {
+    authorizationTelemetry.finish()
+  }
+}
+
+async function authenticatedPlanningContext(
+  request: NextRequest,
+  capability: string
+) {
+  const { connectionString, session } = await authorizedDashboardSession(
+    request,
+    capability
+  )
   const repository = createDashboardPlanningRepository({ connectionString })
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
@@ -322,25 +442,10 @@ async function authenticatedProductionContext(
   request: NextRequest,
   capability: string
 ) {
-  const session = await getAuth().api.getSession({ headers: request.headers })
-  if (!session) {
-    throw new RouteError(
-      401,
-      "Authentication is required to access the dashboard API."
-    )
-  }
-  const connectionString = readAuthEnvironment().connectionString
-  const authorization = createAuthorizationRepository({ connectionString })
-  try {
-    if (!(await authorization.hasCapability(session.user.id, capability))) {
-      throw new RouteError(
-        403,
-        "You do not have permission to perform this dashboard action."
-      )
-    }
-  } finally {
-    await authorization.close()
-  }
+  const { connectionString, session } = await authorizedDashboardSession(
+    request,
+    capability
+  )
   const repository = createProductionShopFloorRepository({ connectionString })
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
@@ -383,11 +488,25 @@ async function savePlanningMasterEntry(
   payload: Record<string, unknown>
 ) {
   if (entryType === "machine_master") {
+    const requestedFloor = parseProductionFloorCode(
+      payload.productionFloorCode
+    )
+    if (!requestedFloor) {
+      throw new RouteError(
+        400,
+        "A valid Production Unit is required. Use Conventional-01, Conventional-02, CNC-01, or Forging."
+      )
+    }
+    const location = text(payload.location)
+    if (!location) {
+      throw new RouteError(400, "Machine location is required.")
+    }
     return repository.upsertMachine({
       actorUserId,
       machineNumber: text(payload.machineNo),
       name: optionalText(payload.machineName),
       organizationId,
+      productionFloorCode: requestedFloor,
       sourcePayload: payload,
     })
   }
@@ -401,7 +520,7 @@ async function savePlanningMasterEntry(
       orderedQuantity: numeric(payload.orderPcs),
       organizationId,
       sourcePayload: payload,
-      workOrderNumber: text(payload.fgPoNo) || text(payload.jcNo),
+      workOrderNumber: workOrderNumberForPayload(payload),
     })
   }
 
@@ -413,10 +532,15 @@ async function savePlanningMasterEntry(
   const routeCode = text(payload.optionNumber) || "1"
 
   if (entryType === "route") {
+    const sourcePayload = {
+      ...payload,
+      machineUsed: text(payload.machineFamily) || payload.machineUsed,
+    }
     return repository.upsertRouteOption({
       actorUserId,
       itemUid,
       organizationId,
+      productionFloorCode: text(payload.productionFloorCode),
       replaceSetups: false,
       routeCode,
       setups: [
@@ -428,20 +552,31 @@ async function savePlanningMasterEntry(
           setupNumber: setupNumber!,
         },
       ],
-      sourcePayload: payload,
+      sourcePayload,
     })
   }
 
   if (entryType === "cycle") {
+    const cycleTime = numeric(payload.cycleTime)
+    const splitLoadingUnloading =
+      numeric(payload.loading) + numeric(payload.unloading)
+    const loadingUnloading =
+      splitLoadingUnloading || numeric(payload.loadingUnloading)
+    const sourcePayload = {
+      ...payload,
+      loadingUnloading,
+      totalTime: numeric(payload.totalTime) || cycleTime + loadingUnloading,
+    }
     return repository.upsertCycleStandard({
       actorUserId,
-      cycleTimeSeconds: numeric(payload.cycleTime),
+      cycleTimeSeconds: cycleTime,
       itemUid,
       organizationId,
+      productionFloorCode: text(payload.productionFloorCode),
       routeCode,
       setupNumber: setupNumber!,
-      setupTimeMinutes: numeric(payload.loadingUnloading),
-      sourcePayload: payload,
+      setupTimeMinutes: loadingUnloading,
+      sourcePayload,
     })
   }
 
@@ -476,6 +611,7 @@ async function savePlanningMasterEntry(
           description: optionalText(payload.remarks) || row.type,
           itemUid,
           organizationId,
+          productionFloorCode: text(payload.productionFloorCode),
           quantity: numeric(row.quantity) || 1,
           routeCode,
           setupNumber: setupNumber!,
@@ -513,33 +649,74 @@ async function savePlanningMasterEntry(
   )
 }
 
-export async function GET(request: NextRequest, context: RouteContext) {
+async function get(request: NextRequest, context: RouteContext) {
+  if (!productionModuleIsEnabled()) {
+    return json({ error: "Production module is temporarily disabled" }, 404)
+  }
+
   const path = (await context.params).path.join("/")
   const search = request.nextUrl.searchParams
 
   try {
     if (path === "hourly-quality") {
       return json(
-        await readPostgresHourlyQualityPage(request, search.get("checkKey"))
+        await readPostgresHourlyQualityPage(
+          request,
+          search.get("checkKey"),
+          search.get("floor")
+        )
       )
     }
 
     if (path === "setup-checklist") {
       return json(
-        await readPostgresSetupChecklistPage(request, search.get("sessionId"))
+        await readPostgresSetupChecklistPage(
+          request,
+          search.get("sessionId"),
+          search.get("floor")
+        )
       )
+    }
+
+    if (path === "employee-master") {
+      return json(await readPostgresEmployeeMaster(request))
     }
 
     if (path === "dashboard") {
       return json(
-        await readPostgresDashboard(request, {
-          endDate: search.get("endDate") || undefined,
-          machine: search.get("machine") || undefined,
-          machineType: search.get("machineType") || undefined,
-          month: search.get("month") || undefined,
-          operatorId: search.get("operatorId") || undefined,
-          startDate: search.get("startDate") || undefined,
-        })
+        await readPostgresDashboard(
+          request,
+          {
+            endDate: search.get("endDate") || undefined,
+            machine: search.get("machine") || undefined,
+            machineType: search.get("machineType") || undefined,
+            month: search.get("month") || undefined,
+            operatorId: search.get("operatorId") || undefined,
+            startDate: search.get("startDate") || undefined,
+          },
+          search.get("floor")
+        )
+      )
+    }
+
+    if (path === "dashboard-state") {
+      return json(
+        await readPostgresDashboardState(
+          request,
+          {
+            endDate: search.get("endDate") || undefined,
+            machine: search.get("machine") || undefined,
+            machineType: search.get("machineType") || undefined,
+            month: search.get("month") || undefined,
+            operatorId: search.get("operatorId") || undefined,
+            startDate: search.get("startDate") || undefined,
+          },
+          search.get("floor"),
+          (() => {
+            const value = Number(search.get("knownVersion"))
+            return Number.isSafeInteger(value) && value > 0 ? value : undefined
+          })()
+        )
       )
     }
 
@@ -582,25 +759,26 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     return json({ error: "Not found" }, 404)
   } catch (err) {
-    return json(
-      { error: err instanceof Error ? err.message : "Request failed" },
-      err instanceof RouteError ||
-      err instanceof OperationalEntryError ||
-      err instanceof DashboardReadError
-        ? err.status
-        : 500
-    )
+    return dashboardRouteError(err)
   }
 }
 
-export async function POST(request: NextRequest, context: RouteContext) {
+async function post(request: NextRequest, context: RouteContext) {
+  if (!productionModuleIsEnabled()) {
+    return json({ error: "Production module is temporarily disabled" }, 404)
+  }
+
   const path = (await context.params).path.join("/")
-  const body = await request.json().catch(() => ({}))
 
   try {
     if (path === "dashboard-refresh") {
       return json(await requestPostgresDashboardRefresh(request))
     }
+
+    await preauthorizeDashboardMutation(request, path)
+    const body = normalizeUserEnteredPayload(
+      plainRecord(await readDashboardJsonBody(request))
+    )
 
     if (path === "attendance" || path === "training") {
       const result = await executePostgresOperationalEntry(
@@ -624,6 +802,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             actorUserId,
             jobCardNumber: String(body.jcNo || ""),
             organizationId,
+            productionFloorCode: text(body.productionFloorCode),
             routeCode: String(body.optionNumber || ""),
           })
       )
@@ -637,6 +816,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     if (path === "planner-priority") {
+      const confirmedSetupNumbers = validConfirmedPrioritySetupNumbers(
+        body.confirmedSetupNumbers
+      )
+      if (!confirmedSetupNumbers) {
+        throw new RouteError(
+          400,
+          "Confirm every priority setup in sequence before applying the priority."
+        )
+      }
       const result = await withPlanningRepository(
         request,
         "planning.priority.write",
@@ -644,6 +832,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           repository.recordPlannerPriority({
             actorUserId,
             approvalMode: optionalText(body.approvalMode),
+            confirmedSetupNumbers,
             interruptedFinishedQuantity:
               body.interruptedFinishedQty === undefined ||
               body.interruptedFinishedQty === ""
@@ -661,6 +850,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             organizationId,
             partCode: optionalText(body.partCode),
             priority: String(body.priority || "Normal"),
+            productionFloorCode: text(body.productionFloorCode),
             queueBeforeSetups: normalizeQueueBeforeSetups(
               body.queueBeforeSetups
             ),
@@ -689,6 +879,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             machineNumber: String(body.machineNo || ""),
             organizationId,
             planningMode: optionalText(body.planningMode),
+            productionFloorCode: text(body.productionFloorCode),
             queuePlacements: normalizeQueuePlacements(body.queuePlacements),
             reason: String(body.reason || ""),
             remark: optionalText(body.remark),
@@ -722,6 +913,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             ),
             jobCardNumber: String(body.target || ""),
             organizationId,
+            productionFloorCode: text(body.productionFloorCode),
             queuePlacements: normalizeQueuePlacements(body.queuePlacements),
             reason: String(body.reason || "Planner machine override"),
             setupNumber: planningSetupNumber(body.setupNo),
@@ -748,6 +940,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             jobCardNumber: String(body.target || ""),
             newRouteCode: String(body.newOption || ""),
             organizationId,
+            productionFloorCode: text(body.productionFloorCode),
             remainingSetups: normalizeRemainingSetups(body.remainingSetups),
             reason: String(body.reason || "Planner route change"),
             wipQuantity:
@@ -776,6 +969,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             approvedBy: text(body.approvedBy),
             jobCardNumber: text(body.jcNo),
             organizationId,
+            productionFloorCode: text(body.productionFloorCode),
             remark: optionalText(body.remark),
           })
       )
@@ -794,6 +988,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             machineNumber: optionalText(body.machine),
             operationSetupCode: optionalText(body.setupNo),
             organizationId,
+            productionFloorCode: text(body.productionFloorCode),
             remark: optionalText(body.remark),
           })
       )
@@ -807,12 +1002,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (path === "reverse-entry") {
       const result = await requestPostgresDashboardCorrection(request, {
-        correctedBy: optionalText(body.correctedBy),
-        reason: text(body.reason),
-        targetId: text(body.targetId),
-        targetKey: optionalText(body.targetKey),
-        targetLabel: optionalText(body.targetLabel),
-        targetTable: text(body.targetTable),
+        correctionKind: text(body.correctionKind || body.targetTable),
+        reason: requiredDashboardText(body.reason, "Reversal reason"),
+        recordId: text(body.recordId || body.targetId),
       })
       return json(
         await withPlanningRefresh(path, body, {
@@ -825,12 +1017,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (path === "production-entry/reverse") {
       const result = await withProductionRepository(
         request,
-        "operations.production.write",
+        "operations.corrections.write",
         ({ actorUserId, repository }) =>
           repository.reverseProductionEntry({
             actorUserId,
             productionEntryId: text(body.productionEntryId),
-            reason: text(body.reason),
+            reason: requiredDashboardText(body.reason, "Reversal reason"),
           })
       )
       return json(
@@ -843,7 +1035,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
-      const payload = plainRecord(body.payload)
+      const payload = productionFloorPayload(
+        plainRecord(body.payload),
+        body.productionFloorCode
+      )
       if (isPostgresOperationalEntryType(entryType)) {
         const result = await executePostgresOperationalEntry(
           request,
@@ -869,6 +1064,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               jobCardNumber: text(payload.jobCard || payload.jcNo),
               organizationId,
               payload,
+              productionFloorCode: text(payload.productionFloorCode),
             })
         )
         return json(
@@ -888,6 +1084,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               actorUserId,
               organizationId,
               payload,
+              productionFloorCode: text(payload.productionFloorCode),
               quantityKg: firstNumeric(payload.rmInwardKg),
               receiptNumber: text(payload.rmPoNo) || text(payload.jcNo),
               receivedOn:
@@ -915,6 +1112,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               operationSetupCode: text(payload.setupNo),
               organizationId,
               payload,
+              productionFloorCode: text(payload.productionFloorCode),
               stage: text(payload.stage),
             })
         )
@@ -939,6 +1137,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               operatorCode: optionalText(payload.operatorId),
               organizationId,
               payload,
+              productionFloorCode: text(payload.productionFloorCode),
               productionDate:
                 text(payload.prodDate) || new Date().toISOString().slice(0, 10),
               quantityGood: firstNumeric(payload.outputQty, payload.actualQty),
@@ -963,7 +1162,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const entryType = String(body.entryType || "")
       const fileName = String(body.fileName || "")
       const fileBase64 = String(body.fileBase64 || "")
-      const importedRows = parseTemplateUpload(entryType, fileName, fileBase64)
+      const importedRows = parseTemplateUpload(
+        entryType,
+        fileName,
+        fileBase64
+      ).map((payload) =>
+        productionFloorPayload(payload, body.productionFloorCode)
+      )
       const importPolicy = browserImportPolicy(entryType, importedRows.length)
       if (!importPolicy.ok) {
         throw new RouteError(importPolicy.status, importPolicy.error)
@@ -972,39 +1177,40 @@ export async function POST(request: NextRequest, context: RouteContext) {
         request,
         "operations.production.write",
         async ({ actorUserId, organizationId, repository }) => {
-          let count = 0
-          for (const payload of importedRows) {
-            if (entryType === "rm_inward") {
-              await repository.upsertRawMaterialReceipt({
+          if (entryType === "rm_inward") {
+            await repository.upsertRawMaterialReceipts(
+              importedRows.map((payload) => ({
                 actorUserId,
                 organizationId,
                 payload,
+                productionFloorCode: text(payload.productionFloorCode),
                 quantityKg: firstNumeric(payload.rmInwardKg),
                 receiptNumber: text(payload.rmPoNo) || text(payload.jcNo),
                 receivedOn:
                   text(payload.rmInwardDate) ||
                   new Date().toISOString().slice(0, 10),
-              })
-            } else {
-              await repository.recordProductionEntry({
-                actorUserId,
-                jobCardNumber: text(payload.jobCard || payload.jcNo),
-                machineNumber: optionalText(payload.machine),
-                operationSetupCode: optionalText(payload.setupNo),
-                operatorCode: optionalText(payload.operatorId),
-                organizationId,
-                payload,
-                productionDate:
-                  text(payload.prodDate) ||
-                  new Date().toISOString().slice(0, 10),
-                quantityGood: firstNumeric(
-                  payload.outputQty,
-                  payload.actualQty
-                ),
-                quantityRejected: firstNumeric(payload.rejectQty),
-                shift: optionalText(payload.shift),
-              })
-            }
+              }))
+            )
+            return importedRows.length
+          }
+          let count = 0
+          for (const payload of importedRows) {
+            await repository.recordProductionEntry({
+              actorUserId,
+              jobCardNumber: text(payload.jobCard || payload.jcNo),
+              machineNumber: optionalText(payload.machine),
+              operationSetupCode: optionalText(payload.setupNo),
+              operatorCode: optionalText(payload.operatorId),
+              organizationId,
+              payload,
+              productionFloorCode: text(payload.productionFloorCode),
+              productionDate:
+                text(payload.prodDate) ||
+                new Date().toISOString().slice(0, 10),
+              quantityGood: firstNumeric(payload.outputQty, payload.actualQty),
+              quantityRejected: firstNumeric(payload.rejectQty),
+              shift: optionalText(payload.shift),
+            })
             count += 1
           }
           return count
@@ -1023,7 +1229,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
       if (postgresMasterEntryTypes.has(entryType)) {
-        const payload = plainRecord(body.payload)
+        const rawPayload = plainRecord(body.payload)
+        const payload = entryType === "machine_master"
+          ? machineMasterImportPayload(rawPayload, body.productionFloorCode)
+          : productionFloorPayload(rawPayload, body.productionFloorCode)
         const result = await withPlanningRepository(
           request,
           "operations.shop_floor.write",
@@ -1034,7 +1243,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
           await withPlanningRefresh(path, body, {
             ...result,
             rowsUpdated: 1,
-            savedText: "Saved to PostgreSQL.",
+            savedText: entryType === "work_order"
+              ? "Work Order accepted. Missing masters are held in Master Readiness for planner action."
+              : "Saved to PostgreSQL.",
           })
         )
       }
@@ -1049,6 +1260,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
           entryType,
           fileName,
           fileBase64
+        ).map((payload) => entryType === "machine_master"
+          ? machineMasterImportPayload(payload, body.productionFloorCode)
+          : productionFloorPayload(payload, body.productionFloorCode)
         )
         const importPolicy = browserImportPolicy(entryType, importedRows.length)
         if (!importPolicy.ok) {
@@ -1071,6 +1285,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
           entryType,
           fileName,
           fileBase64
+        ).map((payload) => entryType === "machine_master"
+          ? machineMasterImportPayload(payload, body.productionFloorCode)
+          : productionFloorPayload(payload, body.productionFloorCode)
         )
         const importPolicy = browserImportPolicy(entryType, importedRows.length)
         if (!importPolicy.ok) {
@@ -1080,18 +1297,41 @@ export async function POST(request: NextRequest, context: RouteContext) {
           request,
           "operations.shop_floor.write",
           async (planningContext) => {
-            let count = 0
-            for (const payload of importedRows) {
-              await savePlanningMasterEntry(planningContext, entryType, payload)
-              count += 1
+            if (["route", "cycle", "tooling", "work_order"].includes(entryType)) {
+              const missingItemUids = ["cycle", "tooling"].includes(entryType)
+                ? await planningContext.repository.missingItemUids(
+                    planningContext.organizationId,
+                    importedRows.map((payload) => text(payload.partNo))
+                  )
+                : []
+              const validationError = planningImportValidationError(
+                entryType,
+                importedRows,
+                missingItemUids
+              )
+              if (validationError) {
+                throw new RouteError(400, validationError)
+              }
             }
-            return count
+            await executeBoundedImport(importedRows, async (payload, index) => {
+              try {
+                await savePlanningMasterEntry(planningContext, entryType, payload)
+              } catch (error) {
+                throw new RouteError(
+                  400,
+                  planningImportRowError(entryType, index, payload, error)
+                )
+              }
+            }, entryType === "machine_master" ? 4 : 1)
+            return importedRows.length
           }
         )
         return json(
           await withPlanningRefresh(path, body, {
             inserted,
-            message: `Imported ${inserted} ${entryType.replaceAll("_", " ")} rows.`,
+            message: entryType === "work_order"
+              ? `Imported ${inserted} work order rows. Missing masters are held in Master Readiness for planner action.`
+              : `Imported ${inserted} ${entryType.replaceAll("_", " ")} rows.`,
             ok: true,
             rowsUpdated: inserted,
           })
@@ -1100,10 +1340,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     if (path === "reschedule") {
-      throw new RouteError(
-        501,
-        "Reschedule is not implemented."
-      )
+      throw new RouteError(501, "Reschedule is not implemented.")
     }
 
     if (path === "data-entry" || path === "data-import") {
@@ -1115,14 +1352,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     return json({ error: "Not found" }, 404)
   } catch (err) {
-    return json(
-      { error: err instanceof Error ? err.message : "Request failed" },
-      err instanceof RouteError ||
-      err instanceof OperationalEntryError ||
-      err instanceof DashboardReadError
-        ? err.status
-        : 400
-    )
+    return dashboardRouteError(err)
   }
 }
 
@@ -1146,6 +1376,20 @@ function plainRecord(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>
   }
   return {}
+}
+
+function productionFloorPayload(
+  payload: Record<string, unknown>,
+  requestedFloor: unknown
+): Record<string, unknown> {
+  const scopedPayload = planningProductionFloorPayload(payload, requestedFloor)
+  if (!scopedPayload) {
+    throw new RouteError(
+      400,
+      "A valid Production Unit is required. Use Conventional-01, Conventional-02, CNC-01, or Forging."
+    )
+  }
+  return scopedPayload
 }
 
 function text(value: unknown) {
@@ -1178,6 +1422,7 @@ function parseTemplateUpload(
   const csvText = decodeDataUrl(fileBase64)
   return parseCsv(csvText)
     .map(normalizeImportedPayload)
+    .map((payload) => normalizeUserEnteredPayload(payload))
     .filter((row) => Object.values(row).some((value) => text(value)))
 }
 
@@ -1327,4 +1572,69 @@ function firstNumeric(...values: unknown[]) {
     if (Number.isFinite(parsed)) return parsed
   }
   return 0
+}
+
+const knownDashboardApiPaths = new Set([
+  "attendance",
+  "correction-candidates",
+  "dashboard",
+  "dashboard-refresh",
+  "dashboard-refresh-status",
+  "dashboard-state",
+  "data-entry",
+  "data-export",
+  "data-import",
+  "data-template",
+  "dispatch-approval",
+  "export-workbook",
+  "hourly-quality",
+  "machine-constraint",
+  "mark-complete",
+  "plan-override",
+  "planner-priority",
+  "production-entry/reverse",
+  "reschedule",
+  "reverse-entry",
+  "route-change",
+  "route-selection",
+  "setup-checklist",
+  "status",
+  "training",
+])
+
+function dashboardApiOperation(method: "get" | "post", path: string) {
+  const operation = knownDashboardApiPaths.has(path)
+    ? path.replaceAll(/[-/]/g, "_")
+    : "not_found"
+  return `dashboard.api.${method}.${operation}`
+}
+
+function withRequestTelemetry(
+  request: NextRequest,
+  operation: string,
+  execute: () => Promise<Response>
+) {
+  const requestId = telemetryRequestId(request)
+  return withAuthorizationRequestTelemetry({ requestId }, () =>
+    withHttpPerformanceOperation(
+      { operation, request, subsystem: "dashboard" },
+      execute
+    )
+  )
+}
+
+export async function GET(request: NextRequest, context: RouteContext) {
+  const path = (await context.params).path.join("/")
+  return withRequestTelemetry(request, dashboardApiOperation("get", path), () =>
+    get(request, context)
+  )
+}
+
+export async function POST(request: NextRequest, context: RouteContext) {
+  const path = (await context.params).path.join("/")
+  return withRequestTelemetry(
+    request,
+    dashboardApiOperation("post", path),
+    () => post(request, context)
+  )
 }

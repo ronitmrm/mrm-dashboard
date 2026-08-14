@@ -6,12 +6,25 @@ import {
   dataEntryCorrectionTargetsWithWorkflowCascade,
   type CorrectionTargetRow,
 } from "./dashboard-corrections"
+import {
+  defaultProductionFloorCode,
+  productionFloorCodeForRecord,
+  productionFloors,
+  type ProductionFloorCode,
+} from "./production-floors"
+import type {
+  CoverageFacts,
+  GroupedSourceCoverage,
+  SourceCoverage,
+  SourceCoverageByFloor,
+} from "./dashboard-coverage"
 
 type JsonRecord = Record<string, unknown>
 type DashboardQueryClient = Pick<PoolClient, "query">
 
 type SourceRow = {
   changed_at: Date | string
+  production_floor_code?: ProductionFloorCode
   source_id: string
   source_payload: JsonRecord
 }
@@ -21,7 +34,17 @@ type DataEntrySourceRow = SourceRow & {
 }
 
 type GroupedSourceRow = SourceRow & {
+  available: number
+  entry_type: string | null
+  production_floor_code: ProductionFloorCode
+  source_kind: "correction" | "data_entry" | "physical"
   source_group: string
+}
+
+type PreviousPlanningRow = {
+  previous_row: JsonRecord
+  production_floor_code: ProductionFloorCode
+  row_kind: "machine_plan" | "production_dashboard"
 }
 
 export type CanonicalDashboardSource = {
@@ -36,6 +59,8 @@ export type CanonicalDashboardSource = {
   routeChanges: JsonRecord[]
   routeSelections: JsonRecord[]
   setupCompletions: JsonRecord[]
+  sourceCoverage: SourceCoverage
+  sourceCoverageByFloor: SourceCoverageByFloor
   trainingRecords: JsonRecord[]
 }
 
@@ -71,6 +96,70 @@ const legacyEntryTypes = [
 
 const snapshotEntryTypes = new Set([...legacyEntryTypes, "shop_floor_status"])
 
+const machinePlanContinuityFields = [
+  "jcNo",
+  "machine",
+  "optionNumber",
+  "partCode",
+  "routeMachine",
+  "setupNo",
+] as const
+
+const productionDashboardContinuityFields = [
+  "jcNo",
+  "partCode",
+  "rmReceivedDate",
+  "plannedDispatchDateAtRmReceipt",
+] as const
+
+const dataEntrySourceBudgets: Record<string, number> = {
+  cycle: 500,
+  employee: 1000,
+  first_piece_inspection_report: 2500,
+  hourly_quality_check: 5000,
+  machine_master: 1000,
+  maintenance_checklist_master: 2000,
+  maintenance_master: 1000,
+  maintenance_schedule: 2500,
+  maintenance_task: 5000,
+  planning_holiday: 1000,
+  production_card: 5000,
+  quality_parameter_master: 2000,
+  rejection_reason_master: 500,
+  rejection_remark_master: 500,
+  rejection_type_master: 500,
+  rm_inward: 2000,
+  route: 500,
+  setup_checklist_master: 2000,
+  setup_checklist_session: 5000,
+  shop_floor_status: 5000,
+  tooling: 500,
+  work_order: 5000,
+}
+
+const physicalSourceBudgets: Record<string, number> = {
+  attendanceRecords: 5000,
+  dispatchApprovals: 2000,
+  machineConstraints: 2000,
+  planOverrides: 2000,
+  plannerPriorities: 2000,
+  productionEntries: 10000,
+  routeChanges: 2000,
+  routeSelections: 2500,
+  setupCompletions: 5000,
+  trainingRecords: 2500,
+}
+
+function floorSourceBudgets(budgets: Record<string, number>) {
+  return productionFloors.flatMap((floor) =>
+    Object.entries(budgets).map(([category, limit]) => ({
+      category,
+      floor_code: floor.code,
+      row_limit: limit,
+    }))
+  )
+}
+
 function timestamp(value: Date | string) {
   return value instanceof Date ? value.toISOString() : value
 }
@@ -80,6 +169,9 @@ function sourceRecord(
 ): JsonRecord & { _id: unknown; createdAt: string } {
   return {
     ...row.source_payload,
+    ...(row.production_floor_code
+      ? { productionFloorCode: row.production_floor_code }
+      : {}),
     _id: row.source_payload._id ?? row.source_id,
     createdAt:
       typeof row.source_payload.createdAt === "string"
@@ -99,7 +191,12 @@ function dataEntryRecord(row: DataEntrySourceRow): JsonRecord & {
     return {
       ...source,
       entryType: source.entryType,
-      payload: source.payload,
+      payload: {
+        ...jsonRecord(source.payload),
+        ...(source.productionFloorCode
+          ? { productionFloorCode: source.productionFloorCode }
+          : {}),
+      },
     }
   }
   return {
@@ -108,7 +205,7 @@ function dataEntryRecord(row: DataEntrySourceRow): JsonRecord & {
     entryType: row.inferred_entry_type,
     key:
       typeof source.key === "string" && source.key ? source.key : row.source_id,
-    payload: row.source_payload,
+    payload: source,
   }
 }
 
@@ -138,199 +235,195 @@ function countRowsByEntryType(rows: JsonRecord[]) {
   return counts
 }
 
+function emptyCoverageFacts(limit: number): CoverageFacts {
+  return { available: 0, limit, returned: 0, truncated: false }
+}
+
+function emptyGroupedCoverage(
+  budgets: Record<string, number>
+): GroupedSourceCoverage {
+  return {
+    ...emptyCoverageFacts(
+      Object.values(budgets).reduce((total, limit) => total + limit, 0)
+    ),
+    groups: Object.fromEntries(
+      Object.entries(budgets).map(([group, limit]) => [
+        group,
+        emptyCoverageFacts(limit),
+      ])
+    ),
+    truncatedGroups: [],
+  }
+}
+
+function emptySourceCoverage(): SourceCoverage {
+  return {
+    corrections: {
+      ...emptyCoverageFacts(5000),
+      truncatedGroups: [],
+    },
+    dataEntries: emptyGroupedCoverage(dataEntrySourceBudgets),
+    physicalRows: emptyGroupedCoverage(physicalSourceBudgets),
+  }
+}
+
+function sourceCoverageByFloor(
+  rows: GroupedSourceRow[]
+): SourceCoverageByFloor {
+  const coverage = Object.fromEntries(
+    productionFloors.map((floor) => [floor.code, emptySourceCoverage()])
+  ) as SourceCoverageByFloor
+
+  for (const row of rows) {
+    const floorCoverage = coverage[row.production_floor_code]
+    const facts =
+      row.source_kind === "correction"
+        ? floorCoverage.corrections
+        : row.source_kind === "data_entry"
+          ? floorCoverage.dataEntries.groups[row.entry_type ?? ""]
+          : floorCoverage.physicalRows.groups[row.source_group]
+    if (!facts) continue
+    facts.available = Number(row.available)
+    facts.returned += 1
+  }
+
+  for (const floorCoverage of Object.values(coverage)) {
+    floorCoverage.corrections.truncated =
+      floorCoverage.corrections.available > floorCoverage.corrections.returned
+    floorCoverage.corrections.truncatedGroups = floorCoverage.corrections
+      .truncated
+      ? ["corrections"]
+      : []
+
+    for (const groupedCoverage of [
+      floorCoverage.dataEntries,
+      floorCoverage.physicalRows,
+    ]) {
+      groupedCoverage.returned = 0
+      groupedCoverage.available = 0
+      groupedCoverage.truncatedGroups = []
+      for (const [group, facts] of Object.entries(groupedCoverage.groups)) {
+        facts.truncated = facts.available > facts.returned
+        groupedCoverage.returned += facts.returned
+        groupedCoverage.available += facts.available
+        if (facts.truncated) groupedCoverage.truncatedGroups.push(group)
+      }
+      groupedCoverage.truncated = groupedCoverage.truncatedGroups.length > 0
+    }
+  }
+
+  return coverage
+}
+
+function floorRows(rows: JsonRecord[], floorCode: ProductionFloorCode) {
+  return rows.filter((row) => productionFloorCodeForRecord(row) === floorCode)
+}
+
+const companyWideQualityEntryTypes = new Set([
+  "rejection_type_master",
+  "rejection_reason_master",
+  "rejection_remark_master",
+])
+
+export function dashboardDataEntriesForFloor(
+  rows: JsonRecord[],
+  floorCode: ProductionFloorCode
+) {
+  return rows.filter(
+    (row) =>
+      (typeof row.entryType === "string" &&
+        companyWideQualityEntryTypes.has(row.entryType)) ||
+      productionFloorCodeForRecord(row) === floorCode
+  )
+}
+
+function jsonRecord(value: unknown): JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : {}
+}
+
 export async function readCanonicalDashboardSource(
   client: DashboardQueryClient,
   organizationId: string
 ): Promise<CanonicalDashboardSource> {
-  const dataEntries = await client.query<DataEntrySourceRow>(
+  const result = await client.query<GroupedSourceRow>(
     `
-      SELECT * FROM (
-        SELECT source_id, source_payload, updated_at AS changed_at,
-          'machine_master' AS inferred_entry_type
-        FROM catalog.machines
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'route'
-        FROM manufacturing.operation_setups
-        WHERE organization_id = $1 AND source_table = 'dataEntries'
-          AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'cycle'
-        FROM manufacturing.operation_cycle_standards
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'tooling'
-        FROM manufacturing.operation_tooling
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'work_order'
-        FROM manufacturing.work_orders
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'rm_inward'
-        FROM manufacturing.raw_material_receipts
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'employee'
-        FROM workforce.employees
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'planning_holiday'
-        FROM manufacturing.planning_calendar_exceptions
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at,
-          'quality_parameter_master'
-        FROM quality.parameter_definitions
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'rejection_type_master'
-        FROM quality.rejection_types
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'rejection_reason_master'
-        FROM quality.rejection_reasons
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'rejection_remark_master'
-        FROM quality.rejection_remarks
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, inspected_at,
-          'first_piece_inspection_report'
-        FROM quality.first_piece_inspections
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, checked_at, 'hourly_quality_check'
-        FROM quality.hourly_checks
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'setup_checklist_master'
-        FROM quality.setup_checklist_template_items
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, COALESCE(completed_at, started_at),
-          'setup_checklist_session'
-        FROM quality.setup_checklist_sessions
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'production_card'
-        FROM manufacturing.production_cards
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'maintenance_master'
-        FROM maintenance.definitions
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND source_table = 'dataEntries'
-        UNION ALL
-        SELECT source_id, source_payload, updated_at,
-          'maintenance_checklist_master'
-        FROM maintenance.checklist_items
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'maintenance_schedule'
-        FROM maintenance.machine_schedules
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, updated_at, 'maintenance_task'
-        FROM maintenance.tasks
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'shop_floor_status'
-        FROM manufacturing.shop_floor_stage_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND (source_table = 'dataEntries' OR source_system = 'mrm-dashboard')
-      ) entries
-      ORDER BY changed_at, source_id
-      LIMIT 25000
+      WITH data_entries AS (
+        SELECT source.source_id, source.source_payload, source.changed_at,
+          source.source_kind, source.source_group, source.entry_type,
+          budget.floor_code AS production_floor_code, source.available
+        FROM jsonb_to_recordset($2::jsonb)
+          budget(category text, floor_code text, row_limit integer)
+        CROSS JOIN LATERAL (
+          SELECT source_id, source_payload, changed_at, source_kind,
+            source_group, entry_type, (count(*) OVER ())::integer AS available
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'data_entry'
+            AND entry_type = budget.category
+            AND production_floor_code = budget.floor_code
+          ORDER BY changed_at DESC, source_id DESC
+          LIMIT budget.row_limit
+        ) source
+      ), physical_rows AS (
+        SELECT source.source_id, source.source_payload, source.changed_at,
+          source.source_kind, source.source_group, source.entry_type,
+          budget.floor_code AS production_floor_code, source.available
+        FROM jsonb_to_recordset($3::jsonb)
+          budget(category text, floor_code text, row_limit integer)
+        CROSS JOIN LATERAL (
+          SELECT source_id, source_payload, changed_at, source_kind,
+            source_group, entry_type, (count(*) OVER ())::integer AS available
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'physical'
+            AND source_group = budget.category
+            AND production_floor_code = budget.floor_code
+          ORDER BY changed_at DESC, source_id DESC
+          LIMIT budget.row_limit
+        ) source
+      ), correction_rows AS (
+        SELECT source.source_id, source.source_payload, source.changed_at,
+          source.source_kind, source.source_group, source.entry_type,
+          floor.code AS production_floor_code, source.available
+        FROM jsonb_array_elements_text($4::jsonb) floor(code)
+        CROSS JOIN LATERAL (
+          SELECT source_id, source_payload, changed_at, source_kind,
+            source_group, entry_type, (count(*) OVER ())::integer AS available
+          FROM derived.dashboard_source_records
+          WHERE organization_id = $1 AND source_kind = 'correction'
+            AND production_floor_code = floor.code
+          ORDER BY changed_at DESC, source_id DESC
+          LIMIT 5000
+        ) source
+      )
+      SELECT * FROM data_entries
+      UNION ALL SELECT * FROM physical_rows
+      UNION ALL SELECT * FROM correction_rows
     `,
-    [organizationId]
+    [
+      organizationId,
+      JSON.stringify(floorSourceBudgets(dataEntrySourceBudgets)),
+      JSON.stringify(floorSourceBudgets(physicalSourceBudgets)),
+      JSON.stringify(productionFloors.map((floor) => floor.code)),
+    ]
   )
 
-  const physicalRows = await client.query<GroupedSourceRow>(
-    `
-      SELECT * FROM (
-        SELECT source_id, source_payload, recorded_at AS changed_at,
-          'productionEntries' AS source_group
-        FROM manufacturing.production_entries
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-          AND reversed_at IS NULL
-        UNION ALL
-        SELECT source_id, source_payload, recorded_at, 'attendanceRecords'
-        FROM workforce.attendance_records
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, recorded_at, 'trainingRecords'
-        FROM workforce.training_records
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, selected_at, 'routeSelections'
-        FROM manufacturing.route_selections
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'plannerPriorities'
-        FROM manufacturing.planner_priority_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'machineConstraints'
-        FROM manufacturing.machine_constraint_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'planOverrides'
-        FROM manufacturing.plan_override_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'routeChanges'
-        FROM manufacturing.route_change_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, occurred_at, 'dispatchApprovals'
-        FROM manufacturing.dispatch_approval_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-        UNION ALL
-        SELECT source_id, source_payload, completed_at, 'setupCompletions'
-        FROM manufacturing.setup_completion_events
-        WHERE organization_id = $1 AND source_payload IS NOT NULL
-      ) source_rows
-      ORDER BY changed_at, source_id
-      LIMIT 10000
-    `,
-    [organizationId]
-  )
-
-  const correctionRows = await client.query<SourceRow>(
-    `
-      SELECT source_id, source_payload,
-        COALESCE(original_timestamp, imported_at) AS changed_at
-      FROM audit.legacy_convex_corrections
-      WHERE organization_id = $1
-      ORDER BY changed_at, source_id
-      LIMIT 5000
-    `,
-    [organizationId]
-  )
+  const byKind = <Kind extends GroupedSourceRow["source_kind"]>(kind: Kind) =>
+    result.rows
+      .filter((row) => row.source_kind === kind)
+      .sort((left, right) => {
+        const time = timestamp(left.changed_at).localeCompare(
+          timestamp(right.changed_at)
+        )
+        return time || left.source_id.localeCompare(right.source_id)
+      })
+  const dataEntryRows = byKind("data_entry")
+  const physicalRows = byKind("physical")
+  const correctionRows = byKind("correction")
+  const coverageByFloor = sourceCoverageByFloor(result.rows)
 
   const grouped = new Map<string, JsonRecord[]>()
-  for (const row of physicalRows.rows) {
+  for (const row of physicalRows) {
     const rows = grouped.get(row.source_group) ?? []
     rows.push(sourceRecord(row))
     grouped.set(row.source_group, rows)
@@ -338,15 +431,20 @@ export async function readCanonicalDashboardSource(
 
   const group = (name: string) => grouped.get(name) ?? []
   return {
-    allDataEntries: dataEntries.rows
-      .map(dataEntryRecord)
+    allDataEntries: dataEntryRows
+      .map((row) =>
+        dataEntryRecord({
+          ...row,
+          inferred_entry_type: row.entry_type ?? "",
+        })
+      )
       .filter(
         (row) =>
           typeof row.entryType === "string" &&
           snapshotEntryTypes.has(row.entryType)
       ),
     attendanceRecords: group("attendanceRecords"),
-    corrections: correctionRows.rows.map(sourceRecord),
+    corrections: correctionRows.map(sourceRecord),
     dispatchApprovals: group("dispatchApprovals"),
     machineConstraints: group("machineConstraints"),
     planOverrides: group("planOverrides"),
@@ -355,6 +453,8 @@ export async function readCanonicalDashboardSource(
     routeChanges: group("routeChanges"),
     routeSelections: group("routeSelections"),
     setupCompletions: group("setupCompletions"),
+    sourceCoverage: coverageByFloor[defaultProductionFloorCode],
+    sourceCoverageByFloor: coverageByFloor,
     trainingRecords: group("trainingRecords"),
   }
 }
@@ -382,6 +482,219 @@ export async function buildCanonicalDashboardReadModel(
     table: string
   ) => withoutCorrectedRows(rows as Row[], table, correctionTargets)
 
+  const previousModel = await client.query<PreviousPlanningRow>(
+    `
+      WITH previous_model AS (
+        SELECT payload
+        FROM derived.dashboard_read_models
+        WHERE organization_id = $1
+        ORDER BY version DESC
+        LIMIT 1
+      ), floor_payloads AS (
+        SELECT floor.code AS production_floor_code,
+          floor.ordinality AS floor_order,
+          CASE
+            WHEN floor.code = $4 THEN COALESCE(
+              NULLIF(
+                previous_model.payload #>
+                  ARRAY['productionFloorSnapshots', floor.code],
+                'null'::jsonb
+              ),
+              previous_model.payload
+            )
+            ELSE COALESCE(
+              NULLIF(
+                previous_model.payload #>
+                  ARRAY['productionFloorSnapshots', floor.code],
+                'null'::jsonb
+              ),
+              '{}'::jsonb
+            )
+          END AS floor_payload
+        FROM previous_model
+        CROSS JOIN jsonb_array_elements_text($2::jsonb)
+          WITH ORDINALITY floor(code, ordinality)
+      )
+      SELECT floor_payloads.production_floor_code, previous.row_kind,
+        (
+          SELECT COALESCE(
+            jsonb_object_agg(field.key, field.value),
+            '{}'::jsonb
+          )
+          FROM jsonb_each(
+            CASE
+              WHEN jsonb_typeof(previous.row) = 'object' THEN previous.row
+              ELSE '{}'::jsonb
+            END
+          ) field
+          WHERE field.key = ANY(
+            CASE previous.row_kind
+              WHEN 'machine_plan' THEN $3::text[]
+              ELSE $5::text[]
+            END
+          )
+        ) AS previous_row
+      FROM floor_payloads
+      CROSS JOIN LATERAL (
+        SELECT 'machine_plan'::text AS row_kind, plan.row, plan.ordinality
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(
+              floor_payloads.floor_payload #>
+                '{productionControl,machinePlanDetailRows}'
+            ) = 'array'
+            THEN floor_payloads.floor_payload #>
+              '{productionControl,machinePlanDetailRows}'
+            ELSE '[]'::jsonb
+          END
+        ) WITH ORDINALITY plan(row, ordinality)
+        UNION ALL
+        SELECT 'production_dashboard'::text AS row_kind,
+          dashboard.row, dashboard.ordinality
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(
+              floor_payloads.floor_payload #>
+                '{productionControl,productionDashboardRows}'
+            ) = 'array'
+            THEN floor_payloads.floor_payload #>
+              '{productionControl,productionDashboardRows}'
+            ELSE '[]'::jsonb
+          END
+        ) WITH ORDINALITY dashboard(row, ordinality)
+      ) previous
+      ORDER BY floor_payloads.floor_order, previous.row_kind,
+        previous.ordinality
+    `,
+    [
+      context.organizationId,
+      JSON.stringify(productionFloors.map((floor) => floor.code)),
+      machinePlanContinuityFields,
+      defaultProductionFloorCode,
+      productionDashboardContinuityFields,
+    ]
+  )
+  const previousMachinePlanRowsByFloor = new Map<
+    ProductionFloorCode,
+    JsonRecord[]
+  >()
+  const previousProductionDashboardRowsByFloor = new Map<
+    ProductionFloorCode,
+    JsonRecord[]
+  >()
+  for (const previousRow of previousModel.rows) {
+    const target = previousRow.row_kind === "machine_plan"
+      ? previousMachinePlanRowsByFloor
+      : previousProductionDashboardRowsByFloor
+    const rows =
+      target.get(previousRow.production_floor_code) ??
+      []
+    rows.push(jsonRecord(previousRow.previous_row))
+    target.set(previousRow.production_floor_code, rows)
+  }
+
+  function previousMachinePlanRows(floorCode: ProductionFloorCode) {
+    return previousMachinePlanRowsByFloor.get(floorCode) ?? []
+  }
+
+  function previousProductionDashboardRows(floorCode: ProductionFloorCode) {
+    return previousProductionDashboardRowsByFloor.get(floorCode) ?? []
+  }
+
+  function buildFloorPayload(floorCode: ProductionFloorCode) {
+    const floorDataEntries = dashboardDataEntriesForFloor(dataEntries, floorCode)
+    const floorCorrections = floorRows(source.corrections, floorCode)
+    const floorUpdatedAt = latestCreatedAt(
+      floorRows(source.productionEntries, floorCode),
+      floorRows(source.attendanceRecords, floorCode),
+      floorRows(source.trainingRecords, floorCode),
+      floorRows(source.routeSelections, floorCode),
+      floorRows(source.plannerPriorities, floorCode),
+      floorRows(source.machineConstraints, floorCode),
+      floorRows(source.planOverrides, floorCode),
+      floorRows(source.routeChanges, floorCode),
+      floorRows(source.dispatchApprovals, floorCode),
+      floorRows(source.setupCompletions, floorCode),
+      floorDataEntries,
+      floorCorrections
+    )
+    const snapshot = buildLegacyDashboardSnapshot({
+      attendanceRecords: floorRows(
+        corrected(source.attendanceRecords, "attendanceRecords"),
+        floorCode
+      ) as never,
+      dataEntries: floorDataEntries as never,
+      dispatchApprovals: floorRows(
+        corrected(source.dispatchApprovals, "dispatchApprovals"),
+        floorCode
+      ),
+      filters: {},
+      machineConstraints: floorRows(
+        corrected(source.machineConstraints, "machineConstraints"),
+        floorCode
+      ),
+      planOverrides: floorRows(
+        corrected(source.planOverrides, "planOverrides"),
+        floorCode
+      ),
+      plannerPriorities: floorRows(
+        corrected(source.plannerPriorities, "plannerPriorities"),
+        floorCode
+      ),
+      previousMachinePlanDetailRows: previousMachinePlanRows(floorCode),
+      previousProductionDashboardRows:
+        previousProductionDashboardRows(floorCode),
+      productionEntries: floorRows(
+        corrected(source.productionEntries, "productionEntries"),
+        floorCode
+      ) as never,
+      routeChanges: floorRows(
+        corrected(source.routeChanges, "routeChanges"),
+        floorCode
+      ),
+      routeSelections: floorRows(
+        corrected(source.routeSelections, "routeSelections"),
+        floorCode
+      ),
+      setupCompletions: floorRows(
+        corrected(source.setupCompletions, "setupCompletions"),
+        floorCode
+      ),
+      trainingRecords: floorRows(
+        corrected(source.trainingRecords, "trainingRecords"),
+        floorCode
+      ) as never,
+      updatedAt: floorUpdatedAt,
+      workbookName: "PostgreSQL",
+    })
+    const liveCounts = countRowsByEntryType(floorDataEntries)
+    return {
+      ...snapshot,
+      cacheStatus: "ready",
+      productionFloorCode: floorCode,
+      sourceCoverage: source.sourceCoverageByFloor[floorCode],
+      dataEntry: {
+        ...snapshot.dataEntry,
+        corrections: floorCorrections,
+        entryTypes: legacyEntryTypes,
+        keySummary: legacyEntryTypes.map((entryType) => ({
+          entryType,
+          rows: liveCounts[entryType] ?? 0,
+        })),
+        templates: legacyEntryTypes.map((entryType) => ({
+          entryType,
+          format: "xlsx",
+        })),
+      },
+    } as JsonRecord
+  }
+
+  const productionFloorSnapshots = Object.fromEntries(
+    productionFloors.map((floor) => [floor.code, buildFloorPayload(floor.code)])
+  )
+  const defaultSnapshot = productionFloorSnapshots[
+    defaultProductionFloorCode
+  ] as JsonRecord
   const updatedAt = latestCreatedAt(
     source.productionEntries,
     source.attendanceRecords,
@@ -396,84 +709,17 @@ export async function buildCanonicalDashboardReadModel(
     dataEntries,
     source.corrections
   )
-  const previousModel = await client.query<{ machine_plan_rows: unknown }>(
-    `
-      SELECT payload->'productionControl'->'machinePlanDetailRows'
-        AS machine_plan_rows
-      FROM derived.dashboard_read_models
-      WHERE organization_id = $1
-      ORDER BY version DESC
-      LIMIT 1
-    `,
-    [context.organizationId]
-  )
-  const previousMachinePlanDetailRows = Array.isArray(
-    previousModel.rows[0]?.machine_plan_rows
-  )
-    ? previousModel.rows[0].machine_plan_rows.map((value) => {
-        const row =
-          typeof value === "object" && value !== null && !Array.isArray(value)
-            ? (value as JsonRecord)
-            : {}
-        return {
-          jcNo: row.jcNo,
-          machine: row.machine,
-          optionNumber: row.optionNumber,
-          partCode: row.partCode,
-          routeMachine: row.routeMachine,
-          setupNo: row.setupNo,
-        }
-      })
-    : []
-  const snapshot = buildLegacyDashboardSnapshot({
-    attendanceRecords: corrected(
-      source.attendanceRecords,
-      "attendanceRecords"
-    ) as never,
-    dataEntries: dataEntries as never,
-    dispatchApprovals: corrected(source.dispatchApprovals, "dispatchApprovals"),
-    filters: {},
-    machineConstraints: corrected(
-      source.machineConstraints,
-      "machineConstraints"
-    ),
-    planOverrides: corrected(source.planOverrides, "planOverrides"),
-    plannerPriorities: corrected(source.plannerPriorities, "plannerPriorities"),
-    previousMachinePlanDetailRows,
-    productionEntries: corrected(
-      source.productionEntries,
-      "productionEntries"
-    ) as never,
-    routeChanges: corrected(source.routeChanges, "routeChanges"),
-    routeSelections: corrected(source.routeSelections, "routeSelections"),
-    setupCompletions: corrected(source.setupCompletions, "setupCompletions"),
-    trainingRecords: corrected(
-      source.trainingRecords,
-      "trainingRecords"
-    ) as never,
-    updatedAt,
-    workbookName: "PostgreSQL",
-  })
-  const liveCounts = countRowsByEntryType(dataEntries)
 
   return {
     payload: {
-      ...snapshot,
-      cacheStatus: "ready",
-      dataEntry: {
-        ...snapshot.dataEntry,
-        corrections: source.corrections,
-        entryTypes: legacyEntryTypes,
-        keySummary: legacyEntryTypes.map((entryType) => ({
-          entryType,
-          rows: liveCounts[entryType] ?? 0,
-        })),
-        templates: legacyEntryTypes.map((entryType) => ({
-          entryType,
-          format: "xlsx",
-        })),
-      },
+      ...defaultSnapshot,
+      productionFloorSnapshots,
+      productionFloors,
     } as JsonRecord,
-    sourceWatermark: { changedAt: updatedAt || null },
+    sourceWatermark: {
+      changedAt: updatedAt || null,
+      sourceCoverage: source.sourceCoverage,
+      sourceCoverageByFloor: source.sourceCoverageByFloor,
+    },
   }
 }

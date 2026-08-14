@@ -1,6 +1,15 @@
 export { createAccessAdministrationRepository } from "./access-administration"
+export {
+  appendAccessAuditChanges,
+  type AccessAuditChange,
+} from "./access-audit"
 export { createAuthorizationRepository } from "./authorization"
 export { createCatalogMasterRepository } from "./catalog-masters"
+export {
+  type BoundedCommercialResult,
+  type CommercialCoverage,
+  commercialSelectorLimit,
+} from "./commercial-bounds"
 export { createCommercialCostingRepository } from "./commercial-costing"
 export {
   commercialTermTypes,
@@ -26,6 +35,13 @@ export { createCommercialWorkflowRepository } from "./commercial-workflow"
 export { createCustomerRepository } from "./customers"
 export { createDashboardPlanningRepository } from "./dashboard-planning"
 export {
+  normalizeSourceCoverage,
+  type CoverageFacts,
+  type GroupedSourceCoverage,
+  type SourceCoverage,
+  type SourceCoverageByFloor,
+} from "./dashboard-coverage"
+export {
   buildCanonicalDashboardReadModel,
   readCanonicalDashboardSource,
 } from "./dashboard-read-model"
@@ -34,14 +50,51 @@ export { createMaintenanceRepository } from "./maintenance"
 export {
   createRecruitmentRepository,
   type RecruitmentCandidateRow,
+  type RecruitmentCandidateApplicationHistoryRow,
+  type RecruitmentCandidateEventRow,
+  type RecruitmentCandidateWorkspace,
+  type RecruitmentCombinedRoleRow,
   type RecruitmentInterviewRow,
+  type RecruitmentInterviewRecordRow,
+  type RecruitmentJobApplicationRow,
+  type RecruitmentJobInterviewRow,
   type RecruitmentJobRow,
+  type RecruitmentJobWorkspace,
   type RecruitmentMasterSnapshot,
   type RecruitmentPostRow,
   type RecruitmentTemplateRow,
 } from "./recruitment"
+export {
+  deriveRecruitmentEmployeeAssignment,
+  deriveRecruitmentPostStatus,
+  isActiveRecruitmentApplicationStatus,
+  listRecruitableApprovedPosts,
+  recruitmentPostDeletionBlocker,
+  resolveRecruitmentEmployeeAssignmentTarget,
+} from "./recruitment-domain"
+export {
+  nextRecruitmentPostIdentity,
+  nextRecruitmentTemplateCode,
+} from "./recruitment-codes"
+export {
+  canonicalRecruitmentInterviewRound,
+  nextRecruitmentInterviewRound,
+  recruitmentInterviewRound,
+  recruitmentInterviewRounds,
+  scoreRecruitmentInterview,
+  type RecruitmentInterviewQuestion,
+  type RecruitmentInterviewRoundName,
+} from "./recruitment-interview-workflow"
 export { createQualityRepository } from "./quality"
 export { createProductionShopFloorRepository } from "./production-shop-floor"
+export {
+  defaultProductionFloorCode,
+  normalizeProductionFloorCode,
+  parseProductionFloorCode,
+  productionFloorCodeForRecord,
+  productionFloors,
+  type ProductionFloorCode,
+} from "./production-floors"
 export { createWorkforceRepository } from "./workforce"
 export { createDatabase } from "./database"
 export { createInitialAdministratorProvisioner } from "./initial-administrator"
@@ -50,6 +103,7 @@ export { createProductRepository } from "./products"
 export {
   connectionTargetSummary,
   createBoundedPostgresPool,
+  instrumentPostgresPool,
   repositoryPool,
   sharedManagedPostgresPool,
   summarizeManagedPostgresEnvironment,

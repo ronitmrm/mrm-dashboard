@@ -52,8 +52,10 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import {
   assignRoleAction,
   createRoleAction,
+  linkEmployeeAction,
   provisionStaffAction,
   setPermissionOverrideAction,
+  setPostRoleAction,
 } from "./actions"
 
 export const dynamic = "force-dynamic"
@@ -71,6 +73,12 @@ export default async function AccessAdministrationPage() {
   const snapshot = await access
     .getSnapshot({ actorUserId: session.user.id })
     .finally(() => access.close())
+  const unlinkedEmployees = snapshot.employees.filter(
+    (employee) => !employee.linkedUserId
+  )
+  const unlinkedUsers = snapshot.users.filter(
+    (user) => !user.employee && user.betterAuthRole !== "admin"
+  )
   const permissionsByModule = new Map<
     string,
     (typeof snapshot.permissions)[number][]
@@ -87,47 +95,67 @@ export default async function AccessAdministrationPage() {
         <div className="flex items-center gap-2">
           <ShieldCheck className="size-5 text-primary" />
           <h2 className="text-2xl font-semibold tracking-tight">
-            Access administration
+            Access Administration
           </h2>
         </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Provision fresh Better Auth identities and grant application access
-          through PostgreSQL roles and explicit user overrides.
+          Provision Fresh Better Auth Identities And Grant Application Access
+          Through Postgresql Roles And Explicit User Overrides.
         </p>
       </section>
 
       <Alert>
         <ShieldCheck />
-        <AlertTitle>Fresh identity boundary</AlertTitle>
+        <AlertTitle>Fresh Identity Boundary</AlertTitle>
         <AlertDescription>
-          Legacy Convex and SQLite users are intentionally excluded. Every
-          account shown here was created in the unified application.
+          Legacy Convex And Sqlite Users Are Intentionally Excluded. Every
+          Account Shown Here Was Created In The Unified Application.
         </AlertDescription>
       </Alert>
 
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Provision staff account</CardTitle>
+            <CardTitle>Provision Staff Account</CardTitle>
             <CardDescription>
-              Create a sign-in-ready Better Auth account. Application roles are
-              granted separately.
+              Create A Sign-In-Ready Better Auth Account. Application Roles Are
+              Granted Separately.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form action={provisionStaffAction}>
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="staff-name">Full name</FieldLabel>
-                  <Input
-                    id="staff-name"
-                    name="name"
-                    autoComplete="name"
+                  <FieldLabel htmlFor="staff-employee">Employee</FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="staff-employee"
+                    name="employee"
                     required
-                  />
+                  >
+                    <NativeSelectOption value="" disabled>
+                      Select an employee
+                    </NativeSelectOption>
+                    {unlinkedEmployees.map((employee) => (
+                      <NativeSelectOption
+                        key={`${employee.organizationId}:${employee.employeeCode}`}
+                        value={JSON.stringify({
+                          employeeCode: employee.employeeCode,
+                          organizationId: employee.organizationId,
+                        })}
+                      >
+                        {employee.employeeName} ({employee.employeeCode}) ·{" "}
+                        {employee.departments.join(", ")} ·{" "}
+                        {employee.postCodes.join(", ")}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                  <FieldDescription>
+                    Name, department, and posts come from Employee Master.
+                  </FieldDescription>
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="staff-email">Email address</FieldLabel>
+                  <FieldLabel htmlFor="staff-email">Email Address</FieldLabel>
                   <Input
                     id="staff-email"
                     name="email"
@@ -138,7 +166,7 @@ export default async function AccessAdministrationPage() {
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="staff-password">
-                    Temporary password
+                    Temporary Password
                   </FieldLabel>
                   <Input
                     id="staff-password"
@@ -149,13 +177,13 @@ export default async function AccessAdministrationPage() {
                     required
                   />
                   <FieldDescription>
-                    Use at least 12 characters and share it outside the
-                    application.
+                    Use At Least 12 Characters And Share It Outside The
+                    Application.
                   </FieldDescription>
                 </Field>
-                <Button type="submit">
+                <Button type="submit" disabled={!unlinkedEmployees.length}>
                   <UserRoundPlus />
-                  Provision staff
+                  Provision Staff
                 </Button>
               </FieldGroup>
             </form>
@@ -164,10 +192,10 @@ export default async function AccessAdministrationPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Create application role</CardTitle>
+            <CardTitle>Create Application Role</CardTitle>
             <CardDescription>
-              Bundle granular capabilities without changing Better Auth&apos;s
-              internal admin and user roles.
+              Bundle Granular Capabilities Without Changing Better Auth&apos;s
+              Internal Admin And User Roles.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -175,11 +203,11 @@ export default async function AccessAdministrationPage() {
               <FieldGroup>
                 <div className="grid gap-4 md:grid-cols-2">
                   <Field>
-                    <FieldLabel htmlFor="role-name">Role name</FieldLabel>
+                    <FieldLabel htmlFor="role-name">Role Name</FieldLabel>
                     <Input id="role-name" name="name" required />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="role-key">Role key</FieldLabel>
+                    <FieldLabel htmlFor="role-key">Role Key</FieldLabel>
                     <Input
                       id="role-key"
                       name="key"
@@ -228,7 +256,7 @@ export default async function AccessAdministrationPage() {
                     )
                   )}
                 </FieldSet>
-                <Button type="submit">Create role</Button>
+                <Button type="submit">Create Role</Button>
               </FieldGroup>
             </form>
           </CardContent>
@@ -238,10 +266,159 @@ export default async function AccessAdministrationPage() {
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Assign role</CardTitle>
+            <CardTitle>Link Existing Account</CardTitle>
             <CardDescription>
-              Role grants are additive and immediately affect server-side
-              capability checks.
+              Connect An Existing Better Auth User To One Employee Master
+              Record.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={linkEmployeeAction}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="link-user">Login Account</FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="link-user"
+                    name="userId"
+                    required
+                  >
+                    <NativeSelectOption value="" disabled>
+                      Select an account
+                    </NativeSelectOption>
+                    {unlinkedUsers.map((user) => (
+                      <NativeSelectOption key={user.id} value={user.id}>
+                        {user.name} · {user.email}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="link-employee">Employee</FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="link-employee"
+                    name="employee"
+                    required
+                  >
+                    <NativeSelectOption value="" disabled>
+                      Select an employee
+                    </NativeSelectOption>
+                    {unlinkedEmployees.map((employee) => (
+                      <NativeSelectOption
+                        key={`${employee.organizationId}:${employee.employeeCode}`}
+                        value={JSON.stringify({
+                          employeeCode: employee.employeeCode,
+                          organizationId: employee.organizationId,
+                        })}
+                      >
+                        {employee.employeeName} ({employee.employeeCode}) ·{" "}
+                        {employee.postCodes.join(", ")}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Button
+                  type="submit"
+                  disabled={!unlinkedUsers.length || !unlinkedEmployees.length}
+                >
+                  Link Account
+                </Button>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Post Access Profile</CardTitle>
+            <CardDescription>
+              Roles Assigned Here Apply Automatically To The Employee Occupying
+              The Post.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <form action={setPostRoleAction}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="profile-post">Approved Post</FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="profile-post"
+                    name="postId"
+                    required
+                  >
+                    {snapshot.postAccessProfiles.map((post) => (
+                      <NativeSelectOption key={post.id} value={post.id}>
+                        {post.postCode} · {post.department} · {post.designation}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="profile-role">
+                    Application Role
+                  </FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="profile-role"
+                    name="roleKey"
+                    required
+                  >
+                    {snapshot.roles
+                      .filter((role) => !role.isSystem)
+                      .map((role) => (
+                        <NativeSelectOption key={role.id} value={role.key}>
+                          {role.name}
+                        </NativeSelectOption>
+                      ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="profile-effect">Change</FieldLabel>
+                  <NativeSelect
+                    className="w-full"
+                    id="profile-effect"
+                    name="effect"
+                    required
+                  >
+                    <NativeSelectOption value="assign">
+                      Assign Role
+                    </NativeSelectOption>
+                    <NativeSelectOption value="remove">
+                      Remove Role
+                    </NativeSelectOption>
+                  </NativeSelect>
+                </Field>
+                <Button type="submit">Save Post Access</Button>
+              </FieldGroup>
+            </form>
+            <div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border p-3">
+              {snapshot.postAccessProfiles.map((post) => (
+                <div
+                  className="flex items-start justify-between gap-3 text-sm"
+                  key={post.id}
+                >
+                  <span>
+                    {post.postCode} · {post.department}
+                  </span>
+                  <span className="text-right text-muted-foreground">
+                    {post.roleKeys.join(", ") || "No role"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Assign Direct Role</CardTitle>
+            <CardDescription>
+              Exceptional Access Only. Normal Access Comes From The Employee's
+              Approved Post Profile.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -249,7 +426,7 @@ export default async function AccessAdministrationPage() {
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="assignment-user">
-                    Staff member
+                    Staff Member
                   </FieldLabel>
                   <NativeSelect
                     className="w-full"
@@ -266,7 +443,7 @@ export default async function AccessAdministrationPage() {
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="assignment-role">
-                    Application role
+                    Application Role
                   </FieldLabel>
                   <NativeSelect
                     className="w-full"
@@ -281,7 +458,7 @@ export default async function AccessAdministrationPage() {
                     ))}
                   </NativeSelect>
                 </Field>
-                <Button type="submit">Assign role</Button>
+                <Button type="submit">Assign Direct Role</Button>
               </FieldGroup>
             </form>
           </CardContent>
@@ -289,17 +466,17 @@ export default async function AccessAdministrationPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Set user override</CardTitle>
+            <CardTitle>Set User Override</CardTitle>
             <CardDescription>
-              A deny override wins over every role grant. An allow override
-              grants one capability directly.
+              A Deny Override Wins Over Every Role Grant. An Allow Override
+              Grants One Capability Directly.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form action={setPermissionOverrideAction}>
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="override-user">Staff member</FieldLabel>
+                  <FieldLabel htmlFor="override-user">Staff Member</FieldLabel>
                   <NativeSelect
                     className="w-full"
                     id="override-user"
@@ -359,7 +536,7 @@ export default async function AccessAdministrationPage() {
                     <Input id="override-reason" name="reason" />
                   </Field>
                 </div>
-                <Button type="submit">Save override</Button>
+                <Button type="submit">Save Override</Button>
               </FieldGroup>
             </form>
           </CardContent>
@@ -368,9 +545,9 @@ export default async function AccessAdministrationPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Staff access</CardTitle>
+          <CardTitle>Staff Access</CardTitle>
           <CardDescription>
-            Effective access is evaluated on every protected server request.
+            Effective Access Is Evaluated On Every Protected Server Request.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -380,10 +557,10 @@ export default async function AccessAdministrationPage() {
                 <EmptyMedia variant="icon">
                   <UsersRound />
                 </EmptyMedia>
-                <EmptyTitle>No staff accounts</EmptyTitle>
+                <EmptyTitle>No Staff Accounts</EmptyTitle>
                 <EmptyDescription>
-                  Provision the first administrator with the explicit CLI
-                  command, then create staff accounts here.
+                  Provision The First Administrator With The Explicit Cli
+                  Command, Then Create Staff Accounts Here.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -391,7 +568,8 @@ export default async function AccessAdministrationPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Staff member</TableHead>
+                  <TableHead>Staff Member</TableHead>
+                  <TableHead>Employee / Post</TableHead>
                   <TableHead>Roles</TableHead>
                   <TableHead>Overrides</TableHead>
                 </TableRow>
@@ -408,16 +586,46 @@ export default async function AccessAdministrationPage() {
                       </div>
                     </TableCell>
                     <TableCell>
+                      {user.employee ? (
+                        <div className="grid gap-0.5">
+                          <span>{user.employee.employeeCode}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {user.employee.departments.join(", ")} ·{" "}
+                            {user.employee.postCodes.join(", ")}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          Not linked
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <div className="flex flex-wrap gap-1.5">
-                        {user.roleKeys.length ? (
-                          user.roleKeys.map((roleKey) => (
-                            <Badge key={roleKey} variant="secondary">
-                              {roleKey}
+                        {user.roleKeys.length ||
+                        user.employee?.inheritedRoleKeys.length ? (
+                          [
+                            ...user.roleKeys.map((roleKey) => ({
+                              key: roleKey,
+                              source: "direct",
+                            })),
+                            ...(user.employee?.inheritedRoleKeys ?? []).map(
+                              (roleKey) => ({
+                                key: roleKey,
+                                source: "post",
+                              })
+                            ),
+                          ].map((role) => (
+                            <Badge
+                              key={`${role.source}:${role.key}`}
+                              variant="secondary"
+                            >
+                              {role.key} · {role.source}
                             </Badge>
                           ))
                         ) : (
                           <span className="text-sm text-muted-foreground">
-                            No application roles
+                            No Application Roles
                           </span>
                         )}
                       </div>
@@ -439,7 +647,7 @@ export default async function AccessAdministrationPage() {
                           ))
                         ) : (
                           <span className="text-sm text-muted-foreground">
-                            No overrides
+                            No Overrides
                           </span>
                         )}
                       </div>
@@ -454,10 +662,10 @@ export default async function AccessAdministrationPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Application roles</CardTitle>
+          <CardTitle>Application Roles</CardTitle>
           <CardDescription>
-            The system administrator role is seeded and immutable by convention.
-            Custom roles use only the selected capabilities.
+            The System Administrator Role Is Seeded And Immutable By Convention.
+            Custom Roles Use Only The Selected Capabilities.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
@@ -473,7 +681,7 @@ export default async function AccessAdministrationPage() {
                 {role.isSystem ? <Badge>System</Badge> : null}
               </div>
               <p className="text-xs text-muted-foreground">
-                {role.permissionKeys.length} capabilities
+                {role.permissionKeys.length} Capabilities
               </p>
             </div>
           ))}

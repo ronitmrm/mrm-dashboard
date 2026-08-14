@@ -58,10 +58,10 @@ export function SignInForm({ returnPath }: { returnPath: string }) {
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle className="text-xl">Sign in to MRMPL</CardTitle>
+        <CardTitle className="text-xl">Sign In To Mrmpl</CardTitle>
         <CardDescription>
-          Use the fresh account provisioned for the unified PostgreSQL
-          application.
+          Use The Fresh Account Provisioned For The Unified Postgresql
+          Application.
         </CardDescription>
       </CardHeader>
       <form method="post" onSubmit={submit}>
@@ -105,10 +105,10 @@ export function SignInForm({ returnPath }: { returnPath: string }) {
                 <ArrowRight />
               )}
               {isPending
-                ? "Signing in"
+                ? "Signing In"
                 : isReady
                   ? "Continue"
-                  : "Preparing sign in"}
+                  : "Preparing Sign In"}
             </Button>
           </CardFooter>
         </fieldset>
