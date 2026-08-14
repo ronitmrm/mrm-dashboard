@@ -100,7 +100,7 @@ function durableProcessor(organizationId: string) {
 
 beforeAll(async () => {
   await migrateDatabase({ connectionString })
-})
+}, 30_000)
 
 afterAll(async () => {
   await pool.end()

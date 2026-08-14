@@ -30,7 +30,7 @@ beforeAll(async () => {
     [`SWEEP-${suffix}`, `Sweep ${suffix}`]
   )
   organizationId = organization.rows[0]!.id
-})
+}, 30_000)
 
 afterAll(async () => {
   await pool.end()
