@@ -76,24 +76,6 @@ function isWorkflowProgressChange(path: string, body: Record<string, unknown>) {
   return entryType === "shop_floor_status" || entryType === "first_piece_inspection_report";
 }
 
-function normalizeShopFloorStage(value: unknown) {
-  const stage = text(value).toLowerCase().replace(/\s+/g, "_");
-  const aliases: Record<string, string> = {
-    shop_floor_rm: "raw_material_at_machine",
-    rawmaterialatmachine: "raw_material_at_machine",
-    raw_material_at_machine: "raw_material_at_machine",
-    tools_drawing: "presetting",
-    presetting: "presetting",
-    setting: "setting",
-    qc_approval: "quality_approval",
-    quality_approval: "quality_approval",
-    worker_start: "operator_started",
-    operator_started: "operator_started",
-    item_complete: "item_complete",
-  };
-  return aliases[stage] ?? stage;
-}
-
 function record(value: unknown) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -107,3 +89,4 @@ function localDateKey(value: unknown) {
   if (Number.isNaN(date.getTime())) return "";
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
+import { normalizeShopFloorStage } from "./shop-floor-workflow";

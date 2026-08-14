@@ -12,7 +12,7 @@ type BlockEvidence = {
   written: number
 }
 
-export type LatencyEvidence = {
+type LatencyEvidence = {
   maximum: number
   p50: number
   p95: number

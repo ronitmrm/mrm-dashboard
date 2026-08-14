@@ -5,7 +5,7 @@ import { recordRedisCommand } from "./managed-telemetry"
 
 type Environment = Record<string, string | undefined>
 
-export type RateLimitResult = {
+type RateLimitResult = {
   allowed: boolean
   count: number
   retryAfterSeconds: number

@@ -8,7 +8,7 @@ export type BehaviorSnapshot =
   | readonly BehaviorSnapshot[]
   | { readonly [key: string]: BehaviorSnapshot }
 
-export type BehaviorFingerprintVersion = "v1"
+type BehaviorFingerprintVersion = "v1"
 
 export type BehaviorFingerprint = {
   version: BehaviorFingerprintVersion

@@ -143,7 +143,7 @@ export function dashboardCoverageFromState(state: unknown): SourceCoverage | nul
   return isRecord(coverage) ? normalizeSourceCoverage(coverage) : null;
 }
 
-export type DashboardRankedRow = {
+type DashboardRankedRow = {
   label: string;
   detail: string;
   value: number;
@@ -151,7 +151,7 @@ export type DashboardRankedRow = {
   rate: number;
 };
 
-export type DashboardTrendPoint = {
+type DashboardTrendPoint = {
   label: string;
   output: number;
   target: number;
@@ -159,7 +159,7 @@ export type DashboardTrendPoint = {
   efficiency: number;
 };
 
-export type DashboardMetric = {
+type DashboardMetric = {
   label: string;
   value: string;
   detail: string;
@@ -393,7 +393,7 @@ export function formatNumber(value: number) {
   return numberFormatter.format(Math.round(value * 10) / 10);
 }
 
-export function formatPercent(value: number) {
+function formatPercent(value: number) {
   const percent = Math.abs(value) <= 1 ? value * 100 : value;
   return `${numberFormatter.format(Math.round(percent * 10) / 10)}%`;
 }
@@ -410,16 +410,16 @@ export function jobCardScheduleSummary(
   };
 }
 
-export function firstDateLabel(rows: DashboardRecord[], key: string) {
+function firstDateLabel(rows: DashboardRecord[], key: string) {
   return sortedDateLabels(rows, key)[0] ?? "-";
 }
 
-export function lastDateLabel(rows: DashboardRecord[], key: string) {
+function lastDateLabel(rows: DashboardRecord[], key: string) {
   const labels = sortedDateLabels(rows, key);
   return labels[labels.length - 1] ?? "";
 }
 
-export function sortedDateLabels(rows: DashboardRecord[], key: string) {
+function sortedDateLabels(rows: DashboardRecord[], key: string) {
   return rows
     .map((row) => displayText(row[key]))
     .filter((value) => value !== "-")

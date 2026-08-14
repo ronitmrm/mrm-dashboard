@@ -1166,7 +1166,7 @@ function buildProductionControl({
     .filter((row) => row.planningItemMissing || row.routeSelectionMissing || row.routeMasterMissing || row.cycleTimeMissing || row.toolingPlanMissing || row.machineMasterMissing);
   const masterGaps = allWorkOrderGaps.filter((row) => row.rmStatus === "Received");
   const combinedBatches = combinedRows(prioritizedWorkOrderRows, rawByJc, routeGroups, cycleKeys, toolingKeys);
-  const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawByJc, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
+  const machinePlanDetailRows = machinePlanDetails(prioritizedWorkOrderRows, rawBySetup, rawBySetupAnyMachine, routeGroups, cycleRows, toolingRows, machineRows, machineConstraints, planOverrides, shopFloorStatusRows, previousMachineAssignmentsBySetup(previousMachinePlanDetailRows), planningCalendar);
   const productionDashboardRows = buildProductionDashboardRows({
     dispatchApprovals,
     dispatchRows,
@@ -2537,7 +2537,6 @@ function isRmReceived(workOrder: Record<string, unknown>, rmInward?: Record<stri
 
 function machinePlanDetails(
   workOrderRows: Array<Record<string, unknown>>,
-  rawByJc: Map<string, { outputQty: number; actualQty: number; rejectQty: number; rows: number; machines?: Set<string> }>,
   rawBySetup: Map<string, PlanningProductionActual>,
   rawBySetupAnyMachine: Map<string, { startDate: string; latestDate: string; outputQty: number; actualQty: number; rows: number; dates: Set<string>; machines: Set<string> }>,
   routeGroups: Map<string, Record<string, unknown>[]>,

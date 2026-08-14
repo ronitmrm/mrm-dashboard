@@ -1,6 +1,6 @@
 import { parseSortableDate } from "./dashboard-view-model";
 
-export type PriorityPlanBlockerState = "running" | "started_not_running" | "queued";
+type PriorityPlanBlockerState = "running" | "started_not_running" | "queued";
 
 export type PriorityPlanWindowBlocker = {
   key: string;

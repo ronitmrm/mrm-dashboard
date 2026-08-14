@@ -1,6 +1,6 @@
 export type MachineConstraintReviewRow = Record<string, unknown>;
 
-export type MachineConstraintQueueReviewKind = "destination" | "same_machine_later" | "downstream";
+type MachineConstraintQueueReviewKind = "destination" | "same_machine_later" | "downstream";
 
 export type MachineConstraintQueueReviewGroup = {
   kind: MachineConstraintQueueReviewKind;
