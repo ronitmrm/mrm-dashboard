@@ -5,6 +5,7 @@ import { createRecruitmentRepository } from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
 
 export async function GET(
   _request: Request,
@@ -22,24 +23,21 @@ export async function GET(
       process.env.LOCAL_FILE_STORAGE_PATH ??
         path.join(/*turbopackIgnore: true*/ process.cwd(), "local-data")
     )
-    const filePath = path.resolve(storageRoot, ...resume.storageKey.split("/"))
+    const filePath = path.resolve(
+      /*turbopackIgnore: true*/ storageRoot,
+      ...resume.storageKey.split("/")
+    )
     if (!filePath.startsWith(`${storageRoot}${path.sep}`)) {
       throw new Error("Candidate resume storage key is invalid.")
     }
     const bytes = await readFile(filePath)
-    const safeName = resume.fileName.replace(/[\r\n"]/g, "_")
     return new Response(
       bytes.buffer.slice(
         bytes.byteOffset,
         bytes.byteOffset + bytes.byteLength
       ) as ArrayBuffer,
       {
-        headers: {
-          "Content-Disposition": `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
-          "Content-Length": String(bytes.byteLength),
-          "Content-Type": resume.mediaType ?? "application/pdf",
-          "X-Content-Type-Options": "nosniff",
-        },
+        headers: userAttachmentDownloadHeaders(resume.fileName, bytes.byteLength),
       }
     )
   } catch (error) {
