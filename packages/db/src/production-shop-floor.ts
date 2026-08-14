@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { Pool, PoolClient } from "pg"
 
+import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 import {
   normalizeProductionFloorCode,
@@ -110,42 +111,6 @@ async function transaction<T>(
   } finally {
     client.release()
   }
-}
-
-async function queueDashboardRefresh(
-  client: PoolClient,
-  organizationId: string
-) {
-  const result = await client.query<{ id: string }>(
-    `
-      INSERT INTO derived.refresh_jobs (
-        organization_id, queue_key, idempotency_key, status, run_after
-      )
-      VALUES ($1, 'dashboard', $2, 'pending', now())
-      ON CONFLICT (organization_id, queue_key)
-        WHERE status IN ('pending', 'running')
-      DO UPDATE SET run_after = LEAST(derived.refresh_jobs.run_after, now()),
-        updated_at = now(), last_error = NULL
-      RETURNING id
-    `,
-    [organizationId, randomUUID()]
-  )
-  const refreshJobId = result.rows[0]!.id
-  await client.query(
-    `
-      INSERT INTO derived.outbox_events (
-        organization_id, topic, aggregate_type, aggregate_id,
-        payload, idempotency_key
-      )
-      VALUES ($1, 'dashboard.refresh.requested', 'refresh_job', $2, $3, $4)
-    `,
-    [
-      organizationId,
-      refreshJobId,
-      { organizationId, queueKey: "dashboard", refreshJobId },
-      randomUUID(),
-    ]
-  )
 }
 
 function payloadText(payload: Record<string, unknown>, ...keys: string[]) {

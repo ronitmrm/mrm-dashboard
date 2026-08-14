@@ -545,6 +545,7 @@ describe("dashboard planning writes", () => {
       constraint_details: "3",
       current_routes: "1",
       jobs: "1",
+      outbox_events: "1",
       overrides: "1",
       override_details: "3",
       priorities: "1",
@@ -553,7 +554,6 @@ describe("dashboard planning writes", () => {
       route_change_setups: "2",
       route_history: "2",
     })
-    expect(Number(result.rows[0]!.outbox_events)).toBeGreaterThan(0)
   })
 
   test("rejects a plan override while the target physical machine is locked by another active setup", async () => {
