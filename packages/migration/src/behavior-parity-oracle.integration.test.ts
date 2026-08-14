@@ -115,6 +115,7 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
       dashboard: {
         floorIsolation: [
           { requested: "conventional", returned: "conventional" },
+          { requested: "conventional-02", returned: "conventional-02" },
           { requested: "cnc", returned: "cnc" },
           { requested: "forging", returned: "forging" },
         ],
@@ -148,7 +149,7 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
         invalidCandidateBulkLeavesNoPartialWrites: true,
         invalidWorkbookLeavesNoPartialWrites: true,
       },
-      productionFloors: ["conventional", "conventional-02", "cnc", "forging"],
+      productionFloors: ["conventional", "cnc", "forging"],
       quality: {
         active_production_cards: 1,
         first_piece_readings: 1,
@@ -265,6 +266,7 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
       }))
     ).toEqual([
       { requested: "conventional", returned: "conventional" },
+      { requested: "conventional-02", returned: "conventional-02" },
       { requested: "cnc", returned: "cnc" },
       { requested: "forging", returned: "forging" },
     ])
@@ -289,7 +291,7 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
           )
         )
         .digest("hex")
-    ).toBe("1f7b727e01c5e827fdca2281cdfb76b6b6c6b031fc0dfb17614793a7f40dddda")
+    ).toBe("7ebdc34976c86866f92301f58b6918e140a0fe00ff1193df94ec3a02af4de774")
     expect(
       createHash("sha256")
         .update(
@@ -306,7 +308,7 @@ describe("real-PostgreSQL behavior-parity oracle", () => {
           )
         )
         .digest("hex")
-    ).toBe("8668e8459482aea21d7a4964ca38ab2b22d140a974e336454f04307b3c495a06")
+    ).toBe("f061981d40539f4060f39094c38b42e32f4beb6ab35d3ce6204238b1edff520d")
 
     const observable = firstCapture.observable as Record<string, unknown>
     const commercial = observable.commercial as {

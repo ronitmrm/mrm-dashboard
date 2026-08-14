@@ -150,12 +150,9 @@ const FOUNDATION_STATEMENTS = [
       AND NOT EXISTS (
         SELECT 1 FROM catalog.machines AS machine
         WHERE machine.organization_id = $2
-          AND machine.production_floor_id = production_floor.id
           AND lower(machine.machine_number) = lower(reference.machine_number)
       )
-    ON CONFLICT (
-      organization_id, production_floor_id, lower(machine_number)
-    ) DO NOTHING
+    ON CONFLICT (organization_id, lower(machine_number)) DO NOTHING
   `,
   `
     INSERT INTO workforce.employees (

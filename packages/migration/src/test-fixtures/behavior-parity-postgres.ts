@@ -2018,7 +2018,7 @@ export async function captureCanonicalBehaviorParityFixture({
       salaryAfterProbationMaximum: 20000,
       salaryAfterProbationMinimum: 15000,
       salaryBeforeProbation: 15000,
-      willingToJoin: "yes",
+      willingToJoin: "no",
     })
     const interviewEvidence = await pool.query<{
       question_count: number

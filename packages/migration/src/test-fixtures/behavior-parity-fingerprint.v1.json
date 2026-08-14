@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "digest": "35bcd9b4f05238e6085a85614309bc0f94311dc665b59ab46f3faa0425ffdc3c",
-  "candidateDigest": "a9d2cf5c7e6fe55f493bdb79977d0f3ab7f93c08897ffb91e091825d9dcf29ec",
-  "oracle": "staging behavior at performant-data-path migration start"
+  "digest": "32215da9eec5294f7cb2d0627577e7061b4d058099cea81ae857c640b9af3eca",
+  "candidateDigest": "947121f5774519864ffd94ab096aff2078ea85962d05f97657c2f71146264c9c",
+  "oracle": "staging behavior after recruitment appointment separation"
 }

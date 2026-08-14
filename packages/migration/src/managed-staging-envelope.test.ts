@@ -47,7 +47,7 @@ function validEnvelope() {
   return {
     artifacts: {
       behaviorFingerprint:
-        "a9d2cf5c7e6fe55f493bdb79977d0f3ab7f93c08897ffb91e091825d9dcf29ec",
+        "947121f5774519864ffd94ab096aff2078ea85962d05f97657c2f71146264c9c",
       schemaChecksumsDigest: schemaContract.checksumsDigest,
       schemaHead: schemaContract.head,
       sourceCommit: "a".repeat(40),
