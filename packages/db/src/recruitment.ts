@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto"
 
 import type { Pool, PoolClient } from "pg"
 
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  repositoryPool,
+  withTransaction as transaction,
+  type RepositoryPoolOptions,
+} from "./postgres-runtime"
 import {
   nextRecruitmentCombinedRoleIdentity,
   nextRecruitmentPostIdentity,
@@ -27,7 +31,6 @@ export {
   deriveRecruitmentPostStatus,
   isActiveRecruitmentApplicationStatus,
   recruitmentPostDeletionBlocker,
-  resolveRecruitmentEmployeeAssignmentTarget,
 } from "./recruitment-domain"
 
 type MutationContext = {
@@ -291,23 +294,6 @@ function requiredYesNo(value: unknown, label: string) {
   throw new Error(`${label} is required.`)
 }
 
-async function transaction<T>(
-  pool: Pool,
-  operation: (client: PoolClient) => Promise<T>
-) {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    const result = await operation(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
-}
 
 type AuditInput = MutationContext & {
   afterState?: Record<string, unknown> | null

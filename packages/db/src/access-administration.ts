@@ -1,8 +1,6 @@
 import { appendAccessAuditChanges } from "./access-audit"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
-type AccessAdministrationRepositoryOptions = RepositoryPoolOptions
-
 type CreateRoleInput = {
   actorUserId: string
   description?: string
@@ -97,7 +95,7 @@ type PermissionRow = {
 }
 
 export function createAccessAdministrationRepository(
-  options: AccessAdministrationRepositoryOptions
+  options: RepositoryPoolOptions
 ) {
   const { close, pool } = repositoryPool(options)
 

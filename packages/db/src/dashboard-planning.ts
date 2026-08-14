@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto"
 
-import type { Pool, PoolClient } from "pg"
+import type { PoolClient } from "pg"
 
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  repositoryPool,
+  withTransaction as transaction,
+  type RepositoryPoolOptions,
+} from "./postgres-runtime"
 import {
   validConfirmedPrioritySetupNumbers,
   workOrderIdentityMatches,
@@ -14,7 +18,6 @@ import {
   type ProductionFloorCode,
 } from "./production-floors"
 
-type RepositoryOptions = RepositoryPoolOptions
 
 type InterruptedSetupInput = {
   finishedQuantity?: number | null
@@ -52,23 +55,6 @@ const requiredText = (value: string, label: string) => {
   return normalized
 }
 
-async function transaction<T>(
-  pool: Pool,
-  operation: (client: PoolClient) => Promise<T>
-) {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    const result = await operation(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
-}
 
 async function businessKeyLock(
   client: PoolClient,
@@ -446,7 +432,7 @@ function priorityPosition(priority: string) {
   return positions[priority.trim().toLowerCase()] ?? 2
 }
 
-export function createDashboardPlanningRepository(options: RepositoryOptions) {
+export function createDashboardPlanningRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
   return {

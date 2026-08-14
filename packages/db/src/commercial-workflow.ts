@@ -10,9 +10,12 @@ import {
   selectorSearchTerm,
   type BoundedCommercialResult,
 } from "./commercial-bounds"
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  repositoryPool,
+  withTransaction as transaction,
+  type RepositoryPoolOptions,
+} from "./postgres-runtime"
 
-type RepositoryOptions = RepositoryPoolOptions
 
 type CommercialTerms = {
   conversionRate?: number
@@ -702,23 +705,6 @@ async function classifyImportRow(
   }
 }
 
-async function transaction<T>(
-  pool: Pool,
-  operation: (client: PoolClient) => Promise<T>
-) {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    const result = await operation(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
-}
 
 type SalesFollowupHistoryRow = {
   channel: string
@@ -1250,7 +1236,7 @@ async function getImportReviewWithClient(client: PoolClient, reviewId: string) {
   }
 }
 
-export function createCommercialWorkflowRepository(options: RepositoryOptions) {
+export function createCommercialWorkflowRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
   return {

@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto"
 
-import type { Pool, PoolClient } from "pg"
+import type { PoolClient } from "pg"
 
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  repositoryPool,
+  withTransaction as transaction,
+  type RepositoryPoolOptions,
+} from "./postgres-runtime"
 
 export const websiteFieldTypes = [
   "material",
@@ -125,23 +129,6 @@ function number(value: number | null | undefined) {
   return Number.isFinite(value) ? Number(value) : 0
 }
 
-async function transaction<T>(
-  pool: Pool,
-  operation: (client: PoolClient) => Promise<T>
-) {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    const result = await operation(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
-}
 
 async function audit(
   client: PoolClient,

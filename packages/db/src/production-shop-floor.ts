@@ -1,15 +1,18 @@
 import { randomUUID } from "node:crypto"
 
-import type { Pool, PoolClient } from "pg"
+import type { PoolClient } from "pg"
 
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  repositoryPool,
+  withTransaction as transaction,
+  type RepositoryPoolOptions,
+} from "./postgres-runtime"
 import {
   normalizeProductionFloorCode,
   type ProductionFloorCode,
 } from "./production-floors"
 
-type RepositoryOptions = RepositoryPoolOptions
 
 type RawMaterialReceiptInput = {
   actorUserId?: string | null
@@ -95,23 +98,6 @@ function mergeProductionCardPayload(
   return merged
 }
 
-async function transaction<T>(
-  pool: Pool,
-  operation: (client: PoolClient) => Promise<T>
-) {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    const result = await operation(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
-}
 
 function payloadText(payload: Record<string, unknown>, ...keys: string[]) {
   for (const key of keys) {
@@ -388,7 +374,7 @@ async function plannerSwitchExists(
   return Boolean(result.rows[0])
 }
 
-export function createProductionShopFloorRepository(options: RepositoryOptions) {
+export function createProductionShopFloorRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
   async function upsertRawMaterialReceipts(inputs: RawMaterialReceiptInput[]) {
