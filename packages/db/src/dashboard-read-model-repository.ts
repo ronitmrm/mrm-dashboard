@@ -145,9 +145,9 @@ export function createDashboardReadModelRepository(options: RepositoryOptions) {
               )
             ) AS source_watermark,
             created_at
-          FROM derived.dashboard_read_models
-          WHERE organization_id = $1
-          ORDER BY version DESC
+          FROM derived.dashboard_read_models AS dashboard_model
+          WHERE dashboard_model.organization_id = $1
+          ORDER BY dashboard_model.version DESC
           LIMIT 1
         `,
         [organizationId, productionFloorCode]

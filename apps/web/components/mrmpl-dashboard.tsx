@@ -81,7 +81,6 @@ import {
   productionFloors,
   toDashboardViewModel,
   universalProductionDashboardRows,
-  type DashboardRecord,
   type ProductionFloorCode,
 } from "@/lib/dashboard-view-model";
 import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
@@ -1766,31 +1765,6 @@ function DashboardContent({
   return <ProductionControlPanel productionControl={productionControl} submitAction={submitAction} />;
 }
 
-const productionDashboardColumns = [
-  { key: "jcNo", label: "JC No.", className: "min-w-28" },
-  { key: "fgPoNo", label: "FG PO No.", className: "min-w-32" },
-  { key: "partCode", label: "Part Code", className: "min-w-28" },
-  { key: "productionUnit", label: "Production Unit", className: "min-w-72" },
-  { key: "orderedQty", label: "Ordered Qty", className: "min-w-28 text-right" },
-  { key: "unit", label: "Unit", className: "min-w-20" },
-  { key: "rmReceivedDate", label: "RM Received Date", className: "min-w-36" },
-  { key: "plannedDispatchDateAtRmReceipt", label: "Planned Dispatch Date During RM Receipt", className: "min-w-52" },
-  { key: "currentProbableDispatchDate", label: "Current Probable Dispatch Date", className: "min-w-52" },
-  { key: "status", label: "Status", className: "min-w-28" },
-  { key: "dispatchedDate", label: "Dispatched Date", className: "min-w-36" },
-] as const;
-
-type ProductionDashboardColumnKey = (typeof productionDashboardColumns)[number]["key"];
-
-function productionDashboardFilterValue(
-  row: DashboardRecord,
-  key: ProductionDashboardColumnKey,
-) {
-  return key === "orderedQty"
-    ? formatNumber(Number(row.orderedQty) || 0)
-    : displayValue(row[key]);
-}
-
 function ProductionDashboardPanel({
   payload,
 }: {
@@ -1813,20 +1787,6 @@ function ProductionDashboardPanel({
     () => universalProductionDashboardRows(floorPayloads),
     [floorPayloads],
   );
-  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
-  const columnFilterOptions = useMemo(
-    () => Object.fromEntries(productionDashboardColumns.map((column) => [
-      column.key,
-      uniqueValues(rows.map((row) => productionDashboardFilterValue(row, column.key))),
-    ])) as Record<ProductionDashboardColumnKey, string[]>,
-    [rows],
-  );
-  const filteredRows = useMemo(() => {
-    return rows.filter((row) => productionDashboardColumns.every((column) => {
-      const selected = columnFilters[column.key];
-      return !selected || productionDashboardFilterValue(row, column.key) === selected;
-    }));
-  }, [columnFilters, rows]);
   const pending = rows.filter((row) => displayValue(row.status) === "Pending").length;
   const dispatched = rows.filter((row) => displayValue(row.status) === "Dispatched").length;
   const rmReceived = rows.filter((row) => displayValue(row.rmReceivedDate) !== "-").length;
@@ -1853,7 +1813,7 @@ function ProductionDashboardPanel({
             </div>
           ) : null}
           <div className="overflow-x-auto rounded-md border">
-            <Table>
+            <Table excelFilters>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="min-w-28">JC No.</TableHead>
@@ -1868,21 +1828,9 @@ function ProductionDashboardPanel({
                   <TableHead className="min-w-28">Status</TableHead>
                   <TableHead className="min-w-36">Dispatched Date</TableHead>
                 </TableRow>
-                <TableRow className="bg-muted/40">
-                  {productionDashboardColumns.map((column) => (
-                    <TableHead key={column.key} className={column.className}>
-                      <MachineMasterColumnFilter
-                        label={column.label}
-                        value={columnFilters[column.key] ?? ""}
-                        onChange={(value) => setColumnFilters((current) => ({ ...current, [column.key]: value }))}
-                        options={columnFilterOptions[column.key]}
-                      />
-                    </TableHead>
-                  ))}
-                </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRows.length ? filteredRows.map((row) => (
+                {rows.length ? rows.map((row) => (
                   <TableRow key={`${displayValue(row.jcNo)}-${displayValue(row.partCode)}`}>
                     <TableCell className="font-medium">{displayValue(row.jcNo)}</TableCell>
                     <TableCell>{displayValue(row.fgPoNo)}</TableCell>
@@ -1899,7 +1847,7 @@ function ProductionDashboardPanel({
                 )) : (
                   <TableRow>
                     <TableCell colSpan={11} className="h-28 text-center text-sm text-muted-foreground">
-                      No Work Orders Match The Selected Column Filters.
+                      No Work Orders Available.
                     </TableCell>
                   </TableRow>
                 )}

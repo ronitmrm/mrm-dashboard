@@ -72,6 +72,38 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL dashboard corrections", () => {
+  it("selects dashboard versions numerically after version 99", async () => {
+    const organization = await pool.query<{ id: string }>(
+      `INSERT INTO core.organizations (code, name) VALUES ($1, $2) RETURNING id`,
+      [`VERSION-${suffix}`, `Version ${suffix}`]
+    )
+    await pool.query(
+      `
+        INSERT INTO derived.dashboard_read_models (
+          organization_id, version, payload, source_watermark
+        ) VALUES
+          ($1, 99, $2, '{}'::jsonb),
+          ($1, 100, $3, '{}'::jsonb)
+      `,
+      [
+        organization.rows[0]!.id,
+        { marker: "version-99" },
+        { marker: "version-100" },
+      ]
+    )
+
+    const latest = await repository.latest(
+      organization.rows[0]!.id,
+      {},
+      "conventional"
+    )
+
+    expect(latest).toMatchObject({
+      marker: "version-100",
+      readModelVersion: 100,
+    })
+  })
+
   it("records a reversal and removes the source row from later candidates", async () => {
     const before = await repository.correctionCandidates(organizationId)
     expect(before).toContainEqual(
