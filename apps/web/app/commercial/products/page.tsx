@@ -23,7 +23,7 @@ import {
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { money } from "@/lib/pricing/costing"
-import { productPageBounds } from "@/lib/product-pagination"
+import { pageBounds } from "@/lib/page-bounds"
 
 export const dynamic = "force-dynamic"
 
@@ -33,7 +33,7 @@ export default async function ProductsPage({
   searchParams: Promise<{ page?: string | string[] }>
 }) {
   await requireCapability("pricing.masters.read", "/commercial/products")
-  const bounds = productPageBounds((await searchParams).page)
+  const bounds = pageBounds((await searchParams).page, 25)
 
   const repository = createProductRepository({
     connectionString: readAuthEnvironment().connectionString,

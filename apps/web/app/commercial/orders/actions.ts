@@ -12,22 +12,11 @@ import * as XLSX from "xlsx"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { optionalText, requiredText } from "@/lib/form-data"
 import { validateUserAttachment } from "@/lib/user-attachment-security"
 
 const ordersPath = "/commercial/orders"
 
-function requiredText(formData: FormData, name: string) {
-  const value = formData.get(name)
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${name} is required`)
-  }
-  return value.trim()
-}
-
-function optionalText(formData: FormData, name: string) {
-  const value = formData.get(name)
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
-}
 
 function numberValue(formData: FormData, name: string) {
   const value = Number(requiredText(formData, name))

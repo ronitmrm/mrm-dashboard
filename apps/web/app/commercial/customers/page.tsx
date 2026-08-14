@@ -29,7 +29,7 @@ import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
-import { customerPageBounds } from "@/lib/customer-pagination"
+import { pageBounds } from "@/lib/page-bounds"
 
 import { createCustomerAction, updateCustomerAction } from "./actions"
 
@@ -40,7 +40,7 @@ export default async function CustomersPage({
 }: {
   searchParams: Promise<{ page?: string | string[] }>
 }) {
-  const bounds = customerPageBounds((await searchParams).page)
+  const bounds = pageBounds((await searchParams).page, 15)
   const session = await requireCapability(
     "pricing.masters.read",
     "/commercial/customers"

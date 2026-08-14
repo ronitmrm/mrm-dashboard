@@ -5,21 +5,10 @@ import { revalidatePath } from "next/cache"
 import { createAccessAdministrationService } from "@/lib/auth/access-administration"
 import { getAuth, readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { optionalText, requiredText } from "@/lib/form-data"
 
 const accessPath = "/administration/access"
 
-function requiredText(formData: FormData, name: string) {
-  const value = formData.get(name)
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${name} is required`)
-  }
-  return value.trim()
-}
-
-function optionalText(formData: FormData, name: string) {
-  const value = formData.get(name)
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
-}
 
 function employeeReference(formData: FormData) {
   const value = requiredText(formData, "employee")
