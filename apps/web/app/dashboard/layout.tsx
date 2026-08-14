@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 
-import { ProductionShell } from "@/components/commercial/commercial-shell"
+import { CommercialShell } from "@/components/commercial/commercial-shell"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 
@@ -18,11 +18,11 @@ export default async function DashboardLayout({
   const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
 
   return (
-    <ProductionShell
+    <CommercialShell
       navigationAccess={navigationAccess}
       user={{ email: session.user.email, name: session.user.name }}
     >
       {children}
-    </ProductionShell>
+    </CommercialShell>
   )
 }

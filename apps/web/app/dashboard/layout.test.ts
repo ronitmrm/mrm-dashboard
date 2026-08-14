@@ -9,7 +9,7 @@ describe("Production dashboard layout", () => {
       "utf8"
     )
 
-    expect(source).toContain("<ProductionShell")
+    expect(source).toContain("<CommercialShell")
     expect(source).toContain("navigationAccess={navigationAccess}")
     expect(source).toContain(
       "user={{ email: session.user.email, name: session.user.name }}"

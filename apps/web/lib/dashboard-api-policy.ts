@@ -1,17 +1,6 @@
 export const maxBrowserImportRows = 100;
 export const maxMachineMasterBrowserImportRows = 250;
 
-const exportUnavailableError =
-  "Dashboard exports are not implemented yet. Use controlled workbook exports instead of placeholder files.";
-
-export function exportUnavailablePayload(path: string) {
-  if (path !== "data-export" && path !== "export-workbook") return null;
-  return {
-    status: 501,
-    error: exportUnavailableError,
-  };
-}
-
 export function browserImportPolicy(entryType: string, rowCount: number) {
   const rowLimit =
     entryType === "machine_master"

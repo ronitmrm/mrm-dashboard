@@ -18,10 +18,7 @@ import {
   readRequestAuthenticatedSession,
   readRequestGrantedCapabilitySet,
 } from "../../../lib/auth/request-authorization"
-import {
-  browserImportPolicy,
-  exportUnavailablePayload,
-} from "@/lib/dashboard-api-policy"
+import { browserImportPolicy } from "@/lib/dashboard-api-policy"
 import {
   dashboardErrorResponse,
   dashboardMutationCapabilities,
@@ -46,7 +43,7 @@ import {
 import { shouldQueuePlanningRefresh } from "@/lib/planning-refresh-policy"
 import { productionModuleIsEnabled } from "@/lib/production-module"
 import { withHttpPerformanceOperation } from "../../../lib/http-operation-telemetry"
-import { normalizeUserEnteredPayload } from "../../../lib/user-entry-text"
+import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text"
 import {
   DashboardReadError,
   readPostgresCorrectionCandidates,
@@ -720,10 +717,6 @@ async function get(request: NextRequest, context: RouteContext) {
       )
     }
 
-    if (path === "dashboard-refresh-status") {
-      return json(await readPostgresDashboardStatus(request))
-    }
-
     if (path === "correction-candidates") {
       return json({
         rows: await readPostgresCorrectionCandidates(
@@ -745,16 +738,6 @@ async function get(request: NextRequest, context: RouteContext) {
     if (path === "data-template") {
       const entryType = search.get("entryType") || "template"
       return await dataTemplateResponse(entryType, request)
-    }
-
-    if (path === "data-export") {
-      const payload = exportUnavailablePayload(path)!
-      return json({ error: payload.error }, payload.status)
-    }
-
-    if (path === "export-workbook") {
-      const payload = exportUnavailablePayload(path)!
-      return json({ error: payload.error }, payload.status)
     }
 
     return json({ error: "Not found" }, 404)
@@ -1010,25 +993,6 @@ async function post(request: NextRequest, context: RouteContext) {
         await withPlanningRefresh(path, body, {
           ...result,
           message: "Entry reversed. Live status recalculated.",
-        })
-      )
-    }
-
-    if (path === "production-entry/reverse") {
-      const result = await withProductionRepository(
-        request,
-        "operations.corrections.write",
-        ({ actorUserId, repository }) =>
-          repository.reverseProductionEntry({
-            actorUserId,
-            productionEntryId: text(body.productionEntryId),
-            reason: requiredDashboardText(body.reason, "Reversal reason"),
-          })
-      )
-      return json(
-        await withPlanningRefresh(path, body, {
-          ...result,
-          message: "Production entry reversed.",
         })
       )
     }
@@ -1579,20 +1543,16 @@ const knownDashboardApiPaths = new Set([
   "correction-candidates",
   "dashboard",
   "dashboard-refresh",
-  "dashboard-refresh-status",
   "dashboard-state",
   "data-entry",
-  "data-export",
   "data-import",
   "data-template",
   "dispatch-approval",
-  "export-workbook",
   "hourly-quality",
   "machine-constraint",
   "mark-complete",
   "plan-override",
   "planner-priority",
-  "production-entry/reverse",
   "reschedule",
   "reverse-entry",
   "route-change",

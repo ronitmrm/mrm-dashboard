@@ -30,7 +30,6 @@ Primary sources:
 - `apps/web/lib/legacy-dashboard-analysis.ts`
 - `apps/web/lib/dashboard-corrections.ts`
 - `apps/web/lib/planning-refresh-policy.ts`
-- `apps/web/lib/dashboard-refresh-state.ts`
 - `apps/web/app/api/[...path]/route.ts`
 - `apps/web/scripts/import-workbook.mjs`
 
