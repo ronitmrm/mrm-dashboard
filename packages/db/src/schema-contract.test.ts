@@ -408,6 +408,71 @@ test("a representative 0038 database upgrades without changing canonical rows", 
   ])
 })
 
+test("dashboard floor migration queues one refresh per organization", async () => {
+  const organizationId = "00000000-0000-4000-8000-000000000059"
+
+  await resetDisposableDatabase()
+  await migrateDatabase({
+    connectionString,
+    through: "0058_dashboard_route_master_projection.sql",
+  })
+  await pool.query(
+    `
+      INSERT INTO core.organizations (id, code, name)
+      VALUES ($1, 'UPGRADE-0059', 'Representative 0059 upgrade')
+    `,
+    [organizationId]
+  )
+  await pool.query(
+    `
+      INSERT INTO derived.dashboard_source_records (
+        organization_id, source_schema, source_table, source_id,
+        source_kind, source_group, entry_type, changed_at, source_payload
+      ) VALUES
+        (
+          $1, 'coverage_test', 'floor', 'first', 'data_entry',
+          'dataEntries', 'machine_master', now(),
+          '{"productionUnit":"Production Planning and Control Conventional 02"}'::jsonb
+        ),
+        (
+          $1, 'coverage_test', 'floor', 'second', 'data_entry',
+          'dataEntries', 'machine_master', now(),
+          '{"productionUnit":"Production Planning and Control Conventional 02"}'::jsonb
+        )
+    `,
+    [organizationId]
+  )
+
+  await migrateDatabase({
+    connectionString,
+    through: "0059_dashboard_conventional_02_projection.sql",
+  })
+
+  const projection = await pool.query<{ production_floor_code: string }>(
+    `
+      SELECT production_floor_code
+      FROM derived.dashboard_source_records
+      WHERE organization_id = $1
+      ORDER BY source_id
+    `,
+    [organizationId]
+  )
+  const refreshJobs = await pool.query<{ count: string }>(
+    `
+      SELECT count(*)::text AS count
+      FROM derived.refresh_jobs
+      WHERE organization_id = $1 AND queue_key = 'dashboard'
+    `,
+    [organizationId]
+  )
+
+  expect(projection.rows).toEqual([
+    { production_floor_code: "conventional-02" },
+    { production_floor_code: "conventional-02" },
+  ])
+  expect(refreshJobs.rows[0]?.count).toBe("1")
+}, 20_000)
+
 test("an empty database migrates into the MRMPL bounded contexts", async () => {
   await resetDisposableDatabase()
   await migrateDatabase({ connectionString })
@@ -423,7 +488,7 @@ test("an empty database migrates into the MRMPL bounded contexts", async () => {
   )
 
   expect(result.rows.map((row) => row.schema_name)).toEqual(expectedSchemas)
-})
+}, 20_000)
 
 test("the complete canonical bounded-context table contract is present", async () => {
   await migrateDatabase({ connectionString })

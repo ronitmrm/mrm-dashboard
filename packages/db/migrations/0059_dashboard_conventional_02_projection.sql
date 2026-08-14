@@ -56,6 +56,9 @@ WITH updated AS (
   WHERE production_floor_code IS DISTINCT FROM
     derived.dashboard_production_floor_code(source_payload)
   RETURNING organization_id
+), updated_organizations AS (
+  SELECT DISTINCT organization_id
+  FROM updated
 )
 INSERT INTO derived.refresh_jobs (
   organization_id,
@@ -64,13 +67,13 @@ INSERT INTO derived.refresh_jobs (
   status,
   run_after
 )
-SELECT DISTINCT
-  updated.organization_id,
+SELECT
+  updated_organizations.organization_id,
   'dashboard',
   gen_random_uuid()::text,
   'pending',
   now()
-FROM updated
+FROM updated_organizations
 ON CONFLICT (organization_id, queue_key)
   WHERE status IN ('pending', 'running')
 DO UPDATE SET
