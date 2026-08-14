@@ -44,7 +44,7 @@ import {
   ExcelColumnFilter,
   matchesColumnFilter,
   uniqueFilterOptions,
-} from "@/components/hr/excel-column-filter"
+} from "@workspace/ui/components/excel-column-filter"
 
 type FilterKey =
   | "candidate"
