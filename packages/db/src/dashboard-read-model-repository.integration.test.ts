@@ -115,13 +115,11 @@ describe("PostgreSQL dashboard corrections", () => {
     )
 
     const result = await repository.reverseEntry({
-      correctedBy: "Correction Tester",
+      actorUserId: "11111111-1111-4111-8111-111111111111",
+      correctionKind: "dataEntries",
       organizationId,
       reason: "Incorrect machine row",
-      targetId: sourceId,
-      targetKey: "CORRECTION-01",
-      targetLabel: "Machine CORRECTION-01",
-      targetTable: "dataEntries",
+      recordId: sourceId,
     })
 
     expect(result).toEqual({ reversed: true })
@@ -144,11 +142,38 @@ describe("PostgreSQL dashboard corrections", () => {
     )
     expect(stored.rows[0]?.source_payload).toMatchObject({
       action: "reverse",
-      correctedBy: "Correction Tester",
+      actorUserId: "11111111-1111-4111-8111-111111111111",
       reason: "Incorrect machine row",
       targetId: sourceId,
       targetTable: "dataEntries",
     })
+    const refresh = await pool.query<{ jobs: string; outbox_events: string }>(
+      `SELECT
+         (SELECT count(*)::text FROM derived.refresh_jobs
+          WHERE organization_id = $1 AND queue_key = 'dashboard') AS jobs,
+         (SELECT count(*)::text FROM derived.outbox_events
+          WHERE organization_id = $1
+            AND topic = 'dashboard.refresh.requested') AS outbox_events`,
+      [organizationId]
+    )
+    expect(refresh.rows).toEqual([{ jobs: "1", outbox_events: "1" }])
+    await expect(
+      repository.reverseEntry({
+        actorUserId: "11111111-1111-4111-8111-111111111111",
+        correctionKind: "dataEntries",
+        organizationId,
+        reason: "Duplicate correction",
+        recordId: sourceId,
+      })
+    ).rejects.toThrow("Active correction target was not found")
+    await pool.query(
+      "DELETE FROM derived.outbox_events WHERE organization_id = $1",
+      [organizationId]
+    )
+    await pool.query(
+      "DELETE FROM derived.refresh_jobs WHERE organization_id = $1",
+      [organizationId]
+    )
   })
 
   it("returns one floor and omits an unchanged dashboard payload", async () => {

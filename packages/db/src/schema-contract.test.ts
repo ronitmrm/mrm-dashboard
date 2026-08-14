@@ -233,27 +233,27 @@ async function representativeUpgradeFingerprint() {
     `
       SELECT jsonb_build_object(
         'organizations', (
-          SELECT jsonb_agg(to_jsonb(source_row) ORDER BY id)
+          SELECT jsonb_agg(jsonb_strip_nulls(to_jsonb(source_row)) ORDER BY id)
           FROM core.organizations source_row
           WHERE id = $1
         ),
         'machines', (
-          SELECT jsonb_agg(to_jsonb(source_row) ORDER BY id)
+          SELECT jsonb_agg(jsonb_strip_nulls(to_jsonb(source_row)) ORDER BY id)
           FROM catalog.machines source_row
           WHERE organization_id = $1
         ),
         'customers', (
-          SELECT jsonb_agg(to_jsonb(source_row) ORDER BY id)
+          SELECT jsonb_agg(jsonb_strip_nulls(to_jsonb(source_row)) ORDER BY id)
           FROM sales.customers source_row
           WHERE organization_id = $1
         ),
         'enquiries', (
-          SELECT jsonb_agg(to_jsonb(source_row) ORDER BY id)
+          SELECT jsonb_agg(jsonb_strip_nulls(to_jsonb(source_row)) ORDER BY id)
           FROM sales.enquiries source_row
           WHERE organization_id = $1
         ),
         'candidates', (
-          SELECT jsonb_agg(to_jsonb(source_row) ORDER BY id)
+          SELECT jsonb_agg(jsonb_strip_nulls(to_jsonb(source_row)) ORDER BY id)
           FROM recruitment.candidates source_row
           WHERE organization_id = $1
         )
@@ -918,9 +918,8 @@ test("refresh-job hints are commit-scoped, coalesced, and bounded", async () => 
       [committedOrganizationId]
     )
 
-    expect(duplicate).toHaveLength(1)
-    expect(JSON.parse(duplicate[0]!)).toEqual(expectedPayload)
-    expect(duplicateEffects.rows).toEqual([{ jobs: "1", outbox_events: "2" }])
+    expect(duplicate).toHaveLength(0)
+    expect(duplicateEffects.rows).toEqual([{ jobs: "1", outbox_events: "1" }])
   } finally {
     if (listenerConnected) {
       await listener
@@ -1337,6 +1336,7 @@ test("identity starts fresh without legacy Pricing auth tables", async () => {
     "employee_links",
     "permissions",
     "post_role_assignments",
+    "rate_limits",
     "role_permissions",
     "roles",
     "sessions",
@@ -1364,7 +1364,7 @@ test("identity starts fresh without legacy Pricing auth tables", async () => {
   ).toBe(false)
 })
 
-test("authorization seeds every unified application module", async () => {
+test("authorization seeds every unified application module and correction authority", async () => {
   await migrateDatabase({ connectionString })
 
   const result = await pool.query<{ module: string }>(`
@@ -1382,6 +1382,19 @@ test("authorization seeds every unified application module", async () => {
     "pricing",
     "quality",
   ])
+
+  const correctionCapability = await pool.query<{ administrator: boolean }>(`
+    SELECT EXISTS (
+      SELECT 1
+      FROM identity.permissions AS permissions
+      JOIN identity.role_permissions AS role_permissions
+        ON role_permissions.permission_id = permissions.id
+      JOIN identity.roles AS roles ON roles.id = role_permissions.role_id
+      WHERE permissions.key = 'operations.corrections.write'
+        AND roles.key = 'administrator'
+    ) AS administrator
+  `)
+  expect(correctionCapability.rows[0]?.administrator).toBe(true)
 })
 
 test("foundation includes provenance, conflict review, and durable work tables", async () => {

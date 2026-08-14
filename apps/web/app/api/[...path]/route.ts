@@ -22,6 +22,13 @@ import {
   browserImportPolicy,
   exportUnavailablePayload,
 } from "@/lib/dashboard-api-policy"
+import {
+  dashboardErrorResponse,
+  dashboardMutationCapabilities,
+  DashboardRequestPolicyError,
+  requiredDashboardText,
+  readDashboardJsonBody,
+} from "../../../lib/dashboard-route-policy"
 import { executeBoundedImport } from "../../../lib/bounded-import"
 import {
   normalizeInterruptedSetups,
@@ -79,6 +86,19 @@ function json(payload: unknown, status = 200) {
       "Cache-Control": "no-store",
     },
   })
+}
+
+function dashboardRouteError(err: unknown) {
+  const status =
+    err instanceof RouteError ||
+    err instanceof OperationalEntryError ||
+    err instanceof DashboardReadError ||
+    err instanceof DashboardRequestPolicyError
+      ? err.status
+      : 500
+  if (status >= 500) console.error("Dashboard API request failed", err)
+  const response = dashboardErrorResponse(err, status)
+  return json({ error: response.error }, response.status)
 }
 
 const dataEntryTemplateFields: Record<string, string[]> = {
@@ -335,6 +355,48 @@ async function authorizedDashboardSession(
     }
     telemetry.setOutcome("allowed")
     return { connectionString, session }
+  } catch (error) {
+    if (!(error instanceof RouteError)) telemetry.setOutcome("error")
+    throw error
+  } finally {
+    authorizationTelemetry.finish()
+  }
+}
+
+async function preauthorizeDashboardMutation(
+  request: NextRequest,
+  path: string
+) {
+  const capabilities = dashboardMutationCapabilities(path)
+  if (!capabilities) throw new RouteError(404, "Not found")
+  const authorizationTelemetry = authorizationRequestTelemetryForCurrentScope({
+    requestId: telemetryRequestId(request),
+  })
+  const { telemetry } = authorizationTelemetry
+  try {
+    const session = await readRequestAuthenticatedSession(
+      request.headers,
+      telemetry
+    )
+    if (!session) {
+      telemetry.setOutcome("unauthenticated")
+      throw new RouteError(
+        401,
+        "Authentication is required to access the dashboard API."
+      )
+    }
+    const granted = await readRequestGrantedCapabilitySet(
+      session.user.id,
+      telemetry
+    )
+    if (!capabilities.some((capability) => granted.has(capability))) {
+      telemetry.setOutcome("unauthorized")
+      throw new RouteError(
+        403,
+        "You do not have permission to perform this dashboard action."
+      )
+    }
+    telemetry.setOutcome("allowed")
   } catch (error) {
     if (!(error instanceof RouteError)) telemetry.setOutcome("error")
     throw error
@@ -697,14 +759,7 @@ async function get(request: NextRequest, context: RouteContext) {
 
     return json({ error: "Not found" }, 404)
   } catch (err) {
-    return json(
-      { error: err instanceof Error ? err.message : "Request failed" },
-      err instanceof RouteError ||
-        err instanceof OperationalEntryError ||
-        err instanceof DashboardReadError
-        ? err.status
-        : 500
-    )
+    return dashboardRouteError(err)
   }
 }
 
@@ -714,14 +769,16 @@ async function post(request: NextRequest, context: RouteContext) {
   }
 
   const path = (await context.params).path.join("/")
-  const body = normalizeUserEnteredPayload(
-    plainRecord(await request.json().catch(() => ({})))
-  )
 
   try {
     if (path === "dashboard-refresh") {
       return json(await requestPostgresDashboardRefresh(request))
     }
+
+    await preauthorizeDashboardMutation(request, path)
+    const body = normalizeUserEnteredPayload(
+      plainRecord(await readDashboardJsonBody(request))
+    )
 
     if (path === "attendance" || path === "training") {
       const result = await executePostgresOperationalEntry(
@@ -945,12 +1002,9 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "reverse-entry") {
       const result = await requestPostgresDashboardCorrection(request, {
-        correctedBy: optionalText(body.correctedBy),
-        reason: text(body.reason),
-        targetId: text(body.targetId),
-        targetKey: optionalText(body.targetKey),
-        targetLabel: optionalText(body.targetLabel),
-        targetTable: text(body.targetTable),
+        correctionKind: text(body.correctionKind || body.targetTable),
+        reason: requiredDashboardText(body.reason, "Reversal reason"),
+        recordId: text(body.recordId || body.targetId),
       })
       return json(
         await withPlanningRefresh(path, body, {
@@ -963,12 +1017,12 @@ async function post(request: NextRequest, context: RouteContext) {
     if (path === "production-entry/reverse") {
       const result = await withProductionRepository(
         request,
-        "operations.production.write",
+        "operations.corrections.write",
         ({ actorUserId, repository }) =>
           repository.reverseProductionEntry({
             actorUserId,
             productionEntryId: text(body.productionEntryId),
-            reason: text(body.reason),
+            reason: requiredDashboardText(body.reason, "Reversal reason"),
           })
       )
       return json(
@@ -1298,14 +1352,7 @@ async function post(request: NextRequest, context: RouteContext) {
 
     return json({ error: "Not found" }, 404)
   } catch (err) {
-    return json(
-      { error: err instanceof Error ? err.message : "Request failed" },
-      err instanceof RouteError ||
-        err instanceof OperationalEntryError ||
-        err instanceof DashboardReadError
-        ? err.status
-        : 400
-    )
+    return dashboardRouteError(err)
   }
 }
 

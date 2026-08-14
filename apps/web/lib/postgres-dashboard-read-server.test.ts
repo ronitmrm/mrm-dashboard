@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   recordGrantRead: vi.fn(),
   recordSessionRead: vi.fn(),
   requestRefresh: vi.fn(),
+  reverseEntry: vi.fn(),
   setOutcome: vi.fn(),
   state: vi.fn(),
 }))
@@ -22,6 +23,7 @@ vi.mock("@workspace/db", () => ({
     close: mocks.dashboardClose,
     organizationIdForCode: mocks.organizationIdForCode,
     requestRefresh: mocks.requestRefresh,
+    reverseEntry: mocks.reverseEntry,
     state: mocks.state,
   }),
 }))
@@ -62,6 +64,7 @@ vi.mock("./request-telemetry", () => ({
 import {
   DashboardReadError,
   readPostgresDashboardState,
+  requestPostgresDashboardCorrection,
 } from "./postgres-dashboard-read-server"
 
 describe("authenticated dashboard state reader", () => {
@@ -120,5 +123,33 @@ describe("authenticated dashboard state reader", () => {
     expect(mocks.state).not.toHaveBeenCalled()
     expect(mocks.dashboardClose).not.toHaveBeenCalled()
     expect(mocks.setOutcome).toHaveBeenCalledWith("unauthorized")
+  })
+
+  it("requires dedicated correction authority before reversing operations evidence", async () => {
+    mocks.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.dashboard.read",
+    ])
+    const request = new NextRequest("http://localhost/api/reverse-entry")
+
+    await expect(
+      requestPostgresDashboardCorrection(request, {
+        correctionKind: "productionEntries",
+        reason: "Duplicate entry",
+        recordId: "11111111-1111-4111-8111-111111111111",
+      })
+    ).rejects.toMatchObject({ status: 403 })
+    expect(mocks.reverseEntry).not.toHaveBeenCalled()
+
+    mocks.listAllGrantedCapabilities.mockResolvedValue([
+      "operations.corrections.write",
+    ])
+    mocks.reverseEntry.mockResolvedValue({ reversed: true })
+    await expect(
+      requestPostgresDashboardCorrection(request, {
+        correctionKind: "productionEntries",
+        reason: "Duplicate entry",
+        recordId: "11111111-1111-4111-8111-111111111111",
+      })
+    ).resolves.toEqual({ reversed: true })
   })
 })
