@@ -17,7 +17,6 @@
     "lint": "eslint src --max-warnings 0",
     "provider:preflight": "tsx src/commands/provider-preflight.ts",
     "recruitment:import": "tsx src/commands/import-recruitment-json.ts",
-    "recruitment:import": "tsx src/commands/import-recruitment-json.ts",
     "rehearse:foundation": "tsx src/commands/rehearse-foundation.ts",
     "rehearse:convex": "tsx src/commands/rehearse-convex.ts",
     "rehearse:pricing": "tsx src/commands/rehearse-pricing.ts",
@@ -42,8 +41,5 @@
     "tsx": "4.23.1",
     "typescript": "^5",
     "vitest": "4.1.10"
-  },
-  "exports": {
-    ".": "./src/index.ts"
   }
 }

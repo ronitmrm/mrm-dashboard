@@ -21,7 +21,6 @@
     "@types/pg": "^8.15.5",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
-    "drizzle-kit": "0.31.10",
     "eslint": "^9",
     "typescript": "^5",
     "vitest": "4.1.10"
@@ -38,7 +37,6 @@
     "./recruitment-codes": "./src/recruitment-codes.ts",
     "./recruitment-domain": "./src/recruitment-domain.ts",
     "./recruitment-interview-workflow": "./src/recruitment-interview-workflow.ts",
-    "./schema": "./src/schema/index.ts",
     "./user-entry-text": "./src/user-entry-text.ts"
   }
 }
