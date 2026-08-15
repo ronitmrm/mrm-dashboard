@@ -6,6 +6,7 @@ import {
 
 export type SharedEmployeeMasterRow = {
   department: string
+  departmentCode: string | null
   designation: string
   doj: string | null
   empId: string
@@ -32,6 +33,7 @@ export function sharedEmployeeMasterRows(
     if (rows.has(key)) continue
     rows.set(key, {
       department: post.department,
+      departmentCode: post.departmentCode,
       designation: post.designation,
       doj: post.joiningDate,
       empId,
@@ -51,9 +53,44 @@ export function sharedEmployeeMasterRows(
   )
 }
 
+const machinistDepartmentCodes = new Set([
+  "PPC-CVM",
+  "PPC-CV02M",
+  "PPC-FGM",
+])
+
+function productionFloorFromDepartment(
+  department: unknown,
+  departmentCode: unknown
+): ProductionFloorCode | null {
+  const code = String(departmentCode).trim().toUpperCase()
+  if (code.startsWith("PPC-CV02")) return "conventional-02"
+  if (code.startsWith("PPC-CV")) return "conventional"
+  if (code.startsWith("PPC-CNC")) return "cnc"
+  if (code.startsWith("PPC-FG")) return "forging"
+  return parseProductionFloorCode(department)
+}
+
+function isMachinistEmployee(row: {
+  department?: unknown
+  departmentCode?: unknown
+  designation?: unknown
+}) {
+  const designation = String(row.designation)
+  if (/\b(hod|manager)\b/i.test(designation)) return false
+  return (
+    /machinist/i.test(designation) ||
+    /machinist/i.test(String(row.department)) ||
+    machinistDepartmentCodes.has(
+      String(row.departmentCode).trim().toUpperCase()
+    )
+  )
+}
+
 export function productionMachinistOptions(
   rows: readonly {
     department?: unknown
+    departmentCode?: unknown
     designation?: unknown
     empId?: unknown
     employeeName?: unknown
@@ -65,8 +102,9 @@ export function productionMachinistOptions(
     .filter(
       (row) =>
         String(row.status).trim() === "Active" &&
-        /machinist/i.test(String(row.designation)) &&
-        parseProductionFloorCode(row.department) === productionFloorCode
+        isMachinistEmployee(row) &&
+        productionFloorFromDepartment(row.department, row.departmentCode) ===
+          productionFloorCode
     )
     .map((row) => ({
       code: String(row.empId).trim(),
@@ -80,6 +118,7 @@ export function productionMachinistOptions(
 export function productionWorkerOptions(
   rows: readonly {
     department?: unknown
+    departmentCode?: unknown
     designation?: unknown
     empId?: unknown
     employeeName?: unknown
@@ -92,7 +131,8 @@ export function productionWorkerOptions(
       (row) =>
         String(row.status).trim() === "Active" &&
         /(operator|worker)/i.test(String(row.designation)) &&
-        parseProductionFloorCode(row.department) === productionFloorCode
+        productionFloorFromDepartment(row.department, row.departmentCode) ===
+          productionFloorCode
     )
     .map((row) => ({
       code: String(row.empId).trim(),

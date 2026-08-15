@@ -75,6 +75,7 @@ export type RecruitmentPostRow = {
   combinedRoleName: string | null
   combinedVacancyCode: string | null
   department: string
+  departmentCode: string | null
   designation: string
   employeeCode: string | null
   employeeName: string | null
@@ -1060,6 +1061,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         combined_role_name: string | null
         combined_vacancy_code: string | null
         department: string
+        department_code: string | null
         designation: string
         employee_code: string | null
         employee_name: string | null
@@ -1090,6 +1092,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             COALESCE(combined_link.is_primary, false)
               AS is_primary_combined_post,
             COALESCE(department.name, '') AS department,
+            department.code AS department_code,
             designation.name AS designation,
             template.template_code AS requirement_template_code
           FROM recruitment.posts post
@@ -1115,6 +1118,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         combinedRoleName: row.combined_role_name,
         combinedVacancyCode: row.combined_vacancy_code,
         department: row.department,
+        departmentCode: row.department_code,
         designation: row.designation,
         employeeCode: row.employee_code,
         employeeName: row.employee_name,
