@@ -1089,11 +1089,12 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             combined.vacancy_code AS combined_vacancy_code,
             COALESCE(combined_link.is_primary, false)
               AS is_primary_combined_post,
-            department.name AS department,
+            COALESCE(department.name, '') AS department,
             designation.name AS designation,
             template.template_code AS requirement_template_code
           FROM recruitment.posts post
-          JOIN recruitment.departments department ON department.id = post.department_id
+          LEFT JOIN recruitment.departments department
+            ON department.id = post.department_id
           JOIN recruitment.designations designation ON designation.id = post.designation_id
           LEFT JOIN recruitment.requirement_templates template
             ON template.id = post.requirement_template_id
@@ -1104,7 +1105,8 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             ON combined_link.combined_role_id = combined.id
            AND combined_link.post_id = post.id
           WHERE post.organization_id = $1
-          ORDER BY department.name, designation.name, post.vacancy_number
+          ORDER BY COALESCE(department.name, ''), designation.name,
+            post.vacancy_number
         `,
         [organizationId]
       )
@@ -1876,6 +1878,58 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    async renameDepartmentMaster(
+      input: MutationContext & {
+        departmentId: string
+        name: string
+        referenceMode: "clear" | "propagate"
+      }
+    ) {
+      return transaction(pool, async (client) => {
+        const departmentId = required(input.departmentId, "Department")
+        const name = requiredProperCase(input.name, "Department name")
+        const result = await client.query<{
+          cleared_candidate_count: number
+          cleared_post_count: number
+          cleared_template_count: number
+          id: string
+          previous_name: string
+          updated_job_count: number
+        }>(
+          `
+            SELECT *
+            FROM recruitment.rename_department_master($1, $2, $3, $4, $5)
+          `,
+          [
+            input.organizationId,
+            departmentId,
+            name,
+            input.referenceMode === "clear",
+            input.actorUserId ?? null,
+          ]
+        )
+        const saved = result.rows[0]
+        if (!saved) throw new Error("Department was not found.")
+        const outcome = {
+          clearedCandidateCount: Number(saved.cleared_candidate_count),
+          clearedPostCount: Number(saved.cleared_post_count),
+          clearedTemplateCount: Number(saved.cleared_template_count),
+          id: saved.id,
+          updatedJobCount: Number(saved.updated_job_count),
+        }
+        await audit(client, {
+          ...input,
+          afterState: { name },
+          beforeState: { name: saved.previous_name },
+          eventType: "recruitment.department.renamed",
+          metadata: { ...outcome, referenceMode: input.referenceMode },
+          targetId: saved.id,
+          targetTable: "departments",
+        })
+        return outcome
+      })
+    },
+
     async upsertTemplate(
       input: MutationContext & {
         combinedRoleId?: string | null
@@ -2036,6 +2090,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             WHERE department.organization_id = $1
               AND lower(department.code) = lower($9)
             ON CONFLICT (organization_id, lower(post_code)) DO UPDATE SET
+              department_id = EXCLUDED.department_id,
               requirement_template_id = EXCLUDED.requirement_template_id,
               vacancy_code = EXCLUDED.vacancy_code,
               updated_by_user_id = EXCLUDED.updated_by_user_id,

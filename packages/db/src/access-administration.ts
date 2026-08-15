@@ -539,8 +539,11 @@ export function createAccessAdministrationRepository(
              organizations.name AS organization_name,
              btrim(posts.employee_code) AS employee_code,
              max(btrim(posts.employee_name)) AS employee_name,
-             array_agg(DISTINCT departments.name ORDER BY departments.name)
-               AS departments,
+             COALESCE(
+               array_agg(DISTINCT departments.name ORDER BY departments.name)
+                 FILTER (WHERE departments.name IS NOT NULL),
+               ARRAY[]::text[]
+             ) AS departments,
              array_agg(DISTINCT designations.name ORDER BY designations.name)
                AS designations,
              array_agg(DISTINCT posts.post_code ORDER BY posts.post_code)
@@ -551,7 +554,7 @@ export function createAccessAdministrationRepository(
            FROM recruitment.posts
            JOIN core.organizations
              ON organizations.id = posts.organization_id
-           JOIN recruitment.departments
+           LEFT JOIN recruitment.departments
              ON departments.id = posts.department_id
            JOIN recruitment.designations
              ON designations.id = posts.designation_id
@@ -581,7 +584,7 @@ export function createAccessAdministrationRepository(
             `SELECT
              posts.id,
              posts.post_code,
-             departments.name AS department,
+             COALESCE(departments.name, '') AS department,
              designations.name AS designation,
              COALESCE(
                array_agg(roles.key ORDER BY roles.key)
@@ -589,7 +592,7 @@ export function createAccessAdministrationRepository(
                ARRAY[]::text[]
              ) AS role_keys
            FROM recruitment.posts
-           JOIN recruitment.departments
+           LEFT JOIN recruitment.departments
              ON departments.id = posts.department_id
            JOIN recruitment.designations
              ON designations.id = posts.designation_id
@@ -599,7 +602,8 @@ export function createAccessAdministrationRepository(
              ON roles.id = post_role_assignments.role_id
            WHERE posts.status <> 'Inactive'
            GROUP BY posts.id, departments.name, designations.name
-           ORDER BY lower(departments.name), lower(designations.name),
+           ORDER BY lower(COALESCE(departments.name, '')),
+             lower(designations.name),
              lower(posts.post_code)`
           ),
         ])

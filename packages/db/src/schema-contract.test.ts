@@ -1309,6 +1309,7 @@ test("database roles enforce least privilege across migration, web, worker, and 
     web_can_execute_try_timestamptz: boolean
     web_can_migrate: boolean
     web_can_read_migration_evidence: boolean
+    web_can_rename_department_master: boolean
     web_can_replace_candidate_department: boolean
     web_can_use_migration_schema: boolean
     web_writes_customers: boolean
@@ -1350,6 +1351,11 @@ test("database roles enforce least privilege across migration, web, worker, and 
         'recruitment.replace_candidate_department(uuid, uuid, uuid)',
         'EXECUTE'
       ) AS web_can_replace_candidate_department,
+      has_function_privilege(
+        'mrmpl_web',
+        'recruitment.rename_department_master(uuid, uuid, text, boolean, uuid)',
+        'EXECUTE'
+      ) AS web_can_rename_department_master,
       has_table_privilege('mrmpl_web', 'migration.schema_migrations', 'INSERT')
         AS web_can_migrate,
       has_table_privilege('mrmpl_web', 'migration.schema_migrations', 'SELECT')
@@ -1392,6 +1398,7 @@ test("database roles enforce least privilege across migration, web, worker, and 
     web_can_execute_try_timestamptz: true,
     web_can_migrate: false,
     web_can_read_migration_evidence: false,
+    web_can_rename_department_master: true,
     web_can_replace_candidate_department: true,
     web_can_use_migration_schema: true,
     web_writes_customers: true,

@@ -202,7 +202,7 @@ function MastersPanel({
           </Button>
         </PanelForm>
       ) : null}
-      <MasterTables masters={masters} />
+      <MasterTables canWrite={canWrite} masters={masters} />
     </>
   )
 }
