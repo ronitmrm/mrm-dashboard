@@ -50,7 +50,7 @@ describe("unified navigation", () => {
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
     expect(dashboardNavigation).toHaveLength(20)
-    expect(productionFloorNavigation).toHaveLength(11)
+    expect(productionFloorNavigation).toHaveLength(10)
     expect(productionFloorNavigation).not.toContainEqual(
       planningHolidayNavigation
     )
@@ -63,6 +63,7 @@ describe("unified navigation", () => {
     })
     expect(universalProductionNavigation.map(({ id }) => id)).toEqual([
       "productionDashboardTab",
+      "maintenanceTab",
       "correctionsTab",
       "dataEntryTab",
       "masterTablesTab",
@@ -111,6 +112,11 @@ describe("unified navigation", () => {
     ).toMatchObject({
       subtitle: "Setup And Maintenance",
       title: "Checklists",
+    })
+    expect(
+      dashboardNavigation.find(({ id }) => id === "maintenanceTab")
+    ).toMatchObject({
+      title: "Mechanical Maintenance",
     })
     expect(commercialNavigation).toHaveLength(17)
     expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([

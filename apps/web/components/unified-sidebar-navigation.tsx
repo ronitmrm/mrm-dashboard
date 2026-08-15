@@ -553,7 +553,9 @@ function universalProductionNavigationHref(
 ) {
   return dashboardTabHref(
     tab,
-    tab === "correctionsTab" || tab === "productionDashboardTab"
+    tab === "correctionsTab" ||
+      tab === "maintenanceTab" ||
+      tab === "productionDashboardTab"
       ? undefined
       : floor
   )

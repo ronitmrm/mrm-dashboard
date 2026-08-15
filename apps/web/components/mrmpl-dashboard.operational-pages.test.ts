@@ -89,4 +89,36 @@ describe("Production operational page loading", () => {
     expect(panel).not.toContain("MachineMasterColumnFilter")
     expect(panel).not.toContain("Search Work Orders")
   })
+
+  it("opens a machine schedule and history workspace from its URL", () => {
+    const source = readFileSync(
+      new URL("./mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
+    const panel = source.slice(
+      source.indexOf("function MachineMasterPanel"),
+      source.indexOf("function MaintenancePanel")
+    )
+
+    expect(panel).toContain("useSyncExternalStore(")
+    expect(panel).toContain("machineMasterQueryFromLocation()")
+    expect(panel).not.toContain("const [selectedMachineNo] = useState")
+  })
+
+  it("loads Mechanical Maintenance across every Production Unit", () => {
+    const source = readFileSync(
+      new URL("./mrmpl-dashboard.tsx", import.meta.url),
+      "utf8"
+    )
+    const workspace = source.slice(
+      source.indexOf("function UniversalMaintenanceWorkspace"),
+      source.indexOf("function ProductionDashboardPanel")
+    )
+
+    for (const floor of ["conventional", "conventional-02", "cnc", "forging"]) {
+      expect(workspace).toContain(`/api/dashboard?floor=${floor}`)
+    }
+    expect(workspace).toContain("combinedMachineMasterProductionControl")
+    expect(workspace).toContain("<MaintenancePanel")
+  })
 })
