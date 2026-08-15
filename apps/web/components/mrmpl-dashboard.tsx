@@ -110,7 +110,7 @@ import {
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
 import { maintenanceChecklistRowsForSchedule } from "@/lib/maintenance-schedule-options";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
-import { duplicateQualityParameterCombination } from "@/lib/quality-parameter-set";
+import { duplicateQualityParameterCombination, mergeQualityInspectionParameterRows } from "@/lib/quality-parameter-set";
 import { productionMachinistOptions } from "@/lib/shared-employee-master";
 import {
   setupChecklistItemAppliesToPhase,
@@ -10187,10 +10187,10 @@ function qualityParameterPayload(draft: QualityParameterDraft | DashboardPayload
 }
 
 function combinedQualityInspectionMasterRows(productionControl: DashboardPayload) {
-  return [
-    ...asArray(productionControl.qualityParameterMasterRows),
-    ...asArray(productionControl.firstPieceInspectionMasterRows),
-  ];
+  return mergeQualityInspectionParameterRows(
+    asArray(productionControl.qualityParameterMasterRows),
+    asArray(productionControl.firstPieceInspectionMasterRows),
+  );
 }
 
 function qualityParameterRouteLines(rows: DashboardPayload[]) {
