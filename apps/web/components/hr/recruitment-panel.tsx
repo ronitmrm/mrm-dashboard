@@ -180,7 +180,7 @@ function MastersPanel({
       {canWrite ? (
         <PanelForm
           action={saveMasterAction}
-          description="Codes Are The Stable Identity Used By Templates And Approved Posts."
+          description="The Department Or Designation Code Is Generated Automatically."
           panelId="mastersPanel"
           title="Add A Master"
         >
@@ -195,7 +195,6 @@ function MastersPanel({
               </NativeSelectOption>
             </NativeSelect>
           </Field>
-          <TextField label="Code" name="code" required />
           <TextField label="Name" name="name" required />
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
             Save Master

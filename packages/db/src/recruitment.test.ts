@@ -268,12 +268,62 @@ describe("updateCombinedRole", () => {
 })
 
 describe("masters", () => {
-  test("rejects a reused code even when the name is unchanged", async () => {
+  test.each([
+    ["department", "departments", "DEP", "DEP013"],
+    ["designation", "designations", "DES", "DES013"],
+  ] as const)(
+    "generates the next %s code",
+    async (kind, table, prefix, expectedCode) => {
+      const query = vi.fn(
+        async (...args: [statement: string, parameters?: readonly unknown[]]) => {
+          const [statement] = args
+          if (statement.includes("AS next_number")) {
+            return { rows: [{ next_number: 13 }] }
+          }
+          if (statement.includes(`INSERT INTO recruitment.${table}`)) {
+            return {
+              rows: [
+                {
+                  code: expectedCode,
+                  id: "00000000-0000-4000-8000-000000000020",
+                },
+              ],
+            }
+          }
+          return { rows: [] }
+        }
+      )
+      const client = { query, release: vi.fn() } as unknown as PoolClient
+      const repository = createRecruitmentRepository({
+        pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+      })
+
+      await expect(
+        repository.upsertMaster({
+          kind,
+          name: "Human Resources",
+          organizationId: "00000000-0000-4000-8000-000000000010",
+        })
+      ).resolves.toMatchObject({ code: expectedCode })
+
+      const nextCodeQuery = query.mock.calls.find(([statement]) =>
+        statement.includes("AS next_number")
+      )
+      expect(nextCodeQuery?.[1]).toEqual([
+        "00000000-0000-4000-8000-000000000010",
+        prefix,
+      ])
+      const insert = query.mock.calls.find(([statement]) =>
+        statement.includes(`INSERT INTO recruitment.${table}`)
+      )
+      expect(insert?.[1]?.[1]).toBe(expectedCode)
+    }
+  )
+
+  test("rejects a reused name", async () => {
     const query = vi.fn(async (statement: string) => {
-      if (
-        statement.includes("SELECT code, name FROM recruitment.departments")
-      ) {
-        return { rows: [{ code: "HR", name: "Human Resources" }] }
+      if (statement.includes("SELECT code, name FROM recruitment.departments")) {
+        return { rows: [{ code: "DEP001", name: "Human Resources" }] }
       }
       return { rows: [] }
     })
@@ -284,12 +334,11 @@ describe("masters", () => {
 
     await expect(
       repository.upsertMaster({
-        code: "hr",
         kind: "department",
         name: "Human Resources",
         organizationId: "00000000-0000-4000-8000-000000000010",
       })
-    ).rejects.toThrow("code hr is already used")
+    ).rejects.toThrow('name "Human Resources" is already used')
     expect(
       query.mock.calls.some(([statement]) =>
         statement.includes("INSERT INTO recruitment.departments")
