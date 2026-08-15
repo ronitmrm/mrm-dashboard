@@ -82,7 +82,6 @@ export async function saveMasterAction(formData: FormData) {
   await mutate(formData, "hr.recruitment.write", (repository, context) =>
     repository.upsertMaster({
       ...context,
-      code: value(formData, "code"),
       kind:
         value(formData, "kind") === "designation"
           ? "designation"

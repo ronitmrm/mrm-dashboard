@@ -1813,14 +1813,13 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
 
     async upsertMaster(
       input: MutationContext & {
-        code: string
         kind: "department" | "designation"
         name: string
       }
     ) {
       const table = input.kind === "department" ? "departments" : "designations"
+      const codePrefix = input.kind === "department" ? "DEP" : "DES"
       return transaction(pool, async (client) => {
-        const code = required(input.code, `${input.kind} code`)
         const name = requiredProperCase(input.name, `${input.kind} name`)
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
@@ -1830,34 +1829,44 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           `
             SELECT code, name FROM recruitment.${table}
             WHERE organization_id = $1
-              AND (
-                lower(btrim(code)) = lower(btrim($2))
-                OR lower(btrim(name)) = lower(btrim($3))
-              )
+              AND lower(btrim(name)) = lower(btrim($2))
             LIMIT 1
           `,
-          [input.organizationId, code, name]
+          [input.organizationId, name]
         )
         if (duplicate.rows[0]) {
           const label =
             input.kind === "department" ? "Department" : "Designation"
-          const duplicateField =
-            duplicate.rows[0].code.trim().toLowerCase() ===
-            code.trim().toLowerCase()
-              ? `code ${code}`
-              : `name "${name}"`
           throw new Error(
-            `${label} ${duplicateField} is already used by ${duplicate.rows[0].code} - ${duplicate.rows[0].name}.`
+            `${label} name "${name}" is already used by ${duplicate.rows[0].code} - ${duplicate.rows[0].name}.`
           )
         }
-        const result = await client.query<{ id: string }>(
+        const nextNumberResult = await client.query<{ next_number: number }>(
+          `
+            SELECT COALESCE(
+              MAX(
+                CASE
+                  WHEN upper(btrim(code)) ~ ('^' || $2 || '[0-9]+$')
+                    THEN substring(upper(btrim(code)) from '[0-9]+$')::integer
+                END
+              ),
+              0
+            ) + 1 AS next_number
+            FROM recruitment.${table}
+            WHERE organization_id = $1
+          `,
+          [input.organizationId, codePrefix]
+        )
+        const nextNumber = nextNumberResult.rows[0]?.next_number ?? 1
+        const code = `${codePrefix}${String(nextNumber).padStart(3, "0")}`
+        const result = await client.query<{ code: string; id: string }>(
           `
             INSERT INTO recruitment.${table} (
               organization_id, code, name, created_by_user_id,
               updated_by_user_id, source_system, source_table, source_id
             )
             VALUES ($1, upper($2), $3, $4, $4, 'mrm-dashboard', $5, $6)
-            RETURNING id
+            RETURNING id, code
           `,
           [
             input.organizationId,
@@ -1870,6 +1879,7 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         )
         await audit(client, {
           ...input,
+          afterState: { code, name },
           eventType: `recruitment.${input.kind}.saved`,
           targetId: result.rows[0]!.id,
           targetTable: table,
