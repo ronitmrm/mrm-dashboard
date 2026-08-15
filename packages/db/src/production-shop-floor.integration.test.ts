@@ -26,6 +26,7 @@ const secondMachine = `FLOOR-MC-${suffix}-2`
 const cncMachine = `FLOOR-CNC-${suffix}`
 const firstOperator = `FLOOR-OP-${suffix}-1`
 const secondOperator = `FLOOR-OP-${suffix}-2`
+const hrOperator = `FLOOR-HR-OP-${suffix}`
 const rmPoNumber = `RM-${suffix}`
 let organizationId: string
 let productionEntryId: string
@@ -506,6 +507,91 @@ describe("production and shop-floor workflows", () => {
       endReason: "item_complete",
       organizationId,
       sessionId: second.id,
+    })
+  })
+
+  test("starts a session with an active operator from the central HR Employee Master", async () => {
+    const department = await pool.query<{ id: string }>(
+      `
+        INSERT INTO recruitment.departments (
+          organization_id, code, name, source_system, source_table, source_id
+        ) VALUES ($1, 'PPC-CVSF', 'Conventional Shop Floor',
+          'test', 'departments', $2)
+        ON CONFLICT (organization_id, lower(code))
+        DO UPDATE SET active = true
+        RETURNING id
+      `,
+      [organizationId, randomUUID()]
+    )
+    const designation = await pool.query<{ id: string }>(
+      `
+        INSERT INTO recruitment.designations (
+          organization_id, code, name, source_system, source_table, source_id
+        ) VALUES ($1, 'WORKER', 'Worker', 'test', 'designations', $2)
+        ON CONFLICT (organization_id, lower(code))
+        DO UPDATE SET active = true
+        RETURNING id
+      `,
+      [organizationId, randomUUID()]
+    )
+    await pool.query(
+      `
+        INSERT INTO recruitment.posts (
+          organization_id, department_id, designation_id, vacancy_number,
+          post_code, vacancy_code, employee_name, employee_code, status,
+          source_system, source_table, source_id
+        ) VALUES ($1, $2, $3, '1', $4, $4, 'HR Operator', $5,
+          'Occupied', 'test', 'posts', $6)
+      `,
+      [
+        organizationId,
+        department.rows[0]!.id,
+        designation.rows[0]!.id,
+        `FLOOR-HR-POST-${suffix}`,
+        hrOperator,
+        randomUUID(),
+      ]
+    )
+    await repository.recordShopFloorStage({
+      jobCardNumber: firstJobCard,
+      machineNumber: firstMachine,
+      operationSetupCode: "1",
+      organizationId,
+      payload: { doneBy: "Machinist", partCode: itemUid },
+      stage: "operator_started",
+    })
+
+    const session = await repository.startProductionSession({
+      jobCardNumber: firstJobCard,
+      machineNumber: firstMachine,
+      measurementMethod: "weight",
+      operationSetupCode: "1",
+      operatorCode: hrOperator,
+      organizationId,
+      pieceWeightGrams: 15.4,
+      productionDate: "2026-08-15",
+      shift: "Day",
+      startedAt: "2026-08-15T08:00:00+05:30",
+    })
+    const projected = await pool.query<{ active: boolean; employee_code: string }>(
+      `
+        SELECT employee_code, active
+        FROM workforce.employees
+        WHERE organization_id = $1 AND lower(employee_code) = lower($2)
+      `,
+      [organizationId, hrOperator]
+    )
+
+    expect(session.id).toBeTruthy()
+    expect(projected.rows[0]).toEqual({ active: true, employee_code: hrOperator })
+    await repository.closeProductionSession({
+      crateCount: 0,
+      crateWeightKg: 0,
+      endedAt: "2026-08-15T09:00:00+05:30",
+      endReason: "item_complete",
+      grossWeightKg: 1,
+      organizationId,
+      sessionId: session.id,
     })
   })
 

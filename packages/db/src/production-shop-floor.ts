@@ -49,6 +49,13 @@ type ProductionSessionEndReason =
 
 type ProductionEntryRole = "quality" | "shop_floor" | "machinist"
 
+const shopFloorDepartmentCode: Record<ProductionFloorCode, string> = {
+  cnc: "PPC-CNCSF",
+  conventional: "PPC-CVSF",
+  "conventional-02": "PPC-CV02SF",
+  forging: "PPC-FGSF",
+}
+
 const stageAliases: Record<string, string> = {
   item_complete: "item_complete",
   operator_started: "operator_started",
@@ -415,8 +422,96 @@ async function employeeIdFor(
 async function requiredActiveEmployeeIdFor(
   client: PoolClient,
   organizationId: string,
-  employeeCode: string
+  employeeCode: string,
+  productionFloorCode: ProductionFloorCode,
+  actorUserId?: string | null
 ) {
+  const normalizedEmployeeCode = requiredText(employeeCode, "Operator code")
+  const projected = await client.query<{ id: string }>(
+    `
+      WITH active_post AS MATERIALIZED (
+        SELECT post.id, btrim(post.employee_code) AS employee_code,
+          btrim(post.employee_name) AS employee_name,
+          department.name AS department_name,
+          department.code AS department_code,
+          designation.name AS designation_name,
+          post.joining_date, post.last_working_date
+        FROM recruitment.posts post
+        JOIN recruitment.departments department
+          ON department.id = post.department_id AND department.active
+        JOIN recruitment.designations designation
+          ON designation.id = post.designation_id AND designation.active
+        WHERE post.organization_id = $1
+          AND lower(btrim(post.employee_code)) = lower($2)
+          AND post.status = 'Occupied'
+          AND upper(btrim(department.code)) = $3
+          AND designation.name !~* '(^|[^a-z])(hod|manager|management)([^a-z]|$)'
+          AND nullif(btrim(post.employee_name), '') IS NOT NULL
+        ORDER BY post.updated_at DESC, post.id
+        LIMIT 1
+      ), projected AS (
+        INSERT INTO workforce.employees (
+          organization_id, employee_code, name, department, designation,
+          active, joined_on, left_on, created_by_user_id,
+          updated_by_user_id, source_system, source_table, source_id,
+          source_payload
+        )
+        SELECT $1, employee_code, employee_name, department_name,
+          designation_name, true, joining_date, last_working_date, $4, $4,
+          'mrm-dashboard', 'recruitment.posts', id::text,
+          jsonb_build_object(
+            'postId', id,
+            'departmentCode', department_code,
+            'projectedFor', 'production_session'
+          )
+        FROM active_post
+        ON CONFLICT (organization_id, lower(employee_code))
+        DO UPDATE SET name = EXCLUDED.name,
+          department = EXCLUDED.department,
+          designation = EXCLUDED.designation,
+          active = true,
+          joined_on = EXCLUDED.joined_on,
+          left_on = EXCLUDED.left_on,
+          updated_by_user_id = EXCLUDED.updated_by_user_id,
+          source_payload = EXCLUDED.source_payload,
+          updated_at = now(),
+          row_version = workforce.employees.row_version + 1
+        WHERE ROW(
+          workforce.employees.name,
+          workforce.employees.department,
+          workforce.employees.designation,
+          workforce.employees.active,
+          workforce.employees.joined_on,
+          workforce.employees.left_on
+        ) IS DISTINCT FROM ROW(
+          EXCLUDED.name,
+          EXCLUDED.department,
+          EXCLUDED.designation,
+          EXCLUDED.active,
+          EXCLUDED.joined_on,
+          EXCLUDED.left_on
+        )
+        RETURNING id
+      )
+      SELECT id FROM projected
+      UNION ALL
+      SELECT employee.id
+      FROM workforce.employees employee
+      WHERE employee.organization_id = $1
+        AND lower(btrim(employee.employee_code)) = lower($2)
+        AND employee.active
+        AND EXISTS (SELECT 1 FROM active_post)
+      LIMIT 1
+    `,
+    [
+      organizationId,
+      normalizedEmployeeCode,
+      shopFloorDepartmentCode[productionFloorCode],
+      actorUserId ?? null,
+    ]
+  )
+  if (projected.rows[0]) return projected.rows[0].id
+
   const result = await client.query<{ id: string }>(
     `
       SELECT id FROM workforce.employees
@@ -426,7 +521,7 @@ async function requiredActiveEmployeeIdFor(
       LIMIT 1
       FOR UPDATE
     `,
-    [organizationId, requiredText(employeeCode, "Operator code")]
+    [organizationId, normalizedEmployeeCode]
   )
   if (!result.rows[0]) {
     throw new Error("The selected active Shop Floor operator was not found.")
@@ -550,7 +645,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const operatorId = await requiredActiveEmployeeIdFor(
           client,
           input.organizationId,
-          input.operatorCode
+          input.operatorCode,
+          floorCode,
+          input.actorUserId
         )
         if (!(input.pieceWeightGrams > 0)) {
           throw new Error("Piece weight from Cycle Time Master is required.")
