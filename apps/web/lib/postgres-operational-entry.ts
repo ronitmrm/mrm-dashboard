@@ -363,9 +363,9 @@ export function operationalEntryPlan(entryType: string, payload: Payload) {
       input: {
         approvedBy: optionalText(payload.approvedBy),
         dimensions: dimensions.map((dimension) => ({
-          parameterCode: text(
-            dimension.parameterCode || dimension.code || dimension.uid
-          ),
+          parameterCode:
+            text(dimension.parameterCode || dimension.code || dimension.uid) ||
+            qualityParameterCode(dimension),
           parameterName: optionalText(
             dimension.parameterName || dimension.description || dimension.name
           ),

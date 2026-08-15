@@ -64,6 +64,32 @@ describe("PostgreSQL operational entry mapping", () => {
     })
   })
 
+  test("uses the saved automatic code for legacy first-piece dimensions", () => {
+    expect(
+      operationalEntryPlan("first_piece_inspection_report", {
+        reportId: "JC-001|M2B|1|1|ADD501|FPI",
+        jcNo: "JC-001",
+        setupNo: "1",
+        machine: "ADD501",
+        dimensions: [
+          {
+            parameterName: "Total Length",
+            specification: "20",
+            readings: [20.1, 20, 20.15, 20.1, 20],
+          },
+        ],
+      })
+    ).toMatchObject({
+      input: {
+        dimensions: [
+          {
+            parameterCode: "Total Length|20",
+          },
+        ],
+      },
+    })
+  })
+
   test("keeps both setup checklist phases and their original value types", () => {
     expect(
       operationalEntryPlan("setup_checklist_session", {
