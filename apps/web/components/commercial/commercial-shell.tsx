@@ -38,6 +38,10 @@ const productionPageNavigation: Record<
   string,
   { label: string; parentTab: DashboardTabId }
 > = {
+  "/dashboard/production-sessions": {
+    label: "Production Sessions",
+    parentTab: "productionSessionsTab",
+  },
   "/dashboard/first-piece-inspection": {
     label: "First Piece Inspection",
     parentTab: "firstPieceInspectionTab",

@@ -32,6 +32,30 @@ _Avoid_: Setup completion date.
 One uninterrupted period in which one operator runs one machine for one Job Card, option, and setup. Shop Floor records its start; Shop Floor closes it, while Quality may also close CNC sessions. A shift change, operator change, item completion, or job/setup change ends the session. Downtime does not end it.
 _Avoid_: Daily production entry, permanent setup operator.
 
+**Production Session Reference**:
+The immutable human-readable reference generated from the machine number, Production Date, and that machine's daily session sequence, such as `C501-20260815-03`. The internal UUID remains the permanent technical identity.
+_Avoid_: User-entered session name, shortened UUID.
+
+**Production Shift**:
+A configured operating interval for one Production Floor. Conventional-01, Conventional-02, and Forging use General shift from 08:30 to 20:00; CNC uses A from 06:00 to 14:00, B from 14:00 to 22:00, and C from 22:00 to 06:00.
+_Avoid_: User-entered free-text shift.
+
+**Production Date**:
+The calendar date on which a Production Shift starts. An overnight CNC C shift therefore keeps its starting date after midnight until 06:00.
+_Avoid_: UTC date, session-end date.
+
+**Daily Machine Board**:
+The machine-first operational view that combines the current planner assignment, Production Session state, operator, and role-authorized start, end, downtime, and rejection actions.
+_Avoid_: Session-history table, separate planner card.
+
+**Production Session Register**:
+The filterable one-row-per-session record used to find and open current and historical Production Sessions.
+_Avoid_: Daily Machine Board, event-level log.
+
+**Production Event Log**:
+The chronological analysis view that presents session starts, downtime, rejection, session closes, and corrections as individual rows without duplicating their canonical records.
+_Avoid_: Mutable audit note, duplicate event storage.
+
 **Production Measurement Method**:
 The method selected for one Production Session. Conventional-01, Conventional-02, and Forging use Weight. CNC asks for either Machine Counter or Weight for every session.
 _Avoid_: Machine-wide permanent counting method.

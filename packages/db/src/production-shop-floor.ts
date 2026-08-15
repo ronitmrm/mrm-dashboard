@@ -14,6 +14,8 @@ import {
 } from "./production-floors"
 import {
   calculateProductionSessionOutput,
+  formatProductionSessionReference,
+  productionShiftAt,
   type ProductionMeasurementMethod,
 } from "./production-session-domain"
 
@@ -595,6 +597,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
 
     async startProductionSession(input: {
       actorUserId?: string | null
+      cycleTimeSeconds?: number
       jobCardNumber: string
       machineNumber: string
       measurementMethod: string
@@ -602,9 +605,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       operatorCode: string
       organizationId: string
       pieceWeightGrams: number
-      productionDate: string
+      productionDate?: string
       productionFloorCode?: string
-      shift: string
+      shift?: string
       sourcePayload?: Record<string, unknown>
       startCount?: number
       startedAt: string
@@ -652,6 +655,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (!(input.pieceWeightGrams > 0)) {
           throw new Error("Piece weight from Cycle Time Master is required.")
         }
+        const shiftContext = productionShiftAt(floorCode, startedAt)
+        if (!shiftContext) {
+          throw new Error(
+            "Session start is outside the configured production shift."
+          )
+        }
 
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtext('production.session'), hashtext($1))",
@@ -691,6 +700,61 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           throw new Error("This machine already has an open production session.")
         }
 
+        const dailySequenceResult = await client.query<{ value: string }>(
+          `
+            SELECT (COALESCE(max(daily_sequence), 0) + 1)::text AS value
+            FROM manufacturing.production_sessions
+            WHERE machine_id = $1 AND production_date = $2
+          `,
+          [machineId, shiftContext.productionDate]
+        )
+        const dailySequence = Number(dailySequenceResult.rows[0]!.value)
+        const snapshot = await client.query<{
+          job_card_number: string
+          machine_number: string
+          operator_code: string
+          operator_name: string
+          option_number: string
+          part_code: string
+          setup_number: string
+        }>(
+          `
+            SELECT work_order.job_card_number,
+              machine.machine_number,
+              employee.employee_code AS operator_code,
+              employee.name AS operator_name,
+              route.route_code AS option_number,
+              item.uid AS part_code,
+              setup.setup_number::text AS setup_number
+            FROM manufacturing.work_orders work_order
+            JOIN catalog.items item ON item.id = work_order.item_id
+            JOIN manufacturing.route_options route ON route.id = $2
+            JOIN manufacturing.operation_setups setup ON setup.id = $3
+            JOIN catalog.machines machine ON machine.id = $4
+            JOIN workforce.employees employee ON employee.id = $5
+            WHERE work_order.id = $1
+          `,
+          [
+            workOrder.work_order_id,
+            workOrder.route_option_id,
+            setupId,
+            machineId,
+            operatorId,
+          ]
+        )
+        const sessionSnapshot = snapshot.rows[0]!
+        const sessionReference = formatProductionSessionReference({
+          dailySequence,
+          machineNumber: sessionSnapshot.machine_number,
+          productionDate: shiftContext.productionDate,
+        })
+        const requestedCycleTime = Number(
+          input.cycleTimeSeconds ?? input.sourcePayload?.cycleTime ?? 0
+        )
+        const cycleTimeSeconds = Number.isFinite(requestedCycleTime)
+          ? Math.max(requestedCycleTime, 0)
+          : 0
+
         const previous = await client.query<{
           end_count: string | null
           id: string
@@ -727,6 +791,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         const sourcePayload = {
           ...input.sourcePayload,
           carriedFromSessionId,
+          cycleTime: cycleTimeSeconds,
+          dailySequence,
           jobCard: input.jobCardNumber,
           jcNo: input.jobCardNumber,
           machine: input.machineNumber,
@@ -734,8 +800,10 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           operatorId: input.operatorCode,
           outputQty: 0,
           actualQty: 0,
-          prodDate: input.productionDate,
+          prodDate: shiftContext.productionDate,
           rejectQty: 0,
+          sessionReference,
+          shift: shiftContext.shift,
           startCount,
           startTime: startedAt.toISOString(),
         }
@@ -750,12 +818,19 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               operation_setup_id, machine_id, operator_employee_id,
               production_date, shift, measurement_method, started_at,
               start_count, carried_from_session_id, piece_weight_grams,
-              started_by_user_id, source_payload
+              started_by_user_id, source_payload, session_reference,
+              daily_sequence, machine_number_snapshot,
+              job_card_number_snapshot, part_code_snapshot,
+              option_number_snapshot, setup_number_snapshot,
+              operator_code_snapshot, operator_name_snapshot,
+              cycle_time_seconds, started_by_role
             )
             VALUES ($1, $2, $3, $4, $5, $6,
-              COALESCE(migration.try_date($7), $8::timestamptz::date),
-              $9, $10, $8, $11, $12, $13, $14, $15)
-            RETURNING id, start_count, carried_from_session_id
+              $7::date, $8, $9, $10, $11, $12, $13, $14, $15,
+              $16, $17, $18, $19, $20, $21, $22, $23, $24,
+              $25, 'shop_floor')
+            RETURNING id, start_count, carried_from_session_id,
+              session_reference
           `,
           [
             input.organizationId,
@@ -764,15 +839,25 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             setupId,
             machineId,
             operatorId,
-            input.productionDate,
-            startedAt.toISOString(),
-            requiredText(input.shift, "Shift"),
+            shiftContext.productionDate,
+            shiftContext.shift,
             measurementMethod,
+            startedAt.toISOString(),
             startCount,
             carriedFromSessionId,
             input.pieceWeightGrams,
             input.actorUserId ?? null,
             sourcePayload,
+            sessionReference,
+            dailySequence,
+            sessionSnapshot.machine_number,
+            sessionSnapshot.job_card_number,
+            sessionSnapshot.part_code,
+            sessionSnapshot.option_number,
+            sessionSnapshot.setup_number,
+            sessionSnapshot.operator_code,
+            sessionSnapshot.operator_name,
+            cycleTimeSeconds,
           ]
         )
         const productionEntry = await client.query<{ id: string }>(
@@ -785,7 +870,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               source_id, source_payload
             )
             VALUES ($1, $2, $3, $4, $5, $6,
-              COALESCE(migration.try_date($7), $8::timestamptz::date),
+              $7::date,
               $9, 0, 0, $8, $10, 'mrm-dashboard',
               'production_session', $11, $12)
             RETURNING id
@@ -797,9 +882,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             setupId,
             machineId,
             operatorId,
-            input.productionDate,
+            shiftContext.productionDate,
             startedAt.toISOString(),
-            requiredText(input.shift, "Shift"),
+            shiftContext.shift,
             input.actorUserId ?? null,
             created.rows[0]!.id,
             sourcePayload,
@@ -816,7 +901,11 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         await queueDashboardRefresh(client, input.organizationId)
         return {
           carriedFromSessionId: created.rows[0]!.carried_from_session_id,
+          dailySequence,
           id: created.rows[0]!.id,
+          productionDate: shiftContext.productionDate,
+          sessionReference,
+          shift: shiftContext.shift,
           startCount: created.rows[0]!.start_count === null
             ? null
             : Number(created.rows[0]!.start_count),
@@ -870,7 +959,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             SELECT id
             FROM manufacturing.production_session_downtime_events
             WHERE production_session_id = $1 AND reversed_at IS NULL
-              AND started_at < $2 AND ended_at > $3
+              AND started_at < $2
+              AND COALESCE(ended_at, 'infinity'::timestamptz) > $3
             LIMIT 1
           `,
           [input.sessionId, endedAt.toISOString(), startedAt.toISOString()]
@@ -934,6 +1024,114 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         )
         await queueDashboardRefresh(client, input.organizationId)
         return { durationMinutes, id: created.rows[0]!.id }
+      })
+    },
+
+    async startProductionSessionDowntime(input: {
+      actorUserId?: string | null
+      enteredRole: string
+      organizationId: string
+      reasonCode: string
+      reasonName: string
+      sessionId: string
+      startedAt: string
+    }) {
+      return transaction(pool, async (client) => {
+        const enteredRole = productionEntryRole(input.enteredRole)
+        const startedAt = requiredTimestamp(input.startedAt, "Downtime start")
+        const session = await client.query<{ started_at: Date; status: string }>(
+          `
+            SELECT started_at, status
+            FROM manufacturing.production_sessions
+            WHERE id = $1 AND organization_id = $2 AND reversed_at IS NULL
+            FOR UPDATE
+          `,
+          [input.sessionId, input.organizationId]
+        )
+        const current = session.rows[0]
+        if (!current) throw new Error("Production session was not found.")
+        if (current.status !== "open") {
+          throw new Error("Downtime can start only on a running session.")
+        }
+        if (startedAt < current.started_at) {
+          throw new Error("Downtime must remain inside the production session.")
+        }
+        const created = await client.query<{ id: string }>(
+          `
+            INSERT INTO manufacturing.production_session_downtime_events (
+              organization_id, production_session_id, reason_code,
+              reason_name, started_at, entered_role,
+              entered_by_user_id, source_payload
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            input.sessionId,
+            requiredText(input.reasonCode, "Downtime code"),
+            requiredText(input.reasonName, "Downtime reason"),
+            startedAt.toISOString(),
+            enteredRole,
+            input.actorUserId ?? null,
+            { ...input, enteredRole, startedAt: startedAt.toISOString() },
+          ]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: created.rows[0]!.id, startedAt: startedAt.toISOString() }
+      })
+    },
+
+    async endProductionSessionDowntime(input: {
+      actorUserId?: string | null
+      endedAt: string
+      organizationId: string
+      sessionId: string
+    }) {
+      return transaction(pool, async (client) => {
+        const endedAt = requiredTimestamp(input.endedAt, "Downtime end")
+        const event = await client.query<{ id: string; started_at: Date }>(
+          `
+            SELECT event.id, event.started_at
+            FROM manufacturing.production_session_downtime_events event
+            JOIN manufacturing.production_sessions session
+              ON session.id = event.production_session_id
+            WHERE event.production_session_id = $1
+              AND session.organization_id = $2
+              AND event.ended_at IS NULL
+              AND event.reversed_at IS NULL
+              AND session.reversed_at IS NULL
+            FOR UPDATE OF event
+          `,
+          [input.sessionId, input.organizationId]
+        )
+        const current = event.rows[0]
+        if (!current) throw new Error("No open downtime was found.")
+        if (endedAt <= current.started_at) {
+          throw new Error("Downtime end must be after downtime start.")
+        }
+        const durationMinutes = Math.max(
+          Math.ceil((endedAt.getTime() - current.started_at.getTime()) / 60_000),
+          1
+        )
+        await client.query(
+          `
+            UPDATE manufacturing.production_session_downtime_events
+            SET ended_at = $1, duration_minutes = $2,
+              ended_by_user_id = $3, updated_at = now(),
+              source_payload = source_payload || $4::jsonb
+            WHERE id = $5
+          `,
+          [
+            endedAt.toISOString(),
+            durationMinutes,
+            input.actorUserId ?? null,
+            { endedAt: endedAt.toISOString() },
+            current.id,
+          ]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { durationMinutes, id: current.id }
       })
     },
 
@@ -1074,6 +1272,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       endCount?: number
       endedAt: string
       endReason: string
+      enteredRole?: string
       grossWeightKg?: number
       organizationId: string
       sessionId: string
@@ -1081,6 +1280,12 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       return transaction(pool, async (client) => {
         const endedAt = requiredTimestamp(input.endedAt, "Session end")
         const endReason = productionSessionEndReason(input.endReason)
+        const closedByRole = input.enteredRole
+          ? productionEntryRole(input.enteredRole)
+          : "shop_floor"
+        if (closedByRole === "machinist") {
+          throw new Error("Machinist cannot close a production session.")
+        }
         const session = await client.query<{
           machine_id: string
           measurement_method: ProductionMeasurementMethod
@@ -1088,6 +1293,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           operator_employee_id: string
           piece_weight_grams: string
           production_entry_id: string
+          production_floor_code: ProductionFloorCode
           production_date: Date
           route_option_id: string
           shift: string
@@ -1098,13 +1304,19 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           work_order_id: string
         }>(
           `
-            SELECT work_order_id, route_option_id, operation_setup_id,
+            SELECT session.work_order_id, session.route_option_id,
+              session.operation_setup_id,
               machine_id, operator_employee_id, production_date, shift,
               measurement_method, started_at, start_count,
-              piece_weight_grams, production_entry_id, source_payload, status
-            FROM manufacturing.production_sessions
-            WHERE id = $1 AND organization_id = $2 AND reversed_at IS NULL
-            FOR UPDATE
+              piece_weight_grams, production_entry_id, session.source_payload,
+              session.status, floor.code AS production_floor_code
+            FROM manufacturing.production_sessions session
+            JOIN catalog.machines machine ON machine.id = session.machine_id
+            JOIN manufacturing.production_floors floor
+              ON floor.id = machine.production_floor_id
+            WHERE session.id = $1 AND session.organization_id = $2
+              AND session.reversed_at IS NULL
+            FOR UPDATE OF session
           `,
           [input.sessionId, input.organizationId]
         )
@@ -1113,9 +1325,32 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (current.status !== "open") {
           throw new Error("Production session is already closed.")
         }
+        if (closedByRole === "quality" && current.production_floor_code !== "cnc") {
+          throw new Error("Quality can close production sessions only in CNC.")
+        }
         if (endedAt < current.started_at) {
           throw new Error("Session end cannot be before session start.")
         }
+        await client.query(
+          `
+            UPDATE manufacturing.production_session_downtime_events
+            SET ended_at = $1,
+              duration_minutes = GREATEST(
+                ceil(extract(epoch FROM ($1::timestamptz - started_at)) / 60),
+                1
+              )::integer,
+              ended_by_user_id = $2, updated_at = now(),
+              source_payload = source_payload || $3::jsonb
+            WHERE production_session_id = $4
+              AND ended_at IS NULL AND reversed_at IS NULL
+          `,
+          [
+            endedAt.toISOString(),
+            input.actorUserId ?? null,
+            { autoClosedAtSessionEnd: true, endedAt: endedAt.toISOString() },
+            input.sessionId,
+          ]
+        )
         const laterDowntime = await client.query<{ id: string }>(
           `
             SELECT id
@@ -1219,9 +1454,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               crate_weight_kg = $6, net_weight_kg = $7,
               total_pieces = $8, quantity_good = $9,
               quantity_rejected = $10, closed_by_user_id = $11,
-              source_payload = $12, updated_at = now(),
+              closed_by_role = $12, source_payload = $13, updated_at = now(),
               row_version = row_version + 1
-            WHERE id = $13
+            WHERE id = $14
           `,
           [
             endedAt.toISOString(),
@@ -1235,6 +1470,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             output.goodPieces,
             output.rejectedPieces,
             input.actorUserId ?? null,
+            closedByRole,
             sourcePayload,
             input.sessionId,
           ]
@@ -1307,13 +1543,23 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     },
 
     async readProductionSessions(input: {
+      endDate?: string
+      limit?: number
+      offset?: number
       organizationId: string
       productionFloorCode?: string
+      sessionId?: string
+      startDate?: string
+      status?: "closed" | "open"
     }) {
       const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
+      const limit = Math.min(Math.max(Math.trunc(input.limit ?? 500), 1), 500)
+      const offset = Math.max(Math.trunc(input.offset ?? 0), 0)
       const result = await pool.query<Record<string, unknown>>(
         `
           SELECT session.id,
+            session.session_reference AS "sessionReference",
+            session.daily_sequence AS "dailySequence",
             session.status,
             session.production_date AS "productionDate",
             session.shift,
@@ -1329,17 +1575,32 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             session.crate_weight_kg AS "crateWeightKg",
             session.net_weight_kg AS "netWeightKg",
             session.piece_weight_grams AS "pieceWeightGrams",
+            session.cycle_time_seconds AS "cycleTimeSeconds",
             session.total_pieces AS "totalPieces",
             session.quantity_good AS "goodPieces",
             session.quantity_rejected AS "rejectedPieces",
-            work_order.job_card_number AS "jobCardNumber",
-            item.uid AS "partCode",
-            route.route_code AS "optionNumber",
-            setup.setup_number::text AS "setupNumber",
-            machine.machine_number AS "machineNumber",
-            employee.employee_code AS "operatorCode",
-            employee.name AS "operatorName",
+            session.job_card_number_snapshot AS "jobCardNumber",
+            session.part_code_snapshot AS "partCode",
+            session.option_number_snapshot AS "optionNumber",
+            session.setup_number_snapshot AS "setupNumber",
+            session.machine_number_snapshot AS "machineNumber",
+            session.operator_code_snapshot AS "operatorCode",
+            session.operator_name_snapshot AS "operatorName",
+            starter.name AS "startedByName",
+            session.started_by_role AS "startedByRole",
+            closer.name AS "closedByName",
+            session.closed_by_role AS "closedByRole",
+            GREATEST(
+              floor(extract(epoch FROM (COALESCE(session.ended_at, now()) - session.started_at)) / 60),
+              0
+            )::integer AS "elapsedMinutes",
+            GREATEST(
+              floor(extract(epoch FROM (COALESCE(session.ended_at, now()) - session.started_at)) / 60)
+                - COALESCE(downtime.minutes, 0),
+              0
+            )::integer AS "runtimeMinutes",
             COALESCE(downtime.minutes, 0) AS "downtimeMinutes",
+            COALESCE(downtime.has_open, false) AS "hasOpenDowntime",
             COALESCE(downtime.rows, '[]'::jsonb) AS "downtimeEvents",
             COALESCE(rejection.rows, '[]'::jsonb) AS "rejectionEvents"
           FROM manufacturing.production_sessions session
@@ -1355,8 +1616,19 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             ON floor.id = machine.production_floor_id
           JOIN workforce.employees employee
             ON employee.id = session.operator_employee_id
+          LEFT JOIN identity.users starter
+            ON starter.id = session.started_by_user_id
+          LEFT JOIN identity.users closer
+            ON closer.id = session.closed_by_user_id
           LEFT JOIN LATERAL (
-            SELECT COALESCE(sum(event.duration_minutes), 0) AS minutes,
+            SELECT COALESCE(sum(COALESCE(
+                event.duration_minutes,
+                GREATEST(
+                  floor(extract(epoch FROM (now() - event.started_at)) / 60),
+                  0
+                )::integer
+              )), 0) AS minutes,
+              COALESCE(bool_or(event.ended_at IS NULL), false) AS has_open,
               jsonb_agg(jsonb_build_object(
                 'id', event.id,
                 'reasonCode', event.reason_code,
@@ -1364,7 +1636,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 'startedAt', event.started_at,
                 'endedAt', event.ended_at,
                 'durationMinutes', event.duration_minutes,
-                'enteredRole', event.entered_role
+                'enteredRole', event.entered_role,
+                'isOpen', event.ended_at IS NULL
               ) ORDER BY event.started_at) AS rows
             FROM manufacturing.production_session_downtime_events event
             WHERE event.production_session_id = session.id
@@ -1388,14 +1661,23 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           ) rejection ON true
           WHERE session.organization_id = $1 AND floor.code = $2
             AND session.reversed_at IS NULL
-            AND (
-              session.status = 'open'
-              OR session.production_date >= current_date - 7
-            )
+            AND ($3::uuid IS NULL OR session.id = $3::uuid)
+            AND ($4::date IS NULL OR session.production_date >= $4::date)
+            AND ($5::date IS NULL OR session.production_date <= $5::date)
+            AND ($6::text IS NULL OR session.status = $6)
           ORDER BY session.started_at DESC, machine.machine_number
-          LIMIT 500
+          LIMIT $7 OFFSET $8
         `,
-        [input.organizationId, floorCode]
+        [
+          input.organizationId,
+          floorCode,
+          input.sessionId || null,
+          input.startDate || null,
+          input.endDate || null,
+          input.status || null,
+          limit,
+          offset,
+        ]
       )
       const numericKeys = [
         "startCount",
@@ -1405,12 +1687,17 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         "crateWeightKg",
         "netWeightKg",
         "pieceWeightGrams",
+        "cycleTimeSeconds",
         "totalPieces",
         "goodPieces",
         "rejectedPieces",
         "downtimeMinutes",
+        "elapsedMinutes",
+        "runtimeMinutes",
       ] as const
       return {
+        limit,
+        offset,
         productionFloorCode: floorCode,
         rows: result.rows.map((row) => {
           const mapped = { ...row }
@@ -1420,6 +1707,57 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           return mapped
         }),
       }
+    },
+
+    async readProductionSessionEvents(input: {
+      endDate?: string
+      limit?: number
+      offset?: number
+      organizationId: string
+      productionFloorCode?: string
+      sessionId?: string
+      startDate?: string
+    }) {
+      const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
+      const limit = Math.min(Math.max(Math.trunc(input.limit ?? 250), 1), 500)
+      const offset = Math.max(Math.trunc(input.offset ?? 0), 0)
+      const result = await pool.query<Record<string, unknown>>(
+        `
+          SELECT production_session_id AS "sessionId",
+            session_reference AS "sessionReference",
+            production_date AS "productionDate", shift,
+            machine_number AS "machineNumber",
+            job_card_number AS "jobCardNumber",
+            part_code AS "partCode",
+            option_number AS "optionNumber",
+            setup_number AS "setupNumber",
+            operator_code AS "operatorCode",
+            operator_name AS "operatorName",
+            event_type AS "eventType", event_time AS "eventTime",
+            started_at AS "startedAt", ended_at AS "endedAt",
+            duration_minutes AS "durationMinutes",
+            reason_code AS "reasonCode", reason_name AS "reasonName",
+            quantity, entered_by_name AS "enteredByName",
+            entered_role AS "enteredRole", recorded_at AS "recordedAt"
+          FROM reporting.production_event_log
+          WHERE organization_id = $1 AND production_floor_code = $2
+            AND ($3::uuid IS NULL OR production_session_id = $3::uuid)
+            AND ($4::date IS NULL OR production_date >= $4::date)
+            AND ($5::date IS NULL OR production_date <= $5::date)
+          ORDER BY event_time DESC, recorded_at DESC
+          LIMIT $6 OFFSET $7
+        `,
+        [
+          input.organizationId,
+          floorCode,
+          input.sessionId || null,
+          input.startDate || null,
+          input.endDate || null,
+          limit,
+          offset,
+        ]
+      )
+      return { limit, offset, productionFloorCode: floorCode, rows: result.rows }
     },
 
     async upsertProductionCard(input: {

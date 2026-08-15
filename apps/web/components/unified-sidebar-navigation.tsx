@@ -551,6 +551,9 @@ function universalProductionNavigationHref(
   tab: DashboardTabId,
   floor: ProductionFloorCode
 ) {
+  if (tab === "productionSessionsTab") {
+    return `/dashboard/production-sessions?${new URLSearchParams({ floor }).toString()}`
+  }
   return dashboardTabHref(
     tab,
     tab === "correctionsTab" ||

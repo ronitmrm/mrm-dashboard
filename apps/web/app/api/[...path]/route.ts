@@ -684,11 +684,25 @@ async function get(request: NextRequest, context: RouteContext) {
         await withProductionRepository(
           request,
           "operations.dashboard.read",
-          ({ organizationId, repository }) =>
-            repository.readProductionSessions({
+          ({ organizationId, repository }) => {
+            const input = {
+              endDate: search.get("endDate") || undefined,
+              limit: optionalNumeric(search.get("limit")),
+              offset: optionalNumeric(search.get("offset")),
               organizationId,
               productionFloorCode: search.get("floor") || undefined,
-            })
+              sessionId: search.get("sessionId") || undefined,
+              startDate: search.get("startDate") || undefined,
+            }
+            return search.get("view") === "events"
+              ? repository.readProductionSessionEvents(input)
+              : repository.readProductionSessions({
+                  ...input,
+                  status: search.get("status") === "open" || search.get("status") === "closed"
+                    ? search.get("status") as "open" | "closed"
+                    : undefined,
+                })
+          }
         )
       )
     }
@@ -1036,6 +1050,7 @@ async function post(request: NextRequest, context: RouteContext) {
           ({ actorUserId, organizationId, repository }) =>
             repository.startProductionSession({
               actorUserId,
+              cycleTimeSeconds: optionalNumeric(payload.cycleTime),
               jobCardNumber: text(payload.jobCard || payload.jcNo),
               machineNumber: text(payload.machine || payload.machineNo),
               measurementMethod: text(payload.measurementMethod),
@@ -1071,6 +1086,7 @@ async function post(request: NextRequest, context: RouteContext) {
               endCount: optionalNumeric(payload.endCount),
               endedAt: text(payload.endedAt),
               endReason: text(payload.endReason),
+              enteredRole: text(payload.enteredRole) || undefined,
               grossWeightKg: optionalNumeric(payload.grossWeightKg ?? payload.grossWeight),
               organizationId,
               sessionId: text(payload.sessionId),
@@ -1101,6 +1117,37 @@ async function post(request: NextRequest, context: RouteContext) {
             })
         )
         return json({ ...result, rowsUpdated: 1, savedText: "Downtime saved." })
+      }
+      if (entryType === "production_session_downtime_start") {
+        const result = await withProductionRepository(
+          request,
+          "operations.production.write",
+          ({ actorUserId, organizationId, repository }) =>
+            repository.startProductionSessionDowntime({
+              actorUserId,
+              enteredRole: text(payload.enteredRole),
+              organizationId,
+              reasonCode: text(payload.reasonCode || payload.downtimeCode),
+              reasonName: text(payload.reasonName || payload.downtimeReason),
+              sessionId: text(payload.sessionId),
+              startedAt: text(payload.startedAt),
+            })
+        )
+        return json({ ...result, rowsUpdated: 1, savedText: "Downtime started." })
+      }
+      if (entryType === "production_session_downtime_end") {
+        const result = await withProductionRepository(
+          request,
+          "operations.production.write",
+          ({ actorUserId, organizationId, repository }) =>
+            repository.endProductionSessionDowntime({
+              actorUserId,
+              endedAt: text(payload.endedAt),
+              organizationId,
+              sessionId: text(payload.sessionId),
+            })
+        )
+        return json({ ...result, rowsUpdated: 1, savedText: "Production resumed." })
       }
       if (entryType === "production_session_rejection") {
         const result = await withProductionRepository(

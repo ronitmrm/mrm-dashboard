@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest"
 
 import {
   calculateProductionSessionOutput,
+  formatProductionSessionReference,
+  productionShiftAt,
   suggestedCounterStart,
 } from "./production-session-domain"
 
@@ -101,4 +103,49 @@ describe("CNC counter continuity", () => {
       })
     ).toBeNull()
   })
+})
+
+describe("production shift assignment", () => {
+  test.each([
+    ["2026-08-15T00:30:00.000Z", "A", "2026-08-15"],
+    ["2026-08-15T08:30:00.000Z", "B", "2026-08-15"],
+    ["2026-08-15T16:30:00.000Z", "C", "2026-08-15"],
+    ["2026-08-15T19:30:00.000Z", "C", "2026-08-15"],
+  ])(
+    "assigns CNC instant %s to shift %s on production date %s",
+    (instant, shift, productionDate) => {
+      expect(productionShiftAt("cnc", new Date(instant))).toEqual({
+        productionDate,
+        shift,
+      })
+    }
+  )
+
+  test.each(["conventional", "conventional-02", "forging"])(
+    "assigns %s to the General shift during its operating interval",
+    (floor) => {
+      expect(
+        productionShiftAt(floor, new Date("2026-08-15T05:00:00.000Z"))
+      ).toEqual({ productionDate: "2026-08-15", shift: "General" })
+    }
+  )
+
+  test("does not invent a conventional shift outside its configured interval", () => {
+    expect(
+      productionShiftAt(
+        "conventional",
+        new Date("2026-08-15T16:00:00.000Z")
+      )
+    ).toBeNull()
+  })
+})
+
+test("formats a stable machine/date/daily-sequence session reference", () => {
+  expect(
+    formatProductionSessionReference({
+      dailySequence: 3,
+      machineNumber: "c501",
+      productionDate: "2026-08-15",
+    })
+  ).toBe("C501-20260815-03")
 })

@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExt
 import Image from "next/image";
 import Link from "next/link";
 import {
+  Activity,
   ArrowDown,
   ArrowUp,
   CalendarDays,
@@ -4265,8 +4266,6 @@ function RoleTaskPanel({
   role: RoleTaskKind;
 }) {
   const {
-    error: employeeMasterError,
-    loaded: employeeMasterLoaded,
     machinistOptions,
     qualityOptions,
     shopFloorOptions,
@@ -4284,24 +4283,6 @@ function RoleTaskPanel({
     () => role === "quality" ? [] : queueRows.filter((row) => roleTaskMatches(row, role)),
     [queueRows, role],
   );
-  const runningRows = useMemo(() => currentShopFloorRows(productionControl), [productionControl]);
-  const [productionSessionReloadKey, setProductionSessionReloadKey] = useState(0);
-  const productionSessionPage = usePostgresOperationalPage(
-    `/api/production-sessions?floor=${encodeURIComponent(productionFloorFromLocation())}`,
-    5_000,
-    undefined,
-    5_000,
-    productionSessionReloadKey,
-  );
-  const productionSessionRows = useMemo(
-    () => asArray(productionSessionPage.data?.rows),
-    [productionSessionPage.data?.rows],
-  );
-  const productionCardRows = useMemo(() => {
-    const taskRows = roleRows.map((row) => row.next).filter((row): row is DashboardPayload => Boolean(row));
-    if (role === "shopFloor" || role === "quality" || role === "machinist") return runningRows;
-    return taskRows;
-  }, [role, roleRows, runningRows]);
   async function saveStage(row: DashboardPayload, stage: ShopFloorStageId, extra: Record<string, unknown> = {}) {
     const stageSpec = shopFloorStages.find((item) => item.id === stage);
     const payload = {
@@ -4351,33 +4332,6 @@ function RoleTaskPanel({
       payload,
     });
   }
-
-
-  async function saveProductionCard(row: DashboardPayload, card: DashboardPayload) {
-    const entryType = str(card.entryType);
-    const payload = {
-      ...card,
-      jcNo: jobCardNumber(row),
-      jobCard: jobCardNumber(row),
-      cycleTime: productionCycleSeconds(row),
-      machine: displayValue(row.machine),
-      machineNo: displayValue(row.machine),
-      optionNumber: displayValue(row.optionNumber),
-      partCode: itemCode(row),
-      pieceWeightGrams: productionPieceWeightGrams(row),
-      productionFloorCode: normalizeProductionFloorCode(
-        row.productionFloorCode ?? productionFloorFromLocation(),
-      ),
-      setupNo: displayValue(row.setupNo),
-    };
-    await submitAction("data-entry", {
-      entryType,
-      key: dataEntryKey(entryType, payload),
-      payload,
-    });
-    setProductionSessionReloadKey((current) => current + 1);
-  }
-
   async function saveSetupChecklistSession(row: DashboardPayload, session: DashboardPayload) {
     const payload = setupChecklistSessionPayload(row, session);
     await submitAction("data-entry", {
@@ -4416,24 +4370,13 @@ function RoleTaskPanel({
               </Button>
             </div>
           ) : null}
-          {productionSessionPage.error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-sm text-destructive">
-              Production sessions unavailable: {productionSessionPage.error}
-            </div>
-          ) : null}
-          <ProductionCardRoleEntryForm
-            role={role}
-            rows={productionCardRows}
-            existingCardRows={productionSessionRows}
-            employeeMasterError={employeeMasterError}
-            employeeMasterLoaded={employeeMasterLoaded}
-            employeeOptions={shopFloorOptions}
-            onSaveProductionCard={saveProductionCard}
-            rejectionTypeRows={asArray(productionControl.rejectionTypeMasterRows)}
-            rejectionReasonRows={asArray(productionControl.rejectionReasonMasterRows)}
-            rejectionRemarkRows={asArray(productionControl.rejectionRemarkMasterRows)}
-            bulkRows={role === "shopFloor" ? runningRows : []}
-          />
+          <Button type="button" className="h-11 w-fit" onClick={() => {
+            const params = new URLSearchParams({ floor: productionFloorFromLocation() });
+            window.location.assign(`/dashboard/production-sessions?${params.toString()}`);
+          }}>
+            <Activity className="size-4" />
+            Open Daily Machine Board
+          </Button>
           <TrackingSummary
             items={[
               ["Pending", formatNumber(roleRows.length)],

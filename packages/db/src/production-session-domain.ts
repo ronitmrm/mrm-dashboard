@@ -1,5 +1,10 @@
 export type ProductionMeasurementMethod = "counter" | "weight"
 
+export type ProductionShiftContext = {
+  productionDate: string
+  shift: "A" | "B" | "C" | "General"
+}
+
 type ProductionContext = {
   jobCardNumber: string
   machineNumber: string
@@ -42,6 +47,80 @@ function nonNegativeInteger(value: number, label: string) {
     throw new Error(`${label} must be a non-negative whole number.`)
   }
   return value
+}
+
+function localProductionClock(instant: Date) {
+  if (Number.isNaN(instant.getTime())) {
+    throw new Error("Production time is invalid.")
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+  }).formatToParts(instant)
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? ""
+  const date = `${value("year")}-${value("month")}-${value("day")}`
+  const hour = Number(value("hour")) % 24
+  const minute = Number(value("minute"))
+  return { date, minutes: hour * 60 + minute }
+}
+
+function previousDate(date: string) {
+  const value = new Date(`${date}T00:00:00.000Z`)
+  value.setUTCDate(value.getUTCDate() - 1)
+  return value.toISOString().slice(0, 10)
+}
+
+export function productionShiftAt(
+  productionFloorCode: string,
+  instant: Date
+): ProductionShiftContext | null {
+  const floor = productionFloorCode.trim().toLowerCase()
+  const { date, minutes } = localProductionClock(instant)
+
+  if (floor === "cnc") {
+    if (minutes >= 6 * 60 && minutes < 14 * 60) {
+      return { productionDate: date, shift: "A" }
+    }
+    if (minutes >= 14 * 60 && minutes < 22 * 60) {
+      return { productionDate: date, shift: "B" }
+    }
+    return {
+      productionDate: minutes < 6 * 60 ? previousDate(date) : date,
+      shift: "C",
+    }
+  }
+
+  if (
+    ["conventional", "conventional-02", "forging"].includes(floor) &&
+    minutes >= 8 * 60 + 30 &&
+    minutes < 20 * 60
+  ) {
+    return { productionDate: date, shift: "General" }
+  }
+
+  return null
+}
+
+export function formatProductionSessionReference(input: {
+  dailySequence: number
+  machineNumber: string
+  productionDate: string
+}) {
+  if (!Number.isSafeInteger(input.dailySequence) || input.dailySequence < 1) {
+    throw new Error("Daily session sequence must be a positive whole number.")
+  }
+  const machineNumber = input.machineNumber.trim().toUpperCase()
+  if (!machineNumber) throw new Error("Machine number is required.")
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.productionDate)) {
+    throw new Error("Production date must use YYYY-MM-DD.")
+  }
+  return `${machineNumber}-${input.productionDate.replaceAll("-", "")}-${String(input.dailySequence).padStart(2, "0")}`
 }
 
 export function calculateProductionSessionOutput(

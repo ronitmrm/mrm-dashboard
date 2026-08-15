@@ -31,6 +31,7 @@ import type { ProductionFloorCode } from "@workspace/db/production-floors"
 
 export type DashboardTabId =
   | "productionDashboardTab"
+  | "productionSessionsTab"
   | "productionControlTab"
   | "jobCardStatusTab"
   | "machineDetailTab"
@@ -108,6 +109,13 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     id: "productionDashboardTab",
     subtitle: "Orders And Dispatch Dates",
     title: "Production Dashboard",
+  },
+  {
+    href: "/dashboard/production-sessions",
+    icon: FileClock,
+    id: "productionSessionsTab",
+    subtitle: "Daily Board, Register, Events",
+    title: "Production Sessions",
   },
   {
     href: dashboardTabHref("productionControlTab"),
@@ -254,6 +262,7 @@ export const machineMasterNavigation = dashboardNavigation.find(
 
 const universalProductionNavigationIds = new Set<DashboardTabId>([
   "productionDashboardTab",
+  "productionSessionsTab",
   "maintenanceTab",
   "correctionsTab",
   "dataEntryTab",
