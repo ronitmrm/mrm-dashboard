@@ -110,7 +110,12 @@ import {
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
 import { maintenanceChecklistRowsForSchedule } from "@/lib/maintenance-schedule-options";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
-import { shopFloorNoPendingActionLabel } from "@/lib/shop-floor-workflow";
+import { duplicateQualityParameterCombination } from "@/lib/quality-parameter-set";
+import { productionMachinistOptions } from "@/lib/shared-employee-master";
+import {
+  setupChecklistItemAppliesToPhase,
+  shopFloorNoPendingActionLabel,
+} from "@/lib/shop-floor-workflow";
 import { priorityChangePlan, priorityPlanHeldBlockers, priorityPlanQueueBeforeSetups, priorityPlanStepPreviewState, priorityPlanStepWindows, type PriorityPlanStep } from "@/lib/priority-change-plan";
 import type { PriorityPlanWindow } from "@/lib/priority-plan-scenarios";
 import {
@@ -153,6 +158,7 @@ type DataEntrySpec = {
 type QualityParameterDraft = {
   draftId: string;
   persisted?: boolean;
+  parameterCode?: string;
   sequence: string;
   parameterName: string;
   specification: string;
@@ -746,12 +752,15 @@ function HourlyQualityCheckShell({
 
   async function saveHourlyCheck() {
     if (!selectedRow || !performerId || !parameters.length) return;
-    const payload = hourlyQualityCheckPayload(selectedRow, parameters, readings, remarks, {
-      prodDate,
-      shift,
-      hourSlot,
-      checkedBy: performerId,
-    });
+    const payload = {
+      ...hourlyQualityCheckPayload(selectedRow, parameters, readings, remarks, {
+        prodDate,
+        shift,
+        hourSlot,
+        checkedBy: performerId,
+      }),
+      productionFloorCode,
+    };
     setIsSaving(true);
     setStatus(null);
     try {
@@ -896,11 +905,12 @@ export function SetupChecklistPage({
 }
 
 function setupChecklistQueryFromLocation() {
-  if (typeof window === "undefined") return { sessionId: "", phase: "", row: {} as DashboardPayload };
+  if (typeof window === "undefined") return { sessionId: "", phase: "", selectedMachinist: "", row: {} as DashboardPayload };
   const params = new URLSearchParams(window.location.search);
   return {
     sessionId: params.get("sessionId") ?? "",
     phase: params.get("phase") ?? "",
+    selectedMachinist: params.get("doneBy") ?? "",
     row: {
       jcNo: params.get("jcNo") ?? "",
       jobCard: params.get("jcNo") ?? "",
@@ -911,6 +921,7 @@ function setupChecklistQueryFromLocation() {
       setupName: params.get("setupName") ?? "",
       machine: params.get("machine") ?? "",
       machineType: params.get("machineType") ?? "",
+      productionFloorCode: params.get("floor") ?? "",
     } as DashboardPayload,
   };
 }
@@ -921,7 +932,7 @@ function SetupChecklistShell({
   productionFloorCode: ProductionFloorCode;
 }) {
   const isClientHydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
-  const { sessionId, phase, row } = isClientHydrated ? setupChecklistQueryFromLocation() : { sessionId: "", phase: "", row: {} as DashboardPayload };
+  const { sessionId, phase, selectedMachinist, row } = isClientHydrated ? setupChecklistQueryFromLocation() : { sessionId: "", phase: "", selectedMachinist: "", row: {} as DashboardPayload };
   const checklistPage = usePostgresOperationalPage(
     sessionId
       ? `/api/setup-checklist?sessionId=${encodeURIComponent(sessionId)}&floor=${encodeURIComponent(productionFloorCode)}`
@@ -932,6 +943,7 @@ function SetupChecklistShell({
   const [doneBy, setDoneBy] = useState("");
   const [remark, setRemark] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
+  const [itemRemarks, setItemRemarks] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState<ActionStatus>(null);
 
@@ -943,9 +955,10 @@ function SetupChecklistShell({
   const checklistItems = Array.isArray(currentChecklistSession?.items)
     ? currentChecklistSession.items as DashboardPayload[]
     : setupChecklistItemsFromMaster(activeChecklistMasters);
-  const canSave = Boolean(sessionId && (phase === "start" || phase === "end") && checklistItems.length)
+  const phaseChecklistItems = setupChecklistItemsForPhase(checklistItems, phase);
+  const canSave = Boolean(sessionId && doneBy && (phase === "start" || phase === "end") && phaseChecklistItems.length)
     && (phase === "start" || Boolean(currentChecklistSession));
-  const isComplete = canSave && setupChecklistValuesComplete(checklistItems, values, phase);
+  const isComplete = canSave && setupChecklistValuesComplete(phaseChecklistItems, values, phase);
 
   useEffect(() => {
     if (!isClientHydrated || !sessionId) return;
@@ -959,24 +972,34 @@ function SetupChecklistShell({
     const timeout = window.setTimeout(() => {
       if (!currentChecklistSession) {
         setValues({});
-        setDoneBy("");
+        setItemRemarks({});
+        setDoneBy(selectedMachinist);
         setRemark("");
         return;
       }
       const nextValues: Record<string, string> = {};
+      const nextItemRemarks: Record<string, string> = {};
       for (const item of asArray(currentChecklistSession.items)) {
-        nextValues[setupChecklistItemKey(item)] = setupChecklistExistingValue(item, phase);
+        const itemKey = setupChecklistItemKey(item);
+        nextValues[itemKey] = setupChecklistExistingValue(item, phase);
+        nextItemRemarks[itemKey] = setupChecklistExistingItemRemark(item, phase);
       }
       setValues(nextValues);
-      setDoneBy(str(phase === "start" ? currentChecklistSession.startedBy : currentChecklistSession.endedBy));
+      setItemRemarks(nextItemRemarks);
+      setDoneBy(str(phase === "start" ? currentChecklistSession.startedBy : currentChecklistSession.endedBy) || selectedMachinist);
       setRemark(str(phase === "start" ? currentChecklistSession.startRemark : currentChecklistSession.endRemark));
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [currentChecklistSession, phase]);
+  }, [currentChecklistSession, phase, selectedMachinist]);
 
   function updateValue(item: DashboardPayload, value: string) {
     const itemKey = setupChecklistItemKey(item);
     setValues((currentValues) => ({ ...currentValues, [itemKey]: value }));
+  }
+
+  function updateItemRemark(item: DashboardPayload, value: string) {
+    const itemKey = setupChecklistItemKey(item);
+    setItemRemarks((currentRemarks) => ({ ...currentRemarks, [itemKey]: value }));
   }
 
   async function saveProgress() {
@@ -985,6 +1008,7 @@ function SetupChecklistShell({
       row,
       phase,
       values,
+      itemRemarks,
       items: checklistItems,
       masterRows: activeChecklistMasters,
       existingSession: currentChecklistSession,
@@ -1039,8 +1063,15 @@ function SetupChecklistShell({
                   <TileField label="Machine" value={row.machine} />
                   <TileField label="Phase" value={phase === "end" ? "Completion" : "Start"} />
                 </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <LabeledInput label={phase === "end" ? "Completed By" : "Started By"} value={doneBy} onChange={setDoneBy} />
+                <div className="grid gap-3 md:grid-cols-3">
+                  <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                    Pre Setting Done By
+                    <Input value={phase === "start" ? doneBy : str(currentChecklistSession?.startedBy)} readOnly />
+                  </label>
+                  <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                    Setting Done By
+                    <Input value={phase === "end" ? doneBy : str(currentChecklistSession?.endedBy)} readOnly />
+                  </label>
                   <LabeledInput label="Remark" value={remark} onChange={setRemark} />
                 </div>
               </CardContent>
@@ -1051,10 +1082,12 @@ function SetupChecklistShell({
               <SetupChecklistForm
                 row={row}
                 phase={phase}
-                items={checklistItems}
+                items={phaseChecklistItems}
                 session={currentChecklistSession}
                 values={values}
+                itemRemarks={itemRemarks}
                 onValueChange={updateValue}
+                onItemRemarkChange={updateItemRemark}
               />
             )}
             {checklistPage.error ? <AlertMessage tone="destructive">{checklistPage.error}</AlertMessage> : null}
@@ -3922,8 +3955,8 @@ const roleTaskCopy: Record<RoleTaskKind, { title: string; description: string; e
   },
   quality: {
     title: "Quality Control Tasks",
-    description: "Items Waiting For Quality Approval After Setting Is Complete.",
-    empty: "No quality approval tasks are pending.",
+    description: "Record Quality Downtime And Rejections. First-Piece Tasks Stay In First Piece Inspection.",
+    empty: "First-piece tasks are available only in First Piece Inspection.",
   },
 };
 
@@ -3980,6 +4013,9 @@ function ShopFloorStatusPanel({
       setupName: displayValue(row.setupName),
       machine: displayValue(row.machine),
       machineType: displayValue(row.machineType),
+      productionFloorCode: normalizeProductionFloorCode(
+        row.productionFloorCode ?? productionFloorFromLocation(),
+      ),
       stage,
       stageLabel: stageSpec?.label ?? "Item complete",
       role: stageSpec?.role ?? "Shop floor",
@@ -4143,11 +4179,15 @@ function RoleTaskPanel({
   const [itemFilter, setItemFilter] = useState("");
   const [taskFilter, setTaskFilter] = useState("");
   const employeeMasterPage = usePostgresOperationalPage(
-    role === "shopFloor" ? "/api/employee-master" : null,
+    role === "shopFloor" || role === "machinist" ? "/api/employee-master" : null,
   );
   const employeeMasterRows = useMemo(
     () => asArray(employeeMasterPage.data?.rows),
     [employeeMasterPage.data?.rows],
+  );
+  const machinistOptions = useMemo(
+    () => productionMachinistOptions(employeeMasterRows, productionFloorFromLocation()),
+    [employeeMasterRows],
   );
   const copy = enableFirstPieceInspection
     ? {
@@ -4157,7 +4197,10 @@ function RoleTaskPanel({
       }
     : roleTaskCopy[role];
   const queueRows = useMemo(() => shopFloorQueueRows(productionControl), [productionControl]);
-  const roleRows = useMemo(() => queueRows.filter((row) => roleTaskMatches(row, role)), [queueRows, role]);
+  const roleRows = useMemo(
+    () => role === "quality" ? [] : queueRows.filter((row) => roleTaskMatches(row, role)),
+    [queueRows, role],
+  );
   const runningRows = useMemo(() => currentShopFloorRows(productionControl), [productionControl]);
   const existingProductionCardRows = useMemo(() => asArray(productionControl.productionCardRows), [productionControl]);
   const productionCardRows = useMemo(() => {
@@ -4186,6 +4229,9 @@ function RoleTaskPanel({
       setupName: displayValue(row.setupName),
       machine: displayValue(row.machine),
       machineType: displayValue(row.machineType),
+      productionFloorCode: normalizeProductionFloorCode(
+        row.productionFloorCode ?? productionFloorFromLocation(),
+      ),
       stage,
       stageLabel: stageSpec?.label ?? "Item complete",
       role: stageSpec?.role ?? "Shop floor",
@@ -4212,6 +4258,9 @@ function RoleTaskPanel({
       setupName: displayValue(row.setupName),
       machine: displayValue(row.machine),
       machineType: displayValue(row.machineType),
+      productionFloorCode: normalizeProductionFloorCode(
+        row.productionFloorCode ?? productionFloorFromLocation(),
+      ),
     };
     await submitAction("data-entry", {
       entryType: "first_piece_inspection_report",
@@ -4264,6 +4313,13 @@ function RoleTaskPanel({
         <CardContent className="grid gap-4">
           {role === "quality" ? (
             <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => {
+                const params = new URLSearchParams({ floor: productionFloorFromLocation() });
+                window.location.assign(`/dashboard/first-piece-inspection?${params.toString()}`);
+              }}>
+                <ListChecks className="size-4" />
+                First Piece Inspection
+              </Button>
               <Button type="button" variant="outline" size="sm" onClick={() => {
                 const params = new URLSearchParams({
                   floor: productionFloorFromLocation(),
@@ -4372,6 +4428,7 @@ function RoleTaskPanel({
                             inspectionMasters={enableFirstPieceInspection ? combinedQualityInspectionMasterRows(productionControl) : []}
                             setupChecklistMasters={asArray(productionControl.setupChecklistMasterRows)}
                             setupChecklistSessions={asArray(productionControl.setupChecklistSessionRows)}
+                            machinistOptions={machinistOptions}
                             onSaveSetupChecklistSession={saveSetupChecklistSession}
                             openDataEntry={openDataEntry}
                           />
@@ -4454,6 +4511,9 @@ function FirstPieceInspectionPanel({
       setupName: displayValue(row.setupName),
       machine: displayValue(row.machine),
       machineType: displayValue(row.machineType),
+      productionFloorCode: normalizeProductionFloorCode(
+        row.productionFloorCode ?? productionFloorFromLocation(),
+      ),
     };
     await submitAction("data-entry", {
       entryType: "first_piece_inspection_report",
@@ -4619,6 +4679,7 @@ function ShopFloorRowAction({
   inspectionMasters = [],
   setupChecklistMasters = [],
   setupChecklistSessions = [],
+  machinistOptions = [],
   openDataEntry,
 }: {
   current?: DashboardPayload;
@@ -4629,6 +4690,7 @@ function ShopFloorRowAction({
   inspectionMasters?: DashboardPayload[];
   setupChecklistMasters?: DashboardPayload[];
   setupChecklistSessions?: DashboardPayload[];
+  machinistOptions?: Array<{ code: string; name: string }>;
   openDataEntry?: (entryType: string, defaults?: Record<string, unknown>) => void;
 }) {
   const [doneBy, setDoneBy] = useState("");
@@ -4655,8 +4717,12 @@ function ShopFloorRowAction({
   const checklistPhase = nextStage?.id === "presetting" ? "start" : nextStage?.id === "setting" ? "end" : "";
   const needsSetupChecklist = Boolean(checklistPhase && onSaveSetupChecklistSession);
   const setupChecklistReady = !needsSetupChecklist
-    || (Boolean(currentChecklistSession) && setupChecklistValuesComplete(asArray(currentChecklistSession?.items), {}, checklistPhase));
-  const checklistPageHref = next && checklistPhase ? setupChecklistPageHref(next, checklistPhase) : "";
+    || (Boolean(currentChecklistSession) && setupChecklistValuesComplete(
+      setupChecklistItemsForPhase(asArray(currentChecklistSession?.items), checklistPhase),
+      {},
+      checklistPhase,
+    ));
+  const checklistPageHref = next && checklistPhase ? setupChecklistPageHref(next, checklistPhase, doneBy) : "";
   const setupChecklistStatus = !needsSetupChecklist
     ? "Not required"
     : setupChecklistReady
@@ -4664,6 +4730,19 @@ function ShopFloorRowAction({
       : currentChecklistSession
         ? "Saved progress"
         : "Checklist pending";
+  useEffect(() => {
+    if (!currentChecklistSession || !checklistPhase) return;
+    const savedMachinist = str(
+      checklistPhase === "start"
+        ? currentChecklistSession.startedBy
+        : currentChecklistSession.endedBy,
+    );
+    if (!savedMachinist) return;
+    const timeout = window.setTimeout(() => {
+      setDoneBy((current) => current || savedMachinist);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [checklistPhase, currentChecklistSession]);
   const firstPieceMasters = useMemo(() => next && nextStage?.id === "quality_approval"
     ? matchingFirstPieceInspectionMasters(inspectionMasters, next)
     : [], [inspectionMasters, next, nextStage?.id]);
@@ -4720,6 +4799,8 @@ function ShopFloorRowAction({
             taskCompletedAt,
             checkedPieces: 5,
             dimensions: firstPieceMasters.map((master) => ({
+              parameterCode: qualityParameterCode(master),
+              parameterName: qualityParameterName(master),
               uid: str(master.uid),
               description: str(master.description),
               instrumentUsed: str(master.instrumentUsed),
@@ -4802,7 +4883,16 @@ function ShopFloorRowAction({
         <>
           <div className="text-sm font-medium">{nextStage.label}</div>
           <div className="grid gap-2 sm:grid-cols-2">
-            <Input className="h-8" value={doneBy} placeholder={`${nextStage.role} name/code`} onChange={(event) => setDoneBy(event.target.value)} />
+            {needsSetupChecklist ? (
+              <SearchableSelect className="h-8 rounded-md border bg-background px-2 text-sm" value={doneBy} onChange={(event) => setDoneBy(event.target.value)}>
+                <option value="">{machinistOptions.length ? "Select Machinist" : "No Machinists In This Production Unit"}</option>
+                {machinistOptions.map((machinist) => (
+                  <option key={machinist.code} value={machinist.name}>{machinist.code} - {machinist.name}</option>
+                ))}
+              </SearchableSelect>
+            ) : (
+              <Input className="h-8" value={doneBy} placeholder={`${nextStage.role} name/code`} onChange={(event) => setDoneBy(event.target.value)} />
+            )}
             {nextStage.id === "operator_started" ? (
               <Input className="h-8" value={worker} placeholder="Worker Name/Code" onChange={(event) => setWorker(event.target.value)} />
             ) : (
@@ -4819,7 +4909,7 @@ function ShopFloorRowAction({
                 <StatusBadge value={setupChecklistStatus} />
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => { window.location.href = checklistPageHref; }}>
+                <Button type="button" size="sm" variant="outline" className="w-fit" disabled={!doneBy} onClick={() => { window.location.href = checklistPageHref; }}>
                   Open Checklist
                 </Button>
                 {checklistPhase === "start" && !activeChecklistMasters.length && openDataEntry ? (
@@ -4840,7 +4930,7 @@ function ShopFloorRowAction({
               showDraftSaved={loadedFirstPieceDraftKey === firstPieceDraftKey}
             />
           ) : null}
-          <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection || !setupChecklistReady || isSubmitting} onClick={() => void submitNextStage()}>
+          <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection || !setupChecklistReady || (needsSetupChecklist && !doneBy) || isSubmitting} onClick={() => void submitNextStage()}>
             <CheckCircle2 className="size-4" />
             {nextStage.button}
           </Button>
@@ -5518,7 +5608,9 @@ function SetupChecklistForm({
   items,
   session,
   values,
+  itemRemarks,
   onValueChange,
+  onItemRemarkChange,
   onAddMaster,
 }: {
   row: DashboardPayload;
@@ -5526,7 +5618,9 @@ function SetupChecklistForm({
   items: DashboardPayload[];
   session?: DashboardPayload;
   values: Record<string, string>;
+  itemRemarks: Record<string, string>;
   onValueChange: (item: DashboardPayload, value: string) => void;
+  onItemRemarkChange: (item: DashboardPayload, value: string) => void;
   onAddMaster?: (entryType: string, defaults?: Record<string, unknown>) => void;
 }) {
   const defaults = setupChecklistMasterDefaults();
@@ -5569,6 +5663,7 @@ function SetupChecklistForm({
               <TableHead className="min-w-12">Seq</TableHead>
               <TableHead className="min-w-72">Check Point</TableHead>
               <TableHead className="min-w-36">Entry</TableHead>
+              <TableHead className="min-w-52">Remark</TableHead>
               <TableHead className="min-w-28">Required</TableHead>
             </TableRow>
           </TableHeader>
@@ -5578,6 +5673,7 @@ function SetupChecklistForm({
               const inputType = str(item.inputType || "checkbox").toLowerCase();
               const existingValue = setupChecklistExistingValue(item, phase);
               const value = values[itemKey] ?? existingValue;
+              const itemRemark = itemRemarks[itemKey] ?? setupChecklistExistingItemRemark(item, phase);
               return (
                 <TableRow key={itemKey}>
                   <TableCell>{displayValue(item.sequence || index + 1)}</TableCell>
@@ -5595,6 +5691,9 @@ function SetupChecklistForm({
                     ) : (
                       <Input className="h-8 min-w-28" type={inputType === "number" ? "number" : "text"} value={value} onChange={(event) => onValueChange(item, event.target.value)} />
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <Input className="h-8 min-w-48" value={itemRemark} onChange={(event) => onItemRemarkChange(item, event.target.value)} />
                   </TableCell>
                   <TableCell>{setupChecklistItemRequired(item) ? "Yes" : "No"}</TableCell>
                 </TableRow>
@@ -7041,6 +7140,7 @@ function QualityParameterMasterForm({
   async function saveParameterSet() {
     const activeDrafts = drafts.filter((draft) => draft.parameterName.trim());
     const duplicateSequences = activeDrafts.map((draft, index) => str(optionalNumber(draft.sequence) ?? index + 1)).filter((sequence, index, sequences) => sequence && sequences.indexOf(sequence) !== index);
+    const duplicateParameter = duplicateQualityParameterCombination(activeDrafts);
     if (!selectedRouteLineExists) {
       setStatus({ tone: "destructive", message: "Select an item, option, and setup that already exists in Route Master." });
       return;
@@ -7051,6 +7151,10 @@ function QualityParameterMasterForm({
     }
     if (duplicateSequences.length) {
       setStatus({ tone: "destructive", message: "Step numbers must be unique for this item, option, and setup." });
+      return;
+    }
+    if (duplicateParameter) {
+      setStatus({ tone: "destructive", message: "The same parameter and specification cannot be repeated for one item, option, and setup." });
       return;
     }
     setIsSaving(true);
@@ -7118,8 +7222,8 @@ function QualityParameterMasterForm({
                   <TableCell><Input className="h-8 min-w-48" value={draft.parameterName} onChange={(event) => updateDraft(draft.draftId, "parameterName", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-28" value={draft.specification} onChange={(event) => updateDraft(draft.draftId, "specification", event.target.value)} /></TableCell>
                   <TableCell><Input className="h-8 min-w-36" value={draft.instrumentUsed} onChange={(event) => updateDraft(draft.draftId, "instrumentUsed", event.target.value)} /></TableCell>
-                  <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.tolerancePlus} onChange={(event) => updateDraft(draft.draftId, "tolerancePlus", event.target.value)} /></TableCell>
-                  <TableCell><Input className="h-8 min-w-24" type="number" step="0.001" value={draft.toleranceMinus} onChange={(event) => updateDraft(draft.draftId, "toleranceMinus", event.target.value)} /></TableCell>
+                  <TableCell><Input className="h-8 min-w-24" type={draft.inputType === "number" ? "number" : "text"} step={draft.inputType === "number" ? "0.001" : undefined} value={draft.tolerancePlus} onChange={(event) => updateDraft(draft.draftId, "tolerancePlus", event.target.value)} /></TableCell>
+                  <TableCell><Input className="h-8 min-w-24" type={draft.inputType === "number" ? "number" : "text"} step={draft.inputType === "number" ? "0.001" : undefined} value={draft.toleranceMinus} onChange={(event) => updateDraft(draft.draftId, "toleranceMinus", event.target.value)} /></TableCell>
                   <TableCell><SearchableSelect className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="number">Number</option><option value="text">Text</option><option value="pass_fail">Ok / Not Ok</option></SearchableSelect></TableCell>
                   <TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell>
                   <TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Parameter" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell>
@@ -7549,7 +7653,7 @@ function SetupChecklistMasterForm({
         <div className="overflow-auto rounded-lg border">
           <Table>
             <TableHeader><TableRow><TableHead className="min-w-20">Step</TableHead><TableHead className="min-w-72">Check Point</TableHead><TableHead className="min-w-32">Input</TableHead><TableHead className="min-w-28">Required</TableHead><TableHead className="min-w-52">Section</TableHead><TableHead className="min-w-44">Remark</TableHead><TableHead className="w-12"></TableHead></TableRow></TableHeader>
-            <TableBody>{drafts.map((draft, index) => <TableRow key={draft.draftId}><TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-64" value={draft.checkPoint} onChange={(event) => updateDraft(draft.draftId, "checkPoint", event.target.value)} /></TableCell><TableCell><SearchableSelect className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></SearchableSelect></TableCell><TableCell><SearchableSelect className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.required} onChange={(event) => updateDraft(draft.draftId, "required", event.target.value)}><option value="Yes">Yes</option><option value="No">No</option></SearchableSelect></TableCell><TableCell><Input className="h-8 min-w-48" value={draft.section} onChange={(event) => updateDraft(draft.draftId, "section", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell><TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Setup Checklist Step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell></TableRow>)}</TableBody>
+            <TableBody>{drafts.map((draft, index) => <TableRow key={draft.draftId}><TableCell><Input className="h-8 min-w-16" type="number" min="1" value={draft.sequence || String(index + 1)} onChange={(event) => updateDraft(draft.draftId, "sequence", event.target.value)} /></TableCell><TableCell><Input className="h-8 min-w-64" value={draft.checkPoint} onChange={(event) => updateDraft(draft.draftId, "checkPoint", event.target.value)} /></TableCell><TableCell><SearchableSelect className="h-8 min-w-28 rounded-md border bg-background px-2 text-sm" value={draft.inputType} onChange={(event) => updateDraft(draft.draftId, "inputType", event.target.value)}><option value="checkbox">Checkbox</option><option value="text">Text</option><option value="number">Number</option></SearchableSelect></TableCell><TableCell><SearchableSelect className="h-8 min-w-24 rounded-md border bg-background px-2 text-sm" value={draft.required} onChange={(event) => updateDraft(draft.draftId, "required", event.target.value)}><option value="Yes">Yes</option><option value="No">No</option></SearchableSelect></TableCell><TableCell><SearchableSelect className="h-8 min-w-48 rounded-md border bg-background px-2 text-sm" value={draft.section} onChange={(event) => updateDraft(draft.draftId, "section", event.target.value)}><option value="Pre setting">Pre Setting</option><option value="Setting">Setting</option>{draft.section === "Pre setting / setting" ? <option value="Pre setting / setting">Both Phases (Legacy)</option> : null}</SearchableSelect></TableCell><TableCell><Input className="h-8 min-w-40" value={draft.remark} onChange={(event) => updateDraft(draft.draftId, "remark", event.target.value)} /></TableCell><TableCell><Button type="button" size="sm" variant="ghost" className="size-8 p-0" aria-label="Remove Setup Checklist Step" onClick={() => removeDraft(draft)}><Trash2 className="size-4" /></Button></TableCell></TableRow>)}</TableBody>
           </Table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2"><Button type="button" variant="outline" onClick={() => setDrafts((current) => [...current, newSetupChecklistDraft(current.length + 1)])}><Plus className="size-4" />Add Step</Button><div className="flex flex-wrap items-center gap-2">{status ? <AlertMessage tone={status.tone}>{status.message}</AlertMessage> : null}<Button type="button" disabled={isSaving} onClick={() => void saveChecklist()}><CheckCircle2 className="size-4" />{isSaving ? "Saving" : "Save Checklist"}</Button></div></div>
@@ -10056,6 +10160,7 @@ function qualityParameterDraftFromRow(row: DashboardPayload): QualityParameterDr
   return {
     draftId: qualityParameterMasterKey(row) || `quality-param-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     persisted: true,
+    parameterCode: qualityParameterCode(row),
     sequence: displayValue(row.sequence) !== "-" ? displayValue(row.sequence) : "",
     parameterName: qualityParameterName(row),
     specification: str(row.specification),
@@ -10068,7 +10173,7 @@ function qualityParameterDraftFromRow(row: DashboardPayload): QualityParameterDr
 }
 
 function qualityParameterAutoCode(draft: QualityParameterDraft | DashboardPayload) {
-  const existingCode = str((draft as DashboardPayload).code || (draft as DashboardPayload).parameterCode);
+  const existingCode = str((draft as DashboardPayload).code || draft.parameterCode);
   if (existingCode) return existingCode;
   const sequence = optionalNumber(draft.sequence) ?? 1;
   return `P${sequence}`;
@@ -10189,7 +10294,7 @@ function newSetupChecklistDraft(sequence: number): SetupChecklistStepDraft {
     checkPoint: "",
     inputType: "checkbox",
     required: "Yes",
-    section: "Pre setting / setting",
+    section: "Pre setting",
     remark: "",
   };
 }
@@ -10793,7 +10898,7 @@ function writeStoredSetupChecklistSession(session: DashboardPayload) {
   if (typeof window === "undefined" || !sessionId) return;
   window.localStorage.setItem(storedSetupChecklistSessionKey(sessionId), JSON.stringify(session));
 }
-function setupChecklistPageHref(row: DashboardPayload, phase: string) {
+function setupChecklistPageHref(row: DashboardPayload, phase: string, doneBy = "") {
   const params = new URLSearchParams({
     sessionId: setupChecklistSessionId(row),
     phase,
@@ -10804,6 +10909,7 @@ function setupChecklistPageHref(row: DashboardPayload, phase: string) {
     setupName: displayValue(row.setupName),
     machine: displayValue(row.machine),
     machineType: displayValue(row.machineType),
+    doneBy,
     floor: normalizeProductionFloorCode(
       row.productionFloorCode ?? productionFloorFromLocation(),
     ),
@@ -10831,6 +10937,9 @@ function setupChecklistSessionPayload(row: DashboardPayload, session: DashboardP
     setupName: displayValue(row.setupName),
     machine: displayValue(row.machine),
     machineType: displayValue(row.machineType),
+    productionFloorCode: normalizeProductionFloorCode(
+      row.productionFloorCode ?? productionFloorFromLocation(),
+    ),
     sessionId: setupChecklistSessionId(row),
     ...session,
   };
@@ -10845,7 +10954,7 @@ function setupChecklistSessionForRow(sessions: DashboardPayload[], row: Dashboar
 function mostCompleteSetupChecklistSession(snapshotSession: DashboardPayload | undefined, localSession: DashboardPayload | undefined, stageId: string | undefined) {
   const phase = stageId === "presetting" ? "start" : stageId === "setting" ? "end" : "";
   if (!phase) return snapshotSession ?? localSession;
-  if (localSession && setupChecklistValuesComplete(asArray(localSession.items), {}, phase)) return localSession;
+  if (localSession && setupChecklistValuesComplete(setupChecklistItemsForPhase(asArray(localSession.items), phase), {}, phase)) return localSession;
   return snapshotSession ?? localSession;
 }
 function activeSetupChecklistMasterRows(rows: DashboardPayload[]) {
@@ -10885,6 +10994,15 @@ function setupChecklistExistingValue(item: DashboardPayload, phase: string) {
   return displayValue(phase === "start" ? item.startValue : item.endValue) === "-" ? "" : displayValue(phase === "start" ? item.startValue : item.endValue);
 }
 
+function setupChecklistExistingItemRemark(item: DashboardPayload, phase: string) {
+  return str(phase === "start" ? item.startItemRemark : item.endItemRemark);
+}
+
+function setupChecklistItemsForPhase(items: DashboardPayload[], phase: string) {
+  const normalizedPhase = phase === "end" ? "end" : "start";
+  return items.filter((item) => setupChecklistItemAppliesToPhase(item.section, normalizedPhase));
+}
+
 function setupChecklistValuesComplete(items: DashboardPayload[], values: Record<string, string>, phase: string) {
   if (!items.length) return false;
   return items.every((item, index) => {
@@ -10898,6 +11016,7 @@ function setupChecklistSessionForStage({
   row,
   phase,
   values,
+  itemRemarks,
   items,
   masterRows,
   existingSession,
@@ -10908,6 +11027,7 @@ function setupChecklistSessionForStage({
   row: DashboardPayload;
   phase: string;
   values: Record<string, string>;
+  itemRemarks: Record<string, string>;
   items: DashboardPayload[];
   masterRows: DashboardPayload[];
   existingSession?: DashboardPayload;
@@ -10917,11 +11037,13 @@ function setupChecklistSessionForStage({
 }) {
   const masterVersion = str(existingSession?.masterVersion || items[0]?.version || masterRows[0]?.version || "1");
   const sessionItems = items.map((item, index) => {
+    if (!setupChecklistItemAppliesToPhase(item.section, phase === "end" ? "end" : "start")) return item;
     const itemKey = setupChecklistItemKey(item, index);
     const value = values[itemKey] ?? setupChecklistExistingValue(item, phase);
+    const itemRemark = itemRemarks[itemKey] ?? setupChecklistExistingItemRemark(item, phase);
     return phase === "start"
-      ? { ...item, startValue: value }
-      : { ...item, endValue: value };
+      ? { ...item, startValue: value, startItemRemark: itemRemark }
+      : { ...item, endValue: value, endItemRemark: itemRemark };
   });
   return {
     ...(existingSession ?? {}),
@@ -10947,7 +11069,7 @@ function setupChecklistMasterDefaults() {
     checkPoint: "",
     inputType: "checkbox",
     required: "Yes",
-    section: "Pre setting / setting",
+    section: "Pre setting",
     effectiveFrom: new Date().toISOString().slice(0, 10),
     status: "Active",
   };

@@ -1,4 +1,8 @@
 import type { RecruitmentPostRow } from "@workspace/db"
+import {
+  parseProductionFloorCode,
+  type ProductionFloorCode,
+} from "@workspace/db/production-floors"
 
 export type SharedEmployeeMasterRow = {
   department: string
@@ -45,4 +49,30 @@ export function sharedEmployeeMasterRows(
       numeric: true,
     })
   )
+}
+
+export function productionMachinistOptions(
+  rows: readonly {
+    department?: unknown
+    designation?: unknown
+    empId?: unknown
+    employeeName?: unknown
+    status?: unknown
+  }[],
+  productionFloorCode: ProductionFloorCode
+) {
+  return rows
+    .filter(
+      (row) =>
+        String(row.status).trim() === "Active" &&
+        /machinist/i.test(String(row.designation)) &&
+        parseProductionFloorCode(row.department) === productionFloorCode
+    )
+    .map((row) => ({
+      code: String(row.empId).trim(),
+      name: String(row.employeeName).trim(),
+    }))
+    .sort((left, right) =>
+      left.name.localeCompare(right.name, "en-IN", { numeric: true })
+    )
 }

@@ -1303,6 +1303,8 @@ test("database roles enforce least privilege across migration, web, worker, and 
     web_can_delete_candidate_events: boolean
     web_can_delete_candidate_departments: boolean
     web_can_delete_customers: boolean
+    web_can_delete_first_piece_readings: boolean
+    web_can_delete_hourly_readings: boolean
     web_can_execute_try_date: boolean
     web_can_execute_try_timestamptz: boolean
     web_can_migrate: boolean
@@ -1318,6 +1320,16 @@ test("database roles enforce least privilege across migration, web, worker, and 
         AS web_writes_customers,
       has_table_privilege('mrmpl_web', 'sales.customers', 'DELETE')
         AS web_can_delete_customers,
+      has_table_privilege(
+        'mrmpl_web',
+        'quality.first_piece_readings',
+        'DELETE'
+      ) AS web_can_delete_first_piece_readings,
+      has_table_privilege(
+        'mrmpl_web',
+        'quality.hourly_check_readings',
+        'DELETE'
+      ) AS web_can_delete_hourly_readings,
       has_table_privilege(
         'mrmpl_web',
         'recruitment.candidate_departments',
@@ -1374,6 +1386,8 @@ test("database roles enforce least privilege across migration, web, worker, and 
     web_can_delete_candidate_events: false,
     web_can_delete_candidate_departments: false,
     web_can_delete_customers: false,
+    web_can_delete_first_piece_readings: true,
+    web_can_delete_hourly_readings: true,
     web_can_execute_try_date: true,
     web_can_execute_try_timestamptz: true,
     web_can_migrate: false,
