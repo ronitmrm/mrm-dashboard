@@ -3995,17 +3995,17 @@ type RoleTaskKind = "shopFloor" | "machinist" | "quality";
 const roleTaskCopy: Record<RoleTaskKind, { title: string; description: string; empty: string }> = {
   shopFloor: {
     title: "Shop Floor Tasks",
-    description: "Items Waiting For Raw Material To Be Placed At The Planned Machine.",
+    description: "Record Operator Sessions, Production Output, And Downtime; Place Raw Material For New Setups.",
     empty: "No raw-material placement tasks are pending.",
   },
   machinist: {
     title: "Machinist Tasks",
-    description: "Items Waiting For Pre Setting, Setting, Or Operator Assignment After Quality Approval.",
+    description: "Complete Setup And Machine Start Tasks; Record Downtime Against The Running Session.",
     empty: "No machinist tasks are pending.",
   },
   quality: {
     title: "Quality Control Tasks",
-    description: "Record Quality Downtime And Rejections. First-Piece Tasks Stay In First Piece Inspection.",
+    description: "Record Session Rejections Or Downtime, And Close CNC Sessions When Required.",
     empty: "First-piece tasks are available only in First Piece Inspection.",
   },
 };
@@ -4284,7 +4284,18 @@ function RoleTaskPanel({
     [queueRows, role],
   );
   const runningRows = useMemo(() => currentShopFloorRows(productionControl), [productionControl]);
-  const existingProductionCardRows = useMemo(() => asArray(productionControl.productionCardRows), [productionControl]);
+  const [productionSessionReloadKey, setProductionSessionReloadKey] = useState(0);
+  const productionSessionPage = usePostgresOperationalPage(
+    `/api/production-sessions?floor=${encodeURIComponent(productionFloorFromLocation())}`,
+    5_000,
+    undefined,
+    5_000,
+    productionSessionReloadKey,
+  );
+  const productionSessionRows = useMemo(
+    () => asArray(productionSessionPage.data?.rows),
+    [productionSessionPage.data?.rows],
+  );
   const productionCardRows = useMemo(() => {
     const taskRows = roleRows.map((row) => row.next).filter((row): row is DashboardPayload => Boolean(row));
     if (role === "shopFloor" || role === "quality" || role === "machinist") return runningRows;
@@ -4342,27 +4353,28 @@ function RoleTaskPanel({
 
 
   async function saveProductionCard(row: DashboardPayload, card: DashboardPayload) {
-    const payload = productionCardPayload(row, card);
+    const entryType = str(card.entryType);
+    const payload = {
+      ...card,
+      jcNo: jobCardNumber(row),
+      jobCard: jobCardNumber(row),
+      cycleTime: productionCycleSeconds(row),
+      machine: displayValue(row.machine),
+      machineNo: displayValue(row.machine),
+      optionNumber: displayValue(row.optionNumber),
+      partCode: itemCode(row),
+      pieceWeightGrams: productionPieceWeightGrams(row),
+      productionFloorCode: normalizeProductionFloorCode(
+        row.productionFloorCode ?? productionFloorFromLocation(),
+      ),
+      setupNo: displayValue(row.setupNo),
+    };
     await submitAction("data-entry", {
-      entryType: "production_card",
-      key: dataEntryKey("production_card", payload),
+      entryType,
+      key: dataEntryKey(entryType, payload),
       payload,
     });
-    if (card.writeProductionOutput) {
-      await submitAction("data-entry", {
-        entryType: "software_raw",
-        key: dataEntryKey("software_raw", payload),
-        payload,
-      });
-      if (productionCycleMasterChanged(row, card)) {
-        const cyclePayload = productionCycleMasterPayload(row, card);
-        await submitAction("data-entry", {
-          entryType: "cycle",
-          key: dataEntryKey("cycle", cyclePayload),
-          payload: cyclePayload,
-        });
-      }
-    }
+    setProductionSessionReloadKey((current) => current + 1);
   }
 
   async function saveSetupChecklistSession(row: DashboardPayload, session: DashboardPayload) {
@@ -4403,10 +4415,15 @@ function RoleTaskPanel({
               </Button>
             </div>
           ) : null}
+          {productionSessionPage.error ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-sm text-destructive">
+              Production sessions unavailable: {productionSessionPage.error}
+            </div>
+          ) : null}
           <ProductionCardRoleEntryForm
             role={role}
             rows={productionCardRows}
-            existingCardRows={existingProductionCardRows}
+            existingCardRows={productionSessionRows}
             employeeMasterError={employeeMasterError}
             employeeMasterLoaded={employeeMasterLoaded}
             employeeOptions={shopFloorOptions}
@@ -5121,6 +5138,375 @@ function CompactEntryField({
 }
 
 function ProductionCardRoleEntryForm({
+  role,
+  rows,
+  existingCardRows: sessionRows = [],
+  employeeMasterError,
+  employeeMasterLoaded = false,
+  employeeOptions = [],
+  rejectionTypeRows = [],
+  rejectionReasonRows = [],
+  rejectionRemarkRows = [],
+  onSaveProductionCard,
+}: {
+  role: RoleTaskKind;
+  rows: DashboardPayload[];
+  existingCardRows?: DashboardPayload[];
+  employeeMasterError?: string;
+  employeeMasterLoaded?: boolean;
+  employeeOptions?: Array<{ code: string; name: string }>;
+  bulkRows?: DashboardPayload[];
+  rejectionTypeRows?: DashboardPayload[];
+  rejectionReasonRows?: DashboardPayload[];
+  rejectionRemarkRows?: DashboardPayload[];
+  onSaveProductionCard: (row: DashboardPayload, card: DashboardPayload) => Promise<void>;
+}) {
+  type EntryKind = "session" | "downtime" | "rejection" | "close";
+  const floor = productionFloorFromLocation();
+  const isCnc = floor === "cnc";
+  const today = new Date().toISOString().slice(0, 10);
+  const [entryKind, setEntryKind] = useState<EntryKind>(role === "machinist" ? "downtime" : role === "quality" ? (isCnc ? "close" : "downtime") : "session");
+  const [selectedKey, setSelectedKey] = useState("");
+  const [prodDate, setProdDate] = useState(today);
+  const [shift, setShift] = useState("Day");
+  const [operatorCode, setOperatorCode] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [measurementMethod, setMeasurementMethod] = useState<"" | "counter" | "weight">(isCnc ? "" : "weight");
+  const [startCount, setStartCount] = useState("");
+  const [endCount, setEndCount] = useState("");
+  const [endReason, setEndReason] = useState("shift_change");
+  const [grossWeightKg, setGrossWeightKg] = useState("");
+  const [crateCount, setCrateCount] = useState("");
+  const [crateWeightKg, setCrateWeightKg] = useState(String(DEFAULT_CRATE_WEIGHT_KG));
+  const [downtimeCode, setDowntimeCode] = useState("");
+  const [rejectionTypeCode, setRejectionTypeCode] = useState("");
+  const [rejectionReasonCode, setRejectionReasonCode] = useState("");
+  const [rejectionRemarkCode, setRejectionRemarkCode] = useState("");
+  const [rejectedPieces, setRejectedPieces] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const rowOptions = useMemo(() => rows.map((row) => ({
+    key: shopFloorPlanKey(row),
+    label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}`,
+  })), [rows]);
+  const selectedRow = rows.find((row) => shopFloorPlanKey(row) === selectedKey);
+  const matchingSessions = useMemo(
+    () => selectedRow
+      ? sessionRows.filter((session) => productionSessionMatchesPlan(session, selectedRow))
+      : [],
+    [selectedRow, sessionRows],
+  );
+  const openSession = matchingSessions.find((session) => str(session.status) === "open");
+  const previousClosedSession = sessionRows
+    .filter((session) => str(session.status) === "closed")
+    .filter((session) => sameProductionCardText(session.machineNumber || session.machine, selectedRow?.machine))
+    .sort((left, right) => str(right.endedAt).localeCompare(str(left.endedAt)))[0];
+  const carriedStartCount = selectedRow && previousClosedSession
+    && productionSessionMatchesPlan(previousClosedSession, selectedRow)
+    && str(previousClosedSession.measurementMethod) === "counter"
+    && optionalNumber(previousClosedSession.endCount) !== undefined
+    ? optionalNumber(previousClosedSession.endCount) ?? null
+    : null;
+  const effectiveStartCount = carriedStartCount ?? optionalNumber(startCount) ?? 0;
+  const effectiveMethod = openSession
+    ? str(openSession.measurementMethod) as "counter" | "weight"
+    : measurementMethod;
+  const pieceWeightGrams = selectedRow ? productionPieceWeightGrams(selectedRow) : 0;
+  const rejectionTypeOptions = useMemo(() => codedMasterOptions(rejectionTypeRows, DEFAULT_REJECTION_TYPE_OPTIONS, ["typeOfRejection", "rejectionType", "name"]), [rejectionTypeRows]);
+  const rejectionReasonOptions = useMemo(() => codedMasterOptions(rejectionReasonRows, DEFAULT_REJECTION_REASON_OPTIONS, ["rejectionReason", "reason", "name", "downtimeReason", "description"]), [rejectionReasonRows]);
+  const rejectionRemarkOptions = useMemo(() => codedMasterOptions(rejectionRemarkRows, DEFAULT_REJECTION_REMARK_OPTIONS, ["rejectionRemark", "remark", "name"]), [rejectionRemarkRows]);
+  const selectedDowntime = rejectionReasonOptions.find((option) => option.code === downtimeCode);
+  const selectedType = rejectionTypeOptions.find((option) => option.code === rejectionTypeCode);
+  const selectedReason = rejectionReasonOptions.find((option) => option.code === rejectionReasonCode);
+  const selectedRemark = rejectionRemarkOptions.find((option) => option.code === rejectionRemarkCode);
+  const netWeightKg = Math.max(numeric(grossWeightKg) - numeric(crateCount) * numeric(crateWeightKg), 0);
+  const totalPieces = effectiveMethod === "counter"
+    ? Math.max(numeric(endCount) - (optionalNumber(openSession?.startCount) ?? effectiveStartCount), 0)
+    : pieceWeightGrams > 0 ? Math.floor((netWeightKg * 1000) / pieceWeightGrams) : 0;
+  const sessionRejectedPieces = optionalNumber(openSession?.rejectedPieces) ?? 0;
+  const goodPieces = Math.max(totalPieces - sessionRejectedPieces, 0);
+  const compactInputClass = "h-8 text-xs";
+  const compactSelectClass = "h-8 w-full min-w-0 rounded-md border bg-background px-2 text-xs";
+  const selectedEmployee = employeeOptions.find((employee) => employee.code === operatorCode);
+  const isSessionEntry = entryKind === "session" || entryKind === "close";
+  const isClosing = isSessionEntry && Boolean(openSession);
+  const canQualityClose = role === "quality" && isCnc && entryKind === "close";
+  const canSave = Boolean(selectedRow) && (
+    entryKind === "downtime"
+      ? Boolean(openSession && downtimeCode && startTime && endTime)
+      : entryKind === "rejection"
+        ? Boolean(openSession && rejectionTypeCode && rejectionReasonCode && rejectionRemarkCode && numeric(rejectedPieces) > 0)
+        : isClosing
+          ? Boolean(endTime && endReason && (
+              effectiveMethod === "counter"
+                ? numeric(endCount) >= (optionalNumber(openSession?.startCount) ?? 0)
+                : grossWeightKg !== "" && crateCount !== "" && numeric(grossWeightKg) >= 0 && pieceWeightGrams > 0
+            ))
+          : role === "shopFloor" && Boolean(
+              operatorCode && startTime && shift && pieceWeightGrams > 0
+              && effectiveMethod
+              && (effectiveMethod !== "counter" || carriedStartCount !== null || startCount !== "")
+            )
+  );
+
+  function selectMachine(key: string) {
+    setSelectedKey(key);
+    setMeasurementMethod(floor === "cnc" ? "" : "weight");
+    setStartCount("");
+    setEndCount("");
+    setStartTime("");
+    setEndTime("");
+    setGrossWeightKg("");
+    setCrateCount("");
+  }
+
+  async function save() {
+    if (!selectedRow || !canSave || isSaving) return;
+    setIsSaving(true);
+    try {
+      if (entryKind === "downtime" && openSession) {
+        await onSaveProductionCard(selectedRow, {
+          endedAt: productionSessionTimestamp(prodDate, endTime, startTime),
+          enteredRole: productionSessionRole(role),
+          entryType: "production_session_downtime",
+          reasonCode: downtimeCode,
+          reasonName: selectedDowntime?.label ?? "",
+          sessionId: openSession.id,
+          startedAt: productionSessionTimestamp(prodDate, startTime),
+        });
+        setDowntimeCode("");
+        setStartTime("");
+        setEndTime("");
+        return;
+      }
+      if (entryKind === "rejection" && openSession) {
+        await onSaveProductionCard(selectedRow, {
+          entryType: "production_session_rejection",
+          quantity: numeric(rejectedPieces),
+          reasonCode: rejectionReasonCode,
+          reasonName: selectedReason?.label ?? "",
+          remarkCode: rejectionRemarkCode,
+          remarkName: selectedRemark?.label ?? "",
+          sessionId: openSession.id,
+          typeCode: rejectionTypeCode,
+          typeName: selectedType?.label ?? "",
+        });
+        setRejectedPieces("");
+        setRejectionTypeCode("");
+        setRejectionReasonCode("");
+        setRejectionRemarkCode("");
+        return;
+      }
+      if (isClosing && openSession) {
+        const started = new Date(str(openSession.startedAt));
+        await onSaveProductionCard(selectedRow, {
+          crateCount: effectiveMethod === "weight" ? numeric(crateCount) : undefined,
+          crateWeightKg: effectiveMethod === "weight" ? numeric(crateWeightKg) : undefined,
+          endCount: effectiveMethod === "counter" ? numeric(endCount) : undefined,
+          endedAt: productionSessionTimestamp(isoDateValue(openSession.productionDate) || prodDate, endTime, undefined, started),
+          endReason,
+          entryType: "production_session_close",
+          grossWeightKg: effectiveMethod === "weight" ? numeric(grossWeightKg) : undefined,
+          sessionId: openSession.id,
+        });
+        setEndTime("");
+        setEndCount("");
+        setGrossWeightKg("");
+        setCrateCount("");
+        return;
+      }
+      await onSaveProductionCard(selectedRow, {
+        entryType: "production_session_start",
+        measurementMethod: effectiveMethod,
+        operatorCode,
+        operatorName: selectedEmployee?.name ?? "",
+        prodDate,
+        productionDate: prodDate,
+        shift,
+        startCount: effectiveMethod === "counter" && carriedStartCount === null ? numeric(startCount) : undefined,
+        startedAt: productionSessionTimestamp(prodDate, startTime),
+      });
+      setOperatorCode("");
+      setStartTime("");
+      setStartCount("");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const availableKinds: Array<{ id: EntryKind; label: string }> = role === "shopFloor"
+    ? [{ id: "session", label: openSession ? "End Session" : "Start Session" }, { id: "downtime", label: "Downtime" }]
+    : role === "quality"
+      ? [
+          ...(isCnc ? [{ id: "close" as const, label: "Close CNC Session" }] : []),
+          { id: "downtime", label: "Downtime" },
+          { id: "rejection", label: "Rejection" },
+        ]
+      : [{ id: "downtime", label: "Downtime" }];
+
+  return (
+    <div className="grid gap-3 rounded-md border bg-muted/10 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium">Production Sessions</div>
+          <div className="text-xs text-muted-foreground">Planning And Master Data Are Filled Automatically.</div>
+        </div>
+        <StatusBadge value={openSession ? `Running / ${displayValue(openSession.operatorCode)}` : "No open session"} />
+      </div>
+      <div className="inline-flex w-fit flex-wrap gap-1 rounded-md border bg-background p-1" role="group" aria-label="Production session action">
+        {availableKinds.map((kind) => (
+          <Button key={kind.id} type="button" size="sm" className="h-7 px-3 text-xs" variant={entryKind === kind.id ? "default" : "ghost"} onClick={() => setEntryKind(kind.id)}>
+            {kind.label}
+          </Button>
+        ))}
+      </div>
+      <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-6">
+        <CompactEntryField className="lg:col-span-2" label="Machine No.">
+          <SearchableSelect className={compactSelectClass} value={selectedKey} onChange={(event) => selectMachine(event.target.value)}>
+            <option value="">Select Machine</option>
+            {rowOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+          </SearchableSelect>
+        </CompactEntryField>
+        <CompactEntryField label="Date">
+          <Input className={compactInputClass} type="date" value={prodDate} onChange={(event) => setProdDate(event.target.value)} />
+        </CompactEntryField>
+        <CompactEntryField label="Shift">
+          <SearchableSelect className={compactSelectClass} value={shift} onChange={(event) => setShift(event.target.value)} disabled={isClosing || entryKind === "downtime" || entryKind === "rejection"}>
+            <option value="Day">Day</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="Night">Night</option><option value="General">General</option>
+          </SearchableSelect>
+        </CompactEntryField>
+        {selectedRow ? <div className="flex min-h-8 items-center rounded-md border bg-background px-2 lg:col-span-2"><ShopFloorItemSummary row={selectedRow} tone="current" compact /></div> : null}
+      </div>
+
+      {selectedRow ? (
+        <div className="grid gap-1.5 rounded-md border bg-background p-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+          <div><span className="text-muted-foreground">Job Card: </span>{jobCardNumber(selectedRow)}</div>
+          <div><span className="text-muted-foreground">Part: </span>{itemCode(selectedRow)}</div>
+          <div><span className="text-muted-foreground">Option / Setup: </span>{displayValue(selectedRow.optionNumber)} / {displayValue(selectedRow.setupNo)}</div>
+          <div><span className="text-muted-foreground">Cycle / Piece Weight: </span>{formatNumber(productionCycleSeconds(selectedRow))} sec / {formatNumber(pieceWeightGrams)} g</div>
+        </div>
+      ) : null}
+
+      {isSessionEntry && !isClosing && role === "shopFloor" ? (
+        <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          <CompactEntryField label="Operator Code">
+            <SearchableSelect className={compactSelectClass} disabled={!employeeOptions.length} value={operatorCode} onChange={(event) => setOperatorCode(event.target.value)}>
+              <option value="">{employeeMasterError ? "Employee Master Unavailable" : !employeeMasterLoaded ? "Loading Employee Master" : "Select Operator"}</option>
+              {employeeOptions.map((employee) => <option key={employee.code} value={employee.code}>{employee.code} - {employee.name}</option>)}
+            </SearchableSelect>
+          </CompactEntryField>
+          <CompactEntryField label="Machine Start">
+            <Input className={compactInputClass} value={startTime} placeholder="HH:mm" onChange={(event) => setStartTime(time24Input(event.target.value))} />
+          </CompactEntryField>
+          {isCnc ? (
+            <CompactEntryField label="Production Method">
+              <SearchableSelect className={compactSelectClass} value={measurementMethod} onChange={(event) => setMeasurementMethod(event.target.value as "" | "counter" | "weight")}>
+                <option value="">Select Method</option><option value="counter">Machine Counter</option><option value="weight">Weight</option>
+              </SearchableSelect>
+            </CompactEntryField>
+          ) : null}
+          {effectiveMethod === "counter" ? (
+            <CompactEntryField label="Machine Start Count">
+              <Input className={compactInputClass} type="number" min="0" value={carriedStartCount ?? startCount} readOnly={carriedStartCount !== null} onChange={(event) => setStartCount(event.target.value)} />
+            </CompactEntryField>
+          ) : null}
+          {carriedStartCount !== null ? <div className="flex items-end pb-1 text-xs text-muted-foreground">Previous end count carried automatically.</div> : null}
+        </div>
+      ) : null}
+
+      {isSessionEntry && isClosing && (role === "shopFloor" || canQualityClose) ? (
+        <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          <CompactEntryField label="Operator"><Input className={compactInputClass} readOnly value={`${displayValue(openSession?.operatorCode)} - ${displayValue(openSession?.operatorName)}`} /></CompactEntryField>
+          <CompactEntryField label="Machine End"><Input className={compactInputClass} value={endTime} placeholder="HH:mm" onChange={(event) => setEndTime(time24Input(event.target.value))} /></CompactEntryField>
+          <CompactEntryField label="End Reason">
+            <SearchableSelect className={compactSelectClass} value={endReason} onChange={(event) => setEndReason(event.target.value)}>
+              <option value="shift_change">Shift Change</option><option value="operator_change">Operator Change</option><option value="item_complete">Item Complete</option><option value="job_change">Job / Setup Change</option><option value="manual_stop">Manual Stop</option>
+            </SearchableSelect>
+          </CompactEntryField>
+          {effectiveMethod === "counter" ? (
+            <CompactEntryField label="Machine End Count"><Input className={compactInputClass} type="number" min={optionalNumber(openSession?.startCount) ?? 0} value={endCount} onChange={(event) => setEndCount(event.target.value)} /></CompactEntryField>
+          ) : (
+            <>
+              <CompactEntryField label="Gross Produced Kg"><Input className={compactInputClass} type="number" min="0" step="0.001" value={grossWeightKg} onChange={(event) => setGrossWeightKg(event.target.value)} /></CompactEntryField>
+              <CompactEntryField label="Crates Used"><Input className={compactInputClass} type="number" min="0" step="1" value={crateCount} onChange={(event) => setCrateCount(event.target.value)} /></CompactEntryField>
+              <CompactEntryField label="Crate Weight Kg"><SearchableSelect className={compactSelectClass} value={crateWeightKg} onChange={(event) => setCrateWeightKg(event.target.value)}>{CRATE_WEIGHT_OPTIONS_KG.map((weight) => <option key={weight} value={String(weight)}>{formatNumber(weight)} Kg</option>)}</SearchableSelect></CompactEntryField>
+            </>
+          )}
+          <CompactEntryField label="Total Produced"><Input className={compactInputClass} readOnly value={formatNumber(totalPieces)} /></CompactEntryField>
+          <CompactEntryField label="QC Rejected"><Input className={compactInputClass} readOnly value={formatNumber(sessionRejectedPieces)} /></CompactEntryField>
+          <CompactEntryField label="Good Pieces"><Input className={compactInputClass} readOnly value={formatNumber(goodPieces)} /></CompactEntryField>
+        </div>
+      ) : null}
+
+      {entryKind === "downtime" ? (
+        <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          <CompactEntryField label="Downtime Code"><SearchableSelect className={compactSelectClass} value={downtimeCode} onChange={(event) => setDowntimeCode(event.target.value)}><option value="">Select Code</option>{rejectionReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}</SearchableSelect></CompactEntryField>
+          <CompactEntryField label="Start"><Input className={compactInputClass} value={startTime} placeholder="HH:mm" onChange={(event) => setStartTime(time24Input(event.target.value))} /></CompactEntryField>
+          <CompactEntryField label="End"><Input className={compactInputClass} value={endTime} placeholder="HH:mm" onChange={(event) => setEndTime(time24Input(event.target.value))} /></CompactEntryField>
+          <CompactEntryField label="Minutes"><Input className={compactInputClass} readOnly value={formatNumber(productionCardRuntimeMinutes(prodDate, startTime, endTime))} /></CompactEntryField>
+        </div>
+      ) : null}
+
+      {entryKind === "rejection" ? (
+        <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
+          <CompactEntryField label="Rejection Type"><SearchableSelect className={compactSelectClass} value={rejectionTypeCode} onChange={(event) => setRejectionTypeCode(event.target.value)}><option value="">Select Type</option>{rejectionTypeOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}</SearchableSelect></CompactEntryField>
+          <CompactEntryField label="Rejection Reason"><SearchableSelect className={compactSelectClass} value={rejectionReasonCode} onChange={(event) => setRejectionReasonCode(event.target.value)}><option value="">Select Reason</option>{rejectionReasonOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}</SearchableSelect></CompactEntryField>
+          <CompactEntryField label="Rejection Remark"><SearchableSelect className={compactSelectClass} value={rejectionRemarkCode} onChange={(event) => setRejectionRemarkCode(event.target.value)}><option value="">Select Remark</option>{rejectionRemarkOptions.map((option) => <option key={option.code} value={option.code}>{option.code} - {option.label}</option>)}</SearchableSelect></CompactEntryField>
+          <CompactEntryField label="Rejected Pcs"><Input className={compactInputClass} type="number" min="1" step="1" value={rejectedPieces} onChange={(event) => setRejectedPieces(event.target.value)} /></CompactEntryField>
+        </div>
+      ) : null}
+
+      {!openSession && (entryKind === "downtime" || entryKind === "rejection" || entryKind === "close") && selectedRow ? <div className="text-xs text-amber-700 dark:text-amber-300">Start the production session before recording this action.</div> : null}
+      <Button type="button" size="sm" className="h-8 w-fit" disabled={!canSave || isSaving} onClick={() => void save()}>
+        <CheckCircle2 className="size-4" />
+        {entryKind === "downtime" ? "Save Downtime" : entryKind === "rejection" ? "Save Rejection" : isClosing ? "Close Session" : "Start Session"}
+      </Button>
+      <div className="max-h-64 overflow-auto rounded-md border bg-background">
+        <Table>
+          <TableHeader className="sticky top-0 bg-background">
+            <TableRow><TableHead>Machine</TableHead><TableHead>Job / Setup</TableHead><TableHead>Session</TableHead><TableHead>Operator</TableHead><TableHead></TableHead></TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const session = sessionRows.find((candidate) => str(candidate.status) === "open" && productionSessionMatchesPlan(candidate, row));
+              return (
+                <TableRow key={shopFloorPlanKey(row)}>
+                  <TableCell className="font-medium">{displayValue(row.machine)}</TableCell>
+                  <TableCell>{jobCardNumber(row)} / {displayValue(row.setupNo)}</TableCell>
+                  <TableCell><StatusBadge value={session ? "Running" : "Not Started"} /></TableCell>
+                  <TableCell>{session ? `${displayValue(session.operatorCode)} - ${displayValue(session.operatorName)}` : "-"}</TableCell>
+                  <TableCell className="text-right"><Button type="button" size="sm" variant="outline" className="h-7" onClick={() => selectMachine(shopFloorPlanKey(row))}>Select</Button></TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+function productionSessionRole(role: RoleTaskKind) {
+  return role === "shopFloor" ? "shop_floor" : role;
+}
+
+function productionSessionMatchesPlan(session: DashboardPayload, row: DashboardPayload) {
+  return sameProductionCardText(session.machineNumber || session.machine, row.machine)
+    && sameProductionCardText(session.jobCardNumber || session.jobCard || session.jcNo, jobCardNumber(row))
+    && sameProductionCardText(session.partCode, itemCode(row))
+    && sameProductionCardText(session.optionNumber, row.optionNumber)
+    && sameProductionCardText(session.setupNumber || session.setupNo, row.setupNo);
+}
+
+function productionSessionTimestamp(date: string, time: string, startTime?: string, notBefore?: Date) {
+  const timestamp = new Date(`${date}T${time}:00`);
+  const start = startTime ? new Date(`${date}T${startTime}:00`) : notBefore;
+  if (start && timestamp < start) timestamp.setDate(timestamp.getDate() + 1);
+  return timestamp.toISOString();
+}
+
+export function LegacyProductionCardRoleEntryForm({
   role,
   rows,
   existingCardRows = [],
@@ -10755,27 +11141,6 @@ function isoDateValue(value: unknown) {
   const parsed = new Date(text);
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
 }
-function productionCycleMasterChanged(row: DashboardPayload, card: DashboardPayload) {
-  const nextCycle = optionalNumber(card.cycleTime) ?? productionCycleSeconds(row);
-  const nextPieceWeight = optionalNumber(card.pieceWeight) ?? productionPieceWeightGrams(row);
-  return Math.abs(nextCycle - productionCycleSeconds(row)) > 0.0001
-    || Math.abs(nextPieceWeight - productionPieceWeightGrams(row)) > 0.0001;
-}
-
-function productionCycleMasterPayload(row: DashboardPayload, card: DashboardPayload) {
-  return {
-    partNo: itemCode(row),
-    optionNumber: displayValue(row.optionNumber),
-    setupNo: displayValue(row.setupNo),
-    setupName: displayValue(row.setupName),
-    machineUsed: displayValue(row.machineType),
-    operationWeight: optionalNumber(card.pieceWeight) ?? productionPieceWeightGrams(row),
-    cycleTime: optionalNumber(card.cycleTime) ?? productionCycleSeconds(row),
-    loadingUnloading: optionalNumber(card.loadingUnloading) ?? 0,
-    updatedFrom: "shop_floor_tasks",
-    updatedAt: new Date().toISOString(),
-  };
-}
 function omitRecordKey<T>(record: Record<string, T>, key: string) {
   if (!(key in record)) return record;
   const next = { ...record };
@@ -10804,78 +11169,6 @@ function inferredProductionCardEntryKind(card: DashboardPayload) {
 function sameProductionCardText(left: unknown, right: unknown) {
   return str(left).toLowerCase() === str(right).toLowerCase();
 }
-function productionCardPayload(row: DashboardPayload, card: DashboardPayload) {
-  const payload = {
-    cardId: productionCardId(row, card),
-    cardRole: optionalText(card.cardRole),
-    cardEntryKind: optionalText(card.cardEntryKind) || inferredProductionCardEntryKind(card),
-    prodDate: text(card.prodDate) || new Date().toISOString().slice(0, 10),
-    shift: optionalText(card.shift),
-    location: optionalText(row.location),
-    operatorId: text(card.operatorId) || "Unassigned",
-    operatorName: optionalText(card.operatorName),
-    qcName: optionalText(card.qcName),
-    machineType: displayValue(row.machineType),
-    machine: displayValue(row.machine),
-    partCode: itemCode(row),
-    jobCard: jobCardNumber(row),
-    jcNo: jobCardNumber(row),
-    optionNumber: displayValue(row.optionNumber),
-    setupNo: displayValue(row.setupNo),
-    setupName: displayValue(row.setupName),
-    cycleTime: optionalNumber(card.cycleTime) ?? optionalNumber(row.cycleTime) ?? 0,
-    loadingUnloading: optionalNumber(card.loadingUnloading) ?? optionalNumber(row.loadingUnloading) ?? 0,
-    startTime: optionalText(card.startTime),
-    endTime: optionalText(card.endTime),
-    runtimeMinutes: optionalNumber(card.runtimeMinutes) ?? 0,
-    breakMinutes: optionalNumber(card.breakMinutes) ?? 0,
-    downtimeMinutes: optionalNumber(card.downtimeMinutes) ?? 0,
-    downtimeReason: optionalText(card.downtimeReason),
-    downtimeCode: optionalText(card.downtimeCode),
-    outputQty: optionalNumber(card.outputQty) ?? 0,
-    actualQty: optionalNumber(card.actualQty) ?? optionalNumber(card.outputQty) ?? 0,
-    targetQty: optionalNumber(card.targetQty) ?? 0,
-    rejectQty: optionalNumber(card.rejectQty) ?? 0,
-    rejectionType: optionalText(card.rejectionType),
-    rejectionTypeCode: optionalText(card.rejectionTypeCode),
-    rejectionReason: optionalText(card.rejectionReason),
-    rejectionReasonCode: optionalText(card.rejectionReasonCode),
-    rejectionRemark: optionalText(card.rejectionRemark),
-    rejectionRemarkCode: optionalText(card.rejectionRemarkCode),
-    grossWeight: optionalNumber(card.grossWeight) ?? 0,
-    netWeight: optionalNumber(card.netWeight) ?? 0,
-    pieceWeight: optionalNumber(card.pieceWeight) ?? 0,
-    cratesUsed: optionalNumber(card.cratesUsed) ?? 0,
-    crateWeightKg: optionalNumber(card.crateWeightKg) ?? 0,
-    producedPcs: optionalNumber(card.producedPcs) ?? optionalNumber(card.actualQty) ?? optionalNumber(card.outputQty) ?? 0,
-    settingQty: optionalNumber(card.settingQty) ?? 0,
-    toolingCheck: asRecord(card.toolingCheck),
-    shopFloorChecks: asRecord(card.shopFloorChecks),
-    qcApproval: optionalText(card.qcApproval),
-    remarks: optionalText(card.remarks),
-    efficiency: optionalNumber(card.efficiency) ?? 0,
-    savedAt: new Date().toISOString(),
-  };
-  return payload;
-}
-
-function productionCardId(row: DashboardPayload, card: DashboardPayload) {
-  const role = optionalText(card.cardRole);
-  const entryKind = optionalText(card.cardEntryKind) || inferredProductionCardEntryKind(card);
-  return [
-    role,
-    entryKind,
-    card.prodDate,
-    card.shift,
-    jobCardNumber(row),
-    itemCode(row),
-    row.setupNo,
-    row.machine,
-  ]
-    .map((value) => str(value).toLowerCase())
-    .join("|");
-}
-
 function productionCycleSeconds(row: DashboardPayload) {
   return (optionalNumber(row.cycleTime) ?? 0) + (optionalNumber(row.loadingUnloading) ?? 0);
 }

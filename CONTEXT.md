@@ -28,6 +28,26 @@ _Avoid_: Fixed production start date.
 The first recorded production date for a setup on a machine. Once present, it locks the production start date used by planning.
 _Avoid_: Setup completion date.
 
+**Production Session**:
+One uninterrupted period in which one operator runs one machine for one Job Card, option, and setup. Shop Floor records its start; Shop Floor closes it, while Quality may also close CNC sessions. A shift change, operator change, item completion, or job/setup change ends the session. Downtime does not end it.
+_Avoid_: Daily production entry, permanent setup operator.
+
+**Production Measurement Method**:
+The method selected for one Production Session. Conventional-01, Conventional-02, and Forging use Weight. CNC asks for either Machine Counter or Weight for every session.
+_Avoid_: Machine-wide permanent counting method.
+
+**Machine Counter Continuity**:
+The previous closed CNC Production Session's end count becomes the next session's start count only when the physical machine, Job Card, Part Code, option, and setup all remain the same and both sessions use Machine Counter.
+_Avoid_: Carrying a counter across a job/setup change, retyping an eligible carried count.
+
+**Production Downtime Event**:
+A non-overlapping start/end interval within one Production Session, recorded by Quality, Shop Floor, or Machinist with a coded reason. It reduces effective runtime but does not close the session.
+_Avoid_: One editable daily downtime total.
+
+**Production Rejection Event**:
+A quantity and coded type, reason, and remark recorded only by Quality against one Production Session. Rejected pieces are part of total produced pieces; good pieces equal total produced minus rejected pieces.
+_Avoid_: Rejection without a Production Session, rejection entered by Machinist or Shop Floor.
+
 **Planning Recalculation**:
 A rebuild of forecast planning from the latest masters, holidays, constraints, production entries, and shop-floor workflow data. It may move future unstarted setups to newly available physical machines, but it must not move setups that already have production actuals or a raw-material-at-machine-or-later shop-floor task unless a planner explicitly switches the machine.
 _Avoid_: Manual date refresh.

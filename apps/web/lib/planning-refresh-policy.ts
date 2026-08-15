@@ -9,6 +9,8 @@ const autoRefreshActionPaths = new Set([
 
 const autoRefreshDataEntryTypes = new Set([
   "rm_inward",
+  "production_session_close",
+  "production_session_start",
   "software_raw",
 ]);
 
