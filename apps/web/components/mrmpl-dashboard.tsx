@@ -4174,10 +4174,6 @@ function RoleTaskPanel({
   onStartFirstPieceInspection?: (row: DashboardPayload) => void;
   role: RoleTaskKind;
 }) {
-  const [machineFilter, setMachineFilter] = useState("");
-  const [locationFilter, setLocationFilter] = useState("");
-  const [itemFilter, setItemFilter] = useState("");
-  const [taskFilter, setTaskFilter] = useState("");
   const employeeMasterPage = usePostgresOperationalPage(
     role === "shopFloor" || role === "machinist" ? "/api/employee-master" : null,
   );
@@ -4208,17 +4204,6 @@ function RoleTaskPanel({
     if (role === "shopFloor" || role === "quality" || role === "machinist") return runningRows;
     return taskRows;
   }, [role, roleRows, runningRows]);
-  const filteredRows = useMemo(() => roleRows.filter((row) =>
-    typedFilterMatches(row.machine, machineFilter) &&
-    typedFilterMatches(row.location, locationFilter) &&
-    shopFloorItemMatchesFilter(row.next, itemFilter) &&
-    typedFilterMatches(pendingTaskLabel(row.next), taskFilter),
-  ), [itemFilter, locationFilter, machineFilter, roleRows, taskFilter]);
-  const machineOptions = useMemo(() => uniqueValues(roleRows.map((row) => row.machine)), [roleRows]);
-  const locationOptions = useMemo(() => uniqueValues(roleRows.map((row) => row.location).filter((value) => value !== "-")), [roleRows]);
-  const itemOptions = useMemo(() => uniqueValues(roleRows.map((row) => shopFloorItemLabel(row.next))), [roleRows]);
-  const taskOptions = useMemo(() => uniqueValues(roleRows.map((row) => pendingTaskLabel(row.next))), [roleRows]);
-
   async function saveStage(row: DashboardPayload, stage: ShopFloorStageId, extra: Record<string, unknown> = {}) {
     const stageSpec = shopFloorStages.find((item) => item.id === stage);
     const payload = {
@@ -4347,48 +4332,12 @@ function RoleTaskPanel({
           />
           <TrackingSummary
             items={[
-              ["Pending", formatNumber(filteredRows.length)],
-              ["Machines", formatNumber(uniqueValues(filteredRows.map((row) => row.machine)).length)],
-              ["Locations", formatNumber(uniqueValues(filteredRows.map((row) => row.location).filter((value) => value !== "-")).length)],
+              ["Pending", formatNumber(roleRows.length)],
+              ["Machines", formatNumber(uniqueValues(roleRows.map((row) => row.machine)).length)],
+              ["Locations", formatNumber(uniqueValues(roleRows.map((row) => row.location).filter((value) => value !== "-")).length)],
             ]}
           />
-          <ExcelStyleFilters
-            filters={[
-              {
-                id: `${role}-machine`,
-                label: "Machine No.",
-                value: machineFilter,
-                placeholder: "Type or select machine",
-                options: machineOptions,
-                onChange: setMachineFilter,
-              },
-              {
-                id: `${role}-location`,
-                label: "Master Location",
-                value: locationFilter,
-                placeholder: "Type or select master location",
-                options: locationOptions,
-                onChange: setLocationFilter,
-              },
-              {
-                id: `${role}-item`,
-                label: "Item Setup",
-                value: itemFilter,
-                placeholder: "Type or select setup",
-                options: itemOptions,
-                onChange: setItemFilter,
-              },
-              {
-                id: `${role}-task`,
-                label: "Task",
-                value: taskFilter,
-                placeholder: "Type or select task",
-                options: taskOptions,
-                onChange: setTaskFilter,
-              },
-            ]}
-          />
-          {filteredRows.length ? (
+          {roleRows.length ? (
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
@@ -4401,7 +4350,7 @@ function RoleTaskPanel({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRows.map((row) => (
+                  {roleRows.map((row) => (
                     <TableRow key={`${row.machine}-${shopFloorPlanKey(row.next)}`}>
                       <TableCell className="align-middle">
                         <div className="font-semibold">{row.machine}</div>
