@@ -35,6 +35,10 @@ import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
+import {
+  recruitmentInterviewerOptions,
+  sharedEmployeeMasterRows,
+} from "@/lib/shared-employee-master"
 
 export const dynamic = "force-dynamic"
 
@@ -121,10 +125,14 @@ export default async function JobWorkspacePage({
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const workspace = await (async () => {
+  const { posts, workspace } = await (async () => {
     try {
       const organizationId = await repository.organizationIdForCode("MRMPL")
-      return repository.getJobWorkspace(organizationId, id)
+      const [workspace, posts] = await Promise.all([
+        repository.getJobWorkspace(organizationId, id),
+        repository.listPosts(organizationId),
+      ])
+      return { posts, workspace }
     } finally {
       await repository.close()
     }
@@ -132,6 +140,9 @@ export default async function JobWorkspacePage({
   if (!workspace) notFound()
 
   const { applications, interviews, job } = workspace
+  const interviewerOptions = recruitmentInterviewerOptions(
+    sharedEmployeeMasterRows(posts)
+  )
   return (
     <div className="grid gap-6">
       <section className="grid gap-3">
@@ -220,6 +231,7 @@ export default async function JobWorkspacePage({
                   id: application.id,
                   scoreableRound: application.scoreableRound,
                 }))}
+                interviewerOptions={interviewerOptions}
                 returnJobId={job.id}
               />
             </CardContent>

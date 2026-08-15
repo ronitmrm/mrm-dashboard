@@ -111,7 +111,11 @@ import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type
 import { maintenanceChecklistRowsForSchedule, maintenanceMasterRowsForMachineAssignment } from "@/lib/maintenance-schedule-options";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { duplicateQualityParameterCombination, mergeQualityInspectionParameterRows } from "@/lib/quality-parameter-set";
-import { productionMachinistOptions, productionWorkerOptions } from "@/lib/shared-employee-master";
+import {
+  productionMachinistOptions,
+  productionQualityOptions,
+  productionShopFloorOptions,
+} from "@/lib/shared-employee-master";
 import {
   setupChecklistItemAppliesToPhase,
   shopFloorNoPendingActionLabel,
@@ -4005,6 +4009,35 @@ const roleTaskCopy: Record<RoleTaskKind, { title: string; description: string; e
   },
 };
 
+function useProductionEmployeeDirectory() {
+  const employeeMasterPage = usePostgresOperationalPage("/api/employee-master");
+  const rows = useMemo(
+    () => asArray(employeeMasterPage.data?.rows),
+    [employeeMasterPage.data?.rows],
+  );
+  const floor = productionFloorFromLocation();
+  const machinistOptions = useMemo(
+    () => productionMachinistOptions(rows, floor),
+    [floor, rows],
+  );
+  const qualityOptions = useMemo(
+    () => productionQualityOptions(rows, floor),
+    [floor, rows],
+  );
+  const shopFloorOptions = useMemo(
+    () => productionShopFloorOptions(rows, floor),
+    [floor, rows],
+  );
+
+  return {
+    error: employeeMasterPage.error,
+    loaded: employeeMasterPage.data !== undefined,
+    machinistOptions,
+    qualityOptions,
+    shopFloorOptions,
+  };
+}
+
 function ShopFloorStatusPanel({
   productionControl,
   submitAction,
@@ -4012,6 +4045,7 @@ function ShopFloorStatusPanel({
   productionControl: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
 }) {
+  const { machinistOptions, qualityOptions, shopFloorOptions } = useProductionEmployeeDirectory();
   const [machineFilter, setMachineFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [currentFilter, setCurrentFilter] = useState("");
@@ -4185,10 +4219,13 @@ function ShopFloorStatusPanel({
                       <ShopFloorRowAction
                         current={row.actionCurrent}
                         next={row.actionNext}
+                        machinistOptions={machinistOptions}
                         onSaveStage={saveStage}
                         onSaveSetupChecklistSession={saveSetupChecklistSession}
+                        qualityOptions={qualityOptions}
                         setupChecklistMasters={asArray(productionControl.setupChecklistMasterRows)}
                         setupChecklistSessions={asArray(productionControl.setupChecklistSessionRows)}
+                        shopFloorOptions={shopFloorOptions}
                       />
                     </TableCell>
                   </TableRow>
@@ -4219,21 +4256,13 @@ function RoleTaskPanel({
   onStartFirstPieceInspection?: (row: DashboardPayload) => void;
   role: RoleTaskKind;
 }) {
-  const employeeMasterPage = usePostgresOperationalPage(
-    role === "shopFloor" || role === "machinist" ? "/api/employee-master" : null,
-  );
-  const employeeMasterRows = useMemo(
-    () => asArray(employeeMasterPage.data?.rows),
-    [employeeMasterPage.data?.rows],
-  );
-  const machinistOptions = useMemo(
-    () => productionMachinistOptions(employeeMasterRows, productionFloorFromLocation()),
-    [employeeMasterRows],
-  );
-  const workerOptions = useMemo(
-    () => productionWorkerOptions(employeeMasterRows, productionFloorFromLocation()),
-    [employeeMasterRows],
-  );
+  const {
+    error: employeeMasterError,
+    loaded: employeeMasterLoaded,
+    machinistOptions,
+    qualityOptions,
+    shopFloorOptions,
+  } = useProductionEmployeeDirectory();
   const copy = enableFirstPieceInspection
     ? {
         title: "First Piece Inspection",
@@ -4370,9 +4399,9 @@ function RoleTaskPanel({
             role={role}
             rows={productionCardRows}
             existingCardRows={existingProductionCardRows}
-            employeeMasterError={employeeMasterPage.error}
-            employeeMasterLoaded={employeeMasterPage.data !== undefined}
-            employeeMasterRows={employeeMasterRows}
+            employeeMasterError={employeeMasterError}
+            employeeMasterLoaded={employeeMasterLoaded}
+            employeeOptions={shopFloorOptions}
             onSaveProductionCard={saveProductionCard}
             rejectionTypeRows={asArray(productionControl.rejectionTypeMasterRows)}
             rejectionReasonRows={asArray(productionControl.rejectionReasonMasterRows)}
@@ -4427,7 +4456,8 @@ function RoleTaskPanel({
                             setupChecklistMasters={asArray(productionControl.setupChecklistMasterRows)}
                             setupChecklistSessions={asArray(productionControl.setupChecklistSessionRows)}
                             machinistOptions={machinistOptions}
-                            workerOptions={workerOptions}
+                            qualityOptions={qualityOptions}
+                            shopFloorOptions={shopFloorOptions}
                             onSaveSetupChecklistSession={saveSetupChecklistSession}
                             openDataEntry={openDataEntry}
                           />
@@ -4466,6 +4496,7 @@ function FirstPieceInspectionPanel({
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
   onTaskComplete: (row: DashboardPayload) => void;
 }) {
+  const { qualityOptions } = useProductionEmployeeDirectory();
   const masters = combinedQualityInspectionMasterRows(productionControl);
   const reportRows = asArray(productionControl.firstPieceInspectionReportRows);
   const [activeView, setActiveView] = useState<"tasks" | "reports">("tasks");
@@ -4607,6 +4638,7 @@ function FirstPieceInspectionPanel({
                                   onSaveStage={saveStage}
                                   onSaveFirstPieceReport={saveFirstPieceReport}
                                   inspectionMasters={masters}
+                                  qualityOptions={qualityOptions}
                                   openDataEntry={openDataEntry}
                                 />
                               </TableCell>
@@ -4679,7 +4711,8 @@ function ShopFloorRowAction({
   setupChecklistMasters = [],
   setupChecklistSessions = [],
   machinistOptions = [],
-  workerOptions = [],
+  qualityOptions = [],
+  shopFloorOptions = [],
   openDataEntry,
 }: {
   current?: DashboardPayload;
@@ -4691,7 +4724,8 @@ function ShopFloorRowAction({
   setupChecklistMasters?: DashboardPayload[];
   setupChecklistSessions?: DashboardPayload[];
   machinistOptions?: Array<{ code: string; name: string }>;
-  workerOptions?: Array<{ code: string; name: string }>;
+  qualityOptions?: Array<{ code: string; name: string }>;
+  shopFloorOptions?: Array<{ code: string; name: string }>;
   openDataEntry?: (entryType: string, defaults?: Record<string, unknown>) => void;
 }) {
   const [doneBy, setDoneBy] = useState("");
@@ -4717,8 +4751,19 @@ function ShopFloorRowAction({
   const activeChecklistMasters = useMemo(() => activeSetupChecklistMasterRows(setupChecklistMasters), [setupChecklistMasters]);
   const checklistPhase = nextStage?.id === "presetting" ? "start" : nextStage?.id === "setting" ? "end" : "";
   const needsSetupChecklist = Boolean(checklistPhase && onSaveSetupChecklistSession);
-  const needsMachinistSelection = needsSetupChecklist || nextStage?.id === "operator_started";
   const needsWorkerSelection = nextStage?.id === "operator_started";
+  const doneByOptions = nextStage?.id === "raw_material_at_machine"
+    ? shopFloorOptions
+    : nextStage?.id === "quality_approval"
+      ? qualityOptions
+      : machinistOptions;
+  const doneByRole = nextStage?.id === "raw_material_at_machine"
+    ? "Shop Floor Employee"
+    : nextStage?.id === "quality_approval"
+      ? "Quality Employee"
+      : "Machinist";
+  const hasEligibleDoneBy = doneByOptions.some((employee) => employee.name === doneBy);
+  const hasEligibleWorker = shopFloorOptions.some((employee) => employee.name === worker);
   const setupChecklistReady = !needsSetupChecklist
     || (Boolean(currentChecklistSession) && setupChecklistValuesComplete(
       setupChecklistItemsForPhase(asArray(currentChecklistSession?.items), checklistPhase),
@@ -4790,6 +4835,7 @@ function ShopFloorRowAction({
 
   async function submitNextStage() {
     if (!next || !nextStage || isSubmitting) return;
+    if (!hasEligibleDoneBy || (needsWorkerSelection && !hasEligibleWorker)) return;
     if (nextStage.id === "quality_approval" && !canSubmitInspection) return;
     if (needsSetupChecklist && !setupChecklistReady) return;
     setIsSubmitting(true);
@@ -4886,20 +4932,16 @@ function ShopFloorRowAction({
         <>
           <div className="text-sm font-medium">{nextStage.label}</div>
           <div className="grid gap-2 sm:grid-cols-2">
-            {needsMachinistSelection ? (
-              <SearchableSelect className="h-8 rounded-md border bg-background px-2 text-sm" value={doneBy} onChange={(event) => setDoneBy(event.target.value)}>
-                <option value="">{machinistOptions.length ? "Select Machinist" : "No Machinists In This Production Unit"}</option>
-                {machinistOptions.map((machinist) => (
-                  <option key={machinist.code} value={machinist.name}>{machinist.code} - {machinist.name}</option>
-                ))}
-              </SearchableSelect>
-            ) : (
-              <Input className="h-8" value={doneBy} placeholder={`${nextStage.role} name/code`} onChange={(event) => setDoneBy(event.target.value)} />
-            )}
+            <SearchableSelect className="h-8 rounded-md border bg-background px-2 text-sm" value={doneBy} onChange={(event) => setDoneBy(event.target.value)}>
+              <option value="">{doneByOptions.length ? `Select ${doneByRole}` : `No ${doneByRole}s In This Production Unit`}</option>
+              {doneByOptions.map((employee) => (
+                <option key={employee.code} value={employee.name}>{employee.code} - {employee.name}</option>
+              ))}
+            </SearchableSelect>
             {nextStage.id === "operator_started" ? (
               <SearchableSelect className="h-8 rounded-md border bg-background px-2 text-sm" value={worker} onChange={(event) => setWorker(event.target.value)}>
-                <option value="">{workerOptions.length ? "Select Worker" : "No Workers In This Production Unit"}</option>
-                {workerOptions.map((workerOption) => (
+                <option value="">{shopFloorOptions.length ? "Select Shop Floor Employee" : "No Shop Floor Employees In This Production Unit"}</option>
+                {shopFloorOptions.map((workerOption) => (
                   <option key={workerOption.code} value={workerOption.name}>{workerOption.code} - {workerOption.name}</option>
                 ))}
               </SearchableSelect>
@@ -4917,7 +4959,7 @@ function ShopFloorRowAction({
                 <StatusBadge value={setupChecklistStatus} />
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" className="w-fit" disabled={!doneBy} onClick={() => { window.location.href = checklistPageHref; }}>
+                <Button type="button" size="sm" variant="outline" className="w-fit" disabled={!hasEligibleDoneBy} onClick={() => { window.location.href = checklistPageHref; }}>
                   Open Checklist
                 </Button>
                 {checklistPhase === "start" && !activeChecklistMasters.length && openDataEntry ? (
@@ -4938,7 +4980,7 @@ function ShopFloorRowAction({
               showDraftSaved={loadedFirstPieceDraftKey === firstPieceDraftKey}
             />
           ) : null}
-          <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection || !setupChecklistReady || (needsMachinistSelection && !doneBy) || (needsWorkerSelection && !worker) || isSubmitting} onClick={() => void submitNextStage()}>
+          <Button type="button" size="sm" className="w-fit" disabled={!canSubmitInspection || !setupChecklistReady || !hasEligibleDoneBy || (needsWorkerSelection && !hasEligibleWorker) || isSubmitting} onClick={() => void submitNextStage()}>
             <CheckCircle2 className="size-4" />
             {nextStage.button}
           </Button>
@@ -5073,7 +5115,7 @@ function ProductionCardRoleEntryForm({
   existingCardRows = [],
   employeeMasterError,
   employeeMasterLoaded = false,
-  employeeMasterRows = [],
+  employeeOptions = [],
   bulkRows = [],
   rejectionTypeRows = [],
   rejectionReasonRows = [],
@@ -5085,7 +5127,7 @@ function ProductionCardRoleEntryForm({
   existingCardRows?: DashboardPayload[];
   employeeMasterError?: string;
   employeeMasterLoaded?: boolean;
-  employeeMasterRows?: DashboardPayload[];
+  employeeOptions?: Array<{ code: string; name: string }>;
   bulkRows?: DashboardPayload[];
   rejectionTypeRows?: DashboardPayload[];
   rejectionReasonRows?: DashboardPayload[];
@@ -5128,11 +5170,6 @@ function ProductionCardRoleEntryForm({
     key: shopFloorPlanKey(row),
     label: `${displayValue(row.machine)} - ${itemCode(row)} / setup ${displayValue(row.setupNo)}`,
   })), [rows]);
-  const employeeOptions = useMemo(() => employeeMasterRows.map((row) => ({
-    code: displayValue(row.empId),
-    name: displayValue(row.employeeName),
-  })).filter((row) => row.code !== "-" && row.name !== "-")
-    .sort((left, right) => left.name.localeCompare(right.name, "en-IN", { numeric: true })), [employeeMasterRows]);
   const selectedEmployee = employeeOptions.find((employee) => employee.code === operatorNumber);
   const rejectionTypeOptions = useMemo(() => codedMasterOptions(rejectionTypeRows, DEFAULT_REJECTION_TYPE_OPTIONS, ["typeOfRejection", "rejectionType", "name"]), [rejectionTypeRows]);
   const rejectionReasonOptions = useMemo(() => codedMasterOptions(rejectionReasonRows, DEFAULT_REJECTION_REASON_OPTIONS, ["rejectionReason", "reason", "name", "downtimeReason", "description"]), [rejectionReasonRows]);
@@ -5459,8 +5496,8 @@ useEffect(() => {
                     : !employeeMasterLoaded
                       ? "Loading Employee Master"
                       : employeeOptions.length
-                        ? "Select Employee"
-                        : "No Joined Employees"}
+                        ? "Select Shop Floor Employee"
+                        : "No Shop Floor Employees In This Production Unit"}
                 </option>
                 {operatorNumber && !selectedEmployee ? <option value={operatorNumber}>{operatorNumber}</option> : null}
                 {employeeOptions.map((employee) => (
