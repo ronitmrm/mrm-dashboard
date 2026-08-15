@@ -135,6 +135,7 @@ const managedEnvironment = {
   BETTER_AUTH_SECRET:
     process.env.BETTER_AUTH_SECRET ?? randomBytes(32).toString("base64url"),
   BETTER_AUTH_URL: process.env.BETTER_AUTH_URL ?? "http://localhost:3001",
+  MRM_LOCAL_MANAGED_RUNTIME: "1",
   MRM_MANAGED_RUNTIME: "1",
   NEXT_PUBLIC_APP_URL:
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001",
