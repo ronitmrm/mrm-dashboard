@@ -36,6 +36,7 @@ import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
+import { candidateSourceOptions } from "@/lib/recruitment-candidate-sources"
 
 export const dynamic = "force-dynamic"
 
@@ -244,11 +245,27 @@ export default async function CandidateWorkspacePage({
               </Field>
               <Field>
                 <FieldLabel htmlFor="edit-candidate-source">Source</FieldLabel>
-                <Input
+                <NativeSelect
+                  className="w-full"
                   defaultValue={candidate.source ?? ""}
                   id="edit-candidate-source"
                   name="source"
-                />
+                >
+                  <NativeSelectOption value="">Not Selected</NativeSelectOption>
+                  {candidate.source &&
+                  !candidateSourceOptions.some(
+                    (source) => source === candidate.source
+                  ) ? (
+                    <NativeSelectOption value={candidate.source}>
+                      {candidate.source}
+                    </NativeSelectOption>
+                  ) : null}
+                  {candidateSourceOptions.map((source) => (
+                    <NativeSelectOption key={source} value={source}>
+                      {source}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
               </Field>
               <Field>
                 <FieldLabel htmlFor="edit-candidate-resume">
