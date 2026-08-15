@@ -110,6 +110,7 @@ import {
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
 import { maintenanceChecklistRowsForSchedule, maintenanceMasterRowsForMachineAssignment } from "@/lib/maintenance-schedule-options";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
+import { productionPieceWeightGrams } from "@/lib/production-session-entry";
 import { duplicateQualityParameterCombination, mergeQualityInspectionParameterRows } from "@/lib/quality-parameter-set";
 import {
   productionMachinistOptions,
@@ -11235,10 +11236,6 @@ function sameProductionCardText(left: unknown, right: unknown) {
 }
 function productionCycleSeconds(row: DashboardPayload) {
   return (optionalNumber(row.cycleTime) ?? 0) + (optionalNumber(row.loadingUnloading) ?? 0);
-}
-
-function productionPieceWeightGrams(row: DashboardPayload) {
-  return optionalNumber(row.operationWeight) ?? optionalNumber(row.stageWeight) ?? 0;
 }
 
 function time24Input(value: string) {
