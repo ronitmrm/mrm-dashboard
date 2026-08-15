@@ -89,7 +89,7 @@ A reusable checklist identified by one generated code and containing one or more
 _Avoid_: Checklist row count.
 
 **Machinist Setup Checklist**:
-A coded checklist whose points belong to Pre Setting or Setting. Each phase shows and completes only its own points, records a machinist from the relevant Production Floor, and retains a remark per point. Pre Setting Done By and Setting Done By are separate fields and may name the same machinist.
+A coded checklist whose points belong to Pre Setting or Setting. Each phase shows and completes only its own points, records a machinist from the relevant Production Floor, and retains a remark per point. Machinist eligibility follows the employee's stable HR Department Master code, so editing the department display name does not remove the employee from the Production Floor. Pre Setting Done By and Setting Done By are separate fields and may name the same machinist.
 _Avoid_: Repeating the machinist name inside an opened checklist, completing both phases from either checklist.
 
 **Mechanical Maintenance Workspace**:

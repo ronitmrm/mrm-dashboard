@@ -15,6 +15,7 @@ function post(
     combinedRoleName: null,
     combinedVacancyCode: null,
     department: "Production",
+    departmentCode: null,
     designation: "Operator",
     employeeCode: null,
     employeeName: null,
@@ -95,6 +96,33 @@ describe("shared Employee Master", () => {
     expect(productionMachinistOptions(rows, "conventional")).toEqual([
       { code: "MACH-1", name: "Amit" },
     ])
+  })
+
+  it("keeps conventional machinists available after their department is renamed", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({
+        department: "Machining Team",
+        departmentCode: "PPC-CVM",
+        designation: "Assistant",
+        employeeCode: "73",
+        employeeName: "Dharaviya Ketanbhai",
+        id: "1",
+        status: "Occupied",
+      }),
+      post({
+        department: "Machining Team",
+        departmentCode: "PPC-CVM",
+        designation: "Manager",
+        employeeCode: "166",
+        employeeName: "Sakhiya Ankit",
+        id: "2",
+        status: "Occupied",
+      }),
+    ])
+
+    expect(
+      productionMachinistOptions(rows, "conventional")
+    ).toEqual([{ code: "73", name: "Dharaviya Ketanbhai" }])
   })
 
   it("offers only active operators and workers from the selected production unit", () => {
