@@ -32,3 +32,34 @@ export function maintenanceChecklistRowsForSchedule(
       (typeof row.checklistCode === "string" && row.checklistCode.trim())
   )
 }
+
+export function maintenanceMasterRowsForMachineAssignment(pages: unknown[]) {
+  const byCode = new Map<string, DashboardRecord>()
+  const pageRecords = pages.map(record)
+  const candidates = [
+    ...pageRecords.flatMap((page) =>
+      rows(record(page.productionControl).maintenanceMasterRows)
+    ),
+    ...pageRecords.flatMap((page) => {
+      const entry = record(page.dataEntry)
+      return [
+        ...rows(entry.maintenanceMasterRows),
+        ...rows(entry.rows),
+        ...rows(entry.templates),
+      ]
+    }),
+  ].filter(
+    (row) =>
+      row.entryType === "maintenance_master" ||
+      (typeof row.maintenanceCode === "string" && row.maintenanceCode.trim())
+  )
+
+  for (const row of candidates) {
+    const code = String(row.maintenanceCode ?? row.code ?? "")
+      .trim()
+      .toLocaleLowerCase()
+    if (code) byCode.set(code, row)
+  }
+
+  return [...byCode.values()]
+}

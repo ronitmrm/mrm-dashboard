@@ -108,7 +108,7 @@ import {
   type FirstPieceInspectionDraft,
 } from "@/lib/first-piece-inspection-draft";
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
-import { maintenanceChecklistRowsForSchedule } from "@/lib/maintenance-schedule-options";
+import { maintenanceChecklistRowsForSchedule, maintenanceMasterRowsForMachineAssignment } from "@/lib/maintenance-schedule-options";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { duplicateQualityParameterCombination, mergeQualityInspectionParameterRows } from "@/lib/quality-parameter-set";
 import { productionMachinistOptions, productionWorkerOptions } from "@/lib/shared-employee-master";
@@ -220,6 +220,7 @@ function validDashboardTab(tab: DashboardTabId | null) {
 
 function dataEntryDestination(entryType: string): DashboardTabId {
   if (entryType === "machine_master") return "machineMasterTab";
+  if (entryType === "maintenance_master") return "maintenanceMastersTab";
   if (entryType === "planning_holiday") return "planningHolidayTab";
   return "dataEntryTab";
 }
@@ -6582,7 +6583,9 @@ function combinedMachineMasterProductionControl(pages: DashboardPayload[]) {
   return Object.fromEntries(
     centralMachineMasterRowKeys.map((key) => [
       key,
-      controls.flatMap((control) => asArray(control[key])),
+      key === "maintenanceMasterRows"
+        ? maintenanceMasterRowsForMachineAssignment(pages)
+        : controls.flatMap((control) => asArray(control[key])),
     ]),
   );
 }
@@ -6693,10 +6696,6 @@ function MachineMasterPanel({
   const codeOptions = uniqueValues(machineHistory.map((row) => displayValue(row.maintenanceCode)).filter((value) => value !== "-"));
   const resultOptions = uniqueValues(machineHistory.map((row) => displayValue(row.result)).filter((value) => value !== "-"));
 
-  function openMachine(machineNo: string) {
-    window.location.assign(`${dashboardTabHref("machineMasterTab")}&machine=${encodeURIComponent(machineNo)}`);
-  }
-
   function closeMachine() {
     window.location.assign(dashboardTabHref("machineMasterTab"));
   }
@@ -6752,7 +6751,7 @@ function MachineMasterPanel({
                 </TableHeader>
                 <TableBody>{machineRows.length ? machineRows.map((row) => {
                   const machineNo = displayValue(row.machineNo);
-                  return <TableRow key={machineNo}><TableCell className="font-medium">{machineNo}</TableCell><TableCell>{displayValue(row.machineFamily)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{machineProductionUnitLabel(row)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><div className="flex justify-end gap-2"><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("machine_master", { ...row, productionFloorCode: normalizeProductionFloorCode(row.productionFloorCode), __returnTab: "machineMasterTab" })}>Edit</Button><Button type="button" size="sm" variant="outline" onClick={() => openMachine(machineNo)}>Open</Button></div></TableCell></TableRow>;
+                  return <TableRow key={machineNo}><TableCell><Link className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline" href={`${dashboardTabHref("machineMasterTab")}&machine=${encodeURIComponent(machineNo)}`} title={`Open Machine ${machineNo}`}>{machineNo}</Link></TableCell><TableCell>{displayValue(row.machineFamily)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{machineProductionUnitLabel(row)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("machine_master", { ...row, productionFloorCode: normalizeProductionFloorCode(row.productionFloorCode), __returnTab: "machineMasterTab" })}>Edit</Button></TableCell></TableRow>;
                 }) : <TableRow><TableCell colSpan={8} className="h-24 text-center text-sm text-muted-foreground">No Machines Match The Selected Filters.</TableCell></TableRow>}</TableBody>
               </Table>
             </div>
@@ -6804,7 +6803,7 @@ function MachineMasterPanel({
         <CardContent className="grid gap-4">
           {isScheduleFormOpen ? (
             <div className="grid gap-4 rounded-lg border p-3">
-              {!maintenanceMasterRows.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No Maintenance Schedule Master Saved Yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_master", {})}>Add Schedule In Data Entry</Button></div> : null}
+              {!maintenanceMasterRows.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No Maintenance Schedule Master Saved Yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_master", {})}>Open Maintenance Masters</Button></div> : null}
               {!checklistOptions.length ? <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200"><span>No Maintenance Checklist Saved Yet.</span><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("maintenance_checklist_master", maintenanceChecklistMasterDefaults("machineMasterTab"))}>Open Checklists</Button></div> : null}
               {selectedChecklistRows.length ? <MaintenanceChecklistPreview rows={selectedChecklistRows} /> : null}
               <form className="grid gap-3" onSubmit={saveSchedule}>
