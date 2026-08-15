@@ -13,6 +13,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
+import { SearchableSelect } from "@workspace/ui/components/searchable-select"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { LockKeyhole } from "lucide-react"
 import { useId, useState } from "react"
@@ -36,11 +37,13 @@ const scoreOptions = [
 export function InterviewOutcomeForm({
   applications,
   initialApplicationId = "",
+  interviewerOptions,
   panelId,
   returnJobId,
 }: {
   applications: InterviewApplicationOption[]
   initialApplicationId?: string
+  interviewerOptions: Array<{ code: string; name: string }>
   panelId?: string
   returnJobId?: string
 }) {
@@ -163,11 +166,24 @@ export function InterviewOutcomeForm({
             <FieldLabel htmlFor={`${fieldId}-interviewer`}>
               Interviewer
             </FieldLabel>
-            <Input
+            <SearchableSelect
               id={`${fieldId}-interviewer`}
               name="interviewer_name"
+              disabled={!interviewerOptions.length}
               required
-            />
+              searchPlaceholder="Search interviewer..."
+            >
+              <option value="">
+                {interviewerOptions.length
+                  ? "Select Interviewer"
+                  : "No HOD, Manager, Or Management Employee Found"}
+              </option>
+              {interviewerOptions.map((interviewer) => (
+                <option key={interviewer.code} value={interviewer.name}>
+                  {interviewer.code} - {interviewer.name}
+                </option>
+              ))}
+            </SearchableSelect>
           </Field>
         </div>
         <Field>

@@ -92,6 +92,10 @@ _Avoid_: Checklist row count.
 A coded checklist whose points belong to Pre Setting or Setting. Each phase shows and completes only its own points, records a machinist from the relevant Production Floor, and retains a remark per point. Machinist eligibility follows the employee's stable HR Department Master code, so editing the department display name does not remove the employee from the Production Floor. Pre Setting Done By and Setting Done By are separate fields and may name the same machinist.
 _Avoid_: Repeating the machinist name inside an opened checklist, completing both phases from either checklist.
 
+**Production Task Assignee**:
+An active Employee Master employee selected from the task role's department in the current Production Floor: Machinist, Inprocess Quality, or Shop Floor. Matching follows the stable Department Master code, with legacy department-name fallback; HOD, Manager, and Management designations are not operational assignees.
+_Avoid_: Free-text person names, employees from another Production Floor, leadership-only posts.
+
 **Mechanical Maintenance Workspace**:
 The company-wide operational workspace for planned and breakdown maintenance across every Production Floor. Schedules and maintenance history belong to a physical machine; its Production Unit assignment does not create a separate maintenance workspace.
 _Avoid_: Production-floor maintenance tab, separate maintenance workspace per Production Unit.
@@ -182,7 +186,9 @@ _Avoid_: Freely selected interview stage.
 
 **Interview Assessment**:
 The preset question scores, interviewer, decision, and comments recorded for
-one recruitment interview round.
+one recruitment interview round. The interviewer is an active Employee Master
+employee whose designation is HOD, Manager, or Management, regardless of
+department.
 _Avoid_: Overall score without question-level marks.
 
 **Recruitment Assignment Command**:

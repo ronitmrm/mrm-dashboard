@@ -21,7 +21,7 @@ export type SharedEmployeeMasterRow = {
 export function sharedEmployeeMasterRows(
   posts: readonly RecruitmentPostRow[]
 ): SharedEmployeeMasterRow[] {
-  const rows = new Map<string, SharedEmployeeMasterRow>()
+  const rows: SharedEmployeeMasterRow[] = []
 
   for (const post of posts) {
     const employeeName = post.employeeName?.trim() ?? ""
@@ -29,9 +29,7 @@ export function sharedEmployeeMasterRows(
     if (!empId || !employeeName) continue
     if (post.status !== "Occupied" && post.status !== "Resigned") continue
 
-    const key = empId.toLocaleLowerCase("en-IN")
-    if (rows.has(key)) continue
-    rows.set(key, {
+    rows.push({
       department: post.department,
       departmentCode: post.departmentCode,
       designation: post.designation,
@@ -46,10 +44,11 @@ export function sharedEmployeeMasterRows(
     })
   }
 
-  return [...rows.values()].sort((left, right) =>
-    left.employeeName.localeCompare(right.employeeName, "en-IN", {
-      numeric: true,
-    })
+  return rows.sort(
+    (left, right) =>
+      left.employeeName.localeCompare(right.employeeName, "en-IN", {
+        numeric: true,
+      }) || left.postCode.localeCompare(right.postCode, "en-IN", { numeric: true })
   )
 }
 
@@ -58,6 +57,34 @@ const machinistDepartmentCodes = new Set([
   "PPC-CV02M",
   "PPC-FGM",
 ])
+
+const qualityDepartmentCodes = new Set([
+  "PPC-CVIQ",
+  "PPC-CV02IQ",
+  "PPC-CNCIQ",
+  "PPC-FGIQ",
+])
+
+const shopFloorDepartmentCodes = new Set([
+  "PPC-CVSF",
+  "PPC-CV02SF",
+  "PPC-CNCSF",
+  "PPC-FGSF",
+])
+
+type EmployeeOptionSource = {
+  department?: unknown
+  departmentCode?: unknown
+  designation?: unknown
+  empId?: unknown
+  employeeName?: unknown
+  status?: unknown
+}
+
+export type EmployeeOption = {
+  code: string
+  name: string
+}
 
 function productionFloorFromDepartment(
   department: unknown,
@@ -87,58 +114,102 @@ function isMachinistEmployee(row: {
   )
 }
 
+function isLeadershipEmployee(row: EmployeeOptionSource) {
+  return /\b(hod|manager|management)\b/i.test(String(row.designation))
+}
+
+function employeeOptions(
+  rows: readonly EmployeeOptionSource[],
+  matches: (row: EmployeeOptionSource) => boolean
+): EmployeeOption[] {
+  const options = new Map<string, EmployeeOption>()
+
+  for (const row of rows) {
+    if (String(row.status).trim() !== "Active" || !matches(row)) continue
+    const code = String(row.empId).trim()
+    const name = String(row.employeeName).trim()
+    if (!code || !name) continue
+    const key = code.toLocaleLowerCase("en-IN")
+    if (!options.has(key)) options.set(key, { code, name })
+  }
+
+  return [...options.values()].sort((left, right) =>
+    left.name.localeCompare(right.name, "en-IN", { numeric: true })
+  )
+}
+
+function belongsToProductionDepartment(
+  row: EmployeeOptionSource,
+  productionFloorCode: ProductionFloorCode,
+  departmentCodes: ReadonlySet<string>,
+  departmentNamePattern: RegExp
+) {
+  const departmentCode = String(row.departmentCode).trim().toUpperCase()
+  return (
+    !isLeadershipEmployee(row) &&
+    (departmentCodes.has(departmentCode) ||
+      departmentNamePattern.test(String(row.department))) &&
+    productionFloorFromDepartment(row.department, row.departmentCode) ===
+      productionFloorCode
+  )
+}
+
 export function productionMachinistOptions(
-  rows: readonly {
-    department?: unknown
-    departmentCode?: unknown
-    designation?: unknown
-    empId?: unknown
-    employeeName?: unknown
-    status?: unknown
-  }[],
+  rows: readonly EmployeeOptionSource[],
   productionFloorCode: ProductionFloorCode
 ) {
-  return rows
-    .filter(
-      (row) =>
-        String(row.status).trim() === "Active" &&
-        isMachinistEmployee(row) &&
-        productionFloorFromDepartment(row.department, row.departmentCode) ===
-          productionFloorCode
+  return employeeOptions(
+    rows,
+    (row) =>
+      isMachinistEmployee(row) &&
+      productionFloorFromDepartment(row.department, row.departmentCode) ===
+        productionFloorCode
+  )
+}
+
+export function productionQualityOptions(
+  rows: readonly EmployeeOptionSource[],
+  productionFloorCode: ProductionFloorCode
+) {
+  return employeeOptions(rows, (row) =>
+    belongsToProductionDepartment(
+      row,
+      productionFloorCode,
+      qualityDepartmentCodes,
+      /\b(?:in\s*process\s+)?quality(?:\s+control)?\b/i
     )
-    .map((row) => ({
-      code: String(row.empId).trim(),
-      name: String(row.employeeName).trim(),
-    }))
-    .sort((left, right) =>
-      left.name.localeCompare(right.name, "en-IN", { numeric: true })
+  )
+}
+
+export function productionShopFloorOptions(
+  rows: readonly EmployeeOptionSource[],
+  productionFloorCode: ProductionFloorCode
+) {
+  return employeeOptions(rows, (row) =>
+    belongsToProductionDepartment(
+      row,
+      productionFloorCode,
+      shopFloorDepartmentCodes,
+      /\bshop\s+floor\b/i
     )
+  )
+}
+
+export function recruitmentInterviewerOptions(
+  rows: readonly EmployeeOptionSource[]
+) {
+  return employeeOptions(rows, isLeadershipEmployee)
 }
 
 export function productionWorkerOptions(
-  rows: readonly {
-    department?: unknown
-    departmentCode?: unknown
-    designation?: unknown
-    empId?: unknown
-    employeeName?: unknown
-    status?: unknown
-  }[],
+  rows: readonly EmployeeOptionSource[],
   productionFloorCode: ProductionFloorCode
 ) {
-  return rows
-    .filter(
-      (row) =>
-        String(row.status).trim() === "Active" &&
-        /(operator|worker)/i.test(String(row.designation)) &&
-        productionFloorFromDepartment(row.department, row.departmentCode) ===
-          productionFloorCode
-    )
-    .map((row) => ({
-      code: String(row.empId).trim(),
-      name: String(row.employeeName).trim(),
-    }))
-    .sort((left, right) =>
-      left.name.localeCompare(right.name, "en-IN", { numeric: true })
-    )
+  return employeeOptions(
+    rows,
+    (row) =>
+      /(operator|worker)/i.test(String(row.designation)) &&
+      productionFloorFromDepartment(row.department, row.departmentCode) ===
+        productionFloorCode
+  )
 }

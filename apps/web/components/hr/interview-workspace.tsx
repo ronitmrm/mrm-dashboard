@@ -116,10 +116,12 @@ export function InterviewScheduleBoard({
   appointmentApplicationId,
   canWrite,
   interviews,
+  interviewerOptions,
 }: {
   appointmentApplicationId?: string
   canWrite: boolean
   interviews: RecruitmentInterviewRow[]
+  interviewerOptions: Array<{ code: string; name: string }>
 }) {
   const [selectedDate, setSelectedDate] = useState("")
   const [selectedInterview, setSelectedInterview] =
@@ -287,6 +289,7 @@ export function InterviewScheduleBoard({
                 },
               ]}
               initialApplicationId={selectedInterview.applicationId}
+              interviewerOptions={interviewerOptions}
               panelId="interviewsPanel"
             />
           </div>

@@ -89,6 +89,7 @@ export default async function HrRecruitmentPage({
     const needsPosts = [
       "approvedPostPanel",
       "employeeMasterPanel",
+      "interviewsPanel",
       "jobsPanel",
     ].includes(panelId)
     const needsCombinedRoles = [

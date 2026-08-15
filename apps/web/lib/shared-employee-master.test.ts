@@ -2,8 +2,11 @@ import type { RecruitmentPostRow } from "@workspace/db"
 import { describe, expect, it } from "vitest"
 
 import {
+  productionQualityOptions,
+  productionShopFloorOptions,
   productionMachinistOptions,
   productionWorkerOptions,
+  recruitmentInterviewerOptions,
   sharedEmployeeMasterRows,
 } from "./shared-employee-master"
 
@@ -164,6 +167,154 @@ describe("shared Employee Master", () => {
     expect(productionWorkerOptions(rows, "conventional")).toEqual([
       { code: "OP-1", name: "Chirag" },
       { code: "WORK-1", name: "Deepak" },
+    ])
+  })
+
+  it("offers only active quality employees from the selected production unit", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({
+        department: "Renamed Inprocess Team",
+        departmentCode: "PPC-CVIQ",
+        designation: "Assistant",
+        employeeCode: "QC-1",
+        employeeName: "Asha",
+        id: "1",
+        status: "Occupied",
+      }),
+      post({
+        department: "Renamed Inprocess Team",
+        departmentCode: "PPC-CVIQ",
+        designation: "Manager",
+        employeeCode: "QC-MGR",
+        employeeName: "Bhavesh",
+        id: "2",
+        status: "Occupied",
+      }),
+      post({
+        department: "CNC Inprocess Quality",
+        departmentCode: "PPC-CNCIQ",
+        designation: "Assistant",
+        employeeCode: "QC-2",
+        employeeName: "Chetan",
+        id: "3",
+        status: "Occupied",
+      }),
+    ])
+
+    expect(productionQualityOptions(rows, "conventional")).toEqual([
+      { code: "QC-1", name: "Asha" },
+    ])
+  })
+
+  it("offers only active shop-floor employees from the selected production unit", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({
+        department: "Renamed Floor Team",
+        departmentCode: "PPC-CVSF",
+        designation: "Assistant",
+        employeeCode: "SF-1",
+        employeeName: "Deepak",
+        id: "1",
+        status: "Occupied",
+      }),
+      post({
+        department: "Renamed Floor Team",
+        departmentCode: "PPC-CVSF",
+        designation: "Hod",
+        employeeCode: "SF-HOD",
+        employeeName: "Esha",
+        id: "2",
+        status: "Occupied",
+      }),
+      post({
+        department: "CNC Shop Floor",
+        departmentCode: "PPC-CNCSF",
+        designation: "Assistant",
+        employeeCode: "SF-2",
+        employeeName: "Farhan",
+        id: "3",
+        status: "Occupied",
+      }),
+    ])
+
+    expect(productionShopFloorOptions(rows, "conventional")).toEqual([
+      { code: "SF-1", name: "Deepak" },
+    ])
+  })
+
+  it("offers all active HOD, manager, and management employees as interviewers", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({
+        department: "Sales",
+        designation: "Hod",
+        employeeCode: "HOD-1",
+        employeeName: "Amit",
+        id: "1",
+        status: "Occupied",
+      }),
+      post({
+        department: "Production",
+        designation: "Manager",
+        employeeCode: "MGR-1",
+        employeeName: "Bina",
+        id: "2",
+        status: "Occupied",
+      }),
+      post({
+        department: "Management",
+        designation: "Management",
+        employeeCode: "MGT-1",
+        employeeName: "Chirag",
+        id: "3",
+        status: "Occupied",
+      }),
+      post({
+        department: "Quality",
+        designation: "Assistant",
+        employeeCode: "AST-1",
+        employeeName: "Deepa",
+        id: "4",
+        status: "Occupied",
+      }),
+      post({
+        department: "Finance",
+        designation: "Manager",
+        employeeCode: "OLD-1",
+        employeeName: "Former Manager",
+        id: "5",
+        status: "Resigned",
+      }),
+    ])
+
+    expect(recruitmentInterviewerOptions(rows)).toEqual([
+      { code: "HOD-1", name: "Amit" },
+      { code: "MGR-1", name: "Bina" },
+      { code: "MGT-1", name: "Chirag" },
+    ])
+  })
+
+  it("keeps every active post available when one employee has several assignments", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({
+        department: "Production",
+        designation: "Assistant",
+        employeeCode: "EMP-1",
+        employeeName: "Amit",
+        id: "1",
+        status: "Occupied",
+      }),
+      post({
+        department: "Management",
+        designation: "Manager",
+        employeeCode: "EMP-1",
+        employeeName: "Amit",
+        id: "2",
+        status: "Occupied",
+      }),
+    ])
+
+    expect(recruitmentInterviewerOptions(rows)).toEqual([
+      { code: "EMP-1", name: "Amit" },
     ])
   })
 })
