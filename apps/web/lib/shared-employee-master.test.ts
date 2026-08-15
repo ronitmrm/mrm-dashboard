@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   productionMachinistOptions,
+  productionWorkerOptions,
   sharedEmployeeMasterRows,
 } from "./shared-employee-master"
 
@@ -93,6 +94,48 @@ describe("shared Employee Master", () => {
 
     expect(productionMachinistOptions(rows, "conventional")).toEqual([
       { code: "MACH-1", name: "Amit" },
+    ])
+  })
+
+  it("offers only active operators and workers from the selected production unit", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({
+        department: "Production Planning & Control Conventional-01",
+        designation: "Machine Operator",
+        employeeCode: "OP-1",
+        employeeName: "Chirag",
+        id: "1",
+        status: "Occupied",
+      }),
+      post({
+        department: "Production Planning & Control Conventional-01",
+        designation: "Production Worker",
+        employeeCode: "WORK-1",
+        employeeName: "Deepak",
+        id: "2",
+        status: "Occupied",
+      }),
+      post({
+        department: "Production Planning & Control CNC-01",
+        designation: "Operator",
+        employeeCode: "OP-2",
+        employeeName: "Farhan",
+        id: "3",
+        status: "Occupied",
+      }),
+      post({
+        department: "Production Planning & Control Conventional-01",
+        designation: "Machinist",
+        employeeCode: "MACH-1",
+        employeeName: "Amit",
+        id: "4",
+        status: "Occupied",
+      }),
+    ])
+
+    expect(productionWorkerOptions(rows, "conventional")).toEqual([
+      { code: "OP-1", name: "Chirag" },
+      { code: "WORK-1", name: "Deepak" },
     ])
   })
 })
