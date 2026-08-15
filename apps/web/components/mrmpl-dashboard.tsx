@@ -1900,7 +1900,15 @@ function ProductionDashboardPanel({
               <TableBody>
                 {rows.length ? rows.map((row) => (
                   <TableRow key={`${displayValue(row.jcNo)}-${displayValue(row.partCode)}`}>
-                    <TableCell className="font-medium">{displayValue(row.jcNo)}</TableCell>
+                    <TableCell>
+                      <Link
+                        className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline"
+                        href={`${dashboardTabHref("jobCardStatusTab", normalizeProductionFloorCode(row.productionFloorCode))}&jcNo=${encodeURIComponent(displayValue(row.jcNo))}`}
+                        title={`Open Job Card ${displayValue(row.jcNo)}`}
+                      >
+                        {displayValue(row.jcNo)}
+                      </Link>
+                    </TableCell>
                     <TableCell>{displayValue(row.fgPoNo)}</TableCell>
                     <TableCell>{displayValue(row.partCode)}</TableCell>
                     <TableCell>{displayValue(row.productionUnit)}</TableCell>
@@ -8049,6 +8057,13 @@ function JobCardTileBoard({
   const pendingRm = rows.filter((row) => displayValue(row.rmStatus) !== "Received").length;
   const ready = rows.filter((row) => jobCardTrackingState(row, plannedRowsForJobCard(row, plannedByJobCard, plannedByPart)) === "Ready").length;
   const inProduction = rows.filter((row) => jobCardTrackingState(row, plannedRowsForJobCard(row, plannedByJobCard, plannedByPart)) === "In production").length;
+
+  useEffect(() => {
+    const linkedJobCard = new URLSearchParams(window.location.search).get("jcNo")?.trim() ?? "";
+    if (!linkedJobCard) return;
+    const timeout = window.setTimeout(() => setJobCardFilter(linkedJobCard), 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   function clearJobCardFilters() {
     setQuery("");
