@@ -269,17 +269,14 @@ describe("updateCombinedRole", () => {
 
 describe("masters", () => {
   test.each([
-    ["department", "departments", "DEP", "DEP013"],
-    ["designation", "designations", "DES", "DES013"],
+    ["department", "departments", "Human Resources", "HR"],
+    ["designation", "designations", "Assistant", "AS"],
   ] as const)(
-    "generates the next %s code",
-    async (kind, table, prefix, expectedCode) => {
+    "generates the %s code from its name",
+    async (kind, table, name, expectedCode) => {
       const query = vi.fn(
         async (...args: [statement: string, parameters?: readonly unknown[]]) => {
           const [statement] = args
-          if (statement.includes("AS next_number")) {
-            return { rows: [{ next_number: 13 }] }
-          }
           if (statement.includes(`INSERT INTO recruitment.${table}`)) {
             return {
               rows: [
@@ -301,24 +298,56 @@ describe("masters", () => {
       await expect(
         repository.upsertMaster({
           kind,
-          name: "Human Resources",
+          name,
           organizationId: "00000000-0000-4000-8000-000000000010",
         })
       ).resolves.toMatchObject({ code: expectedCode })
 
-      const nextCodeQuery = query.mock.calls.find(([statement]) =>
-        statement.includes("AS next_number")
-      )
-      expect(nextCodeQuery?.[1]).toEqual([
-        "00000000-0000-4000-8000-000000000010",
-        prefix,
-      ])
       const insert = query.mock.calls.find(([statement]) =>
         statement.includes(`INSERT INTO recruitment.${table}`)
       )
       expect(insert?.[1]?.[1]).toBe(expectedCode)
     }
   )
+
+  test("adds the next suffix when a name-derived code is already used", async () => {
+    const query = vi.fn(
+      async (...args: [statement: string, parameters?: readonly unknown[]]) => {
+        const [statement] = args
+        if (statement.includes("SELECT code FROM recruitment.departments")) {
+          return { rows: [{ code: "QA" }, { code: "QA-2" }] }
+        }
+        if (statement.includes("INSERT INTO recruitment.departments")) {
+          return {
+            rows: [
+              {
+                code: "QA-3",
+                id: "00000000-0000-4000-8000-000000000020",
+              },
+            ],
+          }
+        }
+        return { rows: [] }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await expect(
+      repository.upsertMaster({
+        kind: "department",
+        name: "Quality Analytics",
+        organizationId: "00000000-0000-4000-8000-000000000010",
+      })
+    ).resolves.toMatchObject({ code: "QA-3" })
+
+    const insert = query.mock.calls.find(([statement]) =>
+      statement.includes("INSERT INTO recruitment.departments")
+    )
+    expect(insert?.[1]?.[1]).toBe("QA-3")
+  })
 
   test("rejects a reused name", async () => {
     const query = vi.fn(async (statement: string) => {

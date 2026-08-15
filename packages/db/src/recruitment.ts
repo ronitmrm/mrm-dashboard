@@ -9,6 +9,7 @@ import {
 } from "./postgres-runtime"
 import {
   nextRecruitmentCombinedRoleIdentity,
+  nextRecruitmentMasterCode,
   nextRecruitmentPostIdentity,
   recruitmentAdvisoryLockKey,
 } from "./recruitment-codes"
@@ -1822,7 +1823,6 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
       }
     ) {
       const table = input.kind === "department" ? "departments" : "designations"
-      const codePrefix = input.kind === "department" ? "DEP" : "DES"
       return transaction(pool, async (client) => {
         const name = requiredProperCase(input.name, `${input.kind} name`)
         await client.query(
@@ -1845,24 +1845,20 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
             `${label} name "${name}" is already used by ${duplicate.rows[0].code} - ${duplicate.rows[0].name}.`
           )
         }
-        const nextNumberResult = await client.query<{ next_number: number }>(
+        const existingCodes = await client.query<{ code: string }>(
           `
-            SELECT COALESCE(
-              MAX(
-                CASE
-                  WHEN upper(btrim(code)) ~ ('^' || $2 || '[0-9]+$')
-                    THEN substring(upper(btrim(code)) from '[0-9]+$')::integer
-                END
-              ),
-              0
-            ) + 1 AS next_number
-            FROM recruitment.${table}
+            SELECT code FROM recruitment.${table}
             WHERE organization_id = $1
           `,
-          [input.organizationId, codePrefix]
+          [input.organizationId]
         )
-        const nextNumber = nextNumberResult.rows[0]?.next_number ?? 1
-        const code = `${codePrefix}${String(nextNumber).padStart(3, "0")}`
+        const code = required(
+          nextRecruitmentMasterCode(
+            name,
+            existingCodes.rows.map((row) => row.code)
+          ),
+          `${input.kind} code`
+        )
         const result = await client.query<{ code: string; id: string }>(
           `
             INSERT INTO recruitment.${table} (

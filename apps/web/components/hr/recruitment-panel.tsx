@@ -180,7 +180,7 @@ function MastersPanel({
       {canWrite ? (
         <PanelForm
           action={saveMasterAction}
-          description="The Department Or Designation Code Is Generated Automatically."
+          description="The Code Is Generated Automatically From The Department Or Designation Name."
           panelId="mastersPanel"
           title="Add A Master"
         >
