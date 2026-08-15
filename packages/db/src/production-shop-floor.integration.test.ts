@@ -428,9 +428,9 @@ describe("production and shop-floor workflows", () => {
       operatorCode: firstOperator,
       organizationId,
       pieceWeightGrams: 489,
-      productionDate: "2026-08-15",
+      productionDate: "1999-01-01",
       productionFloorCode: "cnc",
-      shift: "A",
+      shift: "Wrong",
       startCount: 10_000,
       startedAt: "2026-08-15T06:00:00+05:30",
     })
@@ -483,8 +483,27 @@ describe("production and shop-floor workflows", () => {
     })
     expect(second).toMatchObject({
       carriedFromSessionId: first.id,
+      productionDate: "2026-08-15",
+      sessionReference: `${cncMachine}-20260815-02`.toUpperCase(),
+      shift: "B",
       startCount: 10_850,
     })
+
+    const openDowntime = await repository.startProductionSessionDowntime({
+      enteredRole: "machinist",
+      organizationId,
+      reasonCode: "DC-03",
+      reasonName: "Tool change",
+      sessionId: second.id,
+      startedAt: "2026-08-15T14:15:00+05:30",
+    })
+    await expect(
+      repository.endProductionSessionDowntime({
+        endedAt: "2026-08-15T14:20:00+05:30",
+        organizationId,
+        sessionId: second.id,
+      })
+    ).resolves.toMatchObject({ durationMinutes: 5, id: openDowntime.id })
 
     const sessions = await repository.readProductionSessions({
       organizationId,
@@ -494,12 +513,24 @@ describe("production and shop-floor workflows", () => {
       downtimeMinutes: 10,
       goodPieces: 843,
       rejectedPieces: 7,
+      sessionReference: `${cncMachine}-20260815-01`.toUpperCase(),
+      shift: "A",
       status: "closed",
     })
     expect(sessions.rows.find((row) => row.id === second.id)).toMatchObject({
+      downtimeMinutes: 5,
       startCount: 10_850,
       status: "open",
     })
+
+    const events = await repository.readProductionSessionEvents({
+      organizationId,
+      productionFloorCode: "cnc",
+      sessionId: second.id,
+    })
+    expect(events.rows.map((row) => row.eventType)).toEqual(
+      expect.arrayContaining(["session_started", "downtime"])
+    )
 
     await repository.closeProductionSession({
       endCount: 10_900,
@@ -571,7 +602,7 @@ describe("production and shop-floor workflows", () => {
       pieceWeightGrams: 15.4,
       productionDate: "2026-08-15",
       shift: "Day",
-      startedAt: "2026-08-15T08:00:00+05:30",
+      startedAt: "2026-08-15T08:30:00+05:30",
     })
     const projected = await pool.query<{ active: boolean; employee_code: string }>(
       `
@@ -587,7 +618,7 @@ describe("production and shop-floor workflows", () => {
     await repository.closeProductionSession({
       crateCount: 0,
       crateWeightKg: 0,
-      endedAt: "2026-08-15T09:00:00+05:30",
+      endedAt: "2026-08-15T09:30:00+05:30",
       endReason: "item_complete",
       grossWeightKg: 1,
       organizationId,

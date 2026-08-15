@@ -95,6 +95,11 @@ export {
   productionFloors,
   type ProductionFloorCode,
 } from "./production-floors"
+export {
+  formatProductionSessionReference,
+  productionShiftAt,
+  type ProductionShiftContext,
+} from "./production-session-domain"
 export { createWorkforceRepository } from "./workforce"
 export { createDatabase } from "./database"
 export { createInitialAdministratorProvisioner } from "./initial-administrator"

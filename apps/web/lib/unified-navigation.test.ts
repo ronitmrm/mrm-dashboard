@@ -49,7 +49,7 @@ describe("unified navigation", () => {
     ]
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
-    expect(dashboardNavigation).toHaveLength(20)
+    expect(dashboardNavigation).toHaveLength(21)
     expect(productionFloorNavigation).toHaveLength(10)
     expect(productionFloorNavigation).not.toContainEqual(
       planningHolidayNavigation
@@ -63,6 +63,7 @@ describe("unified navigation", () => {
     })
     expect(universalProductionNavigation.map(({ id }) => id)).toEqual([
       "productionDashboardTab",
+      "productionSessionsTab",
       "maintenanceTab",
       "correctionsTab",
       "dataEntryTab",
@@ -87,6 +88,7 @@ describe("unified navigation", () => {
     })
     expect(dashboardNavigation.map(({ id }) => id)).toEqual([
       "productionDashboardTab",
+      "productionSessionsTab",
       "productionControlTab",
       "planningControlTab",
       "jobCardStatusTab",
