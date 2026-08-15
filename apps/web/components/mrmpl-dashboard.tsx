@@ -5462,7 +5462,12 @@ function ProductionCardRoleEntryForm({
         <CheckCircle2 className="size-4" />
         {entryKind === "downtime" ? "Save Downtime" : entryKind === "rejection" ? "Save Rejection" : isClosing ? "Close Session" : "Start Session"}
       </Button>
-      <div className="max-h-64 overflow-auto rounded-md border bg-background">
+      <div className="grid gap-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs font-medium">Daily Machine Board</div>
+          <div className="text-[11px] text-muted-foreground">Running sessions appear against their machine.</div>
+        </div>
+        <div className="max-h-64 overflow-auto rounded-md border bg-background">
         <Table>
           <TableHeader className="sticky top-0 bg-background">
             <TableRow><TableHead>Machine</TableHead><TableHead>Job / Setup</TableHead><TableHead>Session</TableHead><TableHead>Operator</TableHead><TableHead></TableHead></TableRow>
@@ -5482,6 +5487,65 @@ function ProductionCardRoleEntryForm({
             })}
           </TableBody>
         </Table>
+        </div>
+      </div>
+      <div className="grid gap-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-xs font-medium">Stored Sessions</div>
+            <div className="text-[11px] text-muted-foreground">Open sessions and completed sessions from the last 7 days.</div>
+          </div>
+          <StatusBadge value={`${formatNumber(sessionRows.length)} saved`} />
+        </div>
+        {sessionRows.length ? (
+          <div className="max-h-72 overflow-auto rounded-md border bg-background">
+            <Table>
+              <TableHeader className="sticky top-0 bg-background">
+                <TableRow>
+                  <TableHead>Session</TableHead>
+                  <TableHead>Machine</TableHead>
+                  <TableHead>Job / Setup</TableHead>
+                  <TableHead>Operator</TableHead>
+                  <TableHead>Start / End</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Rejected</TableHead>
+                  <TableHead className="text-right">Good</TableHead>
+                  <TableHead className="text-right">Downtime</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sessionRows.map((session) => (
+                  <TableRow key={str(session.id)}>
+                    <TableCell>
+                      <StatusBadge value={str(session.status) === "open" ? "Running" : "Closed"} />
+                      <div className="mt-1 font-mono text-[10px] text-muted-foreground" title={str(session.id)}>{str(session.id).slice(0, 8)}</div>
+                    </TableCell>
+                    <TableCell className="font-medium">{displayValue(session.machineNumber)}</TableCell>
+                    <TableCell>
+                      <div>{displayValue(session.jobCardNumber)} / {displayValue(session.setupNumber)}</div>
+                      <div className="text-[11px] text-muted-foreground">{displayValue(session.partCode)} · Option {displayValue(session.optionNumber)}</div>
+                    </TableCell>
+                    <TableCell>{displayValue(session.operatorCode)} - {displayValue(session.operatorName)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-xs">
+                      <div>{str(session.startedAt) ? formatDate(str(session.startedAt)) : "-"}</div>
+                      <div className="text-muted-foreground">{str(session.endedAt) ? formatDate(str(session.endedAt)) : "Still running"}</div>
+                    </TableCell>
+                    <TableCell className="capitalize">{displayValue(session.measurementMethod)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(optionalNumber(session.totalPieces) ?? 0)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(optionalNumber(session.rejectedPieces) ?? 0)}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{formatNumber(optionalNumber(session.goodPieces) ?? 0)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(optionalNumber(session.downtimeMinutes) ?? 0)} min</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="rounded-md border border-dashed bg-background p-4 text-center text-xs text-muted-foreground">
+            No sessions stored yet. Shop Floor must start the first session for a running machine.
+          </div>
+        )}
       </div>
     </div>
   );
