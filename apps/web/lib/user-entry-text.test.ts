@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeUserEnteredPayload, properCaseUserText, preservesUserEnteredTextCase } from "./user-entry-text";
+import { normalizeUserEnteredPayload, properCaseUserText, preservesUserEnteredTextCase } from "@workspace/db/user-entry-text";
 
 describe("user entry text normalization", () => {
   it("converts mixed and uppercase human text to proper case", () => {

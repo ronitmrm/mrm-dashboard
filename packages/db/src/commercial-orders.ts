@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto"
 import path from "node:path"
 
-import type { Pool, PoolClient } from "pg"
+import type { PoolClient } from "pg"
 
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  repositoryPool,
+  withTransaction as transaction,
+  type RepositoryPoolOptions,
+} from "./postgres-runtime"
 
-type RepositoryOptions = RepositoryPoolOptions
 
 type PriceDecision = "Accept PO Price" | "Keep Our Price"
 
@@ -170,23 +173,6 @@ const purchaseOrderReportRow = (row: PurchaseOrderReportDatabaseRow) => ({
 const exportBatchSize = (value: number) =>
   Math.min(Math.max(Math.floor(value), 1), 500)
 
-async function transaction<T>(
-  pool: Pool,
-  operation: (client: PoolClient) => Promise<T>
-) {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    const result = await operation(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
-}
 
 async function purchaseOrderReportBatch(
   client: PoolClient,
@@ -774,7 +760,7 @@ async function approveQuoteAndProduct(
   })
 }
 
-export function createCommercialOrdersRepository(options: RepositoryOptions) {
+export function createCommercialOrdersRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
   return {
@@ -2171,36 +2157,7 @@ export function createCommercialOrdersRepository(options: RepositoryOptions) {
       organizationCode: string,
       options: { approvedOnly?: boolean } = {}
     ) {
-      const result = await pool.query<{
-        approved_at: Date | null
-        cancellation_reason: string | null
-        company_name: string
-        currency_code: string
-        customer_part_code: string
-        customer_uid: string
-        decision: string
-        decision_comment: string | null
-        description: string | null
-        invoice_number: string | null
-        invoice_status: string | null
-        line_number: number
-        matched_uid: string | null
-        pi_price: string | null
-        po_date: string
-        po_number: string
-        price_difference: string | null
-        quantity: string
-        quote_enquiry_number: string | null
-        quote_number: string | null
-        quote_request_enquiry_number: string | null
-        quote_request_line_number: number | null
-        sent_at: Date | null
-        system_price: string | null
-        system_profit_percent: string | null
-        system_purchase_times: string | null
-        system_scrap_rate: string | null
-        unit_price: string
-      }>(
+const result = await pool.query<PurchaseOrderReportDatabaseRow>(
         `
           SELECT purchase_order.po_number, purchase_order.po_date,
             purchase_order.cancellation_reason, customer.customer_uid,
@@ -2249,53 +2206,7 @@ export function createCommercialOrdersRepository(options: RepositoryOptions) {
         `,
         [organizationCode.trim(), options.approvedOnly ?? false]
       )
-      return result.rows.map((row) => ({
-        cancellationReason: row.cancellation_reason,
-        companyName: row.company_name,
-        currencyCode: row.currency_code,
-        customerPartCode: row.customer_part_code,
-        customerUid: row.customer_uid,
-        decision: row.decision,
-        decisionComment: row.decision_comment,
-        description: row.description,
-        invoiceApprovedAt: row.approved_at,
-        invoiceNumber: row.invoice_number,
-        invoiceSentAt: row.sent_at,
-        invoiceStatus: row.invoice_status,
-        lineNumber: row.line_number,
-        matchedUid: row.matched_uid,
-        piPrice: row.pi_price === null ? null : asNumber(row.pi_price),
-        poDate: asDateText(row.po_date as string | Date),
-        poNumber: row.po_number,
-        poPrice: asNumber(row.unit_price),
-        priceDifference:
-          row.price_difference === null ? null : asNumber(row.price_difference),
-        quantity: asNumber(row.quantity),
-        quoteEnquiryNumber: row.quote_enquiry_number,
-        quoteNumber: row.quote_number,
-        quoteRequest:
-          row.quote_request_enquiry_number === null
-            ? null
-            : `${row.quote_request_enquiry_number}${
-                row.quote_request_line_number
-                  ? ` / Line ${row.quote_request_line_number}`
-                  : ""
-              }`,
-        systemPrice:
-          row.system_price === null ? null : asNumber(row.system_price),
-        systemProfitPercent:
-          row.system_profit_percent === null
-            ? null
-            : asNumber(row.system_profit_percent),
-        systemPurchaseTimes:
-          row.system_purchase_times === null
-            ? null
-            : asNumber(row.system_purchase_times),
-        systemScrapRate:
-          row.system_scrap_rate === null
-            ? null
-            : asNumber(row.system_scrap_rate),
-      }))
+return result.rows.map(purchaseOrderReportRow)
     },
 
     async listPurchaseOrderReportRowsForExport(

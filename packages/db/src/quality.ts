@@ -1,14 +1,17 @@
 import { randomUUID } from "node:crypto"
 
-import type { Pool, PoolClient } from "pg"
+import type { PoolClient } from "pg"
 
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  repositoryPool,
+  withTransaction as transaction,
+  type RepositoryPoolOptions,
+} from "./postgres-runtime"
 import {
   normalizeProductionFloorCode,
   type ProductionFloorCode,
 } from "./production-floors"
 
-type RepositoryOptions = RepositoryPoolOptions
 
 type QualityContext = {
   item_id: string
@@ -83,23 +86,6 @@ async function generatedQualityMasterCode(
   return `${definition.prefix}${String(result.rows[0]?.nextNumber ?? 1).padStart(3, "0")}`
 }
 
-async function transaction<T>(
-  pool: Pool,
-  operation: (client: PoolClient) => Promise<T>
-) {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    const result = await operation(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
-}
 
 function numericOrNull(value: unknown) {
   if (value === null || value === undefined || value === "") return null
@@ -560,7 +546,7 @@ async function legacyRejectionReasonId(
   return result.rows[0]!.id
 }
 
-export function createQualityRepository(options: RepositoryOptions) {
+export function createQualityRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
   return {

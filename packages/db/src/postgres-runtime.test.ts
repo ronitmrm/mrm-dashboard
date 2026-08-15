@@ -13,6 +13,7 @@ import {
   repositoryPool,
   summarizeManagedPostgresEnvironment,
   validateManagedPostgresUrl,
+  withTransaction,
 } from "./postgres-runtime"
 import { instrumentPostgresPool } from "./postgres-telemetry"
 
@@ -36,6 +37,37 @@ describe("managed PostgreSQL runtime contract", () => {
     await owned.close()
     expect(end).not.toHaveBeenCalled()
     await shared.end()
+  })
+
+  it("commits successful transactions and rolls back failures", async () => {
+    const query = vi.fn().mockResolvedValue({})
+    const release = vi.fn()
+    const client = { query, release } as unknown as PoolClient
+    const pool = {
+      connect: vi.fn().mockResolvedValue(client),
+    } as unknown as Pool
+
+    await expect(
+      withTransaction(pool, async () => "committed")
+    ).resolves.toBe("committed")
+    expect(query.mock.calls.map(([statement]) => statement)).toEqual([
+      "BEGIN",
+      "COMMIT",
+    ])
+    expect(release).toHaveBeenCalledOnce()
+
+    query.mockClear()
+    release.mockClear()
+    await expect(
+      withTransaction(pool, async () => {
+        throw new Error("failed")
+      })
+    ).rejects.toThrow("failed")
+    expect(query.mock.calls.map(([statement]) => statement)).toEqual([
+      "BEGIN",
+      "ROLLBACK",
+    ])
+    expect(release).toHaveBeenCalledOnce()
   })
 
   it("creates a bounded pool with redacted metrics", async () => {

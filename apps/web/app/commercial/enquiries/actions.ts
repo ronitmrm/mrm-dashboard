@@ -10,6 +10,7 @@ import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { optionalText, requiredText } from "@/lib/form-data"
 import { validateUserAttachment } from "@/lib/user-attachment-security"
 
 import {
@@ -19,18 +20,6 @@ import {
 
 const enquiriesPath = "/commercial/enquiries"
 
-function requiredText(formData: FormData, name: string) {
-  const value = formData.get(name)
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${name} is required`)
-  }
-  return value.trim()
-}
-
-function optionalText(formData: FormData, name: string) {
-  const value = formData.get(name)
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
-}
 
 function numeric(formData: FormData, name: string, fallback = 0) {
   const raw = optionalText(formData, name)

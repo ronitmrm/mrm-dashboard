@@ -83,7 +83,6 @@ import {
   universalProductionDashboardRows,
   type ProductionFloorCode,
 } from "@/lib/dashboard-view-model";
-import { nextDashboardPollDelay } from "@/lib/dashboard-polling";
 import {
   checklistWorkspaceEntryTypes,
   companyWideQualityMasterEntryTypes,
@@ -130,7 +129,7 @@ import {
   dashboardTabHref,
   type DashboardTabId,
 } from "@/lib/unified-navigation";
-import { normalizeUserEnteredPayload } from "@/lib/user-entry-text";
+import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text";
 
 type DashboardPayload = Record<string, unknown>;
 
@@ -501,10 +500,10 @@ function usePostgresOperationalPage(
         });
       } finally {
         loading = false;
-        const nextDelay = nextDashboardPollDelay(
-          nextPollIntervalMs,
-          document.visibilityState,
-        );
+        const nextDelay =
+          nextPollIntervalMs > 0 && !document.hidden
+            ? nextPollIntervalMs
+            : null;
         if (!controller.signal.aborted && nextDelay !== null) {
           nextLoad = window.setTimeout(load, nextDelay);
         }
@@ -8697,241 +8696,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-type DashboardActionMutations = {
-  saveRouteSelection: (args: { jcNo: string; optionNumber: string }) => Promise<unknown>;
-  savePlannerPriority: (args: {
-    target: string;
-    jcNo?: string;
-    partCode?: string;
-    priority: string;
-    approvalMode?: string;
-    interruptedJcNo?: string;
-    interruptedSetupNo?: string;
-    interruptedMachine?: string;
-    interruptedFinishedQty?: number;
-    interruptedSetups?: Array<{ jcNo: string; setupNo: string; machine: string; finishedQty?: number }>;
-    queueBeforeSetups?: Array<{ targetSetupNo: string; jcNo: string; setupNo: string; machine: string }>;
-    remark?: string;
-  }) => Promise<unknown>;
-  saveMachineConstraint: (args: {
-    machineNo: string;
-    unavailableFrom: string;
-    unavailableTo: string;
-    reason: string;
-    remark?: string;
-    rescheduleAction?: string;
-    planningMode?: string;
-    interruptedSetups?: Array<{ jcNo: string; setupNo: string; machine: string; finishedQty?: number }>;
-    queuePlacements?: Array<{
-      targetJcNo: string;
-      targetPartCode?: string;
-      targetSetupNo: string;
-      targetSourceMachine?: string;
-      targetMachine: string;
-      queueBeforeSetups?: Array<{ jcNo: string; setupNo: string; machine: string }>;
-    }>;
-  }) => Promise<unknown>;
-  savePlanOverride: (args: {
-    target: string;
-    toMachine: string;
-    setupNo?: string;
-    fromMachine?: string;
-    interruptedSetups?: Array<{ jcNo: string; setupNo: string; machine: string; finishedQty?: number }>;
-    queuePlacements?: Array<{
-      targetJcNo: string;
-      targetPartCode?: string;
-      targetSetupNo: string;
-      targetSourceMachine?: string;
-      targetMachine: string;
-      queueBeforeSetups?: Array<{ jcNo: string; setupNo: string; machine: string }>;
-    }>;
-    reason?: string;
-  }) => Promise<unknown>;
-  saveRouteChange: (args: {
-    target: string;
-    newOption: string;
-    changeAfterSetup?: string;
-    applyFromSetup?: string;
-    wipQty?: number;
-    remainingSetups?: Array<{ setupNo: string; plan: boolean; quantity: number; remark?: string }>;
-    reason?: string;
-  }) => Promise<unknown>;
-  saveDispatchApproval: (args: { jcNo: string; approvedBy: string; remark?: string }) => Promise<unknown>;
-  markComplete: (args: {
-    jcNo: string;
-    completedBy: string;
-    remark?: string;
-    setupNo?: string;
-    machine?: string;
-  }) => Promise<unknown>;
-  saveProductionEntry: (args: {
-    prodDate: string;
-    operatorId: string;
-    operatorName?: string;
-    machineType: string;
-    machine: string;
-    partCode: string;
-    jobCard?: string;
-    setupNo?: string;
-    outputQty: number;
-    actualQty?: number;
-    targetQty: number;
-    rejectQty: number;
-    rejectionType?: string;
-    rejectionRemark?: string;
-    downtimeMinutes?: number;
-    downtimeReason?: string;
-  }) => Promise<unknown>;
-  saveDataEntry: (args: { id?: string; entryType: string; key?: string; payload: unknown }) => Promise<unknown>;
-  reverseEntry: (args: {
-    targetTable: string;
-    targetId: string;
-    targetKey?: string;
-    targetLabel?: string;
-    reason: string;
-    correctedBy: string;
-  }) => Promise<unknown>;
-};
-
-async function runDashboardAction(
-  path: string,
-  body: Record<string, unknown>,
-  mutations: DashboardActionMutations,
-) {
-  if (path === "route-selection") {
-    await mutations.saveRouteSelection({
-      jcNo: text(body.jcNo),
-      optionNumber: text(body.optionNumber),
-    });
-    return "Route option saved.";
-  }
-
-  if (path === "planner-priority") {
-    await mutations.savePlannerPriority({
-      target: text(body.target),
-      jcNo: optionalText(body.jcNo),
-      partCode: optionalText(body.partCode),
-      priority: text(body.priority) || "Normal",
-      approvalMode: optionalText(body.approvalMode),
-      interruptedJcNo: optionalText(body.interruptedJcNo),
-      interruptedSetupNo: optionalText(body.interruptedSetupNo),
-      interruptedMachine: optionalText(body.interruptedMachine),
-      interruptedFinishedQty: optionalNumber(body.interruptedFinishedQty),
-      interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
-      queueBeforeSetups: priorityQueueBeforeSetups(body.queueBeforeSetups),
-      remark: optionalText(body.remark),
-    });
-    return "Priority saved.";
-  }
-
-  if (path === "machine-constraint") {
-    await mutations.saveMachineConstraint({
-      machineNo: text(body.machineNo),
-      unavailableFrom: text(body.unavailableFrom),
-      unavailableTo: text(body.unavailableTo),
-      reason: text(body.reason),
-      remark: optionalText(body.remark),
-      rescheduleAction: optionalText(body.rescheduleAction),
-      planningMode: optionalText(body.planningMode),
-      interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
-      queuePlacements: machineConstraintQueuePlacementsInput(body.queuePlacements),
-    });
-    return "Machine issue saved.";
-  }
-
-  if (path === "plan-override") {
-    await mutations.savePlanOverride({
-      target: text(body.target),
-      toMachine: text(body.toMachine),
-      setupNo: optionalText(body.setupNo),
-      fromMachine: optionalText(body.fromMachine),
-      interruptedSetups: priorityInterruptedSetups(body.interruptedSetups),
-      queuePlacements: machineConstraintQueuePlacementsInput(body.queuePlacements),
-      reason: optionalText(body.reason),
-    });
-    return "Plan override saved.";
-  }
-
-  if (path === "route-change") {
-    await mutations.saveRouteChange({
-      target: text(body.target),
-      newOption: text(body.newOption),
-      changeAfterSetup: optionalText(body.changeAfterSetup),
-      applyFromSetup: optionalText(body.applyFromSetup),
-      wipQty: optionalNumber(body.wipQty),
-      remainingSetups: Array.isArray(body.remainingSetups)
-        ? body.remainingSetups.map((row) => {
-          const setup = asRecord(row);
-          return {
-            setupNo: text(setup.setupNo),
-            plan: Boolean(setup.plan),
-            quantity: optionalNumber(setup.quantity) ?? 0,
-            remark: optionalText(setup.remark),
-          };
-        }).filter((row) => row.setupNo)
-        : undefined,
-      reason: optionalText(body.reason),
-    });
-    return "Route change saved.";
-  }
-
-  if (path === "dispatch-approval") {
-    await mutations.saveDispatchApproval({
-      jcNo: text(body.jcNo),
-      approvedBy: text(body.approvedBy),
-      remark: optionalText(body.remark),
-    });
-    return "Dispatch approved.";
-  }
-
-  if (path === "mark-complete") {
-    await mutations.markComplete({
-      jcNo: text(body.jcNo),
-      completedBy: text(body.completedBy),
-      remark: optionalText(body.remark),
-      setupNo: optionalText(body.setupNo),
-      machine: optionalText(body.machine),
-    });
-    return "Job card completion saved.";
-  }
-
-  if (path === "data-entry") {
-    const entryType = text(body.entryType);
-    const payload = asRecord(body.payload);
-    if (entryType === "software_raw") {
-      await mutations.saveProductionEntry(toProductionEntry(payload));
-      return "Saved production row.";
-    }
-    const id = optionalText(body.id);
-    const key = optionalText(body.key) || dataEntryKey(entryType, payload);
-
-    await mutations.saveDataEntry({ id: id || undefined, entryType, key: key || undefined, payload });
-    return "Saved to PostgreSQL.";
-  }
-
-  if (path === "reverse-entry") {
-    await mutations.reverseEntry({
-      targetTable: text(body.targetTable),
-      targetId: text(body.targetId),
-      targetKey: optionalText(body.targetKey),
-      targetLabel: optionalText(body.targetLabel),
-      reason: text(body.reason),
-      correctedBy: text(body.correctedBy),
-    });
-    return "Entry reversed. Live status recalculated.";
-  }
-
-  if (path === "reschedule") {
-    throw new Error("Reschedule is not available through the compatibility API.");
-  }
-
-  if (path === "data-import") {
-    throw new Error("Bulk Excel import is not available through the compatibility API.");
-  }
-
-  throw new Error(`Unsupported dashboard action: ${path}`);
-}
-
 function downloadApi(kind: "data-template", entryType: string) {
   window.location.href = `/api/${kind}?entryType=${encodeURIComponent(entryType)}&t=${Date.now()}`;
 }
@@ -8962,58 +8726,6 @@ async function postDashboardApi(path: string, body: Record<string, unknown>): Pr
   };
 }
 
-function priorityInterruptedSetups(value: unknown) {
-  if (!Array.isArray(value)) return undefined;
-  const rows = value
-    .map((row) => asRecord(row))
-    .map((row) => ({
-      jcNo: text(row.jcNo),
-      setupNo: text(row.setupNo),
-      machine: text(row.machine),
-      finishedQty: optionalNumber(row.finishedQty),
-    }))
-    .filter((row) => row.jcNo && row.setupNo && row.machine);
-  return rows.length ? rows : undefined;
-}
-
-
-function machineConstraintQueuePlacementsInput(value: unknown) {
-  if (!Array.isArray(value)) return undefined;
-  const rows = value
-    .map((row) => asRecord(row))
-    .map((row) => {
-      const queueBeforeSetups = Array.isArray(row.queueBeforeSetups)
-        ? row.queueBeforeSetups.map((queueRow) => asRecord(queueRow)).map((queueRow) => ({
-          jcNo: text(queueRow.jcNo),
-          setupNo: text(queueRow.setupNo),
-          machine: text(queueRow.machine),
-        })).filter((queueRow) => queueRow.jcNo && queueRow.setupNo && queueRow.machine)
-        : [];
-      return {
-        targetJcNo: text(row.targetJcNo),
-        targetPartCode: optionalText(row.targetPartCode),
-        targetSetupNo: text(row.targetSetupNo),
-        targetSourceMachine: optionalText(row.targetSourceMachine),
-        targetMachine: text(row.targetMachine),
-        queueBeforeSetups,
-      };
-    })
-    .filter((row) => row.targetJcNo && row.targetSetupNo && row.targetMachine);
-  return rows.length ? rows : undefined;
-}
-function priorityQueueBeforeSetups(value: unknown) {
-  if (!Array.isArray(value)) return undefined;
-  const rows = value
-    .map((row) => asRecord(row))
-    .map((row) => ({
-      targetSetupNo: text(row.targetSetupNo),
-      jcNo: text(row.jcNo),
-      setupNo: text(row.setupNo),
-      machine: text(row.machine),
-    }))
-    .filter((row) => row.targetSetupNo && row.jcNo && row.setupNo && row.machine);
-  return rows.length ? rows : undefined;
-}
 function formPayload(form: FormData, fields: LegacyField[]) {
   const payload: Record<string, unknown> = {};
   for (const field of fields) {
@@ -9042,27 +8754,6 @@ function optionalNumber(value: unknown) {
 function numeric(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function toProductionEntry(payload: DashboardPayload) {
-  return {
-    prodDate: text(payload.prodDate) || new Date().toISOString().slice(0, 10),
-    operatorId: text(payload.operatorId) || "Unassigned",
-    operatorName: optionalText(payload.operatorName),
-    machineType: text(payload.machineType) || "-",
-    machine: text(payload.machine) || "-",
-    partCode: text(payload.partCode) || "-",
-    jobCard: optionalText(payload.jobCard),
-    setupNo: optionalText(payload.setupNo),
-    outputQty: numeric(payload.outputQty),
-    actualQty: optionalNumber(payload.actualQty),
-    targetQty: numeric(payload.targetQty),
-    rejectQty: numeric(payload.rejectQty),
-    rejectionType: optionalText(payload.rejectionType),
-    rejectionRemark: optionalText(payload.rejectionRemark),
-    downtimeMinutes: optionalNumber(payload.downtimeMinutes),
-    downtimeReason: optionalText(payload.downtimeReason),
-  };
 }
 
 function routeOptionText(option: DashboardPayload, fallback: string) {

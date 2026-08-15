@@ -58,7 +58,6 @@ type CreateProduct = {
   weight100Pcs?: number
 }
 
-type ProductRepositoryOptions = RepositoryPoolOptions
 
 type ProductSelectorOptions = {
   itemTypes?: string[]
@@ -66,7 +65,7 @@ type ProductSelectorOptions = {
 
 const decimal = (value = 0) => value.toString()
 
-export function createProductRepository(options: ProductRepositoryOptions) {
+export function createProductRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
   const database = drizzle(pool)
 

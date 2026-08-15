@@ -3,7 +3,7 @@ import { nextCalendarDateLabel, priorityPlanWindow, type PriorityPlanWindow, typ
 
 export type DashboardPayload = Record<string, unknown>;
 
-export type PriorityPlanBlocker = PriorityPlanWindowBlocker & {
+type PriorityPlanBlocker = PriorityPlanWindowBlocker & {
   jcNo: string;
   itemCode: string;
   setupNo: string;
@@ -66,7 +66,7 @@ export function priorityChangePlan(productionControl: DashboardPayload, partCode
   };
 }
 
-export function priorityPlanStepWindow(
+function priorityPlanStepWindow(
   step: PriorityPlanStep,
   selectedInterruptions: Record<string, boolean>,
   queueAfterKey?: string,

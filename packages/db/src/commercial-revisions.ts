@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto"
 
-import type { Pool, PoolClient } from "pg"
+import type { PoolClient } from "pg"
 
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  repositoryPool,
+  withTransaction as transaction,
+  type RepositoryPoolOptions,
+} from "./postgres-runtime"
 import { calculateCosting } from "./pricing-calculation"
 
-type RepositoryOptions = RepositoryPoolOptions
 
 type QuoteRow = {
   alloy_premium: string
@@ -290,23 +293,6 @@ const asNumber = (value: unknown, fallback = 0) => {
 const asText = (value: unknown) =>
   typeof value === "string" ? value.trim() : ""
 
-async function transaction<T>(
-  pool: Pool,
-  operation: (client: PoolClient) => Promise<T>
-) {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    const result = await operation(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
-}
 
 async function writeAuditEvent(
   client: PoolClient,
@@ -1511,7 +1497,7 @@ function previewRevisedQuoteFromGraph(
 }
 
 export function createCommercialRevisionsRepository(
-  options: RepositoryOptions
+  options: RepositoryPoolOptions
 ) {
   const { close, pool } = repositoryPool(options)
 

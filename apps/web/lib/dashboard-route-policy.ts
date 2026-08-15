@@ -25,7 +25,6 @@ const mutationCapabilitiesByPath: Record<string, readonly string[]> = {
   "mark-complete": ["operations.shop_floor.write"],
   "plan-override": ["planning.override.write"],
   "planner-priority": ["planning.priority.write"],
-  "production-entry/reverse": ["operations.corrections.write"],
   reschedule: ["planning.override.write"],
   "reverse-entry": ["operations.corrections.write"],
   "route-change": ["planning.route_change.write"],

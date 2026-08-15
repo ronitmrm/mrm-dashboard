@@ -1,4 +1,4 @@
-import { Pool, type PoolConfig } from "pg"
+import { Pool, type PoolClient, type PoolConfig } from "pg"
 
 import { instrumentPostgresPool } from "./postgres-telemetry"
 
@@ -174,6 +174,24 @@ export function sharedManagedPostgresPool(input: {
   const pool = createBoundedPostgresPool(input)
   sharedManagedPools.set(input.connectionString, pool)
   return pool
+}
+
+export async function withTransaction<T>(
+  pool: Pool,
+  operation: (client: PoolClient) => Promise<T>
+) {
+  const client = await pool.connect()
+  try {
+    await client.query("BEGIN")
+    const result = await operation(client)
+    await client.query("COMMIT")
+    return result
+  } catch (error) {
+    await client.query("ROLLBACK")
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 export function repositoryPool(options: RepositoryPoolOptions) {

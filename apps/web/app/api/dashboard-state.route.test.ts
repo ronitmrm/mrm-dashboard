@@ -17,7 +17,6 @@ vi.mock("@/lib/auth/auth", () => ({
 
 vi.mock("@/lib/dashboard-api-policy", () => ({
   browserImportPolicy: vi.fn(),
-  exportUnavailablePayload: vi.fn(),
 }))
 
 vi.mock("@/lib/dashboard-planning-input", () => ({

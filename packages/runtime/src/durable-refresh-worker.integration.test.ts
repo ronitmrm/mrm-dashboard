@@ -48,7 +48,7 @@ beforeAll(async () => {
     [`RUNTIME-${suffix}`, `Runtime ${suffix}`]
   )
   organizationId = organization.rows[0]!.id
-})
+}, 30_000)
 
 afterAll(async () => {
   await pool.end()

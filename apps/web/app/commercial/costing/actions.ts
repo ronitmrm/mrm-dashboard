@@ -6,21 +6,10 @@ import { revalidatePath } from "next/cache"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { optionalText, requiredText } from "@/lib/form-data"
 
 const costingPath = "/commercial/costing"
 
-function requiredText(formData: FormData, name: string) {
-  const value = formData.get(name)
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${name} is required`)
-  }
-  return value.trim()
-}
-
-function optionalText(formData: FormData, name: string) {
-  const value = formData.get(name)
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
-}
 
 function numberValue(formData: FormData, name: string, fallback?: number) {
   const raw = optionalText(formData, name)

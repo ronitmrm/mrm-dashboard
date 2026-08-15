@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto"
 
 import { and, asc, eq, getTableColumns, ilike, or, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
-import type { Pool, PoolClient } from "pg"
 
 import {
   commercialSelectorLimit,
@@ -10,7 +9,11 @@ import {
   selectorResult,
   selectorSearchTerm,
 } from "./commercial-bounds"
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  repositoryPool,
+  withTransaction as transaction,
+  type RepositoryPoolOptions,
+} from "./postgres-runtime"
 import { customers, type Customer } from "./schema/customers"
 import { organizations } from "./schema/organizations"
 
@@ -34,7 +37,6 @@ type CreateCustomer = {
   status?: string
 }
 
-type CreateCustomerRepositoryOptions = RepositoryPoolOptions
 
 type CreateManagedCustomer = {
   actorUserId?: string | null
@@ -57,23 +59,6 @@ type UpdateManagedCustomer = {
   status?: string | null
 }
 
-async function transaction<T>(
-  pool: Pool,
-  operation: (client: PoolClient) => Promise<T>
-) {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    const result = await operation(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
-}
 
 function optionalText(value: string | null | undefined) {
   const normalized = value?.trim()
@@ -81,7 +66,7 @@ function optionalText(value: string | null | undefined) {
 }
 
 export function createCustomerRepository(
-  options: CreateCustomerRepositoryOptions
+  options: RepositoryPoolOptions
 ) {
   const { close, pool } = repositoryPool(options)
   const database = drizzle(pool)

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   browserImportPolicy,
-  exportUnavailablePayload,
   maxBrowserImportRows,
   maxMachineMasterBrowserImportRows,
 } from "./dashboard-api-policy";
@@ -11,18 +10,6 @@ describe("dashboard API policy", () => {
   it("allows 100 general rows and 250 Machine Master rows", () => {
     expect(maxBrowserImportRows).toBe(100);
     expect(maxMachineMasterBrowserImportRows).toBe(250);
-  });
-
-  it("marks placeholder export endpoints as unavailable instead of successful", () => {
-    expect(exportUnavailablePayload("data-export")).toEqual({
-      status: 501,
-      error: "Dashboard exports are not implemented yet. Use controlled workbook exports instead of placeholder files.",
-    });
-    expect(exportUnavailablePayload("export-workbook")).toEqual({
-      status: 501,
-      error: "Dashboard exports are not implemented yet. Use controlled workbook exports instead of placeholder files.",
-    });
-    expect(exportUnavailablePayload("dashboard")).toBeNull();
   });
 
   it("blocks browser imports above the bounded row limit", () => {

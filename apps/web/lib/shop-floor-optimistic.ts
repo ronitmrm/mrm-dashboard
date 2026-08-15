@@ -38,7 +38,7 @@ export function shopFloorStatusPatchFromAction(path: string, body: Record<string
   return shopFloorStatusPatchFromDataEntry(body.entryType, body.payload);
 }
 
-export function shopFloorStatusPatchFromDataEntry(entryType: unknown, payloadValue: unknown): ShopFloorStatusPatch | undefined {
+function shopFloorStatusPatchFromDataEntry(entryType: unknown, payloadValue: unknown): ShopFloorStatusPatch | undefined {
   if (text(entryType) !== "shop_floor_status") return undefined;
   const payload = record(payloadValue);
   const patch = {

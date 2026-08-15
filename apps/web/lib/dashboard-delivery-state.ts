@@ -1,11 +1,11 @@
 import type { ProductionFloorCode } from "@workspace/db"
 
-export const DASHBOARD_SAFETY_REFRESH_MS = 60_000
-export const DASHBOARD_ACTIVE_REFRESH_POLL_MS = 1_000
+const DASHBOARD_SAFETY_REFRESH_MS = 60_000
+const DASHBOARD_ACTIVE_REFRESH_POLL_MS = 1_000
 
-export type DashboardConnectionState = "connecting" | "live" | "retrying"
-export type DashboardPayloadState = "none" | "current" | "stale"
-export type DashboardCanonicalRequestState =
+type DashboardConnectionState = "connecting" | "live" | "retrying"
+type DashboardPayloadState = "none" | "current" | "stale"
+type DashboardCanonicalRequestState =
   | "initial"
   | "canonical-state"
   | "settled"

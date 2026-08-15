@@ -1,9 +1,7 @@
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
-type AuthorizationRepositoryOptions = RepositoryPoolOptions
-
 export function createAuthorizationRepository(
-  options: AuthorizationRepositoryOptions
+  options: RepositoryPoolOptions
 ) {
   const { close, pool } = repositoryPool(options)
 

@@ -98,7 +98,7 @@ export const verification = identity.table("verifications", {
     .defaultNow(),
 })
 
-export const rateLimit = identity.table("rate_limits", {
+const rateLimit = identity.table("rate_limits", {
   id: uuid("id").primaryKey().defaultRandom(),
   key: text("key").notNull().unique(),
   count: integer("count").notNull(),

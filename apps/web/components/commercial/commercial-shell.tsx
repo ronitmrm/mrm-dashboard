@@ -154,5 +154,3 @@ export function CommercialShell({
     </SidebarProvider>
   )
 }
-
-export const ProductionShell = CommercialShell

@@ -2,10 +2,13 @@ import { randomUUID } from "node:crypto"
 
 import type { Pool, PoolClient } from "pg"
 
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  repositoryPool,
+  withTransaction as transaction,
+  type RepositoryPoolOptions,
+} from "./postgres-runtime"
 import { calculateCosting, type CostingResult } from "./pricing-calculation"
 
-type RepositoryOptions = RepositoryPoolOptions
 
 type ProductRow = {
   alloy_premium: string
@@ -144,23 +147,6 @@ const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => ({
 const isBomParent = (itemType: string) =>
   ["package", "assembly"].includes(itemType.toLowerCase())
 
-async function transaction<T>(
-  pool: Pool,
-  operation: (client: PoolClient) => Promise<T>
-) {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    const result = await operation(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
-}
 
 async function writeAuditEvent(
   client: PoolClient,
@@ -727,7 +713,7 @@ async function persistQuote(
   return quoteItemId
 }
 
-export function createCommercialCostingRepository(options: RepositoryOptions) {
+export function createCommercialCostingRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
   const pricingRegisterBatch = async (
@@ -1941,37 +1927,7 @@ export function createCommercialCostingRepository(options: RepositoryOptions) {
       organizationCode: string,
       options: { revisions?: boolean } = {}
     ) {
-      const result = await pool.query<{
-        calculation_json: Record<string, unknown>
-        change_date: Date
-        company_name: string
-        component_depth: number
-        component_quantity: string
-        currency: string
-        customer_id: string
-        customer_part_code: string | null
-        customer_uid: string
-        enquiry_description: string
-        enquiry_number: string | null
-        id: string
-        is_active: boolean
-        item_type: string
-        lifecycle_status: string
-        line_number: number | null
-        packaging: string | null
-        parent_uid: string | null
-        product_context: Record<string, unknown>
-        product_snapshot: Record<string, unknown>
-        quote_inputs: Record<string, unknown>
-        quote_number: string
-        row_key: string
-        revision: number
-        sent_at: Date | null
-        shipping_terms: string | null
-        status: string
-        unit_price: string
-        uid: string
-      }>(
+const result = await pool.query<PricingRegisterDatabaseRow>(
         `
           WITH RECURSIVE roots AS (
             SELECT quote.*
@@ -2080,37 +2036,7 @@ export function createCommercialCostingRepository(options: RepositoryOptions) {
         `,
         [organizationCode.trim(), options.revisions ?? false]
       )
-      return result.rows.map((row) => ({
-        calculation: row.calculation_json,
-        changeDate: row.change_date,
-        companyName: row.company_name,
-        componentDepth: row.component_depth,
-        componentQuantity: asNumber(row.component_quantity, 1),
-        currency: row.currency,
-        customerId: row.customer_id,
-        customerPartCode: row.customer_part_code,
-        customerUid: row.customer_uid,
-        enquiryDescription: row.enquiry_description,
-        enquiryNumber: row.enquiry_number,
-        id: row.id,
-        isActive: row.is_active,
-        itemType: row.item_type,
-        lifecycleStatus: row.lifecycle_status,
-        lineNumber: row.line_number,
-        packaging: row.packaging,
-        parentUid: row.parent_uid,
-        productContext: row.product_context,
-        product: row.product_snapshot,
-        quoteInputs: row.quote_inputs,
-        quoteNumber: row.quote_number,
-        rowKey: row.row_key,
-        revision: row.revision,
-        sentAt: row.sent_at,
-        shippingTerms: row.shipping_terms,
-        status: row.status,
-        unitPrice: asNumber(row.unit_price),
-        uid: row.uid,
-      }))
+return result.rows.map(pricingRegisterRow)
     },
 
     async listPricingRegisterForExport(

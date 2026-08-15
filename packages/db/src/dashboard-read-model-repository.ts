@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto"
 
-import type { Pool, PoolClient } from "pg"
 
 import {
   activeCorrectionTargetKeys,
@@ -11,13 +10,16 @@ import {
 import { normalizeSourceCoverage } from "./dashboard-coverage"
 import { queueDashboardRefresh } from "./dashboard-refresh-queue"
 import { readCanonicalDashboardSource } from "./dashboard-read-model"
-import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
+import {
+  repositoryPool,
+  withTransaction as transaction,
+  type RepositoryPoolOptions,
+} from "./postgres-runtime"
 import {
   defaultProductionFloorCode,
   type ProductionFloorCode,
 } from "./production-floors"
 
-type RepositoryOptions = RepositoryPoolOptions
 type JsonRecord = Record<string, unknown>
 
 function text(value: unknown) {
@@ -104,25 +106,8 @@ function activeCorrectionCandidates(
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 }
 
-async function transaction<T>(
-  pool: Pool,
-  operation: (client: PoolClient) => Promise<T>
-) {
-  const client = await pool.connect()
-  try {
-    await client.query("BEGIN")
-    const result = await operation(client)
-    await client.query("COMMIT")
-    return result
-  } catch (error) {
-    await client.query("ROLLBACK")
-    throw error
-  } finally {
-    client.release()
-  }
-}
 
-export function createDashboardReadModelRepository(options: RepositoryOptions) {
+export function createDashboardReadModelRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
   return {
