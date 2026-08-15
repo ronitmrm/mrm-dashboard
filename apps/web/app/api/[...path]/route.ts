@@ -679,6 +679,20 @@ async function get(request: NextRequest, context: RouteContext) {
       return json(await readPostgresEmployeeMaster(request))
     }
 
+    if (path === "production-sessions") {
+      return json(
+        await withProductionRepository(
+          request,
+          "operations.dashboard.read",
+          ({ organizationId, repository }) =>
+            repository.readProductionSessions({
+              organizationId,
+              productionFloorCode: search.get("floor") || undefined,
+            })
+        )
+      )
+    }
+
     if (path === "dashboard") {
       return json(
         await readPostgresDashboard(
@@ -1014,6 +1028,100 @@ async function post(request: NextRequest, context: RouteContext) {
           rowsUpdated: 1,
           savedText: "Saved to PostgreSQL.",
         })
+      }
+      if (entryType === "production_session_start") {
+        const result = await withProductionRepository(
+          request,
+          "operations.production.write",
+          ({ actorUserId, organizationId, repository }) =>
+            repository.startProductionSession({
+              actorUserId,
+              jobCardNumber: text(payload.jobCard || payload.jcNo),
+              machineNumber: text(payload.machine || payload.machineNo),
+              measurementMethod: text(payload.measurementMethod),
+              operationSetupCode: text(payload.setupNo),
+              operatorCode: text(payload.operatorCode || payload.operatorId),
+              organizationId,
+              pieceWeightGrams: firstNumeric(payload.pieceWeightGrams, payload.pieceWeight),
+              productionDate: text(payload.productionDate || payload.prodDate),
+              productionFloorCode: text(payload.productionFloorCode),
+              shift: text(payload.shift),
+              sourcePayload: payload,
+              startCount: optionalNumeric(payload.startCount),
+              startedAt: text(payload.startedAt),
+            })
+        )
+        return json(
+          await withPlanningRefresh(path, body, {
+            ...result,
+            rowsUpdated: 1,
+            savedText: "Production session started.",
+          })
+        )
+      }
+      if (entryType === "production_session_close") {
+        const result = await withProductionRepository(
+          request,
+          "operations.production.write",
+          ({ actorUserId, organizationId, repository }) =>
+            repository.closeProductionSession({
+              actorUserId,
+              crateCount: optionalNumeric(payload.crateCount ?? payload.cratesUsed),
+              crateWeightKg: optionalNumeric(payload.crateWeightKg),
+              endCount: optionalNumeric(payload.endCount),
+              endedAt: text(payload.endedAt),
+              endReason: text(payload.endReason),
+              grossWeightKg: optionalNumeric(payload.grossWeightKg ?? payload.grossWeight),
+              organizationId,
+              sessionId: text(payload.sessionId),
+            })
+        )
+        return json(
+          await withPlanningRefresh(path, body, {
+            ...result,
+            rowsUpdated: 1,
+            savedText: "Production session closed.",
+          })
+        )
+      }
+      if (entryType === "production_session_downtime") {
+        const result = await withProductionRepository(
+          request,
+          "operations.production.write",
+          ({ actorUserId, organizationId, repository }) =>
+            repository.recordProductionSessionDowntime({
+              actorUserId,
+              endedAt: text(payload.endedAt),
+              enteredRole: text(payload.enteredRole),
+              organizationId,
+              reasonCode: text(payload.reasonCode || payload.downtimeCode),
+              reasonName: text(payload.reasonName || payload.downtimeReason),
+              sessionId: text(payload.sessionId),
+              startedAt: text(payload.startedAt),
+            })
+        )
+        return json({ ...result, rowsUpdated: 1, savedText: "Downtime saved." })
+      }
+      if (entryType === "production_session_rejection") {
+        const result = await withProductionRepository(
+          request,
+          "operations.production.write",
+          ({ actorUserId, organizationId, repository }) =>
+            repository.recordProductionSessionRejection({
+              actorUserId,
+              enteredRole: "quality",
+              organizationId,
+              quantity: firstNumeric(payload.quantity, payload.rejectQty),
+              reasonCode: text(payload.reasonCode || payload.rejectionReasonCode),
+              reasonName: text(payload.reasonName || payload.rejectionReason),
+              remarkCode: text(payload.remarkCode || payload.rejectionRemarkCode),
+              remarkName: text(payload.remarkName || payload.rejectionRemark),
+              sessionId: text(payload.sessionId),
+              typeCode: text(payload.typeCode || payload.rejectionTypeCode),
+              typeName: text(payload.typeName || payload.rejectionType),
+            })
+        )
+        return json({ ...result, rowsUpdated: 1, savedText: "Rejection saved." })
       }
       if (entryType === "production_card") {
         const cardNumber =
@@ -1538,6 +1646,12 @@ function firstNumeric(...values: unknown[]) {
   return 0
 }
 
+function optionalNumeric(value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 const knownDashboardApiPaths = new Set([
   "attendance",
   "correction-candidates",
@@ -1553,6 +1667,7 @@ const knownDashboardApiPaths = new Set([
   "mark-complete",
   "plan-override",
   "planner-priority",
+  "production-sessions",
   "reschedule",
   "reverse-entry",
   "route-change",

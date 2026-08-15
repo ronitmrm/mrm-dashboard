@@ -12,6 +12,10 @@ import {
   normalizeProductionFloorCode,
   type ProductionFloorCode,
 } from "./production-floors"
+import {
+  calculateProductionSessionOutput,
+  type ProductionMeasurementMethod,
+} from "./production-session-domain"
 
 
 type RawMaterialReceiptInput = {
@@ -35,6 +39,15 @@ type WorkOrderContext = {
   route_option_id: string | null
   work_order_id: string
 }
+
+type ProductionSessionEndReason =
+  | "operator_change"
+  | "shift_change"
+  | "item_complete"
+  | "job_change"
+  | "manual_stop"
+
+type ProductionEntryRole = "quality" | "shop_floor" | "machinist"
 
 const stageAliases: Record<string, string> = {
   item_complete: "item_complete",
@@ -62,6 +75,61 @@ function requiredText(value: string, label: string) {
   const cleaned = value.trim()
   if (!cleaned) throw new Error(`${label} is required.`)
   return cleaned
+}
+
+function requiredTimestamp(value: string, label: string) {
+  const timestamp = new Date(requiredText(value, label))
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new Error(`${label} must be a valid date and time.`)
+  }
+  return timestamp
+}
+
+function nonNegativeWholeNumber(value: number | undefined, label: string) {
+  if (value === undefined || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative whole number.`)
+  }
+  return value
+}
+
+function positiveWholeNumber(value: number, label: string) {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${label} must be a positive whole number.`)
+  }
+  return value
+}
+
+function productionMeasurementMethod(value: string) {
+  if (value !== "weight" && value !== "counter") {
+    throw new Error("Production measurement method must be weight or counter.")
+  }
+  return value satisfies ProductionMeasurementMethod
+}
+
+function productionSessionEndReason(value: string) {
+  const reasons = new Set<ProductionSessionEndReason>([
+    "operator_change",
+    "shift_change",
+    "item_complete",
+    "job_change",
+    "manual_stop",
+  ])
+  if (!reasons.has(value as ProductionSessionEndReason)) {
+    throw new Error("A valid production session end reason is required.")
+  }
+  return value as ProductionSessionEndReason
+}
+
+function productionEntryRole(value: string) {
+  const roles = new Set<ProductionEntryRole>([
+    "quality",
+    "shop_floor",
+    "machinist",
+  ])
+  if (!roles.has(value as ProductionEntryRole)) {
+    throw new Error("A valid production entry role is required.")
+  }
+  return value as ProductionEntryRole
 }
 
 function canonicalStage(value: string) {
@@ -344,6 +412,28 @@ async function employeeIdFor(
   return result.rows[0]?.id ?? null
 }
 
+async function requiredActiveEmployeeIdFor(
+  client: PoolClient,
+  organizationId: string,
+  employeeCode: string
+) {
+  const result = await client.query<{ id: string }>(
+    `
+      SELECT id FROM workforce.employees
+      WHERE organization_id = $1
+        AND lower(employee_code) = lower($2)
+        AND active
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [organizationId, requiredText(employeeCode, "Operator code")]
+  )
+  if (!result.rows[0]) {
+    throw new Error("The selected active Shop Floor operator was not found.")
+  }
+  return result.rows[0].id
+}
+
 async function plannerSwitchExists(
   client: PoolClient,
   input: {
@@ -407,6 +497,833 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
     },
 
     upsertRawMaterialReceipts,
+
+    async startProductionSession(input: {
+      actorUserId?: string | null
+      jobCardNumber: string
+      machineNumber: string
+      measurementMethod: string
+      operationSetupCode: string
+      operatorCode: string
+      organizationId: string
+      pieceWeightGrams: number
+      productionDate: string
+      productionFloorCode?: string
+      shift: string
+      sourcePayload?: Record<string, unknown>
+      startCount?: number
+      startedAt: string
+    }) {
+      return transaction(pool, async (client) => {
+        const floorCode = normalizeProductionFloorCode(
+          input.productionFloorCode
+        )
+        const measurementMethod = productionMeasurementMethod(
+          input.measurementMethod
+        )
+        if (measurementMethod === "counter" && floorCode !== "cnc") {
+          throw new Error("Machine-counter sessions are available only in CNC.")
+        }
+        const startedAt = requiredTimestamp(input.startedAt, "Session start")
+        const workOrder = await workOrderContext(
+          client,
+          input.organizationId,
+          input.jobCardNumber,
+          floorCode
+        )
+        if (!workOrder.route_option_id) {
+          throw new Error("Select a route before starting production.")
+        }
+        const setupId = await operationSetupForCode(
+          client,
+          workOrder.route_option_id,
+          input.operationSetupCode
+        )
+        if (!setupId) throw new Error("Production setup is required.")
+        const machineId = await machineIdFor(
+          client,
+          input.organizationId,
+          input.machineNumber,
+          floorCode
+        )
+        if (!machineId) throw new Error("Production machine is required.")
+        const operatorId = await requiredActiveEmployeeIdFor(
+          client,
+          input.organizationId,
+          input.operatorCode
+        )
+        if (!(input.pieceWeightGrams > 0)) {
+          throw new Error("Piece weight from Cycle Time Master is required.")
+        }
+
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtext('production.session'), hashtext($1))",
+          [machineId]
+        )
+        const ready = await client.query<{ stage: string }>(
+          `
+            SELECT stage
+            FROM manufacturing.shop_floor_setup_state
+            WHERE organization_id = $1 AND work_order_id = $2
+              AND route_option_id = $3 AND operation_setup_id = $4
+              AND machine_id = $5 AND active
+            FOR UPDATE
+          `,
+          [
+            input.organizationId,
+            workOrder.work_order_id,
+            workOrder.route_option_id,
+            setupId,
+            machineId,
+          ]
+        )
+        if (ready.rows[0]?.stage !== "operator_started") {
+          throw new Error(
+            "The machinist must finish setup and start the machine before a production session can begin."
+          )
+        }
+        const open = await client.query<{ id: string }>(
+          `
+            SELECT id FROM manufacturing.production_sessions
+            WHERE machine_id = $1 AND status = 'open' AND reversed_at IS NULL
+            FOR UPDATE
+          `,
+          [machineId]
+        )
+        if (open.rows[0]) {
+          throw new Error("This machine already has an open production session.")
+        }
+
+        const previous = await client.query<{
+          end_count: string | null
+          id: string
+          measurement_method: ProductionMeasurementMethod
+          operation_setup_id: string
+          route_option_id: string
+          work_order_id: string
+        }>(
+          `
+            SELECT id, work_order_id, route_option_id, operation_setup_id,
+              measurement_method, end_count
+            FROM manufacturing.production_sessions
+            WHERE machine_id = $1 AND status = 'closed'
+              AND reversed_at IS NULL
+            ORDER BY ended_at DESC, created_at DESC
+            LIMIT 1
+            FOR UPDATE
+          `,
+          [machineId]
+        )
+        const prior = previous.rows[0]
+        const canCarry = measurementMethod === "counter"
+          && prior?.measurement_method === "counter"
+          && prior.work_order_id === workOrder.work_order_id
+          && prior.route_option_id === workOrder.route_option_id
+          && prior.operation_setup_id === setupId
+          && prior.end_count !== null
+        const carriedFromSessionId = canCarry ? prior.id : null
+        const startCount = measurementMethod === "counter"
+          ? canCarry
+            ? Number(prior.end_count)
+            : nonNegativeWholeNumber(input.startCount, "Start count")
+          : null
+        const sourcePayload = {
+          ...input.sourcePayload,
+          carriedFromSessionId,
+          jobCard: input.jobCardNumber,
+          jcNo: input.jobCardNumber,
+          machine: input.machineNumber,
+          measurementMethod,
+          operatorId: input.operatorCode,
+          outputQty: 0,
+          actualQty: 0,
+          prodDate: input.productionDate,
+          rejectQty: 0,
+          startCount,
+          startTime: startedAt.toISOString(),
+        }
+        const created = await client.query<{
+          carried_from_session_id: string | null
+          id: string
+          start_count: string | null
+        }>(
+          `
+            INSERT INTO manufacturing.production_sessions (
+              organization_id, work_order_id, route_option_id,
+              operation_setup_id, machine_id, operator_employee_id,
+              production_date, shift, measurement_method, started_at,
+              start_count, carried_from_session_id, piece_weight_grams,
+              started_by_user_id, source_payload
+            )
+            VALUES ($1, $2, $3, $4, $5, $6,
+              COALESCE(migration.try_date($7), $8::timestamptz::date),
+              $9, $10, $8, $11, $12, $13, $14, $15)
+            RETURNING id, start_count, carried_from_session_id
+          `,
+          [
+            input.organizationId,
+            workOrder.work_order_id,
+            workOrder.route_option_id,
+            setupId,
+            machineId,
+            operatorId,
+            input.productionDate,
+            startedAt.toISOString(),
+            requiredText(input.shift, "Shift"),
+            measurementMethod,
+            startCount,
+            carriedFromSessionId,
+            input.pieceWeightGrams,
+            input.actorUserId ?? null,
+            sourcePayload,
+          ]
+        )
+        const productionEntry = await client.query<{ id: string }>(
+          `
+            INSERT INTO manufacturing.production_entries (
+              organization_id, work_order_id, route_option_id,
+              operation_setup_id, machine_id, operator_employee_id,
+              production_date, shift, quantity_good, quantity_rejected,
+              started_at, recorded_by_user_id, source_system, source_table,
+              source_id, source_payload
+            )
+            VALUES ($1, $2, $3, $4, $5, $6,
+              COALESCE(migration.try_date($7), $8::timestamptz::date),
+              $9, 0, 0, $8, $10, 'mrm-dashboard',
+              'production_session', $11, $12)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            workOrder.work_order_id,
+            workOrder.route_option_id,
+            setupId,
+            machineId,
+            operatorId,
+            input.productionDate,
+            startedAt.toISOString(),
+            requiredText(input.shift, "Shift"),
+            input.actorUserId ?? null,
+            created.rows[0]!.id,
+            sourcePayload,
+          ]
+        )
+        await client.query(
+          `
+            UPDATE manufacturing.production_sessions
+            SET production_entry_id = $1
+            WHERE id = $2
+          `,
+          [productionEntry.rows[0]!.id, created.rows[0]!.id]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return {
+          carriedFromSessionId: created.rows[0]!.carried_from_session_id,
+          id: created.rows[0]!.id,
+          startCount: created.rows[0]!.start_count === null
+            ? null
+            : Number(created.rows[0]!.start_count),
+        }
+      })
+    },
+
+    async recordProductionSessionDowntime(input: {
+      actorUserId?: string | null
+      endedAt: string
+      enteredRole: string
+      organizationId: string
+      reasonCode: string
+      reasonName: string
+      sessionId: string
+      startedAt: string
+    }) {
+      return transaction(pool, async (client) => {
+        const enteredRole = productionEntryRole(input.enteredRole)
+        const startedAt = requiredTimestamp(input.startedAt, "Downtime start")
+        const endedAt = requiredTimestamp(input.endedAt, "Downtime end")
+        const durationMinutes = Math.round(
+          (endedAt.getTime() - startedAt.getTime()) / 60_000
+        )
+        if (durationMinutes <= 0) {
+          throw new Error("Downtime end must be after downtime start.")
+        }
+        const session = await client.query<{
+          ended_at: Date | null
+          production_entry_id: string
+          started_at: Date
+        }>(
+          `
+            SELECT started_at, ended_at, production_entry_id
+            FROM manufacturing.production_sessions
+            WHERE id = $1 AND organization_id = $2 AND reversed_at IS NULL
+            FOR UPDATE
+          `,
+          [input.sessionId, input.organizationId]
+        )
+        const current = session.rows[0]
+        if (!current) throw new Error("Production session was not found.")
+        if (
+          startedAt < current.started_at ||
+          (current.ended_at && endedAt > current.ended_at)
+        ) {
+          throw new Error("Downtime must remain inside the production session.")
+        }
+        const overlap = await client.query<{ id: string }>(
+          `
+            SELECT id
+            FROM manufacturing.production_session_downtime_events
+            WHERE production_session_id = $1 AND reversed_at IS NULL
+              AND started_at < $2 AND ended_at > $3
+            LIMIT 1
+          `,
+          [input.sessionId, endedAt.toISOString(), startedAt.toISOString()]
+        )
+        if (overlap.rows[0]) {
+          throw new Error("Downtime entries cannot overlap.")
+        }
+        const sourcePayload = { ...input, durationMinutes, enteredRole }
+        const created = await client.query<{ id: string }>(
+          `
+            INSERT INTO manufacturing.production_session_downtime_events (
+              organization_id, production_session_id, reason_code,
+              reason_name, started_at, ended_at, duration_minutes,
+              entered_role, entered_by_user_id, source_payload
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            input.sessionId,
+            requiredText(input.reasonCode, "Downtime code"),
+            requiredText(input.reasonName, "Downtime reason"),
+            startedAt.toISOString(),
+            endedAt.toISOString(),
+            durationMinutes,
+            enteredRole,
+            input.actorUserId ?? null,
+            sourcePayload,
+          ]
+        )
+        const totalDowntime = await client.query<{ minutes: string }>(
+          `
+            SELECT COALESCE(sum(duration_minutes), 0)::text AS minutes
+            FROM manufacturing.production_session_downtime_events
+            WHERE production_session_id = $1 AND reversed_at IS NULL
+          `,
+          [input.sessionId]
+        )
+        const downtimePayload = {
+          downtimeCode: input.reasonCode,
+          downtimeMinutes: Number(totalDowntime.rows[0]!.minutes),
+          downtimeReason: input.reasonName,
+        }
+        await client.query(
+          `
+            UPDATE manufacturing.production_sessions
+            SET source_payload = source_payload || $1::jsonb,
+              updated_at = now(), row_version = row_version + 1
+            WHERE id = $2
+          `,
+          [downtimePayload, input.sessionId]
+        )
+        await client.query(
+          `
+            UPDATE manufacturing.production_entries
+            SET source_payload = source_payload || $1::jsonb
+            WHERE id = $2
+          `,
+          [downtimePayload, current.production_entry_id]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { durationMinutes, id: created.rows[0]!.id }
+      })
+    },
+
+    async recordProductionSessionRejection(input: {
+      actorUserId?: string | null
+      enteredRole: string
+      organizationId: string
+      quantity: number
+      reasonCode: string
+      reasonName: string
+      remarkCode: string
+      remarkName: string
+      sessionId: string
+      typeCode: string
+      typeName: string
+    }) {
+      return transaction(pool, async (client) => {
+        const enteredRole = productionEntryRole(input.enteredRole)
+        if (enteredRole !== "quality") {
+          throw new Error("Only Quality can record rejection entries.")
+        }
+        const quantity = positiveWholeNumber(input.quantity, "Rejected pieces")
+        const session = await client.query<{
+          production_entry_id: string | null
+          status: "open" | "closed"
+          total_pieces: string
+        }>(
+          `
+            SELECT status, total_pieces, production_entry_id
+            FROM manufacturing.production_sessions
+            WHERE id = $1 AND organization_id = $2 AND reversed_at IS NULL
+            FOR UPDATE
+          `,
+          [input.sessionId, input.organizationId]
+        )
+        const current = session.rows[0]
+        if (!current) throw new Error("Production session was not found.")
+        const existing = await client.query<{ quantity: string }>(
+          `
+            SELECT COALESCE(sum(quantity), 0)::text AS quantity
+            FROM manufacturing.production_session_rejection_events
+            WHERE production_session_id = $1 AND reversed_at IS NULL
+          `,
+          [input.sessionId]
+        )
+        const rejectedPieces = Number(existing.rows[0]!.quantity) + quantity
+        const totalPieces = Number(current.total_pieces)
+        if (current.status === "closed" && rejectedPieces > totalPieces) {
+          throw new Error("Rejected pieces cannot exceed total produced pieces.")
+        }
+        const sourcePayload = { ...input, enteredRole, quantity }
+        const created = await client.query<{ id: string }>(
+          `
+            INSERT INTO manufacturing.production_session_rejection_events (
+              organization_id, production_session_id, quantity,
+              type_code, type_name, reason_code, reason_name,
+              remark_code, remark_name, entered_role,
+              entered_by_user_id, source_payload
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            input.sessionId,
+            quantity,
+            requiredText(input.typeCode, "Rejection type code"),
+            requiredText(input.typeName, "Rejection type"),
+            requiredText(input.reasonCode, "Rejection reason code"),
+            requiredText(input.reasonName, "Rejection reason"),
+            requiredText(input.remarkCode, "Rejection remark code"),
+            requiredText(input.remarkName, "Rejection remark"),
+            enteredRole,
+            input.actorUserId ?? null,
+            sourcePayload,
+          ]
+        )
+        await client.query(
+          `
+            UPDATE manufacturing.production_sessions
+            SET quantity_rejected = $1,
+              quantity_good = CASE WHEN status = 'closed'
+                THEN total_pieces - $1 ELSE quantity_good END,
+              source_payload = source_payload || $2::jsonb,
+              updated_at = now(), row_version = row_version + 1
+            WHERE id = $3
+          `,
+          [
+            rejectedPieces,
+            {
+              rejectQty: rejectedPieces,
+              rejectionReason: input.reasonName,
+              rejectionReasonCode: input.reasonCode,
+              rejectionRemark: input.remarkName,
+              rejectionRemarkCode: input.remarkCode,
+              rejectionType: input.typeName,
+              rejectionTypeCode: input.typeCode,
+            },
+            input.sessionId,
+          ]
+        )
+        if (current.production_entry_id) {
+          await client.query(
+            `
+              UPDATE manufacturing.production_entries
+              SET quantity_rejected = $1, quantity_good = $2,
+                source_payload = source_payload || $3::jsonb
+              WHERE id = $4
+            `,
+            [
+              rejectedPieces,
+              current.status === "closed" ? totalPieces - rejectedPieces : 0,
+              {
+                outputQty: current.status === "closed"
+                  ? totalPieces - rejectedPieces
+                  : 0,
+                rejectQty: rejectedPieces,
+                rejectionReason: input.reasonName,
+                rejectionReasonCode: input.reasonCode,
+                rejectionRemark: input.remarkName,
+                rejectionRemarkCode: input.remarkCode,
+                rejectionType: input.typeName,
+                rejectionTypeCode: input.typeCode,
+              },
+              current.production_entry_id,
+            ]
+          )
+        }
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: created.rows[0]!.id, rejectedPieces }
+      })
+    },
+
+    async closeProductionSession(input: {
+      actorUserId?: string | null
+      crateCount?: number
+      crateWeightKg?: number
+      endCount?: number
+      endedAt: string
+      endReason: string
+      grossWeightKg?: number
+      organizationId: string
+      sessionId: string
+    }) {
+      return transaction(pool, async (client) => {
+        const endedAt = requiredTimestamp(input.endedAt, "Session end")
+        const endReason = productionSessionEndReason(input.endReason)
+        const session = await client.query<{
+          machine_id: string
+          measurement_method: ProductionMeasurementMethod
+          operation_setup_id: string
+          operator_employee_id: string
+          piece_weight_grams: string
+          production_entry_id: string
+          production_date: Date
+          route_option_id: string
+          shift: string
+          source_payload: Record<string, unknown>
+          start_count: string | null
+          started_at: Date
+          status: "open" | "closed"
+          work_order_id: string
+        }>(
+          `
+            SELECT work_order_id, route_option_id, operation_setup_id,
+              machine_id, operator_employee_id, production_date, shift,
+              measurement_method, started_at, start_count,
+              piece_weight_grams, production_entry_id, source_payload, status
+            FROM manufacturing.production_sessions
+            WHERE id = $1 AND organization_id = $2 AND reversed_at IS NULL
+            FOR UPDATE
+          `,
+          [input.sessionId, input.organizationId]
+        )
+        const current = session.rows[0]
+        if (!current) throw new Error("Production session was not found.")
+        if (current.status !== "open") {
+          throw new Error("Production session is already closed.")
+        }
+        if (endedAt < current.started_at) {
+          throw new Error("Session end cannot be before session start.")
+        }
+        const laterDowntime = await client.query<{ id: string }>(
+          `
+            SELECT id
+            FROM manufacturing.production_session_downtime_events
+            WHERE production_session_id = $1 AND reversed_at IS NULL
+              AND ended_at > $2
+            LIMIT 1
+          `,
+          [input.sessionId, endedAt.toISOString()]
+        )
+        if (laterDowntime.rows[0]) {
+          throw new Error("Session end cannot be before its downtime entries.")
+        }
+        const rejection = await client.query<{
+          quantity: string
+          reason_name: string | null
+          remark_name: string | null
+          type_name: string | null
+        }>(
+          `
+            SELECT COALESCE(sum(quantity), 0)::text AS quantity,
+              (array_agg(type_name ORDER BY recorded_at DESC))[1] AS type_name,
+              (array_agg(reason_name ORDER BY recorded_at DESC))[1] AS reason_name,
+              (array_agg(remark_name ORDER BY recorded_at DESC))[1] AS remark_name
+            FROM manufacturing.production_session_rejection_events
+            WHERE production_session_id = $1 AND reversed_at IS NULL
+          `,
+          [input.sessionId]
+        )
+        const rejectedPieces = Number(rejection.rows[0]!.quantity)
+        const downtime = await client.query<{ minutes: string }>(
+          `
+            SELECT COALESCE(sum(duration_minutes), 0)::text AS minutes
+            FROM manufacturing.production_session_downtime_events
+            WHERE production_session_id = $1 AND reversed_at IS NULL
+          `,
+          [input.sessionId]
+        )
+        const downtimeMinutes = Number(downtime.rows[0]!.minutes)
+        const elapsedMinutes = Math.max(
+          Math.round((endedAt.getTime() - current.started_at.getTime()) / 60_000),
+          0
+        )
+        const runtimeMinutes = Math.max(elapsedMinutes - downtimeMinutes, 0)
+        const cycleTimeSeconds = Number(current.source_payload.cycleTime ?? 0)
+        const output = current.measurement_method === "counter"
+          ? calculateProductionSessionOutput({
+              endCount: nonNegativeWholeNumber(input.endCount, "End count"),
+              measurementMethod: "counter",
+              rejectedPieces,
+              startCount: Number(current.start_count),
+            })
+          : calculateProductionSessionOutput({
+              crateCount: nonNegativeWholeNumber(input.crateCount, "Crates used"),
+              crateWeightKg: input.crateWeightKg ?? 0,
+              grossWeightKg: input.grossWeightKg ?? -1,
+              measurementMethod: "weight",
+              pieceWeightGrams: Number(current.piece_weight_grams),
+              rejectedPieces,
+            })
+        const sourcePayload = {
+          ...current.source_payload,
+          ...input,
+          actualQty: output.goodPieces,
+          downtimeMinutes,
+          endTime: endedAt.toISOString(),
+          measurementMethod: current.measurement_method,
+          outputQty: output.goodPieces,
+          rejectQty: output.rejectedPieces,
+          rejectionReason: rejection.rows[0]!.reason_name,
+          rejectionRemark: rejection.rows[0]!.remark_name,
+          rejectionType: rejection.rows[0]!.type_name,
+          runtimeMinutes,
+          targetQty: cycleTimeSeconds > 0
+            ? Math.floor((runtimeMinutes * 60) / cycleTimeSeconds)
+            : 0,
+          totalPieces: output.totalPieces,
+        }
+        await client.query(
+          `
+            UPDATE manufacturing.production_entries
+            SET quantity_good = $1, quantity_rejected = $2,
+              completed_at = $3, recorded_by_user_id = $4,
+              source_payload = $5
+            WHERE id = $6
+          `,
+          [
+            output.goodPieces,
+            output.rejectedPieces,
+            endedAt.toISOString(),
+            input.actorUserId ?? null,
+            sourcePayload,
+            current.production_entry_id,
+          ]
+        )
+        await client.query(
+          `
+            UPDATE manufacturing.production_sessions
+            SET status = 'closed', ended_at = $1, end_reason = $2,
+              end_count = $3, gross_weight_kg = $4, crate_count = $5,
+              crate_weight_kg = $6, net_weight_kg = $7,
+              total_pieces = $8, quantity_good = $9,
+              quantity_rejected = $10, closed_by_user_id = $11,
+              source_payload = $12, updated_at = now(),
+              row_version = row_version + 1
+            WHERE id = $13
+          `,
+          [
+            endedAt.toISOString(),
+            endReason,
+            current.measurement_method === "counter" ? input.endCount : null,
+            current.measurement_method === "weight" ? input.grossWeightKg : null,
+            current.measurement_method === "weight" ? input.crateCount : null,
+            current.measurement_method === "weight" ? input.crateWeightKg : null,
+            output.netWeightKg,
+            output.totalPieces,
+            output.goodPieces,
+            output.rejectedPieces,
+            input.actorUserId ?? null,
+            sourcePayload,
+            input.sessionId,
+          ]
+        )
+        if (endReason === "item_complete") {
+          const setupState = await client.query<{ id: string; stage: string }>(
+            `
+              SELECT id, stage
+              FROM manufacturing.shop_floor_setup_state
+              WHERE work_order_id = $1 AND route_option_id = $2
+                AND operation_setup_id = $3 AND machine_id = $4 AND active
+              FOR UPDATE
+            `,
+            [
+              current.work_order_id,
+              current.route_option_id,
+              current.operation_setup_id,
+              current.machine_id,
+            ]
+          )
+          if (setupState.rows[0]) {
+            await client.query(
+              `
+                UPDATE manufacturing.shop_floor_setup_state
+                SET stage = 'item_complete', active = false,
+                  completed_at = $1, updated_by_user_id = $2,
+                  source_payload = $3, updated_at = now(),
+                  row_version = row_version + 1
+                WHERE id = $4
+              `,
+              [
+                endedAt.toISOString(),
+                input.actorUserId ?? null,
+                sourcePayload,
+                setupState.rows[0].id,
+              ]
+            )
+            await client.query(
+              `
+                INSERT INTO manufacturing.shop_floor_stage_events (
+                  organization_id, setup_state_id, from_stage, to_stage,
+                  machine_id, occurred_at, actor_user_id, reason,
+                  source_system, source_table, source_id, source_payload
+                )
+                VALUES ($1, $2, $3, 'item_complete', $4, $5, $6,
+                  'Production session closed as item complete',
+                  'mrm-dashboard', 'production_session', $7, $8)
+              `,
+              [
+                input.organizationId,
+                setupState.rows[0].id,
+                setupState.rows[0].stage,
+                current.machine_id,
+                endedAt.toISOString(),
+                input.actorUserId ?? null,
+                randomUUID(),
+                sourcePayload,
+              ]
+            )
+          }
+        }
+        await queueDashboardRefresh(client, input.organizationId)
+        return {
+          goodPieces: output.goodPieces,
+          id: input.sessionId,
+          rejectedPieces: output.rejectedPieces,
+          totalPieces: output.totalPieces,
+        }
+      })
+    },
+
+    async readProductionSessions(input: {
+      organizationId: string
+      productionFloorCode?: string
+    }) {
+      const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
+      const result = await pool.query<Record<string, unknown>>(
+        `
+          SELECT session.id,
+            session.status,
+            session.production_date AS "productionDate",
+            session.shift,
+            session.measurement_method AS "measurementMethod",
+            session.started_at AS "startedAt",
+            session.ended_at AS "endedAt",
+            session.end_reason AS "endReason",
+            session.start_count AS "startCount",
+            session.end_count AS "endCount",
+            session.carried_from_session_id AS "carriedFromSessionId",
+            session.gross_weight_kg AS "grossWeightKg",
+            session.crate_count AS "crateCount",
+            session.crate_weight_kg AS "crateWeightKg",
+            session.net_weight_kg AS "netWeightKg",
+            session.piece_weight_grams AS "pieceWeightGrams",
+            session.total_pieces AS "totalPieces",
+            session.quantity_good AS "goodPieces",
+            session.quantity_rejected AS "rejectedPieces",
+            work_order.job_card_number AS "jobCardNumber",
+            item.uid AS "partCode",
+            route.route_code AS "optionNumber",
+            setup.setup_number::text AS "setupNumber",
+            machine.machine_number AS "machineNumber",
+            employee.employee_code AS "operatorCode",
+            employee.name AS "operatorName",
+            COALESCE(downtime.minutes, 0) AS "downtimeMinutes",
+            COALESCE(downtime.rows, '[]'::jsonb) AS "downtimeEvents",
+            COALESCE(rejection.rows, '[]'::jsonb) AS "rejectionEvents"
+          FROM manufacturing.production_sessions session
+          JOIN manufacturing.work_orders work_order
+            ON work_order.id = session.work_order_id
+          JOIN catalog.items item ON item.id = work_order.item_id
+          JOIN manufacturing.route_options route
+            ON route.id = session.route_option_id
+          JOIN manufacturing.operation_setups setup
+            ON setup.id = session.operation_setup_id
+          JOIN catalog.machines machine ON machine.id = session.machine_id
+          JOIN manufacturing.production_floors floor
+            ON floor.id = machine.production_floor_id
+          JOIN workforce.employees employee
+            ON employee.id = session.operator_employee_id
+          LEFT JOIN LATERAL (
+            SELECT COALESCE(sum(event.duration_minutes), 0) AS minutes,
+              jsonb_agg(jsonb_build_object(
+                'id', event.id,
+                'reasonCode', event.reason_code,
+                'reasonName', event.reason_name,
+                'startedAt', event.started_at,
+                'endedAt', event.ended_at,
+                'durationMinutes', event.duration_minutes,
+                'enteredRole', event.entered_role
+              ) ORDER BY event.started_at) AS rows
+            FROM manufacturing.production_session_downtime_events event
+            WHERE event.production_session_id = session.id
+              AND event.reversed_at IS NULL
+          ) downtime ON true
+          LEFT JOIN LATERAL (
+            SELECT jsonb_agg(jsonb_build_object(
+              'id', event.id,
+              'quantity', event.quantity,
+              'typeCode', event.type_code,
+              'typeName', event.type_name,
+              'reasonCode', event.reason_code,
+              'reasonName', event.reason_name,
+              'remarkCode', event.remark_code,
+              'remarkName', event.remark_name,
+              'recordedAt', event.recorded_at
+            ) ORDER BY event.recorded_at) AS rows
+            FROM manufacturing.production_session_rejection_events event
+            WHERE event.production_session_id = session.id
+              AND event.reversed_at IS NULL
+          ) rejection ON true
+          WHERE session.organization_id = $1 AND floor.code = $2
+            AND session.reversed_at IS NULL
+            AND (
+              session.status = 'open'
+              OR session.production_date >= current_date - 7
+            )
+          ORDER BY session.started_at DESC, machine.machine_number
+          LIMIT 500
+        `,
+        [input.organizationId, floorCode]
+      )
+      const numericKeys = [
+        "startCount",
+        "endCount",
+        "grossWeightKg",
+        "crateCount",
+        "crateWeightKg",
+        "netWeightKg",
+        "pieceWeightGrams",
+        "totalPieces",
+        "goodPieces",
+        "rejectedPieces",
+        "downtimeMinutes",
+      ] as const
+      return {
+        productionFloorCode: floorCode,
+        rows: result.rows.map((row) => {
+          const mapped = { ...row }
+          for (const key of numericKeys) {
+            mapped[key] = row[key] === null ? null : Number(row[key] ?? 0)
+          }
+          return mapped
+        }),
+      }
+    },
 
     async upsertProductionCard(input: {
       actorUserId?: string | null
@@ -637,6 +1554,24 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (!machineId) throw new Error("Shop-floor machine is required.")
         const stage = canonicalStage(input.stage)
         const active = stageIsActive(stage)
+        if (!active) {
+          const openSession = await client.query<{ id: string }>(
+            `
+              SELECT id FROM manufacturing.production_sessions
+              WHERE work_order_id = $1 AND operation_setup_id = $2
+                AND machine_id = $3 AND status = 'open'
+                AND reversed_at IS NULL
+              LIMIT 1
+              FOR UPDATE
+            `,
+            [workOrder.work_order_id, setupId, machineId]
+          )
+          if (openSession.rows[0]) {
+            throw new Error(
+              "Close the production session with Item Complete before finishing the setup."
+            )
+          }
+        }
         const current = await client.query<{
           id: string
           machine_id: string | null
@@ -858,6 +1793,24 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (!setupId) setupId = state.rows[0]?.operation_setup_id ?? null
         if (!machineId) machineId = state.rows[0]?.machine_id ?? null
         if (!setupId) throw new Error("Setup completion target was not found.")
+        if (machineId) {
+          const openSession = await client.query<{ id: string }>(
+            `
+              SELECT id FROM manufacturing.production_sessions
+              WHERE work_order_id = $1 AND operation_setup_id = $2
+                AND machine_id = $3 AND status = 'open'
+                AND reversed_at IS NULL
+              LIMIT 1
+              FOR UPDATE
+            `,
+            [workOrder.work_order_id, setupId, machineId]
+          )
+          if (openSession.rows[0]) {
+            throw new Error(
+              "Close the production session with Item Complete before finishing the setup."
+            )
+          }
+        }
         const sourcePayload = {
           actorUserId: input.actorUserId ?? null,
           completedBy: input.completedBy,

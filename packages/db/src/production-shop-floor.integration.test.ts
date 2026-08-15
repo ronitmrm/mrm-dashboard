@@ -20,8 +20,12 @@ const firstJobCard = `FLOOR-JC-${suffix}-1`
 const secondJobCard = `FLOOR-JC-${suffix}-2`
 const thirdJobCard = `FLOOR-JC-${suffix}-3`
 const fourthJobCard = `FLOOR-JC-${suffix}-4`
+const cncJobCard = `FLOOR-JC-${suffix}-CNC`
 const firstMachine = `FLOOR-MC-${suffix}-1`
 const secondMachine = `FLOOR-MC-${suffix}-2`
+const cncMachine = `FLOOR-CNC-${suffix}`
+const firstOperator = `FLOOR-OP-${suffix}-1`
+const secondOperator = `FLOOR-OP-${suffix}-2`
 const rmPoNumber = `RM-${suffix}`
 let organizationId: string
 let productionEntryId: string
@@ -48,6 +52,15 @@ beforeAll(async () => {
   )
   await pool.query(
     `
+      INSERT INTO manufacturing.production_floors (
+        organization_id, code, name
+      ) VALUES ($1, 'cnc', 'CNC Production Floor')
+      ON CONFLICT (organization_id, code) DO NOTHING
+    `,
+    [organizationId]
+  )
+  await pool.query(
+    `
       INSERT INTO catalog.items (
         organization_id, uid, uid_kind, lifecycle_status, description,
         item_type, source_system, source_table, source_id
@@ -63,6 +76,11 @@ beforeAll(async () => {
   await planning.upsertMachine({
     machineNumber: secondMachine,
     organizationId,
+  })
+  await planning.upsertMachine({
+    machineNumber: cncMachine,
+    organizationId,
+    productionFloorCode: "cnc",
   })
   for (const [index, jobCardNumber] of [
     firstJobCard,
@@ -92,6 +110,27 @@ beforeAll(async () => {
       { operationCode: "FORM", sequence: 2, setupNumber: 2 },
     ],
   })
+  await planning.upsertWorkOrder({
+    itemUid,
+    jobCardNumber: cncJobCard,
+    orderedQuantity: 2_000,
+    organizationId,
+    sourcePayload: {
+      jcNo: cncJobCard,
+      partCode: itemUid,
+      rmPoNo: rmPoNumber,
+    },
+    workOrderNumber: `FLOOR-WO-${suffix}-CNC`,
+  })
+  await planning.upsertRouteOption({
+    itemUid,
+    organizationId,
+    productionFloorCode: "cnc",
+    routeCode: "CNC-1",
+    setups: [
+      { operationCode: "TURN", sequence: 1, setupNumber: 1 },
+    ],
+  })
   await planning.selectRoute({
     jobCardNumber: firstJobCard,
     organizationId,
@@ -102,6 +141,23 @@ beforeAll(async () => {
     organizationId,
     routeCode: "1",
   })
+  await planning.selectRoute({
+    jobCardNumber: cncJobCard,
+    organizationId,
+    productionFloorCode: "cnc",
+    routeCode: "CNC-1",
+  })
+  for (const [index, employeeCode] of [firstOperator, secondOperator].entries()) {
+    await pool.query(
+      `
+        INSERT INTO workforce.employees (
+          organization_id, employee_code, name, department, designation,
+          source_system, source_table, source_id
+        ) VALUES ($1, $2, $3, 'Shop Floor', 'Worker', 'test', 'employees', $4)
+      `,
+      [organizationId, employeeCode, `Operator ${index + 1}`, randomUUID()]
+    )
+  }
 })
 
 afterAll(async () => {
@@ -349,6 +405,107 @@ describe("production and shop-floor workflows", () => {
       rm_po_number: rmPoNumber,
       raw_material_receipts: "1",
       remarks: "Updated card",
+    })
+  })
+
+  test("keeps CNC count continuity across shift sessions and stores linked events", async () => {
+    await repository.recordShopFloorStage({
+      jobCardNumber: cncJobCard,
+      machineNumber: cncMachine,
+      operationSetupCode: "1",
+      organizationId,
+      payload: { doneBy: "Machinist", partCode: itemUid },
+      productionFloorCode: "cnc",
+      stage: "operator_started",
+    })
+
+    const first = await repository.startProductionSession({
+      jobCardNumber: cncJobCard,
+      machineNumber: cncMachine,
+      measurementMethod: "counter",
+      operationSetupCode: "1",
+      operatorCode: firstOperator,
+      organizationId,
+      pieceWeightGrams: 489,
+      productionDate: "2026-08-15",
+      productionFloorCode: "cnc",
+      shift: "A",
+      startCount: 10_000,
+      startedAt: "2026-08-15T06:00:00+05:30",
+    })
+    await repository.recordProductionSessionDowntime({
+      endedAt: "2026-08-15T07:10:00+05:30",
+      enteredRole: "machinist",
+      organizationId,
+      reasonCode: "DC-01",
+      reasonName: "Tool adjustment",
+      sessionId: first.id,
+      startedAt: "2026-08-15T07:00:00+05:30",
+    })
+    await repository.recordProductionSessionRejection({
+      enteredRole: "quality",
+      organizationId,
+      quantity: 7,
+      reasonCode: "DC-02",
+      reasonName: "Visual defect",
+      remarkCode: "RR-01",
+      remarkName: "Segregated",
+      sessionId: first.id,
+      typeCode: "RT-01",
+      typeName: "In-process",
+    })
+    const closed = await repository.closeProductionSession({
+      endCount: 10_850,
+      endedAt: "2026-08-15T14:00:00+05:30",
+      endReason: "shift_change",
+      organizationId,
+      sessionId: first.id,
+    })
+    expect(closed).toMatchObject({
+      goodPieces: 843,
+      rejectedPieces: 7,
+      totalPieces: 850,
+    })
+
+    const second = await repository.startProductionSession({
+      jobCardNumber: cncJobCard,
+      machineNumber: cncMachine,
+      measurementMethod: "counter",
+      operationSetupCode: "1",
+      operatorCode: secondOperator,
+      organizationId,
+      pieceWeightGrams: 489,
+      productionDate: "2026-08-15",
+      productionFloorCode: "cnc",
+      shift: "B",
+      startedAt: "2026-08-15T14:00:00+05:30",
+    })
+    expect(second).toMatchObject({
+      carriedFromSessionId: first.id,
+      startCount: 10_850,
+    })
+
+    const sessions = await repository.readProductionSessions({
+      organizationId,
+      productionFloorCode: "cnc",
+    })
+    expect(sessions.rows.find((row) => row.id === first.id)).toMatchObject({
+      downtimeMinutes: 10,
+      goodPieces: 843,
+      rejectedPieces: 7,
+      status: "closed",
+    })
+    expect(sessions.rows.find((row) => row.id === second.id)).toMatchObject({
+      startCount: 10_850,
+      status: "open",
+    })
+
+    await repository.closeProductionSession({
+      endCount: 10_900,
+      endedAt: "2026-08-15T15:00:00+05:30",
+      endReason: "item_complete",
+      organizationId,
+      sessionId: second.id,
     })
   })
 

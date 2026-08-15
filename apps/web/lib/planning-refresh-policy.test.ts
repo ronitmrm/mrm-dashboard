@@ -7,6 +7,8 @@ describe("planning refresh policy", () => {
     expect(shouldQueuePlanningRefresh("planner-priority")).toBe(true);
     expect(shouldQueuePlanningRefresh("mark-complete")).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "software_raw" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "production_session_start" })).toBe(true);
+    expect(shouldQueuePlanningRefresh("data-entry", { entryType: "production_session_close" })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "operator_started" } })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "shop_floor_status", payload: { stage: "item_complete" } })).toBe(true);
     expect(shouldQueuePlanningRefresh("data-entry", { entryType: "rm_inward" })).toBe(true);
