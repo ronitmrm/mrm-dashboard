@@ -73,22 +73,26 @@ describe("PostgreSQL operational entry mapping", () => {
         machine: "TR506",
         masterVersion: "20260702",
         status: "Completed",
+        startedBy: "MACH-1",
         startedAt: "2026-07-21T08:00:00.000Z",
+        endedBy: "MACH-2",
         endedAt: "2026-07-21T09:00:00.000Z",
         items: [
           {
             sequence: 1,
             checkPoint: "Drawing checked",
+            section: "Pre setting",
             inputType: "checkbox",
             startValue: "Yes",
-            endValue: "No",
+            startItemRemark: "Drawing available",
           },
           {
             sequence: 2,
             checkPoint: "Setting note",
+            section: "Setting",
             inputType: "text",
-            startValue: "Ready",
             endValue: "Complete",
+            endItemRemark: "Setting verified",
           },
         ],
       })
@@ -99,19 +103,27 @@ describe("PostgreSQL operational entry mapping", () => {
       phases: [
         {
           input: {
+            completedBy: "MACH-1",
             phase: "start",
             results: [
-              { itemKey: "1|Drawing checked", value: true },
-              { itemKey: "2|Setting note", value: "Ready" },
+              {
+                itemKey: "1|Drawing checked",
+                notes: "Drawing available",
+                value: true,
+              },
             ],
           },
         },
         {
           input: {
+            completedBy: "MACH-2",
             phase: "end",
             results: [
-              { itemKey: "1|Drawing checked", value: false },
-              { itemKey: "2|Setting note", value: "Complete" },
+              {
+                itemKey: "2|Setting note",
+                notes: "Setting verified",
+                value: "Complete",
+              },
             ],
           },
         },

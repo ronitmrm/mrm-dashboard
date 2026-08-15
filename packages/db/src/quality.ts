@@ -120,6 +120,13 @@ function valueColumns(
 }
 
 function readingResult(parameter: ParameterRow, value: unknown) {
+  if (parameter.data_type === "boolean") {
+    if (value === null || value === undefined || value === "") return "Pending"
+    return valueColumns(value as boolean | number | string | null, "boolean")
+      .booleanValue
+      ? "OK"
+      : "Not OK"
+  }
   const numericValue = numericOrNull(value)
   if (parameter.data_type !== "numeric" || numericValue === null) {
     return value === null || value === "" ? "Pending" : "OK"
@@ -193,13 +200,31 @@ async function qualityContextFor(
   const result = await client.query<QualityContext>(
     `
       SELECT work_order.id AS work_order_id, work_order.item_id,
-        selection.route_option_id, setup.id AS operation_setup_id
+        COALESCE(selection.route_option_id, automatic_route.route_option_id)
+          AS route_option_id,
+        setup.id AS operation_setup_id
       FROM manufacturing.work_orders work_order
-      JOIN manufacturing.route_selections selection
+      LEFT JOIN manufacturing.route_selections selection
         ON selection.work_order_id = work_order.id
         AND selection.reversed_at IS NULL
+      LEFT JOIN LATERAL (
+        SELECT CASE WHEN count(*) = 1
+          THEN (array_agg(candidate.id))[1]
+          ELSE NULL
+        END AS route_option_id
+        FROM manufacturing.route_options candidate
+        JOIN manufacturing.production_floors candidate_floor
+          ON candidate_floor.id = candidate.production_floor_id
+        WHERE candidate.organization_id = work_order.organization_id
+          AND candidate.item_id = work_order.item_id
+          AND candidate.active
+          AND candidate_floor.code = $4
+      ) automatic_route ON selection.route_option_id IS NULL
       JOIN manufacturing.operation_setups setup
-        ON setup.route_option_id = selection.route_option_id
+        ON setup.route_option_id = COALESCE(
+          selection.route_option_id,
+          automatic_route.route_option_id
+        )
       JOIN manufacturing.route_options route
         ON route.id = setup.route_option_id
       JOIN manufacturing.production_floors floor
@@ -212,6 +237,7 @@ async function qualityContextFor(
           OR setup.setup_number = CASE
             WHEN $3 ~ '^[0-9]+$' THEN $3::integer ELSE -1 END
         )
+        AND setup.active
       LIMIT 1
     `,
     [
@@ -904,6 +930,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           const itemRows = await pool.query<{
             endBooleanValue: boolean | null
             endNumericValue: string | null
+            endNotes: string | null
             endTextValue: string | null
             inputType: string
             itemKey: string
@@ -914,6 +941,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
             sourcePayload: unknown
             startBooleanValue: boolean | null
             startNumericValue: string | null
+            startNotes: string | null
             startTextValue: string | null
           }>(
             `
@@ -925,9 +953,11 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
                 start_result.response_text AS "startTextValue",
                 start_result.response_numeric::text AS "startNumericValue",
                 start_result.response_boolean AS "startBooleanValue",
+                start_result.notes AS "startNotes",
                 end_result.response_text AS "endTextValue",
                 end_result.response_numeric::text AS "endNumericValue",
-                end_result.response_boolean AS "endBooleanValue"
+                end_result.response_boolean AS "endBooleanValue",
+                end_result.notes AS "endNotes"
               FROM quality.setup_checklist_template_items item
               LEFT JOIN quality.setup_checklist_results start_result
                 ON start_result.template_item_id = item.id
@@ -961,11 +991,13 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
                   numericValue: item.startNumericValue,
                   textValue: item.startTextValue,
                 }),
+                startItemRemark: item.startNotes ?? "",
                 endValue: relationalValue({
                   booleanValue: item.endBooleanValue,
                   numericValue: item.endNumericValue,
                   textValue: item.endTextValue,
                 }),
+                endItemRemark: item.endNotes ?? "",
               })
             ),
             startedAt: sourcePayload.startedAt ?? session.startedAt,
@@ -1134,6 +1166,40 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           input.operationSetupCode,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
+        if (input.active ?? true) {
+          const specification = String(
+            input.payload.specification ?? input.nominalValue ?? ""
+          ).trim()
+          const duplicate = await client.query<{ parameter_code: string }>(
+            `
+              SELECT parameter_code
+              FROM quality.parameter_definitions
+              WHERE organization_id = $1 AND operation_setup_id = $2
+                AND active
+                AND lower(btrim(name)) = lower(btrim($3))
+                AND lower(btrim(COALESCE(
+                  source_payload->'payload'->>'specification',
+                  source_payload->>'specification',
+                  nominal_value::text,
+                  ''
+                ))) = lower(btrim($4))
+                AND lower(parameter_code) <> lower($5)
+              LIMIT 1
+            `,
+            [
+              input.organizationId,
+              context.operation_setup_id,
+              input.name,
+              specification,
+              input.parameterCode,
+            ]
+          )
+          if (duplicate.rows[0]) {
+            throw new Error(
+              "A quality parameter with the same name and specification already exists for this setup."
+            )
+          }
+        }
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO quality.parameter_definitions (

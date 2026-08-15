@@ -413,6 +413,90 @@ describe("workforce, quality, and maintenance workflows", () => {
     })
   })
 
+  test("uses the only active route for quality writes and rejects duplicate parameter specifications", async () => {
+    const automaticItemUid = `AUTO-QUALITY-${suffix}`
+    const automaticJobCard = `AUTO-QUALITY-JC-${suffix}`
+    await pool.query(
+      `
+        INSERT INTO catalog.items (
+          organization_id, uid, uid_kind, lifecycle_status, description,
+          item_type, source_system, source_table, source_id
+        ) VALUES ($1, $2, 'INTERNAL', 'M', $2, 'List', 'test', 'items', $3)
+      `,
+      [organizationId, automaticItemUid, randomUUID()]
+    )
+    await planning.upsertWorkOrder({
+      itemUid: automaticItemUid,
+      jobCardNumber: automaticJobCard,
+      orderedQuantity: 10,
+      organizationId,
+      workOrderNumber: `AUTO-QUALITY-WO-${suffix}`,
+    })
+    await planning.upsertRouteOption({
+      itemUid: automaticItemUid,
+      organizationId,
+      routeCode: "1",
+      setups: [
+        {
+          legacySetupCode: "1",
+          operationCode: "VISUAL",
+          sequence: 1,
+          setupNumber: 1,
+        },
+      ],
+    })
+    await quality.upsertParameterDefinition({
+      dataType: "boolean",
+      inputType: "pass_fail",
+      itemUid: automaticItemUid,
+      name: "Surface condition",
+      operationSetupCode: "1",
+      organizationId,
+      parameterCode: "VISUAL-1",
+      payload: { specification: "OK", tolerancePlus: "OK", toleranceMinus: "Not OK" },
+      routeCode: "1",
+      sequence: 1,
+    })
+
+    await expect(
+      quality.upsertParameterDefinition({
+        dataType: "boolean",
+        inputType: "pass_fail",
+        itemUid: automaticItemUid,
+        name: "Surface condition",
+        operationSetupCode: "1",
+        organizationId,
+        parameterCode: "VISUAL-2",
+        payload: { specification: "OK" },
+        routeCode: "1",
+        sequence: 2,
+      })
+    ).rejects.toThrow("already exists")
+
+    const inspection = await quality.recordFirstPieceInspection({
+      approvedBy: "QC-1",
+      dimensions: [
+        {
+          parameterCode: "VISUAL-1",
+          readings: ["OK", "Not OK", "OK", "OK", "OK"],
+        },
+      ],
+      inspectionKey: `AUTO-FPIR-${suffix}`,
+      inspectedAt: "2026-08-15T09:00:00.000Z",
+      jobCardNumber: automaticJobCard,
+      machineNumber,
+      operationSetupCode: "1",
+      organizationId,
+      payload: { reportId: `AUTO-FPIR-${suffix}` },
+      status: "Approved",
+    })
+    const result = await pool.query<{ result: string }>(
+      "SELECT result FROM quality.first_piece_readings WHERE inspection_id = $1",
+      [inspection.id]
+    )
+    expect(result.rows).toEqual([{ result: "Not OK" }])
+  })
+
   test("preserves the three standalone legacy rejection masters", async () => {
     const rejectionType = await quality.upsertRejectionType({
       code: `TYPE-${suffix}`,

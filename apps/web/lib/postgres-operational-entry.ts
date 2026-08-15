@@ -1,3 +1,5 @@
+import { setupChecklistItemAppliesToPhase } from "./shop-floor-workflow"
+
 type Payload = Record<string, unknown>
 type EntryValue = boolean | number | string | null
 
@@ -134,7 +136,6 @@ function setupTemplateCode(payload: Payload) {
 function setupSessionPlan(payload: Payload) {
   const items = records(payload.items)
   const common = {
-    completedBy: optionalText(payload.endedBy || payload.completedBy),
     jobCardNumber: text(payload.jcNo || payload.jobCard),
     machineNumber: optionalText(payload.machine || payload.machineNo),
     operationSetupCode: text(payload.setupNo),
@@ -148,13 +149,21 @@ function setupSessionPlan(payload: Payload) {
     {
       input: {
         ...common,
+        completedBy: optionalText(
+          payload.startedBy || payload.completedBy
+        ),
         completedAt: optionalText(payload.startedAt),
         phase: "start" as const,
         results: items
-          .filter((item) => Object.hasOwn(item, "startValue"))
+          .filter(
+            (item) =>
+              setupChecklistItemAppliesToPhase(item.section, "start") &&
+              Object.hasOwn(item, "startValue")
+          )
           .map((item) => ({
             itemKey: itemKey(item),
             itemPrompt: optionalText(item.checkPoint || item.prompt),
+            notes: optionalText(item.startItemRemark),
             sequence: numberOrUndefined(item.sequence),
             value: checklistValue(item, "startValue"),
           })),
@@ -163,13 +172,21 @@ function setupSessionPlan(payload: Payload) {
     {
       input: {
         ...common,
+        completedBy: optionalText(
+          payload.endedBy || payload.completedBy
+        ),
         completedAt: optionalText(payload.endedAt || payload.completedAt),
         phase: "end" as const,
         results: items
-          .filter((item) => Object.hasOwn(item, "endValue"))
+          .filter(
+            (item) =>
+              setupChecklistItemAppliesToPhase(item.section, "end") &&
+              Object.hasOwn(item, "endValue")
+          )
           .map((item) => ({
             itemKey: itemKey(item),
             itemPrompt: optionalText(item.checkPoint || item.prompt),
+            notes: optionalText(item.endItemRemark),
             sequence: numberOrUndefined(item.sequence),
             value: checklistValue(item, "endValue"),
           })),

@@ -23,3 +23,23 @@ export function shopFloorNoPendingActionLabel(stage: unknown) {
   if (normalizedStage === "item_complete") return "Item complete";
   return "No pending workflow task";
 }
+
+export function setupChecklistItemAppliesToPhase(
+  section: unknown,
+  phase: "end" | "start"
+) {
+  const normalizedSection = String(section ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+
+  const includesPreSetting = normalizedSection.includes("pre setting")
+  const includesSetting = normalizedSection
+    .replace("pre setting", "")
+    .includes("setting")
+  if (includesPreSetting && includesSetting) return true
+  if (includesPreSetting) return phase === "start"
+  if (includesSetting) return phase === "end"
+  return true
+}

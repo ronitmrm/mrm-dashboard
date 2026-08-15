@@ -1,7 +1,10 @@
 import type { RecruitmentPostRow } from "@workspace/db"
 import { describe, expect, it } from "vitest"
 
-import { sharedEmployeeMasterRows } from "./shared-employee-master"
+import {
+  productionMachinistOptions,
+  sharedEmployeeMasterRows,
+} from "./shared-employee-master"
 
 function post(
   values: Partial<RecruitmentPostRow> & Pick<RecruitmentPostRow, "id" | "status">
@@ -58,5 +61,38 @@ describe("shared Employee Master", () => {
         }),
       ])
     ).toEqual([])
+  })
+
+  it("offers only active machinists from the selected production unit", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({
+        department: "Production Planning & Control Conventional-01",
+        designation: "Assistant Machinist",
+        employeeCode: "MACH-1",
+        employeeName: "Amit",
+        id: "1",
+        status: "Occupied",
+      }),
+      post({
+        department: "Production Planning & Control CNC-01",
+        designation: "Machinist",
+        employeeCode: "MACH-2",
+        employeeName: "Bharat",
+        id: "2",
+        status: "Occupied",
+      }),
+      post({
+        department: "Production Planning & Control Conventional-01",
+        designation: "Operator",
+        employeeCode: "OP-1",
+        employeeName: "Chirag",
+        id: "3",
+        status: "Occupied",
+      }),
+    ])
+
+    expect(productionMachinistOptions(rows, "conventional")).toEqual([
+      { code: "MACH-1", name: "Amit" },
+    ])
   })
 })

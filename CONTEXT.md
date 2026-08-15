@@ -77,7 +77,7 @@ The setup-by-setup decision flow shown before saving a planner priority change. 
 _Avoid_: Single probable date.
 
 **Quality Inspection Parameter Set**:
-The ordered parameters, specifications, instruments, and tolerances assigned to one item, option, and setup and reused by both first-piece inspection and hourly quality checks.
+The ordered parameters, specifications, instruments, and tolerances assigned to one item, option, and setup and reused by both first-piece inspection and hourly quality checks. A parameter name and specification pair may occur only once in a set. Measurement parameters use numeric values; visual and gauge parameters may use OK / Not OK values and matching textual tolerances.
 _Avoid_: Separate FPIR master, hourly QC parameter master.
 
 **Quality Inspection Line**:
@@ -87,6 +87,10 @@ _Avoid_: Free-text quality master target.
 **Coded Checklist**:
 A reusable checklist identified by one generated code and containing one or more ordered steps. Checklist counts refer to unique checklist codes, not step rows.
 _Avoid_: Checklist row count.
+
+**Machinist Setup Checklist**:
+A coded checklist whose points belong to Pre Setting or Setting. Each phase shows and completes only its own points, records a machinist from the relevant Production Floor, and retains a remark per point. Pre Setting Done By and Setting Done By are separate fields and may name the same machinist.
+_Avoid_: Repeating the machinist name inside an opened checklist, completing both phases from either checklist.
 
 **Factory Planning Holiday**:
 A non-working date applied to Conventional, CNC, and Forging production-floor planning.
