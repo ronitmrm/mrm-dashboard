@@ -115,6 +115,7 @@ import {
   productionMachinistOptions,
   productionQualityOptions,
   productionShopFloorOptions,
+  productionWorkerOptions,
 } from "@/lib/shared-employee-master";
 import {
   setupChecklistItemAppliesToPhase,
@@ -4028,6 +4029,10 @@ function useProductionEmployeeDirectory() {
     () => productionShopFloorOptions(rows, floor),
     [floor, rows],
   );
+  const workerOptions = useMemo(
+    () => productionWorkerOptions(rows, floor),
+    [floor, rows],
+  );
 
   return {
     error: employeeMasterPage.error,
@@ -4035,6 +4040,7 @@ function useProductionEmployeeDirectory() {
     machinistOptions,
     qualityOptions,
     shopFloorOptions,
+    workerOptions,
   };
 }
 
@@ -4045,7 +4051,7 @@ function ShopFloorStatusPanel({
   productionControl: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
 }) {
-  const { machinistOptions, qualityOptions, shopFloorOptions } = useProductionEmployeeDirectory();
+  const { machinistOptions, qualityOptions, shopFloorOptions, workerOptions } = useProductionEmployeeDirectory();
   const [machineFilter, setMachineFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
   const [currentFilter, setCurrentFilter] = useState("");
@@ -4226,6 +4232,7 @@ function ShopFloorStatusPanel({
                         setupChecklistMasters={asArray(productionControl.setupChecklistMasterRows)}
                         setupChecklistSessions={asArray(productionControl.setupChecklistSessionRows)}
                         shopFloorOptions={shopFloorOptions}
+                        workerOptions={workerOptions}
                       />
                     </TableCell>
                   </TableRow>
@@ -4262,6 +4269,7 @@ function RoleTaskPanel({
     machinistOptions,
     qualityOptions,
     shopFloorOptions,
+    workerOptions,
   } = useProductionEmployeeDirectory();
   const copy = enableFirstPieceInspection
     ? {
@@ -4458,6 +4466,7 @@ function RoleTaskPanel({
                             machinistOptions={machinistOptions}
                             qualityOptions={qualityOptions}
                             shopFloorOptions={shopFloorOptions}
+                            workerOptions={workerOptions}
                             onSaveSetupChecklistSession={saveSetupChecklistSession}
                             openDataEntry={openDataEntry}
                           />
@@ -4713,6 +4722,7 @@ function ShopFloorRowAction({
   machinistOptions = [],
   qualityOptions = [],
   shopFloorOptions = [],
+  workerOptions = [],
   openDataEntry,
 }: {
   current?: DashboardPayload;
@@ -4726,6 +4736,7 @@ function ShopFloorRowAction({
   machinistOptions?: Array<{ code: string; name: string }>;
   qualityOptions?: Array<{ code: string; name: string }>;
   shopFloorOptions?: Array<{ code: string; name: string }>;
+  workerOptions?: Array<{ code: string; name: string }>;
   openDataEntry?: (entryType: string, defaults?: Record<string, unknown>) => void;
 }) {
   const [doneBy, setDoneBy] = useState("");
@@ -4763,7 +4774,7 @@ function ShopFloorRowAction({
       ? "Quality Employee"
       : "Machinist";
   const hasEligibleDoneBy = doneByOptions.some((employee) => employee.name === doneBy);
-  const hasEligibleWorker = shopFloorOptions.some((employee) => employee.name === worker);
+  const hasEligibleWorker = workerOptions.some((employee) => employee.name === worker);
   const setupChecklistReady = !needsSetupChecklist
     || (Boolean(currentChecklistSession) && setupChecklistValuesComplete(
       setupChecklistItemsForPhase(asArray(currentChecklistSession?.items), checklistPhase),
@@ -4940,8 +4951,8 @@ function ShopFloorRowAction({
             </SearchableSelect>
             {nextStage.id === "operator_started" ? (
               <SearchableSelect className="h-8 rounded-md border bg-background px-2 text-sm" value={worker} onChange={(event) => setWorker(event.target.value)}>
-                <option value="">{shopFloorOptions.length ? "Select Shop Floor Employee" : "No Shop Floor Employees In This Production Unit"}</option>
-                {shopFloorOptions.map((workerOption) => (
+                <option value="">{workerOptions.length ? "Select Worker" : "No Workers In This Production Unit's Shop Floor"}</option>
+                {workerOptions.map((workerOption) => (
                   <option key={workerOption.code} value={workerOption.name}>{workerOption.code} - {workerOption.name}</option>
                 ))}
               </SearchableSelect>

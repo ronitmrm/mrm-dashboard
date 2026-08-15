@@ -205,11 +205,13 @@ export function productionWorkerOptions(
   rows: readonly EmployeeOptionSource[],
   productionFloorCode: ProductionFloorCode
 ) {
-  return employeeOptions(
-    rows,
-    (row) =>
-      /(operator|worker)/i.test(String(row.designation)) &&
-      productionFloorFromDepartment(row.department, row.departmentCode) ===
-        productionFloorCode
+  return employeeOptions(rows, (row) =>
+    /\bworker\b/i.test(String(row.designation)) &&
+    belongsToProductionDepartment(
+      row,
+      productionFloorCode,
+      shopFloorDepartmentCodes,
+      /\bshop\s+floor\b/i
+    )
   )
 }

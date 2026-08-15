@@ -128,18 +128,20 @@ describe("shared Employee Master", () => {
     ).toEqual([{ code: "73", name: "Dharaviya Ketanbhai" }])
   })
 
-  it("offers only active operators and workers from the selected production unit", () => {
+  it("offers only active Workers from the selected unit's Shop Floor department", () => {
     const rows = sharedEmployeeMasterRows([
       post({
-        department: "Production Planning & Control Conventional-01",
-        designation: "Machine Operator",
-        employeeCode: "OP-1",
-        employeeName: "Chirag",
+        department: "Renamed Shop Floor Team",
+        departmentCode: "PPC-CVSF",
+        designation: "Assistant",
+        employeeCode: "EMP-1",
+        employeeName: "Sagar",
         id: "1",
         status: "Occupied",
       }),
       post({
-        department: "Production Planning & Control Conventional-01",
+        department: "Renamed Shop Floor Team",
+        departmentCode: "PPC-CVSF",
         designation: "Production Worker",
         employeeCode: "WORK-1",
         employeeName: "Deepak",
@@ -147,17 +149,19 @@ describe("shared Employee Master", () => {
         status: "Occupied",
       }),
       post({
-        department: "Production Planning & Control CNC-01",
-        designation: "Operator",
-        employeeCode: "OP-2",
+        department: "CNC Shop Floor",
+        departmentCode: "PPC-CNCSF",
+        designation: "Worker",
+        employeeCode: "WORK-2",
         employeeName: "Farhan",
         id: "3",
         status: "Occupied",
       }),
       post({
-        department: "Production Planning & Control Conventional-01",
-        designation: "Machinist",
-        employeeCode: "MACH-1",
+        department: "Machining Team",
+        departmentCode: "PPC-CVM",
+        designation: "Worker",
+        employeeCode: "WORK-3",
         employeeName: "Amit",
         id: "4",
         status: "Occupied",
@@ -165,7 +169,6 @@ describe("shared Employee Master", () => {
     ])
 
     expect(productionWorkerOptions(rows, "conventional")).toEqual([
-      { code: "OP-1", name: "Chirag" },
       { code: "WORK-1", name: "Deepak" },
     ])
   })
