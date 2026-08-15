@@ -92,6 +92,25 @@ export async function saveMasterAction(formData: FormData) {
   )
 }
 
+export async function renameDepartmentMasterAction(formData: FormData) {
+  const referenceMode =
+    value(formData, "reference_mode") === "clear" ? "clear" : "propagate"
+  await mutate(
+    formData,
+    "hr.recruitment.write",
+    (repository, context) =>
+      repository.renameDepartmentMaster({
+        ...context,
+        departmentId: value(formData, "department_id"),
+        name: value(formData, "name"),
+        referenceMode,
+      }),
+    referenceMode === "clear"
+      ? "Department renamed and existing department selections cleared."
+      : "Department renamed everywhere."
+  )
+}
+
 export async function saveTemplateAction(formData: FormData) {
   await mutate(formData, "hr.recruitment.write", (repository, context) =>
     repository.upsertTemplate({

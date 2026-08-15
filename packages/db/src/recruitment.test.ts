@@ -296,6 +296,62 @@ describe("masters", () => {
       )
     ).toBe(false)
   })
+
+  test("can rename a department while clearing its existing references", async () => {
+    const departmentId = "00000000-0000-4000-8000-000000000020"
+    const organizationId = "00000000-0000-4000-8000-000000000010"
+    const actorUserId = "00000000-0000-4000-8000-000000000030"
+    const query = vi.fn(
+      async (...args: [statement: string, parameters?: readonly unknown[]]) => {
+        const [statement] = args
+        if (statement.includes("recruitment.rename_department_master")) {
+          return {
+            rows: [
+              {
+                cleared_candidate_count: 3,
+                cleared_post_count: 2,
+                cleared_template_count: 1,
+                id: departmentId,
+                updated_job_count: 4,
+              },
+            ],
+          }
+        }
+        return { rows: [] }
+      }
+    )
+    const client = { query, release: vi.fn() } as unknown as PoolClient
+    const repository = createRecruitmentRepository({
+      pool: { connect: vi.fn(async () => client) } as unknown as Pool,
+    })
+
+    await expect(
+      repository.renameDepartmentMaster({
+        actorUserId,
+        departmentId,
+        name: "People And Culture",
+        organizationId,
+        referenceMode: "clear",
+      })
+    ).resolves.toEqual({
+      clearedCandidateCount: 3,
+      clearedPostCount: 2,
+      clearedTemplateCount: 1,
+      id: departmentId,
+      updatedJobCount: 4,
+    })
+    expect(
+      query.mock.calls.find(([statement]) =>
+        statement.includes("recruitment.rename_department_master")
+      )?.[1]
+    ).toEqual([
+      organizationId,
+      departmentId,
+      "People And Culture",
+      true,
+      actorUserId,
+    ])
+  })
 })
 
 describe("combined job templates", () => {

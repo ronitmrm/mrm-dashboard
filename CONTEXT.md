@@ -109,6 +109,13 @@ One sanctioned staffing position identified by a post code. It is vacant,
 appointed, occupied, resigned, or inactive and may participate in one combined role.
 _Avoid_: Job post.
 
+**Department Master Rename**:
+An HR master change that keeps the Department's stable identity. Choosing to apply
+the rename everywhere preserves existing links and shows the new name on linked
+records. Choosing not to apply it clears the Department from existing Approved
+Posts, Job Requirement Templates, and Candidates while retaining those records.
+_Avoid_: Silently changing linked records, deleting linked records.
+
 **Approved Post Status**:
 The staffing state of an approved post: vacant has no appointee, appointed has a
 selected person who has not joined, occupied has a person who joined, and resigned
