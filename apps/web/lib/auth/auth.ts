@@ -127,8 +127,12 @@ export function readAuthEnvironment(
       "http://localhost:3001"
   )
   const publicURL = new URL(environment.NEXT_PUBLIC_APP_URL ?? baseURL.origin)
+  const localManagedOrigin =
+    environment.MRM_LOCAL_MANAGED_RUNTIME === "1" &&
+    baseURL.protocol === "http:" &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(baseURL.hostname)
 
-  if (postgres.hosted && baseURL.protocol !== "https:") {
+  if (postgres.hosted && baseURL.protocol !== "https:" && !localManagedOrigin) {
     throw new Error("BETTER_AUTH_URL must use HTTPS in managed runtime mode")
   }
   if (baseURL.origin !== publicURL.origin) {

@@ -77,4 +77,31 @@ describe("Better Auth security configuration", () => {
       }).baseURL
     ).toBe("https://dashboard.example.com")
   })
+
+  it("allows HTTP only for the managed local development origin", () => {
+    const hosted = {
+      BETTER_AUTH_SECRET: secret,
+      MRM_LOCAL_MANAGED_RUNTIME: "1",
+      MRM_MANAGED_RUNTIME: "1",
+      UPSTASH_REDIS_REST_TOKEN: "test-token",
+      UPSTASH_REDIS_REST_URL: "https://example.upstash.io",
+      WEB_DATABASE_URL:
+        "postgresql://mrmpl_staging_web:secret@example.neon.tech/neondb?sslmode=require",
+    }
+
+    expect(
+      readAuthEnvironment({
+        ...hosted,
+        BETTER_AUTH_URL: "http://localhost:3001",
+        NEXT_PUBLIC_APP_URL: "http://localhost:3001",
+      }).baseURL
+    ).toBe("http://localhost:3001")
+    expect(() =>
+      readAuthEnvironment({
+        ...hosted,
+        BETTER_AUTH_URL: "http://dashboard.example.com",
+        NEXT_PUBLIC_APP_URL: "http://dashboard.example.com",
+      })
+    ).toThrow(/HTTPS/)
+  })
 })
