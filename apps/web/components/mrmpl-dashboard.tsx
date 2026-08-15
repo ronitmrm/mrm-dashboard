@@ -196,6 +196,13 @@ function productionFloorFromLocation(): ProductionFloorCode {
   );
 }
 
+function machineMasterQueryFromLocation() {
+  if (typeof window === "undefined") return { machineNo: "" };
+  return {
+    machineNo: str(new URLSearchParams(window.location.search).get("machine")),
+  };
+}
+
 function dashboardReturnHref(defaultTab: DashboardTabId) {
   if (typeof window === "undefined") {
     return dashboardTabHref(defaultTab, defaultProductionFloorCode);
@@ -1320,7 +1327,7 @@ function DashboardShell({
     tab: DashboardTabId,
     productionFloorCode: ProductionFloorCode,
   ) {
-    if (tab === "machineMasterTab" || tab === "correctionsTab" || tab === "productionDashboardTab") {
+    if (tab === "machineMasterTab" || tab === "maintenanceTab" || tab === "correctionsTab" || tab === "productionDashboardTab") {
       setActiveTab(tab);
       window.history.replaceState({}, "", dashboardTabHref(tab));
       return;
@@ -1383,7 +1390,7 @@ function DashboardShell({
   const selectedProductionFloor = productionFloors.find(
     (floor) => floor.code === activeProductionFloor,
   ) ?? productionFloors[0];
-  const isAllProductionUnitsTab = activeTab === "machineMasterTab" || activeTab === "productionDashboardTab";
+  const isAllProductionUnitsTab = activeTab === "machineMasterTab" || activeTab === "maintenanceTab" || activeTab === "productionDashboardTab";
   const isSnapshotRefreshActive = isRefreshingSnapshot || dashboardRefreshStatus?.isRefreshing === true || isPlanningRefreshLockActive;
   const dashboardStatusLabel = dashboardConnectionLabel(dashboardDeliveryState);
   const dashboardStatusNotice = dashboardDeliveryNotice(dashboardDeliveryState);
@@ -1755,7 +1762,7 @@ function DashboardContent({
   }
 
   if (activeTab === "maintenanceTab") {
-    return <MaintenancePanel productionControl={productionControl} submitAction={submitAction} />;
+    return <UniversalMaintenanceWorkspace payload={payload} submitAction={submitAction} />;
   }
 
   if (activeTab === "planningControlTab") {
@@ -1795,6 +1802,35 @@ function DashboardContent({
   }
 
   return <ProductionControlPanel productionControl={productionControl} submitAction={submitAction} />;
+}
+
+function UniversalMaintenanceWorkspace({
+  payload,
+  submitAction,
+}: {
+  payload: DashboardPayload;
+  submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
+}) {
+  const [reloadKey, setReloadKey] = useState(0);
+  const conventional = usePostgresOperationalPage("/api/dashboard?floor=conventional", 0, undefined, 0, reloadKey);
+  const conventional02 = usePostgresOperationalPage("/api/dashboard?floor=conventional-02", 0, undefined, 0, reloadKey);
+  const cnc = usePostgresOperationalPage("/api/dashboard?floor=cnc", 0, undefined, 0, reloadKey);
+  const forging = usePostgresOperationalPage("/api/dashboard?floor=forging", 0, undefined, 0, reloadKey);
+  const floorPages = useMemo(
+    () => [conventional.data, conventional02.data, cnc.data, forging.data].filter((page): page is DashboardPayload => Boolean(page)),
+    [cnc.data, conventional.data, conventional02.data, forging.data],
+  );
+  const productionControl = useMemo(
+    () => combinedMachineMasterProductionControl(floorPages.length ? floorPages : [payload]),
+    [floorPages, payload],
+  );
+
+  async function saveAndReload(path: string, body: Record<string, unknown>) {
+    await submitAction(path, body);
+    setReloadKey((current) => current + 1);
+  }
+
+  return <MaintenancePanel productionControl={productionControl} submitAction={saveAndReload} />;
 }
 
 function ProductionDashboardPanel({
@@ -6516,6 +6552,7 @@ const centralMachineMasterRowKeys = [
   "maintenanceTaskRows",
   "maintenanceMasterRows",
   "maintenanceChecklistMasterRows",
+  "productionRunRows",
 ] as const;
 
 function combinedMachineMasterProductionControl(pages: DashboardPayload[]) {
@@ -6588,6 +6625,7 @@ function MachineMasterPanel({
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
 }) {
+  const isClientHydrated = useSyncExternalStore(subscribeToHydration, clientHydrationSnapshot, serverHydrationSnapshot);
   const machineRows = useMemo(() => maintenanceMachineRows(asArray(productionControl.machinePlanningRows)), [productionControl.machinePlanningRows]);
   const scheduleRows = useMemo(() => asArray(productionControl.maintenanceScheduleRows), [productionControl.maintenanceScheduleRows]);
   const completionRows = asArray(productionControl.maintenanceTaskRows);
@@ -6596,7 +6634,7 @@ function MachineMasterPanel({
   const activeChecklistRows = useMemo(() => activeMaintenanceChecklistRows(checklistRows), [checklistRows]);
   const checklistOptions = useMemo(() => maintenanceChecklistOptions(activeChecklistRows), [activeChecklistRows]);
   const [selectedMaintenanceCode, setSelectedMaintenanceCode] = useState("");
-  const [selectedMachineNo] = useState(() => typeof window === "undefined" ? "" : str(new URLSearchParams(window.location.search).get("machine")));
+  const { machineNo: selectedMachineNo } = isClientHydrated ? machineMasterQueryFromLocation() : { machineNo: "" };
   const [selectedChecklistCode, setSelectedChecklistCode] = useState("");
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyTypeFilter, setHistoryTypeFilter] = useState("");
@@ -6613,7 +6651,7 @@ function MachineMasterPanel({
 
   const selectedMaintenance = maintenanceMasterRows.find((row) => machineKey(row.maintenanceCode) === machineKey(selectedMaintenanceCode));
   const selectedMachine = machineRows.find((row) => machineKey(row.machineNo) === machineKey(selectedMachineNo));
-  const machineSchedules = useMemo(() => selectedMachineNo ? maintenanceSchedulesForMachine(scheduleRows, selectedMachineNo) : [], [scheduleRows, selectedMachineNo]);
+  const machineSchedules = selectedMachineNo ? maintenanceSchedulesForMachine(scheduleRows, selectedMachineNo) : [];
   const scheduleCodeOptions = useMemo(() => uniqueValues(machineSchedules.map((row) => displayValue(row.maintenanceCode)).filter((value) => value !== "-")), [machineSchedules]);
   const scheduleTitleOptions = useMemo(() => uniqueValues(machineSchedules.map((row) => displayValue(row.maintenanceTitle)).filter((value) => value !== "-")), [machineSchedules]);
   const scheduleChecklistOptions = useMemo(() => uniqueValues(machineSchedules.map((row) => displayValue(row.checklistCode)).filter((value) => value !== "-")), [machineSchedules]);

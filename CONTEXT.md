@@ -92,6 +92,10 @@ _Avoid_: Checklist row count.
 A coded checklist whose points belong to Pre Setting or Setting. Each phase shows and completes only its own points, records a machinist from the relevant Production Floor, and retains a remark per point. Pre Setting Done By and Setting Done By are separate fields and may name the same machinist.
 _Avoid_: Repeating the machinist name inside an opened checklist, completing both phases from either checklist.
 
+**Mechanical Maintenance Workspace**:
+The company-wide operational workspace for planned and breakdown maintenance across every Production Floor. Schedules and maintenance history belong to a physical machine; its Production Unit assignment does not create a separate maintenance workspace.
+_Avoid_: Production-floor maintenance tab, separate maintenance workspace per Production Unit.
+
 **Factory Planning Holiday**:
 A non-working date applied to Conventional, CNC, and Forging production-floor planning.
 _Avoid_: Re-entering the same factory holiday separately for each floor.

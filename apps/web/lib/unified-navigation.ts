@@ -177,7 +177,7 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     icon: Settings2,
     id: "maintenanceTab",
     subtitle: "Machine Pm Schedule",
-    title: "Maintenance",
+    title: "Mechanical Maintenance",
   },
   {
     href: dashboardTabHref("correctionsTab"),
@@ -254,6 +254,7 @@ export const machineMasterNavigation = dashboardNavigation.find(
 
 const universalProductionNavigationIds = new Set<DashboardTabId>([
   "productionDashboardTab",
+  "maintenanceTab",
   "correctionsTab",
   "dataEntryTab",
   "masterTablesTab",
