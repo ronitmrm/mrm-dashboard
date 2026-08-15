@@ -76,3 +76,29 @@ export function productionMachinistOptions(
       left.name.localeCompare(right.name, "en-IN", { numeric: true })
     )
 }
+
+export function productionWorkerOptions(
+  rows: readonly {
+    department?: unknown
+    designation?: unknown
+    empId?: unknown
+    employeeName?: unknown
+    status?: unknown
+  }[],
+  productionFloorCode: ProductionFloorCode
+) {
+  return rows
+    .filter(
+      (row) =>
+        String(row.status).trim() === "Active" &&
+        /(operator|worker)/i.test(String(row.designation)) &&
+        parseProductionFloorCode(row.department) === productionFloorCode
+    )
+    .map((row) => ({
+      code: String(row.empId).trim(),
+      name: String(row.employeeName).trim(),
+    }))
+    .sort((left, right) =>
+      left.name.localeCompare(right.name, "en-IN", { numeric: true })
+    )
+}
