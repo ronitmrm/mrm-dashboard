@@ -12,6 +12,38 @@ export function recruitmentAdvisoryLockKey(parts: Iterable<string>) {
   return [...parts].map((part) => part.trim().toLowerCase()).join(":")
 }
 
+export function recruitmentMasterCodeFromName(name: string) {
+  const words = name
+    .normalize("NFKD")
+    .toUpperCase()
+    .match(/[A-Z0-9]+/g)
+    ?.filter((word) => word !== "AND")
+
+  if (!words?.length) return ""
+  if (words.length === 1) return words[0]!.slice(0, 2)
+  return words.map((word) => word[0]).join("")
+}
+
+export function nextRecruitmentMasterCode(
+  name: string,
+  existingCodes: Iterable<string>
+) {
+  const baseCode = recruitmentMasterCodeFromName(name)
+  const normalizedCodes = new Set(
+    [...existingCodes].map((code) => code.trim().toUpperCase())
+  )
+  if (!normalizedCodes.has(baseCode)) return baseCode
+
+  let highestSuffix = 1
+  const suffixPattern = new RegExp(`^${baseCode}-(\\d+)$`)
+  for (const code of normalizedCodes) {
+    const match = suffixPattern.exec(code)
+    if (!match?.[1]) continue
+    highestSuffix = Math.max(highestSuffix, Number(match[1]))
+  }
+  return `${baseCode}-${highestSuffix + 1}`
+}
+
 export function nextRecruitmentCombinedRoleIdentity(
   vacancyCodes: Iterable<string>
 ) {

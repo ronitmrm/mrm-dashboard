@@ -120,6 +120,10 @@ records. Choosing not to apply it clears the Department from existing Approved
 Posts, Job Requirement Templates, and Candidates while retaining those records.
 _Avoid_: Silently changing linked records, deleting linked records.
 
+**Recruitment Master Code**:
+The stable code automatically assigned when a Department or Designation is created. Multi-word names use initials while ignoring "and" / `&`; single-word names use their first two letters. A numeric suffix is added when another master already uses the abbreviation. Existing codes do not change when names are edited.
+_Avoid_: User-entered master code, unrelated sequential code.
+
 **Approved Post Status**:
 The staffing state of an approved post: vacant has no appointee, appointed has a
 selected person who has not joined, occupied has a person who joined, and resigned
