@@ -93,7 +93,7 @@ A coded checklist whose points belong to Pre Setting or Setting. Each phase show
 _Avoid_: Repeating the machinist name inside an opened checklist, completing both phases from either checklist.
 
 **Production Task Assignee**:
-An active Employee Master employee selected from the task role's department in the current Production Floor: Machinist, Inprocess Quality, or Shop Floor. Matching follows the stable Department Master code, with legacy department-name fallback; HOD, Manager, and Management designations are not operational assignees.
+An active Employee Master employee selected from the task role's department in the current Production Floor: Machinist, Inprocess Quality, or Shop Floor. Matching follows the stable Department Master code, with legacy department-name fallback; HOD, Manager, and Management designations are not operational assignees. The Start Machine Worker is narrower: the employee must have a Worker designation and belong to that Production Floor's Shop Floor department.
 _Avoid_: Free-text person names, employees from another Production Floor, leadership-only posts.
 
 **Mechanical Maintenance Workspace**:
