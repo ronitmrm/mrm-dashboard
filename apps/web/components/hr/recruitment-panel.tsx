@@ -64,6 +64,7 @@ import { JobTemplatesTable } from "@/components/hr/job-templates-table"
 import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
+import { candidateSourceOptions } from "@/lib/recruitment-candidate-sources"
 
 type RecruitmentPanelProps = {
   canManageEmployees: boolean
@@ -538,7 +539,21 @@ function LogCandidatePanel({
           <TextField label="Email" name="email" type="email" />
           <TextField label="Current Company" name="current_company" />
           <TextField label="Experience" name="experience" />
-          <TextField label="Source" name="source" />
+          <Field>
+            <FieldLabel htmlFor="candidate-source">Source</FieldLabel>
+            <NativeSelect
+              className="w-full"
+              id="candidate-source"
+              name="source"
+            >
+              <NativeSelectOption value="">Not Selected</NativeSelectOption>
+              {candidateSourceOptions.map((source) => (
+                <NativeSelectOption key={source} value={source}>
+                  {source}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
           <Field>
             <FieldLabel htmlFor="candidate-department">
               Preferred Department
