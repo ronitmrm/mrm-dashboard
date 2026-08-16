@@ -18,6 +18,7 @@ import {
   productionShiftAt,
   type ProductionMeasurementMethod,
 } from "./production-session-domain"
+import { buildJobCardAnalytics } from "./job-card-workspace"
 
 
 type RawMaterialReceiptInput = {
@@ -419,6 +420,20 @@ async function employeeIdFor(
     [organizationId, employeeCode.trim()]
   )
   return result.rows[0]?.id ?? null
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function objectRows(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((row): row is Record<string, unknown> =>
+        Boolean(row) && typeof row === "object" && !Array.isArray(row)
+      )
+    : []
 }
 
 async function requiredActiveEmployeeIdFor(
@@ -1540,6 +1555,346 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           totalPieces: output.totalPieces,
         }
       })
+    },
+
+    async readJobCardWorkspace(input: {
+      jobCardNumber: string
+      organizationId: string
+      productionFloorCode?: string
+    }) {
+      const jobCardNumber = requiredText(input.jobCardNumber, "Job card")
+      const floorCode = normalizeProductionFloorCode(input.productionFloorCode)
+      const workOrderResult = await pool.query<Record<string, unknown>>(
+        `
+          SELECT work_order.id, work_order.job_card_number AS "jobCardNumber",
+            work_order.work_order_number AS "workOrderNumber",
+            work_order.ordered_quantity AS "orderedQuantity",
+            work_order.completed_quantity AS "completedQuantity",
+            work_order.order_date AS "orderDate", work_order.due_date AS "dueDate",
+            work_order.status, work_order.source_payload AS "workOrderSource",
+            item.id AS "itemId", item.uid AS "partCode",
+            item.description, item.production_type AS "productionType",
+            item.weight_100_pcs AS "weight100Pieces",
+            item.pieces_per_kg AS "piecesPerKg",
+            material.name AS "materialGrade", rod.name AS "rodType",
+            item.rod_size AS "rodSize", item.source_payload AS "itemSource",
+            selection.route_option_id AS "selectedRouteOptionId",
+            selection.selected_at AS "routeSelectedAt",
+            selection.reason AS "routeSelectionReason"
+          FROM manufacturing.work_orders work_order
+          JOIN catalog.items item ON item.id = work_order.item_id
+          LEFT JOIN catalog.material_grades material ON material.id = item.material_grade_id
+          LEFT JOIN catalog.rod_types rod ON rod.id = item.rod_type_id
+          LEFT JOIN LATERAL (
+            SELECT route_option_id, selected_at, reason
+            FROM manufacturing.route_selections
+            WHERE work_order_id = work_order.id AND reversed_at IS NULL
+            ORDER BY selected_at DESC LIMIT 1
+          ) selection ON true
+          WHERE work_order.organization_id = $1
+            AND lower(work_order.job_card_number) = lower($2)
+          LIMIT 1
+        `,
+        [input.organizationId, jobCardNumber]
+      )
+      const jobCard = workOrderResult.rows[0]
+      if (!jobCard) throw new Error("Job card was not found.")
+
+      const routesResult = await pool.query<Record<string, unknown>>(
+        `
+          SELECT route.id, route.route_code AS "routeCode", route.name,
+            route.revision, route.active, floor.code AS "productionFloorCode",
+            route.source_payload AS "sourcePayload"
+          FROM manufacturing.route_options route
+          JOIN manufacturing.production_floors floor
+            ON floor.id = route.production_floor_id
+          WHERE route.organization_id = $1 AND route.item_id = $2
+            AND floor.code = $3
+          ORDER BY route.active DESC, route.revision DESC, route.route_code
+        `,
+        [input.organizationId, jobCard.itemId, floorCode]
+      )
+      const activeRoutes = routesResult.rows.filter((route) => route.active === true)
+      const explicitRouteId = String(jobCard.selectedRouteOptionId ?? "")
+      const selectedRoute = routesResult.rows.find((route) => route.id === explicitRouteId)
+        ?? (activeRoutes.length === 1 ? activeRoutes[0] : undefined)
+
+      const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, receiptsResult, snapshotResult] = await Promise.all([
+        pool.query<Record<string, unknown>>(
+          `
+            SELECT setup.id, setup.setup_number::text AS "setupNumber",
+              setup.sequence, setup.operation_code AS "operationCode",
+              setup.operation_name AS "operationName", setup.active,
+              machine_type.name AS "machineType",
+              setup.source_payload AS "sourcePayload",
+              cycle.cycle_time_seconds AS "cycleTimeSeconds",
+              cycle.pieces_per_cycle AS "piecesPerCycle",
+              cycle.setup_time_minutes AS "setupTimeMinutes",
+              cycle.source_payload AS "cycleSource",
+              COALESCE(tooling.rows, '[]'::jsonb) AS tooling,
+              COALESCE(parameters.rows, '[]'::jsonb) AS "qualityParameters"
+            FROM manufacturing.operation_setups setup
+            LEFT JOIN catalog.machine_types machine_type
+              ON machine_type.id = setup.machine_type_id
+            LEFT JOIN LATERAL (
+              SELECT standard.cycle_time_seconds, standard.pieces_per_cycle,
+                standard.setup_time_minutes, standard.source_payload
+              FROM manufacturing.operation_cycle_standards standard
+              WHERE standard.operation_setup_id = setup.id
+              ORDER BY standard.effective_from DESC NULLS LAST,
+                standard.updated_at DESC LIMIT 1
+            ) cycle ON true
+            LEFT JOIN LATERAL (
+              SELECT jsonb_agg(jsonb_build_object(
+                'toolCode', tool.tool_code, 'description', tool.description,
+                'quantity', tool.quantity, 'sourcePayload', tool.source_payload
+              ) ORDER BY tool.tool_code) AS rows
+              FROM manufacturing.operation_tooling tool
+              WHERE tool.operation_setup_id = setup.id AND tool.active
+            ) tooling ON true
+            LEFT JOIN LATERAL (
+              SELECT jsonb_agg(jsonb_build_object(
+                'parameterCode', parameter.parameter_code,
+                'name', parameter.name, 'dataType', parameter.data_type,
+                'unit', parameter.unit, 'lowerLimit', parameter.lower_limit,
+                'upperLimit', parameter.upper_limit,
+                'nominalValue', parameter.nominal_value,
+                'sourcePayload', parameter.source_payload
+              ) ORDER BY parameter.sequence, parameter.parameter_code) AS rows
+              FROM quality.parameter_definitions parameter
+              WHERE parameter.operation_setup_id = setup.id AND parameter.active
+            ) parameters ON true
+            WHERE setup.route_option_id = $1::uuid
+            ORDER BY setup.sequence, setup.setup_number
+          `,
+          [selectedRoute?.id ?? null]
+        ),
+        pool.query<Record<string, unknown>>(
+          `SELECT * FROM reporting.production_session_summary
+           WHERE organization_id = $1 AND production_floor_code = $2
+             AND lower(job_card_number) = lower($3)
+           ORDER BY started_at DESC`,
+          [input.organizationId, floorCode, jobCardNumber]
+        ),
+        pool.query<Record<string, unknown>>(
+          `SELECT entry.id, entry.production_date AS "productionDate",
+              entry.shift, entry.quantity_good AS "goodPieces",
+              entry.quantity_rejected AS "rejectedPieces",
+              entry.started_at AS "startedAt", entry.completed_at AS "endedAt",
+              entry.recorded_at AS "recordedAt",
+              machine.machine_number AS "machineNumber",
+              setup.setup_number::text AS "setupNumber",
+              employee.employee_code AS "operatorCode",
+              employee.name AS "operatorName", actor.name AS "enteredByName",
+              route.route_code AS "optionNumber"
+           FROM manufacturing.production_entries entry
+           LEFT JOIN manufacturing.production_sessions session
+             ON session.production_entry_id = entry.id AND session.reversed_at IS NULL
+           LEFT JOIN manufacturing.route_options route ON route.id = entry.route_option_id
+           LEFT JOIN manufacturing.production_floors route_floor
+             ON route_floor.id = route.production_floor_id
+           LEFT JOIN manufacturing.operation_setups setup
+             ON setup.id = entry.operation_setup_id
+           LEFT JOIN catalog.machines machine ON machine.id = entry.machine_id
+           LEFT JOIN manufacturing.production_floors machine_floor
+             ON machine_floor.id = machine.production_floor_id
+           LEFT JOIN workforce.employees employee ON employee.id = entry.operator_employee_id
+           LEFT JOIN identity.users actor ON actor.id = entry.recorded_by_user_id
+           WHERE entry.organization_id = $1 AND entry.work_order_id = $2
+             AND entry.reversed_at IS NULL AND session.id IS NULL
+             AND (route_floor.code = $3 OR machine_floor.code = $3)
+           ORDER BY entry.production_date DESC, entry.recorded_at DESC`,
+          [input.organizationId, jobCard.id, floorCode]
+        ),
+        pool.query<Record<string, unknown>>(
+          `SELECT production_session_id AS "sessionId",
+              session_reference AS "sessionReference", event_type AS "eventType",
+              event_time AS "eventTime", started_at AS "startedAt",
+              ended_at AS "endedAt",
+              COALESCE(duration_minutes, CASE WHEN event_type = 'downtime_started'
+                THEN GREATEST(floor(extract(epoch FROM (now() - started_at)) / 60), 0)::integer
+                ELSE NULL END) AS "durationMinutes",
+              reason_code AS "reasonCode", reason_name AS "reasonName",
+              quantity, entered_by_name AS "enteredByName",
+              entered_role AS "enteredRole", setup_number AS "setupNumber",
+              machine_number AS "machineNumber", operator_code AS "operatorCode"
+           FROM reporting.production_event_log
+           WHERE organization_id = $1 AND production_floor_code = $2
+             AND lower(job_card_number) = lower($3)
+           ORDER BY event_time DESC`,
+          [input.organizationId, floorCode, jobCardNumber]
+        ),
+        pool.query<Record<string, unknown>>(
+          `
+            SELECT event_type AS "eventType", event_time AS "eventTime",
+              "setupNumber", "machineNumber", "enteredByName", detail
+            FROM (
+              SELECT 'shop_floor_stage'::text AS event_type,
+                event.occurred_at AS event_time,
+                setup.setup_number::text AS "setupNumber",
+                machine.machine_number AS "machineNumber",
+                actor.name AS "enteredByName",
+                concat_ws(' · ', event.from_stage, event.to_stage, event.reason) AS detail
+              FROM manufacturing.shop_floor_stage_events event
+              JOIN manufacturing.shop_floor_setup_state state
+                ON state.id = event.setup_state_id
+              JOIN manufacturing.operation_setups setup
+                ON setup.id = state.operation_setup_id
+              LEFT JOIN catalog.machines machine ON machine.id = event.machine_id
+              LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
+              WHERE state.work_order_id = $1 AND event.reversed_at IS NULL
+              UNION ALL
+              SELECT 'setup_completed', event.completed_at,
+                setup.setup_number::text, machine.machine_number,
+                actor.name, COALESCE(event.notes, 'Setup completed')
+              FROM manufacturing.setup_completion_events event
+              JOIN manufacturing.operation_setups setup ON setup.id = event.operation_setup_id
+              LEFT JOIN catalog.machines machine ON machine.id = event.machine_id
+              LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
+              WHERE event.work_order_id = $1 AND event.reversed_at IS NULL
+              UNION ALL
+              SELECT 'dispatch_' || event.decision, event.occurred_at,
+                NULL::text, NULL::text, actor.name,
+                COALESCE(event.reason, 'Dispatch decision')
+              FROM manufacturing.dispatch_approval_events event
+              LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
+              WHERE event.work_order_id = $1 AND event.reversed_at IS NULL
+              UNION ALL
+              SELECT 'production_card_' || event.event_type, event.event_at,
+                setup.setup_number::text, machine.machine_number,
+                actor.name,
+                COALESCE(
+                  event.details->>'remarks', event.details->>'remark',
+                  event.details->>'reason', event.event_type
+                )
+              FROM manufacturing.production_card_events event
+              JOIN manufacturing.production_cards card
+                ON card.id = event.production_card_id
+              LEFT JOIN manufacturing.operation_setups setup
+                ON setup.id = event.operation_setup_id
+              LEFT JOIN catalog.machines machine ON machine.id = event.machine_id
+              LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
+              WHERE card.work_order_id = $1 AND event.reversed_at IS NULL
+            ) workflow
+            ORDER BY event_time DESC
+          `,
+          [jobCard.id]
+        ),
+        pool.query<Record<string, unknown>>(
+          `SELECT receipt_number AS "receiptNumber", received_on AS "receivedOn",
+              quantity_kg AS "quantityKg", remaining_quantity_kg AS "remainingQuantityKg",
+              heat_number AS "heatNumber", supplier_name AS "supplierName",
+              source_payload AS "sourcePayload"
+           FROM manufacturing.raw_material_receipts
+           WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
+           ORDER BY received_on, created_at`,
+          [input.organizationId, jobCardNumber]
+        ),
+        pool.query<{ payload: Record<string, unknown> }>(
+          `SELECT payload FROM derived.dashboard_read_models
+           WHERE organization_id = $1 ORDER BY version DESC LIMIT 1`,
+          [input.organizationId]
+        ),
+      ])
+
+      const snapshot = objectRecord(snapshotResult.rows[0]?.payload)
+      const floorSnapshots = objectRecord(snapshot.productionFloorSnapshots)
+      const floorPayload = objectRecord(
+        floorSnapshots[floorCode] ?? (floorCode === "conventional" ? snapshot : {})
+      )
+      const productionControl = objectRecord(floorPayload.productionControl)
+      const matchesJobCard = (row: Record<string, unknown>) =>
+        payloadText(row, "jcNo", "jobCardNumber", "JobCardNo", "jobCard").toLowerCase()
+          === jobCardNumber.toLowerCase()
+      const planRows = objectRows(productionControl.machinePlanDetailRows)
+        .filter(matchesJobCard)
+      const dashboardSummary = objectRows(productionControl.productionDashboardRows)
+        .find(matchesJobCard) ?? null
+      const sessionRows = sessionsResult.rows.map((row) => ({
+        ...row,
+        downtimeMinutes: Number(row.downtime_minutes ?? 0),
+        endedAt: row.ended_at ? String(row.ended_at) : null,
+        goodPieces: Number(row.quantity_good ?? 0),
+        rejectedPieces: Number(row.quantity_rejected ?? 0),
+        runtimeMinutes: Number(row.runtime_minutes ?? 0),
+        setupNumber: String(row.setup_number ?? ""),
+        startedAt: row.started_at ? String(row.started_at) : null,
+        totalPieces: Number(row.total_pieces ?? 0),
+      }))
+      const legacySessionRows = legacyEntriesResult.rows.map((row) => ({
+        downtimeMinutes: 0,
+        endedAt: row.endedAt || row.recordedAt
+          ? String(row.endedAt ?? row.recordedAt)
+          : null,
+        goodPieces: Number(row.goodPieces ?? 0),
+        rejectedPieces: Number(row.rejectedPieces ?? 0),
+        runtimeMinutes: 0,
+        setupNumber: String(row.setupNumber ?? ""),
+        startedAt: row.startedAt || row.productionDate || row.recordedAt
+          ? String(row.startedAt ?? row.productionDate ?? row.recordedAt)
+          : null,
+        totalPieces: Number(row.goodPieces ?? 0) + Number(row.rejectedPieces ?? 0),
+      }))
+      const standardizedPlans = planRows.map((row) => ({
+        plannedProductionEndDate: payloadText(row, "plannedProductionEndDate", "productionEndDate"),
+        plannedProductionStartDate: payloadText(row, "plannedProductionStartDate", "productionStartDate"),
+        setupNumber: payloadText(row, "setupNo", "setupNumber"),
+      }))
+      const analyticsSummary = buildJobCardAnalytics({
+        downtimeEvents: eventsResult.rows
+          .filter((row) => ["downtime", "downtime_started"].includes(String(row.eventType)))
+          .map((row) => ({
+            durationMinutes: Number(row.durationMinutes ?? 0),
+            reasonCode: String(row.reasonCode ?? ""),
+            reasonName: String(row.reasonName ?? ""),
+            setupNumber: String(row.setupNumber ?? ""),
+          })),
+        orderedQuantity: Number(jobCard.orderedQuantity ?? 0),
+        planRows: standardizedPlans,
+        sessions: [...sessionRows, ...legacySessionRows],
+      })
+      const analytics = {
+        ...analyticsSummary,
+        legacyEntryCount: legacyEntriesResult.rows.length,
+        sessionCount: sessionsResult.rows.length,
+      }
+      const legacyEntryEvents = legacyEntriesResult.rows.map((row) => ({
+        detail: `Production entry · ${Number(row.rejectedPieces ?? 0)} rejected`,
+        enteredByName: row.enteredByName,
+        eventTime: row.endedAt ?? row.recordedAt,
+        eventType: "production_entry",
+        machineNumber: row.machineNumber,
+        operatorCode: row.operatorCode,
+        quantity: Number(row.goodPieces ?? 0) + Number(row.rejectedPieces ?? 0),
+        setupNumber: row.setupNumber,
+      }))
+      const eventLog = [...eventsResult.rows, ...legacyEntryEvents, ...workflowResult.rows].sort((left, right) =>
+        String(right.eventTime ?? "").localeCompare(String(left.eventTime ?? ""))
+      )
+
+      return {
+        analytics,
+        dashboardSummary,
+        events: eventLog,
+        jobCard: {
+          ...jobCard,
+          effectiveRouteSource: explicitRouteId && selectedRoute?.id === explicitRouteId
+            ? "planner_selected"
+            : selectedRoute
+              ? "single_active_route"
+              : "planner_required",
+        },
+        legacyProductionEntries: legacyEntriesResult.rows,
+        planRows,
+        productionFloorCode: floorCode,
+        rawMaterialReceipts: receiptsResult.rows,
+        routes: routesResult.rows.map((route) => ({
+          ...route,
+          selected: route.id === selectedRoute?.id,
+        })),
+        sessions: sessionsResult.rows,
+        setups: setupsResult.rows,
+      }
     },
 
     async readProductionSessions(input: {

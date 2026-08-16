@@ -88,6 +88,14 @@ _Avoid_: FG PO, Job Card.
 A unique identifier assigned to exactly one Work Order Line. A Job Card cannot identify two lines, even when their FG PO Number or Part Code matches another line.
 _Avoid_: Work Order Line, FG PO Number.
 
+**Job Card Workspace**:
+The permanent traceability view for one Job Card. It combines the Work Order, selected Product/Route/Setup masters, planning dates, Production Sessions, downtime, rejection, setup progress, dispatch events, and Job Card Analytics without copying their canonical records.
+_Avoid_: Job Card tile, filtered Job Cards list, duplicate history store.
+
+**Job Card Analytics**:
+The calculated comparison of ordered quantity and planned dates against actual good/total output, rejection, runtime, and downtime patterns for one Job Card. It is derived from current planning and canonical event records.
+_Avoid_: OEE, manually entered summary, machine-wide analytics.
+
 **Operational Replanning**:
 An automatic planning recalculation after live planning inputs change, such as priority, RM inward, shop-floor progress, setup completion, or production quantity. Master and structural changes remain manually recalculated.
 _Avoid_: Manual operational refresh.

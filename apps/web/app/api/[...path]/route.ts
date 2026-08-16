@@ -679,6 +679,20 @@ async function get(request: NextRequest, context: RouteContext) {
       return json(await readPostgresEmployeeMaster(request))
     }
 
+    if (path.startsWith("job-cards/")) {
+      return json(
+        await withProductionRepository(
+          request,
+          "operations.dashboard.read",
+          ({ organizationId, repository }) => repository.readJobCardWorkspace({
+            jobCardNumber: path.slice("job-cards/".length),
+            organizationId,
+            productionFloorCode: search.get("floor") || undefined,
+          })
+        )
+      )
+    }
+
     if (path === "production-sessions") {
       return json(
         await withProductionRepository(
@@ -1710,6 +1724,7 @@ const knownDashboardApiPaths = new Set([
   "data-template",
   "dispatch-approval",
   "hourly-quality",
+  "job-cards",
   "machine-constraint",
   "mark-complete",
   "plan-override",
@@ -1725,8 +1740,9 @@ const knownDashboardApiPaths = new Set([
 ])
 
 function dashboardApiOperation(method: "get" | "post", path: string) {
-  const operation = knownDashboardApiPaths.has(path)
-    ? path.replaceAll(/[-/]/g, "_")
+  const canonicalPath = path.startsWith("job-cards/") ? "job-cards" : path
+  const operation = knownDashboardApiPaths.has(canonicalPath)
+    ? canonicalPath.replaceAll(/[-/]/g, "_")
     : "not_found"
   return `dashboard.api.${method}.${operation}`
 }

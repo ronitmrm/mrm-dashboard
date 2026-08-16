@@ -11,6 +11,7 @@ import {
   dashboardNavigationDestination,
   dashboardTabHref,
   hrNavigation,
+  jobCardWorkspaceHref,
   machineMasterNavigation,
   navigationHrefMatches,
   planningHolidayNavigation,
@@ -170,6 +171,12 @@ describe("unified navigation", () => {
       href: "/dashboard/production-sessions?floor=cnc",
       interaction: "route",
     })
+  })
+
+  it("creates a standalone Job Card workspace link", () => {
+    expect(jobCardWorkspaceHref("JC 100/2", "cnc")).toBe(
+      "/dashboard/job-cards/JC%20100%2F2?floor=cnc"
+    )
   })
 
   it("matches the selected HR panel instead of every HR link", () => {
