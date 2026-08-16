@@ -14,6 +14,13 @@ import {
   type TableColumnFilters,
   type TableFilterColumn,
 } from "@workspace/ui/lib/table-filter-state"
+import {
+  isTableSecondaryPlaceholder,
+  resolveTableFilterText,
+  tableFilterIgnoredSelector,
+  tableFilterSecondarySelector,
+  tableSecondaryTextSelector,
+} from "@workspace/ui/lib/table-filter-display"
 
 type TableProps = React.ComponentProps<"table"> & {
   excelFilters?: boolean
@@ -26,7 +33,34 @@ function headerLabel(cell: HTMLTableCellElement) {
 }
 
 function cellFilterValue(cell: HTMLTableCellElement | null) {
-  return cell?.dataset.filterValue ?? cell?.textContent
+  if (!cell) return undefined
+  if (cell.dataset.filterValue !== undefined) return cell.dataset.filterValue
+
+  const fallbackClone = cell.cloneNode(true) as HTMLTableCellElement
+  fallbackClone
+    .querySelectorAll(tableFilterIgnoredSelector)
+    .forEach((element) => element.remove())
+  const primaryClone = fallbackClone.cloneNode(true) as HTMLTableCellElement
+  primaryClone
+    .querySelectorAll(tableFilterSecondarySelector)
+    .forEach((element) => element.remove())
+  return resolveTableFilterText(
+    tableFilterTextParts(primaryClone),
+    tableFilterTextParts(fallbackClone)
+  )
+}
+
+function tableFilterTextParts(node: Node): string[] {
+  if (!node.childNodes.length) return [node.textContent ?? ""]
+  return Array.from(node.childNodes).flatMap(tableFilterTextParts)
+}
+
+function syncSecondaryPlaceholderVisibility(cell: HTMLTableCellElement) {
+  cell.querySelectorAll<HTMLElement>(tableSecondaryTextSelector).forEach(
+    (element) => {
+      element.hidden = isTableSecondaryPlaceholder(element.textContent)
+    }
+  )
 }
 
 function tableSnapshot(table: HTMLTableElement) {
@@ -96,7 +130,16 @@ function Table({ className, excelFilters = true, ...props }: TableProps) {
 
   const refreshTable = React.useCallback(() => {
     const table = tableRef.current
-    if (!table || !excelFilters) return
+    if (!table) return
+
+    for (const body of Array.from(table.tBodies)) {
+      for (const row of Array.from(body.rows)) {
+        for (const cell of Array.from(row.cells)) {
+          syncSecondaryPlaceholderVisibility(cell)
+        }
+      }
+    }
+    if (!excelFilters) return
 
     const snapshot = tableSnapshot(table)
     const headerCells = Array.from(table.tHead?.rows.item(0)?.cells ?? [])
