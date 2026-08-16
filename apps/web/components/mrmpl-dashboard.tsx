@@ -112,6 +112,7 @@ import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type
 import { dispatchReadyJobCards, jobCardActionAssignments } from "@/lib/job-card-action-planning";
 import { maintenanceChecklistRowsForSchedule, maintenanceMasterRowsForMachineAssignment } from "@/lib/maintenance-schedule-options";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
+import { plannerActionHistoryRows } from "@/lib/planner-action-history";
 import { productionPieceWeightGrams } from "@/lib/production-session-entry";
 import { duplicateQualityParameterCombination, mergeQualityInspectionParameterRows } from "@/lib/quality-parameter-set";
 import {
@@ -8580,7 +8581,7 @@ function LegacyActionForm({
 }
 
 function ActionLogTable({ rows }: { rows: DashboardPayload[] }) {
-  return <DataRowsCard title="Planner Action Log" rows={rows} empty="No planner actions saved yet" />;
+  return <DataRowsCard title="Planner Action Log" rows={plannerActionHistoryRows(rows)} empty="No planner actions saved yet" />;
 }
 
 function JobCardTileBoard({
