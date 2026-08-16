@@ -23,7 +23,6 @@ import {
   RefreshCw,
   Route,
   Search,
-  Settings2,
   Sun,
   Trash2,
   Undo2,
@@ -139,6 +138,11 @@ import {
 import { useTheme } from "@/components/theme-provider";
 import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation";
 import { JobCardRegister } from "@/components/job-card-register";
+import {
+  PlannerDecisionWorkspace,
+  type PlannerDecisionAction,
+  type PlannerDecisionView,
+} from "@/components/planner-decision-workspace";
 import { authClient } from "@/lib/auth/auth-client";
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access";
 import {
@@ -1963,13 +1967,7 @@ function ProductionControlPanel({
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
 }) {
   return (
-    <>
-      <PlannerDecisionConsole productionControl={productionControl} submitAction={submitAction} />
-      <ActionLogTable rows={asArray(productionControl.plannerActionLog)} />
-      <section className="grid gap-4">
-        <DataRowsCard title="Machine Issues" rows={asArray(productionControl.machineConstraintRows)} empty="No machine constraints yet" />
-      </section>
-    </>
+    <PlannerDecisionConsole productionControl={productionControl} submitAction={submitAction} />
   );
 }
 
@@ -1980,24 +1978,42 @@ function PlannerDecisionConsole({
   productionControl: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
 }) {
+  const [activeView, setActiveView] = useState<PlannerDecisionView>("new");
+  const [activeAction, setActiveAction] = useState<PlannerDecisionAction | null>(null);
+  const conflicts = asArray(productionControl.plannerActionConflicts);
+  const history = asArray(productionControl.plannerActionLog);
+  const machineIssues = asArray(productionControl.machineConstraintRows);
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Planner Decision Console</CardTitle>
-        <CardDescription>Priority Changes, Machine Breakdowns, Part-Specific Machine Switches, And Mid-Route Changes.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <PlannerActionConflictPanel productionControl={productionControl} submitAction={submitAction} />
-        <PlannerPriorityForm productionControl={productionControl} submitAction={submitAction} />
-        <MachineConstraintPlannerForm productionControl={productionControl} submitAction={submitAction} />
-        <PartMachineSwitchPlannerForm productionControl={productionControl} submitAction={submitAction} />
-        <RouteChangePlannerForm productionControl={productionControl} submitAction={submitAction} />
-        <Button type="button" variant="outline" onClick={() => void submitAction("reschedule", {})}>
-          <Settings2 className="size-4" />
-          Reschedule
-        </Button>
-      </CardContent>
-    </Card>
+    <PlannerDecisionWorkspace
+      activeAction={activeAction}
+      activeView={activeView}
+      historyCount={history.length}
+      pendingCount={conflicts.length}
+      onActionChange={setActiveAction}
+      onRecalculate={() => void submitAction("reschedule", {})}
+      onViewChange={setActiveView}
+      panels={{
+        priority: <PlannerPriorityForm productionControl={productionControl} submitAction={submitAction} />,
+        machineUnavailable: <MachineConstraintPlannerForm productionControl={productionControl} submitAction={submitAction} />,
+        machineSwitch: <PartMachineSwitchPlannerForm productionControl={productionControl} submitAction={submitAction} />,
+        routeChange: <RouteChangePlannerForm productionControl={productionControl} submitAction={submitAction} />,
+        pending: (
+          <div className="grid gap-4">
+            {conflicts.length ? (
+              <PlannerActionConflictPanel productionControl={productionControl} submitAction={submitAction} />
+            ) : (
+              <div className="rounded-lg border border-dashed bg-muted/10 p-6 text-center">
+                <div className="font-medium">No conflicting decisions require review.</div>
+                <div className="mt-1 text-sm text-muted-foreground">New conflicts will appear here before they affect the live plan.</div>
+              </div>
+            )}
+            <DataRowsCard title="Active Machine Issues" rows={machineIssues} empty="No machine constraints yet" />
+          </div>
+        ),
+        history: <ActionLogTable rows={history} />,
+      }}
+    />
   );
 }
 
@@ -2142,7 +2158,7 @@ function MachineConstraintPlannerForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={saveMachineIssue}>
       <div>
-        <div className="text-sm font-medium">2. Machine Unavailable / Breakdown</div>
+        <div className="text-sm font-medium">Machine Unavailable Details</div>
         <div className="text-xs text-muted-foreground">Running Rows Need Produced Quantity Before Remaining Quantity Is Planned Elsewhere.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
@@ -2191,7 +2207,7 @@ function MachineConstraintPlannerForm({
             <span>{formatNumber(runningRows.length)} Running Quantity Inputs</span>
           </div>
           {affectedRows.length ? (
-            <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
+            <div className="grid gap-2 @5xl/main:grid-cols-2">
               {affectedRows.map((row, index) => {
                 const needsProducedQty = machineIssueRowNeedsProducedQty(row);
                 const producedKey = machineIssueRowKey(row);
@@ -2455,10 +2471,10 @@ function PartMachineSwitchPlannerForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
       <div>
-        <div className="text-sm font-medium">3. Part-Specific Machine Switch</div>
+        <div className="text-sm font-medium">Move Setup Details</div>
         <div className="text-xs text-muted-foreground">Move Only The Selected Part/Setup To Another Machine After Reviewing That Target Queue And Downstream Wip Queues.</div>
       </div>
-      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-6">
+      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
         <Field label="Item Code">
           <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -2555,7 +2571,7 @@ function PartMachineSwitchPlannerForm({
             <span>{formatNumber(targetInterruptionRows.length)} Target Running Blockers</span>
           </div>
           {selectedRows.length ? (
-            <div className="grid max-h-56 gap-2 overflow-y-auto pr-1">
+            <div className="grid gap-2 @5xl/main:grid-cols-2">
               {selectedRows.map((row, index) => {
                 const needsProducedQty = machineIssueRowNeedsProducedQty(row);
                 const producedKey = machineIssueRowKey(row);
@@ -3207,10 +3223,10 @@ function PlannerPriorityForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
       <div>
-        <div className="text-sm font-medium">1. Priority Change</div>
+        <div className="text-sm font-medium">Priority Change Details</div>
         <div className="text-xs text-muted-foreground">Review The Setup-Wise Machine Impact Before Applying A Priority Change.</div>
       </div>
-      <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2">
         <Field label="Item Code">
           <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -3822,7 +3838,7 @@ function RouteChangePlannerForm({
   return (
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
       <div>
-        <div className="text-sm font-medium">4. Mid-Route Change</div>
+        <div className="text-sm font-medium">Route Change Details</div>
         <div className="text-xs text-muted-foreground">Planner Selects The New Route Option And Enters Remaining Setup Quantities.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
