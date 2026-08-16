@@ -35,4 +35,6 @@ Rejected pieces are included in total produced pieces. Good pieces equal total p
 
 ## Operational and analytical views
 
-The Daily Machine Board combines each machine's planner assignment with its current session and role-authorized actions. The Production Session Register shows one row per session. The Production Event Log presents lifecycle actions and child events chronologically for analysis without creating a second source of truth.
+Production Sessions belongs inside each Production Unit. Start Session accepts a machine number and fetches that unit's current planner assignment for verification before Shop Floor enters the operator, start time, measurement method, and applicable machine start count. It does not expose a daily all-machine board.
+
+The Production Session Register shows one row per session for the selected Production Unit. The Production Event Log presents that unit's lifecycle actions and child events chronologically for analysis without creating a second source of truth.

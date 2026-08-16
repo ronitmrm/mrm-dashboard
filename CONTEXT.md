@@ -44,9 +44,9 @@ _Avoid_: User-entered free-text shift.
 The calendar date on which a Production Shift starts. An overnight CNC C shift therefore keeps its starting date after midnight until 06:00.
 _Avoid_: UTC date, session-end date.
 
-**Daily Machine Board**:
-The machine-first operational view that combines the current planner assignment, Production Session state, operator, and role-authorized start, end, downtime, and rejection actions.
-_Avoid_: Session-history table, separate planner card.
+**Production Session Start Lookup**:
+The Production Unit-scoped machine-number lookup used to fetch and verify the current planner assignment before entering operator, start time, and an applicable machine start count.
+_Avoid_: Daily machine board, company-wide machine list, retyping planner details.
 
 **Production Session Register**:
 The filterable one-row-per-session record used to find and open current and historical Production Sessions.
