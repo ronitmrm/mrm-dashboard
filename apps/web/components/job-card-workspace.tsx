@@ -6,7 +6,6 @@ import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
-import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
 import { ArrowLeft, Factory, History, RefreshCw, Route, Save, Settings2, ShieldAlert, Truck } from "lucide-react"
 import Link from "next/link"
@@ -230,12 +229,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
     {error ? <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive" role="alert">{error}</div> : null}
     {loading && !workspace ? <div className="rounded-md border p-10 text-center text-sm text-muted-foreground">Loading Job Card…</div> : null}
     {workspace ? <>
-      <Label className="grid max-w-sm gap-1 text-sm font-medium">
-        <span>Job Card Actions</span>
-        <NativeSelect className="w-full" value={activeTab} onChange={(event) => setActiveTab(event.target.value as TabKey)}>
-          {tabs.map((tab) => <NativeSelectOption key={tab.key} value={tab.key}>{tab.label}</NativeSelectOption>)}
-        </NativeSelect>
-      </Label>
+      <nav className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1" aria-label="Job Card sections">{tabs.map((tab) => <Button className="shrink-0" key={tab.key} size="sm" variant={activeTab === tab.key ? "default" : "ghost"} aria-pressed={activeTab === tab.key} onClick={() => setActiveTab(tab.key)}>{tab.label}</Button>)}</nav>
 
       {activeTab === "overview" ? <section className="grid gap-4">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Job Complete" value={`${quantity(completion, 1)}%`} note={finishedOutputNote} /><Metric label="Current Stage" value={currentStage} /><Metric label="Delivery Rating" value={display(delivery.rating)} note={display(delivery.status)} /><Metric label="Order Short" value={quantity(material.orderShortPieces)} note="finished pieces still required" /></div>

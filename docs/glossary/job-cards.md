@@ -4,6 +4,8 @@
 
 The Job Cards tab is a compact one-row-per-Job-Card register. It is for finding a Job Card, not displaying its complete history.
 
+Use the table's per-column filters, including Job Card. The register does not have a separate search strip. Setup Completion and Dispatch Approval remain visible together; selecting a machine for Setup Completion fills its current Job Card and setup from planning.
+
 ## Job Card Workspace
 
 Every Job Card has one dedicated workspace URL. The workspace reads, but does not duplicate:

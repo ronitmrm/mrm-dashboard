@@ -59,10 +59,11 @@ function tableSnapshot(table: HTMLTableElement) {
   const columns = headerCells.flatMap((cell, index) => {
     const label = headerLabel(cell)
     const cells = rows.map((row) => row.cells.item(index))
+    const forceFilter = cell.dataset.filterable === "true"
     const isActionColumn = cells.every((rowCell) =>
       rowCell?.querySelector("a, button, form, input, select, textarea")
     )
-    if (!label || !rows.length || isActionColumn) return []
+    if (!label || !rows.length || (isActionColumn && !forceFilter)) return []
 
     return [
       {
