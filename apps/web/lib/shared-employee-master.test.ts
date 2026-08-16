@@ -2,6 +2,7 @@ import type { RecruitmentPostRow } from "@workspace/db"
 import { describe, expect, it } from "vitest"
 
 import {
+  productionDispatchApproverOptions,
   productionQualityOptions,
   productionShopFloorOptions,
   productionMachinistOptions,
@@ -242,6 +243,63 @@ describe("shared Employee Master", () => {
 
     expect(productionShopFloorOptions(rows, "conventional")).toEqual([
       { code: "SF-1", name: "Deepak" },
+    ])
+  })
+
+  it("offers selected-floor planners and shop-floor employees as dispatch approvers", () => {
+    const rows = sharedEmployeeMasterRows([
+      post({
+        department: "Production Planning & Control Conventional-01",
+        departmentCode: "PPC-CV",
+        designation: "Assistant",
+        employeeCode: "PLAN-1",
+        employeeName: "Asha Planner",
+        id: "1",
+        status: "Occupied",
+      }),
+      post({
+        department: "Production Planning & Control Conventional-01",
+        designation: "Production Planner",
+        employeeCode: "PLAN-2",
+        employeeName: "Bharat Planner",
+        id: "2",
+        status: "Occupied",
+      }),
+      post({
+        department: "Conventional Shop Floor",
+        departmentCode: "PPC-CVSF",
+        designation: "Assistant",
+        employeeCode: "SF-1",
+        employeeName: "Chetan Shop Floor",
+        id: "3",
+        status: "Occupied",
+      }),
+      post({
+        department: "CNC Shop Floor",
+        departmentCode: "PPC-CNCSF",
+        designation: "Assistant",
+        employeeCode: "SF-2",
+        employeeName: "Deepak CNC",
+        id: "4",
+        status: "Occupied",
+      }),
+      post({
+        department: "Production Planning & Control Conventional-01",
+        departmentCode: "PPC-CV",
+        designation: "Manager",
+        employeeCode: "PLAN-MGR",
+        employeeName: "Esha Manager",
+        id: "5",
+        status: "Occupied",
+      }),
+    ])
+
+    expect(
+      productionDispatchApproverOptions(rows, "conventional"),
+    ).toEqual([
+      { code: "PLAN-1", name: "Asha Planner" },
+      { code: "PLAN-2", name: "Bharat Planner" },
+      { code: "SF-1", name: "Chetan Shop Floor" },
     ])
   })
 

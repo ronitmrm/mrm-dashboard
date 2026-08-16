@@ -72,6 +72,13 @@ const shopFloorDepartmentCodes = new Set([
   "PPC-FGSF",
 ])
 
+const plannerDepartmentCodes = new Set([
+  "PPC-CV",
+  "PPC-CV02",
+  "PPC-CNC",
+  "PPC-FG",
+])
+
 type EmployeeOptionSource = {
   department?: unknown
   departmentCode?: unknown
@@ -192,6 +199,46 @@ export function productionShopFloorOptions(
       shopFloorDepartmentCodes,
       /\bshop\s+floor\b/i
     )
+  )
+}
+
+function isProductionPlanner(
+  row: EmployeeOptionSource,
+  productionFloorCode: ProductionFloorCode
+) {
+  return (
+    !isLeadershipEmployee(row) &&
+    productionFloorFromDepartment(row.department, row.departmentCode) ===
+      productionFloorCode &&
+    (plannerDepartmentCodes.has(
+      String(row.departmentCode).trim().toUpperCase()
+    ) || /\bplanner\b/i.test(String(row.designation)))
+  )
+}
+
+export function productionPlannerOptions(
+  rows: readonly EmployeeOptionSource[],
+  productionFloorCode: ProductionFloorCode
+) {
+  return employeeOptions(rows, (row) =>
+    isProductionPlanner(row, productionFloorCode)
+  )
+}
+
+export function productionDispatchApproverOptions(
+  rows: readonly EmployeeOptionSource[],
+  productionFloorCode: ProductionFloorCode
+) {
+  return employeeOptions(
+    rows,
+    (row) =>
+      isProductionPlanner(row, productionFloorCode) ||
+      belongsToProductionDepartment(
+        row,
+        productionFloorCode,
+        shopFloorDepartmentCodes,
+        /\bshop\s+floor\b/i
+      )
   )
 }
 
