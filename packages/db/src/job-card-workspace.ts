@@ -242,19 +242,39 @@ function lastDate(values: Array<string | null | undefined>) {
 
 export function buildJobCardAnalytics(input: {
   downtimeEvents: JobCardDowntimeRow[]
+  finalSetupNumber: string | null
+  firstSetupNumber: string | null
   orderedQuantity: number
   planRows: JobCardPlanRow[]
   sessions: JobCardSessionRow[]
 }) {
   const orderedQuantity = finite(input.orderedQuantity)
-  const actualProducedPieces = input.sessions.reduce(
+  const finalSetupNumber = input.finalSetupNumber?.trim() || null
+  const firstSetupNumber = input.firstSetupNumber?.trim() || null
+  const operationProducedPieces = input.sessions.reduce(
     (total, row) => total + finite(row.totalPieces),
     0
   )
-  const actualGoodPieces = input.sessions.reduce(
+  const operationGoodPieces = input.sessions.reduce(
     (total, row) => total + finite(row.goodPieces),
     0
   )
+  const finishedSessions = finalSetupNumber
+    ? input.sessions.filter((row) => row.setupNumber?.trim() === finalSetupNumber)
+    : []
+  const actualProducedPieces = finishedSessions.reduce(
+    (total, row) => total + finite(row.totalPieces),
+    0
+  )
+  const actualGoodPieces = finishedSessions.reduce(
+    (total, row) => total + finite(row.goodPieces),
+    0
+  )
+  const materialOutputPieces = firstSetupNumber
+    ? input.sessions
+      .filter((row) => row.setupNumber?.trim() === firstSetupNumber)
+      .reduce((total, row) => total + finite(row.totalPieces), 0)
+    : 0
   const rejectedPieces = input.sessions.reduce(
     (total, row) => total + finite(row.rejectedPieces),
     0
@@ -319,6 +339,10 @@ export function buildJobCardAnalytics(input: {
       left.setupNumber.localeCompare(right.setupNumber, undefined, { numeric: true })
     ),
     downtimeMinutes,
+    finalSetupNumber,
+    materialOutputPieces,
+    operationGoodPieces,
+    operationProducedPieces,
     orderedQuantity,
     plannedEndDate: lastDate(
       input.planRows.map((row) => row.plannedProductionEndDate)
@@ -327,7 +351,7 @@ export function buildJobCardAnalytics(input: {
       input.planRows.map((row) => row.plannedProductionStartDate)
     ),
     rejectedPieces,
-    rejectionPercent: percent(rejectedPieces, actualProducedPieces),
+    rejectionPercent: percent(rejectedPieces, operationProducedPieces),
     runtimeMinutes,
     sessionCount: input.sessions.length,
     setupPerformance: [...setupNumbers]
