@@ -25,6 +25,10 @@ function headerLabel(cell: HTMLTableCellElement) {
   return clone.textContent?.trim() ?? ""
 }
 
+function cellFilterValue(cell: HTMLTableCellElement | null) {
+  return cell?.dataset.filterValue ?? cell?.textContent
+}
+
 function tableSnapshot(table: HTMLTableElement) {
   const headerRows = table.tHead?.rows
   const firstHeaderRow = headerRows?.item(0)
@@ -69,7 +73,7 @@ function tableSnapshot(table: HTMLTableElement) {
       {
         index,
         label,
-        options: uniqueFilterOptions(cells.map((rowCell) => rowCell?.textContent)),
+        options: uniqueFilterOptions(cells.map(cellFilterValue)),
       },
     ]
   })
@@ -134,7 +138,7 @@ function Table({ className, excelFilters = true, ...props }: TableProps) {
     for (const row of snapshot.rows) {
       row.hidden = snapshot.columns.some((column) => {
         const selected = applicableFilters[column.index] ?? null
-        const value = row.cells.item(column.index)?.textContent
+        const value = cellFilterValue(row.cells.item(column.index))
         return !matchesColumnFilter(value, selected)
       })
     }
