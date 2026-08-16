@@ -28,6 +28,10 @@ type InterruptedSetupInput = {
 
 type SettledInterruptedSetup = InterruptedSetupInput & {
   finishedQuantity: number
+  hasOpenDowntime: boolean
+  openSessionReference: string | null
+  sessionReferences: string[]
+  settledAt: string | null
 }
 
 type QueueBeforeSetupInput = {
@@ -271,7 +275,9 @@ async function plannerInterruptionState(
     finished_quantity: string
     has_open_downtime: boolean | null
     measurement_method: "counter" | "weight" | null
+    session_references: string[]
     session_reference: string | null
+    settled_at: string | null
   }>(
     `
       WITH interruption_reference AS (
@@ -303,8 +309,19 @@ async function plannerInterruptionState(
             AND downtime.ended_at IS NULL
             AND downtime.reversed_at IS NULL
         ) END AS has_open_downtime,
-        COALESCE((
-          SELECT sum(closed.quantity_good)
+        COALESCE(closed_sessions.finished_quantity, 0)::text AS finished_quantity,
+        COALESCE(closed_sessions.session_references, ARRAY[]::text[])
+          AS session_references,
+        closed_sessions.settled_at::text AS settled_at
+      FROM interruption_reference reference
+      LEFT JOIN LATERAL (
+        SELECT sum(closed.quantity_good) AS finished_quantity,
+          array_agg(closed.session_reference ORDER BY closed.started_at)
+            AS session_references,
+          to_char(
+            max(closed.ended_at) AT TIME ZONE 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+          ) AS settled_at
           FROM manufacturing.production_sessions closed
           WHERE closed.organization_id = $1
             AND closed.work_order_id = reference.work_order_id
@@ -312,8 +329,7 @@ async function plannerInterruptionState(
             AND closed.machine_id = reference.machine_id
             AND closed.status = 'closed'
             AND closed.reversed_at IS NULL
-        ), 0)::text AS finished_quantity
-      FROM interruption_reference reference
+      ) closed_sessions ON true
       LEFT JOIN LATERAL (
         SELECT session.id, session.session_reference,
           session.measurement_method
@@ -364,6 +380,10 @@ async function settledPlannerInterruptions(
     settled.push({
       ...interruption,
       finishedQuantity: Number(state?.finished_quantity ?? 0),
+      hasOpenDowntime: state?.has_open_downtime === true,
+      openSessionReference: state?.session_reference ?? null,
+      sessionReferences: state?.session_references ?? [],
+      settledAt: state?.settled_at ?? null,
     })
   }
   return settled

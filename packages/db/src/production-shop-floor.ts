@@ -24,8 +24,10 @@ import {
   buildDeliveryPerformance,
   buildJobCardAnalytics,
   buildMaterialYield,
+  buildPlannerMovementRecord,
   buildSetupTiming,
   normalizeDeliveryTargets,
+  normalizePlannerMovementActionType,
 } from "./job-card-workspace"
 
 
@@ -1771,7 +1773,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       const selectedRoute = routesResult.rows.find((route) => route.id === explicitRouteId)
         ?? (activeRoutes.length === 1 ? activeRoutes[0] : undefined)
 
-      const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, receiptsResult, setupTimingsResult, snapshotResult] = await Promise.all([
+      const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, plannerMovementsResult, receiptsResult, setupTimingsResult, snapshotResult] = await Promise.all([
         pool.query<Record<string, unknown>>(
           `
             SELECT setup.id, setup.setup_number::text AS "setupNumber",
@@ -1933,6 +1935,155 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           [jobCard.id]
         ),
         pool.query<Record<string, unknown>>(
+          `
+            WITH movement_events AS (
+              SELECT event.id::text AS "decisionId",
+                'machine_shift'::text AS "actionType",
+                event.occurred_at AS "eventTime",
+                setup.setup_number::text AS "setupNumber",
+                source_machine.machine_number AS "fromMachineNumber",
+                target_machine.machine_number AS "toMachineNumber",
+                event.reason, COALESCE(actor.name, event.legacy_actor) AS "recordedByName",
+                COALESCE(detail.details, '{}'::jsonb) AS evidence,
+                event.work_order_id AS "workOrderId",
+                event.operation_setup_id AS "operationSetupId"
+              FROM manufacturing.plan_override_events event
+              LEFT JOIN manufacturing.operation_setups setup
+                ON setup.id = event.operation_setup_id
+              LEFT JOIN catalog.machines source_machine
+                ON source_machine.id = event.source_machine_id
+              LEFT JOIN catalog.machines target_machine
+                ON target_machine.id = event.target_machine_id
+              LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
+              LEFT JOIN LATERAL (
+                SELECT event_detail.details
+                FROM manufacturing.plan_override_event_details event_detail
+                WHERE event_detail.plan_override_event_id = event.id
+                  AND event_detail.related_work_order_id = event.work_order_id
+                  AND event_detail.detail_type = 'interrupted-setup'
+                  AND (event.operation_setup_id IS NULL
+                    OR event_detail.related_setup_id = event.operation_setup_id)
+                ORDER BY event_detail.sequence
+                LIMIT 1
+              ) detail ON true
+              WHERE event.organization_id = $1
+                AND event.work_order_id = $2
+                AND event.reversed_at IS NULL
+
+              UNION ALL
+
+              SELECT event.id::text,
+                CASE WHEN detail.detail_type = 'interrupted-setup'
+                  THEN 'machine_shift_interruption'
+                  ELSE 'queue_replanned' END,
+                event.occurred_at, setup.setup_number::text,
+                COALESCE(detail.details->>'machineNumber', source_machine.machine_number),
+                CASE WHEN detail.detail_type = 'interrupted-setup' THEN NULL
+                  ELSE detail.details->>'targetMachineNumber' END,
+                event.reason, COALESCE(actor.name, event.legacy_actor), detail.details,
+                detail.related_work_order_id, detail.related_setup_id
+              FROM manufacturing.plan_override_event_details detail
+              JOIN manufacturing.plan_override_events event
+                ON event.id = detail.plan_override_event_id
+              LEFT JOIN manufacturing.operation_setups setup
+                ON setup.id = detail.related_setup_id
+              LEFT JOIN catalog.machines source_machine
+                ON source_machine.id = event.source_machine_id
+              LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
+              WHERE event.organization_id = $1
+                AND detail.related_work_order_id = $2
+                AND event.reversed_at IS NULL
+                AND NOT (event.work_order_id = $2
+                  AND detail.detail_type = 'interrupted-setup')
+
+              UNION ALL
+
+              SELECT event.id::text,
+                CASE WHEN event.source_payload->>'rescheduleAction' = 'delay'
+                  THEN 'machine_delayed'
+                  WHEN detail.impact_type = 'interrupted-setup'
+                  THEN 'machine_unavailable' ELSE 'queue_replanned' END,
+                event.occurred_at, setup.setup_number::text,
+                machine.machine_number,
+                detail.evidence->>'targetMachineNumber',
+                event.reason, COALESCE(actor.name, event.legacy_actor), detail.evidence,
+                detail.work_order_id, detail.operation_setup_id
+              FROM manufacturing.machine_constraint_event_details detail
+              JOIN manufacturing.machine_constraint_events event
+                ON event.id = detail.machine_constraint_event_id
+              JOIN catalog.machines machine ON machine.id = event.machine_id
+              LEFT JOIN manufacturing.operation_setups setup
+                ON setup.id = detail.operation_setup_id
+              LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
+              WHERE event.organization_id = $1
+                AND detail.work_order_id = $2
+                AND event.reversed_at IS NULL
+
+              UNION ALL
+
+              SELECT event.id::text,
+                CASE WHEN detail.blocker_code = 'interrupted-setup'
+                  THEN 'priority_interruption'
+                  WHEN detail.blocker_code LIKE 'queue-before-setup-%'
+                  THEN 'queue_replanned'
+                  ELSE 'priority_changed' END,
+                event.occurred_at, setup.setup_number::text,
+                interruption.evidence->>'machineNumber', NULL::text,
+                event.reason, COALESCE(actor.name, event.legacy_actor),
+                COALESCE(interruption.evidence, '{}'::jsonb),
+                detail.work_order_id, detail.operation_setup_id
+              FROM manufacturing.planner_priority_event_details detail
+              JOIN manufacturing.planner_priority_events event
+                ON event.id = detail.planner_priority_event_id
+              LEFT JOIN manufacturing.operation_setups setup
+                ON setup.id = detail.operation_setup_id
+              LEFT JOIN identity.users actor ON actor.id = event.actor_user_id
+              LEFT JOIN LATERAL (
+                SELECT value AS evidence
+                FROM jsonb_array_elements(
+                  COALESCE(event.source_payload->'interruptedSetups', '[]'::jsonb)
+                ) interruption(value)
+                WHERE lower(value->>'jobCardNumber') = lower($3)
+                  AND (detail.operation_setup_id IS NULL
+                    OR value->>'setupNumber' = setup.setup_number::text)
+                LIMIT 1
+              ) interruption ON true
+              WHERE event.organization_id = $1
+                AND detail.work_order_id = $2
+                AND event.reversed_at IS NULL
+            )
+            SELECT movement.*,
+              COALESCE(settlement."sessionReferences", ARRAY[]::text[])
+                AS "settlementSessionReferences",
+              settlement."settledAt"::text AS "settlementSettledAt",
+              COALESCE(settlement."settledGoodPieces", 0)::text
+                AS "settlementGoodPieces"
+            FROM movement_events movement
+            LEFT JOIN LATERAL (
+              SELECT array_agg(session.session_reference ORDER BY session.started_at)
+                  AS "sessionReferences",
+                max(session.ended_at) AS "settledAt",
+                sum(session.quantity_good) AS "settledGoodPieces"
+              FROM manufacturing.production_sessions session
+              JOIN catalog.machines session_machine ON session_machine.id = session.machine_id
+              WHERE session.organization_id = $1
+                AND session.work_order_id = movement."workOrderId"
+                AND session.operation_setup_id = movement."operationSetupId"
+                AND lower(session_machine.machine_number)
+                  = lower(movement."fromMachineNumber")
+                AND movement."actionType" IN (
+                  'machine_shift', 'machine_shift_interruption',
+                  'machine_unavailable', 'priority_interruption'
+                )
+                AND session.status = 'closed'
+                AND session.reversed_at IS NULL
+                AND session.ended_at <= movement."eventTime"
+            ) settlement ON true
+            ORDER BY movement."eventTime" DESC, movement."decisionId"
+          `,
+          [input.organizationId, jobCard.id, jobCardNumber]
+        ),
+        pool.query<Record<string, unknown>>(
           `SELECT receipt_number AS "receiptNumber", received_on AS "receivedOn",
               quantity_kg AS "quantityKg", remaining_quantity_kg AS "remainingQuantityKg",
               heat_number AS "heatNumber", supplier_name AS "supplierName",
@@ -2041,6 +2192,55 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             : Number(row.targetSetupMinutes),
         }),
       }))
+      const plannerMovements = plannerMovementsResult.rows.map((row) => {
+        const evidence = objectRecord(row.evidence)
+        const actionType = normalizePlannerMovementActionType(row.actionType)
+        const hasSessionSettlement = [
+          "machine_shift",
+          "machine_shift_interruption",
+          "machine_unavailable",
+          "priority_interruption",
+        ].includes(actionType)
+        const evidenceReferences = Array.isArray(evidence.sessionReferences)
+          ? evidence.sessionReferences.map(String).filter(Boolean)
+          : []
+        const settlementReferences = Array.isArray(row.settlementSessionReferences)
+          ? row.settlementSessionReferences.map(String).filter(Boolean)
+          : []
+        return buildPlannerMovementRecord({
+          actionType,
+          activeSessionReference: evidence.openSessionReference
+            ? String(evidence.openSessionReference)
+            : null,
+          decisionId: String(row.decisionId ?? ""),
+          downtimeOpen: evidence.hasOpenDowntime === true,
+          eventTime: String(row.eventTime ?? ""),
+          fromMachineNumber: row.fromMachineNumber
+            ? String(row.fromMachineNumber)
+            : null,
+          reason: row.reason ? String(row.reason) : null,
+          recordedByName: row.recordedByName
+            ? String(row.recordedByName)
+            : null,
+          sessionReferences: hasSessionSettlement
+            ? evidenceReferences.length
+              ? evidenceReferences
+              : settlementReferences
+            : [],
+          settledAt: hasSessionSettlement && evidence.settledAt
+            ? String(evidence.settledAt)
+            : hasSessionSettlement && row.settlementSettledAt
+              ? String(row.settlementSettledAt)
+              : null,
+          settledGoodPieces: hasSessionSettlement
+            ? Number(evidence.finishedQuantity ?? row.settlementGoodPieces ?? 0)
+            : 0,
+          setupNumber: row.setupNumber ? String(row.setupNumber) : null,
+          toMachineNumber: row.toMachineNumber
+            ? String(row.toMachineNumber)
+            : null,
+        })
+      })
       const sessionRows = sessionsResult.rows.map((row) => ({
         ...row,
         downtimeMinutes: Number(row.downtime_minutes ?? 0),
@@ -2132,7 +2332,32 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         quantity: Number(row.goodPieces ?? 0) + Number(row.rejectedPieces ?? 0),
         setupNumber: row.setupNumber,
       }))
-      const eventLog = [...eventsResult.rows, ...legacyEntryEvents, ...workflowResult.rows].sort((left, right) =>
+      const plannerMovementEvents = plannerMovements.map((movement) => ({
+        detail: [
+          movement.actionLabel,
+          movement.fromMachineNumber && movement.toMachineNumber
+            ? `${movement.fromMachineNumber} → ${movement.toMachineNumber}`
+            : movement.fromMachineNumber,
+          movement.reason,
+          movement.sessionReferences.length
+            ? `Settled by ${movement.sessionReferences.join(", ")}`
+            : movement.downtimeOpen && movement.activeSessionReference
+              ? `Downtime open on ${movement.activeSessionReference}`
+              : null,
+        ].filter(Boolean).join(" · "),
+        enteredByName: movement.recordedByName,
+        eventTime: movement.eventTime,
+        eventType: `planner_${movement.actionType}`,
+        machineNumber: movement.toMachineNumber ?? movement.fromMachineNumber,
+        quantity: movement.settledGoodPieces || null,
+        setupNumber: movement.setupNumber,
+      }))
+      const eventLog = [
+        ...eventsResult.rows,
+        ...legacyEntryEvents,
+        ...workflowResult.rows,
+        ...plannerMovementEvents,
+      ].sort((left, right) =>
         String(right.eventTime ?? "").localeCompare(String(left.eventTime ?? ""))
       )
 
@@ -2150,6 +2375,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         },
         legacyProductionEntries: legacyEntriesResult.rows,
         planRows,
+        plannerMovements,
         productionFloorCode: floorCode,
         rawMaterialReceipts: receiptsResult.rows,
         routes: routesResult.rows.map((route) => ({

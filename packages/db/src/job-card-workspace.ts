@@ -22,6 +22,68 @@ export type JobCardDowntimeRow = {
   setupNumber?: string | null
 }
 
+export type PlannerMovementRecordInput = {
+  actionType: "machine_delayed" | "machine_shift" | "machine_shift_interruption" | "machine_unavailable" | "priority_interruption" | "priority_changed" | "queue_replanned"
+  activeSessionReference?: string | null
+  decisionId: string
+  downtimeOpen?: boolean | null
+  eventTime: string
+  fromMachineNumber?: string | null
+  reason?: string | null
+  recordedByName?: string | null
+  sessionReferences?: string[] | null
+  settledAt?: string | null
+  settledGoodPieces?: number | string | null
+  setupNumber?: string | number | null
+  toMachineNumber?: string | null
+}
+
+const plannerMovementLabels: Record<PlannerMovementRecordInput["actionType"], string> = {
+  machine_delayed: "Delayed on machine",
+  machine_shift: "Machine shifted",
+  machine_shift_interruption: "Interrupted by machine shift",
+  machine_unavailable: "Machine unavailable",
+  priority_changed: "Priority changed",
+  priority_interruption: "Interrupted for priority",
+  queue_replanned: "Queue replanned",
+}
+
+export function normalizePlannerMovementActionType(value: unknown): PlannerMovementRecordInput["actionType"] {
+  switch (value) {
+    case "machine_delayed":
+    case "machine_shift":
+    case "machine_shift_interruption":
+    case "machine_unavailable":
+    case "priority_changed":
+    case "priority_interruption":
+    case "queue_replanned":
+      return value
+    default:
+      return "queue_replanned"
+  }
+}
+
+export function buildPlannerMovementRecord(input: PlannerMovementRecordInput) {
+  return {
+    activeSessionReference: input.activeSessionReference?.trim() || null,
+    actionLabel: plannerMovementLabels[input.actionType],
+    actionType: input.actionType,
+    decisionId: input.decisionId,
+    downtimeOpen: input.downtimeOpen === true,
+    eventTime: input.eventTime,
+    fromMachineNumber: input.fromMachineNumber?.trim() || null,
+    reason: input.reason?.trim() || null,
+    recordedByName: input.recordedByName?.trim() || null,
+    sessionReferences: [...new Set(input.sessionReferences ?? [])]
+      .map((reference) => reference.trim())
+      .filter(Boolean),
+    settledAt: input.settledAt?.trim() || null,
+    settledGoodPieces: finite(Number(input.settledGoodPieces ?? 0)),
+    setupNumber: String(input.setupNumber ?? "").trim() || null,
+    toMachineNumber: input.toMachineNumber?.trim() || null,
+  }
+}
+
 function finite(value: number | null | undefined) {
   return Number.isFinite(value) ? Number(value) : 0
 }
