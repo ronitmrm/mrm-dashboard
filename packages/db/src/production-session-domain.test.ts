@@ -1,11 +1,35 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  assertProductionSessionCanClose,
   calculateProductionSessionOutput,
   formatProductionSessionReference,
+  productionDowntimeEndOutcome,
   productionShiftAt,
   suggestedCounterStart,
 } from "./production-session-domain"
+
+describe("production downtime lifecycle", () => {
+  test("blocks session closure until its open downtime is explicitly closed", () => {
+    expect(() =>
+      assertProductionSessionCanClose({ hasOpenDowntime: true })
+    ).toThrow("Close the open downtime before ending the production session.")
+
+    expect(() =>
+      assertProductionSessionCanClose({ hasOpenDowntime: false })
+    ).not.toThrow()
+  })
+
+  test("accepts only resolved or shift-ended-unresolved outcomes", () => {
+    expect(productionDowntimeEndOutcome("resolved")).toBe("resolved")
+    expect(productionDowntimeEndOutcome("shift_end_unresolved")).toBe(
+      "shift_end_unresolved"
+    )
+    expect(() => productionDowntimeEndOutcome("automatic")).toThrow(
+      "A valid downtime closure outcome is required."
+    )
+  })
+})
 
 describe("production session output", () => {
   test("calculates good pieces from weight after crate tare and QC rejection", () => {

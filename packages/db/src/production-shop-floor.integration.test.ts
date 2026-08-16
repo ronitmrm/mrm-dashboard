@@ -499,6 +499,7 @@ describe("production and shop-floor workflows", () => {
     })
     await expect(
       repository.endProductionSessionDowntime({
+        endOutcome: "resolved",
         endedAt: "2026-08-15T14:20:00+05:30",
         organizationId,
         sessionId: second.id,
@@ -530,6 +531,45 @@ describe("production and shop-floor workflows", () => {
     })
     expect(events.rows.map((row) => row.eventType)).toEqual(
       expect.arrayContaining(["session_started", "downtime"])
+    )
+
+    const carriedDowntime = await repository.startProductionSessionDowntime({
+      enteredRole: "machinist",
+      organizationId,
+      reasonCode: "DC-04",
+      reasonName: "Bearing failure",
+      sessionId: second.id,
+      startedAt: "2026-08-15T14:30:00+05:30",
+    })
+    await expect(
+      repository.closeProductionSession({
+        endCount: 10_900,
+        endedAt: "2026-08-15T15:00:00+05:30",
+        endReason: "shift_end",
+        organizationId,
+        sessionId: second.id,
+      })
+    ).rejects.toThrow(
+      "Close the open downtime before ending the production session."
+    )
+    await repository.endProductionSessionDowntime({
+      endOutcome: "shift_end_unresolved",
+      endedAt: "2026-08-15T15:00:00+05:30",
+      organizationId,
+      sessionId: second.id,
+    })
+    const carriedSession = await repository.readProductionSessions({
+      organizationId,
+      productionFloorCode: "cnc",
+      sessionId: second.id,
+    })
+    expect(carriedSession.rows[0]?.downtimeEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          endOutcome: "shift_end_unresolved",
+          id: carriedDowntime.id,
+        }),
+      ])
     )
 
     await repository.closeProductionSession({

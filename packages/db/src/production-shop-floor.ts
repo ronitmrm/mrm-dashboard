@@ -13,8 +13,10 @@ import {
   type ProductionFloorCode,
 } from "./production-floors"
 import {
+  assertProductionSessionCanClose,
   calculateProductionSessionOutput,
   formatProductionSessionReference,
+  productionDowntimeEndOutcome,
   productionShiftAt,
   type ProductionMeasurementMethod,
 } from "./production-session-domain"
@@ -1036,9 +1038,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             INSERT INTO manufacturing.production_session_downtime_events (
               organization_id, production_session_id, reason_code,
               reason_name, started_at, ended_at, duration_minutes,
-              entered_role, entered_by_user_id, source_payload
+              end_outcome, entered_role, entered_by_user_id, source_payload
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'resolved', $8, $9, $10)
             RETURNING id
           `,
           [
@@ -1146,11 +1148,13 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
 
     async endProductionSessionDowntime(input: {
       actorUserId?: string | null
+      endOutcome: string
       endedAt: string
       organizationId: string
       sessionId: string
     }) {
       return transaction(pool, async (client) => {
+        const endOutcome = productionDowntimeEndOutcome(input.endOutcome)
         const endedAt = requiredTimestamp(input.endedAt, "Downtime end")
         const event = await client.query<{ id: string; started_at: Date }>(
           `
@@ -1180,20 +1184,75 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           `
             UPDATE manufacturing.production_session_downtime_events
             SET ended_at = $1, duration_minutes = $2,
-              ended_by_user_id = $3, updated_at = now(),
-              source_payload = source_payload || $4::jsonb
-            WHERE id = $5
+              end_outcome = $3, ended_by_user_id = $4, updated_at = now(),
+              source_payload = source_payload || $5::jsonb
+            WHERE id = $6
           `,
           [
             endedAt.toISOString(),
             durationMinutes,
+            endOutcome,
             input.actorUserId ?? null,
-            { endedAt: endedAt.toISOString() },
+            { endOutcome, endedAt: endedAt.toISOString() },
             current.id,
           ]
         )
         await queueDashboardRefresh(client, input.organizationId)
-        return { durationMinutes, id: current.id }
+        return { durationMinutes, endOutcome, id: current.id }
+      })
+    },
+
+    async resolveCarriedProductionSessionDowntime(input: {
+      actorUserId?: string | null
+      eventId: string
+      organizationId: string
+      resolvedAt: string
+    }) {
+      return transaction(pool, async (client) => {
+        const resolvedAt = requiredTimestamp(input.resolvedAt, "Resolution time")
+        const event = await client.query<{
+          carry_forward_resolved_at: Date | null
+          ended_at: Date
+          id: string
+        }>(
+          `
+            SELECT event.id, event.ended_at, event.carry_forward_resolved_at
+            FROM manufacturing.production_session_downtime_events event
+            JOIN manufacturing.production_sessions session
+              ON session.id = event.production_session_id
+            WHERE event.id = $1 AND session.organization_id = $2
+              AND event.end_outcome = 'shift_end_unresolved'
+              AND event.reversed_at IS NULL AND session.reversed_at IS NULL
+            FOR UPDATE OF event
+          `,
+          [input.eventId, input.organizationId]
+        )
+        const current = event.rows[0]
+        if (!current) throw new Error("Carried downtime was not found.")
+        if (current.carry_forward_resolved_at) {
+          throw new Error("Carried downtime is already resolved.")
+        }
+        if (resolvedAt < current.ended_at) {
+          throw new Error("Resolution time cannot be before the shift-end closure.")
+        }
+        await client.query(
+          `
+            UPDATE manufacturing.production_session_downtime_events
+            SET carry_forward_resolved_at = $1,
+              carry_forward_resolved_by_user_id = $2,
+              updated_at = now(),
+              source_payload = source_payload || $3::jsonb
+            WHERE id = $4
+          `,
+          [
+            resolvedAt.toISOString(),
+            input.actorUserId ?? null,
+            { carryForwardResolvedAt: resolvedAt.toISOString() },
+            current.id,
+          ]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { id: current.id, resolvedAt: resolvedAt.toISOString() }
       })
     },
 
@@ -1349,6 +1408,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
           throw new Error("Machinist cannot close a production session.")
         }
         const session = await client.query<{
+          has_open_downtime: boolean
           machine_id: string
           measurement_method: ProductionMeasurementMethod
           operation_setup_id: string
@@ -1371,7 +1431,14 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               machine_id, operator_employee_id, production_date, shift,
               measurement_method, started_at, start_count,
               piece_weight_grams, production_entry_id, session.source_payload,
-              session.status, floor.code AS production_floor_code
+              session.status, floor.code AS production_floor_code,
+              EXISTS (
+                SELECT 1
+                FROM manufacturing.production_session_downtime_events downtime
+                WHERE downtime.production_session_id = session.id
+                  AND downtime.ended_at IS NULL
+                  AND downtime.reversed_at IS NULL
+              ) AS has_open_downtime
             FROM manufacturing.production_sessions session
             JOIN catalog.machines machine ON machine.id = session.machine_id
             JOIN manufacturing.production_floors floor
@@ -1393,26 +1460,9 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         if (endedAt < current.started_at) {
           throw new Error("Session end cannot be before session start.")
         }
-        await client.query(
-          `
-            UPDATE manufacturing.production_session_downtime_events
-            SET ended_at = $1,
-              duration_minutes = GREATEST(
-                ceil(extract(epoch FROM ($1::timestamptz - started_at)) / 60),
-                1
-              )::integer,
-              ended_by_user_id = $2, updated_at = now(),
-              source_payload = source_payload || $3::jsonb
-            WHERE production_session_id = $4
-              AND ended_at IS NULL AND reversed_at IS NULL
-          `,
-          [
-            endedAt.toISOString(),
-            input.actorUserId ?? null,
-            { autoClosedAtSessionEnd: true, endedAt: endedAt.toISOString() },
-            input.sessionId,
-          ]
-        )
+        assertProductionSessionCanClose({
+          hasOpenDowntime: current.has_open_downtime,
+        })
         const laterDowntime = await client.query<{ id: string }>(
           `
             SELECT id
@@ -2206,6 +2256,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
                 'startedAt', event.started_at,
                 'endedAt', event.ended_at,
                 'durationMinutes', event.duration_minutes,
+                'endOutcome', event.end_outcome,
+                'carryResolvedAt', event.carry_forward_resolved_at,
                 'enteredRole', event.entered_role,
                 'isOpen', event.ended_at IS NULL
               ) ORDER BY event.started_at) AS rows
