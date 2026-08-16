@@ -31,6 +31,9 @@ import {
 } from "@/lib/auth/require-capability"
 
 import {
+  createStoreAssetCategoryAction,
+  createStoreAssetNameAction,
+  createStoreAssetSubcategoryAction,
   createStoreItemTypeAction,
   createStoreLocationAction,
   createStoreSupplierAction,
@@ -47,14 +50,16 @@ export default async function StoreItemsPage() {
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, locations, suppliers, prices, movements] = await Promise.all([
-      repository.listItemTypes(organizationId),
-      repository.listLocations(organizationId),
-      repository.listSuppliers(organizationId),
-      repository.listSupplierPrices(organizationId),
-      repository.listRecentStockMovements(organizationId),
-    ])
-    return { items, locations, movements, prices, suppliers }
+    const [items, locations, suppliers, prices, movements, masters] =
+      await Promise.all([
+        repository.listItemTypes(organizationId),
+        repository.listLocations(organizationId),
+        repository.listSuppliers(organizationId),
+        repository.listSupplierPrices(organizationId),
+        repository.listRecentStockMovements(organizationId),
+        repository.listAssetClassificationMasters(organizationId),
+      ])
+    return { items, locations, masters, movements, prices, suppliers }
   })().finally(() => repository.close())
 
   return (
@@ -74,30 +79,43 @@ export default async function StoreItemsPage() {
             <CardHeader>
               <CardTitle>Create Asset / Item Type</CardTitle>
               <CardDescription>
-                Type Code belongs to Type + Category + Subcategory + Asset Name.
+                Type Code is generated automatically after selecting the
+                maintained classification.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form action={createStoreItemTypeAction}>
                 <FieldGroup className="grid gap-4 md:grid-cols-2">
                   <TextField
-                    label="Asset Type Code"
-                    name="type_code"
-                    required
-                  />
-                  <TextField
                     label="Identification Name"
                     name="identification_name"
                     required
                   />
                   <TextField label="Asset Type" name="asset_type" required />
-                  <TextField label="Category" name="asset_category" required />
-                  <TextField
-                    label="Subcategory"
-                    name="asset_subcategory"
-                    required
+                  <SelectField
+                    label="Category"
+                    name="asset_category_id"
+                    options={data.masters.categories.map((row) => ({
+                      label: row.name,
+                      value: row.id,
+                    }))}
                   />
-                  <TextField label="Asset Name" name="asset_name" required />
+                  <SelectField
+                    label="Subcategory"
+                    name="asset_subcategory_id"
+                    options={data.masters.subcategories.map((row) => ({
+                      label: `${row.categoryName} — ${row.name}`,
+                      value: row.id,
+                    }))}
+                  />
+                  <SelectField
+                    label="Asset Name"
+                    name="asset_name_id"
+                    options={data.masters.assetNames.map((row) => ({
+                      label: `${row.categoryName} — ${row.subcategoryName} — ${row.name}`,
+                      value: row.id,
+                    }))}
+                  />
                   <TextField
                     label="For Product / Item Code"
                     name="applicable_item_code"
@@ -127,8 +145,94 @@ export default async function StoreItemsPage() {
                     type="number"
                   />
                 </FieldGroup>
+                <Button
+                  className="mt-5"
+                  disabled={
+                    !data.masters.categories.length ||
+                    !data.masters.subcategories.length ||
+                    !data.masters.assetNames.length
+                  }
+                  type="submit"
+                >
+                  Create & Generate Type Code
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Asset Category Master</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form action={createStoreAssetCategoryAction}>
+                <TextField
+                  label="Category Name"
+                  name="asset_category_name"
+                  required
+                />
                 <Button className="mt-5" type="submit">
-                  Create Type Code
+                  Save Category
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Asset Subcategory Master</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form action={createStoreAssetSubcategoryAction}>
+                <FieldGroup className="grid gap-4 md:grid-cols-2">
+                  <SelectField
+                    label="Category"
+                    name="asset_category_id"
+                    options={data.masters.categories.map((row) => ({
+                      label: row.name,
+                      value: row.id,
+                    }))}
+                  />
+                  <TextField
+                    label="Subcategory Name"
+                    name="asset_subcategory_name"
+                    required
+                  />
+                </FieldGroup>
+                <Button
+                  className="mt-5"
+                  disabled={!data.masters.categories.length}
+                  type="submit"
+                >
+                  Save Subcategory
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Asset Name Master</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form action={createStoreAssetNameAction}>
+                <FieldGroup className="grid gap-4 md:grid-cols-2">
+                  <SelectField
+                    label="Subcategory"
+                    name="asset_subcategory_id"
+                    options={data.masters.subcategories.map((row) => ({
+                      label: `${row.categoryName} — ${row.name}`,
+                      value: row.id,
+                    }))}
+                  />
+                  <TextField label="Asset Name" name="asset_name" required />
+                </FieldGroup>
+                <Button
+                  className="mt-5"
+                  disabled={!data.masters.subcategories.length}
+                  type="submit"
+                >
+                  Save Asset Name
                 </Button>
               </form>
             </CardContent>

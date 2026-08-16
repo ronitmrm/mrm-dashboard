@@ -112,13 +112,48 @@ export async function createStoreSupplierAction(formData: FormData) {
   revalidateStore()
 }
 
+export async function createStoreAssetCategoryAction(formData: FormData) {
+  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+    repository.createAssetCategory({
+      actorUserId,
+      name: requiredText(formData, "asset_category_name"),
+      organizationId,
+    })
+  )
+  revalidateStore()
+}
+
+export async function createStoreAssetSubcategoryAction(formData: FormData) {
+  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+    repository.createAssetSubcategory({
+      actorUserId,
+      categoryId: requiredText(formData, "asset_category_id"),
+      name: requiredText(formData, "asset_subcategory_name"),
+      organizationId,
+    })
+  )
+  revalidateStore()
+}
+
+export async function createStoreAssetNameAction(formData: FormData) {
+  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+    repository.createAssetName({
+      actorUserId,
+      name: requiredText(formData, "asset_name"),
+      organizationId,
+      subcategoryId: requiredText(formData, "asset_subcategory_id"),
+    })
+  )
+  revalidateStore()
+}
+
 export async function createStoreItemTypeAction(formData: FormData) {
   await withStore("store.manage", (repository, actorUserId, organizationId) =>
     repository.createItemType({
       actorUserId,
-      assetCategory: requiredText(formData, "asset_category"),
-      assetName: requiredText(formData, "asset_name"),
-      assetSubcategory: requiredText(formData, "asset_subcategory"),
+      assetCategoryId: requiredText(formData, "asset_category_id"),
+      assetNameId: requiredText(formData, "asset_name_id"),
+      assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
       assetType: requiredText(formData, "asset_type"),
       applicableItemCode: optionalText(formData, "applicable_item_code"),
       drawingNumber: optionalText(formData, "drawing_number"),
@@ -126,7 +161,6 @@ export async function createStoreItemTypeAction(formData: FormData) {
       minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
       organizationId,
       trackingMode: trackingMode(formData),
-      typeCode: requiredText(formData, "type_code"),
       unit: requiredText(formData, "unit"),
     })
   )
@@ -139,9 +173,9 @@ export async function requestMissingStoreCodeAction(formData: FormData) {
     (repository, actorUserId, organizationId) =>
       repository.createCodeRequest({
         actorUserId,
-        assetCategory: requiredText(formData, "asset_category"),
-        assetName: requiredText(formData, "asset_name"),
-        assetSubcategory: requiredText(formData, "asset_subcategory"),
+        assetCategoryId: requiredText(formData, "asset_category_id"),
+        assetNameId: requiredText(formData, "asset_name_id"),
+        assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
         assetType: requiredText(formData, "asset_type"),
         department: requiredText(formData, "department"),
         identificationName: requiredText(formData, "identification_name"),
