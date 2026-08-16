@@ -4377,7 +4377,7 @@ function ShopFloorStatusPanel({
                         <EmptyShopFloorSlot label="No Next Plan" compact />
                       )}
                     </TableCell>
-                    <TableCell className="align-middle">
+                    <TableCell className="align-middle" data-filter-value={row.status}>
                       <ShopFloorRowAction
                         current={row.actionCurrent}
                         next={row.actionNext}
