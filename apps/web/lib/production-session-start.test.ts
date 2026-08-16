@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 
 import {
   productionSessionCarriedStartCount,
-  productionSessionMachineMatches,
   productionSessionStartOptions,
 } from "./production-session-start"
 
@@ -49,22 +48,22 @@ describe("production session machine lookup", () => {
     ])
   })
 
-  it("matches only machine numbers and keeps the lookup concise", () => {
+  it("offers only running machines in the Start Session dropdown", () => {
     const options = productionSessionStartOptions({
       planRows: [
-        { jcNo: "JC-501", machine: "C501" },
-        { jcNo: "JC-510", machine: "C510" },
-        { jcNo: "JC-D501", machine: "D501" },
+        { jcNo: "JC-501", machine: "C501", runningStatus: "Running" },
+        { jcNo: "JC-510", machine: "C510", runningStatus: "Planned" },
+        { jcNo: "JC-D501", machine: "D501", runningStatus: "Planned" },
       ],
-      sessions: [],
+      sessions: [
+        { id: "session-2", machineNumber: "D501", status: "open" },
+      ],
     })
 
-    expect(
-      productionSessionMachineMatches(options, "c5").map(
-        ({ machineNumber }) => machineNumber
-      )
-    ).toEqual(["C501", "C510"])
-    expect(productionSessionMachineMatches(options, "JC-501")).toEqual([])
+    expect(options.map(({ machineNumber }) => machineNumber)).toEqual([
+      "C501",
+      "D501",
+    ])
   })
 
   it("carries a counter only from the immediately previous matching session", () => {

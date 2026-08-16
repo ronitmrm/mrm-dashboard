@@ -34,17 +34,20 @@ function setupNumber(row: ProductionSessionRow) {
   return first(row, ["setupNumber", "setupNo", "operationSetupCode"])
 }
 
+function planIsRunning(row: ProductionSessionRow) {
+  const stage = text(row.shopFloorStage).toLowerCase()
+  const status = text(row.runningStatus).toLowerCase()
+  return (
+    stage !== "item_complete" &&
+    (status === "running" ||
+      ["quality_approval", "operator_started", "worker_start"].includes(stage))
+  )
+}
+
 function currentPlan(rows: readonly ProductionSessionRow[]) {
   return (
-    rows.find((row) => {
-      const stage = text(row.shopFloorStage).toLowerCase()
-      const status = text(row.runningStatus).toLowerCase()
-      return (
-        stage !== "item_complete" &&
-        (status === "running" ||
-          ["quality_approval", "operator_started", "worker_start"].includes(stage))
-      )
-    }) ?? rows.find((row) => text(row.shopFloorStage).toLowerCase() !== "item_complete")
+    rows.find(planIsRunning) ??
+    rows.find((row) => text(row.shopFloorStage).toLowerCase() !== "item_complete")
   )
 }
 
@@ -69,19 +72,22 @@ export function productionSessionStartOptions({
     if (key) openSessions.set(key, row)
   }
   const options: ProductionSessionMachineOption[] = []
+  const addedMachines = new Set<string>()
 
   for (const [key, rows] of plansByMachine) {
     const plan = currentPlan(rows)
-    if (!plan) continue
+    const session = openSessions.get(key)
+    if (!plan || (!session && !planIsRunning(plan))) continue
     options.push({
       machineNumber: machineNumber(plan),
       plan,
-      session: openSessions.get(key),
+      session,
     })
+    addedMachines.add(key)
   }
 
   for (const [key, session] of openSessions) {
-    if (plansByMachine.has(key)) continue
+    if (addedMachines.has(key)) continue
     options.push({ machineNumber: machineNumber(session), plan: session, session })
   }
 
@@ -90,20 +96,6 @@ export function productionSessionStartOptions({
       numeric: true,
     })
   )
-}
-
-export function productionSessionMachineMatches(
-  options: readonly ProductionSessionMachineOption[],
-  query: string,
-  limit = 8
-) {
-  const needle = query.trim().toLocaleLowerCase("en-IN")
-  if (!needle) return []
-  return options
-    .filter(({ machineNumber }) =>
-      machineNumber.toLocaleLowerCase("en-IN").includes(needle)
-    )
-    .slice(0, limit)
 }
 
 export function productionSessionCarriedStartCount(

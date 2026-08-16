@@ -35,6 +35,6 @@ Rejected pieces are included in total produced pieces. Good pieces equal total p
 
 ## Operational and analytical views
 
-Production Sessions belongs inside each Production Unit. Start Session accepts a machine number and fetches that unit's current planner assignment for verification before Shop Floor enters the operator, start time, measurement method, and applicable machine start count. It does not expose a daily all-machine board.
+Production Sessions belongs inside each Production Unit. Start Session offers a dropdown containing only currently running machines in that unit and fetches the selected machine's current planner assignment for verification before Shop Floor enters the operator, start time, measurement method, and applicable machine start count. It does not expose a daily all-machine board or queued machines.
 
 The Production Session Register shows one row per session for the selected Production Unit. The Production Event Log presents that unit's lifecycle actions and child events chronologically for analysis without creating a second source of truth.

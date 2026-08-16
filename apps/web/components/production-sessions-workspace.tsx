@@ -20,7 +20,6 @@ import { dashboardPayloadFromState, dashboardPayloadForProductionFloor } from "@
 import { productionPieceWeightGrams } from "@/lib/production-session-entry"
 import {
   productionSessionCarriedStartCount,
-  productionSessionMachineMatches,
   productionSessionStartOptions,
   type ProductionSessionMachineOption,
 } from "@/lib/production-session-start"
@@ -71,7 +70,6 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
   const [eventRows, setEventRows] = useState<Row[]>([])
   const [employees, setEmployees] = useState<Array<{ code: string; name: string }>>([])
   const [query, setQuery] = useState("")
-  const [machineQuery, setMachineQuery] = useState("")
   const [selectedMachine, setSelectedMachine] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
@@ -122,10 +120,6 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
     planRows: rows(control.machinePlanDetailRows),
     sessions,
   }), [control.machinePlanDetailRows, sessions])
-  const machineMatches = useMemo(
-    () => productionSessionMachineMatches(machineOptions, machineQuery),
-    [machineOptions, machineQuery]
-  )
   const selectedOption = useMemo(
     () => machineOptions.find(({ machineNumber }) => machineNumber.toLowerCase() === selectedMachine.toLowerCase()),
     [machineOptions, selectedMachine]
@@ -198,7 +192,7 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
         <Card>
           <CardHeader className="gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div><CardTitle>{view === "start" ? "Start a session" : view === "register" ? "Session Register" : "Event Log"}</CardTitle><CardDescription>{view === "start" ? "Find one machine and verify its current planning details." : "Search the session history for this Production Unit."}</CardDescription></div>
+              <div><CardTitle>{view === "start" ? "Start a session" : view === "register" ? "Session Register" : "Event Log"}</CardTitle><CardDescription>{view === "start" ? "Select a running machine and verify its current planning details." : "Search the session history for this Production Unit."}</CardDescription></div>
               <div className="flex flex-wrap gap-2">
                 {([['start','Start Session'],['register','Session Register'],['events','Event Log']] as const).map(([id, label]) => <Button key={id} className="h-11" variant={view === id ? "default" : "outline"} onClick={() => setView(id)}>{id === "start" ? <Play /> : id === "register" ? <History /> : <Clock3 />}{label}</Button>)}
               </div>
@@ -211,7 +205,7 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
           <CardContent>
             {error ? <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
             {message ? <div className="mb-3 rounded-md border bg-muted p-3 text-sm">{message}</div> : null}
-            {loading ? <div className="p-10 text-center text-muted-foreground">Loading production sessions…</div> : view === "start" ? <StartSessionLookup query={machineQuery} matches={machineMatches} selected={selectedOption} shift={shift} onQueryChange={(value) => { setMachineQuery(value); if (value.toLowerCase() !== selectedMachine.toLowerCase()) setSelectedMachine("") }} onSelect={(option) => { setMachineQuery(option.machineNumber); setSelectedMachine(option.machineNumber) }} onAction={openAction} onResume={(row) => void resume(row)} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
+            {loading ? <div className="p-10 text-center text-muted-foreground">Loading production sessions…</div> : view === "start" ? <StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} onSelect={setSelectedMachine} onAction={openAction} onResume={(row) => void resume(row)} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
           </CardContent>
         </Card>
       <ActionSheet key={`${action}-${text(target?.id) || machine(target ?? {})}`} action={action} target={target} floor={floor} shift={shift} employees={employees} control={control} saving={saving} message={message} onOpenChange={(open) => { if (!open) setAction(null) }} onSave={(type, payload) => void save(type, payload)} />
@@ -220,14 +214,13 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
   )
 }
 
-function StartSessionLookup({ query, matches, selected, shift, onQueryChange, onSelect, onAction, onResume, onDetail }: { query: string; matches: ProductionSessionMachineOption[]; selected?: ProductionSessionMachineOption; shift: ReturnType<typeof productionShiftAt>; onQueryChange: (value: string) => void; onSelect: (option: ProductionSessionMachineOption) => void; onAction: (action: Action, row: Row) => void; onResume: (row: Row) => void; onDetail: (row: Row) => void }) {
+function StartSessionLookup({ options, selected, shift, onSelect, onAction, onResume, onDetail }: { options: ProductionSessionMachineOption[]; selected?: ProductionSessionMachineOption; shift: ReturnType<typeof productionShiftAt>; onSelect: (machineNumber: string) => void; onAction: (action: Action, row: Row) => void; onResume: (row: Row) => void; onDetail: (row: Row) => void }) {
   const plan = selected?.plan
   const session = selected?.session
   const pieceWeight = plan ? productionPieceWeightGrams(plan) : 0
   return <div className="mx-auto grid max-w-4xl gap-4">
-    <div className="grid gap-2"><label className="text-sm font-medium" htmlFor="production-session-machine">Machine number</label><div className="relative"><Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" /><Input id="production-session-machine" autoComplete="off" className="h-11 pl-9" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Type machine number, for example C501" /></div></div>
-    {!selected && query.trim() ? matches.length ? <div className="overflow-hidden rounded-md border">{matches.map((option) => <button key={option.machineNumber} className="flex w-full items-center justify-between border-b px-4 py-3 text-left last:border-b-0 hover:bg-muted/50" type="button" onClick={() => onSelect(option)}><span className="font-medium">{option.machineNumber}</span><span className="text-sm text-muted-foreground">{part(option.plan) || "No planned part"} · JC {job(option.plan) || "-"}</span></button>)}</div> : <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">No current plan or open session matches that machine number in this Production Unit.</div> : null}
-    {!selected && !query.trim() ? <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">Enter a machine number to fetch its current planning information.</div> : null}
+    <Field label="Machine number"><NativeSelect value={selected?.machineNumber ?? ""} onChange={(event) => onSelect(event.target.value)}><NativeSelectOption value="">Select running machine</NativeSelectOption>{options.map((option) => <NativeSelectOption key={option.machineNumber} value={option.machineNumber}>{option.machineNumber} · {part(option.plan) || "No planned part"} · JC {job(option.plan) || "-"}</NativeSelectOption>)}</NativeSelect></Field>
+    {!selected ? <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">{options.length ? "Select a running machine to fetch its current planning information." : "No machines are currently running in this Production Unit."}</div> : null}
     {selected && plan ? <div className="rounded-lg border bg-background p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-lg font-semibold">{selected.machineNumber}</div><div className="text-sm text-muted-foreground">Planning details to verify before entry</div></div><Badge variant={session ? "default" : "secondary"}>{session ? (session.hasOpenDowntime ? "Downtime" : "Running") : "Ready to start"}</Badge></div>
       <div className="mt-4 grid gap-x-6 gap-y-3 rounded-md bg-muted/40 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
