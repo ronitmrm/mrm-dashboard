@@ -51,6 +51,7 @@ type WorkOrderContext = {
 
 type ProductionSessionEndReason =
   | "operator_change"
+  | "shift_end"
   | "shift_change"
   | "item_complete"
   | "job_change"
@@ -125,6 +126,7 @@ function productionMeasurementMethod(value: string) {
 function productionSessionEndReason(value: string) {
   const reasons = new Set<ProductionSessionEndReason>([
     "operator_change",
+    "shift_end",
     "shift_change",
     "item_complete",
     "job_change",

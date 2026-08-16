@@ -1,9 +1,38 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  productionSessionActionDefaults,
   productionSessionCarriedStartCount,
   productionSessionStartOptions,
 } from "./production-session-start"
+
+describe("production session action defaults", () => {
+  it("prefills the Conventional shift start, shift end, and close reason", () => {
+    expect(
+      productionSessionActionDefaults(
+        "conventional",
+        new Date("2026-08-16T10:30:00.000Z")
+      )
+    ).toEqual({
+      endAt: "2026-08-16T20:00",
+      endReason: "shift_end",
+      startAt: "2026-08-16T08:30",
+    })
+  })
+
+  it("keeps overnight CNC shift C on its starting production date", () => {
+    expect(
+      productionSessionActionDefaults(
+        "cnc",
+        new Date("2026-08-16T19:30:00.000Z")
+      )
+    ).toEqual({
+      endAt: "2026-08-17T06:00",
+      endReason: "shift_end",
+      startAt: "2026-08-16T22:00",
+    })
+  })
+})
 
 describe("production session machine lookup", () => {
   it("selects the current planned job for each machine and attaches its open session", () => {

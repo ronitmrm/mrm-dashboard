@@ -6,6 +6,8 @@ A Production Session is one uninterrupted period in which one operator runs one 
 
 Shop Floor starts and closes sessions. Quality may also close CNC sessions. Quality, Shop Floor, and Machinist may record downtime; only Quality may record rejection.
 
+Close reasons are Shift Ends, Shift Change, Operator Change, Item Complete, Job / Setup Change, and Manual Stop. Shift Ends is the default because it is the normal close path.
+
 ## Shift and production date
 
 | Production Floor | Shift | Start | End |
@@ -18,6 +20,8 @@ Shop Floor starts and closes sessions. Quality may also close CNC sessions. Qual
 | CNC | C | 22:00 | 06:00 |
 
 Production Date is the date on which the shift starts. CNC Shift C therefore keeps its starting date after midnight until 06:00.
+
+Start Session pre-fills the selected shift's scheduled start. End Session pre-fills that session's scheduled shift end. Both remain editable for exceptions; for example, Conventional starts at 08:30 and ends at 20:00.
 
 ## Session reference
 
