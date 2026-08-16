@@ -149,7 +149,7 @@ A company-wide workspace where eligible records from every Production Floor can 
 _Avoid_: Production-floor-specific Corrections, deleting wrong entries.
 
 **Company-Wide Quality Code Master**:
-The shared Rejection Type, Defect / Downtime Reason, and Rejection Remark code lists used by every Production Floor. These codes are not copied or customized per Production Floor.
+The shared Rejection Type, Defect / Downtime Reason, and Rejection Remark code lists used by every Production Floor. Their codes are system-generated and CSV uploads cannot replace the established sequence. These codes are not copied or customized per Production Floor.
 _Avoid_: Production-floor rejection codes, department-specific defect reasons.
 
 **Priority Plan Scenario**:
@@ -165,7 +165,7 @@ An existing Route Master combination of item code, option number, and setup numb
 _Avoid_: Free-text quality master target.
 
 **Coded Checklist**:
-A reusable checklist identified by one generated code and containing one or more ordered steps. Checklist counts refer to unique checklist codes, not step rows.
+A reusable checklist identified by one system-generated code and containing one or more ordered steps. CSV code values may group uploaded steps but never become the saved code. Checklist counts refer to unique checklist codes, not step rows.
 _Avoid_: Checklist row count.
 
 **Machinist Setup Checklist**:

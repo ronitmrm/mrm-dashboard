@@ -1021,7 +1021,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
     }) {
       return transaction(pool, async (client) => {
         const code = await generatedQualityMasterCode(client, input.organizationId, input.code, "rejection-type")
-        const result = await client.query<{ id: string }>(
+        const result = await client.query<{ code: string; id: string }>(
           `
             INSERT INTO quality.rejection_types (
               organization_id, code, name, active,
@@ -1034,7 +1034,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
               updated_by_user_id = EXCLUDED.updated_by_user_id,
               source_payload = EXCLUDED.source_payload, updated_at = now(),
               row_version = quality.rejection_types.row_version + 1
-            RETURNING id
+            RETURNING code, id
           `,
           [
             input.organizationId,
@@ -1064,7 +1064,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           input.organizationId
         )
         const code = await generatedQualityMasterCode(client, input.organizationId, input.code, "rejection-reason")
-        const result = await client.query<{ id: string }>(
+        const result = await client.query<{ code: string; id: string }>(
           `
             INSERT INTO quality.rejection_reasons (
               organization_id, rejection_type_id, code, name, active,
@@ -1077,7 +1077,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
               updated_by_user_id = EXCLUDED.updated_by_user_id,
               source_payload = EXCLUDED.source_payload, updated_at = now(),
               row_version = quality.rejection_reasons.row_version + 1
-            RETURNING id
+            RETURNING code, id
           `,
           [
             input.organizationId,
@@ -1108,7 +1108,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           input.organizationId
         )
         const code = await generatedQualityMasterCode(client, input.organizationId, input.code, "rejection-remark")
-        const result = await client.query<{ id: string }>(
+        const result = await client.query<{ code: string; id: string }>(
           `
             INSERT INTO quality.rejection_remarks (
               organization_id, rejection_reason_id, code, remark, active,
@@ -1121,7 +1121,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
               updated_by_user_id = EXCLUDED.updated_by_user_id,
               source_payload = EXCLUDED.source_payload, updated_at = now(),
               row_version = quality.rejection_remarks.row_version + 1
-            RETURNING id
+            RETURNING code, id
           `,
           [
             input.organizationId,
@@ -1483,7 +1483,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
           checklistCode: code,
           version: code,
         }
-        const result = await client.query<{ id: string }>(
+        const result = await client.query<{ code: string; id: string }>(
           `
             INSERT INTO quality.setup_checklist_templates (
               organization_id, code, name, revision, active,
@@ -1497,7 +1497,7 @@ export function createQualityRepository(options: RepositoryPoolOptions) {
               updated_by_user_id = EXCLUDED.updated_by_user_id,
               source_payload = EXCLUDED.source_payload,
               updated_at = now(), row_version = quality.setup_checklist_templates.row_version + 1
-            RETURNING id
+            RETURNING code, id
           `,
           [
             input.organizationId,

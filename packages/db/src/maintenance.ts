@@ -500,7 +500,7 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
           `,
           [definition.rows[0].id, normalizedItem.itemKey]
         )
-        return itemResult.rows[0]!
+        return { ...itemResult.rows[0]!, code }
       })
     },
 
