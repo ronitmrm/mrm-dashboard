@@ -3923,6 +3923,8 @@ function JobCardsPanel({
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   openMasterReadiness: () => void;
 }) {
+  const [selectedAction, setSelectedAction] = useState<"" | "mark-complete" | "dispatch-approval">("");
+
   return (
     <section className="grid gap-4">
       <JobCardRegister
@@ -3936,8 +3938,19 @@ function JobCardsPanel({
           <CardTitle>Job Card Actions</CardTitle>
           <CardDescription>Setup Completion And Dispatch Approval Actions.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 @5xl/main:grid-cols-2">
-          <LegacyActionForm
+        <CardContent className="grid gap-4">
+          <Field label="Action">
+            <SearchableSelect
+              className="h-9 max-w-md rounded-md border bg-background px-3 text-sm"
+              value={selectedAction}
+              onChange={(event) => setSelectedAction(event.target.value as typeof selectedAction)}
+            >
+              <option value="">Select Job Card action</option>
+              <option value="mark-complete">Mark Setup Complete</option>
+              <option value="dispatch-approval">Dispatch Approval</option>
+            </SearchableSelect>
+          </Field>
+          {selectedAction === "mark-complete" ? <LegacyActionForm
             title="Mark Setup Complete"
             description="Equivalent To The Legacy Running Job-Card Completion Action."
             fields={[
@@ -3949,8 +3962,8 @@ function JobCardsPanel({
             ]}
             buttonLabel="Mark complete"
             onSubmit={(body) => submitAction("mark-complete", body)}
-          />
-          <LegacyActionForm
+          /> : null}
+          {selectedAction === "dispatch-approval" ? <LegacyActionForm
             title="Dispatch Approval"
             description="Only Completed Job Cards Should Be Approved For Dispatch."
             fields={[
@@ -3960,7 +3973,7 @@ function JobCardsPanel({
             ]}
             buttonLabel="Approve dispatch"
             onSubmit={(body) => submitAction("dispatch-approval", body)}
-          />
+          /> : null}
         </CardContent>
       </Card>
     </section>

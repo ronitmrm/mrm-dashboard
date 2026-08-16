@@ -1081,6 +1081,13 @@ function buildProductionControl({
     const missingTooling = missingToolingRoutes.map((route) => setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption));
     const missingMachine = missingMachineRoutes.map((route) => setupStepKey(rowText(route, "SETUP NO.", "SETUP CODE", "setupNo"), effectiveOption));
     const firstMissingRoute = missingCycleRoutes[0] ?? missingToolingRoutes[0] ?? missingMachineRoutes[0] ?? selectedRoutes[0] ?? {};
+    const finalRoute = allSelectedRoutes.at(-1);
+    const finalRouteSetupNo = finalRoute ? rowText(finalRoute, "SETUP NO.", "SETUP CODE", "setupNo") : "";
+    const finalSetupNumber = setupStepKey(finalRouteSetupNo, effectiveOption) || finalRouteSetupNo;
+    const finalSetupActual = finalRoute
+      ? rawBySetupAnyMachine.get(productionSetupBaseKey({ jcNo, partCode, setupNo: finalSetupNumber }))
+        ?? rawBySetupAnyMachine.get(productionSetupBaseKey({ jcNo, partCode, setupNo: finalRouteSetupNo }))
+      : undefined;
     const actual = rawByJc.get(canonicalKey(jcNo));
     const orderPcs = safeNumber(rowValue(row, "ORD. PCS.", "orderPcs"));
     const dispatchStatus = dispatchJcKeys.has(canonicalKey(jcNo)) ? "Shifted to dispatch" : "In production";
@@ -1127,6 +1134,8 @@ function buildProductionControl({
       cycleStatus: missingCycle.length ? `Missing setup ${compactJoin(missingCycle)}` : "Ready",
       toolingStatus: missingTooling.length ? `Missing setup ${compactJoin(missingTooling)}` : "Ready",
       machineMasterStatus: missingMachine.length ? `Missing setup ${compactJoin(missingMachine)}` : "Ready",
+      finalSetupGoodPieces: round(finalSetupActual?.actualQty ?? 0),
+      finalSetupNumber,
       rawOutputQty: round(actual?.outputQty ?? 0),
       rawActualQty: round(actual?.actualQty ?? 0),
       rawRejectQty: round(actual?.rejectQty ?? 0),
