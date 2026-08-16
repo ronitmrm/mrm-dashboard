@@ -6,6 +6,7 @@ const preservedFieldNames = new Set([
   "cardrole",
   "currency",
   "department",
+  "endoutcome",
   "endreason",
   "enteredrole",
   "entrytype",
