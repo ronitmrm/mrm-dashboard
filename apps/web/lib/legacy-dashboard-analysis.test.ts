@@ -5431,7 +5431,12 @@ describe("buildLegacyDashboardSnapshot", () => {
           priority: "High",
           approvalMode: "allow_stop_running",
           interruptedSetups: [
-            { jcNo: "JC-042", setupNo: "1", machine: "C501", finishedQty: 4 },
+            {
+              finishedQuantity: 4,
+              jobCardNumber: "JC-042",
+              machineNumber: "C501",
+              setupNumber: 1,
+            },
           ],
           createdAt: "2026-06-23T01:00:00.000Z",
         },
@@ -5543,8 +5548,8 @@ describe("buildLegacyDashboardSnapshot", () => {
     })
     expect(stoppedSetup).toMatchObject({
       priorityStoppedByJcNo: "JC-043",
-      rawActualQty: 4,
-      priorityRemainingQty: 6,
+      rawActualQty: 1,
+      priorityRemainingQty: 9,
     })
     expect(untouchedSetup).not.toHaveProperty("priorityStoppedByJcNo")
     expect(untouchedSetup).toMatchObject({ rawActualQty: 1 })

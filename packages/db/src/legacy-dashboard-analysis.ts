@@ -2632,7 +2632,30 @@ function machinePlanDetails(
         setupNo: displaySetupNo,
         lockedMachines: interruptedLockedMachines,
       }) : undefined;
-      const setupInterruption = planOverrideInterruption ?? breakdownInterruption;
+      const recordedSetupInterruption = planOverrideInterruption ?? breakdownInterruption;
+      const interruptionActual = recordedSetupInterruption
+        ? rawBySetup.get(productionSetupKey({
+            jcNo: rowText(row, "jcNo"),
+            partCode,
+            setupNo: displaySetupNo,
+            machine: recordedSetupInterruption.machine,
+          })) ?? rawBySetup.get(productionSetupKey({
+            jcNo: rowText(row, "jcNo"),
+            partCode,
+            setupNo,
+            machine: recordedSetupInterruption.machine,
+          }))
+        : undefined;
+      const setupInterruption = recordedSetupInterruption
+        ? {
+            ...recordedSetupInterruption,
+            finishedQty: Math.max(
+              0,
+              interruptionActual?.actualQty
+                ?? recordedSetupInterruption.finishedQty
+            ),
+          }
+        : undefined;
       const machineUnavailablePlacement = machineUnavailableQueuePlacementForSetup(machineUnavailableWindows, {
         jcNo: rowText(row, "jcNo"),
         partCode,
@@ -3451,9 +3474,9 @@ function machineUnavailableQueueBeforeSetupsForSort(row: Record<string, unknown>
     .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
     .map((item) => item as Record<string, unknown>)
     .map((item) => ({
-      jcNo: canonicalKey(rowText(item, "jcNo", "JC NO", "jobCard")),
-      setupNo: canonicalKey(rowText(item, "setupNo", "SETUP NO", "setup")),
-      machine: canonicalKey(rowText(item, "machine", "machineNo", "MACHINE NO", "M/C NO")),
+      jcNo: canonicalKey(rowText(item, "jobCardNumber", "jcNo", "JC NO", "jobCard")),
+      setupNo: canonicalKey(rowText(item, "setupNumber", "setupNo", "SETUP NO", "setup")),
+      machine: canonicalKey(rowText(item, "machineNumber", "machine", "machineNo", "MACHINE NO", "M/C NO")),
     }))
     .filter((item) => item.jcNo && item.setupNo && item.machine);
 }
@@ -3469,27 +3492,23 @@ function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, u
     const setupInterruptions = planOverrideInterruptedSetups(overrideRow);
     for (const row of details) {
       const matchingInterruption = setupInterruptions.find((interruption) => priorityInterruptionMatchesRow(interruption, row));
-      if (!matchingInterruption || matchingInterruption.finishedQty <= 0) continue;
+      if (!matchingInterruption) continue;
       const meta = planningMeta(row);
-      const currentActual = meta.productionActual ?? {
-        machine: rowText(row, "machine"),
-        startDate: actualProductionStartDate(meta) || parseDate(rowText(row, "setupPlannedDate")) || "",
-        latestDate: actualProductionStartDate(meta) || parseDate(rowText(row, "setupPlannedDate")) || "",
-        outputQty: 0,
-        actualQty: 0,
-        rows: 0,
-        dates: new Set<string>(),
-      };
-      const actualQty = Math.max(currentActual.actualQty ?? 0, matchingInterruption.finishedQty);
-      const outputQty = Math.max(currentActual.outputQty ?? 0, matchingInterruption.finishedQty);
-      meta.productionActual = {
-        ...currentActual,
-        latestDate: currentActual.latestDate || currentActual.startDate || parseDate(rowText(row, "setupPlannedDate")) || "",
-        outputQty,
-        actualQty,
-      };
-      row.rawOutputQty = round(outputQty);
-      row.rawActualQty = round(actualQty);
+      if (!meta.productionActual && matchingInterruption.finishedQty > 0) {
+        const actualDate = parseDate(rowText(row, "setupPlannedDate")) || "";
+        meta.productionActual = {
+          machine: rowText(row, "machine"),
+          startDate: actualDate,
+          latestDate: actualDate,
+          outputQty: matchingInterruption.finishedQty,
+          actualQty: matchingInterruption.finishedQty,
+          rows: 1,
+          dates: new Set(actualDate ? [actualDate] : []),
+        };
+        row.rawOutputQty = round(matchingInterruption.finishedQty);
+        row.rawActualQty = round(matchingInterruption.finishedQty);
+      }
+      const actualQty = meta.productionActual?.actualQty ?? 0;
       row.planOverrideStoppedByJcNo = rowText(overrideRow, "target", "jcNo");
       row.planOverrideRemainingQty = round(Math.max((meta.totalOrderPcs ?? meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs"))) - actualQty, 0));
     }
@@ -3497,7 +3516,7 @@ function applyPlanOverrideInterruptionQuantities(details: Array<Record<string, u
 }
 
 function planOverrideInterruptionHasFinishedQty(row: Record<string, unknown>) {
-  return planOverrideInterruptedSetups(row).some((interruption) => interruption.finishedQty > 0);
+  return planOverrideInterruptedSetups(row).length > 0;
 }
 
 function planOverrideInterruptedSetups(row: Record<string, unknown>) {
@@ -3507,10 +3526,10 @@ function planOverrideInterruptedSetups(row: Record<string, unknown>) {
     .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
     .map((item) => item as Record<string, unknown>)
     .map((item) => ({
-      jcNo: canonicalKey(rowText(item, "jcNo", "JC NO", "jobCard")),
-      setupNo: canonicalKey(rowText(item, "setupNo", "SETUP NO", "setup")),
-      machine: canonicalKey(rowText(item, "machine", "machineNo", "MACHINE NO", "M/C NO")),
-      finishedQty: safeNumber(rowValue(item, "finishedQty", "FINISHED QTY", "producedQty", "PRODUCED QTY")),
+      jcNo: canonicalKey(rowText(item, "jobCardNumber", "jcNo", "JC NO", "jobCard")),
+      setupNo: canonicalKey(rowText(item, "setupNumber", "setupNo", "SETUP NO", "setup")),
+      machine: canonicalKey(rowText(item, "machineNumber", "machine", "machineNo", "MACHINE NO", "M/C NO")),
+      finishedQty: safeNumber(rowValue(item, "finishedQuantity", "finishedQty", "FINISHED QTY", "producedQty", "PRODUCED QTY")),
     }))
     .filter((item) => item.jcNo && item.setupNo);
 }
@@ -3521,39 +3540,17 @@ function planOverridePlacesRowBeforeStoppedRow(targetRow: Record<string, unknown
   if (canonicalKey(rowText(targetRow, "machine", "machineNo")) !== canonicalKey(rowText(blockingRow, "machine", "machineNo"))) return false;
   if (machineUnavailableKeepsRowBefore(targetRow, blockingRow)) return false;
   return planOverrideInterruptedSetups(targetRow).some((interruption) =>
-    interruption.finishedQty > 0 && priorityInterruptionMatchesRow(interruption, blockingRow),
+    priorityInterruptionMatchesRow(interruption, blockingRow),
   );
 }
 
 function applyPriorityInterruptionQuantities(details: Array<Record<string, unknown>>) {
   const stopApprovals = details.filter((row) => priorityApprovalMode(row) === "allow_stop_running" && priorityApprovalHasFinishedQty(row));
   for (const approval of stopApprovals) {
-    const setupInterruptions = priorityInterruptedSetups(approval);
-    const defaultFinishedQty = safeNumber(rowValue(approval, "priorityInterruptedFinishedQty"));
     for (const row of details) {
       if (!priorityInterruptsRow(approval, row)) continue;
       const meta = planningMeta(row);
-      const currentActual = meta.productionActual ?? {
-        machine: rowText(row, "machine"),
-        startDate: actualProductionStartDate(meta) || parseDate(rowText(row, "setupPlannedDate")) || "",
-        latestDate: actualProductionStartDate(meta) || parseDate(rowText(row, "setupPlannedDate")) || "",
-        outputQty: 0,
-        actualQty: 0,
-        rows: 0,
-        dates: new Set<string>(),
-      };
-      const matchingInterruption = setupInterruptions.find((interruption) => priorityInterruptionMatchesRow(interruption, row));
-      const finishedQty = matchingInterruption?.finishedQty || defaultFinishedQty;
-      const actualQty = Math.max(currentActual.actualQty ?? 0, finishedQty);
-      const outputQty = Math.max(currentActual.outputQty ?? 0, finishedQty);
-      meta.productionActual = {
-        ...currentActual,
-        latestDate: currentActual.latestDate || currentActual.startDate || parseDate(rowText(row, "setupPlannedDate")) || "",
-        outputQty,
-        actualQty,
-      };
-      row.rawOutputQty = round(outputQty);
-      row.rawActualQty = round(actualQty);
+      const actualQty = meta.productionActual?.actualQty ?? 0;
       row.priorityStoppedByJcNo = rowText(approval, "jcNo");
       row.priorityRemainingQty = round(Math.max((meta.totalOrderPcs ?? meta.orderPcs ?? safeNumber(rowValue(row, "orderPcs"))) - actualQty, 0));
     }
@@ -3592,10 +3589,10 @@ function priorityInterruptedSetups(priorityRow: Record<string, unknown>) {
     .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
     .map((item) => item as Record<string, unknown>)
     .map((item) => ({
-      jcNo: canonicalKey(rowText(item, "jcNo", "JC NO", "jobCard")),
-      setupNo: canonicalKey(rowText(item, "setupNo", "SETUP NO", "setup")),
-      machine: canonicalKey(rowText(item, "machine", "machineNo", "MACHINE NO", "M/C NO")),
-      finishedQty: safeNumber(rowValue(item, "finishedQty", "FINISHED QTY")),
+      jcNo: canonicalKey(rowText(item, "jobCardNumber", "jcNo", "JC NO", "jobCard")),
+      setupNo: canonicalKey(rowText(item, "setupNumber", "setupNo", "SETUP NO", "setup")),
+      machine: canonicalKey(rowText(item, "machineNumber", "machine", "machineNo", "MACHINE NO", "M/C NO")),
+      finishedQty: safeNumber(rowValue(item, "finishedQuantity", "finishedQty", "FINISHED QTY")),
     }))
     .filter((item) => item.jcNo && item.setupNo);
 }
@@ -3608,10 +3605,10 @@ function priorityQueueBeforeSetups(priorityRow: Record<string, unknown>) {
     .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
     .map((item) => item as Record<string, unknown>)
     .map((item) => ({
-      targetSetupNo: canonicalKey(rowText(item, "targetSetupNo", "TARGET SETUP NO", "targetSetup", "prioritySetupNo")),
-      jcNo: canonicalKey(rowText(item, "jcNo", "JC NO", "jobCard")),
-      setupNo: canonicalKey(rowText(item, "setupNo", "SETUP NO", "setup")),
-      machine: canonicalKey(rowText(item, "machine", "machineNo", "MACHINE NO", "M/C NO")),
+      targetSetupNo: canonicalKey(rowText(item, "targetSetupNumber", "targetSetupNo", "TARGET SETUP NO", "targetSetup", "prioritySetupNo")),
+      jcNo: canonicalKey(rowText(item, "jobCardNumber", "jcNo", "JC NO", "jobCard")),
+      setupNo: canonicalKey(rowText(item, "setupNumber", "setupNo", "SETUP NO", "setup")),
+      machine: canonicalKey(rowText(item, "machineNumber", "machine", "machineNo", "MACHINE NO", "M/C NO")),
     }))
     .filter((item) => item.targetSetupNo && item.jcNo && item.setupNo);
 }
@@ -3638,13 +3635,13 @@ function priorityInterruptionMatchesRow(interruption: ReturnType<typeof priority
 function priorityApprovalHasFinishedQty(priorityRow: Record<string, unknown>) {
   const setupInterruptions = priorityInterruptedSetups(priorityRow);
   if (!setupInterruptions.length) return safeNumber(rowValue(priorityRow, "priorityInterruptedFinishedQty")) > 0;
-  return setupInterruptions.some((interruption) => interruption.finishedQty > 0);
+  return true;
 }
 
 function priorityInterruptionHasFinishedQty(priorityRow: Record<string, unknown>, blockingRow: Record<string, unknown>) {
   const setupInterruptions = priorityInterruptedSetups(priorityRow);
   if (!setupInterruptions.length) return safeNumber(rowValue(priorityRow, "priorityInterruptedFinishedQty")) > 0;
-  return setupInterruptions.some((interruption) => interruption.finishedQty > 0 && priorityInterruptionMatchesRow(interruption, blockingRow));
+  return setupInterruptions.some((interruption) => priorityInterruptionMatchesRow(interruption, blockingRow));
 }
 
 function priorityQueueStateRank(row: Record<string, unknown>) {
@@ -4074,10 +4071,10 @@ function machineUnavailableInterruptedSetups(row: Record<string, unknown>): Mach
     .filter((item) => typeof item === "object" && item !== null && !Array.isArray(item))
     .map((item) => item as Record<string, unknown>)
     .map((item) => ({
-      jcNo: canonicalKey(rowText(item, "jcNo", "JC NO", "jobCard")),
-      setupNo: canonicalKey(rowText(item, "setupNo", "SETUP NO", "setup")),
-      machine: canonicalKey(rowText(item, "machine", "machineNo", "MACHINE NO", "M/C NO")),
-      finishedQty: safeNumber(rowValue(item, "finishedQty", "FINISHED QTY", "producedQty", "PRODUCED QTY")),
+      jcNo: canonicalKey(rowText(item, "jobCardNumber", "jcNo", "JC NO", "jobCard")),
+      setupNo: canonicalKey(rowText(item, "setupNumber", "setupNo", "SETUP NO", "setup")),
+      machine: canonicalKey(rowText(item, "machineNumber", "machine", "machineNo", "MACHINE NO", "M/C NO")),
+      finishedQty: safeNumber(rowValue(item, "finishedQuantity", "finishedQty", "FINISHED QTY", "producedQty", "PRODUCED QTY")),
     }))
     .filter((item) => item.jcNo && item.setupNo && item.machine);
 }
@@ -4095,18 +4092,18 @@ function machineUnavailableQueuePlacements(row: Record<string, unknown>): Machin
           .filter((queueItem) => typeof queueItem === "object" && queueItem !== null && !Array.isArray(queueItem))
           .map((queueItem) => queueItem as Record<string, unknown>)
           .map((queueItem) => ({
-            jcNo: canonicalKey(rowText(queueItem, "jcNo", "JC NO", "jobCard")),
-            setupNo: canonicalKey(rowText(queueItem, "setupNo", "SETUP NO", "setup")),
-            machine: canonicalKey(rowText(queueItem, "machine", "machineNo", "MACHINE NO", "M/C NO")),
+            jcNo: canonicalKey(rowText(queueItem, "jobCardNumber", "jcNo", "JC NO", "jobCard")),
+            setupNo: canonicalKey(rowText(queueItem, "setupNumber", "setupNo", "SETUP NO", "setup")),
+            machine: canonicalKey(rowText(queueItem, "machineNumber", "machine", "machineNo", "MACHINE NO", "M/C NO")),
           }))
           .filter((queueItem) => queueItem.jcNo && queueItem.setupNo && queueItem.machine)
         : [];
       return {
-        targetJcNo: canonicalKey(rowText(item, "targetJcNo", "jcNo", "JC NO", "jobCard")),
+        targetJcNo: canonicalKey(rowText(item, "targetJobCardNumber", "targetJcNo", "jcNo", "JC NO", "jobCard")),
         targetPartCode: canonicalKey(rowText(item, "targetPartCode", "partCode", "PART CODE", "partNo")),
-        targetSetupNo: canonicalKey(rowText(item, "targetSetupNo", "setupNo", "SETUP NO", "setup")),
-        targetSourceMachine: canonicalKey(rowText(item, "targetSourceMachine", "sourceMachine", "fromMachine", "machine")),
-        targetMachine: canonicalKey(rowText(item, "targetMachine", "toMachine", "machine", "machineNo")),
+        targetSetupNo: canonicalKey(rowText(item, "targetSetupNumber", "targetSetupNo", "setupNo", "SETUP NO", "setup")),
+        targetSourceMachine: canonicalKey(rowText(item, "targetSourceMachineNumber", "targetSourceMachine", "sourceMachine", "fromMachine", "machine")),
+        targetMachine: canonicalKey(rowText(item, "targetMachineNumber", "targetMachine", "toMachine", "machine", "machineNo")),
         queueBeforeSetups,
       };
     })

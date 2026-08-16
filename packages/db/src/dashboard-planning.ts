@@ -12,6 +12,7 @@ import {
   validConfirmedPrioritySetupNumbers,
   workOrderIdentityMatches,
 } from "./planning-rules"
+import { plannerInterruptionRequirement } from "./planner-interruption-settlement"
 import {
   normalizeProductionFloorCode,
   productionFloors,
@@ -20,10 +21,13 @@ import {
 
 
 type InterruptedSetupInput = {
-  finishedQuantity?: number | null
   jobCardNumber: string
   machineNumber: string
   setupNumber: number
+}
+
+type SettledInterruptedSetup = InterruptedSetupInput & {
+  finishedQuantity: number
 }
 
 type QueueBeforeSetupInput = {
@@ -256,6 +260,168 @@ async function optionalPlanningReference(
     [organizationId, jobCardNumber.trim(), setupNumber]
   )
   return result.rows[0] ?? null
+}
+
+async function plannerInterruptionState(
+  client: PoolClient,
+  organizationId: string,
+  interruption: InterruptedSetupInput
+) {
+  const result = await client.query<{
+    finished_quantity: string
+    has_open_downtime: boolean | null
+    measurement_method: "counter" | "weight" | null
+    session_reference: string | null
+  }>(
+    `
+      WITH interruption_reference AS (
+        SELECT work_order.id AS work_order_id,
+          setup.id AS operation_setup_id,
+          machine.id AS machine_id
+        FROM manufacturing.work_orders work_order
+        JOIN manufacturing.route_selections selection
+          ON selection.work_order_id = work_order.id
+          AND selection.reversed_at IS NULL
+        JOIN manufacturing.operation_setups setup
+          ON setup.route_option_id = selection.route_option_id
+          AND setup.setup_number = $3
+          AND setup.active
+        JOIN catalog.machines machine
+          ON machine.organization_id = work_order.organization_id
+          AND lower(machine.machine_number) = lower($4)
+          AND machine.active
+        WHERE work_order.organization_id = $1
+          AND lower(work_order.job_card_number) = lower($2)
+        LIMIT 1
+      )
+      SELECT open_session.session_reference,
+        open_session.measurement_method,
+        CASE WHEN open_session.id IS NULL THEN NULL ELSE EXISTS (
+          SELECT 1
+          FROM manufacturing.production_session_downtime_events downtime
+          WHERE downtime.production_session_id = open_session.id
+            AND downtime.ended_at IS NULL
+            AND downtime.reversed_at IS NULL
+        ) END AS has_open_downtime,
+        COALESCE((
+          SELECT sum(closed.quantity_good)
+          FROM manufacturing.production_sessions closed
+          WHERE closed.organization_id = $1
+            AND closed.work_order_id = reference.work_order_id
+            AND closed.operation_setup_id = reference.operation_setup_id
+            AND closed.machine_id = reference.machine_id
+            AND closed.status = 'closed'
+            AND closed.reversed_at IS NULL
+        ), 0)::text AS finished_quantity
+      FROM interruption_reference reference
+      LEFT JOIN LATERAL (
+        SELECT session.id, session.session_reference,
+          session.measurement_method
+        FROM manufacturing.production_sessions session
+        WHERE session.organization_id = $1
+          AND session.work_order_id = reference.work_order_id
+          AND session.operation_setup_id = reference.operation_setup_id
+          AND session.machine_id = reference.machine_id
+          AND session.status = 'open'
+          AND session.reversed_at IS NULL
+        LIMIT 1
+      ) open_session ON true
+    `,
+    [
+      organizationId,
+      interruption.jobCardNumber.trim(),
+      interruption.setupNumber,
+      interruption.machineNumber.trim(),
+    ]
+  )
+  return result.rows[0] ?? null
+}
+
+async function settledPlannerInterruptions(
+  client: PoolClient,
+  organizationId: string,
+  interruptions: InterruptedSetupInput[],
+  keepsWorkOnMachine = false
+): Promise<SettledInterruptedSetup[]> {
+  const settled: SettledInterruptedSetup[] = []
+  for (const interruption of interruptions) {
+    const state = await plannerInterruptionState(
+      client,
+      organizationId,
+      interruption
+    )
+    const requirement = plannerInterruptionRequirement({
+      keepsWorkOnMachine,
+      session: state?.session_reference && state.measurement_method
+        ? {
+            hasOpenDowntime: state.has_open_downtime === true,
+            measurementMethod: state.measurement_method,
+            sessionReference: state.session_reference,
+          }
+        : null,
+    })
+    if (requirement.blocked) throw new Error(requirement.message)
+    settled.push({
+      ...interruption,
+      finishedQuantity: Number(state?.finished_quantity ?? 0),
+    })
+  }
+  return settled
+}
+
+async function requireMachineSessionSettlement(
+  client: PoolClient,
+  organizationId: string,
+  machineId: string,
+  keepsWorkOnMachine: boolean
+) {
+  const result = await client.query<{
+    has_open_downtime: boolean
+    measurement_method: "counter" | "weight"
+    session_reference: string
+  }>(
+    `
+      SELECT session.session_reference, session.measurement_method,
+        EXISTS (
+          SELECT 1
+          FROM manufacturing.production_session_downtime_events downtime
+          WHERE downtime.production_session_id = session.id
+            AND downtime.ended_at IS NULL
+            AND downtime.reversed_at IS NULL
+        ) AS has_open_downtime
+      FROM manufacturing.production_sessions session
+      WHERE session.organization_id = $1
+        AND session.machine_id = $2
+        AND session.status = 'open'
+        AND session.reversed_at IS NULL
+      LIMIT 1
+      FOR UPDATE OF session
+    `,
+    [organizationId, machineId]
+  )
+  const session = result.rows[0]
+  const requirement = plannerInterruptionRequirement({
+    keepsWorkOnMachine,
+    session: session
+      ? {
+          hasOpenDowntime: session.has_open_downtime,
+          measurementMethod: session.measurement_method,
+          sessionReference: session.session_reference,
+        }
+      : null,
+  })
+  if (requirement.blocked) throw new Error(requirement.message)
+}
+
+function interruptionMatches(
+  interruption: InterruptedSetupInput,
+  candidate: InterruptedSetupInput
+) {
+  return interruption.setupNumber === candidate.setupNumber
+    && interruption.jobCardNumber.trim().toLowerCase()
+      === candidate.jobCardNumber.trim().toLowerCase()
+    && interruption.machineNumber.trim().toLowerCase()
+      === candidate.machineNumber.trim().toLowerCase()
 }
 
 async function insertConstraintDetail(
@@ -1172,6 +1338,18 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           input.organizationId,
           input.jobCardNumber
         )
+        const interruptedSetups = await settledPlannerInterruptions(
+          client,
+          input.organizationId,
+          input.interruptedSetups ?? []
+        )
+        const firstInterruption = interruptedSetups[0]
+        const sourcePayload = {
+          ...input,
+          interruptedFinishedQuantity:
+            firstInterruption?.finishedQuantity ?? null,
+          interruptedSetups,
+        }
         const created = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.planner_priority_events (
@@ -1187,7 +1365,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             input.remark?.trim() || requiredText(input.priority, "Priority"),
             input.actorUserId ?? null,
             randomUUID(),
-            { ...input, confirmedSetupNumbers },
+            { ...sourcePayload, confirmedSetupNumbers },
           ]
         )
         await client.query(
@@ -1206,7 +1384,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           ]
         )
         let detailSequence = 1
-        for (const interrupted of input.interruptedSetups ?? []) {
+        for (const interrupted of interruptedSetups) {
           const reference = await optionalPlanningReference(
             client,
             input.organizationId,
@@ -1299,6 +1477,21 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           `,
           [machineId]
         )
+        const keepsWorkOnMachine = input.rescheduleAction?.trim().toLowerCase()
+          === "delay"
+        await requireMachineSessionSettlement(
+          client,
+          input.organizationId,
+          machineId,
+          keepsWorkOnMachine
+        )
+        const interruptedSetups = await settledPlannerInterruptions(
+          client,
+          input.organizationId,
+          input.interruptedSetups ?? [],
+          keepsWorkOnMachine
+        )
+        const sourcePayload = { ...input, interruptedSetups }
         const created = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.machine_constraint_events (
@@ -1318,10 +1511,10 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             input.unavailableTo ?? null,
             input.actorUserId ?? null,
             randomUUID(),
-            input,
+            sourcePayload,
           ]
         )
-        for (const interrupted of input.interruptedSetups ?? []) {
+        for (const interrupted of interruptedSetups) {
           await insertConstraintDetail(client, {
             evidence: interrupted,
             eventId: created.rows[0]!.id,
@@ -1392,18 +1585,55 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
               normalizeProductionFloorCode(input.productionFloorCode)
             )
           : null
-        const targetLock = await client.query<{ work_order_id: string }>(
+        const sourceInterruption = input.fromMachineNumber && input.setupNumber
+          ? {
+              jobCardNumber: input.jobCardNumber,
+              machineNumber: input.fromMachineNumber,
+              setupNumber: input.setupNumber,
+            }
+          : null
+        const requestedInterruptions = [...(input.interruptedSetups ?? [])]
+        if (
+          sourceInterruption
+          && !requestedInterruptions.some((interruption) =>
+            interruptionMatches(interruption, sourceInterruption)
+          )
+        ) {
+          requestedInterruptions.unshift(sourceInterruption)
+        }
+        const interruptedSetups = await settledPlannerInterruptions(
+          client,
+          input.organizationId,
+          requestedInterruptions
+        )
+        const targetLock = await client.query<{
+          job_card_number: string
+          setup_number: number
+          work_order_id: string
+        }>(
           `
-            SELECT work_order_id
-            FROM manufacturing.shop_floor_setup_state
-            WHERE machine_id = $1 AND active
+            SELECT state.work_order_id, work_order.job_card_number,
+              setup.setup_number
+            FROM manufacturing.shop_floor_setup_state state
+            JOIN manufacturing.work_orders work_order
+              ON work_order.id = state.work_order_id
+            JOIN manufacturing.operation_setups setup
+              ON setup.id = state.operation_setup_id
+            WHERE state.machine_id = $1 AND state.active
             FOR UPDATE
           `,
           [targetMachineId]
         )
         if (
           targetLock.rows[0] &&
-          targetLock.rows[0].work_order_id !== workOrder.id
+          targetLock.rows[0].work_order_id !== workOrder.id &&
+          !interruptedSetups.some((interruption) =>
+            interruptionMatches(interruption, {
+              jobCardNumber: targetLock.rows[0]!.job_card_number,
+              machineNumber: input.toMachineNumber,
+              setupNumber: targetLock.rows[0]!.setup_number,
+            })
+          )
         ) {
           throw new Error("Target machine is locked by another active setup.")
         }
@@ -1427,6 +1657,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           )
           operationSetupId = setup.rows[0]?.id ?? null
         }
+        const sourcePayload = { ...input, interruptedSetups }
         const created = await client.query<{ id: string }>(
           `
             INSERT INTO manufacturing.plan_override_events (
@@ -1447,11 +1678,11 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
             requiredText(input.reason, "Override reason"),
             input.actorUserId ?? null,
             randomUUID(),
-            input,
+            sourcePayload,
           ]
         )
         let detailSequence = 0
-        for (const interrupted of input.interruptedSetups ?? []) {
+        for (const interrupted of interruptedSetups) {
           await insertOverrideDetail(client, {
             details: interrupted,
             detailType: "interrupted-setup",

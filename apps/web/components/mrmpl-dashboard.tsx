@@ -2036,7 +2036,6 @@ function MachineConstraintPlannerForm({
   const [reviewReady, setReviewReady] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resolvedMachineConflictIds, setResolvedMachineConflictIds] = useState<Set<string>>(() => new Set());
-  const [producedQtyByRow, setProducedQtyByRow] = useState<Record<string, string>>({});
   const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false);
   const [queueAfterByRow, setQueueAfterByRow] = useState<Record<string, string>>({});
   const affectedRows = useMemo(() => machineIssueAffectedRows(plannedRows, {
@@ -2056,12 +2055,6 @@ function MachineConstraintPlannerForm({
   const runningRows = affectedRows.filter(machineIssueRowNeedsProducedQty);
   const lockedCount = affectedRows.filter(machineIssueRowIsLocked).length;
   const plannedCount = affectedRows.length - lockedCount;
-  const missingProducedQty = runningRows.some((row) => {
-    const rawValue = producedQtyByRow[machineIssueRowKey(row)]?.trim() ?? "";
-    const value = Number(rawValue);
-    const orderQty = Number(row.totalOrderPcs || row.orderPcs);
-    return rawValue === "" || !Number.isFinite(value) || value < 0 || (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty);
-  });
   const queueReviewRequired = planningMode === "review_then_plan";
   const movableAffectedRows = useMemo(
     () => machineConstraintMovableRows(affectedRows, rescheduleAction),
@@ -2078,7 +2071,7 @@ function MachineConstraintPlannerForm({
     resolvedIds: resolvedMachineConflictIds,
   }), [machineNo, planningMode, productionControl.machineConstraintRows, proposedMachineQueuePlacements, resolvedMachineConflictIds, rescheduleAction, unavailableFrom, unavailableTo]);
   const canReview = Boolean(machineNo.trim() && unavailableFrom);
-  const canSave = canReview && Boolean(reason.trim()) && reviewReady && !missingProducedQty && !machineConstraintConflicts.length && (!queueReviewRequired || queueReviewConfirmed);
+  const canSave = canReview && Boolean(reason.trim()) && reviewReady && !machineConstraintConflicts.length && (!queueReviewRequired || queueReviewConfirmed);
 
   function updateField(setter: Dispatch<SetStateAction<string>>, value: string) {
     setter(value);
@@ -2093,11 +2086,6 @@ function MachineConstraintPlannerForm({
     setQueueReviewConfirmed(false);
     setQueueAfterByRow({});
     setResolvedMachineConflictIds(new Set());
-  }
-
-  function updateProducedQty(row: DashboardPayload, value: string) {
-    const key = machineIssueRowKey(row);
-    setProducedQtyByRow((current) => ({ ...current, [key]: value }));
   }
 
   async function reverseMachineConstraintConflict(conflict: DashboardPayload) {
@@ -2126,7 +2114,6 @@ function MachineConstraintPlannerForm({
         jcNo: jobCardNumber(row),
         setupNo: displayValue(row.setupNo),
         machine: machineValue(row, "machine"),
-        finishedQty: Number(producedQtyByRow[machineIssueRowKey(row)] ?? 0),
       }));
       const queuePlacements = proposedMachineQueuePlacements;
       await submitAction("machine-constraint", {
@@ -2138,7 +2125,7 @@ function MachineConstraintPlannerForm({
         interruptedSetups,
         queuePlacements,
         reason,
-        remark: `Reviewed ${affectedRows.length} affected setup rows; ${lockedCount} locked; ${plannedCount} planned; ${runningRows.length} running rows captured with produced quantity; ${queueReviewGroups.length} queue review groups; ${queuePlacements.length} queue placements; ${planningMode}`,
+        remark: `Reviewed ${affectedRows.length} affected setup rows; ${lockedCount} locked; ${plannedCount} planned; ${runningRows.length} running rows require canonical session handling; ${queueReviewGroups.length} queue review groups; ${queuePlacements.length} queue placements; ${planningMode}`,
       });
       setMachineNo("");
       setUnavailableFrom("");
@@ -2146,7 +2133,6 @@ function MachineConstraintPlannerForm({
       setRescheduleAction("shift_required");
       setPlanningMode("system_recalculate");
       setReason("");
-      setProducedQtyByRow({});
       setQueueAfterByRow({});
       setQueueReviewConfirmed(false);
       setReviewReady(false);
@@ -2159,7 +2145,7 @@ function MachineConstraintPlannerForm({
     <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={saveMachineIssue}>
       <div>
         <div className="text-sm font-medium">Machine Unavailable Details</div>
-        <div className="text-xs text-muted-foreground">Running Rows Need Produced Quantity Before Remaining Quantity Is Planned Elsewhere.</div>
+        <div className="text-xs text-muted-foreground">Running Work Uses Its Production Session Output. Planner Actions Never Ask For A Second Quantity.</div>
       </div>
       <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
         <Field label="Machine Unavailable">
@@ -2204,37 +2190,28 @@ function MachineConstraintPlannerForm({
             <span>{formatNumber(affectedRows.length)} Affected Setup Rows</span>
             <span>{formatNumber(lockedCount)} Locked On Machine</span>
             <span>{formatNumber(plannedCount)} Planned/Unlocked</span>
-            <span>{formatNumber(runningRows.length)} Running Quantity Inputs</span>
+            <span>{formatNumber(runningRows.length)} Running Session Checks</span>
           </div>
+          {runningRows.length ? (
+            <PlannerSessionSettlementNotice
+              mode={machineKey(rescheduleAction) === "delay" ? "downtime" : "close"}
+              rows={runningRows}
+              sessionRows={asArray(productionControl.productionCardRows)}
+            />
+          ) : null}
           {affectedRows.length ? (
             <div className="grid gap-2 @5xl/main:grid-cols-2">
               {affectedRows.map((row, index) => {
-                const needsProducedQty = machineIssueRowNeedsProducedQty(row);
-                const producedKey = machineIssueRowKey(row);
-                const orderQty = Number(row.totalOrderPcs || row.orderPcs);
+                const needsSessionAction = machineIssueRowNeedsProducedQty(row);
                 return (
                   <div key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${index}`} className="grid gap-2 rounded-md border bg-background p-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-                      <StatusBadge value={needsProducedQty ? "Produced qty required" : machineIssueRowIsLocked(row) ? "Delay locked setup" : "Shift if alternate exists"} />
+                      <StatusBadge value={needsSessionAction ? machineKey(rescheduleAction) === "delay" ? "Downtime required" : "Session close required" : machineIssueRowIsLocked(row) ? "Delay locked setup" : "Shift if alternate exists"} />
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} Of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} To {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
                     </div>
-                    {needsProducedQty ? (
-                      <Field label="Produced Qty">
-                        <Input
-                          type="number"
-                          min="0"
-                          max={Number.isFinite(orderQty) && orderQty > 0 ? orderQty : undefined}
-                          step="1"
-                          value={producedQtyByRow[producedKey] ?? ""}
-                          placeholder="0"
-                          required
-                          onChange={(event) => updateProducedQty(row, event.target.value)}
-                        />
-                      </Field>
-                    ) : null}
                   </div>
                 );
               })}
@@ -2309,10 +2286,8 @@ function PartMachineSwitchPlannerForm({
   const [reason, setReason] = useState("");
   const [reviewReady, setReviewReady] = useState(false);
   const [queueReviewConfirmed, setQueueReviewConfirmed] = useState(false);
-  const [producedQtyByRow, setProducedQtyByRow] = useState<Record<string, string>>({});
   const [queueAfterByRow, setQueueAfterByRow] = useState<Record<string, string>>({});
   const [selectedTargetInterruptions, setSelectedTargetInterruptions] = useState<Record<string, boolean>>({});
-  const [targetFinishedQtyByRow, setTargetFinishedQtyByRow] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resolvedConflictIds, setResolvedConflictIds] = useState<Set<string>>(() => new Set());
   const jobCardOptions = useMemo(() => uniqueValues(plannedRows
@@ -2340,12 +2315,6 @@ function PartMachineSwitchPlannerForm({
     sourceMachine: fromMachine,
   }), [fromMachine, machineRows, plannedRows, selectedRows]);
   const runningRows = selectedRows.filter(machineIssueRowNeedsProducedQty);
-  const missingProducedQty = runningRows.some((row) => {
-    const rawValue = producedQtyByRow[machineIssueRowKey(row)]?.trim() ?? "";
-    const value = Number(rawValue);
-    const orderQty = Number(row.totalOrderPcs || row.orderPcs);
-    return rawValue === "" || !Number.isFinite(value) || value < 0 || (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty);
-  });
   const queueReviewGroups = useMemo(() => machineConstraintQueueReview({
     plannedRows,
     machineRows,
@@ -2366,17 +2335,9 @@ function PartMachineSwitchPlannerForm({
     resolvedIds: resolvedConflictIds,
   }), [productionControl.planOverrideRows, proposedQueuePlacements, resolvedConflictIds, selectedItem, setupNo, target, toMachine]);
   const targetInterruptionRows = useMemo(() => partMachineSwitchTargetInterruptionRows(queueReviewGroups, selectedRows), [queueReviewGroups, selectedRows]);
-  const missingTargetFinishedQty = targetInterruptionRows.some((row) => {
-    const rowKey = machineIssueRowKey(row);
-    if (!selectedTargetInterruptions[rowKey]) return false;
-    const rawValue = targetFinishedQtyByRow[rowKey]?.trim() ?? "";
-    const value = Number(rawValue);
-    const orderQty = Number(row.totalOrderPcs || row.orderPcs);
-    return rawValue === "" || !Number.isFinite(value) || value <= 0 || (Number.isFinite(orderQty) && orderQty > 0 && value > orderQty);
-  });
   const canReview = Boolean(selectedItem.trim() && target.trim() && setupNo.trim() && fromMachine.trim() && toMachine.trim())
     && machineKey(fromMachine) !== machineKey(toMachine);
-  const canSave = canReview && Boolean(reason.trim()) && reviewReady && selectedRows.length > 0 && !missingProducedQty && !missingTargetFinishedQty && !switchConflicts.length && queueReviewConfirmed;
+  const canSave = canReview && Boolean(reason.trim()) && reviewReady && selectedRows.length > 0 && !switchConflicts.length && queueReviewConfirmed;
 
   function updateField(setter: Dispatch<SetStateAction<string>>, value: string) {
     setter(value);
@@ -2384,18 +2345,7 @@ function PartMachineSwitchPlannerForm({
     setQueueReviewConfirmed(false);
     setQueueAfterByRow({});
     setSelectedTargetInterruptions({});
-    setTargetFinishedQtyByRow({});
     setResolvedConflictIds(new Set());
-  }
-
-  function updateProducedQty(row: DashboardPayload, value: string) {
-    const key = machineIssueRowKey(row);
-    setProducedQtyByRow((current) => ({ ...current, [key]: value }));
-  }
-
-  function updateTargetFinishedQty(row: DashboardPayload, value: string) {
-    const key = machineIssueRowKey(row);
-    setTargetFinishedQtyByRow((current) => ({ ...current, [key]: value }));
   }
 
   async function reverseSwitchConflict(conflict: DashboardPayload) {
@@ -2429,7 +2379,6 @@ function PartMachineSwitchPlannerForm({
         jcNo: jobCardNumber(row),
         setupNo: displayValue(row.setupNo),
         machine: machineValue(row, "machine"),
-        finishedQty: Number(producedQtyByRow[machineIssueRowKey(row)] ?? 0),
       }));
       const targetInterruptions = targetInterruptionRows
         .filter((row) => selectedTargetInterruptions[machineIssueRowKey(row)])
@@ -2437,7 +2386,6 @@ function PartMachineSwitchPlannerForm({
           jcNo: jobCardNumber(row),
           setupNo: displayValue(row.setupNo),
           machine: machineValue(row, "machine"),
-          finishedQty: Number(targetFinishedQtyByRow[machineIssueRowKey(row)] ?? 0),
         }));
       const interruptedSetups = [...sourceInterruptions, ...targetInterruptions];
       const queuePlacements = proposedQueuePlacements;
@@ -2456,10 +2404,8 @@ function PartMachineSwitchPlannerForm({
       setFromMachine("");
       setToMachine("");
       setReason("");
-      setProducedQtyByRow({});
       setQueueAfterByRow({});
       setSelectedTargetInterruptions({});
-      setTargetFinishedQtyByRow({});
     setResolvedConflictIds(new Set());
       setReviewReady(false);
       setQueueReviewConfirmed(false);
@@ -2567,38 +2513,29 @@ function PartMachineSwitchPlannerForm({
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{formatNumber(selectedRows.length)} Selected Setup Rows</span>
             <span>{displayValue(fromMachine)} To {displayValue(toMachine)}</span>
-            <span>{formatNumber(runningRows.length)} Source Running Quantity Inputs</span>
+            <span>{formatNumber(runningRows.length)} Source Session Checks</span>
             <span>{formatNumber(targetInterruptionRows.length)} Target Running Blockers</span>
           </div>
+          {runningRows.length ? (
+            <PlannerSessionSettlementNotice
+              mode="close"
+              rows={runningRows}
+              sessionRows={asArray(productionControl.productionCardRows)}
+            />
+          ) : null}
           {selectedRows.length ? (
             <div className="grid gap-2 @5xl/main:grid-cols-2">
               {selectedRows.map((row, index) => {
-                const needsProducedQty = machineIssueRowNeedsProducedQty(row);
-                const producedKey = machineIssueRowKey(row);
-                const orderQty = Number(row.totalOrderPcs || row.orderPcs);
+                const needsSessionClose = machineIssueRowNeedsProducedQty(row);
                 return (
                   <div key={`${jobCardNumber(row)}-${displayValue(row.setupNo)}-${machineValue(row, "machine")}-${index}`} className="grid gap-2 rounded-md border bg-background p-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
-                      <StatusBadge value={needsProducedQty ? "Produced qty required" : "Selected setup"} />
+                      <StatusBadge value={needsSessionClose ? "Session close required" : "Selected setup"} />
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {machineValue(row, "machine")} | Order {displayValue(row.orderPcs, true)} Of {displayValue(row.totalOrderPcs || row.orderPcs, true)} | Production {displayValue(row.plannedProductionStartDate)} To {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}
                     </div>
-                    {needsProducedQty ? (
-                      <Field label="Produced Qty">
-                        <Input
-                          type="number"
-                          min="0"
-                          max={Number.isFinite(orderQty) && orderQty > 0 ? orderQty : undefined}
-                          step="1"
-                          value={producedQtyByRow[producedKey] ?? ""}
-                          placeholder="0"
-                          required
-                          onChange={(event) => updateProducedQty(row, event.target.value)}
-                        />
-                      </Field>
-                    ) : null}
                   </div>
                 );
               })}
@@ -2610,19 +2547,18 @@ function PartMachineSwitchPlannerForm({
             <div className="grid gap-2 rounded-md border bg-background p-3">
               <div>
                 <div className="text-sm font-medium">Target Machine Running Setup</div>
-                <div className="text-xs text-muted-foreground">Choose Whether To Stop The Running Setup On The Target Machine Before Saving This Switch.</div>
+                <div className="text-xs text-muted-foreground">Choose Whether To Stop It. If Selected, Close Its Production Session Normally Before Saving.</div>
               </div>
               {targetInterruptionRows.map((row) => {
                 const rowKey = machineIssueRowKey(row);
                 const selected = Boolean(selectedTargetInterruptions[rowKey]);
-                const orderQty = Number(row.totalOrderPcs || row.orderPcs);
                 return (
                   <div key={rowKey} className="grid gap-2 rounded-md border bg-muted/10 p-2 md:grid-cols-[1fr_auto] md:items-end">
                     <div>
                       <div className="text-sm font-medium">{itemCode(row)} / {jobCardNumber(row)} / Setup {displayValue(row.setupNo)}</div>
                       <div className="text-xs text-muted-foreground">{machineValue(row, "machine")} | Production {displayValue(row.plannedProductionStartDate)} To {displayValue(row.plannedProductionEndDate)} | {displayValue(row.runningStatus)}</div>
                     </div>
-                    <div className="flex flex-wrap items-end gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
                         variant={selected ? "default" : "outline"}
@@ -2630,24 +2566,18 @@ function PartMachineSwitchPlannerForm({
                       >
                         {selected ? "Stop Selected" : "Do Not Stop / Click To Stop"}
                       </Button>
-                      {selected ? (
-                        <Field label="Produced Qty">
-                          <Input
-                            className="w-28"
-                            type="number"
-                            min="0"
-                            max={Number.isFinite(orderQty) && orderQty > 0 ? orderQty : undefined}
-                            step="1"
-                            value={targetFinishedQtyByRow[rowKey] ?? ""}
-                            required
-                            onChange={(event) => updateTargetFinishedQty(row, event.target.value)}
-                          />
-                        </Field>
-                      ) : null}
+                      {selected ? <StatusBadge value="Session close required" /> : null}
                     </div>
                   </div>
                 );
               })}
+              {targetInterruptionRows.some((row) => selectedTargetInterruptions[machineIssueRowKey(row)]) ? (
+                <PlannerSessionSettlementNotice
+                  mode="close"
+                  rows={targetInterruptionRows.filter((row) => selectedTargetInterruptions[machineIssueRowKey(row)])}
+                  sessionRows={asArray(productionControl.productionCardRows)}
+                />
+              ) : null}
             </div>
           ) : null}
           <MachineConstraintQueueReviewPanel
@@ -2661,9 +2591,6 @@ function PartMachineSwitchPlannerForm({
               return next;
             })}
           />
-          {missingTargetFinishedQty ? (
-            <div className="text-xs text-destructive">Enter Produced Quantity For Every Target Running Setup Selected To Stop.</div>
-          ) : null}
           {switchConflicts.length ? (
             <div className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
               <div>
@@ -3081,6 +3008,61 @@ function PlannerPreSaveConflictReview({
     </div>
   );
 }
+
+function PlannerSessionSettlementNotice({
+  mode,
+  rows,
+  sessionRows,
+}: {
+  mode: "close" | "downtime";
+  rows: DashboardPayload[];
+  sessionRows: DashboardPayload[];
+}) {
+  const sessions = rows.flatMap((row) => {
+    const session = plannerOpenSessionForRow(sessionRows, row);
+    return session ? [session] : [];
+  }).filter((session, index, all) => all.findIndex((candidate) => str(candidate.id) === str(session.id)) === index);
+  const actionLabel = mode === "close" ? "Close session" : "Start downtime";
+  return (
+    <div className="grid gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium">Production Session Action Required</div>
+          <div className="text-xs">
+            {mode === "close"
+              ? "Close running work through its Weight or Machine Counter form. Saved good pieces will update the Production Entry and Job Card; do not enter output again here."
+              : "Keep the session open and start downtime at the actual interruption time before saving this same-machine delay."}
+          </div>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={() => {
+          const params = new URLSearchParams({ floor: productionFloorFromLocation() });
+          window.open(`/dashboard/production-sessions?${params.toString()}`, "_blank", "noopener,noreferrer");
+        }}>
+          <Activity className="size-4" />
+          Open Production Sessions
+        </Button>
+      </div>
+      <div className="grid gap-1 text-xs">
+        {sessions.length ? sessions.map((session) => (
+          <div key={str(session.id)} className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-200 bg-background px-2 py-1.5 text-foreground dark:border-amber-900">
+            <span>{displayValue(session.sessionReference || session.id)} · {displayValue(session.machineNumber || session.machine)} · {displayValue(session.jobCardNumber || session.jobCard || session.jcNo)} / Setup {displayValue(session.setupNumber || session.setupNo)}</span>
+            <StatusBadge value={`${actionLabel} · ${displayValue(session.measurementMethod)}`} />
+          </div>
+        )) : (
+          <div>Open Production Sessions, complete the required action for the running machine, then retry Save. The server checks the live session before applying the planner decision.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function plannerOpenSessionForRow(sessionRows: DashboardPayload[], row: DashboardPayload) {
+  return sessionRows.find((session) => str(session.status).toLowerCase() === "open"
+    && sameProductionCardText(session.machineNumber || session.machine, row.machineNumber || row.machine)
+    && sameProductionCardText(session.jobCardNumber || session.jobCard || session.jcNo, row.jobCardNumber || row.jobCard || row.jcNo)
+    && sameProductionCardText(session.setupNumber || session.setupNo, row.setupNumber || row.setupNo));
+}
+
 function PlannerPriorityForm({
   productionControl,
   submitAction,
@@ -3097,7 +3079,6 @@ function PlannerPriorityForm({
   const [planReady, setPlanReady] = useState(false);
   const [selectedInterruptions, setSelectedInterruptions] = useState<Record<string, boolean>>({});
   const [queueAfterByStep, setQueueAfterByStep] = useState<Record<string, string>>({});
-  const [finishedQtyByInterruption, setFinishedQtyByInterruption] = useState<Record<string, string>>({});
   const [confirmedPrioritySteps, setConfirmedPrioritySteps] = useState<Record<string, boolean>>({});
   const [resolvedPriorityConflictIds, setResolvedPriorityConflictIds] = useState<Set<string>>(() => new Set());
   const jobCardOptions = useMemo(() => uniqueValues(workOrders
@@ -3111,9 +3092,6 @@ function PlannerPriorityForm({
   const selectedBlockers = priorityPlan.steps
     .flatMap((step) => step.blockers)
     .filter((blocker) => selectedInterruptions[blocker.key]);
-  const hasSelectedRunningWithoutQty = selectedBlockers.some((blocker) =>
-    blocker.state === "running" && Number(finishedQtyByInterruption[blocker.key] || 0) <= 0,
-  );
   const confirmedSteps = priorityPlan.steps.filter((step) => confirmedPrioritySteps[step.key]);
   const firstUnconfirmedStepIndex = priorityPlan.steps.findIndex((step) => !confirmedPrioritySteps[step.key]);
   const allStepsConfirmed = priorityPlan.steps.length > 0 && firstUnconfirmedStepIndex === -1;
@@ -3137,7 +3115,6 @@ function PlannerPriorityForm({
     setPlanReady(false);
     setSelectedInterruptions({});
     setQueueAfterByStep({});
-    setFinishedQtyByInterruption({});
     setConfirmedPrioritySteps({});
     setResolvedPriorityConflictIds(new Set());
   }
@@ -3162,9 +3139,6 @@ function PlannerPriorityForm({
     setQueueAfterByStep((current) => Object.fromEntries(
       Object.entries(current).filter(([key]) => keepKeys.has(key)),
     ));
-    setFinishedQtyByInterruption((current) => Object.fromEntries(
-      Object.entries(current).filter(([key]) => !downstreamBlockerKeys.has(key)),
-    ));
   }
 
   async function reversePriorityConflict(conflict: DashboardPayload) {
@@ -3186,13 +3160,12 @@ function PlannerPriorityForm({
       setPlanReady(true);
       return;
     }
-    if ((!selectedPart && !selectedJc) || hasSelectedRunningWithoutQty || !allStepsConfirmed || priorityConflicts.length > 0) return;
+    if ((!selectedPart && !selectedJc) || !allStepsConfirmed || priorityConflicts.length > 0) return;
     const queueBeforeSetups = priorityPlanQueueBeforeSetups(priorityPlan.steps, queueAfterByStep);
     const interruptedSetups = selectedBlockers.map((blocker) => ({
       jcNo: blocker.jcNo,
       setupNo: blocker.setupNo,
       machine: blocker.machine,
-      finishedQty: blocker.state === "running" ? Number(finishedQtyByInterruption[blocker.key] || 0) : undefined,
     }));
     const firstInterruption = interruptedSetups[0];
     const approvalMode = selectedBlockers.some((blocker) => blocker.state === "running")
@@ -3211,7 +3184,6 @@ function PlannerPriorityForm({
       interruptedJcNo: firstInterruption?.jcNo || "",
       interruptedSetupNo: firstInterruption?.setupNo || "",
       interruptedMachine: firstInterruption?.machine || "",
-      interruptedFinishedQty: firstInterruption?.finishedQty,
       interruptedSetups,
       queueBeforeSetups,
       remark,
@@ -3316,7 +3288,7 @@ function PlannerPriorityForm({
                   plannedWindow={priorityStepWindows.get(step.key) ?? { startDate: step.startDate, endDate: step.endDate }}
                   selectedInterruptions={selectedInterruptions}
                   queueAfterKey={queueAfterByStep[step.key] ?? ""}
-                  finishedQtyByInterruption={finishedQtyByInterruption}
+                  sessionRows={asArray(productionControl.productionCardRows)}
                   setSelectedInterruptions={setSelectedInterruptions}
                   onQueueAfterChange={(value) => setQueueAfterByStep((current) => {
                     const next = { ...current };
@@ -3324,7 +3296,6 @@ function PlannerPriorityForm({
                     else delete next[step.key];
                     return next;
                   })}
-                  setFinishedQtyByInterruption={setFinishedQtyByInterruption}
                   onConfirm={() => confirmPriorityStep(step.key)}
                   onEdit={() => editPriorityStep(step.key)}
                 />
@@ -3334,9 +3305,6 @@ function PlannerPriorityForm({
           ) : (
             <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">No Planned Setup Was Found For This Item / Jc In The Current Machine Plan.</div>
           )}
-          {hasSelectedRunningWithoutQty ? (
-            <div className="text-xs text-destructive">Enter Finished Quantity For Every Running Setup Selected To Stop.</div>
-          ) : null}
           <PlannerPreSaveConflictReview
             conflicts={priorityConflicts}
             title="Conflicting Priority Action Found"
@@ -3347,7 +3315,7 @@ function PlannerPriorityForm({
         </div>
       ) : null}
 
-      <Button className="w-fit" type="submit" disabled={planReady && (priorityPlan.steps.length === 0 || hasSelectedRunningWithoutQty || !allStepsConfirmed || priorityConflicts.length > 0)}>
+      <Button className="w-fit" type="submit" disabled={planReady && (priorityPlan.steps.length === 0 || !allStepsConfirmed || priorityConflicts.length > 0)}>
         <Wrench className="size-4" />
         {planReady ? "Apply Confirmed Priority" : "Show Probable Plan"}
       </Button>
@@ -3399,10 +3367,9 @@ function PriorityPlanStepReview({
   plannedWindow,
   selectedInterruptions,
   queueAfterKey,
-  finishedQtyByInterruption,
+  sessionRows,
   setSelectedInterruptions,
   onQueueAfterChange,
-  setFinishedQtyByInterruption,
   onConfirm,
   onEdit,
 }: {
@@ -3412,10 +3379,9 @@ function PriorityPlanStepReview({
   plannedWindow: PriorityPlanWindow;
   selectedInterruptions: Record<string, boolean>;
   queueAfterKey: string;
-  finishedQtyByInterruption: Record<string, string>;
+  sessionRows: DashboardPayload[];
   setSelectedInterruptions: Dispatch<SetStateAction<Record<string, boolean>>>;
   onQueueAfterChange: (value: string) => void;
-  setFinishedQtyByInterruption: Dispatch<SetStateAction<Record<string, string>>>;
   onConfirm: () => void;
   onEdit: () => void;
 }) {
@@ -3424,9 +3390,6 @@ function PriorityPlanStepReview({
     .map((blocker) => blocker.key);
   const selectedRunningCount = selectedRunningKeys.length;
   const runningBlockerCount = step.blockers.filter((blocker) => blocker.state === "running").length;
-  const selectedRunningWithoutQty = step.blockers.some((blocker) =>
-    blocker.state === "running" && selectedInterruptions[blocker.key] && Number(finishedQtyByInterruption[blocker.key] || 0) <= 0,
-  );
   const selectedStartedCount = step.blockers.filter((blocker) =>
     blocker.state === "started_not_running" && selectedInterruptions[blocker.key],
   ).length;
@@ -3513,7 +3476,7 @@ function PriorityPlanStepReview({
                   <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
                   <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} To {blocker.endDate} - {blocker.label}</div>
                 </div>
-                <div className="flex flex-wrap items-end gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     variant={selected ? "default" : "outline"}
@@ -3521,19 +3484,7 @@ function PriorityPlanStepReview({
                   >
                     {blocker.state === "running" ? (selected ? "Stop Selected" : "Stop This Setup") : (selected ? "Move Approved" : "Approve Queue Move")}
                   </Button>
-                  {selected && blocker.state === "running" ? (
-                    <Field label="Finished Qty">
-                      <Input
-                        className="w-28"
-                        min="0"
-                        step="1"
-                        type="number"
-                        value={finishedQtyByInterruption[blocker.key] ?? ""}
-                        required
-                        onChange={(event) => setFinishedQtyByInterruption((current) => ({ ...current, [blocker.key]: event.target.value }))}
-                      />
-                    </Field>
-                  ) : null}
+                  {selected && blocker.state === "running" ? <StatusBadge value="Session close required" /> : null}
                 </div>
               </div>
             );
@@ -3541,13 +3492,21 @@ function PriorityPlanStepReview({
         </div>
       ) : null}
 
-      {state === "active" && selectedRunningWithoutQty ? (
-        <div className="text-xs text-destructive">Enter Finished Quantity For Every Running Setup Selected To Stop.</div>
+      {state === "active" && selectedRunningCount ? (
+        <PlannerSessionSettlementNotice
+          mode="close"
+          rows={step.blockers.filter((blocker) => blocker.state === "running" && selectedInterruptions[blocker.key]).map((blocker) => ({
+            jcNo: blocker.jcNo,
+            machine: blocker.machine,
+            setupNo: blocker.setupNo,
+          }))}
+          sessionRows={sessionRows}
+        />
       ) : null}
 
       {state === "active" ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" onClick={onConfirm} disabled={selectedRunningWithoutQty}>
+          <Button type="button" size="sm" onClick={onConfirm}>
             Confirm Setup Action
           </Button>
           <span className="text-xs text-muted-foreground">

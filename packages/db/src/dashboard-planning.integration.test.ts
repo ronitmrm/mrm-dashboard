@@ -386,7 +386,6 @@ describe("dashboard planning writes", () => {
       confirmedSetupNumbers: ["1"],
       interruptedSetups: [
         {
-          finishedQuantity: 12,
           jobCardNumber: secondJobCard,
           machineNumber: firstMachine,
           setupNumber: 1,
@@ -408,7 +407,6 @@ describe("dashboard planning writes", () => {
     await repository.recordMachineConstraint({
       interruptedSetups: [
         {
-          finishedQuantity: 12,
           jobCardNumber: secondJobCard,
           machineNumber: firstMachine,
           setupNumber: 1,
@@ -440,7 +438,6 @@ describe("dashboard planning writes", () => {
       fromMachineNumber: firstMachine,
       interruptedSetups: [
         {
-          finishedQuantity: 12,
           jobCardNumber: secondJobCard,
           machineNumber: firstMachine,
           setupNumber: 1,
@@ -554,6 +551,173 @@ describe("dashboard planning writes", () => {
       route_change_setups: "2",
       route_history: "2",
     })
+  })
+
+  test("blocks planner output duplication and records canonical closed-session output", async () => {
+    await repository.selectRoute({
+      jobCardNumber: firstJobCard,
+      organizationId,
+      routeCode: "1",
+    })
+    const operatorCode = `OP-${suffix}`
+    const employee = await pool.query<{ id: string }>(
+      `
+        INSERT INTO workforce.employees (
+          organization_id, employee_code, name, department, designation,
+          source_system, source_table, source_id
+        ) VALUES ($1, $2, 'Planner settlement operator', 'Shop Floor',
+          'Worker', 'test', 'employees', $3)
+        RETURNING id
+      `,
+      [organizationId, operatorCode, randomUUID()]
+    )
+    const reference = await pool.query<{
+      item_uid: string
+      machine_id: string
+      operation_setup_id: string
+      route_code: string
+      route_option_id: string
+      work_order_id: string
+    }>(
+      `
+        SELECT work_order.id AS work_order_id,
+          selection.route_option_id, setup.id AS operation_setup_id,
+          machine.id AS machine_id, item.uid AS item_uid,
+          route.route_code
+        FROM manufacturing.work_orders work_order
+        JOIN catalog.items item ON item.id = work_order.item_id
+        JOIN manufacturing.route_selections selection
+          ON selection.work_order_id = work_order.id
+          AND selection.reversed_at IS NULL
+        JOIN manufacturing.route_options route
+          ON route.id = selection.route_option_id
+        JOIN manufacturing.operation_setups setup
+          ON setup.route_option_id = route.id AND setup.setup_number = 1
+        JOIN catalog.machines machine
+          ON machine.organization_id = work_order.organization_id
+          AND machine.machine_number = $3
+        WHERE work_order.organization_id = $1
+          AND work_order.job_card_number = $2
+      `,
+      [organizationId, firstJobCard, firstMachine]
+    )
+    const ids = reference.rows[0]!
+    const productionEntryId = randomUUID()
+    await pool.query(
+      `
+        INSERT INTO manufacturing.production_entries (
+          id, organization_id, work_order_id, route_option_id,
+          operation_setup_id, machine_id, operator_employee_id,
+          production_date, shift, quantity_good, quantity_rejected,
+          started_at, source_system, source_table, source_id, source_payload
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, '2026-08-16',
+          'General', 0, 0, '2026-08-16T08:30:00+05:30',
+          'test', 'production_entries', $8, '{}'::jsonb)
+      `,
+      [
+        productionEntryId,
+        organizationId,
+        ids.work_order_id,
+        ids.route_option_id,
+        ids.operation_setup_id,
+        ids.machine_id,
+        employee.rows[0]!.id,
+        randomUUID(),
+      ]
+    )
+    const sessionId = randomUUID()
+    const sessionReference = `${firstMachine}-20260816-01`
+    await pool.query(
+      `
+        INSERT INTO manufacturing.production_sessions (
+          id, organization_id, work_order_id, route_option_id,
+          operation_setup_id, machine_id, operator_employee_id,
+          production_date, shift, measurement_method, status, started_at,
+          piece_weight_grams, production_entry_id, source_payload,
+          session_reference, daily_sequence, machine_number_snapshot,
+          job_card_number_snapshot, part_code_snapshot,
+          option_number_snapshot, setup_number_snapshot,
+          operator_code_snapshot, operator_name_snapshot
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, '2026-08-16',
+          'General', 'weight', 'open', '2026-08-16T08:30:00+05:30',
+          15.4, $8, '{}'::jsonb, $9, 1, $10, $11, $12, $13,
+          '1', $14, 'Planner settlement operator')
+      `,
+      [
+        sessionId,
+        organizationId,
+        ids.work_order_id,
+        ids.route_option_id,
+        ids.operation_setup_id,
+        ids.machine_id,
+        employee.rows[0]!.id,
+        productionEntryId,
+        sessionReference,
+        firstMachine,
+        firstJobCard,
+        ids.item_uid,
+        ids.route_code,
+        operatorCode,
+      ]
+    )
+    const interruption = [{
+      jobCardNumber: firstJobCard,
+      machineNumber: firstMachine,
+      setupNumber: 1,
+    }]
+
+    await expect(repository.recordMachineConstraint({
+      machineNumber: firstMachine,
+      organizationId,
+      reason: "Breakdown",
+      rescheduleAction: "shift_required",
+      unavailableFrom: "2026-08-16T16:00:00+05:30",
+    })).rejects.toThrow(`Close Production Session ${sessionReference} using Weight`)
+
+    await expect(repository.recordMachineConstraint({
+      interruptedSetups: interruption,
+      machineNumber: firstMachine,
+      organizationId,
+      reason: "Breakdown",
+      rescheduleAction: "delay",
+      unavailableFrom: "2026-08-16T16:00:00+05:30",
+    })).rejects.toThrow(`Start downtime on Production Session ${sessionReference}`)
+
+    await pool.query(
+      `
+        UPDATE manufacturing.production_entries
+        SET quantity_good = 40, completed_at = '2026-08-16T16:00:00+05:30'
+        WHERE id = $1;
+        UPDATE manufacturing.production_sessions
+        SET status = 'closed', ended_at = '2026-08-16T16:00:00+05:30',
+          end_reason = 'manual_stop', gross_weight_kg = 0.616,
+          net_weight_kg = 0.616, total_pieces = 40, quantity_good = 40,
+          updated_at = now()
+        WHERE id = $2
+      `,
+      [productionEntryId, sessionId]
+    )
+    await repository.recordMachineConstraint({
+      interruptedSetups: interruption,
+      machineNumber: firstMachine,
+      organizationId,
+      reason: "Breakdown after settled weight",
+      rescheduleAction: "shift_required",
+      unavailableFrom: "2026-08-16T16:00:00+05:30",
+    })
+    const saved = await pool.query<{ finished_quantity: string }>(
+      `
+        SELECT detail.evidence->>'finishedQuantity' AS finished_quantity
+        FROM manufacturing.machine_constraint_event_details detail
+        JOIN manufacturing.machine_constraint_events event
+          ON event.id = detail.machine_constraint_event_id
+        WHERE event.organization_id = $1
+          AND event.reason = 'Breakdown after settled weight'
+          AND detail.impact_type = 'interrupted-setup'
+      `,
+      [organizationId]
+    )
+    expect(saved.rows).toEqual([{ finished_quantity: "40" }])
   })
 
   test("rejects a plan override while the target physical machine is locked by another active setup", async () => {

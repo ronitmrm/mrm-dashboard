@@ -49,6 +49,10 @@ Conventional-01, Conventional-02, and Forging use Weight. CNC selects Machine Co
 
 Rejected pieces are included in total produced pieces. Good pieces equal total produced minus rejected pieces.
 
+Planner Actions never accept a second produced-quantity figure. When a planner decision stops or moves a running setup, its Production Session must first be closed through the normal Weight or Machine Counter workflow at the actual interruption time. The planner decision then reads the resulting canonical good output and uses it as interruption evidence; the same output therefore appears immediately in the Production Entry and Job Card.
+
+When a machine problem delays work on the same machine, the Production Session remains open and an open Production Downtime Event is required before the delay decision can be saved. If the work moves to another machine, the source session must be closed first. Stopping running work on a destination machine follows the same close-first rule. Queued work that has not started needs neither output settlement nor session closure.
+
 ## Operational and analytical views
 
 Production Sessions belongs inside each Production Unit. Start Session offers a dropdown containing only currently running machines in that unit and fetches the selected machine's current planner assignment for verification before Shop Floor enters the operator, start time, measurement method, and applicable machine start count. It does not expose a daily all-machine board or queued machines.
