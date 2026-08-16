@@ -16,6 +16,7 @@ import {
   navigationHrefMatches,
   planningHolidayNavigation,
   productionFloorNavigation,
+  storeNavigation,
   universalProductionNavigation,
 } from "./unified-navigation"
 
@@ -27,7 +28,7 @@ describe("unified navigation", () => {
     )
     const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
-    expect(nativeLinks).toHaveLength(3)
+    expect(nativeLinks).toHaveLength(4)
     expect(source).toContain(
       "<a href={productionNavigationHref(item.id, floor.code)}>"
     )
@@ -53,6 +54,7 @@ describe("unified navigation", () => {
       ...commercialNavigation.map(({ href }) => href),
       ...hrNavigation.map(({ href }) => href),
       ...administrationNavigation.map(({ href }) => href),
+      ...storeNavigation.map(({ href }) => href),
     ]
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
@@ -130,6 +132,14 @@ describe("unified navigation", () => {
       title: "Mechanical Maintenance",
     })
     expect(commercialNavigation).toHaveLength(17)
+    expect(storeNavigation.map(({ href, label }) => ({ href, label }))).toEqual(
+      [
+        { href: "/store", label: "Store Overview" },
+        { href: "/store/requests", label: "Requests & Issues" },
+        { href: "/store/items", label: "Items & Receipts" },
+        { href: "/store/assets", label: "Asset Master" },
+      ]
+    )
     expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([
       { href: "/hr?panel=mastersPanel", label: "Masters" },
       { href: "/hr?panel=postMasterPanel", label: "Job Templates" },
@@ -161,9 +171,7 @@ describe("unified navigation", () => {
     expect(dashboardTabHref("maintenanceTab", "cnc")).toBe(
       "/?tab=maintenanceTab&floor=cnc"
     )
-    expect(dashboardTabHref("correctionsTab")).toBe(
-      "/?tab=correctionsTab"
-    )
+    expect(dashboardTabHref("correctionsTab")).toBe("/?tab=correctionsTab")
   })
 
   it("opens Production Sessions as a standalone route from the live dashboard", () => {

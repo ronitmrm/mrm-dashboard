@@ -73,9 +73,11 @@ export function jobCardWorkspaceHref(
   jobCardNumber: string,
   productionFloorCode: ProductionFloorCode
 ) {
-  return `/dashboard/job-cards/${encodeURIComponent(jobCardNumber)}?${new URLSearchParams({
-    floor: productionFloorCode,
-  }).toString()}`
+  return `/dashboard/job-cards/${encodeURIComponent(jobCardNumber)}?${new URLSearchParams(
+    {
+      floor: productionFloorCode,
+    }
+  ).toString()}`
 }
 
 export function dashboardNavigationDestination(
@@ -327,16 +329,17 @@ export const universalProductionNavigation = dashboardNavigation.filter(
   (item) => universalProductionNavigationIds.has(item.id)
 )
 
-export const productionFloorNavigation = dashboardNavigation.filter(
-  (item) =>
-    item.id !== planningHolidayNavigation.id &&
-    !universalProductionNavigationIds.has(item.id) &&
-    !consolidatedProductionNavigationIds.has(item.id)
-).sort(
-  (left, right) =>
-    Number(right.id === "masterGapsTab") -
-    Number(left.id === "masterGapsTab")
-)
+export const productionFloorNavigation = dashboardNavigation
+  .filter(
+    (item) =>
+      item.id !== planningHolidayNavigation.id &&
+      !universalProductionNavigationIds.has(item.id) &&
+      !consolidatedProductionNavigationIds.has(item.id)
+  )
+  .sort(
+    (left, right) =>
+      Number(right.id === "masterGapsTab") - Number(left.id === "masterGapsTab")
+  )
 
 export const commercialNavigation = [
   {
@@ -423,6 +426,29 @@ export const commercialNavigation = [
     href: "/commercial/corrections",
     icon: Undo2,
     label: "Corrections",
+  },
+] as const
+
+export const storeNavigation = [
+  {
+    href: "/store",
+    icon: LayoutDashboard,
+    label: "Store Overview",
+  },
+  {
+    href: "/store/requests",
+    icon: ClipboardList,
+    label: "Requests & Issues",
+  },
+  {
+    href: "/store/items",
+    icon: Boxes,
+    label: "Items & Receipts",
+  },
+  {
+    href: "/store/assets",
+    icon: Wrench,
+    label: "Asset Master",
   },
 ] as const
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import {
   BriefcaseBusiness,
+  Boxes,
   Calculator,
   ChevronRight,
   Factory,
@@ -45,6 +46,7 @@ import {
   navigationHrefMatches,
   planningHolidayNavigation,
   productionFloorNavigation,
+  storeNavigation,
   universalProductionNavigation,
   type DashboardTabId,
 } from "@/lib/unified-navigation"
@@ -55,6 +57,7 @@ const stateChangedEvent = "mrmpl:sidebar:expanded-modules-changed"
 type SectionId =
   | "costing"
   | "hr"
+  | "store"
   | "productionConventional"
   | "productionConventional02"
   | "productionCnc"
@@ -76,6 +79,7 @@ function defaultExpandedSections(
   return {
     costing: pathname.startsWith("/commercial"),
     hr: pathname.startsWith("/hr"),
+    store: pathname.startsWith("/store"),
     productionConventional:
       onProduction && activeProductionFloor === "conventional",
     productionConventional02:
@@ -99,6 +103,7 @@ function storedExpandedSections(
       costing:
         typeof parsed.costing === "boolean" ? parsed.costing : fallback.costing,
       hr: typeof parsed.hr === "boolean" ? parsed.hr : fallback.hr,
+      store: typeof parsed.store === "boolean" ? parsed.store : fallback.store,
       productionConventional:
         typeof parsed.productionConventional === "boolean"
           ? parsed.productionConventional
@@ -180,6 +185,7 @@ export function UnifiedSidebarNavigation({
   const visibleHrNavigation = hrNavigation.filter((item) =>
     navigationAccess.hrHrefs.includes(item.href)
   )
+  const visibleStoreNavigation = navigationAccess.store ? storeNavigation : []
   const normalizedMenuSearch = menuSearch.trim().toLowerCase()
   const filteredCommercialNavigation = filterNavigationItems(
     visibleCommercialNavigation,
@@ -190,6 +196,11 @@ export function UnifiedSidebarNavigation({
     visibleHrNavigation,
     normalizedMenuSearch,
     "hr recruitment"
+  )
+  const filteredStoreNavigation = filterNavigationItems(
+    visibleStoreNavigation,
+    normalizedMenuSearch,
+    "store inventory assets requests receipts"
   )
   const filteredProductionNavigation = navigationAccess.operations
     ? productionFloors
@@ -213,10 +224,7 @@ export function UnifiedSidebarNavigation({
       ].some((value) => value.toLowerCase().includes(normalizedMenuSearch)))
   const filteredUniversalProductionNavigation = navigationAccess.operations
     ? filterProductionItems(
-        [
-          ...universalProductionNavigation,
-          ...consolidatedProductionNavigation,
-        ],
+        [...universalProductionNavigation, ...consolidatedProductionNavigation],
         normalizedMenuSearch,
         "universal production corrections reverse wrong entries data entry master tables machine master checklists maintenance quality masters"
       )
@@ -294,6 +302,42 @@ export function UnifiedSidebarNavigation({
           open={normalizedMenuSearch ? true : expandedSections.hr}
         >
           {filteredHrNavigation.map((item) => (
+            <SidebarMenuSubItem key={item.href}>
+              <SidebarMenuSubButton
+                asChild
+                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                isActive={navigationHrefMatches(
+                  pathname,
+                  searchParams,
+                  item.href
+                )}
+              >
+                <a href={item.href}>
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
+                  />
+                  <span>{item.label}</span>
+                </a>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </NavigationSection>
+      ) : null}
+
+      {filteredStoreNavigation.length ? (
+        <NavigationSection
+          icon={Boxes}
+          isActive={visibleStoreNavigation.some((item) =>
+            navigationHrefMatches(pathname, searchParams, item.href)
+          )}
+          label="Store"
+          onOpenChange={(open) => {
+            if (!normalizedMenuSearch) setSectionOpen("store", open)
+          }}
+          open={normalizedMenuSearch ? true : expandedSections.store}
+        >
+          {filteredStoreNavigation.map((item) => (
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
@@ -461,7 +505,9 @@ export function UnifiedSidebarNavigation({
                   >
                     {onDashboardTabSelect ? (
                       <button
-                        onClick={() => onDashboardTabSelect(item.id, activeProductionFloor)}
+                        onClick={() =>
+                          onDashboardTabSelect(item.id, activeProductionFloor)
+                        }
                         type="button"
                       >
                         <item.icon />
@@ -515,6 +561,7 @@ export function UnifiedSidebarNavigation({
 
       {normalizedMenuSearch &&
       !filteredHrNavigation.length &&
+      !filteredStoreNavigation.length &&
       !filteredCommercialNavigation.length &&
       !planningHolidayMatchesSearch &&
       !filteredUniversalProductionNavigation.length &&
