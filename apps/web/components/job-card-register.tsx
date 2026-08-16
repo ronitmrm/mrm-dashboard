@@ -18,7 +18,7 @@ const numeric = (value: unknown) => Number.isFinite(Number(value)) ? Number(valu
 
 function jobCardProgress(row: Row) {
   const ordered = numeric(row.orderPcs ?? row.orderedQty ?? row["ORD. PCS."])
-  const good = numeric(row.rawActualQty ?? row.actualGoodPieces ?? row.completedQuantity)
+  const good = numeric(row.finalSetupGoodPieces)
   return ordered > 0 ? Math.min(Math.max((good / ordered) * 100, 0), 100) : 0
 }
 
@@ -27,7 +27,7 @@ function jobCardStage(row: Row) {
   const dispatch = first(row, ["dispatchStatus", "status"])
   if (dispatch.toLowerCase().includes("dispatch")) return "Dispatch"
   if (progress >= 100) return "Production complete"
-  if (progress > 0) return "Production"
+  if (progress > 0 || numeric(row.rawRows) > 0 || numeric(row.rawActualQty) > 0 || numeric(row.rawOutputQty) > 0) return "Production"
   if (first(row, ["rmStatus"]).toLowerCase() !== "received") return "Awaiting RM"
   if (["routeStatus", "cycleStatus", "toolingStatus", "machineMasterStatus"].some((key) => text(row[key]).toLowerCase().includes("missing"))) return "Master readiness"
   return "Ready for setup"
@@ -81,6 +81,7 @@ export function JobCardRegister({
               const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
               const href = jobCardWorkspaceHref(jobCard, floor)
               const progress = jobCardProgress(row)
+              const finishedPieces = numeric(row.finalSetupGoodPieces)
               return <TableRow key={jobCard}>
                 <TableCell><Link className="font-semibold text-primary hover:underline" href={href}>{jobCard}</Link></TableCell>
                 <TableCell>{first(row, ["partCode", "itemCode", "PART CODE"])}</TableCell>
@@ -88,7 +89,7 @@ export function JobCardRegister({
                 <TableCell>{first(row, ["fgPoNo", "FG PO NO."])}</TableCell>
                 <TableCell className="text-right tabular-nums">{first(row, ["orderPcs", "orderedQty", "ORD. PCS."])}</TableCell>
                 <TableCell>{jobCardStage(row)}</TableCell>
-                <TableCell className="min-w-40"><div className="mb-1 flex justify-between gap-2 text-xs"><span>{progress.toFixed(1)}%</span><span>{new Intl.NumberFormat("en-IN").format(numeric(row.rawActualQty))} good</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${progress}%` }} /></div></TableCell>
+                <TableCell className="min-w-40"><div className="mb-1 flex justify-between gap-2 text-xs"><span>{progress.toFixed(1)}%</span><span>{new Intl.NumberFormat("en-IN").format(finishedPieces)} finished</span></div><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-emerald-600" style={{ width: `${progress}%` }} /></div></TableCell>
                 <TableCell>{first(row, ["optionNumber", "selectedOption", "routeStatus"])}</TableCell>
                 <TableCell><Button asChild size="sm" variant="outline"><Link href={href}>Open <ExternalLink /></Link></Button></TableCell>
               </TableRow>
