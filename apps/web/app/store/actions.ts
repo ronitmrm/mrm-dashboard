@@ -6,8 +6,8 @@ import path from "node:path"
 
 import {
   createStoreRepository,
+  type StoreAssetType,
   type StoreHolderType,
-  type StoreTrackingMode,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
 
@@ -22,6 +22,7 @@ const holderTypes = [
   "PERSON",
   "STORE",
   "UNIT",
+  "VENDOR",
 ] as const satisfies readonly StoreHolderType[]
 
 function requiredText(formData: FormData, key: string) {
@@ -42,10 +43,12 @@ function positiveNumber(formData: FormData, key: string) {
   return value
 }
 
-function trackingMode(formData: FormData): StoreTrackingMode {
-  return requiredText(formData, "tracking_mode") === "SERIALIZED"
-    ? "SERIALIZED"
-    : "CONSUMABLE"
+function assetType(formData: FormData): StoreAssetType {
+  const value = requiredText(formData, "asset_type")
+  if (value !== "CONSUMABLE" && value !== "NON_CONSUMABLE") {
+    throw new Error("Asset type must be Consumable or Non Consumable.")
+  }
+  return value
 }
 
 function holderType(formData: FormData) {
@@ -79,6 +82,9 @@ async function withStore<T>(
 function revalidateStore() {
   revalidatePath("/store")
   revalidatePath("/store/items")
+  revalidatePath("/store/masters")
+  revalidatePath("/store/orders")
+  revalidatePath("/store/stock")
   revalidatePath("/store/requests")
   revalidatePath("/store/assets")
 }
@@ -106,6 +112,19 @@ export async function createStoreSupplierAction(formData: FormData) {
       code: requiredText(formData, "supplier_code"),
       contactDetails: optionalText(formData, "contact_details"),
       name: requiredText(formData, "supplier_name"),
+      organizationId,
+    })
+  )
+  revalidateStore()
+}
+
+export async function createStoreVendorAction(formData: FormData) {
+  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+    repository.createVendor({
+      actorUserId,
+      code: requiredText(formData, "vendor_code"),
+      contactDetails: optionalText(formData, "contact_details"),
+      name: requiredText(formData, "vendor_name"),
       organizationId,
     })
   )
@@ -154,13 +173,12 @@ export async function createStoreItemTypeAction(formData: FormData) {
       assetCategoryId: requiredText(formData, "asset_category_id"),
       assetNameId: requiredText(formData, "asset_name_id"),
       assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
-      assetType: requiredText(formData, "asset_type"),
+      assetType: assetType(formData),
       applicableItemCode: optionalText(formData, "applicable_item_code"),
       drawingNumber: optionalText(formData, "drawing_number"),
       identificationName: requiredText(formData, "identification_name"),
       minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
       organizationId,
-      trackingMode: trackingMode(formData),
       unit: requiredText(formData, "unit"),
     })
   )
@@ -176,7 +194,7 @@ export async function requestMissingStoreCodeAction(formData: FormData) {
         assetCategoryId: requiredText(formData, "asset_category_id"),
         assetNameId: requiredText(formData, "asset_name_id"),
         assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
-        assetType: requiredText(formData, "asset_type"),
+        assetType: assetType(formData),
         department: requiredText(formData, "department"),
         identificationName: requiredText(formData, "identification_name"),
         organizationId,
@@ -276,13 +294,11 @@ export async function receiveStoreStockAction(formData: FormData) {
         billNumber: optionalText(formData, "bill_number"),
         guaranteeCardFileName: savedFile?.fileName,
         guaranteeCardStorageKey: savedFile?.storageKey,
-        itemTypeId: requiredText(formData, "item_type_id"),
         locationId: requiredText(formData, "location_id"),
         organizationId,
+        purchaseOrderId: requiredText(formData, "purchase_order_id"),
         quantity: positiveNumber(formData, "quantity"),
         receivedBy: optionalText(formData, "received_by"),
-        supplierId: optionalText(formData, "supplier_id"),
-        unitPrice: requiredText(formData, "unit_price"),
         warrantyUntil: optionalText(formData, "warranty_until"),
       })
     )
@@ -293,18 +309,35 @@ export async function receiveStoreStockAction(formData: FormData) {
   revalidateStore()
 }
 
+export async function createStorePurchaseOrderAction(formData: FormData) {
+  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+    repository.createPurchaseOrder({
+      actorUserId,
+      itemTypeId: requiredText(formData, "item_type_id"),
+      orderDate: optionalText(formData, "order_date"),
+      organizationId,
+      quantity: positiveNumber(formData, "quantity"),
+      remark: optionalText(formData, "remark"),
+      supplierId: requiredText(formData, "supplier_id"),
+      unitPrice: requiredText(formData, "unit_price"),
+    })
+  )
+  revalidateStore()
+}
+
 export async function moveStoreAssetAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
   await withStore("store.manage", (repository, actorUserId, organizationId) =>
     repository.moveAsset({
       actorUserId,
       assetCode,
-      holderName: requiredText(formData, "holder_name"),
-      holderReference: requiredText(formData, "holder_reference"),
+      holderName: optionalText(formData, "holder_name"),
+      holderReference: optionalText(formData, "holder_reference"),
       holderType: holderType(formData),
       movedBy: optionalText(formData, "moved_by"),
       organizationId,
       remark: optionalText(formData, "remark"),
+      vendorId: optionalText(formData, "vendor_id"),
     })
   )
   revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)

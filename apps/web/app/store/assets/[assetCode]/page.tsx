@@ -57,14 +57,22 @@ export default async function StoreAssetWorkspacePage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [workspace, definitions] = await Promise.all([
+    const [workspace, definitions, vendors] = await Promise.all([
       repository.getAssetWorkspace({ assetCode, organizationId }),
       repository.listMaintenanceDefinitions(organizationId),
+      repository.listVendors(organizationId),
     ])
-    return { definitions, workspace }
+    return { definitions, vendors, workspace }
   })().finally(() => repository.close())
   if (!data.workspace) notFound()
-  const { asset, documents, maintenance, movements, schedules } = data.workspace
+  const {
+    asset,
+    documents,
+    maintenance,
+    movements,
+    schedules,
+    supplierPrices,
+  } = data.workspace
 
   return (
     <div className="flex flex-col gap-6">
@@ -98,6 +106,13 @@ export default async function StoreAssetWorkspacePage({
           label="Warranty Until"
           value={asset.warrantyUntil || "Not recorded"}
         />
+        <Info label="Purchase Order" value={asset.orderNumber || "Legacy receipt"} />
+        <Info label="Supplier" value={asset.supplierName || "Not recorded"} />
+        <Info
+          label="Purchase Price"
+          value={asset.unitPrice ? `₹ ${asset.unitPrice}` : "Not recorded"}
+        />
+        <Info label="Acquired On" value={asset.acquiredOn || "Not recorded"} />
       </div>
 
       {canManage ? (
@@ -106,8 +121,8 @@ export default async function StoreAssetWorkspacePage({
             <CardHeader>
               <CardTitle>Move / Assign Asset</CardTitle>
               <CardDescription>
-                Machine assignments also appear from Machine Master. Choose
-                Store to record a return.
+                Non Consumables can move to a Department, Machine, registered
+                Vendor, or return to Store.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -127,21 +142,32 @@ export default async function StoreAssetWorkspacePage({
                       <NativeSelectOption value="DEPARTMENT">
                         Department
                       </NativeSelectOption>
-                      <NativeSelectOption value="UNIT">Unit</NativeSelectOption>
-                      <NativeSelectOption value="PERSON">
-                        Person
+                      <NativeSelectOption value="VENDOR">
+                        Vendor
                       </NativeSelectOption>
                       <NativeSelectOption value="STORE">
                         Store Return
                       </NativeSelectOption>
                     </NativeSelect>
                   </Field>
+                  <Field>
+                    <FieldLabel htmlFor="vendor-id">Vendor</FieldLabel>
+                    <NativeSelect id="vendor-id" name="vendor_id">
+                      <NativeSelectOption value="">
+                        Select only when assigning to Vendor
+                      </NativeSelectOption>
+                      {data.vendors.map((vendor) => (
+                        <NativeSelectOption key={vendor.id} value={vendor.id}>
+                          {vendor.code} — {vendor.name}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
                   <TextField
                     label="Reference / Machine No. / Store Code"
                     name="holder_reference"
-                    required
                   />
-                  <TextField label="Name" name="holder_name" required />
+                  <TextField label="Department / Destination Name" name="holder_name" />
                   <TextField label="Moved By" name="moved_by" />
                   <TextField label="Remark" name="remark" />
                 </FieldGroup>
@@ -471,6 +497,49 @@ export default async function StoreAssetWorkspacePage({
                     colSpan={7}
                   >
                     No completed maintenance records.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Supplier Price History</CardTitle>
+          <CardDescription>
+            Purchase prices for this Asset Type are kept with the Asset.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Supplier</TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>Bill / Order</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {supplierPrices.map((price, index) => (
+                <TableRow
+                  key={`${price.supplierName}-${price.validFrom}-${price.quoteReference}-${index}`}
+                >
+                  <TableCell>{price.validFrom}</TableCell>
+                  <TableCell>{price.supplierName}</TableCell>
+                  <TableCell>₹ {price.unitPrice}</TableCell>
+                  <TableCell>{price.quoteReference || "—"}</TableCell>
+                </TableRow>
+              ))}
+              {!supplierPrices.length ? (
+                <TableRow>
+                  <TableCell
+                    className="h-24 text-center text-muted-foreground"
+                    colSpan={4}
+                  >
+                    No supplier price history for this Asset Type.
                   </TableCell>
                 </TableRow>
               ) : null}

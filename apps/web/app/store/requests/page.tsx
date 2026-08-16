@@ -156,7 +156,14 @@ export default async function StoreRequestsPage() {
             <CardContent>
               <form action={requestMissingStoreCodeAction}>
                 <FieldGroup className="grid gap-4 md:grid-cols-2">
-                  <TextField label="Asset Type" name="asset_type" required />
+                  <SelectField
+                    label="Asset Type"
+                    name="asset_type"
+                    options={[
+                      { label: "Non Consumable", value: "NON_CONSUMABLE" },
+                      { label: "Consumable", value: "CONSUMABLE" },
+                    ]}
+                  />
                   <SelectField
                     label="Category"
                     name="asset_category_id"

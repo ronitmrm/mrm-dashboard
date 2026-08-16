@@ -284,3 +284,19 @@ _Avoid_: Independent row updates, workbook import batch.
 **Recruitment Assignment Event**:
 One durable, command-ordered fact recording an application or Approved Post transition caused by a Recruitment Assignment Command.
 _Avoid_: Unordered audit row, log message.
+
+**Store Asset Type**:
+The stock-control classification of a Store Item Type: Consumable or Non Consumable.
+_Avoid_: Tracking mode, free-text asset type.
+
+**Store Purchase Order**:
+The authority to receive a stated quantity of one Store Item Type from one Supplier at an agreed unit price.
+_Avoid_: Receipt, direct stock entry.
+
+**Store Receipt**:
+A goods receipt against one Store Purchase Order that cannot exceed its remaining quantity.
+_Avoid_: Receipt without order, direct inward.
+
+**Store Vendor**:
+An external party that may temporarily hold a Non Consumable Asset.
+_Avoid_: Supplier when referring to an asset holder.
