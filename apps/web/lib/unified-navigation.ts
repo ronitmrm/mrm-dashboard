@@ -462,6 +462,14 @@ export const storeNavigation = [
   },
 ] as const
 
+export function storePurchaseOrderHref(input: {
+  itemTypeId: string
+  quantity: string
+  requestNumber: string
+}) {
+  return `/store/orders?${new URLSearchParams(input).toString()}`
+}
+
 export const hrNavigation = [
   {
     href: "/hr?panel=mastersPanel",

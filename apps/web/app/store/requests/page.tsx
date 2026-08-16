@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -30,6 +31,7 @@ import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
+import { storePurchaseOrderHref } from "@/lib/unified-navigation"
 
 import {
   createStoreRequisitionAction,
@@ -239,7 +241,7 @@ export default async function StoreRequestsPage() {
                 <TableHead>Current Stock</TableHead>
                 <TableHead>Status</TableHead>
                 {capabilities.has("store.manage") ? (
-                  <TableHead>Issue</TableHead>
+                  <TableHead>Order / Issue</TableHead>
                 ) : null}
               </TableRow>
             </TableHeader>
@@ -286,68 +288,81 @@ export default async function StoreRequestsPage() {
                       {["Pending", "Partially Issued"].includes(
                         request.status
                       ) ? (
-                        <form
-                          action={issueStoreRequisitionAction}
-                          className="grid min-w-72 grid-cols-2 gap-2"
-                        >
-                          <input
-                            name="requisition_id"
-                            type="hidden"
-                            value={request.id}
-                          />
-                          <Input
-                            aria-label={`Issue quantity for ${request.requestNumber}`}
-                            defaultValue={
-                              request.trackingMode === "SERIALIZED"
-                                ? "1"
-                                : request.remainingQuantity
-                            }
-                            max={request.remainingQuantity}
-                            min="0.001"
-                            name="issue_quantity"
-                            step="0.001"
-                            type="number"
-                          />
-                          <NativeSelect
-                            aria-label={`Assign ${request.requestNumber} to`}
-                            name="holder_type"
-                          >
-                            <NativeSelectOption value="DEPARTMENT">
-                              Department
-                            </NativeSelectOption>
-                            <NativeSelectOption value="MACHINE">
-                              Machine
-                            </NativeSelectOption>
-                            <NativeSelectOption value="UNIT">
-                              Unit
-                            </NativeSelectOption>
-                            <NativeSelectOption value="PERSON">
-                              Person
-                            </NativeSelectOption>
-                          </NativeSelect>
-                          <Input
-                            aria-label="Holder reference"
-                            name="holder_reference"
-                            placeholder="Machine no. / ID"
-                          />
-                          <Input
-                            aria-label="Holder name"
-                            name="holder_name"
-                            placeholder="Machine / person name"
-                          />
-                          {request.assetCodeRequired ? (
-                            <Input
-                              className="col-span-2"
-                              name="asset_code"
-                              placeholder="Specific Asset Code"
-                              required
-                            />
-                          ) : null}
-                          <Input name="issued_by" placeholder="Issued by" />
-                          <Button size="sm" type="submit">
-                            Issue
+                        <div className="grid min-w-72 gap-3">
+                          <Button asChild size="sm" variant="outline">
+                            <Link
+                              href={storePurchaseOrderHref({
+                                itemTypeId: request.itemTypeId,
+                                quantity: request.remainingQuantity,
+                                requestNumber: request.requestNumber,
+                              })}
+                            >
+                              Make Order
+                            </Link>
                           </Button>
-                        </form>
+                          <form
+                            action={issueStoreRequisitionAction}
+                            className="grid grid-cols-2 gap-2"
+                          >
+                            <input
+                              name="requisition_id"
+                              type="hidden"
+                              value={request.id}
+                            />
+                            <Input
+                              aria-label={`Issue quantity for ${request.requestNumber}`}
+                              defaultValue={
+                                request.trackingMode === "SERIALIZED"
+                                  ? "1"
+                                  : request.remainingQuantity
+                              }
+                              max={request.remainingQuantity}
+                              min="0.001"
+                              name="issue_quantity"
+                              step="0.001"
+                              type="number"
+                            />
+                            <NativeSelect
+                              aria-label={`Assign ${request.requestNumber} to`}
+                              name="holder_type"
+                            >
+                              <NativeSelectOption value="DEPARTMENT">
+                                Department
+                              </NativeSelectOption>
+                              <NativeSelectOption value="MACHINE">
+                                Machine
+                              </NativeSelectOption>
+                              <NativeSelectOption value="UNIT">
+                                Unit
+                              </NativeSelectOption>
+                              <NativeSelectOption value="PERSON">
+                                Person
+                              </NativeSelectOption>
+                            </NativeSelect>
+                            <Input
+                              aria-label="Holder reference"
+                              name="holder_reference"
+                              placeholder="Machine no. / ID"
+                            />
+                            <Input
+                              aria-label="Holder name"
+                              name="holder_name"
+                              placeholder="Machine / person name"
+                            />
+                            {request.assetCodeRequired ? (
+                              <Input
+                                className="col-span-2"
+                                name="asset_code"
+                                placeholder="Specific Asset Code"
+                                required
+                              />
+                            ) : null}
+                            <Input name="issued_by" placeholder="Issued by" />
+                            <Button size="sm" type="submit">
+                              Issue
+                            </Button>
+                          </form>
+                        </div>
                       ) : (
                         "—"
                       )}

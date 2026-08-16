@@ -35,7 +35,16 @@ import {
   receiveStoreStockAction,
 } from "../actions"
 
-export default async function StoreOrdersPage() {
+export default async function StoreOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    itemTypeId?: string
+    quantity?: string
+    requestNumber?: string
+  }>
+}) {
+  const requestedOrder = await searchParams
   const session = await requireCapability("store.read", "/store/orders")
   const canManage =
     (await listGrantedCapabilities(session.user.id, ["store.manage"])).length > 0
@@ -55,6 +64,13 @@ export default async function StoreOrdersPage() {
   const receivableOrders = data.orders.filter((order) =>
     ["Open", "Partially Received"].includes(order.status)
   )
+  const requestedItemId = data.items.some(
+    (item) => item.id === requestedOrder.itemTypeId
+  )
+    ? requestedOrder.itemTypeId
+    : undefined
+  const requestedQuantity =
+    Number(requestedOrder.quantity) > 0 ? requestedOrder.quantity : undefined
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,7 +89,9 @@ export default async function StoreOrdersPage() {
             <CardHeader>
               <CardTitle>Create Purchase Order</CardTitle>
               <CardDescription>
-                Purchase Order number is generated automatically.
+                {requestedOrder.requestNumber
+                  ? `Prefilled from ${requestedOrder.requestNumber}. Select Supplier and enter the agreed price.`
+                  : "Purchase Order number is generated automatically."}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -88,6 +106,7 @@ export default async function StoreOrdersPage() {
                     }))}
                   />
                   <SelectField
+                    defaultValue={requestedItemId}
                     label="Store Item"
                     name="item_type_id"
                     options={data.items.map((item) => ({
@@ -102,7 +121,14 @@ export default async function StoreOrdersPage() {
                     required
                     type="date"
                   />
-                  <TextField label="Quantity" name="quantity" required step="0.001" type="number" />
+                  <TextField
+                    defaultValue={requestedQuantity}
+                    label="Quantity"
+                    name="quantity"
+                    required
+                    step="0.001"
+                    type="number"
+                  />
                   <TextField label="Unit Price" name="unit_price" required step="0.01" type="number" />
                   <TextField label="Remark" name="remark" />
                 </FieldGroup>
@@ -215,12 +241,22 @@ function TextField({ label, name, ...props }: { label: string; name: string } & 
   return <Field><FieldLabel htmlFor={id}>{label}</FieldLabel><Input id={id} name={name} {...props} /></Field>
 }
 
-function SelectField({ label, name, options }: { label: string; name: string; options: { label: string; value: string }[] }) {
+function SelectField({
+  defaultValue,
+  label,
+  name,
+  options,
+}: {
+  defaultValue?: string
+  label: string
+  name: string
+  options: { label: string; value: string }[]
+}) {
   const id = `order-${name}`
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <NativeSelect id={id} name={name} required>
+      <NativeSelect defaultValue={defaultValue} id={id} name={name} required>
         {options.map((option) => <NativeSelectOption key={option.value} value={option.value}>{option.label}</NativeSelectOption>)}
       </NativeSelect>
     </Field>

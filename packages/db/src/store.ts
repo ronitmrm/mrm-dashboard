@@ -1134,6 +1134,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         id: string
         identificationName: string
         issuedQuantity: string
+        itemTypeId: string
         locationName: string
         remainingQuantity: string
         requestNumber: string
@@ -1146,7 +1147,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         unit: string
       }>(
         `
-          SELECT request.id, request.request_number AS "requestNumber",
+          SELECT request.id, request.item_type_id AS "itemTypeId",
+            request.request_number AS "requestNumber",
             request.department, request.requested_by AS "requestedBy",
             trim_scale(request.requested_quantity)::text AS "requestedQuantity",
             trim_scale(request.issued_quantity)::text AS "issuedQuantity",

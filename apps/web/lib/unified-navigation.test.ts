@@ -17,6 +17,7 @@ import {
   planningHolidayNavigation,
   productionFloorNavigation,
   storeNavigation,
+  storePurchaseOrderHref,
   universalProductionNavigation,
 } from "./unified-navigation"
 
@@ -188,6 +189,18 @@ describe("unified navigation", () => {
   it("creates a standalone Job Card workspace link", () => {
     expect(jobCardWorkspaceHref("JC 100/2", "cnc")).toBe(
       "/dashboard/job-cards/JC%20100%2F2?floor=cnc"
+    )
+  })
+
+  it("creates a prefilled Purchase Order link from a Store request", () => {
+    expect(
+      storePurchaseOrderHref({
+        itemTypeId: "item-123",
+        quantity: "3.5",
+        requestNumber: "STR-REQ-2026-000123",
+      })
+    ).toBe(
+      "/store/orders?itemTypeId=item-123&quantity=3.5&requestNumber=STR-REQ-2026-000123"
     )
   })
 
