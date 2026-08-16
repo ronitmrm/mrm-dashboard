@@ -818,6 +818,30 @@ async function post(request: NextRequest, context: RouteContext) {
       })
     }
 
+    if (path === "job-card-delivery-target") {
+      const result = await withProductionRepository(
+        request,
+        "planning.override.write",
+        ({ actorUserId, organizationId, repository }) =>
+          repository.saveJobCardDeliveryTarget({
+            actorUserId,
+            jobCardNumber: text(body.jcNo),
+            jobCardOverrideWorkingDays:
+              body.jobCardOverrideWorkingDays === null ||
+              body.jobCardOverrideWorkingDays === ""
+                ? null
+                : numeric(body.jobCardOverrideWorkingDays),
+            organizationId,
+            productDefaultWorkingDays:
+              body.productDefaultWorkingDays === null ||
+              body.productDefaultWorkingDays === ""
+                ? null
+                : numeric(body.productDefaultWorkingDays),
+          })
+      )
+      return json({ ...result, message: "Delivery target saved." })
+    }
+
     if (path === "route-selection") {
       const result = await withPlanningRepository(
         request,
@@ -1724,6 +1748,7 @@ const knownDashboardApiPaths = new Set([
   "data-template",
   "dispatch-approval",
   "hourly-quality",
+  "job-card-delivery-target",
   "job-cards",
   "machine-constraint",
   "mark-complete",

@@ -18,7 +18,13 @@ import {
   productionShiftAt,
   type ProductionMeasurementMethod,
 } from "./production-session-domain"
-import { buildJobCardAnalytics } from "./job-card-workspace"
+import {
+  buildDeliveryPerformance,
+  buildJobCardAnalytics,
+  buildMaterialYield,
+  buildSetupTiming,
+  normalizeDeliveryTargets,
+} from "./job-card-workspace"
 
 
 type RawMaterialReceiptInput = {
@@ -434,6 +440,45 @@ function objectRows(value: unknown) {
         Boolean(row) && typeof row === "object" && !Array.isArray(row)
       )
     : []
+}
+
+function optionalWorkingDays(value: unknown) {
+  if (value === undefined || value === null || value === "") return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 365
+    ? parsed
+    : null
+}
+
+function payloadNumber(payload: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const parsed = Number(payload[key])
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return 0
+}
+
+function rawMaterialSummary(
+  rows: Array<Record<string, unknown>>,
+  orderedKg: number
+) {
+  let receivedKg = 0
+  let rawMaterialCompleteDate: string | null = null
+  for (const row of rows) {
+    receivedKg += Number(row.quantityKg ?? 0)
+    if (!rawMaterialCompleteDate && orderedKg > 0 && receivedKg >= orderedKg) {
+      rawMaterialCompleteDate = String(row.receivedOn ?? "") || null
+    }
+  }
+  return {
+    orderedKg,
+    rawMaterialCompleteDate,
+    receivedKg,
+    remainingKg: rows.reduce(
+      (total, row) => total + Number(row.remainingQuantityKg ?? 0),
+      0
+    ),
+  }
 }
 
 async function requiredActiveEmployeeIdFor(
@@ -1557,6 +1602,60 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       })
     },
 
+    async saveJobCardDeliveryTarget(input: {
+      actorUserId?: string | null
+      jobCardNumber: string
+      jobCardOverrideWorkingDays?: number | null
+      organizationId: string
+      productDefaultWorkingDays?: number | null
+    }) {
+      const jobCardNumber = requiredText(input.jobCardNumber, "Job card")
+      const targets = normalizeDeliveryTargets({
+        jobCardOverrideWorkingDays: input.jobCardOverrideWorkingDays,
+        productDefaultWorkingDays: input.productDefaultWorkingDays,
+      })
+      return transaction(pool, async (client) => {
+        const workOrderResult = await client.query<{
+          id: string
+          item_id: string
+        }>(
+          `SELECT id, item_id FROM manufacturing.work_orders
+           WHERE organization_id = $1 AND lower(job_card_number) = lower($2)
+           FOR UPDATE`,
+          [input.organizationId, jobCardNumber]
+        )
+        const workOrder = workOrderResult.rows[0]
+        if (!workOrder) throw new Error("Job card was not found.")
+
+        const productPatch = targets.productDefaultWorkingDays === null
+          ? {}
+          : { deliveryTargetWorkingDaysAfterRm: targets.productDefaultWorkingDays }
+        const overridePatch = targets.jobCardOverrideWorkingDays === null
+          ? {}
+          : { deliveryTargetWorkingDaysAfterRmOverride: targets.jobCardOverrideWorkingDays }
+        await client.query(
+          `UPDATE catalog.items
+           SET source_payload = (COALESCE(source_payload, '{}'::jsonb)
+                 - 'deliveryTargetWorkingDaysAfterRm') || $1::jsonb,
+             updated_by_user_id = $2, updated_at = now(),
+             row_version = row_version + 1
+           WHERE id = $3`,
+          [productPatch, input.actorUserId ?? null, workOrder.item_id]
+        )
+        await client.query(
+          `UPDATE manufacturing.work_orders
+           SET source_payload = (COALESCE(source_payload, '{}'::jsonb)
+                 - 'deliveryTargetWorkingDaysAfterRmOverride') || $1::jsonb,
+             updated_by_user_id = $2, updated_at = now(),
+             row_version = row_version + 1
+           WHERE id = $3`,
+          [overridePatch, input.actorUserId ?? null, workOrder.id]
+        )
+        await queueDashboardRefresh(client, input.organizationId)
+        return { jobCardNumber, ...targets }
+      })
+    },
+
     async readJobCardWorkspace(input: {
       jobCardNumber: string
       organizationId: string
@@ -1576,6 +1675,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             item.description, item.production_type AS "productionType",
             item.weight_100_pcs AS "weight100Pieces",
             item.pieces_per_kg AS "piecesPerKg",
+            item.casting,
             material.name AS "materialGrade", rod.name AS "rodType",
             item.rod_size AS "rodSize", item.source_payload AS "itemSource",
             selection.route_option_id AS "selectedRouteOptionId",
@@ -1619,7 +1719,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       const selectedRoute = routesResult.rows.find((route) => route.id === explicitRouteId)
         ?? (activeRoutes.length === 1 ? activeRoutes[0] : undefined)
 
-      const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, receiptsResult, snapshotResult] = await Promise.all([
+      const [setupsResult, sessionsResult, legacyEntriesResult, eventsResult, workflowResult, receiptsResult, setupTimingsResult, snapshotResult] = await Promise.all([
         pool.query<Record<string, unknown>>(
           `
             SELECT setup.id, setup.setup_number::text AS "setupNumber",
@@ -1790,6 +1890,47 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
            ORDER BY received_on, created_at`,
           [input.organizationId, jobCardNumber]
         ),
+        pool.query<Record<string, unknown>>(
+          `
+            SELECT setup.id AS "setupId", setup.setup_number::text AS "setupNumber",
+              setup.operation_code AS "operationCode",
+              setup.operation_name AS "operationName",
+              cycle.setup_time_minutes AS "targetSetupMinutes",
+              stage."settingStartedAt", stage."settingCompletedAt",
+              stage."qualityApprovedAt", production."productionStartedAt"
+            FROM manufacturing.operation_setups setup
+            LEFT JOIN LATERAL (
+              SELECT standard.setup_time_minutes
+              FROM manufacturing.operation_cycle_standards standard
+              WHERE standard.operation_setup_id = setup.id
+              ORDER BY standard.effective_from DESC NULLS LAST,
+                standard.updated_at DESC LIMIT 1
+            ) cycle ON true
+            LEFT JOIN LATERAL (
+              SELECT
+                min(event.occurred_at) FILTER (WHERE event.to_stage = 'presetting')
+                  AS "settingStartedAt",
+                min(event.occurred_at) FILTER (WHERE event.to_stage = 'setting')
+                  AS "settingCompletedAt",
+                min(event.occurred_at) FILTER (WHERE event.to_stage = 'quality_approval')
+                  AS "qualityApprovedAt"
+              FROM manufacturing.shop_floor_setup_state state
+              JOIN manufacturing.shop_floor_stage_events event
+                ON event.setup_state_id = state.id AND event.reversed_at IS NULL
+              WHERE state.work_order_id = $2 AND state.operation_setup_id = setup.id
+            ) stage ON true
+            LEFT JOIN LATERAL (
+              SELECT min(session.started_at) AS "productionStartedAt"
+              FROM manufacturing.production_sessions session
+              WHERE session.work_order_id = $2
+                AND session.operation_setup_id = setup.id
+                AND session.reversed_at IS NULL
+            ) production ON true
+            WHERE setup.route_option_id = $1::uuid
+            ORDER BY setup.sequence, setup.setup_number
+          `,
+          [selectedRoute?.id ?? null, jobCard.id]
+        ),
         pool.query<{ payload: Record<string, unknown> }>(
           `SELECT payload FROM derived.dashboard_read_models
            WHERE organization_id = $1 ORDER BY version DESC LIMIT 1`,
@@ -1810,6 +1951,44 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         .filter(matchesJobCard)
       const dashboardSummary = objectRows(productionControl.productionDashboardRows)
         .find(matchesJobCard) ?? null
+      const planningCalendar = objectRecord(productionControl.planningCalendar)
+      const holidayDates = Array.isArray(planningCalendar.holidayDates)
+        ? planningCalendar.holidayDates.map(String)
+        : []
+      const workOrderSource = objectRecord(jobCard.workOrderSource)
+      const itemSource = objectRecord(jobCard.itemSource)
+      const deliveryTarget = normalizeDeliveryTargets({
+        jobCardOverrideWorkingDays: optionalWorkingDays(
+          workOrderSource.deliveryTargetWorkingDaysAfterRmOverride
+        ),
+        productDefaultWorkingDays: optionalWorkingDays(
+          itemSource.deliveryTargetWorkingDaysAfterRm
+        ),
+      })
+      const material = rawMaterialSummary(
+        receiptsResult.rows,
+        payloadNumber(workOrderSource, "orderKg", "ORD. KG.", "ORD. KG")
+      )
+      const setupTimings = setupTimingsResult.rows.map((row) => ({
+        ...row,
+        ...buildSetupTiming({
+          productionStartedAt: row.productionStartedAt
+            ? String(row.productionStartedAt)
+            : null,
+          qualityApprovedAt: row.qualityApprovedAt
+            ? String(row.qualityApprovedAt)
+            : null,
+          settingCompletedAt: row.settingCompletedAt
+            ? String(row.settingCompletedAt)
+            : null,
+          settingStartedAt: row.settingStartedAt
+            ? String(row.settingStartedAt)
+            : null,
+          targetSetupMinutes: row.targetSetupMinutes == null
+            ? null
+            : Number(row.targetSetupMinutes),
+        }),
+      }))
       const sessionRows = sessionsResult.rows.map((row) => ({
         ...row,
         downtimeMinutes: Number(row.downtime_minutes ?? 0),
@@ -1853,10 +2032,37 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         planRows: standardizedPlans,
         sessions: [...sessionRows, ...legacySessionRows],
       })
+      const materialYield = buildMaterialYield({
+        actualGoodPieces: analyticsSummary.actualGoodPieces,
+        actualProducedPieces: analyticsSummary.actualProducedPieces,
+        orderedQuantity: Number(jobCard.orderedQuantity ?? 0),
+        piecesPerKg: Number(jobCard.piecesPerKg ?? 0),
+        receivedKg: material.receivedKg,
+        rejectedPieces: analyticsSummary.rejectedPieces,
+        remainingKg: material.remainingKg,
+      })
+      const delivery = buildDeliveryPerformance({
+        actualOrProjectedDate: payloadText(
+          dashboardSummary ?? {},
+          "dispatchedDate",
+          "currentProbableDispatchDate"
+        ),
+        asOfDate: new Date().toISOString(),
+        holidayDates,
+        rawMaterialCompleteDate: material.rawMaterialCompleteDate,
+        targetWorkingDays: deliveryTarget.effectiveWorkingDays,
+      })
       const analytics = {
         ...analyticsSummary,
+        delivery,
+        deliveryTarget,
         legacyEntryCount: legacyEntriesResult.rows.length,
+        material: {
+          ...material,
+          ...materialYield,
+        },
         sessionCount: sessionsResult.rows.length,
+        setupTimings,
       }
       const legacyEntryEvents = legacyEntriesResult.rows.map((row) => ({
         detail: `Production entry · ${Number(row.rejectedPieces ?? 0)} rejected`,
@@ -1894,6 +2100,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
         })),
         sessions: sessionsResult.rows,
         setups: setupsResult.rows,
+        setupTimings,
       }
     },
 

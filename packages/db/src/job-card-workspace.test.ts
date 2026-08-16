@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import { buildJobCardAnalytics } from "./job-card-workspace"
+import {
+  buildDeliveryPerformance,
+  buildJobCardAnalytics,
+  buildMaterialYield,
+  buildSetupTiming,
+  normalizeDeliveryTargets,
+} from "./job-card-workspace"
 
 describe("job card workspace", () => {
   it("summarizes plan versus actual, rejection and downtime patterns", () => {
@@ -71,5 +77,109 @@ describe("job card workspace", () => {
         { actualGoodPieces: 200, completionPercent: 20, setupNumber: "2" },
       ],
     })
+  })
+
+  it("uses good production as progress and explains the material shortfall", () => {
+    expect(
+      buildMaterialYield({
+        actualGoodPieces: 40_000,
+        actualProducedPieces: 48_000,
+        orderedQuantity: 50_000,
+        piecesPerKg: 100,
+        receivedKg: 520,
+        remainingKg: 20,
+        rejectedPieces: 8_000,
+      })
+    ).toEqual({
+      available: true,
+      expectedPiecesFromMaterial: 52_000,
+      materialCapacityShortPieces: 0,
+      orderShortPieces: 10_000,
+      productionProgressPercent: 80,
+      remainingMaterialEquivalentPieces: 2_000,
+      rejectedPieces: 8_000,
+      unexplainedLossPieces: 2_000,
+    })
+  })
+
+  it("caps production progress at 100 percent", () => {
+    expect(buildJobCardAnalytics({
+      downtimeEvents: [],
+      orderedQuantity: 100,
+      planRows: [],
+      sessions: [{ goodPieces: 120, totalPieces: 120 }],
+    }).completionPercent).toBe(100)
+  })
+
+  it("does not invent a material shortage when pieces per kilogram is missing", () => {
+    expect(buildMaterialYield({
+      actualGoodPieces: 100,
+      actualProducedPieces: 110,
+      orderedQuantity: 1_000,
+      piecesPerKg: 0,
+      receivedKg: 50,
+      rejectedPieces: 10,
+      remainingKg: 20,
+    })).toEqual({
+      available: false,
+      expectedPiecesFromMaterial: null,
+      materialCapacityShortPieces: null,
+      orderShortPieces: 900,
+      productionProgressPercent: 10,
+      remainingMaterialEquivalentPieces: null,
+      rejectedPieces: 10,
+      unexplainedLossPieces: null,
+    })
+  })
+
+  it("separates machinist setup time from QC and machine-start waiting", () => {
+    expect(
+      buildSetupTiming({
+        productionStartedAt: "2026-08-01T11:15:00.000Z",
+        qualityApprovedAt: "2026-08-01T11:00:00.000Z",
+        settingCompletedAt: "2026-08-01T10:30:00.000Z",
+        settingStartedAt: "2026-08-01T08:00:00.000Z",
+        targetSetupMinutes: 120,
+      })
+    ).toEqual({
+      machinistSetupMinutes: 150,
+      machineStartWaitMinutes: 15,
+      qcWaitMinutes: 30,
+      setupVarianceMinutes: 30,
+      targetSetupMinutes: 120,
+    })
+  })
+
+  it("rates delivery in working days excluding Fridays and holidays", () => {
+    expect(
+      buildDeliveryPerformance({
+        actualOrProjectedDate: "2026-08-13",
+        asOfDate: "2026-08-16",
+        holidayDates: ["2026-08-08"],
+        rawMaterialCompleteDate: "2026-08-03",
+        targetWorkingDays: 5,
+      })
+    ).toEqual({
+      daysLate: 3,
+      rating: "C",
+      status: "3 working days late",
+      targetDate: "2026-08-10",
+    })
+  })
+
+  it("uses a Job Card delivery override when provided", () => {
+    expect(normalizeDeliveryTargets({
+      jobCardOverrideWorkingDays: 12,
+      productDefaultWorkingDays: 20,
+    })).toEqual({
+      effectiveWorkingDays: 12,
+      jobCardOverrideWorkingDays: 12,
+      productDefaultWorkingDays: 20,
+      source: "job_card_override",
+    })
+    expect(() => normalizeDeliveryTargets({
+      jobCardOverrideWorkingDays: 0,
+      productDefaultWorkingDays: 20,
+    })).toThrow("Job Card override must be between 1 and 365 working days.")
   })
 })

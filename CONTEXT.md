@@ -96,6 +96,18 @@ _Avoid_: Job Card tile, filtered Job Cards list, duplicate history store.
 The calculated comparison of ordered quantity and planned dates against actual good/total output, rejection, runtime, and downtime patterns for one Job Card. It is derived from current planning and canonical event records.
 _Avoid_: OEE, manually entered summary, machine-wide analytics.
 
+**Job Card Production Progress**:
+The percentage of ordered pieces completed as good pieces: good produced divided by ordered quantity, capped at 100%. Rejections, downtime, setup completion, and elapsed stages explain performance but never increase progress.
+_Avoid_: Task-count progress, total-produced progress.
+
+**Job Card Delivery Target**:
+The working-day limit after full Raw Material receipt. Product Master provides the default and the Job Card may override it; Fridays and Planning Calendar holidays are excluded. A/B/C/D ratings mean on time, 1–2, 3–5, or more than 5 working days late.
+_Avoid_: Calendar-day promise, Job Card-only default.
+
+**Job Card Setup Time**:
+Setup-wise elapsed time split into machinist setup (Pre Setting start to Setting complete), QC wait (Setting complete to QC approval), and machine-start wait (QC approval to first Production Session). Missing timestamps stay unknown.
+_Avoid_: One combined setup duration, missing time as zero.
+
 **Operational Replanning**:
 An automatic planning recalculation after live planning inputs change, such as priority, RM inward, shop-floor progress, setup completion, or production quantity. Master and structural changes remain manually recalculated.
 _Avoid_: Manual operational refresh.
