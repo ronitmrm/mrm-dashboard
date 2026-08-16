@@ -16,9 +16,13 @@ const store = createStoreRepository({ connectionString })
 const maintenance = createMaintenanceRepository({ connectionString })
 const suffix = randomUUID().slice(0, 8)
 let organizationId: string
+let legacyItemTypeId: string
 
 beforeAll(async () => {
-  await migrateDatabase({ connectionString })
+  await migrateDatabase({
+    connectionString,
+    through: "0068_store_module.sql",
+  })
   const organization = await pool.query<{ id: string }>(
     `
       INSERT INTO core.organizations (code, name)
@@ -28,6 +32,20 @@ beforeAll(async () => {
     `
   )
   organizationId = organization.rows[0]!.id
+  const legacyItemType = await pool.query<{ id: string }>(
+    `
+      INSERT INTO store.item_types (
+        organization_id, type_code, asset_type, asset_category,
+        asset_subcategory, asset_name, identification_name,
+        tracking_mode, unit
+      ) VALUES ($1, 'N41', 'Asset', 'Furniture', 'Chairs',
+        'Operator Chair', 'Legacy Operator Chair', 'SERIALIZED', 'Nos')
+      RETURNING id
+    `,
+    [organizationId]
+  )
+  legacyItemTypeId = legacyItemType.rows[0]!.id
+  await migrateDatabase({ connectionString })
 })
 
 afterAll(async () => {
@@ -36,22 +54,104 @@ afterAll(async () => {
   await pool.end()
 })
 
+async function createClassification(label: string) {
+  const category = await store.createAssetCategory({
+    name: `${label} Category ${suffix}`,
+    organizationId,
+  })
+  const subcategory = await store.createAssetSubcategory({
+    categoryId: category.id,
+    name: `${label} Subcategory ${suffix}`,
+    organizationId,
+  })
+  const assetName = await store.createAssetName({
+    name: `${label} Asset ${suffix}`,
+    organizationId,
+    subcategoryId: subcategory.id,
+  })
+  return {
+    assetCategoryId: category.id,
+    assetNameId: assetName.id,
+    assetSubcategoryId: subcategory.id,
+  }
+}
+
 describe("Store requests", () => {
+  test("uses classification masters and generates immutable Type Codes", async () => {
+    const category = await store.createAssetCategory({
+      name: `Safety ${suffix}`,
+      organizationId,
+    })
+    const subcategory = await store.createAssetSubcategory({
+      categoryId: category.id,
+      name: `Eye Protection ${suffix}`,
+      organizationId,
+    })
+    const assetName = await store.createAssetName({
+      name: `Safety Glasses ${suffix}`,
+      organizationId,
+      subcategoryId: subcategory.id,
+    })
+
+    const first = await store.createItemType({
+      assetCategoryId: category.id,
+      assetNameId: assetName.id,
+      assetSubcategoryId: subcategory.id,
+      assetType: "PPE",
+      identificationName: `Clear Safety Glasses ${suffix}`,
+      organizationId,
+      trackingMode: "SERIALIZED",
+      unit: "Nos",
+    })
+    const second = await store.createItemType({
+      assetCategoryId: category.id,
+      assetNameId: assetName.id,
+      assetSubcategoryId: subcategory.id,
+      assetType: "PPE Spare",
+      identificationName: `Tinted Safety Glasses ${suffix}`,
+      organizationId,
+      trackingMode: "SERIALIZED",
+      unit: "Nos",
+    })
+
+    expect(first.typeCode).toMatch(/^ST\d{3,}$/)
+    expect(Number(second.typeCode.slice(2))).toBe(
+      Number(first.typeCode.slice(2)) + 1
+    )
+
+    const masters = await store.listAssetClassificationMasters(organizationId)
+    expect(masters.assetNames).toContainEqual(
+      expect.objectContaining({
+        categoryId: category.id,
+        id: assetName.id,
+        subcategoryId: subcategory.id,
+      })
+    )
+    expect(masters.assetNames).toContainEqual(
+      expect.objectContaining({
+        categoryName: "Furniture",
+        name: "Operator Chair",
+        subcategoryName: "Chairs",
+      })
+    )
+    expect(await store.listItemTypes(organizationId)).toContainEqual(
+      expect.objectContaining({ id: legacyItemTypeId, typeCode: "N41" })
+    )
+  })
+
   test("generates request numbers and shows every department the live shared stock", async () => {
     const location = await store.createLocation({
       code: `MAIN-${suffix}`,
       name: "Main Store",
       organizationId,
     })
+    const classification = await createClassification("Carbide Insert")
     const itemType = await store.createItemType({
-      assetCategory: "Cutting Tools",
-      assetName: `Carbide Insert ${suffix}`,
-      assetSubcategory: "Inserts",
+      ...classification,
       assetType: "Tool",
       identificationName: "CNMG Insert",
       organizationId,
       trackingMode: "CONSUMABLE",
-      typeCode: `CT-${suffix}`,
       unit: "Nos",
     })
     await store.receiveStock({
@@ -111,15 +211,13 @@ describe("Store requests", () => {
       name: "Asset Store",
       organizationId,
     })
+    const classification = await createClassification("Operator Chair")
     const itemType = await store.createItemType({
-      assetCategory: "Furniture",
-      assetName: `Operator Chair ${suffix}`,
-      assetSubcategory: "Chairs",
+      ...classification,
       assetType: "Asset",
       identificationName: "CNC Operator Chair",
       organizationId,
       trackingMode: "SERIALIZED",
-      typeCode: `N41-${suffix}`,
       unit: "Nos",
     })
     const receipt = await store.receiveStock({
@@ -130,8 +228,8 @@ describe("Store requests", () => {
       unitPrice: "4500.00",
     })
     expect(receipt.assetCodes).toEqual([
-      `N41-${suffix}-00001`,
-      `N41-${suffix}-00002`,
+      `${itemType.typeCode}-00001`,
+      `${itemType.typeCode}-00002`,
     ])
 
     const request = await store.createRequisition({
@@ -197,7 +295,7 @@ describe("Store requests", () => {
       quantity: 1,
       unitPrice: "4750.00",
     })
-    expect(replacement.assetCodes).toEqual([`N41-${suffix}-00003`])
+    expect(replacement.assetCodes).toEqual([`${itemType.typeCode}-00003`])
 
     const workspace = await store.getAssetWorkspace({
       assetCode: receipt.assetCodes[0]!,

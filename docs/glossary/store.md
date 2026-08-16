@@ -1,11 +1,18 @@
 # Store
 
-**Store Item Type**: The unique combination of Asset Type, Asset Category,
-Asset Subcategory, and Asset Name. It owns one permanent Type Code and one
+**Store Classification Master**: The maintained hierarchy of Asset Category,
+Asset Subcategory, and Asset Name. A Subcategory belongs to one Category, and
+an Asset Name belongs to one Subcategory. Store item creation selects these
+values from the masters; users do not retype classification names.
+
+**Store Item Type**: The unique combination of Asset Type and one selected
+Store Classification Master path. It owns one permanent Type Code and one
 Identification Name.
 
-**Type Code**: The Store-managed code for one Store Item Type. Store checks a
-missing-code request for an existing combination before creating another code.
+**Type Code**: The immutable, company-wide Store code generated in sequence as
+`ST001`, `ST002`, and so on when a Store Item Type is created. Users and CSV
+imports cannot supply or replace it. Existing historical Type Codes remain
+unchanged. Store checks a requested combination before generating another code.
 
 **Physical Asset**: One returnable item tracked individually through receipt,
 assignment, movement, maintenance, calibration, breakage, and scrap.

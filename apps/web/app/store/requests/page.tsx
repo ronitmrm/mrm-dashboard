@@ -51,13 +51,21 @@ export default async function StoreRequestsPage() {
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, locations, requisitions, codeRequests] = await Promise.all([
-      repository.listItemTypes(organizationId),
-      repository.listLocations(organizationId),
-      repository.listRequisitions({ organizationId }),
-      repository.listCodeRequests(organizationId),
-    ])
-    return { codeRequests, items, locations, requisitions: requisitions.rows }
+    const [items, locations, requisitions, codeRequests, masters] =
+      await Promise.all([
+        repository.listItemTypes(organizationId),
+        repository.listLocations(organizationId),
+        repository.listRequisitions({ organizationId }),
+        repository.listCodeRequests(organizationId),
+        repository.listAssetClassificationMasters(organizationId),
+      ])
+    return {
+      codeRequests,
+      items,
+      locations,
+      masters,
+      requisitions: requisitions.rows,
+    }
   })().finally(() => repository.close())
 
   return (
@@ -149,13 +157,30 @@ export default async function StoreRequestsPage() {
               <form action={requestMissingStoreCodeAction}>
                 <FieldGroup className="grid gap-4 md:grid-cols-2">
                   <TextField label="Asset Type" name="asset_type" required />
-                  <TextField label="Category" name="asset_category" required />
-                  <TextField
-                    label="Subcategory"
-                    name="asset_subcategory"
-                    required
+                  <SelectField
+                    label="Category"
+                    name="asset_category_id"
+                    options={data.masters.categories.map((row) => ({
+                      label: row.name,
+                      value: row.id,
+                    }))}
                   />
-                  <TextField label="Asset Name" name="asset_name" required />
+                  <SelectField
+                    label="Subcategory"
+                    name="asset_subcategory_id"
+                    options={data.masters.subcategories.map((row) => ({
+                      label: `${row.categoryName} — ${row.name}`,
+                      value: row.id,
+                    }))}
+                  />
+                  <SelectField
+                    label="Asset Name"
+                    name="asset_name_id"
+                    options={data.masters.assetNames.map((row) => ({
+                      label: `${row.categoryName} — ${row.subcategoryName} — ${row.name}`,
+                      value: row.id,
+                    }))}
+                  />
                   <TextField
                     label="Identification Name"
                     name="identification_name"
@@ -169,7 +194,15 @@ export default async function StoreRequestsPage() {
                   />
                   <TextField label="Reason / Use" name="reason" />
                 </FieldGroup>
-                <Button className="mt-5" type="submit">
+                <Button
+                  className="mt-5"
+                  disabled={
+                    !data.masters.categories.length ||
+                    !data.masters.subcategories.length ||
+                    !data.masters.assetNames.length
+                  }
+                  type="submit"
+                >
                   Send To Store
                 </Button>
               </form>

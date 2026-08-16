@@ -53,6 +53,70 @@ async function nextDocumentNumber(
   return `${input.prefix}-${year}-${String(counter.rows[0]!.current_value).padStart(6, "0")}`
 }
 
+async function nextStoreTypeCode(
+  client: PoolClient,
+  organizationId: string
+) {
+  const counter = await client.query<{ current_value: number }>(
+    `
+      INSERT INTO store.number_counters (
+        organization_id, counter_key, counter_year, current_value
+      ) VALUES ($1, 'TYPE_CODE', 0, 1)
+      ON CONFLICT (organization_id, counter_key, counter_year)
+      DO UPDATE SET current_value = store.number_counters.current_value + 1
+      RETURNING current_value
+    `,
+    [organizationId]
+  )
+  return `ST${String(counter.rows[0]!.current_value).padStart(3, "0")}`
+}
+
+async function assetClassificationPath(
+  client: PoolClient,
+  input: {
+    assetCategoryId: string
+    assetNameId: string
+    assetSubcategoryId: string
+    organizationId: string
+  }
+) {
+  const result = await client.query<{
+    asset_category: string
+    asset_name: string
+    asset_subcategory: string
+  }>(
+    `
+      SELECT category.name AS asset_category,
+        subcategory.name AS asset_subcategory,
+        asset_name.name AS asset_name
+      FROM store.asset_categories category
+      JOIN store.asset_subcategories subcategory
+        ON subcategory.category_id = category.id
+      JOIN store.asset_names asset_name
+        ON asset_name.subcategory_id = subcategory.id
+      WHERE category.organization_id = $1
+        AND subcategory.organization_id = $1
+        AND asset_name.organization_id = $1
+        AND category.id = $2
+        AND subcategory.id = $3
+        AND asset_name.id = $4
+        AND category.active AND subcategory.active AND asset_name.active
+    `,
+    [
+      input.organizationId,
+      input.assetCategoryId,
+      input.assetSubcategoryId,
+      input.assetNameId,
+    ]
+  )
+  if (!result.rows[0]) {
+    throw new Error(
+      "Select a valid Store Category, Subcategory, and Asset Name combination."
+    )
+  }
+  return result.rows[0]
+}
+
 async function machineIdForReference(
   client: PoolClient,
   organizationId: string,
@@ -135,6 +199,145 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
+    async createAssetCategory(input: {
+      actorUserId?: string | null
+      name: string
+      organizationId: string
+    }) {
+      const result = await pool.query<{ id: string }>(
+        `
+          INSERT INTO store.asset_categories (
+            organization_id, name, created_by_user_id, updated_by_user_id
+          ) VALUES ($1, $2, $3, $3)
+          ON CONFLICT (organization_id, lower(name))
+          DO UPDATE SET active = true, updated_at = now(),
+            updated_by_user_id = EXCLUDED.updated_by_user_id
+          RETURNING id
+        `,
+        [
+          input.organizationId,
+          requiredText(input.name, "Asset category"),
+          input.actorUserId ?? null,
+        ]
+      )
+      return result.rows[0]!
+    },
+
+    async createAssetSubcategory(input: {
+      actorUserId?: string | null
+      categoryId: string
+      name: string
+      organizationId: string
+    }) {
+      const result = await pool.query<{ id: string }>(
+        `
+          INSERT INTO store.asset_subcategories (
+            organization_id, category_id, name,
+            created_by_user_id, updated_by_user_id
+          )
+          SELECT $1, category.id, $2, $3, $3
+          FROM store.asset_categories category
+          WHERE category.id = $4 AND category.organization_id = $1
+            AND category.active
+          ON CONFLICT (organization_id, category_id, lower(name))
+          DO UPDATE SET active = true, updated_at = now(),
+            updated_by_user_id = EXCLUDED.updated_by_user_id
+          RETURNING id
+        `,
+        [
+          input.organizationId,
+          requiredText(input.name, "Asset subcategory"),
+          input.actorUserId ?? null,
+          input.categoryId,
+        ]
+      )
+      if (!result.rows[0]) throw new Error("Store Category was not found.")
+      return result.rows[0]
+    },
+
+    async createAssetName(input: {
+      actorUserId?: string | null
+      name: string
+      organizationId: string
+      subcategoryId: string
+    }) {
+      const result = await pool.query<{ id: string }>(
+        `
+          INSERT INTO store.asset_names (
+            organization_id, subcategory_id, name,
+            created_by_user_id, updated_by_user_id
+          )
+          SELECT $1, subcategory.id, $2, $3, $3
+          FROM store.asset_subcategories subcategory
+          WHERE subcategory.id = $4 AND subcategory.organization_id = $1
+            AND subcategory.active
+          ON CONFLICT (organization_id, subcategory_id, lower(name))
+          DO UPDATE SET active = true, updated_at = now(),
+            updated_by_user_id = EXCLUDED.updated_by_user_id
+          RETURNING id
+        `,
+        [
+          input.organizationId,
+          requiredText(input.name, "Asset name"),
+          input.actorUserId ?? null,
+          input.subcategoryId,
+        ]
+      )
+      if (!result.rows[0]) throw new Error("Store Subcategory was not found.")
+      return result.rows[0]
+    },
+
+    async listAssetClassificationMasters(organizationId: string) {
+      const [categories, subcategories, assetNames] = await Promise.all([
+        pool.query<{ id: string; name: string }>(
+          `SELECT id, name FROM store.asset_categories
+           WHERE organization_id = $1 AND active ORDER BY name`,
+          [organizationId]
+        ),
+        pool.query<{
+          categoryId: string
+          categoryName: string
+          id: string
+          name: string
+        }>(
+          `SELECT subcategory.id, subcategory.category_id AS "categoryId",
+             category.name AS "categoryName", subcategory.name
+           FROM store.asset_subcategories subcategory
+           JOIN store.asset_categories category ON category.id = subcategory.category_id
+           WHERE subcategory.organization_id = $1 AND subcategory.active
+             AND category.active
+           ORDER BY category.name, subcategory.name`,
+          [organizationId]
+        ),
+        pool.query<{
+          categoryId: string
+          categoryName: string
+          id: string
+          name: string
+          subcategoryId: string
+          subcategoryName: string
+        }>(
+          `SELECT asset_name.id, asset_name.subcategory_id AS "subcategoryId",
+             subcategory.category_id AS "categoryId",
+             category.name AS "categoryName",
+             subcategory.name AS "subcategoryName", asset_name.name
+           FROM store.asset_names asset_name
+           JOIN store.asset_subcategories subcategory
+             ON subcategory.id = asset_name.subcategory_id
+           JOIN store.asset_categories category ON category.id = subcategory.category_id
+           WHERE asset_name.organization_id = $1 AND asset_name.active
+             AND subcategory.active AND category.active
+           ORDER BY category.name, subcategory.name, asset_name.name`,
+          [organizationId]
+        ),
+      ])
+      return {
+        assetNames: assetNames.rows,
+        categories: categories.rows,
+        subcategories: subcategories.rows,
+      }
+    },
+
     async createSupplier(input: {
       actorUserId?: string | null
       code: string
@@ -214,9 +417,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
 
     async createItemType(input: {
       actorUserId?: string | null
-      assetCategory: string
-      assetName: string
-      assetSubcategory: string
+      assetCategoryId: string
+      assetNameId: string
+      assetSubcategoryId: string
       assetType: string
       applicableItemCode?: string | null
       drawingNumber?: string | null
@@ -224,36 +427,46 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       minimumStock?: number
       organizationId: string
       trackingMode: StoreTrackingMode
-      typeCode: string
       unit: string
     }) {
-      const result = await pool.query<{ id: string }>(
-        `
-          INSERT INTO store.item_types (
-            organization_id, type_code, asset_type, asset_category,
-            asset_subcategory, asset_name, identification_name,
-            applicable_item_code, drawing_number, tracking_mode, unit, minimum_stock,
-            created_by_user_id, updated_by_user_id
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
-          RETURNING id
-        `,
-        [
-          input.organizationId,
-          requiredText(input.typeCode, "Asset type code"),
-          requiredText(input.assetType, "Asset type"),
-          requiredText(input.assetCategory, "Asset category"),
-          requiredText(input.assetSubcategory, "Asset subcategory"),
-          requiredText(input.assetName, "Asset name"),
-          requiredText(input.identificationName, "Identification name"),
-          input.applicableItemCode?.trim() || null,
-          input.drawingNumber?.trim() || null,
-          input.trackingMode,
-          requiredText(input.unit, "Unit"),
-          input.minimumStock ?? 0,
-          input.actorUserId ?? null,
-        ]
-      )
-      return result.rows[0]!
+      return withTransaction(pool, async (client) => {
+        const classification = await assetClassificationPath(client, input)
+        const typeCode = await nextStoreTypeCode(client, input.organizationId)
+        const result = await client.query<{ id: string }>(
+          `
+            INSERT INTO store.item_types (
+              organization_id, type_code, asset_type, asset_category,
+              asset_subcategory, asset_name, asset_category_id,
+              asset_subcategory_id, asset_name_id, identification_name,
+              applicable_item_code, drawing_number, tracking_mode, unit,
+              minimum_stock, created_by_user_id, updated_by_user_id
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+              $13, $14, $15, $16, $16
+            )
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            typeCode,
+            requiredText(input.assetType, "Asset type"),
+            classification.asset_category,
+            classification.asset_subcategory,
+            classification.asset_name,
+            input.assetCategoryId,
+            input.assetSubcategoryId,
+            input.assetNameId,
+            requiredText(input.identificationName, "Identification name"),
+            input.applicableItemCode?.trim() || null,
+            input.drawingNumber?.trim() || null,
+            input.trackingMode,
+            requiredText(input.unit, "Unit"),
+            input.minimumStock ?? 0,
+            input.actorUserId ?? null,
+          ]
+        )
+        return { id: result.rows[0]!.id, typeCode }
+      })
     },
 
     async listItemTypes(organizationId: string) {
@@ -344,9 +557,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
 
     async createCodeRequest(input: {
       actorUserId?: string | null
-      assetCategory: string
-      assetName: string
-      assetSubcategory: string
+      assetCategoryId: string
+      assetNameId: string
+      assetSubcategoryId: string
       assetType: string
       department: string
       identificationName: string
@@ -355,6 +568,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       requestedBy: string
     }) {
       return withTransaction(pool, async (client) => {
+        const classification = await assetClassificationPath(client, input)
         const requestNumber = await nextDocumentNumber(client, {
           counterKey: "CODE_REQUEST",
           organizationId: input.organizationId,
@@ -365,18 +579,25 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             INSERT INTO store.code_requests (
               organization_id, request_number, requested_asset_type,
               requested_category, requested_subcategory, requested_asset_name,
+              requested_category_id, requested_subcategory_id,
+              requested_asset_name_id,
               identification_name, requested_by, department, reason,
               created_by_user_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+            )
             RETURNING id
           `,
           [
             input.organizationId,
             requestNumber,
             requiredText(input.assetType, "Asset type"),
-            requiredText(input.assetCategory, "Asset category"),
-            requiredText(input.assetSubcategory, "Asset subcategory"),
-            requiredText(input.assetName, "Asset name"),
+            classification.asset_category,
+            classification.asset_subcategory,
+            classification.asset_name,
+            input.assetCategoryId,
+            input.assetSubcategoryId,
+            input.assetNameId,
             requiredText(input.identificationName, "Identification name"),
             requiredText(input.requestedBy, "Requested by"),
             requiredText(input.department, "Department"),
