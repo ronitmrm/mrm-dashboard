@@ -4383,7 +4383,7 @@ function RoleTaskPanel({
             window.location.assign(`/dashboard/production-sessions?${params.toString()}`);
           }}>
             <Activity className="size-4" />
-            Open Daily Machine Board
+            Open Production Sessions
           </Button>
           <TrackingSummary
             items={[
@@ -5416,7 +5416,7 @@ function ProductionCardRoleEntryForm({
       </Button>
       <div className="grid gap-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-xs font-medium">Daily Machine Board</div>
+          <div className="text-xs font-medium">Current Production Sessions</div>
           <div className="text-[11px] text-muted-foreground">Running sessions appear against their machine.</div>
         </div>
         <div className="max-h-64 overflow-auto rounded-md border bg-background">

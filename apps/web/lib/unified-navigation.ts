@@ -158,7 +158,7 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     href: "/dashboard/production-sessions",
     icon: FileClock,
     id: "productionSessionsTab",
-    subtitle: "Daily Board, Register, Events",
+    subtitle: "Start, Register, Events",
     title: "Production Sessions",
   },
   {
@@ -306,7 +306,6 @@ export const machineMasterNavigation = dashboardNavigation.find(
 
 const universalProductionNavigationIds = new Set<DashboardTabId>([
   "productionDashboardTab",
-  "productionSessionsTab",
   "maintenanceTab",
   "correctionsTab",
   "dataEntryTab",

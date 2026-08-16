@@ -2,7 +2,6 @@
 
 import { productionShiftAt } from "@workspace/db/production-session-domain"
 import {
-  normalizeProductionFloorCode,
   productionFloors,
   type ProductionFloorCode,
 } from "@workspace/db/production-floors"
@@ -13,13 +12,21 @@ import { Input } from "@workspace/ui/components/input"
 import { NativeSelect, NativeSelectOption } from "@workspace/ui/components/native-select"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@workspace/ui/components/sheet"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
-import { Activity, Clock3, Download, History, Play, Search, Square, TriangleAlert } from "lucide-react"
+import { Clock3, Download, History, Play, Search, Square, TriangleAlert } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery"
 import { dashboardPayloadFromState, dashboardPayloadForProductionFloor } from "@/lib/dashboard-view-model"
+import { productionPieceWeightGrams } from "@/lib/production-session-entry"
+import {
+  productionSessionCarriedStartCount,
+  productionSessionMachineMatches,
+  productionSessionStartOptions,
+  type ProductionSessionMachineOption,
+} from "@/lib/production-session-start"
+import { productionShopFloorOptions } from "@/lib/shared-employee-master"
 
-type View = "board" | "register" | "events"
+type View = "start" | "register" | "events"
 type Action = "start" | "end" | "downtime" | "rejection"
 type Row = Record<string, unknown>
 
@@ -42,21 +49,6 @@ const formatDateTime = (value: unknown) => {
 }
 const titleCase = (value: unknown) => text(value).replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) || "-"
 
-function plannerRows(control: Row) {
-  const source = rows(control.machinePlanDetailRows)
-  const byMachine = new Map<string, Row[]>()
-  for (const row of source) {
-    const key = machine(row).toLowerCase()
-    if (!key) continue
-    byMachine.set(key, [...(byMachine.get(key) ?? []), row])
-  }
-  return [...byMachine.values()].map((items) => items.find((row) => {
-    const stage = text(row.shopFloorStage).toLowerCase()
-    const status = text(row.runningStatus).toLowerCase()
-    return stage !== "item_complete" && (status === "running" || ["quality_approval", "operator_started", "worker_start"].includes(stage))
-  }) ?? items.find((row) => text(row.shopFloorStage).toLowerCase() !== "item_complete") ?? items[0]!)
-}
-
 function masterOptions(value: unknown, labelKeys: string[]) {
   return rows(value).map((row) => ({
     code: first(row, ["code", "uid", "id"]),
@@ -72,12 +64,15 @@ async function api(path: string, init?: RequestInit) {
 }
 
 export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: ProductionFloorCode }) {
-  const [floor, setFloor] = useState(initialFloor)
-  const [view, setView] = useState<View>("board")
+  const floor = initialFloor
+  const unit = productionFloors.find((item) => item.code === floor)!
+  const [view, setView] = useState<View>("start")
   const [sessions, setSessions] = useState<Row[]>([])
   const [eventRows, setEventRows] = useState<Row[]>([])
   const [employees, setEmployees] = useState<Array<{ code: string; name: string }>>([])
   const [query, setQuery] = useState("")
+  const [machineQuery, setMachineQuery] = useState("")
+  const [selectedMachine, setSelectedMachine] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
   const [action, setAction] = useState<Action | null>(null)
@@ -94,7 +89,6 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
       ? floorPayload.productionControl
       : {}
   ) as Row, [floorPayload.productionControl])
-  const plans = useMemo(() => plannerRows(control), [control])
   const shift = productionShiftAt(floor, new Date())
 
   const load = useCallback(async () => {
@@ -108,8 +102,7 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
       ])
       setSessions(rows(sessionBody.rows))
       setEventRows(rows(eventsBody.rows))
-      const options = rows(employeeBody.productionShopFloorOptions ?? employeeBody.rows)
-      setEmployees(options.map((row) => ({ code: first(row, ["code", "employeeCode", "uid"]), name: first(row, ["name", "employeeName", "fullName"]) })).filter((item) => item.code))
+      setEmployees(productionShopFloorOptions(rows(employeeBody.rows), floor))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Production sessions could not be loaded.")
     } finally {
@@ -125,27 +118,25 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
     const needle = query.toLowerCase()
     return sessions.filter((row) => !needle || [row.sessionReference, row.machineNumber, row.jobCardNumber, row.partCode, row.operatorCode, row.operatorName].some((value) => text(value).toLowerCase().includes(needle)))
   }, [query, sessions])
-  const openByMachine = useMemo(() => new Map(sessions.filter((row) => text(row.status) === "open").map((row) => [machine(row).toLowerCase(), row])), [sessions])
-  const board = useMemo(() => {
-    const result = plans.map((plan) => ({ plan, session: openByMachine.get(machine(plan).toLowerCase()) }))
-    for (const session of sessions.filter((row) => text(row.status) === "open")) {
-      if (!result.some((item) => machine(item.plan).toLowerCase() === machine(session).toLowerCase())) result.push({ plan: session, session })
-    }
-    const needle = query.toLowerCase()
-    return result.filter(({ plan, session }) => !needle || [machine(plan), job(plan), part(plan), setup(plan), session?.operatorCode].some((value) => text(value).toLowerCase().includes(needle)))
-  }, [openByMachine, plans, query, sessions])
+  const machineOptions = useMemo(() => productionSessionStartOptions({
+    planRows: rows(control.machinePlanDetailRows),
+    sessions,
+  }), [control.machinePlanDetailRows, sessions])
+  const machineMatches = useMemo(
+    () => productionSessionMachineMatches(machineOptions, machineQuery),
+    [machineOptions, machineQuery]
+  )
+  const selectedOption = useMemo(
+    () => machineOptions.find(({ machineNumber }) => machineNumber.toLowerCase() === selectedMachine.toLowerCase()),
+    [machineOptions, selectedMachine]
+  )
 
   function openAction(next: Action, row: Row) {
-    const previous = next === "start"
-      ? sessions.filter((session) => text(session.status) === "closed"
-          && machine(session).toLowerCase() === machine(row).toLowerCase()
-          && job(session).toLowerCase() === job(row).toLowerCase()
-          && part(session).toLowerCase() === part(row).toLowerCase()
-          && setup(session).toLowerCase() === setup(row).toLowerCase())
-        .sort((left, right) => text(right.endedAt).localeCompare(text(left.endedAt)))[0]
+    const carriedStartCount = next === "start"
+      ? productionSessionCarriedStartCount(row, sessions)
       : undefined
-    setTarget(previous && text(previous.measurementMethod) === "counter" && text(previous.endCount)
-      ? { ...row, carriedStartCount: previous.endCount }
+    setTarget(carriedStartCount !== undefined
+      ? { ...row, carriedStartCount }
       : row)
     setAction(next)
     setMessage("")
@@ -194,44 +185,33 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
     URL.revokeObjectURL(url)
   }
 
-  const running = sessions.filter((row) => text(row.status) === "open").length
-  const openDowntime = sessions.filter((row) => Boolean(row.hasOpenDowntime)).length
-
   return (
     <div className="grid gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h1 className="text-xl font-semibold">Production Sessions</h1><p className="text-sm text-muted-foreground">One place to start, stop, review and analyse every machine session.</p></div>
+          <div><h1 className="text-xl font-semibold">Production Sessions</h1><p className="text-sm text-muted-foreground">Start and review sessions for {unit.shortLabel}.</p></div>
           <div className="flex flex-wrap items-center gap-2">
-            <NativeSelect className="h-11 w-48" value={floor} onChange={(event) => { const next = normalizeProductionFloorCode(event.target.value); setFloor(next); history.replaceState(null, "", `/dashboard/production-sessions?floor=${next}`) }}>
-              {productionFloors.map((item) => <NativeSelectOption key={item.code} value={item.code}>{item.shortLabel}</NativeSelectOption>)}
-            </NativeSelect>
+            <Badge variant="secondary" className="h-8 px-3">{unit.shortLabel}</Badge>
             <Badge variant="outline" className="h-8 px-3">{shift ? `${shift.shift} · ${shift.productionDate}` : "Outside production shift"}</Badge>
           </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Metric label="Running" value={running} detail="open sessions" />
-          <Metric label="Downtime" value={openDowntime} detail="machines stopped now" alert={openDowntime > 0} />
-          <Metric label="Today" value={sessions.filter((row) => text(row.productionDate) === shift?.productionDate).length} detail="sessions recorded" />
         </div>
 
         <Card>
           <CardHeader className="gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div><CardTitle>Daily Machine Board</CardTitle><CardDescription>Planner details are shown directly against each machine.</CardDescription></div>
+              <div><CardTitle>{view === "start" ? "Start a session" : view === "register" ? "Session Register" : "Event Log"}</CardTitle><CardDescription>{view === "start" ? "Find one machine and verify its current planning details." : "Search the session history for this Production Unit."}</CardDescription></div>
               <div className="flex flex-wrap gap-2">
-                {([['board','Daily Board'],['register','Session Register'],['events','Event Log']] as const).map(([id, label]) => <Button key={id} className="h-11" variant={view === id ? "default" : "outline"} onClick={() => setView(id)}>{id === "board" ? <Activity /> : id === "register" ? <History /> : <Clock3 />}{label}</Button>)}
+                {([['start','Start Session'],['register','Session Register'],['events','Event Log']] as const).map(([id, label]) => <Button key={id} className="h-11" variant={view === id ? "default" : "outline"} onClick={() => setView(id)}>{id === "start" ? <Play /> : id === "register" ? <History /> : <Clock3 />}{label}</Button>)}
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            {view !== "start" ? <div className="flex flex-wrap gap-2">
               <div className="relative min-w-56 flex-1"><Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" /><Input className="h-11 pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search machine, job, part or operator" /></div>
-              {view !== "board" ? <Button className="h-11" variant="outline" onClick={exportCsv}><Download />Export CSV</Button> : null}
-            </div>
+              <Button className="h-11" variant="outline" onClick={exportCsv}><Download />Export CSV</Button>
+            </div> : null}
           </CardHeader>
           <CardContent>
             {error ? <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
             {message ? <div className="mb-3 rounded-md border bg-muted p-3 text-sm">{message}</div> : null}
-            {loading ? <div className="p-10 text-center text-muted-foreground">Loading production sessions…</div> : view === "board" ? <Board rows={board} floor={floor} onAction={openAction} onResume={(row) => void resume(row)} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
+            {loading ? <div className="p-10 text-center text-muted-foreground">Loading production sessions…</div> : view === "start" ? <StartSessionLookup query={machineQuery} matches={machineMatches} selected={selectedOption} shift={shift} onQueryChange={(value) => { setMachineQuery(value); if (value.toLowerCase() !== selectedMachine.toLowerCase()) setSelectedMachine("") }} onSelect={(option) => { setMachineQuery(option.machineNumber); setSelectedMachine(option.machineNumber) }} onAction={openAction} onResume={(row) => void resume(row)} onDetail={(row) => void openDetail(row)} /> : view === "register" ? <Register rows={visibleSessions} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
           </CardContent>
         </Card>
       <ActionSheet key={`${action}-${text(target?.id) || machine(target ?? {})}`} action={action} target={target} floor={floor} shift={shift} employees={employees} control={control} saving={saving} message={message} onOpenChange={(open) => { if (!open) setAction(null) }} onSave={(type, payload) => void save(type, payload)} />
@@ -240,17 +220,37 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
   )
 }
 
-function Metric({ label, value, detail, alert = false }: { label: string; value: number; detail: string; alert?: boolean }) {
-  return <Card className={alert ? "border-amber-500/50" : ""}><CardContent className="flex items-center justify-between p-4"><div><div className="text-sm text-muted-foreground">{label}</div><div className="text-xs text-muted-foreground">{detail}</div></div><div className="text-2xl font-semibold tabular-nums">{value}</div></CardContent></Card>
+function StartSessionLookup({ query, matches, selected, shift, onQueryChange, onSelect, onAction, onResume, onDetail }: { query: string; matches: ProductionSessionMachineOption[]; selected?: ProductionSessionMachineOption; shift: ReturnType<typeof productionShiftAt>; onQueryChange: (value: string) => void; onSelect: (option: ProductionSessionMachineOption) => void; onAction: (action: Action, row: Row) => void; onResume: (row: Row) => void; onDetail: (row: Row) => void }) {
+  const plan = selected?.plan
+  const session = selected?.session
+  const pieceWeight = plan ? productionPieceWeightGrams(plan) : 0
+  return <div className="mx-auto grid max-w-4xl gap-4">
+    <div className="grid gap-2"><label className="text-sm font-medium" htmlFor="production-session-machine">Machine number</label><div className="relative"><Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" /><Input id="production-session-machine" autoComplete="off" className="h-11 pl-9" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Type machine number, for example C501" /></div></div>
+    {!selected && query.trim() ? matches.length ? <div className="overflow-hidden rounded-md border">{matches.map((option) => <button key={option.machineNumber} className="flex w-full items-center justify-between border-b px-4 py-3 text-left last:border-b-0 hover:bg-muted/50" type="button" onClick={() => onSelect(option)}><span className="font-medium">{option.machineNumber}</span><span className="text-sm text-muted-foreground">{part(option.plan) || "No planned part"} · JC {job(option.plan) || "-"}</span></button>)}</div> : <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">No current plan or open session matches that machine number in this Production Unit.</div> : null}
+    {!selected && !query.trim() ? <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">Enter a machine number to fetch its current planning information.</div> : null}
+    {selected && plan ? <div className="rounded-lg border bg-background p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-lg font-semibold">{selected.machineNumber}</div><div className="text-sm text-muted-foreground">Planning details to verify before entry</div></div><Badge variant={session ? "default" : "secondary"}>{session ? (session.hasOpenDowntime ? "Downtime" : "Running") : "Ready to start"}</Badge></div>
+      <div className="mt-4 grid gap-x-6 gap-y-3 rounded-md bg-muted/40 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <PlanField label="Job Card" value={job(plan)} />
+        <PlanField label="Part" value={part(plan)} />
+        <PlanField label="Option / Setup" value={`${option(plan) || "-"} / ${setup(plan) || "-"}`} />
+        <PlanField label="Setup" value={first(plan, ["setupName", "operationName"])} />
+        <PlanField label="Planned quantity" value={first(plan, ["orderPcs", "plannedQuantity", "quantity"])} />
+        <PlanField label="Planning status" value={first(plan, ["runningStatus", "shopFloorStageLabel", "shopFloorStage"])} />
+        <PlanField label="Planned run" value={`${first(plan, ["plannedProductionStartDate", "plannedStartDate"]) || "-"} → ${first(plan, ["plannedProductionEndDate", "plannedCompletionDate"]) || "-"}`} />
+        <PlanField label="Cycle time" value={first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"]) ? `${first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"])} sec` : ""} />
+        <PlanField label="Piece weight" value={pieceWeight ? `${pieceWeight} g` : "Not configured"} />
+        {session ? <><PlanField label="Operator" value={`${text(session.operatorCode)} · ${text(session.operatorName)}`} /><PlanField label="Started" value={formatDateTime(session.startedAt)} /><PlanField label="Session" value={text(session.sessionReference)} /></> : null}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">{session ? <><Button className="h-11" variant="outline" onClick={() => onDetail(session)}><History />View Session</Button><Button className="h-11" variant="outline" onClick={() => onAction("end", session)}><Square />End</Button>{session.hasOpenDowntime ? <Button className="h-11" variant="destructive" onClick={() => onResume(session)}><Play />Resume</Button> : <Button className="h-11" variant="outline" onClick={() => onAction("downtime", session)}><Clock3 />Downtime</Button>}<Button className="h-11" variant="outline" onClick={() => onAction("rejection", session)}><TriangleAlert />Rejection</Button></> : <Button className="h-11" disabled={!shift || !pieceWeight} onClick={() => onAction("start", plan)}><Play />Enter operator and start details</Button>}</div>
+      {!session && !shift ? <p className="mt-2 text-sm text-destructive">A session can be started only during the Production Unit&apos;s configured shift.</p> : null}
+      {!session && !pieceWeight ? <p className="mt-2 text-sm text-destructive">A positive piece weight is required in the Route or Cycle Time Master.</p> : null}
+    </div> : null}
+  </div>
 }
 
-function Board({ rows: boardRows, floor, onAction, onResume, onDetail }: { rows: Array<{ plan: Row; session?: Row }>; floor: ProductionFloorCode; onAction: (action: Action, row: Row) => void; onResume: (row: Row) => void; onDetail: (row: Row) => void }) {
-  if (!boardRows.length) return <div className="rounded-md border border-dashed p-10 text-center text-muted-foreground">No planner machine cards are available for this floor.</div>
-  return <div className="grid gap-3 xl:grid-cols-2">{boardRows.map(({ plan, session }) => <div key={`${machine(plan)}-${job(plan)}-${setup(plan)}`} className="rounded-lg border bg-background p-4">
-    <div className="flex items-start justify-between gap-3"><div><div className="text-lg font-semibold">{machine(plan) || "Machine"}</div><div className="text-sm text-muted-foreground">{part(plan) || "No part"} · JC {job(plan) || "-"} · Setup {setup(plan) || "-"} · Option {option(plan) || "-"}</div></div><Badge variant={session ? "default" : "secondary"}>{session ? (session.hasOpenDowntime ? "Downtime" : "Running") : "Not started"}</Badge></div>
-    <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-muted/40 p-3 text-sm sm:grid-cols-4"><span><b>Cycle</b><br />{first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"]) || "-"} sec</span><span><b>Piece wt.</b><br />{first(plan, ["pieceWeightGrams", "pieceWeight", "weightPerPiece"]) || "-"} g</span><span><b>Operator</b><br />{session ? `${text(session.operatorCode)} ${text(session.operatorName)}` : "Assign at start"}</span><span><b>Session</b><br /><button className="font-mono text-xs underline" disabled={!session} onClick={() => session && onDetail(session)}>{text(session?.sessionReference) || "Not created"}</button></span></div>
-    <div className="mt-3 flex flex-wrap gap-2">{session ? <><Button className="h-11" variant="outline" onClick={() => onAction("end", session)}><Square />End</Button>{session.hasOpenDowntime ? <Button className="h-11" variant="destructive" onClick={() => onResume(session)}><Play />Resume</Button> : <Button className="h-11" variant="outline" onClick={() => onAction("downtime", session)}><Clock3 />Downtime</Button>}<Button className="h-11" variant="outline" onClick={() => onAction("rejection", session)}><TriangleAlert />Rejection</Button></> : <Button className="h-11" disabled={!productionShiftAt(floor, new Date())} onClick={() => onAction("start", plan)}><Play />Start Session</Button>}</div>
-  </div>)}</div>
+function PlanField({ label, value }: { label: string; value: unknown }) {
+  return <div><div className="text-xs text-muted-foreground">{label}</div><div className="font-medium">{text(value) || "-"}</div></div>
 }
 
 function Register({ rows, onDetail }: { rows: Row[]; onDetail: (row: Row) => void }) {
@@ -290,17 +290,18 @@ function ActionSheet({ action, target, floor, shift, employees, control, saving,
   const remarkOptions = masterOptions(control.rejectionRemarkMasterRows, ["rejectionRemark", "remark", "name"])
   if (!target) return null
   const plan = target
+  const pieceWeight = productionPieceWeightGrams(plan)
   const sessionId = text(target.id)
   const selectedReason = reasonOptions.find((item) => item.code === reason)
   const selectedType = typeOptions.find((item) => item.code === typeCode)
   const selectedRemark = remarkOptions.find((item) => item.code === remark)
   const submit = () => {
-    if (action === "start") onSave("production_session_start", { machine: machine(plan), jobCard: job(plan), setupNo: setup(plan), operatorCode: operator, measurementMethod: method, startCount: method === "counter" && !text(plan.carriedStartCount) ? number(startCount) : undefined, startedAt: new Date(startAt).toISOString(), cycleTime: number(first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"])), pieceWeightGrams: number(first(plan, ["pieceWeightGrams", "pieceWeight", "weightPerPiece"])) })
+    if (action === "start") onSave("production_session_start", { machine: machine(plan), jobCard: job(plan), setupNo: setup(plan), operatorCode: operator, measurementMethod: method, startCount: method === "counter" && !text(plan.carriedStartCount) ? number(startCount) : undefined, startedAt: new Date(startAt).toISOString(), cycleTime: number(first(plan, ["cycleTime", "cycleTimeSeconds", "cycleTimeSec"])), pieceWeightGrams: pieceWeight })
     if (action === "end") onSave("production_session_close", { sessionId, enteredRole: role, endedAt: new Date(endAt).toISOString(), endReason, endCount: method === "counter" ? number(endCount) : undefined, grossWeightKg: method === "weight" ? number(grossKg) : undefined, crateCount: method === "weight" ? number(crates) : undefined, crateWeightKg: method === "weight" ? 2 : undefined })
     if (action === "downtime") onSave("production_session_downtime_start", { sessionId, enteredRole: role, startedAt: new Date(startAt).toISOString(), reasonCode: reason, reasonName: selectedReason?.label })
     if (action === "rejection") onSave("production_session_rejection", { sessionId, quantity: number(quantity), typeCode, typeName: selectedType?.label, reasonCode: reason, reasonName: selectedReason?.label, remarkCode: remark, remarkName: selectedRemark?.label })
   }
-  const valid = action === "start" ? Boolean(operator && startAt && method && (method === "weight" || startCount || text(plan.carriedStartCount))) : action === "end" ? Boolean(endAt && endReason && (method === "counter" ? endCount : grossKg && crates)) : action === "downtime" ? Boolean(reason && startAt && role) : action === "rejection" ? Boolean(typeCode && reason && remark && number(quantity) > 0) : false
+  const valid = action === "start" ? Boolean(operator && startAt && method && pieceWeight > 0 && (method === "weight" || startCount || text(plan.carriedStartCount))) : action === "end" ? Boolean(endAt && endReason && (method === "counter" ? endCount : grossKg && crates)) : action === "downtime" ? Boolean(reason && startAt && role) : action === "rejection" ? Boolean(typeCode && reason && remark && number(quantity) > 0) : false
   return <Sheet open={Boolean(action)} onOpenChange={onOpenChange}><SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg"><SheetHeader><SheetTitle>{titleCase(action)} production session</SheetTitle><SheetDescription>{machine(target)} · {job(target)} · {part(target)} · Setup {setup(target)}</SheetDescription></SheetHeader><div className="grid gap-4 px-6">
     {action === "start" ? <><Field label="Operator"><NativeSelect value={operator} onChange={(event) => setOperator(event.target.value)}><NativeSelectOption value="">Select operator</NativeSelectOption>{employees.map((employee) => <NativeSelectOption key={employee.code} value={employee.code}>{employee.code} · {employee.name}</NativeSelectOption>)}</NativeSelect></Field><Field label="Start time"><Input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} /></Field><Field label="Production method"><NativeSelect value={method} onChange={(event) => setMethod(event.target.value as "weight" | "counter")}><NativeSelectOption value="weight">Weight at session end</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="counter">Machine counter</NativeSelectOption> : null}</NativeSelect></Field>{method === "counter" ? text(plan.carriedStartCount) ? <div className="rounded-md bg-muted p-3 text-sm">Start count carried from the previous matching session: <b>{text(plan.carriedStartCount)}</b></div> : <Field label="Machine start count"><Input inputMode="numeric" type="number" min="0" value={startCount} onChange={(event) => setStartCount(event.target.value)} /></Field> : null}<div className="rounded-md bg-muted p-3 text-sm">Shift and production date are automatic: <b>{shift?.shift ?? "Outside shift"} · {shift?.productionDate ?? "-"}</b></div></> : null}
     {action === "end" ? <><Field label="End time"><Input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} /></Field><Field label="End reason"><NativeSelect value={endReason} onChange={(event) => setEndReason(event.target.value)}>{["shift_change","operator_change","item_complete","job_change","manual_stop"].map((value) => <NativeSelectOption key={value} value={value}>{titleCase(value)}</NativeSelectOption>)}</NativeSelect></Field><Field label="Entry role"><NativeSelect value={role} onChange={(event) => setRole(event.target.value)}><NativeSelectOption value="shop_floor">Shop Floor</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="quality">QC</NativeSelectOption> : null}</NativeSelect></Field><Field label="Production method"><NativeSelect value={method} onChange={(event) => setMethod(event.target.value as "weight" | "counter")}><NativeSelectOption value="weight">Weight</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="counter">Machine counter</NativeSelectOption> : null}</NativeSelect></Field>{method === "counter" ? <Field label="Machine end count"><Input inputMode="numeric" type="number" min="0" value={endCount} onChange={(event) => setEndCount(event.target.value)} /></Field> : <div className="grid grid-cols-2 gap-3"><Field label="Gross produced kg"><Input inputMode="decimal" type="number" min="0" step="0.001" value={grossKg} onChange={(event) => setGrossKg(event.target.value)} /></Field><Field label="Crates used"><Input inputMode="numeric" type="number" min="0" step="1" value={crates} onChange={(event) => setCrates(event.target.value)} /></Field></div>}</> : null}
