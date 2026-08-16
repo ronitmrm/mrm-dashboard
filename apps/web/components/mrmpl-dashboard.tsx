@@ -110,16 +110,18 @@ import {
   type FirstPieceInspectionDraft,
 } from "@/lib/first-piece-inspection-draft";
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
-import { jobCardActionAssignments } from "@/lib/job-card-action-planning";
+import { dispatchReadyJobCards, jobCardActionAssignments } from "@/lib/job-card-action-planning";
 import { maintenanceChecklistRowsForSchedule, maintenanceMasterRowsForMachineAssignment } from "@/lib/maintenance-schedule-options";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { productionPieceWeightGrams } from "@/lib/production-session-entry";
 import { duplicateQualityParameterCombination, mergeQualityInspectionParameterRows } from "@/lib/quality-parameter-set";
 import {
+  productionDispatchApproverOptions,
   productionMachinistOptions,
   productionQualityOptions,
   productionShopFloorOptions,
   productionWorkerOptions,
+  type EmployeeOption,
 } from "@/lib/shared-employee-master";
 import {
   setupChecklistItemAppliesToPhase,
@@ -3915,9 +3917,11 @@ function RouteChangePlannerForm({
 
 function SetupCompleteActionForm({
   plannedRows,
+  shopFloorOptions,
   onSubmit,
 }: {
   plannedRows: DashboardPayload[];
+  shopFloorOptions: EmployeeOption[];
   onSubmit: (body: Record<string, unknown>) => void | Promise<void>;
 }) {
   const assignments = useMemo(() => jobCardActionAssignments(plannedRows), [plannedRows]);
@@ -3966,13 +3970,82 @@ function SetupCompleteActionForm({
           </Field>
           <Field label="Job Card"><Input readOnly value={assignment?.jobCard ?? ""} placeholder="From planning" /></Field>
           <Field label="Setup No."><Input readOnly value={assignment?.setupNo ?? ""} placeholder="From planning" /></Field>
-          <Field label="Completed By"><Input name="completedBy" placeholder="Name or code" required /></Field>
+          <Field label="Completed By">
+            <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="completedBy" required>
+              <option value="">{shopFloorOptions.length ? "Select Shop Floor Employee" : "No Shop Floor Employees In This Production Unit"}</option>
+              {shopFloorOptions.map((employee) => (
+                <option key={employee.code} value={employee.name}>{employee.code} - {employee.name}</option>
+              ))}
+            </SearchableSelect>
+          </Field>
           <Field label="Completion Remark"><Input name="remark" placeholder="Optional" /></Field>
         </div>
         {!assignments.length ? <p className="text-xs text-muted-foreground">No current machine assignments are available in planning.</p> : null}
         <Button className="w-fit" type="submit" disabled={!assignment || isSubmitting}>
           <Wrench className="size-4" />
           {isSubmitting ? "Processing..." : "Mark complete"}
+        </Button>
+      </fieldset>
+    </form>
+  );
+}
+
+function DispatchApprovalActionForm({
+  approverOptions,
+  jobCards,
+  onSubmit,
+}: {
+  approverOptions: EmployeeOption[];
+  jobCards: string[];
+  onSubmit: (body: Record<string, unknown>) => void | Promise<void>;
+}) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSubmitting) return;
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    setIsSubmitting(true);
+    try {
+      await onSubmit({
+        approvedBy: String(formData.get("approvedBy") ?? "").trim(),
+        jcNo: String(formData.get("jcNo") ?? "").trim(),
+        remark: String(formData.get("remark") ?? "").trim(),
+      });
+      form.reset();
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <form aria-busy={isSubmitting} className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={(event) => void submit(event)}>
+      <fieldset className="contents" disabled={isSubmitting}>
+        <div>
+          <div className="text-sm font-medium">Dispatch Approval</div>
+          <div className="text-xs text-muted-foreground">Only Job Cards With Every Planned Setup Completed Are Ready For Approval.</div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+          <Field label="Job Card">
+            <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="jcNo" required>
+              <option value="">{jobCards.length ? "Select Ready Job Card" : "No Job Cards Ready For Dispatch"}</option>
+              {jobCards.map((jobCard) => <option key={jobCard} value={jobCard}>{jobCard}</option>)}
+            </SearchableSelect>
+          </Field>
+          <Field label="Approved By">
+            <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="approvedBy" required>
+              <option value="">{approverOptions.length ? "Select Planner Or Shop Floor Employee" : "No Eligible Approvers In This Production Unit"}</option>
+              {approverOptions.map((employee) => (
+                <option key={employee.code} value={employee.name}>{employee.code} - {employee.name}</option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Dispatch Remark"><Input name="remark" placeholder="Optional" /></Field>
+        </div>
+        <Button className="w-fit" type="submit" disabled={!jobCards.length || !approverOptions.length || isSubmitting}>
+          <Wrench className="size-4" />
+          {isSubmitting ? "Processing..." : "Approve dispatch"}
         </Button>
       </fieldset>
     </form>
@@ -3990,10 +4063,24 @@ function JobCardsPanel({
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   openMasterReadiness: () => void;
 }) {
+  const { dispatchApproverOptions, shopFloorOptions } = useProductionEmployeeDirectory(productionFloorCode);
+  const plannedRows = useMemo(
+    () => asArray(productionControl.machinePlanDetailRows),
+    [productionControl.machinePlanDetailRows],
+  );
+  const jobCardRows = useMemo(
+    () => asArray(productionControl.jobCardStatusTiles),
+    [productionControl.jobCardStatusTiles],
+  );
+  const readyJobCards = useMemo(
+    () => dispatchReadyJobCards(jobCardRows, plannedRows),
+    [jobCardRows, plannedRows],
+  );
+
   return (
     <section className="grid gap-4">
       <JobCardRegister
-        rows={asArray(productionControl.jobCardStatusTiles)}
+        rows={jobCardRows}
         floor={productionFloorCode}
         actionNeededCount={asArray(productionControl.allWorkOrderGaps).length}
         onOpenMasterReadiness={openMasterReadiness}
@@ -4005,18 +4092,13 @@ function JobCardsPanel({
         </CardHeader>
         <CardContent className="grid gap-4 @5xl/main:grid-cols-2">
           <SetupCompleteActionForm
-            plannedRows={asArray(productionControl.machinePlanDetailRows)}
+            plannedRows={plannedRows}
+            shopFloorOptions={shopFloorOptions}
             onSubmit={(body) => submitAction("mark-complete", body)}
           />
-          <LegacyActionForm
-            title="Dispatch Approval"
-            description="Only Completed Job Cards Should Be Approved For Dispatch."
-            fields={[
-              { name: "jcNo", label: "Job Card", placeholder: "JC-1001", required: true },
-              { name: "approvedBy", label: "Approved By", placeholder: "Name or code", required: true },
-              { name: "remark", label: "Dispatch Remark", placeholder: "Optional" },
-            ]}
-            buttonLabel="Approve dispatch"
+          <DispatchApprovalActionForm
+            approverOptions={dispatchApproverOptions}
+            jobCards={readyJobCards}
             onSubmit={(body) => submitAction("dispatch-approval", body)}
           />
         </CardContent>
@@ -4079,13 +4161,13 @@ const roleTaskCopy: Record<RoleTaskKind, { title: string; description: string; e
   },
 };
 
-function useProductionEmployeeDirectory() {
+function useProductionEmployeeDirectory(productionFloorCode?: ProductionFloorCode) {
   const employeeMasterPage = usePostgresOperationalPage("/api/employee-master");
   const rows = useMemo(
     () => asArray(employeeMasterPage.data?.rows),
     [employeeMasterPage.data?.rows],
   );
-  const floor = productionFloorFromLocation();
+  const floor = productionFloorCode ?? productionFloorFromLocation();
   const machinistOptions = useMemo(
     () => productionMachinistOptions(rows, floor),
     [floor, rows],
@@ -4098,6 +4180,10 @@ function useProductionEmployeeDirectory() {
     () => productionShopFloorOptions(rows, floor),
     [floor, rows],
   );
+  const dispatchApproverOptions = useMemo(
+    () => productionDispatchApproverOptions(rows, floor),
+    [floor, rows],
+  );
   const workerOptions = useMemo(
     () => productionWorkerOptions(rows, floor),
     [floor, rows],
@@ -4105,6 +4191,7 @@ function useProductionEmployeeDirectory() {
 
   return {
     error: employeeMasterPage.error,
+    dispatchApproverOptions,
     loaded: employeeMasterPage.data !== undefined,
     machinistOptions,
     qualityOptions,
