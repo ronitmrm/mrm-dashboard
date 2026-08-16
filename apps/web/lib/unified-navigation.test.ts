@@ -8,6 +8,7 @@ import {
   commercialNavigation,
   consolidatedProductionNavigation,
   dashboardNavigation,
+  dashboardNavigationDestination,
   dashboardTabHref,
   hrNavigation,
   machineMasterNavigation,
@@ -29,7 +30,12 @@ describe("unified navigation", () => {
     expect(source).toContain(
       "<a href={productionNavigationHref(item.id, floor.code)}>"
     )
-    expect(source).toContain("/dashboard/first-piece-inspection")
+    expect(
+      dashboardNavigationDestination("firstPieceInspectionTab", "cnc")
+    ).toEqual({
+      href: "/dashboard/first-piece-inspection?floor=cnc",
+      interaction: "route",
+    })
     expect(source).not.toContain('from "next/link"')
     expect(source).not.toContain("router.prefetch")
   })
@@ -155,6 +161,15 @@ describe("unified navigation", () => {
     expect(dashboardTabHref("correctionsTab")).toBe(
       "/?tab=correctionsTab"
     )
+  })
+
+  it("opens Production Sessions as a standalone route from the live dashboard", () => {
+    expect(
+      dashboardNavigationDestination("productionSessionsTab", "cnc")
+    ).toEqual({
+      href: "/dashboard/production-sessions?floor=cnc",
+      interaction: "route",
+    })
   })
 
   it("matches the selected HR panel instead of every HR link", () => {

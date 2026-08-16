@@ -40,6 +40,7 @@ import {
   commercialNavigation,
   consolidatedProductionNavigation,
   dashboardTabHref,
+  dashboardNavigationDestination,
   hrNavigation,
   navigationHrefMatches,
   planningHolidayNavigation,
@@ -540,28 +541,14 @@ function productionNavigationHref(
   tab: DashboardTabId,
   floor: ProductionFloorCode
 ) {
-  if (tab === "firstPieceInspectionTab") {
-    const params = new URLSearchParams({ floor })
-    return `/dashboard/first-piece-inspection?${params.toString()}`
-  }
-  return dashboardTabHref(tab, floor)
+  return dashboardNavigationDestination(tab, floor).href
 }
 
 function universalProductionNavigationHref(
   tab: DashboardTabId,
   floor: ProductionFloorCode
 ) {
-  if (tab === "productionSessionsTab") {
-    return `/dashboard/production-sessions?${new URLSearchParams({ floor }).toString()}`
-  }
-  return dashboardTabHref(
-    tab,
-    tab === "correctionsTab" ||
-      tab === "maintenanceTab" ||
-      tab === "productionDashboardTab"
-      ? undefined
-      : floor
-  )
+  return dashboardNavigationDestination(tab, floor).href
 }
 
 function filterProductionItems<T extends { subtitle: string; title: string }>(
