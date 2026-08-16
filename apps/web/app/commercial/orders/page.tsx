@@ -36,6 +36,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { istDateValue } from "@/lib/date-time"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
@@ -154,7 +155,7 @@ export default async function PurchaseOrdersPage({
                     <Field>
                       <FieldLabel htmlFor="po-date">Po Date</FieldLabel>
                       <Input
-                        defaultValue={new Date().toISOString().slice(0, 10)}
+                        defaultValue={istDateValue()}
                         id="po-date"
                         name="po_date"
                         required

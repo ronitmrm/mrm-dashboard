@@ -40,6 +40,7 @@ import {
   deleteCandidateEventAction,
   updateCandidateEventAction,
 } from "@/app/hr/actions"
+import { formatIstDateTime } from "@/lib/date-time"
 import {
   ExcelColumnFilter,
   matchesColumnFilter,
@@ -109,7 +110,7 @@ export function ConversationLogsTable({
     () =>
       events.map((event) => ({
         candidate: event.candidateName,
-        date: new Date(event.occurredAt).toLocaleString("en-IN"),
+        date: formatIstDateTime(event.occurredAt),
         department: event.department ?? "—",
         event,
         job: event.jobNumber ?? "—",

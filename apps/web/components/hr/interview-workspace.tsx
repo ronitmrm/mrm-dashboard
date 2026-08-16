@@ -44,6 +44,11 @@ import { useMemo, useState } from "react"
 import { CandidateAppointmentDialog } from "@/components/hr/candidate-appointment-dialog"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
+import {
+  formatIstDate,
+  formatIstTime,
+  istDateValue,
+} from "@/lib/date-time"
 
 function StatusBadge({ status }: { status: string }) {
   return (
@@ -54,32 +59,11 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function dateKey(value: string | null) {
-  if (!value) return ""
-  return new Date(value).toLocaleDateString("en-CA", {
-    timeZone: "Asia/Kolkata",
-  })
+  return value ? istDateValue(value) : ""
 }
 
-function formatDate(value: string | null) {
-  return value
-    ? new Date(value).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "2-digit",
-        timeZone: "Asia/Kolkata",
-        year: "numeric",
-      })
-    : "—"
-}
-
-function formatTime(value: string | null) {
-  return value
-    ? new Date(value).toLocaleTimeString("en-IN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "Asia/Kolkata",
-      })
-    : "—"
-}
+const formatDate = (value: string | null) => value ? formatIstDate(value) : "—"
+const formatTime = (value: string | null) => value ? formatIstTime(value) : "—"
 
 function formatSalary(value: number | null) {
   return value === null

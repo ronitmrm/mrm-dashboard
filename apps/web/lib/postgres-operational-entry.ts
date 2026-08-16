@@ -1,4 +1,5 @@
 import { setupChecklistItemAppliesToPhase } from "./shop-floor-workflow"
+import { istDateValue } from "./date-time"
 
 type Payload = Record<string, unknown>
 type EntryValue = boolean | number | string | null
@@ -206,7 +207,7 @@ function maintenanceTaskPlan(payload: Payload) {
   const common = {
     completedAt:
       text(payload.completedAt) ||
-      `${text(payload.completedDate) || new Date().toISOString().slice(0, 10)}T00:00:00.000Z`,
+      `${text(payload.completedDate) || istDateValue()}T00:00:00.000Z`,
     completedBy: optionalText(payload.completedBy),
     machineNumber: text(payload.machineNo || payload.machine),
     payload,

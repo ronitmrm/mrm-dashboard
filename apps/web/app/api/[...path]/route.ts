@@ -9,6 +9,7 @@ import { validConfirmedPrioritySetupNumbers } from "@workspace/db/planning-rules
 import { NextResponse, type NextRequest } from "next/server"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { istDateValue } from "../../../lib/date-time"
 import { planningProductionFloorPayload } from "../../../lib/planning-production-floor"
 import {
   authorizationRequestTelemetryForCurrentScope,
@@ -1246,7 +1247,7 @@ async function post(request: NextRequest, context: RouteContext) {
               receiptNumber: text(payload.rmPoNo) || text(payload.jcNo),
               receivedOn:
                 text(payload.rmInwardDate) ||
-                new Date().toISOString().slice(0, 10),
+                istDateValue(),
             })
         )
         return json(
@@ -1296,7 +1297,7 @@ async function post(request: NextRequest, context: RouteContext) {
               payload,
               productionFloorCode: text(payload.productionFloorCode),
               productionDate:
-                text(payload.prodDate) || new Date().toISOString().slice(0, 10),
+                text(payload.prodDate) || istDateValue(),
               quantityGood: firstNumeric(payload.outputQty, payload.actualQty),
               quantityRejected: firstNumeric(payload.rejectQty),
               shift: optionalText(payload.shift),
@@ -1345,7 +1346,7 @@ async function post(request: NextRequest, context: RouteContext) {
                 receiptNumber: text(payload.rmPoNo) || text(payload.jcNo),
                 receivedOn:
                   text(payload.rmInwardDate) ||
-                  new Date().toISOString().slice(0, 10),
+                  istDateValue(),
               }))
             )
             return importedRows.length
@@ -1363,7 +1364,7 @@ async function post(request: NextRequest, context: RouteContext) {
               productionFloorCode: text(payload.productionFloorCode),
               productionDate:
                 text(payload.prodDate) ||
-                new Date().toISOString().slice(0, 10),
+                istDateValue(),
               quantityGood: firstNumeric(payload.outputQty, payload.actualQty),
               quantityRejected: firstNumeric(payload.rejectQty),
               shift: optionalText(payload.shift),
