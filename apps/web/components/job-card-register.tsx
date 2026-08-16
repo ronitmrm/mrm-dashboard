@@ -3,11 +3,9 @@
 import type { ProductionFloorCode } from "@workspace/db/production-floors"
 import { Button } from "@workspace/ui/components/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
-import { Input } from "@workspace/ui/components/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
-import { ExternalLink, Search } from "lucide-react"
+import { ExternalLink } from "lucide-react"
 import Link from "next/link"
-import { useMemo, useState } from "react"
 
 import { jobCardWorkspaceHref } from "@/lib/unified-navigation"
 
@@ -44,18 +42,6 @@ export function JobCardRegister({
   onOpenMasterReadiness: () => void
   rows: Row[]
 }) {
-  const [query, setQuery] = useState("")
-  const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    return rows.filter((row) => !needle || [
-      first(row, ["jcNo", "JobCardNo", "jobCard"]),
-      first(row, ["partCode", "itemCode", "PART CODE"]),
-      first(row, ["fgPoNo", "FG PO NO."]),
-      first(row, ["description", "DESCRIPTION"]),
-      first(row, ["routeStatus", "optionNumber", "selectedOption"]),
-    ].some((value) => value.toLowerCase().includes(needle)))
-  }, [query, rows])
-
   return (
     <Card>
       <CardHeader className="gap-3">
@@ -66,18 +52,14 @@ export function JobCardRegister({
           </div>
           {actionNeededCount ? <Button variant="outline" onClick={onOpenMasterReadiness}>{actionNeededCount} need master action</Button> : null}
         </div>
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-3 size-4 text-muted-foreground" />
-          <Input className="h-10 pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Job Card, part, PO or route" />
-        </div>
       </CardHeader>
       <CardContent>
         <div className="max-h-[70vh] overflow-auto rounded-md border">
           <Table excelFilters>
             <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
-              <TableHead>Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead>Production Progress</TableHead><TableHead>Route</TableHead><TableHead />
+              <TableHead data-filterable="true">Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>Stage</TableHead><TableHead>Production Progress</TableHead><TableHead>Route</TableHead><TableHead />
             </TableRow></TableHeader>
-            <TableBody>{visible.length ? visible.map((row) => {
+            <TableBody>{rows.length ? rows.map((row) => {
               const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
               const href = jobCardWorkspaceHref(jobCard, floor)
               const progress = jobCardProgress(row)
