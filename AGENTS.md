@@ -87,7 +87,7 @@ Always kill dev server/s after testing, unless the user specifies to have them u
 ## Git Discipline
 
 - working branch: `staging`.
-- Check `git status --short` before and after every change set.
+- Check `git fetch origin && git status --short` before and after every change set.
 - Regularly check git fetch origin for upstream changes.
 - Commit every completed change set with a clear, specific message. Be proactive in committing changes and keep the commits small and traceable.
 - Never commit secrets, `.env.local/.env`, workbook files, generated caches, or ignored files.
