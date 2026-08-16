@@ -9,6 +9,7 @@ export type ProductionSessionMachineOption = {
 }
 
 type ProductionSessionActionContext = {
+  action?: "downtime"
   productionDate?: string
   shift?: string
 }
@@ -53,6 +54,7 @@ export function productionSessionActionDefaults(
 ) {
   const floor = productionFloorCode.trim().toLowerCase()
   const clock = productionClock(instant)
+  const localNow = istDateTimeInputValue(instant)
   const contextualDate = /^\d{4}-\d{2}-\d{2}$/.test(context.productionDate ?? "")
     ? context.productionDate!
     : undefined
@@ -79,7 +81,7 @@ export function productionSessionActionDefaults(
     return {
       endAt: `${activeShift === "C" ? moveDate(productionDate, 1) : productionDate}T${endTime}`,
       endReason: "shift_end" as const,
-      startAt: `${productionDate}T${startTime}`,
+      startAt: context.action === "downtime" ? localNow : `${productionDate}T${startTime}`,
     }
   }
 
@@ -88,11 +90,10 @@ export function productionSessionActionDefaults(
     return {
       endAt: `${productionDate}T20:00`,
       endReason: "shift_end" as const,
-      startAt: `${productionDate}T08:30`,
+      startAt: context.action === "downtime" ? localNow : `${productionDate}T08:30`,
     }
   }
 
-  const localNow = istDateTimeInputValue(instant)
   return { endAt: localNow, endReason: "shift_end" as const, startAt: localNow }
 }
 

@@ -12,7 +12,7 @@ An open session changes its displayed operational status to Closing Required as 
 
 ## Downtime lifecycle
 
-Downtime starts with a coded reason and start time. It remains open until an end time and one of two outcomes are entered: Resolved — Resume Production, or Shift Ended — Unresolved. Only one downtime interval may be open in a Production Session, and production cannot resume while it remains open.
+Downtime starts with a coded reason and start time. A new downtime entry defaults its start time to the current IST time, while remaining editable for corrections. It remains open until an end time and one of two outcomes are entered: Resolved — Resume Production, or Shift Ended — Unresolved. Only one downtime interval may be open in a Production Session, and production cannot resume while it remains open.
 
 An open downtime interval blocks End Session. The user must explicitly close the downtime first; ending a session never silently supplies its end time.
 
