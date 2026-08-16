@@ -21,6 +21,10 @@ import {
 } from "../../../lib/auth/request-authorization"
 import { browserImportPolicy } from "@/lib/dashboard-api-policy"
 import {
+  autoCodedMasterTemplateFields,
+  importAutoCodedMasterRows,
+} from "../../../lib/auto-coded-master-import"
+import {
   dashboardErrorResponse,
   dashboardMutationCapabilities,
   DashboardRequestPolicyError,
@@ -264,7 +268,7 @@ async function dataTemplateResponse(entryType: string, request: NextRequest) {
   }
   return csvResponse(
     `${entryType}_template.csv`,
-    `${fields.map(csvCell).join(",")}\n`
+    `${autoCodedMasterTemplateFields(entryType, fields).map(csvCell).join(",")}\n`
   )
 }
 
@@ -1451,9 +1455,11 @@ async function post(request: NextRequest, context: RouteContext) {
         if (!importPolicy.ok) {
           throw new RouteError(importPolicy.status, importPolicy.error)
         }
-        for (const payload of importedRows) {
-          await executePostgresOperationalEntry(request, entryType, payload)
-        }
+        await importAutoCodedMasterRows(
+          entryType,
+          importedRows,
+          (payload) => executePostgresOperationalEntry(request, entryType, payload)
+        )
         return json({
           inserted: importedRows.length,
           message: `Imported ${importedRows.length} ${entryType.replaceAll("_", " ")} rows.`,
