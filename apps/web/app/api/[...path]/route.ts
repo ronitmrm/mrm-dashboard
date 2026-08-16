@@ -22,6 +22,8 @@ import {
 import { browserImportPolicy } from "@/lib/dashboard-api-policy"
 import {
   autoCodedMasterTemplateFields,
+  csvImportRowSourceId,
+  dedupeCsvImportRows,
   importAutoCodedMasterRows,
 } from "../../../lib/auto-coded-master-import"
 import {
@@ -1349,11 +1351,12 @@ async function post(request: NextRequest, context: RouteContext) {
       const entryType = String(body.entryType || "")
       const fileName = String(body.fileName || "")
       const fileBase64 = String(body.fileBase64 || "")
-      const importedRows = parseTemplateUpload(
+      const importBatch = parseTemplateUpload(
         entryType,
         fileName,
         fileBase64
-      ).map((payload) =>
+      )
+      const importedRows = importBatch.rows.map((payload) =>
         productionFloorPayload(payload, body.productionFloorCode)
       )
       const importPolicy = browserImportPolicy(entryType, importedRows.length)
@@ -1397,6 +1400,7 @@ async function post(request: NextRequest, context: RouteContext) {
               quantityGood: firstNumeric(payload.outputQty, payload.actualQty),
               quantityRejected: firstNumeric(payload.rejectQty),
               shift: optionalText(payload.shift),
+              sourceId: csvImportRowSourceId(entryType, payload),
             })
             count += 1
           }
@@ -1406,7 +1410,12 @@ async function post(request: NextRequest, context: RouteContext) {
       return json(
         await withPlanningRefresh(path, body, {
           inserted,
-          message: `Imported ${inserted} ${entryType.replaceAll("_", " ")} rows.`,
+          duplicatesSkipped: importBatch.duplicateCount,
+          message: importMessage(
+            entryType,
+            inserted,
+            importBatch.duplicateCount
+          ),
           ok: true,
           rowsUpdated: inserted,
         })
@@ -1443,13 +1452,15 @@ async function post(request: NextRequest, context: RouteContext) {
       if (isPostgresOperationalEntryType(entryType)) {
         const fileName = String(body.fileName || "")
         const fileBase64 = String(body.fileBase64 || "")
-        const importedRows = parseTemplateUpload(
+        const importBatch = parseTemplateUpload(
           entryType,
           fileName,
           fileBase64
-        ).map((payload) => entryType === "machine_master"
-          ? machineMasterImportPayload(payload, body.productionFloorCode)
-          : productionFloorPayload(payload, body.productionFloorCode)
+        )
+        const importedRows = importBatch.rows.map((payload) =>
+          entryType === "machine_master"
+            ? machineMasterImportPayload(payload, body.productionFloorCode)
+            : productionFloorPayload(payload, body.productionFloorCode)
         )
         const importPolicy = browserImportPolicy(entryType, importedRows.length)
         if (!importPolicy.ok) {
@@ -1462,7 +1473,12 @@ async function post(request: NextRequest, context: RouteContext) {
         )
         return json({
           inserted: importedRows.length,
-          message: `Imported ${importedRows.length} ${entryType.replaceAll("_", " ")} rows.`,
+          duplicatesSkipped: importBatch.duplicateCount,
+          message: importMessage(
+            entryType,
+            importedRows.length,
+            importBatch.duplicateCount
+          ),
           ok: true,
           rowsUpdated: importedRows.length,
         })
@@ -1470,13 +1486,15 @@ async function post(request: NextRequest, context: RouteContext) {
       if (postgresMasterEntryTypes.has(entryType)) {
         const fileName = String(body.fileName || "")
         const fileBase64 = String(body.fileBase64 || "")
-        const importedRows = parseTemplateUpload(
+        const importBatch = parseTemplateUpload(
           entryType,
           fileName,
           fileBase64
-        ).map((payload) => entryType === "machine_master"
-          ? machineMasterImportPayload(payload, body.productionFloorCode)
-          : productionFloorPayload(payload, body.productionFloorCode)
+        )
+        const importedRows = importBatch.rows.map((payload) =>
+          entryType === "machine_master"
+            ? machineMasterImportPayload(payload, body.productionFloorCode)
+            : productionFloorPayload(payload, body.productionFloorCode)
         )
         const importPolicy = browserImportPolicy(entryType, importedRows.length)
         if (!importPolicy.ok) {
@@ -1518,9 +1536,10 @@ async function post(request: NextRequest, context: RouteContext) {
         return json(
           await withPlanningRefresh(path, body, {
             inserted,
+            duplicatesSkipped: importBatch.duplicateCount,
             message: entryType === "work_order"
-              ? `Imported ${inserted} work order rows. Missing masters are held in Master Readiness for planner action.`
-              : `Imported ${inserted} ${entryType.replaceAll("_", " ")} rows.`,
+              ? `${importMessage(entryType, inserted, importBatch.duplicateCount)} Missing masters are held in Master Readiness for planner action.`
+              : importMessage(entryType, inserted, importBatch.duplicateCount),
             ok: true,
             rowsUpdated: inserted,
           })
@@ -1609,10 +1628,22 @@ function parseTemplateUpload(
     )
   }
   const csvText = decodeDataUrl(fileBase64)
-  return parseCsv(csvText)
+  const rows = parseCsv(csvText)
     .map(normalizeImportedPayload)
     .map((payload) => normalizeUserEnteredPayload(payload))
     .filter((row) => Object.values(row).some((value) => text(value)))
+  return dedupeCsvImportRows(entryType, rows)
+}
+
+function importMessage(
+  entryType: string,
+  importedCount: number,
+  duplicateCount: number
+) {
+  const imported = `Imported ${importedCount} ${entryType.replaceAll("_", " ")} rows.`
+  if (!duplicateCount) return imported
+  const noun = duplicateCount === 1 ? "row" : "rows"
+  return `${imported} Skipped ${duplicateCount} repeated ${noun}.`
 }
 
 function decodeDataUrl(value: string) {

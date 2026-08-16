@@ -1178,6 +1178,27 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       },
     })
 
+    const afterFirstImport = (
+      await repository.listEnquiries(organizationCode)
+    ).length
+    await expect(
+      repository.importEnquiryRegister({
+        organizationId,
+        receivedOn: "2026-07-22",
+        rows: [
+          {
+            customerName: "Workflow Customer",
+            priority: "Normal",
+            rowNumber: 9,
+            source: "Email",
+          },
+        ],
+      })
+    ).resolves.toEqual({ createdCount: 0, updatedCount: 1 })
+    expect((await repository.listEnquiries(organizationCode)).length).toBe(
+      afterFirstImport
+    )
+
     const before = (await repository.listEnquiries(organizationCode)).length
     await expect(
       repository.importEnquiryRegister({

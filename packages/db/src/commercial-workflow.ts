@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import path from "node:path"
 
 import type { Pool, PoolClient, QueryResult } from "pg"
@@ -24,6 +24,27 @@ type CommercialTerms = {
   packagingTerms?: string | null
   paymentTerms?: string | null
   shipmentMode?: string | null
+}
+
+function enquiryRegisterSourceId(input: {
+  buyerName?: string | null
+  customerId: string
+  organizationId: string
+  priority?: string | null
+  receivedOn: string
+  remarks?: string | null
+  source?: string | null
+}) {
+  const identity = JSON.stringify([
+    input.organizationId,
+    input.customerId,
+    input.receivedOn,
+    input.source?.trim() || "Email",
+    input.priority?.trim() || "Normal",
+    input.buyerName?.trim() || "",
+    input.remarks?.trim() || "",
+  ])
+  return `enquiry-register:${createHash("sha256").update(identity).digest("hex")}`
 }
 
 type AddEnquiryItem = {
@@ -1476,11 +1497,35 @@ export function createCommercialWorkflowRepository(options: RepositoryPoolOption
             continue
           }
 
+          const sourceId = enquiryRegisterSourceId({
+            buyerName: row.buyerName,
+            customerId,
+            organizationId: input.organizationId,
+            priority: row.priority,
+            receivedOn: input.receivedOn,
+            remarks: row.remarks,
+            source: row.source,
+          })
+          await client.query(
+            "SELECT pg_advisory_xact_lock(hashtext('sales.enquiry-register'), hashtext($1))",
+            [sourceId]
+          )
+          const repeatedImport = await client.query<{ id: string }>(
+            `
+              SELECT id FROM sales.enquiries
+              WHERE source_system = 'mrm-dashboard'
+                AND source_table = 'enquiries' AND source_id = $1
+            `,
+            [sourceId]
+          )
+          if (repeatedImport.rows[0]) {
+            updatedCount += 1
+            continue
+          }
           const enquiryNumber = await nextEnquiryNumber(
             client,
             input.organizationId
           )
-          const sourceId = randomUUID()
           const created = await client.query<{ id: string }>(
             `
               INSERT INTO sales.enquiries (

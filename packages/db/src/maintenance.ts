@@ -56,7 +56,8 @@ function requiredText(value: unknown, label: string) {
 async function generatedMaintenanceChecklistCode(
   client: PoolClient,
   organizationId: string,
-  requestedCode: string
+  requestedCode: string,
+  checklistTitle?: string
 ) {
   const cleaned = requestedCode.trim()
   if (cleaned) return cleaned
@@ -64,6 +65,23 @@ async function generatedMaintenanceChecklistCode(
     "SELECT pg_advisory_xact_lock(hashtext('maintenance.checklist-code'), hashtext($1))",
     [organizationId]
   )
+  const title = checklistTitle?.trim()
+  if (title) {
+    const existing = await client.query<{ code: string }>(
+      `
+        SELECT code FROM maintenance.definitions
+        WHERE organization_id = $1
+          AND source_table = 'maintenance_checklist_master'
+          AND lower(btrim(name)) = lower(btrim($2))
+          AND code ~* '^MC[0-9]+$'
+        ORDER BY created_at, code
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [organizationId, title]
+    )
+    if (existing.rows[0]) return existing.rows[0].code
+  }
   const result = await client.query<{ nextNumber: number }>(
     `
       SELECT COALESCE(MAX(
@@ -452,7 +470,12 @@ export function createMaintenanceRepository(options: RepositoryPoolOptions) {
       payload: Record<string, unknown>
     }) {
       return transaction(pool, async (client) => {
-        const code = await generatedMaintenanceChecklistCode(client, input.organizationId, input.checklistCode)
+        const code = await generatedMaintenanceChecklistCode(
+          client,
+          input.organizationId,
+          input.checklistCode,
+          input.checklistTitle
+        )
         const payload = { ...input.payload, checklistCode: code }
         const normalizedItem = { ...input.item, itemKey: `${code}|${input.item.sequence}` }
         await client.query(

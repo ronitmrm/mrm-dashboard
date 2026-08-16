@@ -2737,6 +2737,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
       quantityGood: number
       quantityRejected: number
       shift?: string | null
+      sourceId?: string
     }) {
       return transaction(pool, async (client) => {
         if (input.quantityGood < 0 || input.quantityRejected < 0) {
@@ -2777,6 +2778,8 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
               COALESCE(migration.try_date($7), current_date), $8, $9, $10,
               migration.try_timestamptz($11), migration.try_timestamptz($12),
               $13, 'mrm-dashboard', 'production_entry', $14, $15)
+            ON CONFLICT (source_system, source_table, source_id)
+            DO UPDATE SET source_payload = EXCLUDED.source_payload
             RETURNING id
           `,
           [
@@ -2793,7 +2796,7 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             String(input.payload.startTime ?? ""),
             String(input.payload.endTime ?? ""),
             input.actorUserId ?? null,
-            randomUUID(),
+            input.sourceId?.trim() || randomUUID(),
             input.payload,
           ]
         )

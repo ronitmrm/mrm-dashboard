@@ -55,6 +55,31 @@ describe("enquiry import workbook", () => {
     ])
   })
 
+  test("keeps only the first exact row from commercial spreadsheet imports", () => {
+    const linesCsv = [
+      "part,description,quantity,target_price,grade,drawing_reference,remarks",
+      "P-100,Precision component,12,4.5,CZ121,DRG-100,Urgent",
+      "P-100,Precision component,12,4.5,CZ121,DRG-100,Urgent",
+      "P-100,Precision component,13,4.5,CZ121,DRG-100,Urgent",
+    ].join("\n")
+    expect(
+      parseEnquiryImportFile(Buffer.from(linesCsv), "customer-enquiry.csv").map(
+        (row) => row.rowNumber
+      )
+    ).toEqual([2, 4])
+
+    const registerCsv = [
+      "ENQ,Customer Code,Company,Source,Priority,Buyer,Notes",
+      "ENQ-2607-001,C-001,,Portal,High,Mayank,Update",
+      "ENQ-2607-001,C-001,,Portal,High,Mayank,Update",
+    ].join("\n")
+    expect(
+      parseEnquiryRegisterFile(Buffer.from(registerCsv), "register.csv").map(
+        (row) => row.rowNumber
+      )
+    ).toEqual([2])
+  })
+
   test.each(["xls", "xlsx"])(
     "accepts source header aliases from %s workbooks",
     (extension) => {

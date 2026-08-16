@@ -523,7 +523,7 @@ export async function importEnquiryLinesAction(formData: FormData) {
     throw new Error("Template has no line items.")
   }
   const importKey = createHash("sha256")
-    .update(buffer)
+    .update(JSON.stringify(rows.map((row) => row.rawValues)))
     .update(enquiryId)
     .digest("hex")
   const review = await withWorkflow(

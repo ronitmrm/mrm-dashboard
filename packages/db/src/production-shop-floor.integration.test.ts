@@ -350,7 +350,29 @@ describe("production and shop-floor workflows", () => {
       quantityGood: 10,
       quantityRejected: 1,
       shift: "A",
+      sourceId: `csv:test:${suffix}`,
     })
+    const repeatedProduction = await repository.recordProductionEntry({
+      jobCardNumber: firstJobCard,
+      machineNumber: firstMachine,
+      operationSetupCode: "1",
+      organizationId,
+      payload: {
+        actualQty: 10,
+        downtimeMinutes: 5,
+        operatorId: "OP-1",
+        outputQty: 10,
+        rejectQty: 1,
+        rejectionType: "Visual",
+        targetQty: 12,
+      },
+      productionDate: "2026-07-21",
+      quantityGood: 10,
+      quantityRejected: 1,
+      shift: "A",
+      sourceId: `csv:test:${suffix}`,
+    })
+    expect(repeatedProduction.id).toBe(production.id)
     productionEntryId = production.id
 
     const result = await pool.query<{
