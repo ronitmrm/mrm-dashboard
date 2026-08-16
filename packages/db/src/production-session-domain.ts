@@ -2,6 +2,10 @@ export type ProductionMeasurementMethod = "counter" | "weight"
 export type ProductionDowntimeEndOutcome =
   | "resolved"
   | "shift_end_unresolved"
+export type ProductionSessionOperationalStatus =
+  | "closed"
+  | "closing_required"
+  | "open"
 
 export type ProductionShiftContext = {
   productionDate: string
@@ -94,6 +98,57 @@ function previousDate(date: string) {
   const value = new Date(`${date}T00:00:00.000Z`)
   value.setUTCDate(value.getUTCDate() - 1)
   return value.toISOString().slice(0, 10)
+}
+
+function nextDate(date: string) {
+  const value = new Date(`${date}T00:00:00.000Z`)
+  value.setUTCDate(value.getUTCDate() + 1)
+  return value.toISOString().slice(0, 10)
+}
+
+function productionShiftEndInstant(input: {
+  productionDate: string
+  productionFloorCode: string
+  shift: string
+}) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.productionDate)) {
+    throw new Error("Production date must use YYYY-MM-DD.")
+  }
+  const floor = input.productionFloorCode.trim().toLowerCase()
+  if (floor === "cnc") {
+    const shiftEnd = {
+      A: [input.productionDate, "14:00"],
+      B: [input.productionDate, "22:00"],
+      C: [nextDate(input.productionDate), "06:00"],
+    }[input.shift]
+    if (!shiftEnd) throw new Error("A valid CNC production shift is required.")
+    return new Date(`${shiftEnd[0]}T${shiftEnd[1]}:00.000+05:30`)
+  }
+  if (
+    ["conventional", "conventional-02", "forging"].includes(floor) &&
+    input.shift === "General"
+  ) {
+    return new Date(`${input.productionDate}T20:00:00.000+05:30`)
+  }
+  throw new Error("A valid Production Floor shift is required.")
+}
+
+export function productionSessionOperationalStatus(
+  input: {
+    productionDate: string
+    productionFloorCode: string
+    shift: string
+    status: "closed" | "open"
+  },
+  instant: Date
+): ProductionSessionOperationalStatus {
+  if (input.status === "closed") return "closed"
+  if (Number.isNaN(instant.getTime())) {
+    throw new Error("Production time is invalid.")
+  }
+  return instant >= productionShiftEndInstant(input)
+    ? "closing_required"
+    : "open"
 }
 
 export function productionShiftAt(

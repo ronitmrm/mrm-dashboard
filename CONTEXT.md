@@ -36,6 +36,10 @@ _Avoid_: Daily production entry, permanent setup operator.
 The immutable human-readable reference generated from the machine number, Production Date, and that machine's daily session sequence, such as `C501-20260815-03`. The internal UUID remains the permanent technical identity.
 _Avoid_: User-entered session name, shortened UUID.
 
+**Closing Required**:
+The operational status of a Production Session that is still open after its scheduled Production Shift end. It remains an open session until an authorized user completes the normal close action; the status is derived, not a separate saved lifecycle state.
+_Avoid_: Automatically closed session, overdue shift.
+
 **Production Shift**:
 A configured operating interval for one Production Floor. Conventional-01, Conventional-02, and Forging use General shift from 08:30 to 20:00; CNC uses A from 06:00 to 14:00, B from 14:00 to 22:00, and C from 22:00 to 06:00.
 _Avoid_: User-entered free-text shift.

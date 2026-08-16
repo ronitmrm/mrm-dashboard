@@ -1,6 +1,10 @@
 "use client"
 
-import { productionShiftAt } from "@workspace/db/production-session-domain"
+import {
+  productionSessionOperationalStatus,
+  productionShiftAt,
+  type ProductionSessionOperationalStatus,
+} from "@workspace/db/production-session-domain"
 import {
   productionFloors,
   type ProductionFloorCode,
@@ -37,6 +41,7 @@ import {
 import { productionShopFloorOptions } from "@/lib/shared-employee-master"
 
 type View = "start" | "register" | "events"
+type SessionStatusFilter = "all" | ProductionSessionOperationalStatus
 type Action =
   | "start"
   | "end"
@@ -66,6 +71,27 @@ const endReasons = [
   { label: "Manual Stop", value: "manual_stop" },
 ]
 
+function sessionOperationalStatus(
+  row: Row,
+  floor: ProductionFloorCode,
+  instant: Date
+) {
+  const status = text(row.status).toLowerCase() === "closed" ? "closed" : "open"
+  try {
+    return productionSessionOperationalStatus(
+      {
+        productionDate: text(row.productionDate),
+        productionFloorCode: floor,
+        shift: text(row.shift),
+        status,
+      },
+      instant
+    )
+  } catch {
+    return status
+  }
+}
+
 function masterOptions(value: unknown, labelKeys: string[]) {
   return rows(value).map((row) => ({
     code: first(row, ["code", "uid", "id"]),
@@ -88,6 +114,8 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
   const [eventRows, setEventRows] = useState<Row[]>([])
   const [employees, setEmployees] = useState<Array<{ code: string; name: string }>>([])
   const [query, setQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState<SessionStatusFilter>("all")
+  const [now, setNow] = useState(() => new Date())
   const [selectedMachine, setSelectedMachine] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
@@ -130,10 +158,23 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
     queueMicrotask(() => void load())
   }, [load])
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
   const visibleSessions = useMemo(() => {
     const needle = query.toLowerCase()
-    return sessions.filter((row) => !needle || [row.sessionReference, row.machineNumber, row.jobCardNumber, row.partCode, row.operatorCode, row.operatorName].some((value) => text(value).toLowerCase().includes(needle)))
-  }, [query, sessions])
+    return sessions.filter((row) => {
+      const matchesQuery = !needle || [row.sessionReference, row.machineNumber, row.jobCardNumber, row.partCode, row.operatorCode, row.operatorName].some((value) => text(value).toLowerCase().includes(needle))
+      const matchesStatus = statusFilter === "all" || sessionOperationalStatus(row, floor, now) === statusFilter
+      return matchesQuery && matchesStatus
+    })
+  }, [floor, now, query, sessions, statusFilter])
+  const closingRequiredSessions = useMemo(
+    () => sessions.filter((row) => sessionOperationalStatus(row, floor, now) === "closing_required"),
+    [floor, now, sessions]
+  )
   const machineOptions = useMemo(() => productionSessionStartOptions({
     planRows: rows(control.machinePlanDetailRows),
     sessions,
@@ -202,6 +243,7 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h1 className="text-xl font-semibold">Production Sessions</h1><p className="text-sm text-muted-foreground">Start and review sessions for {unit.shortLabel}.</p></div>
           <div className="flex flex-wrap items-center gap-2">
+            {closingRequiredSessions.length ? <Button className="h-8 px-3" variant="destructive" onClick={() => { setStatusFilter("closing_required"); setView("register") }}><TriangleAlert />Closing Required · {closingRequiredSessions.length}</Button> : null}
             <Badge variant="secondary" className="h-8 px-3">{unit.shortLabel}</Badge>
             <Badge variant="outline" className="h-8 px-3">{shift ? `${shift.shift} · ${shift.productionDate}` : "Outside production shift"}</Badge>
           </div>
@@ -217,17 +259,18 @@ export function ProductionSessionsWorkspace({ initialFloor }: { initialFloor: Pr
             </div>
             {view !== "start" ? <div className="flex flex-wrap gap-2">
               <div className="relative min-w-56 flex-1"><Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" /><Input className="h-11 pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search machine, job, part or operator" /></div>
+              {view === "register" ? <NativeSelect className="h-11 w-52" aria-label="Session status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as SessionStatusFilter)}><NativeSelectOption value="all">All statuses</NativeSelectOption><NativeSelectOption value="closing_required">Closing Required ({closingRequiredSessions.length})</NativeSelectOption><NativeSelectOption value="open">Open</NativeSelectOption><NativeSelectOption value="closed">Closed</NativeSelectOption></NativeSelect> : null}
               <Button className="h-11" variant="outline" onClick={exportCsv}><Download />Export CSV</Button>
             </div> : null}
           </CardHeader>
           <CardContent>
             {error ? <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
             {message ? <div className="mb-3 rounded-md border bg-muted p-3 text-sm">{message}</div> : null}
-            {loading ? <div className="p-10 text-center text-muted-foreground">Loading production sessions…</div> : view === "start" ? <div className="grid gap-4"><CarriedDowntimePanel rows={carriedDowntime} sessions={sessions} options={machineOptions} onSelect={setSelectedMachine} onAction={openAction} /><StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /></div> : view === "register" ? <Register rows={visibleSessions} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
+            {loading ? <div className="p-10 text-center text-muted-foreground">Loading production sessions…</div> : view === "start" ? <div className="grid gap-4"><CarriedDowntimePanel rows={carriedDowntime} sessions={sessions} options={machineOptions} onSelect={setSelectedMachine} onAction={openAction} /><StartSessionLookup options={machineOptions} selected={selectedOption} shift={shift} floor={floor} now={now} onSelect={setSelectedMachine} onAction={openAction} onDetail={(row) => void openDetail(row)} /></div> : view === "register" ? <Register rows={visibleSessions} floor={floor} now={now} onAction={openAction} onDetail={(row) => void openDetail(row)} /> : <EventLog rows={eventRows.filter((row) => !query || Object.values(row).some((value) => text(value).toLowerCase().includes(query.toLowerCase())))} />}
           </CardContent>
         </Card>
       <ActionSheet key={`${action}-${text(target?.id) || machine(target ?? {})}`} action={action} target={target} floor={floor} shift={shift} employees={employees} control={control} saving={saving} message={message} onOpenChange={(open) => { if (!open) setAction(null) }} onSave={(type, payload) => void save(type, payload)} />
-      <DetailSheet session={detail} events={detailEvents} onOpenChange={(open) => { if (!open) setDetail(null) }} />
+      <DetailSheet session={detail} events={detailEvents} floor={floor} now={now} onOpenChange={(open) => { if (!open) setDetail(null) }} />
     </div>
   )
 }
@@ -255,15 +298,16 @@ function CarriedDowntimePanel({ rows: carriedRows, sessions, options, onSelect, 
   })}</div></div>
 }
 
-function StartSessionLookup({ options, selected, shift, onSelect, onAction, onDetail }: { options: ProductionSessionMachineOption[]; selected?: ProductionSessionMachineOption; shift: ReturnType<typeof productionShiftAt>; onSelect: (machineNumber: string) => void; onAction: (action: Action, row: Row) => void; onDetail: (row: Row) => void }) {
+function StartSessionLookup({ options, selected, shift, floor, now, onSelect, onAction, onDetail }: { options: ProductionSessionMachineOption[]; selected?: ProductionSessionMachineOption; shift: ReturnType<typeof productionShiftAt>; floor: ProductionFloorCode; now: Date; onSelect: (machineNumber: string) => void; onAction: (action: Action, row: Row) => void; onDetail: (row: Row) => void }) {
   const plan = selected?.plan
   const session = selected?.session
   const pieceWeight = plan ? productionPieceWeightGrams(plan) : 0
+  const operationalStatus = session ? sessionOperationalStatus(session, floor, now) : null
   return <div className="mx-auto grid max-w-4xl gap-4">
     <Field label="Machine number"><NativeSelect value={selected?.machineNumber ?? ""} onChange={(event) => onSelect(event.target.value)}><NativeSelectOption value="">Select running machine</NativeSelectOption>{options.map((option) => <NativeSelectOption key={option.machineNumber} value={option.machineNumber}>{option.machineNumber} · {part(option.plan) || "No planned part"} · JC {job(option.plan) || "-"}</NativeSelectOption>)}</NativeSelect></Field>
     {!selected ? <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">{options.length ? "Select a running machine to fetch its current planning information." : "No machines are currently running in this Production Unit."}</div> : null}
     {selected && plan ? <div className="rounded-lg border bg-background p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-lg font-semibold">{selected.machineNumber}</div><div className="text-sm text-muted-foreground">Planning details to verify before entry</div></div><Badge variant={session ? "default" : "secondary"}>{session ? (session.hasOpenDowntime ? "Downtime" : "Running") : "Ready to start"}</Badge></div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-lg font-semibold">{selected.machineNumber}</div><div className="text-sm text-muted-foreground">Planning details to verify before entry</div></div><Badge variant={operationalStatus === "closing_required" ? "destructive" : session ? "default" : "secondary"}>{operationalStatus === "closing_required" ? "Closing Required" : session ? (session.hasOpenDowntime ? "Downtime" : "Running") : "Ready to start"}</Badge></div>
       <div className="mt-4 grid gap-x-6 gap-y-3 rounded-md bg-muted/40 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
         <PlanField label="Job Card" value={job(plan)} />
         <PlanField label="Part" value={part(plan)} />
@@ -288,8 +332,13 @@ function PlanField({ label, value }: { label: string; value: unknown }) {
   return <div><div className="text-xs text-muted-foreground">{label}</div><div className="font-medium">{text(value) || "-"}</div></div>
 }
 
-function Register({ rows, onDetail }: { rows: Row[]; onDetail: (row: Row) => void }) {
-  return <ScrollableTable headers={["Session", "Machine", "Job / Part", "Operator", "Shift", "Start / End", "Produced", "Rejected", "Good", "Downtime"]}>{rows.map((row) => <TableRow key={text(row.id)} className="cursor-pointer" onClick={() => onDetail(row)}><TableCell><div className="font-mono text-xs font-medium">{text(row.sessionReference) || text(row.id).slice(0, 8)}</div><Badge className="mt-1" variant={text(row.status) === "open" ? "default" : "secondary"}>{titleCase(row.status)}</Badge></TableCell><TableCell className="font-medium">{machine(row)}</TableCell><TableCell>{job(row)}<div className="text-xs text-muted-foreground">{part(row)} · Setup {setup(row)}</div></TableCell><TableCell>{text(row.operatorCode)}<div className="text-xs text-muted-foreground">{text(row.operatorName)}</div></TableCell><TableCell>{text(row.shift)}<div className="text-xs text-muted-foreground">{text(row.productionDate)}</div></TableCell><TableCell className="whitespace-nowrap text-xs">{formatDateTime(row.startedAt)}<br />{text(row.endedAt) ? formatDateTime(row.endedAt) : "Running"}</TableCell><TableCell className="text-right tabular-nums">{number(row.totalPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.rejectedPieces)}</TableCell><TableCell className="text-right font-medium tabular-nums">{number(row.goodPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.downtimeMinutes)} min</TableCell></TableRow>)}</ScrollableTable>
+function Register({ rows, floor, now, onAction, onDetail }: { rows: Row[]; floor: ProductionFloorCode; now: Date; onAction: (action: Action, row: Row) => void; onDetail: (row: Row) => void }) {
+  return <ScrollableTable headers={["Session", "Machine", "Job / Part", "Operator", "Shift", "Start / End", "Produced", "Rejected", "Good", "Downtime", "Action"]}>{rows.map((row) => {
+    const status = sessionOperationalStatus(row, floor, now)
+    const closingRequired = status === "closing_required"
+    const action = row.hasOpenDowntime ? "downtimeEnd" : "end"
+    return <TableRow key={text(row.id)} className={`cursor-pointer ${closingRequired ? "bg-amber-50/80 hover:bg-amber-100/80 dark:bg-amber-950/20 dark:hover:bg-amber-950/30" : ""}`} onClick={() => onDetail(row)}><TableCell><div className="font-mono text-xs font-medium">{text(row.sessionReference) || text(row.id).slice(0, 8)}</div><Badge className="mt-1" variant={closingRequired ? "destructive" : status === "open" ? "default" : "secondary"}>{titleCase(status)}</Badge></TableCell><TableCell className="font-medium">{machine(row)}</TableCell><TableCell>{job(row)}<div className="text-xs text-muted-foreground">{part(row)} · Setup {setup(row)}</div></TableCell><TableCell>{text(row.operatorCode)}<div className="text-xs text-muted-foreground">{text(row.operatorName)}</div></TableCell><TableCell>{text(row.shift)}<div className="text-xs text-muted-foreground">{text(row.productionDate)}</div></TableCell><TableCell className="whitespace-nowrap text-xs">{formatDateTime(row.startedAt)}<br />{text(row.endedAt) ? formatDateTime(row.endedAt) : closingRequired ? "Shift ended" : "Running"}</TableCell><TableCell className="text-right tabular-nums">{number(row.totalPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.rejectedPieces)}</TableCell><TableCell className="text-right font-medium tabular-nums">{number(row.goodPieces)}</TableCell><TableCell className="text-right tabular-nums">{number(row.downtimeMinutes)} min</TableCell><TableCell>{closingRequired ? <Button className="h-9 whitespace-nowrap" variant={row.hasOpenDowntime ? "destructive" : "default"} onClick={(event) => { event.stopPropagation(); onAction(action, row) }}>{row.hasOpenDowntime ? "Close downtime" : "Close session"}</Button> : "-"}</TableCell></TableRow>
+  })}</ScrollableTable>
 }
 
 function EventLog({ rows }: { rows: Row[] }) {
@@ -394,7 +443,8 @@ function IstDateTimeField({ label, value, onChange }: { label: string; value: st
 }
 function MasterSelect({ value, options, onChange, placeholder }: { value: string; options: Array<{ code: string; label: string }>; onChange: (value: string) => void; placeholder: string }) { return <NativeSelect value={value} onChange={(event) => onChange(event.target.value)}><NativeSelectOption value="">{options.length ? placeholder : "No active master values configured"}</NativeSelectOption>{options.map((item) => <NativeSelectOption key={item.code} value={item.code}>{item.code} · {item.label}</NativeSelectOption>)}</NativeSelect> }
 
-function DetailSheet({ session, events, onOpenChange }: { session: Row | null; events: Row[]; onOpenChange: (open: boolean) => void }) {
+function DetailSheet({ session, events, floor, now, onOpenChange }: { session: Row | null; events: Row[]; floor: ProductionFloorCode; now: Date; onOpenChange: (open: boolean) => void }) {
   if (!session) return null
-  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="h-full !w-full gap-0 overflow-hidden sm:!max-w-4xl xl:!max-w-5xl"><SheetHeader className="shrink-0 border-b"><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="flex min-h-0 flex-1 flex-col gap-4 p-6"><div className="grid shrink-0 grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-4">{[["Status",titleCase(session.status)],["Operator",`${text(session.operatorCode)} ${text(session.operatorName)}`],["Started",formatDateTime(session.startedAt)],["Ended",text(session.endedAt) ? formatDateTime(session.endedAt) : "Running"],["Total",number(session.totalPieces)],["Rejected",number(session.rejectedPieces)],["Good",number(session.goodPieces)],["Downtime",`${number(session.downtimeMinutes)} min`]].map(([label,value]) => <div className="min-w-0" key={String(label)}><div className="text-xs text-muted-foreground">{label}</div><div className="truncate font-medium">{value}</div></div>)}</div><div className="flex min-h-0 flex-1 flex-col"><h3 className="mb-2 shrink-0 font-medium">Session timeline</h3><SessionTimeline rows={events} /></div></div></SheetContent></Sheet>
+  const status = sessionOperationalStatus(session, floor, now)
+  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="h-full !w-full gap-0 overflow-hidden sm:!max-w-4xl xl:!max-w-5xl"><SheetHeader className="shrink-0 border-b"><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="flex min-h-0 flex-1 flex-col gap-4 p-6"><div className="grid shrink-0 grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-4">{[["Status",titleCase(status)],["Operator",`${text(session.operatorCode)} ${text(session.operatorName)}`],["Started",formatDateTime(session.startedAt)],["Ended",text(session.endedAt) ? formatDateTime(session.endedAt) : status === "closing_required" ? "Closing required" : "Running"],["Total",number(session.totalPieces)],["Rejected",number(session.rejectedPieces)],["Good",number(session.goodPieces)],["Downtime",`${number(session.downtimeMinutes)} min`]].map(([label,value]) => <div className="min-w-0" key={String(label)}><div className="text-xs text-muted-foreground">{label}</div><div className="truncate font-medium">{value}</div></div>)}</div><div className="flex min-h-0 flex-1 flex-col"><h3 className="mb-2 shrink-0 font-medium">Session timeline</h3><SessionTimeline rows={events} /></div></div></SheetContent></Sheet>
 }
