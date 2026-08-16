@@ -64,6 +64,10 @@ _Avoid_: Mutable audit note, duplicate event storage.
 The method selected for one Production Session. Conventional-01, Conventional-02, and Forging use Weight. CNC asks for either Machine Counter or Weight for every session.
 _Avoid_: Machine-wide permanent counting method.
 
+**Planner Interruption Settlement**:
+The required Production Session action before a planner decision interrupts running work. Moving or stopping work requires the matching session to be closed through its Weight or Machine Counter method; delaying it on the same machine requires an open downtime event. Planner Actions read the canonical session output and never ask for a separate produced quantity.
+_Avoid_: Planner finished quantity, duplicate production actual.
+
 **Machine Counter Continuity**:
 The previous closed CNC Production Session's end count becomes the next session's start count only when the physical machine, Job Card, Part Code, option, and setup all remain the same and both sessions use Machine Counter.
 _Avoid_: Carrying a counter across a job/setup change, retyping an eligible carried count.

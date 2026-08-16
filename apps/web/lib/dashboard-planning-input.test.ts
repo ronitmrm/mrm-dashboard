@@ -9,7 +9,7 @@ import {
 } from "./dashboard-planning-input"
 
 describe("dashboard planning input normalization", () => {
-  test("preserves the legacy nested planning decision shape with typed setup numbers", () => {
+  test("keeps interruption identity but rejects planner-entered production output", () => {
     expect(
       normalizeInterruptedSetups([
         {
@@ -22,7 +22,6 @@ describe("dashboard planning input normalization", () => {
       ])
     ).toEqual([
       {
-        finishedQuantity: 12,
         jobCardNumber: "JC-1",
         machineNumber: "MC-1",
         setupNumber: 2,

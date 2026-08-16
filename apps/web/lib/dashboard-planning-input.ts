@@ -36,10 +36,8 @@ export function normalizeInterruptedSetups(value: unknown) {
     const machineNumber = cleanedText(row.machine)
     const setupNumber = planningSetupNumber(row.setupNo)
     if (!jobCardNumber || !machineNumber || !setupNumber) return []
-    const finishedQuantity = optionalNumber(row.finishedQty)
     return [
       {
-        ...(finishedQuantity === undefined ? {} : { finishedQuantity }),
         jobCardNumber,
         machineNumber,
         setupNumber,
