@@ -78,3 +78,8 @@ export function istDateTimeInputToIso(value: string) {
   const date = new Date(`${value}:00.000+05:30`)
   return Number.isNaN(date.getTime()) ? "" : date.toISOString()
 }
+
+export function istDateTimeInputParts(value: string) {
+  const [date = "", time = ""] = value.split("T", 2)
+  return { date, time }
+}
