@@ -65,8 +65,12 @@ The previous closed CNC Production Session's end count becomes the next session'
 _Avoid_: Carrying a counter across a job/setup change, retyping an eligible carried count.
 
 **Production Downtime Event**:
-A non-overlapping start/end interval within one Production Session, recorded by Quality, Shop Floor, or Machinist with a coded reason. It reduces effective runtime but does not close the session.
-_Avoid_: One editable daily downtime total.
+A non-overlapping start/end interval within one Production Session, recorded by Quality, Shop Floor, or Machinist with a coded reason and closure outcome. It reduces effective runtime but does not close the session; an open interval must be closed before the session can end.
+_Avoid_: One editable daily downtime total, automatically closing downtime with the session.
+
+**Carried Downtime**:
+An unresolved machine problem whose current Production Downtime Event closes at shift end and continues into the next operating shift. Non-working hours between shifts are excluded; each affected shift records its own downtime interval until the problem is resolved.
+_Avoid_: One continuous downtime interval across off-shift hours, resolved downtime.
 
 **Production Rejection Event**:
 A quantity and coded type, reason, and remark recorded only by Quality against one Production Session. Rejected pieces are part of total produced pieces; good pieces equal total produced minus rejected pieces.

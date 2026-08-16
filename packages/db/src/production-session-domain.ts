@@ -1,4 +1,7 @@
 export type ProductionMeasurementMethod = "counter" | "weight"
+export type ProductionDowntimeEndOutcome =
+  | "resolved"
+  | "shift_end_unresolved"
 
 export type ProductionShiftContext = {
   productionDate: string
@@ -47,6 +50,23 @@ function nonNegativeInteger(value: number, label: string) {
     throw new Error(`${label} must be a non-negative whole number.`)
   }
   return value
+}
+
+export function productionDowntimeEndOutcome(value: string) {
+  if (value === "resolved" || value === "shift_end_unresolved") {
+    return value satisfies ProductionDowntimeEndOutcome
+  }
+  throw new Error("A valid downtime closure outcome is required.")
+}
+
+export function assertProductionSessionCanClose(input: {
+  hasOpenDowntime: boolean
+}) {
+  if (input.hasOpenDowntime) {
+    throw new Error(
+      "Close the open downtime before ending the production session."
+    )
+  }
 }
 
 function localProductionClock(instant: Date) {

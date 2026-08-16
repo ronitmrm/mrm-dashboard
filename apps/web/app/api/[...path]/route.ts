@@ -1181,12 +1181,37 @@ async function post(request: NextRequest, context: RouteContext) {
           ({ actorUserId, organizationId, repository }) =>
             repository.endProductionSessionDowntime({
               actorUserId,
+              endOutcome: text(payload.endOutcome),
               endedAt: text(payload.endedAt),
               organizationId,
               sessionId: text(payload.sessionId),
             })
         )
-        return json({ ...result, rowsUpdated: 1, savedText: "Production resumed." })
+        return json({
+          ...result,
+          rowsUpdated: 1,
+          savedText: result.endOutcome === "shift_end_unresolved"
+            ? "Downtime closed and carried to the next shift."
+            : "Downtime closed; production can resume.",
+        })
+      }
+      if (entryType === "production_session_downtime_carry_resolve") {
+        const result = await withProductionRepository(
+          request,
+          "operations.production.write",
+          ({ actorUserId, organizationId, repository }) =>
+            repository.resolveCarriedProductionSessionDowntime({
+              actorUserId,
+              eventId: text(payload.eventId),
+              organizationId,
+              resolvedAt: text(payload.resolvedAt),
+            })
+        )
+        return json({
+          ...result,
+          rowsUpdated: 1,
+          savedText: "Carried machine problem resolved.",
+        })
       }
       if (entryType === "production_session_rejection") {
         const result = await withProductionRepository(
