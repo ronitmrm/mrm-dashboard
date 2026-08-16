@@ -42,6 +42,7 @@ describe("user entry text normalization", () => {
       stage: "operator_started",
       measurementMethod: "weight",
       endReason: "shift_change",
+      endOutcome: "shift_end_unresolved",
       enteredRole: "shop_floor",
       specification: "M10 x 1.5 / H7",
       savedAt: "2026-08-10T10:13:24.070Z",
