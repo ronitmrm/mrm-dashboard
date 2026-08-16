@@ -353,6 +353,60 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
+      {filteredProductionNavigation.map(({ floor, items }) => {
+        const sectionId = productionSectionIds[floor.code]
+        return (
+          <NavigationSection
+            icon={Factory}
+            isActive={
+              productionFloorNavigation.some(
+                (item) => item.id === activeDashboardTab
+              ) && floor.code === activeProductionFloor
+            }
+            key={floor.code}
+            label={floor.label}
+            onOpenChange={(open) => {
+              if (!normalizedMenuSearch) setSectionOpen(sectionId, open)
+            }}
+            open={normalizedMenuSearch ? true : expandedSections[sectionId]}
+          >
+            {items.map((item) => (
+              <SidebarMenuSubItem key={`${floor.code}:${item.id}`}>
+                <SidebarMenuSubButton
+                  asChild
+                  className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                  isActive={
+                    floor.code === activeProductionFloor &&
+                    item.id === activeDashboardTab
+                  }
+                >
+                  {onDashboardTabSelect ? (
+                    <button
+                      onClick={() => onDashboardTabSelect(item.id, floor.code)}
+                      type="button"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
+                      />
+                      <span>{item.title}</span>
+                    </button>
+                  ) : (
+                    <a href={productionNavigationHref(item.id, floor.code)}>
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
+                      />
+                      <span>{item.title}</span>
+                    </a>
+                  )}
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
+          </NavigationSection>
+        )
+      })}
+
       {planningHolidayMatchesSearch ? (
         <SidebarGroup className="px-3 py-0.5">
           <SidebarGroupContent>
@@ -431,60 +485,6 @@ export function UnifiedSidebarNavigation({
           </SidebarGroupContent>
         </SidebarGroup>
       ) : null}
-
-      {filteredProductionNavigation.map(({ floor, items }) => {
-        const sectionId = productionSectionIds[floor.code]
-        return (
-          <NavigationSection
-            icon={Factory}
-            isActive={
-              productionFloorNavigation.some(
-                (item) => item.id === activeDashboardTab
-              ) && floor.code === activeProductionFloor
-            }
-            key={floor.code}
-            label={floor.label}
-            onOpenChange={(open) => {
-              if (!normalizedMenuSearch) setSectionOpen(sectionId, open)
-            }}
-            open={normalizedMenuSearch ? true : expandedSections[sectionId]}
-          >
-            {items.map((item) => (
-              <SidebarMenuSubItem key={`${floor.code}:${item.id}`}>
-                <SidebarMenuSubButton
-                  asChild
-                  className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
-                  isActive={
-                    floor.code === activeProductionFloor &&
-                    item.id === activeDashboardTab
-                  }
-                >
-                  {onDashboardTabSelect ? (
-                    <button
-                      onClick={() => onDashboardTabSelect(item.id, floor.code)}
-                      type="button"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
-                      />
-                      <span>{item.title}</span>
-                    </button>
-                  ) : (
-                    <a href={productionNavigationHref(item.id, floor.code)}>
-                      <span
-                        aria-hidden="true"
-                        className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
-                      />
-                      <span>{item.title}</span>
-                    </a>
-                  )}
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
-            ))}
-          </NavigationSection>
-        )
-      })}
 
       {administrationMatchesSearch ? (
         <SidebarGroup className="px-3 py-0.5">
