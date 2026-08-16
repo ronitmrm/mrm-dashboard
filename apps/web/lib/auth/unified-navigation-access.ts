@@ -11,6 +11,7 @@ export type UnifiedNavigationAccess = {
   commercialHrefs: string[]
   hrHrefs: string[]
   operations: boolean
+  store: boolean
 }
 
 export async function getUnifiedNavigationAccess(
@@ -19,6 +20,7 @@ export async function getUnifiedNavigationAccess(
   const capabilities = [
     operationsCapability,
     administrationCapability,
+    "store.read",
     ...hrNavigation.map(({ requiredCapability }) => requiredCapability),
     ...commercialNavigationAccess.map(([, capability]) => capability),
   ]
@@ -39,5 +41,6 @@ export async function getUnifiedNavigationAccess(
     operations:
       productionModuleIsEnabled() &&
       grantedCapabilities.has(operationsCapability),
+    store: grantedCapabilities.has("store.read"),
   }
 }

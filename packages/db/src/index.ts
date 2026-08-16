@@ -48,6 +48,11 @@ export {
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 export { createMaintenanceRepository } from "./maintenance"
 export {
+  createStoreRepository,
+  type StoreHolderType,
+  type StoreTrackingMode,
+} from "./store"
+export {
   createRecruitmentRepository,
   type RecruitmentCandidateRow,
   type RecruitmentCandidateApplicationHistoryRow,

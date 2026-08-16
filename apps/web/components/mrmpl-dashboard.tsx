@@ -111,6 +111,7 @@ import {
 import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type MachineConstraintQueueReviewGroup } from "@/lib/machine-constraint-review";
 import { dispatchReadyJobCards, jobCardActionAssignments } from "@/lib/job-card-action-planning";
 import { maintenanceChecklistRowsForSchedule, maintenanceMasterRowsForMachineAssignment } from "@/lib/maintenance-schedule-options";
+import { MachineStoreAssets } from "@/components/machine-store-assets";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { plannerActionHistoryRows } from "@/lib/planner-action-history";
 import { productionPieceWeightGrams } from "@/lib/production-session-entry";
@@ -7361,6 +7362,7 @@ function MachineMasterPanel({
         <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine Maintenance Schedules And Records.</CardDescription></CardHeader>
         <CardContent><div className="grid gap-3 md:grid-cols-6"><TileField label="Machine Family" value={selectedMachine.machineFamily} important /><TileField label="Machine Type" value={selectedMachine.machineType} /><TileField label="Machine Name" value={selectedMachine.machineName} /><TileField label="Production Unit" value={machineProductionUnitLabel(selectedMachine)} /><TileField label="Machine Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
       </Card>
+      <MachineStoreAssets machineNumber={displayValue(selectedMachine.machineNo)} />
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div>
