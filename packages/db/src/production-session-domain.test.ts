@@ -5,6 +5,7 @@ import {
   calculateProductionSessionOutput,
   formatProductionSessionReference,
   productionDowntimeEndOutcome,
+  productionSessionOperationalStatus,
   productionShiftAt,
   suggestedCounterStart,
 } from "./production-session-domain"
@@ -28,6 +29,30 @@ describe("production downtime lifecycle", () => {
     expect(() => productionDowntimeEndOutcome("automatic")).toThrow(
       "A valid downtime closure outcome is required."
     )
+  })
+})
+
+describe("production session operational status", () => {
+  test("marks an open Conventional session Closing Required at its 20:00 shift end", () => {
+    const session = {
+      productionDate: "2026-08-16",
+      productionFloorCode: "conventional",
+      shift: "General",
+      status: "open" as const,
+    }
+
+    expect(
+      productionSessionOperationalStatus(
+        session,
+        new Date("2026-08-16T14:29:59.999Z")
+      )
+    ).toBe("open")
+    expect(
+      productionSessionOperationalStatus(
+        session,
+        new Date("2026-08-16T14:30:00.000Z")
+      )
+    ).toBe("closing_required")
   })
 })
 
