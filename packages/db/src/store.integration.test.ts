@@ -76,7 +76,80 @@ async function createClassification(label: string) {
   }
 }
 
+async function createPurchaseOrder(
+  itemTypeId: string,
+  quantity: number,
+  unitPrice: string
+) {
+  const supplier = await store.createSupplier({
+    code: `SUPPLIER-${suffix}`,
+    name: "Store Test Supplier",
+    organizationId,
+  })
+  return store.createPurchaseOrder({
+    itemTypeId,
+    orderDate: "2026-08-17",
+    organizationId,
+    quantity,
+    supplierId: supplier.id,
+    unitPrice,
+  })
+}
+
 describe("Store requests", () => {
+  test("receives stock only against the remaining Purchase Order quantity", async () => {
+    const location = await store.createLocation({
+      code: `PO-${suffix}`,
+      name: "Purchase Receipt Store",
+      organizationId,
+    })
+    const supplier = await store.createSupplier({
+      code: `SUP-${suffix}`,
+      name: "Test Supplier",
+      organizationId,
+    })
+    const classification = await createClassification("Purchase Order")
+    const itemType = await store.createItemType({
+      ...classification,
+      assetType: "CONSUMABLE",
+      identificationName: "Purchase Order Test Item",
+      organizationId,
+      unit: "Nos",
+    })
+    const order = await store.createPurchaseOrder({
+      itemTypeId: itemType.id,
+      orderDate: "2026-08-17",
+      organizationId,
+      quantity: 5,
+      supplierId: supplier.id,
+      unitPrice: "125.00",
+    })
+
+    await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderId: order.id,
+      quantity: 2,
+    })
+
+    await expect(
+      store.receiveStock({
+        locationId: location.id,
+        organizationId,
+        purchaseOrderId: order.id,
+        quantity: 4,
+      })
+    ).rejects.toThrow("remaining Purchase Order quantity")
+    expect(await store.listPurchaseOrders(organizationId)).toContainEqual(
+      expect.objectContaining({
+        id: order.id,
+        orderedQuantity: "5",
+        receivedQuantity: "2",
+        status: "Partially Received",
+      })
+    )
+  })
+
   test("uses classification masters and generates immutable Type Codes", async () => {
     const category = await store.createAssetCategory({
       name: `Safety ${suffix}`,
@@ -97,20 +170,18 @@ describe("Store requests", () => {
       assetCategoryId: category.id,
       assetNameId: assetName.id,
       assetSubcategoryId: subcategory.id,
-      assetType: "PPE",
+      assetType: "NON_CONSUMABLE",
       identificationName: `Clear Safety Glasses ${suffix}`,
       organizationId,
-      trackingMode: "SERIALIZED",
       unit: "Nos",
     })
     const second = await store.createItemType({
       assetCategoryId: category.id,
       assetNameId: assetName.id,
       assetSubcategoryId: subcategory.id,
-      assetType: "PPE Spare",
+      assetType: "CONSUMABLE",
       identificationName: `Tinted Safety Glasses ${suffix}`,
       organizationId,
-      trackingMode: "SERIALIZED",
       unit: "Nos",
     })
 
@@ -148,18 +219,17 @@ describe("Store requests", () => {
     const classification = await createClassification("Carbide Insert")
     const itemType = await store.createItemType({
       ...classification,
-      assetType: "Tool",
+      assetType: "CONSUMABLE",
       identificationName: "CNMG Insert",
       organizationId,
-      trackingMode: "CONSUMABLE",
       unit: "Nos",
     })
+    const order = await createPurchaseOrder(itemType.id, 5, "125.00")
     await store.receiveStock({
-      itemTypeId: itemType.id,
       locationId: location.id,
       organizationId,
+      purchaseOrderId: order.id,
       quantity: 5,
-      unitPrice: "125.00",
     })
 
     const production = await store.createRequisition({
@@ -214,18 +284,17 @@ describe("Store requests", () => {
     const classification = await createClassification("Operator Chair")
     const itemType = await store.createItemType({
       ...classification,
-      assetType: "Asset",
+      assetType: "NON_CONSUMABLE",
       identificationName: "CNC Operator Chair",
       organizationId,
-      trackingMode: "SERIALIZED",
       unit: "Nos",
     })
+    const order = await createPurchaseOrder(itemType.id, 2, "4500.00")
     const receipt = await store.receiveStock({
-      itemTypeId: itemType.id,
       locationId: location.id,
       organizationId,
+      purchaseOrderId: order.id,
       quantity: 2,
-      unitPrice: "4500.00",
     })
     expect(receipt.assetCodes).toEqual([
       `${itemType.typeCode}-00001`,
@@ -249,12 +318,16 @@ describe("Store requests", () => {
       quantity: 1,
       requisitionId: request.id,
     })
+    const vendor = await store.createVendor({
+      code: `REPAIR-${suffix}`,
+      name: "Approved Repair Vendor",
+      organizationId,
+    })
     await store.moveAsset({
       assetCode: receipt.assetCodes[0]!,
-      holderName: "Quality Inspector",
-      holderReference: "EMP-QC-01",
-      holderType: "PERSON",
+      holderType: "VENDOR",
       organizationId,
+      vendorId: vendor.id,
     })
 
     const definitionCode = `AM-${suffix}`
@@ -288,12 +361,16 @@ describe("Store requests", () => {
       organizationId,
       status: "BROKEN",
     })
+    const replacementOrder = await createPurchaseOrder(
+      itemType.id,
+      1,
+      "4750.00"
+    )
     const replacement = await store.receiveStock({
-      itemTypeId: itemType.id,
       locationId: location.id,
       organizationId,
+      purchaseOrderId: replacementOrder.id,
       quantity: 1,
-      unitPrice: "4750.00",
     })
     expect(replacement.assetCodes).toEqual([`${itemType.typeCode}-00003`])
 
@@ -302,6 +379,8 @@ describe("Store requests", () => {
       organizationId,
     })
     expect(workspace?.asset.status).toBe("BROKEN")
+    expect(workspace?.asset.holderType).toBe("VENDOR")
+    expect(workspace?.asset.holderName).toBe("Approved Repair Vendor")
     expect(
       workspace?.movements.map((movement) => movement.movementType)
     ).toEqual(

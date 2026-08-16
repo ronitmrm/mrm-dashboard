@@ -7,12 +7,14 @@ import {
 } from "./postgres-runtime"
 
 export type StoreTrackingMode = "CONSUMABLE" | "SERIALIZED"
+export type StoreAssetType = "CONSUMABLE" | "NON_CONSUMABLE"
 export type StoreHolderType =
   | "DEPARTMENT"
   | "MACHINE"
   | "PERSON"
   | "STORE"
   | "UNIT"
+  | "VENDOR"
 
 function requiredText(value: unknown, label: string) {
   const text = String(value ?? "").trim()
@@ -25,6 +27,15 @@ function positiveQuantity(value: number, label = "Quantity") {
     throw new Error(`${label} must be greater than zero.`)
   }
   return value
+}
+
+function storeAssetType(value: unknown): StoreAssetType {
+  if (value === "CONSUMABLE" || value === "NON_CONSUMABLE") return value
+  throw new Error("Asset type must be Consumable or Non Consumable.")
+}
+
+function trackingModeForAssetType(assetType: StoreAssetType): StoreTrackingMode {
+  return assetType === "NON_CONSUMABLE" ? "SERIALIZED" : "CONSUMABLE"
 }
 
 async function nextDocumentNumber(
@@ -387,6 +398,159 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
+    async createVendor(input: {
+      actorUserId?: string | null
+      code: string
+      contactDetails?: string | null
+      name: string
+      organizationId: string
+    }) {
+      const result = await pool.query<{ id: string }>(
+        `
+          INSERT INTO store.vendors (
+            organization_id, code, name, contact_details,
+            created_by_user_id, updated_by_user_id
+          ) VALUES ($1, $2, $3, $4, $5, $5)
+          ON CONFLICT (organization_id, lower(code))
+          DO UPDATE SET name = EXCLUDED.name,
+            contact_details = EXCLUDED.contact_details,
+            active = true, updated_at = now(),
+            updated_by_user_id = EXCLUDED.updated_by_user_id
+          RETURNING id
+        `,
+        [
+          input.organizationId,
+          requiredText(input.code, "Vendor code"),
+          requiredText(input.name, "Vendor name"),
+          input.contactDetails?.trim() || null,
+          input.actorUserId ?? null,
+        ]
+      )
+      return result.rows[0]!
+    },
+
+    async listVendors(organizationId: string) {
+      const result = await pool.query<{
+        code: string
+        contactDetails: string | null
+        id: string
+        name: string
+      }>(
+        `
+          SELECT id, code, name, contact_details AS "contactDetails"
+          FROM store.vendors
+          WHERE organization_id = $1 AND active
+          ORDER BY name
+        `,
+        [organizationId]
+      )
+      return result.rows
+    },
+
+    async createPurchaseOrder(input: {
+      actorUserId?: string | null
+      itemTypeId: string
+      orderDate?: string | null
+      organizationId: string
+      quantity: number
+      remark?: string | null
+      supplierId: string
+      unitPrice: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const quantity = positiveQuantity(input.quantity)
+        const unitPrice = Number(input.unitPrice)
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+          throw new Error("Unit price must be zero or greater.")
+        }
+        const references = await client.query(
+          `
+            SELECT 1
+            FROM store.suppliers supplier
+            JOIN store.item_types item ON item.organization_id = supplier.organization_id
+            WHERE supplier.organization_id = $1 AND supplier.id = $2
+              AND item.id = $3 AND supplier.active AND item.active
+          `,
+          [input.organizationId, input.supplierId, input.itemTypeId]
+        )
+        if (!references.rows[0]) {
+          throw new Error("Select a valid Supplier and Store Item Type.")
+        }
+        const orderNumber = await nextDocumentNumber(client, {
+          counterKey: "PURCHASE_ORDER",
+          organizationId: input.organizationId,
+          prefix: "STR-PO",
+        })
+        const result = await client.query<{ id: string }>(
+          `
+            INSERT INTO store.purchase_orders (
+              organization_id, order_number, supplier_id, item_type_id,
+              order_date, ordered_quantity, unit_price, remark,
+              created_by_user_id, updated_by_user_id
+            ) VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5, '')::date, current_date),
+              $6, $7, $8, $9, $9)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            orderNumber,
+            input.supplierId,
+            input.itemTypeId,
+            input.orderDate ?? null,
+            quantity,
+            input.unitPrice,
+            input.remark?.trim() || null,
+            input.actorUserId ?? null,
+          ]
+        )
+        return { id: result.rows[0]!.id, orderNumber }
+      })
+    },
+
+    async listPurchaseOrders(organizationId: string) {
+      const result = await pool.query<{
+        id: string
+        itemName: string
+        itemTypeId: string
+        orderDate: string
+        orderedQuantity: string
+        orderNumber: string
+        receivedQuantity: string
+        remainingQuantity: string
+        status: string
+        supplierId: string
+        supplierName: string
+        typeCode: string
+        unit: string
+        unitPrice: string
+      }>(
+        `
+          SELECT purchase_order.id,
+            purchase_order.order_number AS "orderNumber",
+            purchase_order.order_date::text AS "orderDate",
+            purchase_order.supplier_id AS "supplierId",
+            supplier.name AS "supplierName",
+            purchase_order.item_type_id AS "itemTypeId",
+            item.type_code AS "typeCode",
+            item.identification_name AS "itemName", item.unit,
+            trim_scale(purchase_order.ordered_quantity)::text AS "orderedQuantity",
+            trim_scale(purchase_order.received_quantity)::text AS "receivedQuantity",
+            trim_scale(purchase_order.ordered_quantity - purchase_order.received_quantity)::text
+              AS "remainingQuantity",
+            purchase_order.unit_price::text AS "unitPrice",
+            purchase_order.status
+          FROM store.purchase_orders purchase_order
+          JOIN store.suppliers supplier ON supplier.id = purchase_order.supplier_id
+          JOIN store.item_types item ON item.id = purchase_order.item_type_id
+          WHERE purchase_order.organization_id = $1
+          ORDER BY purchase_order.order_date DESC, purchase_order.created_at DESC
+          LIMIT 500
+        `,
+        [organizationId]
+      )
+      return result.rows
+    },
+
     async listSupplierPrices(organizationId: string) {
       const result = await pool.query<{
         itemName: string
@@ -420,17 +584,17 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       assetCategoryId: string
       assetNameId: string
       assetSubcategoryId: string
-      assetType: string
+      assetType: StoreAssetType
       applicableItemCode?: string | null
       drawingNumber?: string | null
       identificationName: string
       minimumStock?: number
       organizationId: string
-      trackingMode: StoreTrackingMode
       unit: string
     }) {
       return withTransaction(pool, async (client) => {
         const classification = await assetClassificationPath(client, input)
+        const assetType = storeAssetType(input.assetType)
         const typeCode = await nextStoreTypeCode(client, input.organizationId)
         const result = await client.query<{ id: string }>(
           `
@@ -449,7 +613,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           [
             input.organizationId,
             typeCode,
-            requiredText(input.assetType, "Asset type"),
+            assetType === "NON_CONSUMABLE" ? "Non Consumable" : "Consumable",
             classification.asset_category,
             classification.asset_subcategory,
             classification.asset_name,
@@ -459,7 +623,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             requiredText(input.identificationName, "Identification name"),
             input.applicableItemCode?.trim() || null,
             input.drawingNumber?.trim() || null,
-            input.trackingMode,
+            trackingModeForAssetType(assetType),
             requiredText(input.unit, "Unit"),
             input.minimumStock ?? 0,
             input.actorUserId ?? null,
@@ -487,7 +651,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       }>(
         `
           SELECT item.id, item.type_code AS "typeCode",
-            item.asset_type AS "assetType",
+            CASE WHEN item.tracking_mode = 'SERIALIZED'
+              THEN 'NON_CONSUMABLE' ELSE 'CONSUMABLE' END AS "assetType",
             item.asset_category AS "assetCategory",
             item.asset_subcategory AS "assetSubcategory",
             item.asset_name AS "assetName",
@@ -560,7 +725,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       assetCategoryId: string
       assetNameId: string
       assetSubcategoryId: string
-      assetType: string
+      assetType: StoreAssetType
       department: string
       identificationName: string
       organizationId: string
@@ -569,6 +734,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     }) {
       return withTransaction(pool, async (client) => {
         const classification = await assetClassificationPath(client, input)
+        const assetType = storeAssetType(input.assetType)
         const requestNumber = await nextDocumentNumber(client, {
           counterKey: "CODE_REQUEST",
           organizationId: input.organizationId,
@@ -591,7 +757,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           [
             input.organizationId,
             requestNumber,
-            requiredText(input.assetType, "Asset type"),
+            assetType === "NON_CONSUMABLE" ? "Non Consumable" : "Consumable",
             classification.asset_category,
             classification.asset_subcategory,
             classification.asset_name,
@@ -671,38 +837,59 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       billNumber?: string | null
       guaranteeCardFileName?: string | null
       guaranteeCardStorageKey?: string | null
-      itemTypeId: string
       locationId: string
       manufacturerSerialNumbers?: string[]
       organizationId: string
+      purchaseOrderId: string
       quantity: number
       receivedBy?: string | null
-      supplierId?: string | null
-      unitPrice: string
       warrantyUntil?: string | null
     }) {
       return withTransaction(pool, async (client) => {
         const quantity = positiveQuantity(input.quantity)
-        const item = await client.query<{
+        const order = await client.query<{
           identification_name: string
+          item_type_id: string
           next_asset_number: number
+          order_number: string
+          ordered_quantity: string
+          received_quantity: string
+          status: string
+          supplier_id: string
           tracking_mode: StoreTrackingMode
           type_code: string
+          unit_price: string
         }>(
           `
-            SELECT type_code, identification_name, tracking_mode, next_asset_number
-            FROM store.item_types
-            WHERE id = $1 AND organization_id = $2
-            FOR UPDATE
+            SELECT purchase_order.item_type_id, purchase_order.supplier_id,
+              purchase_order.order_number, purchase_order.ordered_quantity::text,
+              purchase_order.received_quantity::text, purchase_order.unit_price::text,
+              purchase_order.status, item.type_code, item.identification_name,
+              item.tracking_mode, item.next_asset_number
+            FROM store.purchase_orders purchase_order
+            JOIN store.item_types item ON item.id = purchase_order.item_type_id
+            WHERE purchase_order.id = $1 AND purchase_order.organization_id = $2
+            FOR UPDATE OF purchase_order, item
           `,
-          [input.itemTypeId, input.organizationId]
+          [input.purchaseOrderId, input.organizationId]
         )
-        if (!item.rows[0]) throw new Error("Store item type was not found.")
+        if (!order.rows[0]) throw new Error("Purchase Order was not found.")
+        if (order.rows[0].status === "Cancelled") {
+          throw new Error("A cancelled Purchase Order cannot be received.")
+        }
+        const remainingQuantity =
+          Number(order.rows[0].ordered_quantity) -
+          Number(order.rows[0].received_quantity)
+        if (quantity > remainingQuantity) {
+          throw new Error(
+            `Receipt quantity exceeds the remaining Purchase Order quantity of ${remainingQuantity}.`
+          )
+        }
         if (
-          item.rows[0].tracking_mode === "SERIALIZED" &&
+          order.rows[0].tracking_mode === "SERIALIZED" &&
           !Number.isInteger(quantity)
         ) {
-          throw new Error("Serialized asset quantity must be a whole number.")
+          throw new Error("Non Consumable quantity must be a whole number.")
         }
         const receiptNumber = await nextDocumentNumber(client, {
           counterKey: "RECEIPT",
@@ -712,16 +899,17 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         const receipt = await client.query<{ id: string }>(
           `
             INSERT INTO store.receipts (
-              organization_id, receipt_number, location_id, supplier_id,
-              bill_number, bill_date, received_by, created_by_user_id
-            ) VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::date, $7, $8)
+              organization_id, receipt_number, purchase_order_id, location_id,
+              supplier_id, bill_number, bill_date, received_by, created_by_user_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::date, $8, $9)
             RETURNING id
           `,
           [
             input.organizationId,
             receiptNumber,
+            input.purchaseOrderId,
             input.locationId,
-            input.supplierId ?? null,
+            order.rows[0].supplier_id,
             input.billNumber?.trim() || null,
             input.billDate ?? null,
             input.receivedBy?.trim() || null,
@@ -739,9 +927,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           [
             input.organizationId,
             receipt.rows[0]!.id,
-            input.itemTypeId,
+            order.rows[0].item_type_id,
             quantity,
-            input.unitPrice,
+            order.rows[0].unit_price,
             input.warrantyUntil ?? null,
           ]
         )
@@ -761,30 +949,28 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             ]
           )
         }
-        if (input.supplierId) {
-          await client.query(
-            `
-              INSERT INTO store.supplier_prices (
-                organization_id, item_type_id, supplier_id, unit_price,
-                valid_from, quote_reference, created_by_user_id
-              ) VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5, '')::date, current_date), $6, $7)
-            `,
-            [
-              input.organizationId,
-              input.itemTypeId,
-              input.supplierId,
-              input.unitPrice,
-              input.billDate ?? null,
-              input.billNumber?.trim() || null,
-              input.actorUserId ?? null,
-            ]
-          )
-        }
+        await client.query(
+          `
+            INSERT INTO store.supplier_prices (
+              organization_id, item_type_id, supplier_id, unit_price,
+              valid_from, quote_reference, created_by_user_id
+            ) VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5, '')::date, current_date), $6, $7)
+          `,
+          [
+            input.organizationId,
+            order.rows[0].item_type_id,
+            order.rows[0].supplier_id,
+            order.rows[0].unit_price,
+            input.billDate ?? null,
+            input.billNumber?.trim() || order.rows[0].order_number,
+            input.actorUserId ?? null,
+          ]
+        )
         const assetCodes: string[] = []
-        if (item.rows[0].tracking_mode === "SERIALIZED") {
+        if (order.rows[0].tracking_mode === "SERIALIZED") {
           for (let index = 0; index < quantity; index += 1) {
-            const number = item.rows[0].next_asset_number + index
-            const assetCode = `${item.rows[0].type_code}-${String(number).padStart(5, "0")}`
+            const number = order.rows[0].next_asset_number + index
+            const assetCode = `${order.rows[0].type_code}-${String(number).padStart(5, "0")}`
             const asset = await client.query<{ id: string }>(
               `
                 INSERT INTO store.assets (
@@ -798,10 +984,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               `,
               [
                 input.organizationId,
-                input.itemTypeId,
+                order.rows[0].item_type_id,
                 line.rows[0]!.id,
                 assetCode,
-                item.rows[0].identification_name,
+                order.rows[0].identification_name,
                 input.manufacturerSerialNumbers?.[index]?.trim() || null,
                 input.locationId,
                 input.warrantyUntil ?? null,
@@ -822,7 +1008,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               `,
               [
                 input.organizationId,
-                input.itemTypeId,
+                order.rows[0].item_type_id,
                 asset.rows[0]!.id,
                 input.locationId,
                 line.rows[0]!.id,
@@ -835,7 +1021,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             `UPDATE store.item_types
              SET next_asset_number = next_asset_number + $1, updated_at = now()
              WHERE id = $2`,
-            [quantity, input.itemTypeId]
+            [quantity, order.rows[0].item_type_id]
           )
         } else {
           await client.query(
@@ -849,7 +1035,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             `,
             [
               input.organizationId,
-              input.itemTypeId,
+              order.rows[0].item_type_id,
               input.locationId,
               line.rows[0]!.id,
               quantity,
@@ -876,6 +1062,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             ]
           )
         }
+        await client.query(
+          `
+            UPDATE store.purchase_orders
+            SET received_quantity = received_quantity + $1,
+              status = CASE
+                WHEN received_quantity + $1 = ordered_quantity THEN 'Received'
+                ELSE 'Partially Received'
+              END,
+              updated_at = now(), updated_by_user_id = $2
+            WHERE id = $3
+          `,
+          [quantity, input.actorUserId ?? null, input.purchaseOrderId]
+        )
         return { assetCodes, receiptNumber }
       })
     },
@@ -1213,14 +1412,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         identificationName: string
         locationName: string | null
         manufacturerSerialNumber: string | null
+        orderNumber: string | null
         status: string
         subcategory: string
+        supplierName: string | null
         typeCode: string
+        unitPrice: string | null
         warrantyUntil: string | null
       }>(
         `
           SELECT asset.id, asset.asset_code AS "assetCode",
-            item.type_code AS "typeCode", item.asset_type AS "assetType",
+            item.type_code AS "typeCode",
+            CASE WHEN item.tracking_mode = 'SERIALIZED'
+              THEN 'NON_CONSUMABLE' ELSE 'CONSUMABLE' END AS "assetType",
             item.asset_category AS category,
             item.asset_subcategory AS subcategory,
             item.asset_name AS "assetName",
@@ -1231,10 +1435,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             asset.current_holder_name AS "holderName",
             location.name AS "locationName",
             asset.warranty_until::text AS "warrantyUntil",
-            asset.acquired_on::text AS "acquiredOn"
+            asset.acquired_on::text AS "acquiredOn",
+            purchase_order.order_number AS "orderNumber",
+            supplier.name AS "supplierName",
+            receipt_line.unit_price::text AS "unitPrice"
           FROM store.assets asset
           JOIN store.item_types item ON item.id = asset.item_type_id
           LEFT JOIN store.locations location ON location.id = asset.current_location_id
+          LEFT JOIN store.receipt_lines receipt_line
+            ON receipt_line.id = asset.receipt_line_id
+          LEFT JOIN store.receipts receipt ON receipt.id = receipt_line.receipt_id
+          LEFT JOIN store.purchase_orders purchase_order
+            ON purchase_order.id = receipt.purchase_order_id
+          LEFT JOIN store.suppliers supplier ON supplier.id = receipt.supplier_id
           WHERE asset.organization_id = $1 AND lower(asset.asset_code) = lower($2)
         `,
         [input.organizationId, requiredText(input.assetCode, "Asset code")]
@@ -1330,24 +1543,46 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         `,
         [input.organizationId, asset.rows[0].id]
       )
+      const supplierPrices = await pool.query<{
+        quoteReference: string | null
+        supplierName: string
+        unitPrice: string
+        validFrom: string
+      }>(
+        `
+          SELECT supplier.name AS "supplierName",
+            price.unit_price::text AS "unitPrice",
+            price.valid_from::text AS "validFrom",
+            price.quote_reference AS "quoteReference"
+          FROM store.supplier_prices price
+          JOIN store.suppliers supplier ON supplier.id = price.supplier_id
+          JOIN store.assets linked_asset ON linked_asset.item_type_id = price.item_type_id
+          WHERE price.organization_id = $1 AND linked_asset.id = $2
+          ORDER BY price.valid_from DESC, price.created_at DESC
+          LIMIT 100
+        `,
+        [input.organizationId, asset.rows[0].id]
+      )
       return {
         asset: asset.rows[0],
         documents: documents.rows,
         maintenance: maintenance.rows,
         movements: movements.rows,
         schedules: schedules.rows,
+        supplierPrices: supplierPrices.rows,
       }
     },
 
     async moveAsset(input: {
       actorUserId?: string | null
       assetCode: string
-      holderName: string
-      holderReference: string
+      holderName?: string | null
+      holderReference?: string | null
       holderType: StoreHolderType
       movedBy?: string | null
       organizationId: string
       remark?: string | null
+      vendorId?: string | null
     }) {
       return withTransaction(pool, async (client) => {
         const asset = await client.query<{
@@ -1380,6 +1615,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 input.holderReference
               )
             : null
+        const destinationVendor =
+          input.holderType === "VENDOR"
+            ? await client.query<{ code: string; id: string; name: string }>(
+                `
+                  SELECT id, code, name FROM store.vendors
+                  WHERE organization_id = $1 AND id = $2 AND active
+                `,
+                [input.organizationId, input.vendorId ?? null]
+              )
+            : null
+        if (input.holderType === "VENDOR" && !destinationVendor?.rows[0]) {
+          throw new Error("Select a Vendor from Vendor Master.")
+        }
         const destinationStore =
           input.holderType === "STORE"
             ? await client.query<{ code: string; id: string; name: string }>(
@@ -1405,9 +1653,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           fallbackLocation.rows[0]?.id
         if (!locationId) throw new Error("A Store location is required.")
         const destinationReference =
+          destinationVendor?.rows[0]?.code ??
           destinationStore?.rows[0]?.code ??
           requiredText(input.holderReference, "Holder reference")
         const destinationName =
+          destinationVendor?.rows[0]?.name ??
           destinationStore?.rows[0]?.name ??
           requiredText(input.holderName, "Holder name")
         await client.query(
@@ -1415,9 +1665,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             UPDATE store.assets SET status = $1,
               current_holder_type = $2, current_holder_reference = $3,
               current_holder_name = $4, current_machine_id = $5,
-              current_location_id = $6, updated_at = now(),
-              updated_by_user_id = $7
-            WHERE id = $8
+              current_vendor_id = $6, current_location_id = $7,
+              updated_at = now(), updated_by_user_id = $8
+            WHERE id = $9
           `,
           [
             input.holderType === "STORE" ? "AVAILABLE" : "ASSIGNED",
@@ -1425,6 +1675,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             destinationReference,
             destinationName,
             machineId,
+            destinationVendor?.rows[0]?.id ?? null,
             destinationStore?.rows[0]?.id ?? null,
             input.actorUserId ?? null,
             asset.rows[0].id,

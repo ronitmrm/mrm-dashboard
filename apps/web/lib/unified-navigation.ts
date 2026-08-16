@@ -441,14 +441,24 @@ export const storeNavigation = [
     label: "Requests & Issues",
   },
   {
-    href: "/store/items",
+    href: "/store/orders",
+    icon: ShoppingCart,
+    label: "Orders & Receipts",
+  },
+  {
+    href: "/store/stock",
     icon: Boxes,
-    label: "Items & Receipts",
+    label: "Stock",
   },
   {
     href: "/store/assets",
     icon: Wrench,
     label: "Asset Master",
+  },
+  {
+    href: "/store/masters",
+    icon: Database,
+    label: "Store Masters",
   },
 ] as const
 

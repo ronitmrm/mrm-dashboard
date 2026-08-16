@@ -136,8 +136,10 @@ describe("unified navigation", () => {
       [
         { href: "/store", label: "Store Overview" },
         { href: "/store/requests", label: "Requests & Issues" },
-        { href: "/store/items", label: "Items & Receipts" },
+        { href: "/store/orders", label: "Orders & Receipts" },
+        { href: "/store/stock", label: "Stock" },
         { href: "/store/assets", label: "Asset Master" },
+        { href: "/store/masters", label: "Store Masters" },
       ]
     )
     expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([

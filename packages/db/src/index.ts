@@ -49,6 +49,7 @@ export { createDashboardReadModelRepository } from "./dashboard-read-model-repos
 export { createMaintenanceRepository } from "./maintenance"
 export {
   createStoreRepository,
+  type StoreAssetType,
   type StoreHolderType,
   type StoreTrackingMode,
 } from "./store"

@@ -63,7 +63,7 @@ export default async function StoreOverviewPage() {
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline">
-            <Link href="/store/items">Receive Stock</Link>
+            <Link href="/store/orders">Orders & Receipts</Link>
           </Button>
           <Button asChild>
             <Link href="/store/requests">New Request</Link>
@@ -140,7 +140,7 @@ export default async function StoreOverviewPage() {
             <Attention
               label="Low Stock Items"
               value={lowStock.length}
-              href="/store/items"
+              href="/store/stock"
             />
             <Attention
               label="Pending Code Requests"
