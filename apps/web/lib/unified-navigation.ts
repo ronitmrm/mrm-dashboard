@@ -332,6 +332,10 @@ export const productionFloorNavigation = dashboardNavigation.filter(
     item.id !== planningHolidayNavigation.id &&
     !universalProductionNavigationIds.has(item.id) &&
     !consolidatedProductionNavigationIds.has(item.id)
+).sort(
+  (left, right) =>
+    Number(right.id === "masterGapsTab") -
+    Number(left.id === "masterGapsTab")
 )
 
 export const commercialNavigation = [
