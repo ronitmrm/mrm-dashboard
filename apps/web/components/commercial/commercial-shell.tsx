@@ -67,7 +67,9 @@ export function CommercialShell({
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const productionPage = productionPageNavigation[pathname]
+  const productionPage = pathname.startsWith("/dashboard/job-cards/")
+    ? { label: "Job Card", parentTab: "jobCardStatusTab" as const }
+    : productionPageNavigation[pathname]
   const requestedReturnTab = searchParams.get("returnTab")
   const activeDashboardTab = dashboardNavigation.some(
     (item) => item.id === requestedReturnTab

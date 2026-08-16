@@ -1,0 +1,82 @@
+"use client"
+
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
+import { Button } from "@workspace/ui/components/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card"
+import { Input } from "@workspace/ui/components/input"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table"
+import { ExternalLink, Search } from "lucide-react"
+import Link from "next/link"
+import { useMemo, useState } from "react"
+
+import { jobCardWorkspaceHref } from "@/lib/unified-navigation"
+
+type Row = Record<string, unknown>
+const text = (value: unknown) => String(value ?? "").trim()
+const first = (row: Row, keys: string[]) => keys.map((key) => text(row[key])).find(Boolean) ?? "-"
+
+export function JobCardRegister({
+  actionNeededCount,
+  floor,
+  onOpenMasterReadiness,
+  rows,
+}: {
+  actionNeededCount: number
+  floor: ProductionFloorCode
+  onOpenMasterReadiness: () => void
+  rows: Row[]
+}) {
+  const [query, setQuery] = useState("")
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return rows.filter((row) => !needle || [
+      first(row, ["jcNo", "JobCardNo", "jobCard"]),
+      first(row, ["partCode", "itemCode", "PART CODE"]),
+      first(row, ["fgPoNo", "FG PO NO."]),
+      first(row, ["description", "DESCRIPTION"]),
+      first(row, ["routeStatus", "optionNumber", "selectedOption"]),
+    ].some((value) => value.toLowerCase().includes(needle)))
+  }, [query, rows])
+
+  return (
+    <Card>
+      <CardHeader className="gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>Job Card Register</CardTitle>
+            <CardDescription>One row per Job Card. Open a Job Card for masters, history and analytics.</CardDescription>
+          </div>
+          {actionNeededCount ? <Button variant="outline" onClick={onOpenMasterReadiness}>{actionNeededCount} need master action</Button> : null}
+        </div>
+        <div className="relative max-w-xl">
+          <Search className="absolute left-3 top-3 size-4 text-muted-foreground" />
+          <Input className="h-10 pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Job Card, part, PO or route" />
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="max-h-[70vh] overflow-auto rounded-md border">
+          <Table excelFilters>
+            <TableHeader className="sticky top-0 z-10 bg-background"><TableRow>
+              <TableHead>Job Card</TableHead><TableHead>Part</TableHead><TableHead>Description</TableHead><TableHead>FG PO</TableHead><TableHead className="text-right">Order Qty</TableHead><TableHead>RM</TableHead><TableHead>Route</TableHead><TableHead>Status</TableHead><TableHead />
+            </TableRow></TableHeader>
+            <TableBody>{visible.length ? visible.map((row) => {
+              const jobCard = first(row, ["jcNo", "JobCardNo", "jobCard"])
+              const href = jobCardWorkspaceHref(jobCard, floor)
+              return <TableRow key={jobCard}>
+                <TableCell><Link className="font-semibold text-primary hover:underline" href={href}>{jobCard}</Link></TableCell>
+                <TableCell>{first(row, ["partCode", "itemCode", "PART CODE"])}</TableCell>
+                <TableCell className="max-w-72 truncate">{first(row, ["description", "DESCRIPTION"])}</TableCell>
+                <TableCell>{first(row, ["fgPoNo", "FG PO NO."])}</TableCell>
+                <TableCell className="text-right tabular-nums">{first(row, ["orderPcs", "orderedQty", "ORD. PCS."])}</TableCell>
+                <TableCell>{first(row, ["rmStatus"])}</TableCell>
+                <TableCell>{first(row, ["optionNumber", "selectedOption", "routeStatus"])}</TableCell>
+                <TableCell>{first(row, ["dispatchStatus", "status", "trackingState", "productionStatus"])}</TableCell>
+                <TableCell><Button asChild size="sm" variant="outline"><Link href={href}>Open <ExternalLink /></Link></Button></TableCell>
+              </TableRow>
+            }) : <TableRow><TableCell colSpan={9} className="py-10 text-center text-muted-foreground">No Job Cards match this search.</TableCell></TableRow>}</TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}

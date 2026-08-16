@@ -69,6 +69,15 @@ export function dashboardTabHref(
   return `/?${params.toString()}`
 }
 
+export function jobCardWorkspaceHref(
+  jobCardNumber: string,
+  productionFloorCode: ProductionFloorCode
+) {
+  return `/dashboard/job-cards/${encodeURIComponent(jobCardNumber)}?${new URLSearchParams({
+    floor: productionFloorCode,
+  }).toString()}`
+}
+
 export function dashboardNavigationDestination(
   tab: DashboardTabId,
   productionFloorCode: ProductionFloorCode

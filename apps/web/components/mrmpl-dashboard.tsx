@@ -134,6 +134,7 @@ import {
 } from "@/lib/shop-floor-optimistic";
 import { useTheme } from "@/components/theme-provider";
 import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation";
+import { JobCardRegister } from "@/components/job-card-register";
 import { authClient } from "@/lib/auth/auth-client";
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access";
 import {
@@ -141,6 +142,7 @@ import {
   dashboardTabHref,
   dashboardNavigationDestination,
   type DashboardTabId,
+  jobCardWorkspaceHref,
 } from "@/lib/unified-navigation";
 import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text";
 
@@ -1735,7 +1737,7 @@ function DashboardContent({
   }
 
   if (activeTab === "jobCardStatusTab") {
-    return <JobCardsPanel productionControl={productionControl} submitAction={submitAction} openMasterReadiness={openMasterReadiness} />;
+    return <JobCardsPanel productionControl={productionControl} productionFloorCode={productionFloorCode} submitAction={submitAction} openMasterReadiness={openMasterReadiness} />;
   }
 
   if (activeTab === "machineDetailTab") {
@@ -1916,7 +1918,7 @@ function ProductionDashboardPanel({
                     <TableCell>
                       <Link
                         className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline"
-                        href={`${dashboardTabHref("jobCardStatusTab", normalizeProductionFloorCode(row.productionFloorCode))}&jcNo=${encodeURIComponent(displayValue(row.jcNo))}`}
+                        href={jobCardWorkspaceHref(displayValue(row.jcNo), normalizeProductionFloorCode(row.productionFloorCode))}
                         title={`Open Job Card ${displayValue(row.jcNo)}`}
                       >
                         {displayValue(row.jcNo)}
@@ -3911,21 +3913,22 @@ function RouteChangePlannerForm({
 
 function JobCardsPanel({
   productionControl,
+  productionFloorCode,
   submitAction,
   openMasterReadiness,
 }: {
   productionControl: DashboardPayload;
+  productionFloorCode: ProductionFloorCode;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   openMasterReadiness: () => void;
 }) {
   return (
     <section className="grid gap-4">
-      <JobCardTileBoard
+      <JobCardRegister
         rows={asArray(productionControl.jobCardStatusTiles)}
-        plannedRows={asArray(productionControl.machinePlanDetailRows)}
-        machineRows={asArray(productionControl.machinePlanningRows)}
+        floor={productionFloorCode}
         actionNeededCount={asArray(productionControl.allWorkOrderGaps).length}
-        openMasterReadiness={openMasterReadiness}
+        onOpenMasterReadiness={openMasterReadiness}
       />
       <Card>
         <CardHeader>
