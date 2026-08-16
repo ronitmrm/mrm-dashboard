@@ -16,6 +16,7 @@ Every Job Card has one dedicated workspace URL. The workspace reads, but does no
 - its selected Route and Setup masters;
 - Cycle, Tooling and Quality Parameter masters for each selected setup;
 - current planner dates and machine assignments;
+- durable Planner Movement Records for machine shifts, machine constraints, priority interruptions, and queue changes, including their Production Session settlement evidence;
 - Production Sessions, downtime and rejection;
 - setup-progress, historical Production Card and dispatch events.
 

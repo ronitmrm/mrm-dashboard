@@ -3,12 +3,65 @@ import { describe, expect, it } from "vitest"
 import {
   buildDeliveryPerformance,
   buildJobCardAnalytics,
+  buildPlannerMovementRecord,
   buildMaterialYield,
   buildSetupTiming,
   normalizeDeliveryTargets,
 } from "./job-card-workspace"
 
 describe("job card workspace", () => {
+  it("builds a durable machine-shift record from planner and session evidence", () => {
+    expect(buildPlannerMovementRecord({
+      actionType: "machine_shift",
+      activeSessionReference: null,
+      decisionId: "override-1",
+      downtimeOpen: false,
+      eventTime: "2026-08-16T11:15:00.000Z",
+      fromMachineNumber: "ADD501",
+      reason: "Machine breakdown",
+      recordedByName: "Production Planner",
+      sessionReferences: ["ADD501-20260816-01"],
+      settledAt: "2026-08-16T10:30:00.000Z",
+      settledGoodPieces: "14000",
+      setupNumber: "1",
+      toMachineNumber: "ADD502",
+    })).toEqual({
+      actionLabel: "Machine shifted",
+      actionType: "machine_shift",
+      activeSessionReference: null,
+      decisionId: "override-1",
+      downtimeOpen: false,
+      eventTime: "2026-08-16T11:15:00.000Z",
+      fromMachineNumber: "ADD501",
+      reason: "Machine breakdown",
+      recordedByName: "Production Planner",
+      sessionReferences: ["ADD501-20260816-01"],
+      settledAt: "2026-08-16T10:30:00.000Z",
+      settledGoodPieces: 14_000,
+      setupNumber: "1",
+      toMachineNumber: "ADD502",
+    })
+  })
+
+  it("keeps same-machine delay evidence separate from closed-session output", () => {
+    expect(buildPlannerMovementRecord({
+      actionType: "machine_delayed",
+      activeSessionReference: "ADD501-20260816-02",
+      decisionId: "constraint-1",
+      downtimeOpen: true,
+      eventTime: "2026-08-16T12:00:00.000Z",
+      fromMachineNumber: "ADD501",
+      reason: "Awaiting maintenance",
+      setupNumber: 1,
+    })).toMatchObject({
+      actionLabel: "Delayed on machine",
+      activeSessionReference: "ADD501-20260816-02",
+      downtimeOpen: true,
+      sessionReferences: [],
+      settledGoodPieces: 0,
+    })
+  })
+
   it("summarizes plan versus actual, rejection and downtime patterns", () => {
     expect(
       buildJobCardAnalytics({

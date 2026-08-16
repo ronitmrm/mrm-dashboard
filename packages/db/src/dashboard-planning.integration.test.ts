@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
 import { createDashboardPlanningRepository } from "./dashboard-planning"
 import { migrateDatabase } from "./migrate"
+import { createProductionShopFloorRepository } from "./production-shop-floor"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -12,6 +13,7 @@ const connectionString =
 
 const pool = new Pool({ connectionString })
 const repository = createDashboardPlanningRepository({ connectionString })
+const jobCards = createProductionShopFloorRepository({ connectionString })
 let organizationId: string
 let itemId: string
 const suffix = randomUUID().slice(0, 8)
@@ -58,6 +60,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await jobCards.close()
   await repository.close()
   await pool.end()
 })
@@ -705,9 +708,15 @@ describe("dashboard planning writes", () => {
       rescheduleAction: "shift_required",
       unavailableFrom: "2026-08-16T16:00:00+05:30",
     })
-    const saved = await pool.query<{ finished_quantity: string }>(
+    const saved = await pool.query<{
+      finished_quantity: string
+      session_references: string[]
+      settled_at: string
+    }>(
       `
-        SELECT detail.evidence->>'finishedQuantity' AS finished_quantity
+        SELECT detail.evidence->>'finishedQuantity' AS finished_quantity,
+          detail.evidence->'sessionReferences' AS session_references,
+          detail.evidence->>'settledAt' AS settled_at
         FROM manufacturing.machine_constraint_event_details detail
         JOIN manufacturing.machine_constraint_events event
           ON event.id = detail.machine_constraint_event_id
@@ -717,7 +726,35 @@ describe("dashboard planning writes", () => {
       `,
       [organizationId]
     )
-    expect(saved.rows).toEqual([{ finished_quantity: "40" }])
+    expect(saved.rows).toEqual([{
+      finished_quantity: "40",
+      session_references: [sessionReference],
+      settled_at: "2026-08-16T10:30:00.000Z",
+    }])
+
+    await repository.recordPlanOverride({
+      fromMachineNumber: firstMachine,
+      jobCardNumber: firstJobCard,
+      organizationId,
+      reason: "Shift after machine breakdown",
+      setupNumber: 1,
+      toMachineNumber: secondMachine,
+    })
+    const workspace = await jobCards.readJobCardWorkspace({
+      jobCardNumber: firstJobCard,
+      organizationId,
+      productionFloorCode: "conventional",
+    })
+    expect(workspace.plannerMovements).toContainEqual(expect.objectContaining({
+      actionLabel: "Machine shifted",
+      actionType: "machine_shift",
+      fromMachineNumber: firstMachine,
+      reason: "Shift after machine breakdown",
+      sessionReferences: [sessionReference],
+      settledGoodPieces: 40,
+      setupNumber: "1",
+      toMachineNumber: secondMachine,
+    }))
   })
 
   test("rejects a plan override while the target physical machine is locked by another active setup", async () => {

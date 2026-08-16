@@ -68,6 +68,10 @@ _Avoid_: Machine-wide permanent counting method.
 The required Production Session action before a planner decision interrupts running work. Moving or stopping work requires the matching session to be closed through its Weight or Machine Counter method; delaying it on the same machine requires an open downtime event. Planner Actions read the canonical session output and never ask for a separate produced quantity.
 _Avoid_: Planner finished quantity, duplicate production actual.
 
+**Planner Movement Record**:
+A durable Job Card history entry created when a planner decision moves, stops, reprioritizes, or requeues a setup. It identifies the decision, affected setup, source and destination machines where applicable, reason, planner, time, and the Production Session references and canonical good output used to settle interrupted work.
+_Avoid_: Current machine assignment as history, free-text machine-shift note, duplicate output entry.
+
 **Machine Counter Continuity**:
 The previous closed CNC Production Session's end count becomes the next session's start count only when the physical machine, Job Card, Part Code, option, and setup all remain the same and both sessions use Machine Counter.
 _Avoid_: Carrying a counter across a job/setup change, retyping an eligible carried count.
