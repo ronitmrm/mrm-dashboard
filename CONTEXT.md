@@ -93,12 +93,12 @@ The permanent traceability view for one Job Card. It combines the Work Order, se
 _Avoid_: Job Card tile, filtered Job Cards list, duplicate history store.
 
 **Job Card Analytics**:
-The calculated comparison of ordered quantity and planned dates against actual good/total output, rejection, runtime, and downtime patterns for one Job Card. It is derived from current planning and canonical event records.
+The calculated comparison of ordered quantity and planned dates against finished output from the selected route's final setup, setup-level operation output, rejection, runtime, and downtime patterns for one Job Card. It is derived from current planning and canonical event records.
 _Avoid_: OEE, manually entered summary, machine-wide analytics.
 
 **Job Card Production Progress**:
-The percentage of ordered pieces completed as good pieces: good produced divided by ordered quantity, capped at 100%. Rejections, downtime, setup completion, and elapsed stages explain performance but never increase progress.
-_Avoid_: Task-count progress, total-produced progress.
+The percentage of ordered pieces completed as finished good pieces: good output from the selected route's final setup divided by ordered quantity, capped at 100%. Output from earlier setups is WIP and never increases finished Job Card progress.
+_Avoid_: Task-count progress, total operation-output progress, counting the same pieces once per setup.
 
 **Job Card Delivery Target**:
 The working-day limit after full Raw Material receipt. Product Master provides the default and the Job Card may override it; Fridays and Planning Calendar holidays are excluded. A/B/C/D ratings mean on time, 1–2, 3–5, or more than 5 working days late.

@@ -2030,13 +2030,19 @@ export function createProductionShopFloorRepository(options: RepositoryPoolOptio
             reasonName: String(row.reasonName ?? ""),
             setupNumber: String(row.setupNumber ?? ""),
           })),
+        finalSetupNumber: setupsResult.rows.length
+          ? String(setupsResult.rows.at(-1)?.setupNumber ?? "") || null
+          : null,
+        firstSetupNumber: setupsResult.rows.length
+          ? String(setupsResult.rows[0]?.setupNumber ?? "") || null
+          : null,
         orderedQuantity: Number(jobCard.orderedQuantity ?? 0),
         planRows: standardizedPlans,
         sessions: [...sessionRows, ...legacySessionRows],
       })
       const materialYield = buildMaterialYield({
         actualGoodPieces: analyticsSummary.actualGoodPieces,
-        actualProducedPieces: analyticsSummary.actualProducedPieces,
+        actualProducedPieces: analyticsSummary.materialOutputPieces,
         orderedQuantity: Number(jobCard.orderedQuantity ?? 0),
         piecesPerKg: Number(jobCard.piecesPerKg ?? 0),
         receivedKg: material.receivedKg,

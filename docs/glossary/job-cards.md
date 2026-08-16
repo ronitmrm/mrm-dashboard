@@ -22,8 +22,8 @@ records.
 ## Analytics
 
 - Plan: ordered quantity and current planned production dates.
-- Actual: total pieces, good pieces, rejected pieces, runtime and downtime. It includes Production Sessions plus older production entries that are not already linked to a Session, preventing double counting.
-- Completion percent: good pieces divided by ordered quantity.
+- Actual: finished total/good pieces from the selected route's final setup, plus setup-level operation output, rejected pieces, runtime and downtime. It includes Production Sessions plus older production entries that are not already linked to a Session, preventing duplicate records.
+- Completion percent: final-setup good pieces divided by ordered quantity. Earlier setup output is WIP and is not counted as finished pieces.
 - Rejection percent: rejected pieces divided by total produced pieces.
 - Downtime pattern: minutes and occurrences grouped by coded reason and setup.
 
@@ -42,7 +42,7 @@ Missing timestamps remain unknown and are never treated as zero minutes.
 
 - Expected pieces from material: received kilograms multiplied by Product Master pieces/kg.
 - Remaining material equivalent: remaining kilograms multiplied by pieces/kg.
-- Unexplained process loss: expected pieces minus remaining-material equivalent minus total produced pieces.
+- Unexplained process loss: expected pieces minus remaining-material equivalent minus first-setup output pieces. Later setup output is not subtracted again because it is the same material moving through the route.
 - Order short: ordered pieces minus good produced pieces.
 
 These values are estimates until remaining RM is maintained accurately.

@@ -12,6 +12,8 @@ describe("job card workspace", () => {
   it("summarizes plan versus actual, rejection and downtime patterns", () => {
     expect(
       buildJobCardAnalytics({
+        finalSetupNumber: "2",
+        firstSetupNumber: "1",
         orderedQuantity: 1_000,
         planRows: [
           {
@@ -54,9 +56,9 @@ describe("job card workspace", () => {
         ],
       })
     ).toMatchObject({
-      actualGoodPieces: 580,
-      actualProducedPieces: 600,
-      completionPercent: 58,
+      actualGoodPieces: 200,
+      actualProducedPieces: 200,
+      completionPercent: 20,
       downtimeMinutes: 90,
       plannedEndDate: "2026-08-14",
       plannedStartDate: "2026-08-10",
@@ -64,6 +66,9 @@ describe("job card workspace", () => {
       rejectionPercent: 3.33,
       runtimeMinutes: 900,
       sessionCount: 2,
+      operationGoodPieces: 580,
+      operationProducedPieces: 600,
+      materialOutputPieces: 400,
       downtimeByReason: [
         { code: "D01", minutes: 60, name: "Breakdown", occurrences: 2 },
         { code: "D02", minutes: 30, name: "Power", occurrences: 1 },
@@ -76,6 +81,34 @@ describe("job card workspace", () => {
         { actualGoodPieces: 380, completionPercent: 38, setupNumber: "1" },
         { actualGoodPieces: 200, completionPercent: 20, setupNumber: "2" },
       ],
+    })
+  })
+
+  it("does not count earlier setup output as finished pieces", () => {
+    expect(buildJobCardAnalytics({
+      downtimeEvents: [],
+      finalSetupNumber: "3",
+      firstSetupNumber: "1",
+      orderedQuantity: 10_000,
+      planRows: [
+        { setupNumber: "1" },
+        { setupNumber: "2" },
+        { setupNumber: "3" },
+      ],
+      sessions: [{
+        goodPieces: 8_441,
+        rejectedPieces: 0,
+        setupNumber: "1",
+        totalPieces: 8_441,
+      }],
+    })).toMatchObject({
+      actualGoodPieces: 0,
+      actualProducedPieces: 0,
+      completionPercent: 0,
+      finalSetupNumber: "3",
+      operationGoodPieces: 8_441,
+      operationProducedPieces: 8_441,
+      materialOutputPieces: 8_441,
     })
   })
 
@@ -105,9 +138,11 @@ describe("job card workspace", () => {
   it("caps production progress at 100 percent", () => {
     expect(buildJobCardAnalytics({
       downtimeEvents: [],
+      finalSetupNumber: "1",
+      firstSetupNumber: "1",
       orderedQuantity: 100,
       planRows: [],
-      sessions: [{ goodPieces: 120, totalPieces: 120 }],
+      sessions: [{ goodPieces: 120, setupNumber: "1", totalPieces: 120 }],
     }).completionPercent).toBe(100)
   })
 
