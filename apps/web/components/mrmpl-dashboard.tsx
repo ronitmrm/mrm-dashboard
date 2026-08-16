@@ -139,6 +139,7 @@ import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-acce
 import {
   dashboardNavigation as navItems,
   dashboardTabHref,
+  dashboardNavigationDestination,
   type DashboardTabId,
 } from "@/lib/unified-navigation";
 import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text";
@@ -1335,13 +1336,17 @@ function DashboardShell({
     tab: DashboardTabId,
     productionFloorCode: ProductionFloorCode,
   ) {
-    if (tab === "machineMasterTab" || tab === "maintenanceTab" || tab === "correctionsTab" || tab === "productionDashboardTab") {
-      setActiveTab(tab);
-      window.history.replaceState({}, "", dashboardTabHref(tab));
+    const destination = dashboardNavigationDestination(
+      tab,
+      productionFloorCode,
+    );
+    if (destination.interaction === "route") {
+      window.location.assign(destination.href);
       return;
     }
-    if (tab === "firstPieceInspectionTab") {
-      window.location.assign(`/dashboard/first-piece-inspection?${new URLSearchParams({ floor: productionFloorCode }).toString()}`);
+    if (tab === "machineMasterTab" || tab === "maintenanceTab" || tab === "correctionsTab" || tab === "productionDashboardTab") {
+      setActiveTab(tab);
+      window.history.replaceState({}, "", destination.href);
       return;
     }
     if (productionFloorCode !== activeProductionFloor) {
@@ -1352,7 +1357,7 @@ function DashboardShell({
     window.history.replaceState(
       {},
       "",
-      dashboardTabHref(tab, productionFloorCode),
+      destination.href,
     );
   }
 

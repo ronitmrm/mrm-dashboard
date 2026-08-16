@@ -69,6 +69,41 @@ export function dashboardTabHref(
   return `/?${params.toString()}`
 }
 
+export function dashboardNavigationDestination(
+  tab: DashboardTabId,
+  productionFloorCode: ProductionFloorCode
+): { href: string; interaction: "dashboard" | "route" } {
+  if (tab === "productionSessionsTab") {
+    return {
+      href: `/dashboard/production-sessions?${new URLSearchParams({
+        floor: productionFloorCode,
+      }).toString()}`,
+      interaction: "route",
+    }
+  }
+  if (tab === "firstPieceInspectionTab") {
+    return {
+      href: `/dashboard/first-piece-inspection?${new URLSearchParams({
+        floor: productionFloorCode,
+      }).toString()}`,
+      interaction: "route",
+    }
+  }
+  const isCompanyWide = [
+    "machineMasterTab",
+    "maintenanceTab",
+    "correctionsTab",
+    "productionDashboardTab",
+  ].includes(tab)
+  return {
+    href: dashboardTabHref(
+      tab,
+      isCompanyWide ? undefined : productionFloorCode
+    ),
+    interaction: "dashboard",
+  }
+}
+
 export function navigationHrefMatches(
   pathname: string,
   searchParams: Pick<URLSearchParams, "get">,
