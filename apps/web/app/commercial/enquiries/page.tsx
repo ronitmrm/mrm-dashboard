@@ -35,6 +35,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
 
@@ -70,7 +71,7 @@ export default async function EnquiriesPage({
       }
     })()
   const enquiries = enquiryResult.rows
-  const today = new Date().toISOString().slice(0, 10)
+  const today = istDateValue()
 
   return (
     <div className="grid gap-6">

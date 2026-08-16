@@ -16,6 +16,7 @@ import { parseEmployeeAssignmentWorkbook } from "@/app/hr/employee-assignment-wo
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { hrReturnPath } from "@/lib/hr-return-path"
+import { istDateTimeInputToIso } from "@/lib/date-time"
 
 const hrPath = "/hr"
 
@@ -33,7 +34,9 @@ function values(formData: FormData, key: string) {
 function interviewAtValue(formData: FormData) {
   const date = value(formData, "interview_date")
   const time = value(formData, "interview_time")
-  return date && time ? `${date}T${time}` : value(formData, "interview_at")
+  return date && time
+    ? istDateTimeInputToIso(`${date}T${time}`)
+    : value(formData, "interview_at")
 }
 
 async function mutate(

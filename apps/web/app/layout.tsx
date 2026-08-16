@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={cn("antialiased", "font-sans")}>
+    <html lang="en-GB" suppressHydrationWarning className={cn("antialiased", "font-sans")}>
       <body className={cn("min-h-svh antialiased")}>
         <ThemeProvider>
           <SoftwareProcessingProvider>{children}</SoftwareProcessingProvider>

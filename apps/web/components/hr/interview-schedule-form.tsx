@@ -157,12 +157,16 @@ function ScheduleFields({
         />
       </Field>
       <Field>
-        <FieldLabel htmlFor="schedule-interview-time">Interview Time</FieldLabel>
+        <FieldLabel htmlFor="schedule-interview-time">Interview Time (IST)</FieldLabel>
         <Input
           id="schedule-interview-time"
+          inputMode="numeric"
           name="interview_time"
+          pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
+          placeholder="HH:mm"
           required
-          type="time"
+          title="Use 24-hour IST time as HH:mm"
+          type="text"
         />
       </Field>
       <Button

@@ -13,6 +13,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { dashboardTabHref } from "@/lib/unified-navigation"
+import { formatIstDate, formatIstDateTime } from "@/lib/date-time"
 
 type Row = Record<string, unknown>
 type Workspace = {
@@ -56,11 +57,7 @@ const piecesEstimate = (input: unknown) => input === null || input === undefined
   ? "Master value required"
   : `${quantity(input)} pcs`
 const date = (input: unknown, includeTime = false) => {
-  const parsed = new Date(text(input))
-  if (Number.isNaN(parsed.getTime())) return "-"
-  return new Intl.DateTimeFormat("en-IN", includeTime
-    ? { dateStyle: "medium", timeStyle: "short" }
-    : { dateStyle: "medium" }).format(parsed)
+  return includeTime ? formatIstDateTime(text(input)) : formatIstDate(text(input))
 }
 
 async function loadWorkspace(jobCardNumber: string, floor: ProductionFloorCode) {

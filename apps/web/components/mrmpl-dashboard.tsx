@@ -84,6 +84,7 @@ import {
   universalProductionDashboardRows,
   type ProductionFloorCode,
 } from "@/lib/dashboard-view-model";
+import { formatIstDateTime, formatIstTime, istDateValue } from "@/lib/date-time";
 import {
   checklistWorkspaceEntryTypes,
   companyWideQualityMasterEntryTypes,
@@ -716,7 +717,7 @@ function HourlyQualityCheckShell({
     `/api/hourly-quality?floor=${encodeURIComponent(productionFloorCode)}`,
   );
   const hourlyQualityPageData = hourlyQualityPage.data;
-  const [prodDate, setProdDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [prodDate, setProdDate] = useState(() => istDateValue());
   const [shift, setShift] = useState("Day");
   const [hourSlot, setHourSlot] = useState(() => currentHourSlot());
   const [selectedKey, setSelectedKey] = useState("");
@@ -5116,7 +5117,7 @@ function ProductionCardRoleEntryForm({
   type EntryKind = "session" | "downtime" | "rejection" | "close";
   const floor = productionFloorFromLocation();
   const isCnc = floor === "cnc";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istDateValue();
   const [entryKind, setEntryKind] = useState<EntryKind>(role === "machinist" ? "downtime" : role === "quality" ? (isCnc ? "close" : "downtime") : "session");
   const [selectedKey, setSelectedKey] = useState("");
   const [prodDate, setProdDate] = useState(today);
@@ -5547,7 +5548,7 @@ export function LegacyProductionCardRoleEntryForm({
   rejectionRemarkRows?: DashboardPayload[];
   onSaveProductionCard: (row: DashboardPayload, card: DashboardPayload) => Promise<void>;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istDateValue();
   const [selectedKey, setSelectedKey] = useState("");
   const [prodDate, setProdDate] = useState(today);
   const [shift, setShift] = useState("Day");
@@ -6993,7 +6994,7 @@ function downloadMasterTableCsv(spec: DataEntrySpec, rows: DashboardPayload[], c
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${safeExportFileName(spec.title)}-${new Date().toISOString().slice(0, 10)}-${scope}.csv`;
+  anchor.download = `${safeExportFileName(spec.title)}-${istDateValue()}-${scope}.csv`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -9362,13 +9363,8 @@ function DashboardSkeleton() {
   );
 }
 
-function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+function formatDate(value: Date | string) {
+  return formatIstDateTime(value);
 }
 
 function asRecord(value: unknown): DashboardPayload {
@@ -9400,7 +9396,7 @@ function displayValue(value: unknown, numeric = false) {
 }
 
 function nextPlanningHolidayLabel(rows: DashboardPayload[]) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istDateValue();
   const next = rows
     .map((row) => ({
       label: displayValue(row.date),
@@ -10280,7 +10276,7 @@ function hourSlotOptions() {
 }
 
 function currentHourSlot() {
-  const hour = new Date().getHours();
+  const hour = Number(formatIstTime(new Date()).slice(0, 2));
   return `${String(hour).padStart(2, "0")}:00-${String((hour + 1) % 24).padStart(2, "0")}:00`;
 }
 
@@ -11137,15 +11133,13 @@ function maintenanceStatusRank(status: unknown) {
 }
 
 function todayIsoDate() {
-  const now = new Date();
-  const offsetMs = now.getTimezoneOffset() * 60000;
-  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
+  return istDateValue();
 }
 
 function addIsoDays(date: string, days: number) {
-  const parsed = new Date(`${date}T00:00:00`);
+  const parsed = new Date(`${date}T00:00:00.000Z`);
   if (Number.isNaN(parsed.getTime())) return "";
-  parsed.setDate(parsed.getDate() + days);
+  parsed.setUTCDate(parsed.getUTCDate() + days);
   return parsed.toISOString().slice(0, 10);
 }
 
@@ -11155,7 +11149,7 @@ function isoDateValue(value: unknown) {
   const isoMatch = text.match(/^\d{4}-\d{2}-\d{2}/);
   if (isoMatch) return isoMatch[0];
   const parsed = new Date(text);
-  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+  return Number.isNaN(parsed.getTime()) ? "" : istDateValue(parsed);
 }
 function omitRecordKey<T>(record: Record<string, T>, key: string) {
   if (!(key in record)) return record;
@@ -11438,7 +11432,7 @@ function setupChecklistMasterDefaults() {
     inputType: "checkbox",
     required: "Yes",
     section: "Pre setting",
-    effectiveFrom: new Date().toISOString().slice(0, 10),
+    effectiveFrom: istDateValue(),
     status: "Active",
   };
 }

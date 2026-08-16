@@ -1,3 +1,5 @@
+import { istDateTimeInputValue } from "./date-time"
+
 export type ProductionSessionRow = Record<string, unknown>
 
 export type ProductionSessionMachineOption = {
@@ -90,9 +92,7 @@ export function productionSessionActionDefaults(
     }
   }
 
-  const localNow = new Date(instant.getTime() - instant.getTimezoneOffset() * 60_000)
-    .toISOString()
-    .slice(0, 16)
+  const localNow = istDateTimeInputValue(instant)
   return { endAt: localNow, endReason: "shift_end" as const, startAt: localNow }
 }
 

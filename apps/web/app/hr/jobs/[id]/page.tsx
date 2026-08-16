@@ -31,6 +31,7 @@ import { InterviewOutcomeForm } from "@/components/hr/interview-outcome-form"
 import { JobInterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { CandidateApplicationActions } from "@/components/hr/candidate-application-actions"
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { formatIstDateTime as formatDateTime } from "@/lib/date-time"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -52,19 +53,6 @@ function StatusBadge({ status }: { status: string }) {
           ? "secondary"
           : "outline"
   return <Badge variant={variant}>{status}</Badge>
-}
-
-function formatDateTime(value: string | null) {
-  return value
-    ? new Date(value).toLocaleString("en-GB", {
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        month: "2-digit",
-        timeZone: "Asia/Kolkata",
-        year: "numeric",
-      })
-    : "—"
 }
 
 function formatInterviewScore(score: number | null) {
