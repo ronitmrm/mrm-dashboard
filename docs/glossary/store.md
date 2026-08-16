@@ -52,7 +52,9 @@ Store Item Type, and agreed unit price.
 **Store Request**: One department requisition for one Store Item Type and one
 Store location. It receives an immutable number such as
 `STR-REQ-2026-000001` and progresses through Pending, Partially Issued,
-Fulfilled, or Cancelled.
+Fulfilled, or Cancelled. An open request may start a Purchase Order with its
+Store Item Type and remaining quantity prefilled; Supplier and agreed price
+must still be selected before the order is saved.
 
 **Current Available Stock**: A live derived value, never a request snapshot.
 For Consumables it is the signed movement-ledger balance at the requested
