@@ -31,6 +31,9 @@ describe("dashboard route policy", () => {
     expect(dashboardMutationCapabilities("data-import")).toContain(
       "quality.hourly.write"
     )
+    expect(dashboardMutationCapabilities("job-card-delivery-target")).toEqual([
+      "planning.override.write",
+    ])
     expect(dashboardMutationCapabilities("unknown")).toBeUndefined()
   })
 
