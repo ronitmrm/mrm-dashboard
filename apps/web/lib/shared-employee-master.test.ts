@@ -24,6 +24,7 @@ function post(
     employeeCode: null,
     employeeName: null,
     isPrimaryCombinedPost: false,
+    joiningConfirmationDue: false,
     joiningDate: null,
     lastWorkingDate: null,
     postCode: `POST-${values.id}`,

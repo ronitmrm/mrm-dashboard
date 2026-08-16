@@ -82,6 +82,7 @@ export type RecruitmentPostRow = {
   employeeName: string | null
   id: string
   isPrimaryCombinedPost: boolean
+  joiningConfirmationDue: boolean
   joiningDate: string | null
   lastWorkingDate: string | null
   postCode: string
@@ -612,7 +613,8 @@ async function assignEmployeeInTransaction(
       SET employee_name = $1, employee_code = $2,
         status = $3, last_working_date = migration.try_date($4),
         joining_date = CASE
-          WHEN $3 = 'Appointed' THEN migration.try_date($5)
+          WHEN $3 = 'Appointed' THEN
+            COALESCE(migration.try_date($5), joining_date)
           WHEN $3 = 'Occupied' THEN
             COALESCE(migration.try_date($5), joining_date)
           ELSE NULL
@@ -1125,6 +1127,10 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
         employeeName: row.employee_name,
         id: row.id,
         isPrimaryCombinedPost: row.is_primary_combined_post,
+        joiningConfirmationDue:
+          row.status === "Appointed" &&
+          Boolean(row.joining_date) &&
+          row.joining_date! <= row.current_date,
         joiningDate: row.joining_date,
         lastWorkingDate: row.last_working_date,
         postCode: row.post_code,

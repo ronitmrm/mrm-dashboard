@@ -424,7 +424,7 @@ export function ApprovedPostsTable({
                   <TableHead>Designation</TableHead>
                   <TableHead>Template</TableHead>
                   <TableHead>Employee Name</TableHead>
-                  <TableHead>Employee Code</TableHead>
+                  <TableHead>Employee ID</TableHead>
                   <TableHead>Joining Date</TableHead>
                   <TableHead>Last Working Date</TableHead>
                   <TableHead>Status</TableHead>
@@ -499,7 +499,9 @@ export function ApprovedPostsTable({
                                 variant="outline"
                               >
                                 <UserRoundCog data-icon="inline-start" />
-                                Employee
+                                {row.joiningConfirmationDue
+                                  ? "Confirm Joining"
+                                  : "Employee"}
                               </Button>
                             ) : null}
                             {canWrite ? (
