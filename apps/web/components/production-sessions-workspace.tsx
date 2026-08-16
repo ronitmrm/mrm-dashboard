@@ -19,6 +19,7 @@ import { useDashboardDelivery } from "@/hooks/use-dashboard-delivery"
 import { dashboardPayloadFromState, dashboardPayloadForProductionFloor } from "@/lib/dashboard-view-model"
 import { productionPieceWeightGrams } from "@/lib/production-session-entry"
 import {
+  productionSessionActionDefaults,
   productionSessionCarriedStartCount,
   productionSessionStartOptions,
   type ProductionSessionMachineOption,
@@ -38,15 +39,19 @@ const job = (row: Row) => first(row, ["jobCardNumber", "jobCard", "jcNo", "JC NO
 const part = (row: Row) => first(row, ["partCode", "partNo", "itemCode", "partUid"])
 const setup = (row: Row) => first(row, ["setupNumber", "setupNo", "operationSetupCode"])
 const option = (row: Row) => first(row, ["optionNumber", "optionNo"])
-const isoLocal = (date: Date) => {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-  return local.toISOString().slice(0, 16)
-}
 const formatDateTime = (value: unknown) => {
   const date = new Date(text(value))
   return Number.isNaN(date.getTime()) ? "-" : new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(date)
 }
 const titleCase = (value: unknown) => text(value).replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) || "-"
+const endReasons = [
+  { label: "Shift Ends", value: "shift_end" },
+  { label: "Shift Change", value: "shift_change" },
+  { label: "Operator Change", value: "operator_change" },
+  { label: "Item Complete", value: "item_complete" },
+  { label: "Job / Setup Change", value: "job_change" },
+  { label: "Manual Stop", value: "manual_stop" },
+]
 
 function masterOptions(value: unknown, labelKeys: string[]) {
   return rows(value).map((row) => ({
@@ -254,11 +259,32 @@ function EventLog({ rows }: { rows: Row[] }) {
   return <ScrollableTable headers={["Time", "Session", "Machine", "Event", "Entered by", "Details", "Qty / Min"]}>{rows.map((row, index) => <TableRow key={`${text(row.eventId)}-${index}`}><TableCell className="whitespace-nowrap text-xs">{formatDateTime(row.eventTime)}</TableCell><TableCell className="font-mono text-xs">{text(row.sessionReference)}</TableCell><TableCell>{text(row.machineNumber)}</TableCell><TableCell><Badge variant="outline">{titleCase(row.eventType)}</Badge></TableCell><TableCell>{titleCase(row.enteredRole)}<div className="text-xs text-muted-foreground">{text(row.enteredByName) || "-"}</div></TableCell><TableCell>{text(row.reasonName) || "-"}</TableCell><TableCell className="text-right tabular-nums">{number(row.quantity) || number(row.durationMinutes) || "-"}</TableCell></TableRow>)}</ScrollableTable>
 }
 
+function SessionTimeline({ rows }: { rows: Row[] }) {
+  if (!rows.length) {
+    return <div className="grid min-h-32 place-items-center rounded-md border text-muted-foreground">No session events yet.</div>
+  }
+  return <div className="min-h-0 flex-1 overflow-y-auto rounded-md border">{rows.map((row, index) => {
+    const detail = text(row.reasonName) || text(row.eventDetails) || "-"
+    const quantity = number(row.quantity) || number(row.durationMinutes)
+    return <div key={`${text(row.eventId)}-${index}`} className="grid min-w-0 gap-3 border-b p-3 last:border-b-0 sm:grid-cols-2 lg:grid-cols-[10rem_11rem_minmax(9rem,1fr)_minmax(12rem,1.4fr)_5rem] lg:items-center">
+      <div><div className="text-xs text-muted-foreground lg:hidden">Time</div><div className="whitespace-nowrap text-xs">{formatDateTime(row.eventTime)}</div></div>
+      <div><div className="text-xs text-muted-foreground lg:hidden">Event</div><Badge variant="outline">{titleCase(row.eventType)}</Badge></div>
+      <div className="min-w-0"><div className="text-xs text-muted-foreground lg:hidden">Entered by</div><div>{titleCase(row.enteredRole)}</div><div className="truncate text-xs text-muted-foreground">{text(row.enteredByName) || "-"}</div></div>
+      <div className="min-w-0"><div className="text-xs text-muted-foreground lg:hidden">Details</div><div className="break-words">{detail}</div></div>
+      <div><div className="text-xs text-muted-foreground lg:hidden">Qty / Min</div><div className="tabular-nums lg:text-right">{quantity || "-"}</div></div>
+    </div>
+  })}</div>
+}
+
 function ScrollableTable({ headers, children }: { headers: string[]; children: React.ReactNode }) {
   return <div className="max-h-[65vh] overflow-auto rounded-md border"><Table><TableHeader className="sticky top-0 z-10 bg-background"><TableRow>{headers.map((header) => <TableHead key={header}>{header}</TableHead>)}</TableRow></TableHeader><TableBody>{children}</TableBody></Table></div>
 }
 
 function ActionSheet({ action, target, floor, shift, employees, control, saving, message, onOpenChange, onSave }: { action: Action | null; target: Row | null; floor: ProductionFloorCode; shift: ReturnType<typeof productionShiftAt>; employees: Array<{ code: string; name: string }>; control: Row; saving: boolean; message: string; onOpenChange: (open: boolean) => void; onSave: (entryType: string, payload: Row) => void }) {
+  const defaults = productionSessionActionDefaults(floor, new Date(), {
+    productionDate: text(target?.productionDate),
+    shift: text(target?.shift),
+  })
   const [operator, setOperator] = useState("")
   const storedMethod = text(target?.measurementMethod)
   const [method, setMethod] = useState<"weight" | "counter">(
@@ -266,13 +292,13 @@ function ActionSheet({ action, target, floor, shift, employees, control, saving,
       ? storedMethod
       : floor === "cnc" ? "counter" : "weight"
   )
-  const [startAt, setStartAt] = useState(isoLocal(new Date()))
-  const [endAt, setEndAt] = useState(isoLocal(new Date()))
+  const [startAt, setStartAt] = useState(defaults.startAt)
+  const [endAt, setEndAt] = useState(defaults.endAt)
   const [startCount, setStartCount] = useState("")
   const [endCount, setEndCount] = useState("")
   const [grossKg, setGrossKg] = useState("")
   const [crates, setCrates] = useState("")
-  const [endReason, setEndReason] = useState("shift_change")
+  const [endReason, setEndReason] = useState<string>(defaults.endReason)
   const [role, setRole] = useState("shop_floor")
   const [reason, setReason] = useState("")
   const [typeCode, setTypeCode] = useState("")
@@ -297,7 +323,7 @@ function ActionSheet({ action, target, floor, shift, employees, control, saving,
   const valid = action === "start" ? Boolean(operator && startAt && method && pieceWeight > 0 && (method === "weight" || startCount || text(plan.carriedStartCount))) : action === "end" ? Boolean(endAt && endReason && (method === "counter" ? endCount : grossKg && crates)) : action === "downtime" ? Boolean(reason && startAt && role) : action === "rejection" ? Boolean(typeCode && reason && remark && number(quantity) > 0) : false
   return <Sheet open={Boolean(action)} onOpenChange={onOpenChange}><SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg"><SheetHeader><SheetTitle>{titleCase(action)} production session</SheetTitle><SheetDescription>{machine(target)} · {job(target)} · {part(target)} · Setup {setup(target)}</SheetDescription></SheetHeader><div className="grid gap-4 px-6">
     {action === "start" ? <><Field label="Operator"><NativeSelect value={operator} onChange={(event) => setOperator(event.target.value)}><NativeSelectOption value="">Select operator</NativeSelectOption>{employees.map((employee) => <NativeSelectOption key={employee.code} value={employee.code}>{employee.code} · {employee.name}</NativeSelectOption>)}</NativeSelect></Field><Field label="Start time"><Input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} /></Field><Field label="Production method"><NativeSelect value={method} onChange={(event) => setMethod(event.target.value as "weight" | "counter")}><NativeSelectOption value="weight">Weight at session end</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="counter">Machine counter</NativeSelectOption> : null}</NativeSelect></Field>{method === "counter" ? text(plan.carriedStartCount) ? <div className="rounded-md bg-muted p-3 text-sm">Start count carried from the previous matching session: <b>{text(plan.carriedStartCount)}</b></div> : <Field label="Machine start count"><Input inputMode="numeric" type="number" min="0" value={startCount} onChange={(event) => setStartCount(event.target.value)} /></Field> : null}<div className="rounded-md bg-muted p-3 text-sm">Shift and production date are automatic: <b>{shift?.shift ?? "Outside shift"} · {shift?.productionDate ?? "-"}</b></div></> : null}
-    {action === "end" ? <><Field label="End time"><Input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} /></Field><Field label="End reason"><NativeSelect value={endReason} onChange={(event) => setEndReason(event.target.value)}>{["shift_change","operator_change","item_complete","job_change","manual_stop"].map((value) => <NativeSelectOption key={value} value={value}>{titleCase(value)}</NativeSelectOption>)}</NativeSelect></Field><Field label="Entry role"><NativeSelect value={role} onChange={(event) => setRole(event.target.value)}><NativeSelectOption value="shop_floor">Shop Floor</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="quality">QC</NativeSelectOption> : null}</NativeSelect></Field><Field label="Production method"><NativeSelect value={method} onChange={(event) => setMethod(event.target.value as "weight" | "counter")}><NativeSelectOption value="weight">Weight</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="counter">Machine counter</NativeSelectOption> : null}</NativeSelect></Field>{method === "counter" ? <Field label="Machine end count"><Input inputMode="numeric" type="number" min="0" value={endCount} onChange={(event) => setEndCount(event.target.value)} /></Field> : <div className="grid grid-cols-2 gap-3"><Field label="Gross produced kg"><Input inputMode="decimal" type="number" min="0" step="0.001" value={grossKg} onChange={(event) => setGrossKg(event.target.value)} /></Field><Field label="Crates used"><Input inputMode="numeric" type="number" min="0" step="1" value={crates} onChange={(event) => setCrates(event.target.value)} /></Field></div>}</> : null}
+    {action === "end" ? <><Field label="End time"><Input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} /></Field><Field label="End reason"><NativeSelect value={endReason} onChange={(event) => setEndReason(event.target.value)}>{endReasons.map(({ label, value }) => <NativeSelectOption key={value} value={value}>{label}</NativeSelectOption>)}</NativeSelect></Field><Field label="Entry role"><NativeSelect value={role} onChange={(event) => setRole(event.target.value)}><NativeSelectOption value="shop_floor">Shop Floor</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="quality">QC</NativeSelectOption> : null}</NativeSelect></Field><Field label="Production method"><NativeSelect value={method} onChange={(event) => setMethod(event.target.value as "weight" | "counter")}><NativeSelectOption value="weight">Weight</NativeSelectOption>{floor === "cnc" ? <NativeSelectOption value="counter">Machine counter</NativeSelectOption> : null}</NativeSelect></Field>{method === "counter" ? <Field label="Machine end count"><Input inputMode="numeric" type="number" min="0" value={endCount} onChange={(event) => setEndCount(event.target.value)} /></Field> : <div className="grid grid-cols-2 gap-3"><Field label="Gross produced kg"><Input inputMode="decimal" type="number" min="0" step="0.001" value={grossKg} onChange={(event) => setGrossKg(event.target.value)} /></Field><Field label="Crates used"><Input inputMode="numeric" type="number" min="0" step="1" value={crates} onChange={(event) => setCrates(event.target.value)} /></Field></div>}</> : null}
     {action === "downtime" ? <><Field label="Entered by"><NativeSelect value={role} onChange={(event) => setRole(event.target.value)}><NativeSelectOption value="shop_floor">Shop Floor</NativeSelectOption><NativeSelectOption value="machinist">Machinist</NativeSelectOption><NativeSelectOption value="quality">QC</NativeSelectOption></NativeSelect></Field><Field label="Downtime reason"><MasterSelect value={reason} options={reasonOptions} onChange={setReason} placeholder="Select downtime reason" /></Field><Field label="Downtime starts"><Input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} /></Field><p className="text-sm text-muted-foreground">Use Resume on the machine card when production restarts.</p></> : null}
     {action === "rejection" ? <><Field label="Rejection type"><MasterSelect value={typeCode} options={typeOptions} onChange={setTypeCode} placeholder="Select rejection type" /></Field><Field label="Rejection reason"><MasterSelect value={reason} options={reasonOptions} onChange={setReason} placeholder="Select rejection reason" /></Field><Field label="Rejection remark"><MasterSelect value={remark} options={remarkOptions} onChange={setRemark} placeholder="Select remark" /></Field><Field label="Rejected pieces"><Input inputMode="numeric" type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></Field><p className="text-sm text-muted-foreground">Counter difference includes rejected pieces. Good pieces are calculated automatically.</p></> : null}
     {message ? <div className="rounded-md border p-3 text-sm">{message}</div> : null}
@@ -309,5 +335,5 @@ function MasterSelect({ value, options, onChange, placeholder }: { value: string
 
 function DetailSheet({ session, events, onOpenChange }: { session: Row | null; events: Row[]; onOpenChange: (open: boolean) => void }) {
   if (!session) return null
-  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl"><SheetHeader><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="grid gap-4 px-6 pb-6"><div className="grid grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-4">{[["Status",titleCase(session.status)],["Operator",`${text(session.operatorCode)} ${text(session.operatorName)}`],["Started",formatDateTime(session.startedAt)],["Ended",text(session.endedAt) ? formatDateTime(session.endedAt) : "Running"],["Total",number(session.totalPieces)],["Rejected",number(session.rejectedPieces)],["Good",number(session.goodPieces)],["Downtime",`${number(session.downtimeMinutes)} min`]].map(([label,value]) => <div key={String(label)}><div className="text-xs text-muted-foreground">{label}</div><div className="font-medium">{value}</div></div>)}</div><div><h3 className="mb-2 font-medium">Session timeline</h3><EventLog rows={events} /></div></div></SheetContent></Sheet>
+  return <Sheet open onOpenChange={onOpenChange}><SheetContent side="right" className="h-full w-full gap-0 overflow-hidden sm:max-w-4xl xl:max-w-5xl"><SheetHeader className="shrink-0 border-b"><SheetTitle>{text(session.sessionReference) || "Production session"}</SheetTitle><SheetDescription>{machine(session)} · {job(session)} · {part(session)} · Setup {setup(session)}</SheetDescription></SheetHeader><div className="flex min-h-0 flex-1 flex-col gap-4 p-6"><div className="grid shrink-0 grid-cols-2 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-4">{[["Status",titleCase(session.status)],["Operator",`${text(session.operatorCode)} ${text(session.operatorName)}`],["Started",formatDateTime(session.startedAt)],["Ended",text(session.endedAt) ? formatDateTime(session.endedAt) : "Running"],["Total",number(session.totalPieces)],["Rejected",number(session.rejectedPieces)],["Good",number(session.goodPieces)],["Downtime",`${number(session.downtimeMinutes)} min`]].map(([label,value]) => <div className="min-w-0" key={String(label)}><div className="text-xs text-muted-foreground">{label}</div><div className="truncate font-medium">{value}</div></div>)}</div><div className="flex min-h-0 flex-1 flex-col"><h3 className="mb-2 shrink-0 font-medium">Session timeline</h3><SessionTimeline rows={events} /></div></div></SheetContent></Sheet>
 }
