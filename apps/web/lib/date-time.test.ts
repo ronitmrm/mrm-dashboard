@@ -5,6 +5,7 @@ import {
   formatIstDateTime,
   formatIstTime,
   istDateTimeInputToIso,
+  istDateTimeInputParts,
   istDateTimeInputValue,
   istDateValue,
 } from "./date-time"
@@ -26,5 +27,12 @@ describe("IST date and time display", () => {
     expect(istDateTimeInputToIso("2026-08-17T01:30")).toBe(
       "2026-08-16T20:00:00.000Z"
     )
+  })
+
+  it("exposes a native-date value and an explicit 24-hour time value", () => {
+    expect(istDateTimeInputParts("2026-08-16T08:30")).toEqual({
+      date: "2026-08-16",
+      time: "08:30",
+    })
   })
 })
