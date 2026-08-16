@@ -7,6 +7,16 @@ import {
 } from "./production-session-start"
 
 describe("production session action defaults", () => {
+  it("prefills a new downtime start with the current IST time", () => {
+    expect(
+      productionSessionActionDefaults(
+        "conventional",
+        new Date("2026-08-16T10:30:00.000Z"),
+        { action: "downtime" }
+      ).startAt
+    ).toBe("2026-08-16T16:00")
+  })
+
   it("prefills the Conventional shift start, shift end, and close reason", () => {
     expect(
       productionSessionActionDefaults(

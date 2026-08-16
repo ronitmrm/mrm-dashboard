@@ -368,6 +368,7 @@ function ScrollableTable({ headers, children }: { headers: string[]; children: R
 
 function ActionSheet({ action, target, floor, shift, employees, control, saving, message, onOpenChange, onSave }: { action: Action | null; target: Row | null; floor: ProductionFloorCode; shift: ReturnType<typeof productionShiftAt>; employees: Array<{ code: string; name: string }>; control: Row; saving: boolean; message: string; onOpenChange: (open: boolean) => void; onSave: (entryType: string, payload: Row) => void }) {
   const defaults = productionSessionActionDefaults(floor, new Date(), {
+    action: action === "downtime" ? "downtime" : undefined,
     productionDate: text(target?.productionDate),
     shift: text(target?.shift),
   })
