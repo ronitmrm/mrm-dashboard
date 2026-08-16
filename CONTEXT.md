@@ -152,6 +152,10 @@ _Avoid_: Production-floor-specific Corrections, deleting wrong entries.
 The shared Rejection Type, Defect / Downtime Reason, and Rejection Remark code lists used by every Production Floor. Their codes are system-generated and CSV uploads cannot replace the established sequence. These codes are not copied or customized per Production Floor.
 _Avoid_: Production-floor rejection codes, department-specific defect reasons.
 
+**CSV Import Deduplication**:
+The import rule that keeps the first exact business row, skips later copies in the same file, and reuses the existing database identity when the same data is uploaded again. Real differences such as setup number, checklist sequence, quantity, date, or machine keep rows distinct. Historical duplicates are not deleted automatically.
+_Avoid_: Deleting legitimate repeated operations, creating another record on repeat upload.
+
 **Priority Plan Scenario**:
 The setup-by-setup decision flow shown before saving a planner priority change. It opens one setup at a time; downstream setup dates are hidden until the previous setup action is confirmed.
 _Avoid_: Single probable date.

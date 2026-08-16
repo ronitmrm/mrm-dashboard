@@ -2,10 +2,60 @@ import { describe, expect, test, vi } from "vitest"
 
 import {
   autoCodedMasterTemplateFields,
+  csvImportRowSourceId,
+  dedupeCsvImportRows,
   importAutoCodedMasterRows,
 } from "./auto-coded-master-import"
 
 describe("auto-coded master CSV imports", () => {
+  test("removes repeated CSV entries without collapsing distinct business rows", () => {
+    expect(
+      dedupeCsvImportRows("route", [
+        { optionNumber: 1, partNo: "P1", setupNo: 1 },
+        { setupNo: 1, partNo: "P1", optionNumber: 1 },
+        { optionNumber: 1, partNo: "P1", setupNo: 2 },
+      ])
+    ).toEqual({
+      duplicateCount: 1,
+      rows: [
+        { optionNumber: 1, partNo: "P1", setupNo: 1 },
+        { optionNumber: 1, partNo: "P1", setupNo: 2 },
+      ],
+    })
+
+    expect(
+      dedupeCsvImportRows("rejection_type_master", [
+        { code: "R1", typeOfRejection: "Crack" },
+        { code: "CUSTOM-99", typeOfRejection: "Crack" },
+      ])
+    ).toEqual({
+      duplicateCount: 1,
+      rows: [{ code: "R1", typeOfRejection: "Crack" }],
+    })
+  })
+
+  test("gives repeat production CSV rows a stable persistence identity", () => {
+    const first = csvImportRowSourceId("software_raw", {
+      jobCard: "JC-1",
+      outputQty: 10,
+      prodDate: "2026-08-16",
+    })
+    expect(
+      csvImportRowSourceId("software_raw", {
+        prodDate: "2026-08-16",
+        jobCard: "JC-1",
+        outputQty: 10,
+      })
+    ).toBe(first)
+    expect(
+      csvImportRowSourceId("software_raw", {
+        jobCard: "JC-1",
+        outputQty: 11,
+        prodDate: "2026-08-16",
+      })
+    ).not.toBe(first)
+  })
+
   test("keeps codes system-generated while preserving checklist row groups", async () => {
     expect(
       autoCodedMasterTemplateFields("rejection_type_master", [

@@ -41,6 +41,16 @@ function normalizedKey(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "")
 }
 
+function uniqueRows<T>(rows: T[], identity: (row: T) => string) {
+  const seen = new Set<string>()
+  return rows.filter((row) => {
+    const key = identity(row)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 function canonicalHeader(value: string) {
   const normalized = normalizedKey(value)
   return headers.find((header) =>
@@ -78,7 +88,7 @@ export function parseEnquiryImportFile(buffer: Buffer, fileName: string) {
   const inputHeaders = rows[0]!.map((value) =>
     canonicalHeader(String(value ?? "").trim())
   )
-  return rows
+  const parsedRows = rows
     .slice(1)
     .map((values, index) => {
       const rawValues = Object.fromEntries(
@@ -99,6 +109,7 @@ export function parseEnquiryImportFile(buffer: Buffer, fileName: string) {
     .filter((row) =>
       Object.values(row.rawValues).some((value) => value.length > 0)
     )
+  return uniqueRows(parsedRows, (row) => JSON.stringify(row.rawValues))
 }
 
 const registerAliases = {
@@ -123,7 +134,7 @@ export function parseEnquiryRegisterFile(buffer: Buffer, fileName: string) {
     )
     return index < 0 ? "" : String(values[index] ?? "").trim()
   }
-  return rows
+  const parsedRows = rows
     .slice(1)
     .map((values, index) => ({
       buyerName: valueFor(values, registerAliases.buyerName),
@@ -140,6 +151,13 @@ export function parseEnquiryRegisterFile(buffer: Buffer, fileName: string) {
         ([key, value]) => key !== "rowNumber" && String(value).length > 0
       )
     )
+  return uniqueRows(parsedRows, (row) =>
+    JSON.stringify(
+      Object.fromEntries(
+        Object.entries(row).filter(([key]) => key !== "rowNumber")
+      )
+    )
+  )
 }
 
 export function buildEnquiryLinesTemplate() {

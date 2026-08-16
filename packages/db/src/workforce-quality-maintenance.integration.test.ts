@@ -541,6 +541,92 @@ describe("workforce, quality, and maintenance workflows", () => {
     expect(rows.rows[0]?.count).toBe("3")
   })
 
+  test("reuses generated codes for repeated CSV master entries", async () => {
+    const typeName = `CSV rejection ${suffix}`
+    const legacyType = await quality.upsertRejectionType({
+      code: `R-${suffix}`,
+      name: typeName,
+      organizationId,
+      payload: { code: `R-${suffix}`, typeOfRejection: typeName },
+    })
+    const firstType = await quality.upsertRejectionType({
+      code: "",
+      name: typeName,
+      organizationId,
+      payload: { typeOfRejection: typeName },
+    })
+    const repeatedType = await quality.upsertRejectionType({
+      code: "",
+      name: typeName,
+      organizationId,
+      payload: { typeOfRejection: typeName },
+    })
+
+    const setupTitle = `CSV setup ${suffix}`
+    const firstSetup = await quality.upsertSetupChecklistTemplate({
+      code: "",
+      items: [{
+        inputType: "checkbox",
+        itemKey: "1|Drawing",
+        prompt: "Drawing",
+        required: true,
+        sequence: 1,
+      }],
+      name: setupTitle,
+      organizationId,
+      payload: { checklistTitle: setupTitle },
+      revision: 1,
+    })
+    const repeatedSetup = await quality.upsertSetupChecklistTemplate({
+      code: "",
+      items: [{
+        inputType: "checkbox",
+        itemKey: "2|Tooling",
+        prompt: "Tooling",
+        required: true,
+        sequence: 2,
+      }],
+      name: setupTitle,
+      organizationId,
+      payload: { checklistTitle: setupTitle },
+      revision: 1,
+    })
+
+    const maintenanceTitle = `CSV maintenance ${suffix}`
+    const firstMaintenance = await maintenance.upsertChecklistItem({
+      checklistCode: "",
+      checklistTitle: maintenanceTitle,
+      item: {
+        inputType: "checkbox",
+        itemKey: "1",
+        prompt: "Clean",
+        required: true,
+        sequence: 1,
+      },
+      organizationId,
+      payload: { checklistTitle: maintenanceTitle },
+    })
+    const repeatedMaintenance = await maintenance.upsertChecklistItem({
+      checklistCode: "",
+      checklistTitle: maintenanceTitle,
+      item: {
+        inputType: "checkbox",
+        itemKey: "2",
+        prompt: "Lubricate",
+        required: true,
+        sequence: 2,
+      },
+      organizationId,
+      payload: { checklistTitle: maintenanceTitle },
+    })
+
+    expect(firstType.code).not.toBe(legacyType.code)
+    expect(firstType.code).toMatch(/^RT\d+$/)
+    expect(repeatedType).toEqual(firstType)
+    expect(repeatedSetup).toEqual(firstSetup)
+    expect(repeatedMaintenance.code).toBe(firstMaintenance.code)
+  })
+
   test("ties planned and breakdown maintenance history to physical machines and checklist results", async () => {
     const definition = await maintenance.upsertDefinition({
       checklistCode: `MAINT-${suffix}`,
