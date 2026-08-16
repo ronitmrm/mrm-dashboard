@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  deriveRecruitmentEmployeeAssignment,
   deriveRecruitmentPostStatus,
   listRecruitableApprovedPosts,
   resolveRecruitmentEmployeeAssignmentTarget,
@@ -20,15 +21,35 @@ describe("deriveRecruitmentPostStatus", () => {
     ).toBe("Appointed")
   })
 
-  test("marks an appointment occupied on and after the joining date", () => {
+  test("keeps an appointment appointed after the planned joining date", () => {
     expect(
       deriveRecruitmentPostStatus({
-        currentDate: "2026-08-11",
+        currentDate: "2026-08-12",
         employeeName: "Candidate One",
         joiningDate: "2026-08-11",
         storedStatus: "Appointed",
       })
-    ).toBe("Occupied")
+    ).toBe("Appointed")
+  })
+
+  test("does not show a name-only assignment as occupied", () => {
+    expect(
+      deriveRecruitmentPostStatus({
+        employeeName: "Candidate One",
+        storedStatus: "Occupied",
+      })
+    ).toBe("Appointed")
+  })
+})
+
+describe("deriveRecruitmentEmployeeAssignment", () => {
+  test("rejects joining a candidate without an employee ID", () => {
+    expect(() =>
+      deriveRecruitmentEmployeeAssignment({
+        currentEmployeeName: "Candidate One",
+        employeeEvent: "Joined",
+      })
+    ).toThrow("Employee ID is required before the candidate can join.")
   })
 })
 

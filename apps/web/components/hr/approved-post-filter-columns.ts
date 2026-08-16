@@ -20,7 +20,7 @@ export const APPROVED_POST_FILTER_COLUMNS: ReadonlyArray<{
   { key: "designation", label: "Designation" },
   { key: "template", label: "Template" },
   { key: "employeeName", label: "Employee Name" },
-  { key: "employeeCode", label: "Employee Code" },
+  { key: "employeeCode", label: "Employee ID" },
   { key: "joiningDate", label: "Joining Date" },
   { key: "lastWorkingDate", label: "Last Working Date" },
   { key: "status", label: "Status" },

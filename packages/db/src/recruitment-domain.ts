@@ -20,32 +20,19 @@ export function isActiveRecruitmentApplicationStatus(status: string) {
 }
 
 export function deriveRecruitmentPostStatus(input: {
+  currentDate?: string | null
   employeeCode?: string | null
   employeeName?: string | null
   joiningDate?: string | null
   storedStatus?: string | null
-  currentDate?: string | null
 }) {
   if (input.storedStatus === "Inactive") return "Inactive"
   if (!optionalText(input.employeeName) && !optionalText(input.employeeCode)) {
     return "Vacant"
   }
-  if (
-    input.storedStatus === "Appointed" &&
-    optionalText(input.joiningDate) &&
-    optionalText(input.currentDate) &&
-    input.joiningDate! <= input.currentDate!
-  ) {
-    return "Occupied"
-  }
-  if (
-    input.storedStatus === "Appointed" ||
-    input.storedStatus === "Occupied" ||
-    input.storedStatus === "Resigned"
-  ) {
-    return input.storedStatus
-  }
-  return "Occupied"
+  if (input.storedStatus === "Appointed") return "Appointed"
+  if (input.storedStatus === "Resigned") return "Resigned"
+  return optionalText(input.employeeCode) ? "Occupied" : "Appointed"
 }
 
 export function recruitmentPostDeletionBlocker(input: {
@@ -87,6 +74,9 @@ export function deriveRecruitmentEmployeeAssignment(input: {
     optionalText(input.employeeCode) ?? optionalText(input.currentEmployeeCode)
   const employeeName =
     optionalText(input.employeeName) ?? optionalText(input.currentEmployeeName)
+  if (event === "Joined" && !employeeCode) {
+    throw new Error("Employee ID is required before the candidate can join.")
+  }
   if (!employeeCode && !employeeName) {
     throw new Error("Employee name or employee code is required.")
   }

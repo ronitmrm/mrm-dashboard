@@ -25,7 +25,7 @@ type AssignmentTarget = {
 }
 
 function initialEmploymentEvent(status?: string) {
-  if (status === "Appointed") return "Joined"
+  if (status === "Appointed") return ""
   if (status === "Resigned") return "Resigned"
   if (status === "Occupied") return ""
   return "Appointed"
@@ -88,9 +88,16 @@ export function SingleEmployeeAssignmentFields({
     initialEmploymentEvent(initialTarget?.post.status)
   )
   const selected = targets.find(({ post }) => post.id === postId)
-  const occupied = Boolean(
+  const assigned = Boolean(
     selected?.post.employeeName || selected?.post.employeeCode
   )
+  const appointed = selected?.post.status === "Appointed"
+  const awaitingJoiningConfirmation = Boolean(
+    appointed && selected?.post.joiningConfirmationDue
+  )
+  const employeeIdentityLocked =
+    selected?.post.status === "Occupied" ||
+    selected?.post.status === "Resigned"
 
   function selectTarget(nextPostId: string) {
     const next = targets.find(({ post }) => post.id === nextPostId)
@@ -168,27 +175,37 @@ export function SingleEmployeeAssignmentFields({
           id="employee-name"
           name="employee_name"
           onChange={(change) => setEmployeeName(change.target.value)}
-          readOnly={occupied}
+          readOnly={assigned}
           value={employeeName}
         />
       </Field>
       <Field className="w-full min-w-0">
-        <FieldLabel htmlFor="employee-code">Employee Code</FieldLabel>
+        <FieldLabel htmlFor="employee-code">Employee ID</FieldLabel>
         <Input
           id="employee-code"
           name="employee_code"
           onChange={(change) => setEmployeeCode(change.target.value)}
-          readOnly={occupied}
+          readOnly={employeeIdentityLocked}
+          required={event === "Joined"}
           value={employeeCode}
         />
-        {occupied ? (
+        {event === "Joined" && !employeeCode.trim() ? (
+          <FieldDescription>
+            Employee ID Is Required Before The Candidate Can Join And The Post
+            Can Become Occupied.
+          </FieldDescription>
+        ) : employeeIdentityLocked ? (
           <FieldDescription>
             Employee Details Stay Locked Until This Post Is Vacated.
           </FieldDescription>
         ) : null}
       </Field>
       <Field className="w-full min-w-0">
-        <FieldLabel htmlFor="employee-event">Employment Event</FieldLabel>
+        <FieldLabel htmlFor="employee-event">
+          {awaitingJoiningConfirmation
+            ? "Has The Candidate Actually Joined?"
+            : "Employment Event"}
+        </FieldLabel>
         <NativeSelect
           className="w-full"
           id="employee-event"
@@ -197,18 +214,41 @@ export function SingleEmployeeAssignmentFields({
           required
           value={event}
         >
-          <NativeSelectOption value="">Select Action</NativeSelectOption>
-          <NativeSelectOption value="Appointed">
-            Appointed — Not Joined
-          </NativeSelectOption>
-          <NativeSelectOption value="Joined">
-            Joined — Becomes Occupied
-          </NativeSelectOption>
-          <NativeSelectOption value="Resigned">Resigned</NativeSelectOption>
-          <NativeSelectOption value="Removed">
-            Remove Assignment — Becomes Vacant
-          </NativeSelectOption>
+          {awaitingJoiningConfirmation ? (
+            <>
+              <NativeSelectOption value="">Select Yes Or No</NativeSelectOption>
+              <NativeSelectOption value="Joined">
+                Yes — Candidate Joined
+              </NativeSelectOption>
+              <NativeSelectOption value="Appointed">
+                No — Keep As Appointed
+              </NativeSelectOption>
+              <NativeSelectOption value="Removed">
+                Remove Appointment — Becomes Vacant
+              </NativeSelectOption>
+            </>
+          ) : (
+            <>
+              <NativeSelectOption value="">Select Action</NativeSelectOption>
+              <NativeSelectOption value="Appointed">
+                Appointed — Not Joined
+              </NativeSelectOption>
+              <NativeSelectOption value="Joined">
+                Joined — Becomes Occupied
+              </NativeSelectOption>
+              <NativeSelectOption value="Resigned">Resigned</NativeSelectOption>
+              <NativeSelectOption value="Removed">
+                Remove Assignment — Becomes Vacant
+              </NativeSelectOption>
+            </>
+          )}
         </NativeSelect>
+        {appointed && selected.post.joiningDate ? (
+          <FieldDescription>
+            Planned Joining Date: {selected.post.joiningDate}. The Post Stays
+            Appointed Until Actual Joining Is Confirmed With An Employee ID.
+          </FieldDescription>
+        ) : null}
       </Field>
       {event === "Resigned" ? (
         <Field className="w-full min-w-0">
