@@ -8,6 +8,8 @@ import {
   Calculator,
   ChevronRight,
   Factory,
+  Database,
+  ListChecks,
   Search,
   X,
 } from "lucide-react"
@@ -36,15 +38,14 @@ import {
 import { Input } from "@workspace/ui/components/input"
 
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
+import { masterDataFallbackLinks } from "@/lib/master-data-navigation"
 import {
   administrationNavigation,
   commercialNavigation,
   consolidatedProductionNavigation,
-  dashboardTabHref,
   dashboardNavigationDestination,
   hrNavigation,
   navigationHrefMatches,
-  planningHolidayNavigation,
   productionFloorNavigation,
   storeNavigation,
   universalProductionNavigation,
@@ -162,7 +163,6 @@ export function UnifiedSidebarNavigation({
 }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const PlanningHolidayIcon = planningHolidayNavigation.icon
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [menuSearch, setMenuSearch] = useState("")
   const storedSections = useSyncExternalStore(
@@ -214,14 +214,6 @@ export function UnifiedSidebarNavigation({
         }))
         .filter(({ items }) => items.length)
     : []
-  const planningHolidayMatchesSearch =
-    navigationAccess.operations &&
-    (!normalizedMenuSearch ||
-      [
-        planningHolidayNavigation.title,
-        planningHolidayNavigation.subtitle,
-        "holiday calendar",
-      ].some((value) => value.toLowerCase().includes(normalizedMenuSearch)))
   const filteredUniversalProductionNavigation = navigationAccess.operations
     ? filterProductionItems(
         [...universalProductionNavigation, ...consolidatedProductionNavigation],
@@ -233,6 +225,12 @@ export function UnifiedSidebarNavigation({
     navigationAccess.administration &&
     (!normalizedMenuSearch ||
       "administration access".includes(normalizedMenuSearch))
+  const fallbackMasterDataLinks = masterDataFallbackLinks(navigationAccess).filter(
+    (item) =>
+      !normalizedMenuSearch ||
+      item.title.toLowerCase().includes(normalizedMenuSearch) ||
+      "company master data".includes(normalizedMenuSearch)
+  )
 
   useEffect(() => {
     function focusMenuSearch(event: KeyboardEvent) {
@@ -288,6 +286,36 @@ export function UnifiedSidebarNavigation({
           )}
         </div>
       </div>
+
+      {fallbackMasterDataLinks.length ? (
+        <SidebarGroup className="px-3 py-0.5">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {fallbackMasterDataLinks.map((item) => {
+                const Icon = item.id === "dataEntryTab" ? ListChecks : Database
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      asChild
+                      className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                      isActive={navigationHrefMatches(
+                        pathname,
+                        searchParams,
+                        item.destination
+                      )}
+                    >
+                      <a href={item.destination}>
+                        <Icon />
+                        <span>{item.title}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ) : null}
 
       {filteredHrNavigation.length ? (
         <NavigationSection
@@ -451,47 +479,6 @@ export function UnifiedSidebarNavigation({
         )
       })}
 
-      {planningHolidayMatchesSearch ? (
-        <SidebarGroup className="px-3 py-0.5">
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
-                  isActive={activeDashboardTab === planningHolidayNavigation.id}
-                >
-                  {onDashboardTabSelect ? (
-                    <button
-                      onClick={() =>
-                        onDashboardTabSelect(
-                          planningHolidayNavigation.id,
-                          activeProductionFloor
-                        )
-                      }
-                      type="button"
-                    >
-                      <PlanningHolidayIcon />
-                      <span>{planningHolidayNavigation.title}</span>
-                    </button>
-                  ) : (
-                    <a
-                      href={dashboardTabHref(
-                        planningHolidayNavigation.id,
-                        activeProductionFloor
-                      )}
-                    >
-                      <PlanningHolidayIcon />
-                      <span>{planningHolidayNavigation.title}</span>
-                    </a>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      ) : null}
-
       {filteredUniversalProductionNavigation.length ? (
         <SidebarGroup className="px-3 py-0.5">
           <SidebarGroupContent>
@@ -563,7 +550,7 @@ export function UnifiedSidebarNavigation({
       !filteredHrNavigation.length &&
       !filteredStoreNavigation.length &&
       !filteredCommercialNavigation.length &&
-      !planningHolidayMatchesSearch &&
+      !fallbackMasterDataLinks.length &&
       !filteredUniversalProductionNavigation.length &&
       !filteredProductionNavigation.length &&
       !administrationMatchesSearch ? (

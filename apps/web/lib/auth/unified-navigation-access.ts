@@ -1,6 +1,6 @@
 import { commercialNavigationAccess } from "./commercial-capabilities"
 import { listGrantedCapabilities } from "./require-capability"
-import { hrNavigation } from "../unified-navigation"
+import { hrMasterNavigation, hrNavigation } from "../unified-navigation"
 import { productionModuleIsEnabled } from "../production-module"
 
 const operationsCapability = "operations.dashboard.read"
@@ -21,7 +21,9 @@ export async function getUnifiedNavigationAccess(
     operationsCapability,
     administrationCapability,
     "store.read",
-    ...hrNavigation.map(({ requiredCapability }) => requiredCapability),
+    ...[...hrMasterNavigation, ...hrNavigation].map(
+      ({ requiredCapability }) => requiredCapability
+    ),
     ...commercialNavigationAccess.map(([, capability]) => capability),
   ]
   const grantedCapabilities = new Set(

@@ -14,6 +14,10 @@ export function hrReturnPath(formData: FormData) {
 
   const panel = formValue(formData, "panel")
   const params = new URLSearchParams({ panel: panel || "mastersPanel" })
+  const masterView = formValue(formData, "master_view")
+  if (masterView === "dataEntry" || masterView === "masterTables") {
+    params.set("masterView", masterView)
+  }
   const selectedJobId = formValue(formData, "job_id")
   if (panel === "candidateSearchPanel" && uuidPattern.test(selectedJobId)) {
     params.set("job", selectedJobId)

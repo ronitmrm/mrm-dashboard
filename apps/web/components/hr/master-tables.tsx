@@ -46,11 +46,13 @@ import {
 function MasterTable({
   canWrite,
   kind,
+  masterView,
   rows,
   title,
 }: {
   canWrite: boolean
   kind: "department" | "designation"
+  masterView?: "dataEntry" | "masterTables"
   rows: RecruitmentMasterSnapshot["departments"]
   title: string
 }) {
@@ -170,6 +172,9 @@ function MasterTable({
             </DialogHeader>
             <form action={renameDepartmentMasterAction} className="grid gap-5">
               <input name="panel" type="hidden" value="mastersPanel" />
+              {masterView ? (
+                <input name="master_view" type="hidden" value={masterView} />
+              ) : null}
               <input
                 name="department_id"
                 type="hidden"
@@ -241,9 +246,11 @@ function MasterTable({
 
 export function MasterTables({
   canWrite = false,
+  masterView,
   masters,
 }: {
   canWrite?: boolean
+  masterView?: "dataEntry" | "masterTables"
   masters: RecruitmentMasterSnapshot
 }) {
   return (
@@ -251,12 +258,14 @@ export function MasterTables({
       <MasterTable
         canWrite={canWrite}
         kind="department"
+        masterView={masterView}
         rows={masters.departments}
         title="Departments"
       />
       <MasterTable
         canWrite={canWrite}
         kind="designation"
+        masterView={masterView}
         rows={masters.designations}
         title="Designations"
       />

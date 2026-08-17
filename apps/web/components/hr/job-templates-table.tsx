@@ -62,11 +62,13 @@ const emptyFilters: Record<FilterKey, string[] | null> = {
 
 function JobTemplateEditor({
   combinedRoles,
+  masterView,
   masters,
   panelId = "postMasterPanel",
   template,
 }: {
   combinedRoles: RecruitmentCombinedRoleRow[]
+  masterView?: "dataEntry" | "masterTables"
   masters: RecruitmentMasterSnapshot
   panelId?: string
   template: RecruitmentTemplateRow
@@ -74,6 +76,9 @@ function JobTemplateEditor({
   return (
     <form action={saveTemplateAction} className="flex min-h-full flex-col">
       <input name="panel" type="hidden" value={panelId} />
+      {masterView ? (
+        <input name="master_view" type="hidden" value={masterView} />
+      ) : null}
       <input name="template_code" type="hidden" value={template.templateCode} />
       <SheetHeader>
         <SheetTitle>Edit {template.templateCode}</SheetTitle>
@@ -176,12 +181,14 @@ export function JobTemplatesTable({
   canWrite,
   combinedRoles,
   initialTemplateCode,
+  masterView,
   masters,
   templates,
 }: {
   canWrite: boolean
   combinedRoles: RecruitmentCombinedRoleRow[]
   initialTemplateCode?: string
+  masterView?: "dataEntry" | "masterTables"
   masters: RecruitmentMasterSnapshot
   templates: RecruitmentTemplateRow[]
 }) {
@@ -316,6 +323,7 @@ export function JobTemplatesTable({
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
           <JobTemplateEditor
             combinedRoles={combinedRoles}
+            masterView={masterView}
             masters={masters}
             template={editingTemplate}
           />

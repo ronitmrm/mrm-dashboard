@@ -24,6 +24,7 @@ export const productionMasterTableEntryTypes = [
   "route",
   "cycle",
   "tooling",
+  "planning_holiday",
   "maintenance_master",
   ...checklistWorkspaceEntryTypes,
   ...qualityWorkspaceEntryTypes,

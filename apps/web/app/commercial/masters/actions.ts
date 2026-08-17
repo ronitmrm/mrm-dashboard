@@ -17,6 +17,13 @@ import { parseMastersWorkbook } from "./workbook"
 
 const mastersPath = "/commercial/masters"
 
+function mastersReturnPath(formData: FormData) {
+  const view = formData.get("master_view")?.toString()
+  return view === "dataEntry" || view === "masterTables"
+    ? `${mastersPath}?masterView=${view}`
+    : mastersPath
+}
+
 function required(formData: FormData, key: string) {
   const value = formData.get(key)?.toString().trim()
   if (!value) throw new Error(`${key.replaceAll("_", " ")} is required.`)
@@ -167,13 +174,14 @@ export async function setMasterActiveAction(formData: FormData) {
 }
 
 export async function importMastersWorkbookAction(formData: FormData) {
+  const returnPath = mastersReturnPath(formData)
   const file = formData.get("masters_file")
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${mastersPath}?error=Masters%20workbook%20is%20required`)
+    redirect(`${returnPath}${returnPath.includes("?") ? "&" : "?"}error=Masters%20workbook%20is%20required`)
   }
   if (!/\.(xlsx|xls)$/i.test(file.name)) {
     redirect(
-      `${mastersPath}?error=Only%20XLSX%20or%20XLS%20files%20are%20accepted`
+      `${returnPath}${returnPath.includes("?") ? "&" : "?"}error=Only%20XLSX%20or%20XLS%20files%20are%20accepted`
     )
   }
 
@@ -194,9 +202,9 @@ export async function importMastersWorkbookAction(formData: FormData) {
   } catch (error) {
     outcome =
       error instanceof Error ? error.message : "Masters workbook import failed"
-    redirect(`${mastersPath}?error=${encodeURIComponent(outcome)}`)
+    redirect(`${returnPath}${returnPath.includes("?") ? "&" : "?"}error=${encodeURIComponent(outcome)}`)
   }
 
   revalidatePath(mastersPath)
-  redirect(`${mastersPath}?success=${encodeURIComponent(outcome)}`)
+  redirect(`${returnPath}${returnPath.includes("?") ? "&" : "?"}success=${encodeURIComponent(outcome)}`)
 }

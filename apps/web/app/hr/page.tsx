@@ -21,7 +21,7 @@ import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
-import { hrNavigation } from "@/lib/unified-navigation"
+import { hrMasterNavigation, hrNavigation } from "@/lib/unified-navigation"
 
 export const dynamic = "force-dynamic"
 
@@ -32,6 +32,7 @@ export default async function HrRecruitmentPage({
     appointment?: string
     error?: string
     job?: string
+    masterView?: string
     panel?: string
     returnJob?: string
     success?: string
@@ -39,7 +40,8 @@ export default async function HrRecruitmentPage({
   }>
 }) {
   const feedback = await searchParams
-  const requestedItem = hrNavigation.find(
+  const routeNavigation = [...hrMasterNavigation, ...hrNavigation]
+  const requestedItem = routeNavigation.find(
     (item) => item.panelId === feedback.panel
   )
   const activeItem = requestedItem ?? hrNavigation[0]
@@ -214,6 +216,12 @@ export default async function HrRecruitmentPage({
         interviewRecords={interviewRecords}
         jobs={jobs}
         masters={masters}
+        masterView={
+          feedback.masterView === "dataEntry" ||
+          feedback.masterView === "masterTables"
+            ? feedback.masterView
+            : undefined
+        }
         panelId={activeItem.panelId}
         posts={posts}
         returnJobId={feedback.returnJob}
