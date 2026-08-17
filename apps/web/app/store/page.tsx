@@ -153,7 +153,7 @@ export default async function StoreOverviewPage() {
             <Attention
               label="Maintenance / Calibration Due"
               value={dueAssets.length}
-              href="/store/assets"
+              href="/store/stock#asset-register"
             />
           </CardContent>
         </Card>

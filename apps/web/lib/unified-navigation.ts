@@ -451,11 +451,6 @@ export const storeNavigation = [
     label: "Stock",
   },
   {
-    href: "/store/assets",
-    icon: Wrench,
-    label: "Asset Master",
-  },
-  {
     href: "/store/masters",
     icon: Database,
     label: "Store Masters",
