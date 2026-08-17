@@ -3,7 +3,9 @@
 **Store Classification Master**: The maintained hierarchy of Asset Category,
 Asset Subcategory, and Asset Name. A Subcategory belongs to one Category, and
 an Asset Name belongs to one Subcategory. Store item creation selects these
-values from the masters; users do not retype classification names.
+values from the masters; users do not retype classification names. Store
+Masters shows one selector-driven data-entry form and its saved records at a
+time.
 
 **Store Item Type**: The unique combination of Asset Type and one selected
 Store Classification Master path. It owns one permanent Type Code and one
@@ -59,7 +61,8 @@ must still be selected before the order is saved.
 **Current Available Stock**: A live derived value, never a request snapshot.
 For Consumables it is the signed movement-ledger balance at the requested
 Store. For Physical Assets it is the count of Available Asset Codes at that
-Store. Every open request therefore sees the effect of the latest issue.
+Store. Every open request therefore sees the effect of the latest issue. The
+Stock workspace also contains the complete clickable Physical Asset register.
 
 **Asset Workspace**: The permanent view for one Asset Code containing its
 identity, current assignment, Department/Machine/Vendor movement history,

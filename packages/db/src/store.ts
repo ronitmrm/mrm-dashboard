@@ -1390,7 +1390,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               item.asset_name, asset.identification_name,
               asset.current_holder_name) ILIKE '%' || $2 || '%')
           ORDER BY asset.asset_code
-          LIMIT 500
         `,
         [input.organizationId, input.query?.trim() ?? ""]
       )

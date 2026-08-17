@@ -1,5 +1,7 @@
+import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
@@ -7,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import { Input } from "@workspace/ui/components/input"
 import {
   Table,
   TableBody,
@@ -18,21 +21,29 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { formatIstDateTime } from "@/lib/date-time"
+import { formatIstDateTime, istDateValue } from "@/lib/date-time"
 
-export default async function StoreStockPage() {
+export default async function StoreStockPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[] }>
+}) {
   await requireCapability("store.read", "/store/stock")
+  const rawQuery = (await searchParams).q
+  const query = (Array.isArray(rawQuery) ? rawQuery[0] : rawQuery) ?? ""
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, movements] = await Promise.all([
+    const [assets, items, movements] = await Promise.all([
+      repository.listAssets({ organizationId, query }),
       repository.listItemTypes(organizationId),
       repository.listRecentStockMovements(organizationId),
     ])
-    return { items, movements }
+    return { assets, items, movements }
   })().finally(() => repository.close())
+  const today = istDateValue()
 
   return (
     <div className="flex flex-col gap-6">
@@ -86,6 +97,104 @@ export default async function StoreStockPage() {
               })}
               {!data.items.length ? (
                 <TableRow><TableCell className="h-24 text-center text-muted-foreground" colSpan={7}>No Store stock yet.</TableCell></TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card id="asset-register">
+        <CardHeader>
+          <CardTitle>Non Consumable Asset Register</CardTitle>
+          <CardDescription>
+            Every physical asset is listed here. Open an Asset Code for its
+            movement, calibration, maintenance, supplier, and document history.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5 overflow-x-auto">
+          <form className="flex max-w-2xl gap-2">
+            <Input
+              defaultValue={query}
+              name="q"
+              placeholder="Search Asset Code, item, or current holder"
+              type="search"
+            />
+            <Button type="submit">Search</Button>
+          </form>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Asset Code</TableHead>
+                <TableHead>Identification</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Current Assignment</TableHead>
+                <TableHead>Next Maintenance / Calibration</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.assets.map((asset) => {
+                const overdue =
+                  asset.nextDueOn !== null && asset.nextDueOn <= today
+                const assetHref = `/store/assets/${encodeURIComponent(asset.assetCode)}`
+                return (
+                  <TableRow key={asset.id}>
+                    <TableCell className="font-medium">
+                      <Link className="hover:underline" href={assetHref}>
+                        {asset.assetCode}
+                      </Link>
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {asset.typeCode}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {asset.identificationName}
+                      <span className="block text-xs text-muted-foreground">
+                        {asset.assetName}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          asset.status === "BROKEN"
+                            ? "destructive"
+                            : "secondary"
+                        }
+                      >
+                        {asset.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {asset.holderName ||
+                        asset.locationName ||
+                        asset.holderType}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={
+                          overdue ? "font-semibold text-destructive" : ""
+                        }
+                      >
+                        {asset.nextDueOn || "Not scheduled"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={assetHref}>Open Asset</Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+              {!data.assets.length ? (
+                <TableRow>
+                  <TableCell
+                    className="h-28 text-center text-muted-foreground"
+                    colSpan={6}
+                  >
+                    No matching physical assets.
+                  </TableCell>
+                </TableRow>
               ) : null}
             </TableBody>
           </Table>
