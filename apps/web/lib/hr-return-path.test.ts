@@ -6,6 +6,16 @@ const jobId = "123e4567-e89b-12d3-a456-426614174000"
 const candidateId = "123e4567-e89b-12d3-a456-426614174001"
 
 describe("HR action return path", () => {
+  it("keeps HR master saves inside the selected company workspace", () => {
+    const formData = new FormData()
+    formData.set("panel", "mastersPanel")
+    formData.set("master_view", "masterTables")
+
+    expect(hrReturnPath(formData)).toBe(
+      "/hr?panel=mastersPanel&masterView=masterTables"
+    )
+  })
+
   it("returns to the originating job after assigning candidates", () => {
     const formData = new FormData()
     formData.set("return_job_id", jobId)

@@ -153,6 +153,7 @@ import {
 } from "@/components/planner-decision-workspace";
 import { authClient } from "@/lib/auth/auth-client";
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access";
+import { externalMasterDataOptions, type ExternalMasterDataOption } from "@/lib/master-data-navigation";
 import {
   dashboardNavigation as navItems,
   dashboardTabHref,
@@ -246,8 +247,6 @@ function validDashboardTab(tab: DashboardTabId | null) {
 
 function dataEntryDestination(entryType: string): DashboardTabId {
   if (entryType === "machine_master") return "machineMasterTab";
-  if (entryType === "maintenance_master") return "maintenanceMastersTab";
-  if (entryType === "planning_holiday") return "planningHolidayTab";
   return "dataEntryTab";
 }
 const dataEntrySpecs: DataEntrySpec[] = [
@@ -492,6 +491,7 @@ const universalDataEntryTypes = [
   ...checklistWorkspaceEntryTypes,
   ...maintenanceMasterEntryTypes,
   ...qualityWorkspaceEntryTypes,
+  "planning_holiday",
   "store_masters",
 ] as const;
 
@@ -734,7 +734,7 @@ function FirstPieceInspectionShell({
           tasks={tasks}
           productionControl={productionControl}
           submitAction={submitAction}
-          openDataEntry={() => window.location.assign(dashboardTabHref("qualityMastersTab", productionFloorCode))}
+          openDataEntry={() => window.location.assign(`${dashboardTabHref("dataEntryTab", productionFloorCode)}&entry=quality_parameter_master`)}
           onTaskComplete={completeTask}
         />
       ) : null}
@@ -1591,6 +1591,7 @@ function DashboardShell({
                 openFirstPieceInspection={openFirstPieceInspection}
                 closeFirstPieceInspection={closeFirstPieceInspection}
                 firstPieceInspectionTasks={firstPieceInspectionTasks}
+                navigationAccess={navigationAccess}
                 preferredDataEntryType={preferredDataEntryType}
                 preferredDataEntryDefaults={preferredDataEntryDefaults}
                 productionFloorCode={activeProductionFloor}
@@ -1757,6 +1758,7 @@ function DashboardContent({
   openFirstPieceInspection,
   closeFirstPieceInspection,
   firstPieceInspectionTasks,
+  navigationAccess,
   preferredDataEntryType,
   preferredDataEntryDefaults,
   productionFloorCode,
@@ -1773,6 +1775,7 @@ function DashboardContent({
   openFirstPieceInspection: (row: DashboardPayload) => void;
   closeFirstPieceInspection: (row: DashboardPayload) => void;
   firstPieceInspectionTasks: DashboardPayload[];
+  navigationAccess: UnifiedNavigationAccess;
   preferredDataEntryType: string;
   preferredDataEntryDefaults: Record<string, unknown>;
   productionFloorCode: ProductionFloorCode;
@@ -1802,11 +1805,11 @@ function DashboardContent({
   }
 
   if (activeTab === "dataEntryTab") {
-    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={universalDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} />;
+    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={universalDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "dataEntry")} />;
   }
 
   if (activeTab === "masterTablesTab") {
-    return <MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} />;
+    return <MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} preferredEntryType={preferredDataEntryType} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "masterTables")} />;
   }
 
   if (activeTab === "planningHolidayTab") {
@@ -6833,6 +6836,7 @@ function DataEntryPanel({
   storeMasterData,
   title = "Production data entry",
   description = "Use focused forms for manual entry or download the matching CSV template for a small import.",
+  externalOptions = [],
 }: {
   canManageStoreMasters?: boolean;
   payload: DashboardPayload;
@@ -6849,6 +6853,7 @@ function DataEntryPanel({
   storeMasterData?: StoreMasterData | null;
   title?: string;
   description?: string;
+  externalOptions?: ExternalMasterDataOption[];
 }) {
   const dataEntry = asRecord(payload.dataEntry);
   const productionControl = asRecord(payload.productionControl);
@@ -6931,13 +6936,27 @@ function DataEntryPanel({
               <SearchableSelect
                 className="h-9 rounded-md border bg-background px-3 text-sm"
                 value={bulkEntryType}
-                onChange={(event) => setBulkEntryType(event.target.value)}
+                onChange={(event) => {
+                  const external = externalOptions.find((option) => option.id === event.target.value);
+                  if (external) {
+                    window.location.assign(external.href);
+                    return;
+                  }
+                  setBulkEntryType(event.target.value);
+                }}
               >
                 {availableSpecs.map((spec) => (
                   <option key={spec.entryType} value={spec.entryType}>
                     {spec.title}
                   </option>
                 ))}
+                {externalOptions.length ? (
+                  <optgroup label="Other Modules">
+                    {externalOptions.map((option) => (
+                      <option key={option.id} value={option.id}>{option.title}</option>
+                    ))}
+                  </optgroup>
+                ) : null}
               </SearchableSelect>
             </Field>
             {bulkEntryType !== "store_masters" ? <Field label="Filled Csv Template">
@@ -6981,17 +7000,21 @@ function MasterTablesPanel({
   payload,
   productionControl,
   openDataEntry,
+  preferredEntryType,
   productionFloorCode,
   onProductionFloorChange,
   storeMasterData,
+  externalOptions = [],
 }: {
   canManageStoreMasters: boolean;
   payload: DashboardPayload;
   productionControl: DashboardPayload;
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  preferredEntryType?: string;
   productionFloorCode: ProductionFloorCode;
   onProductionFloorChange: (floorCode: ProductionFloorCode) => void;
   storeMasterData?: StoreMasterData | null;
+  externalOptions?: ExternalMasterDataOption[];
 }) {
   const specs = useMemo(
     () => masterTableSpecs().filter(
@@ -6999,7 +7022,11 @@ function MasterTablesPanel({
     ),
     [storeMasterData],
   );
-  const [entryType, setEntryType] = useState(() => specs[0]?.entryType ?? "");
+  const [entryType, setEntryType] = useState(() =>
+    specs.some((spec) => spec.entryType === preferredEntryType)
+      ? preferredEntryType ?? ""
+      : specs[0]?.entryType ?? ""
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [tableResetKey, setTableResetKey] = useState(0);
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
@@ -7053,11 +7080,25 @@ function MasterTablesPanel({
             <SearchableSelect
               className="h-9 rounded-md border bg-background px-3 text-sm"
               value={selectedSpec.entryType}
-              onChange={(event) => { setEntryType(event.target.value); setSearchQuery(""); setTableResetKey((current) => current + 1); }}
+              onChange={(event) => {
+                const external = externalOptions.find((option) => option.id === event.target.value);
+                if (external) {
+                  window.location.assign(external.href);
+                  return;
+                }
+                setEntryType(event.target.value); setSearchQuery(""); setTableResetKey((current) => current + 1);
+              }}
             >
               {specs.map((spec) => (
                 <option key={spec.entryType} value={spec.entryType}>{spec.title}</option>
               ))}
+              {externalOptions.length ? (
+                <optgroup label="Other Modules">
+                  {externalOptions.map((option) => (
+                    <option key={option.id} value={option.id}>{option.title}</option>
+                  ))}
+                </optgroup>
+              ) : null}
             </SearchableSelect>
           </Field>
           {selectedSpec.entryType !== "store_masters" ? <Field label="Search All Visible Columns">

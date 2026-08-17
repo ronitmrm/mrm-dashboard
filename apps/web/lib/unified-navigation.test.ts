@@ -12,6 +12,7 @@ import {
   dashboardTabHref,
   hrNavigation,
   jobCardWorkspaceHref,
+  legacyMasterEntryForDashboardTab,
   machineMasterNavigation,
   navigationHrefMatches,
   planningHolidayNavigation,
@@ -44,9 +45,11 @@ describe("unified navigation", () => {
   })
 
   it("keeps every commercial destination tied to a permission", () => {
-    expect(commercialNavigation.map(({ href }) => href)).toEqual(
-      commercialNavigationAccess.map(([href]) => href)
-    )
+    const protectedHrefs = commercialNavigationAccess.map(([href]) => href)
+    expect(
+      commercialNavigation.every(({ href }) => protectedHrefs.includes(href))
+    ).toBe(true)
+    expect(protectedHrefs).toContain("/commercial/masters")
   })
 
   it("provides unique links for every merged application tab", () => {
@@ -79,11 +82,7 @@ describe("unified navigation", () => {
       "masterTablesTab",
       "machineMasterTab",
     ])
-    expect(consolidatedProductionNavigation.map(({ id }) => id)).toEqual([
-      "setupChecklistMasterTab",
-      "maintenanceMastersTab",
-      "qualityMastersTab",
-    ])
+    expect(consolidatedProductionNavigation).toEqual([])
     expect(productionFloorNavigation.map(({ id }) => id)).not.toEqual(
       expect.arrayContaining([
         "setupChecklistMasterTab",
@@ -132,7 +131,10 @@ describe("unified navigation", () => {
     ).toMatchObject({
       title: "Mechanical Maintenance",
     })
-    expect(commercialNavigation).toHaveLength(17)
+    expect(commercialNavigation).toHaveLength(16)
+    expect(commercialNavigation.map(({ label }) => label)).not.toContain(
+      "Pricing Masters"
+    )
     expect(storeNavigation.map(({ href, label }) => ({ href, label }))).toEqual(
       [
         { href: "/store", label: "Store Overview" },
@@ -143,8 +145,6 @@ describe("unified navigation", () => {
       ]
     )
     expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([
-      { href: "/hr?panel=mastersPanel", label: "Masters" },
-      { href: "/hr?panel=postMasterPanel", label: "Job Templates" },
       { href: "/hr?panel=approvedPostPanel", label: "Approved Post Form" },
       { href: "/hr?panel=employeeMasterPanel", label: "Employee Master" },
       { href: "/hr?panel=jobsPanel", label: "Job Posts" },
@@ -174,6 +174,22 @@ describe("unified navigation", () => {
       "/?tab=maintenanceTab&floor=cnc"
     )
     expect(dashboardTabHref("correctionsTab")).toBe("/?tab=correctionsTab")
+  })
+
+  it("sends old Production master bookmarks into company Data Entry", () => {
+    expect(legacyMasterEntryForDashboardTab("planningHolidayTab")).toBe(
+      "planning_holiday"
+    )
+    expect(legacyMasterEntryForDashboardTab("setupChecklistMasterTab")).toBe(
+      "setup_checklist_master"
+    )
+    expect(legacyMasterEntryForDashboardTab("maintenanceMastersTab")).toBe(
+      "maintenance_master"
+    )
+    expect(legacyMasterEntryForDashboardTab("qualityMastersTab")).toBe(
+      "quality_parameter_master"
+    )
+    expect(legacyMasterEntryForDashboardTab("machineMasterTab")).toBeUndefined()
   })
 
   it("opens Production Sessions as a standalone route from the live dashboard", () => {

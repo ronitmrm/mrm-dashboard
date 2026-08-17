@@ -97,7 +97,11 @@ function activationOptions(editable: Editable) {
 export default async function MastersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; success?: string }>
+  searchParams: Promise<{
+    error?: string
+    masterView?: string
+    success?: string
+  }>
 }) {
   const session = await requireCapability(
     "pricing.masters.read",
@@ -121,6 +125,8 @@ export default async function MastersPage({
   }
   const feedback = await searchParams
   const activeOptions = activationOptions(editable)
+  const showDataEntry = feedback.masterView !== "masterTables"
+  const showMasterTables = feedback.masterView !== "dataEntry"
 
   return (
     <div className="flex flex-col gap-6">
@@ -135,6 +141,8 @@ export default async function MastersPage({
         </Alert>
       ) : null}
 
+      {showDataEntry ? (
+        <>
       <Card>
         <CardHeader>
           <CardTitle>Master Workbook</CardTitle>
@@ -158,6 +166,7 @@ export default async function MastersPage({
           </div>
           {canWrite ? (
             <form action={importMastersWorkbookAction}>
+              <input name="master_view" type="hidden" value="dataEntry" />
               <FieldGroup className="flex flex-col gap-4 sm:flex-row sm:items-end">
                 <Field className="max-w-xl">
                   <FieldLabel htmlFor="masters-file">
@@ -244,8 +253,11 @@ export default async function MastersPage({
           </CardContent>
         </Card>
       ) : null}
+        </>
+      ) : null}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {showMasterTables ? (
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {groups(snapshot).map(([label, values]) => (
           <Card key={label}>
             <CardHeader>
@@ -274,7 +286,8 @@ export default async function MastersPage({
             </CardContent>
           </Card>
         ))}
-      </section>
+        </section>
+      ) : null}
     </div>
   )
 }

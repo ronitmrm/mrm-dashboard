@@ -27,8 +27,10 @@ import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigatio
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
   administrationNavigation,
+  commercialMasterNavigation,
   commercialNavigation,
   dashboardNavigation,
+  hrMasterNavigation,
   hrNavigation,
   navigationHrefMatches,
   storeNavigation,
@@ -84,6 +86,8 @@ export function CommercialShell({
     productionPage ??
     [
       ...commercialNavigation,
+      commercialMasterNavigation,
+      ...hrMasterNavigation,
       ...hrNavigation,
       ...administrationNavigation,
       ...storeNavigation,

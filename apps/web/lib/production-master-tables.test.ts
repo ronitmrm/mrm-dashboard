@@ -15,6 +15,10 @@ import {
 } from "./production-master-tables"
 
 describe("Production master table rows", () => {
+  it("keeps planning holidays in the universal master table selector", () => {
+    expect(productionMasterTableEntryTypes).toContain("planning_holiday")
+  })
+
   it("does not show rows explicitly belonging to another master", () => {
     const route = { entryType: "route", partNo: "P-1" }
     const machine = { entryType: "machine_master", machineNo: "1" }

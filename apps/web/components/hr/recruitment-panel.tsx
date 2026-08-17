@@ -80,6 +80,7 @@ type RecruitmentPanelProps = {
   interviewRecords: RecruitmentInterviewRecordRow[]
   jobs: RecruitmentJobRow[]
   masters: RecruitmentMasterSnapshot
+  masterView?: "dataEntry" | "masterTables"
   panelId: string
   posts: RecruitmentPostRow[]
   returnJobId?: string
@@ -94,12 +95,14 @@ function PanelForm({
   children,
   description,
   panelId,
+  masterView,
   title,
 }: {
   action: (formData: FormData) => Promise<void>
   children: React.ReactNode
   description: string
   panelId: string
+  masterView?: "dataEntry" | "masterTables"
   title: string
 }) {
   return (
@@ -111,6 +114,9 @@ function PanelForm({
       <CardContent>
         <form action={action}>
           <input name="panel" type="hidden" value={panelId} />
+          {masterView ? (
+            <input name="master_view" type="hidden" value={masterView} />
+          ) : null}
           <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {children}
           </FieldGroup>
@@ -177,15 +183,19 @@ function StatusBadge({ status }: { status: string }) {
 
 function MastersPanel({
   canWrite,
+  masterView,
   masters,
-}: Pick<RecruitmentPanelProps, "canWrite" | "masters">) {
+}: Pick<RecruitmentPanelProps, "canWrite" | "masterView" | "masters">) {
+  const showDataEntry = masterView !== "masterTables"
+  const showMasterTables = masterView !== "dataEntry"
   return (
     <>
-      {canWrite ? (
+      {canWrite && showDataEntry ? (
         <PanelForm
           action={saveMasterAction}
           description="The Code Is Generated Automatically From The Department Or Designation Name."
           panelId="mastersPanel"
+          masterView={masterView}
           title="Add A Master"
         >
           <Field>
@@ -205,7 +215,13 @@ function MastersPanel({
           </Button>
         </PanelForm>
       ) : null}
-      <MasterTables canWrite={canWrite} masters={masters} />
+      {showMasterTables ? (
+        <MasterTables
+          canWrite={canWrite}
+          masterView={masterView}
+          masters={masters}
+        />
+      ) : null}
     </>
   )
 }
@@ -213,6 +229,7 @@ function MastersPanel({
 function TemplatePanel({
   canWrite,
   combinedRoles,
+  masterView,
   masters,
   selectedTemplateCode,
   templates,
@@ -220,6 +237,7 @@ function TemplatePanel({
   RecruitmentPanelProps,
   | "canWrite"
   | "combinedRoles"
+  | "masterView"
   | "masters"
   | "selectedTemplateCode"
   | "templates"
@@ -227,14 +245,17 @@ function TemplatePanel({
   const templateCode = nextRecruitmentTemplateCode(
     templates.map((template) => template.templateCode)
   )
+  const showDataEntry = masterView !== "masterTables"
+  const showMasterTables = masterView !== "dataEntry"
 
   return (
     <>
-      {canWrite ? (
+      {canWrite && showDataEntry ? (
         <PanelForm
           action={saveTemplateAction}
           description="Create The Reusable Qualification And Salary Profile Used By Recruitment Openings."
           panelId="postMasterPanel"
+          masterView={masterView}
           title="Job Requirement Template"
         >
           <TextField
@@ -280,13 +301,16 @@ function TemplatePanel({
           </Button>
         </PanelForm>
       ) : null}
-      <JobTemplatesTable
-        canWrite={canWrite}
-        combinedRoles={combinedRoles}
-        initialTemplateCode={selectedTemplateCode}
-        masters={masters}
-        templates={templates}
-      />
+      {showMasterTables ? (
+        <JobTemplatesTable
+          canWrite={canWrite}
+          combinedRoles={combinedRoles}
+          initialTemplateCode={selectedTemplateCode}
+          masterView={masterView}
+          masters={masters}
+          templates={templates}
+        />
+      ) : null}
     </>
   )
 }
@@ -668,6 +692,7 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
         <TemplatePanel
           canWrite={props.canWrite}
           combinedRoles={props.combinedRoles}
+          masterView={props.masterView}
           masters={props.masters}
           selectedTemplateCode={props.selectedTemplateCode}
           templates={props.templates}
@@ -743,6 +768,6 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
         />
       )
     default:
-      return <MastersPanel canWrite={props.canWrite} masters={props.masters} />
+      return <MastersPanel canWrite={props.canWrite} masterView={props.masterView} masters={props.masters} />
   }
 }

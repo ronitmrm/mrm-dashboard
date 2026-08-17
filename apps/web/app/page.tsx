@@ -14,6 +14,7 @@ import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access
 import { productionModuleIsEnabled } from "@/lib/production-module"
 import {
   dashboardNavigation,
+  legacyMasterEntryForDashboardTab,
   type DashboardTabId,
 } from "@/lib/unified-navigation"
 
@@ -74,17 +75,21 @@ export default async function Page({
       })()
     : null
   const requestedTab = Array.isArray(query.tab) ? query.tab[0] : query.tab
-  const initialDashboardTab = dashboardNavigation.some(
-    (item) => item.id === requestedTab
-  )
-    ? (requestedTab as DashboardTabId)
-    : "productionControlTab"
+  const legacyMasterEntry = legacyMasterEntryForDashboardTab(requestedTab)
+  const initialDashboardTab = legacyMasterEntry
+    ? "dataEntryTab"
+    : dashboardNavigation.some(
+          (item) => item.id === requestedTab
+        )
+      ? (requestedTab as DashboardTabId)
+      : "productionControlTab"
   const requestedFloor = Array.isArray(query.floor)
     ? query.floor[0]
     : query.floor
-  const requestedEntry = Array.isArray(query.entry)
+  const requestedEntryFromQuery = Array.isArray(query.entry)
     ? query.entry[0]
     : query.entry
+  const requestedEntry = requestedEntryFromQuery ?? legacyMasterEntry
 
   return (
     <MrmplDashboard

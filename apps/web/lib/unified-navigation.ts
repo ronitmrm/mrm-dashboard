@@ -11,7 +11,6 @@ import {
   Globe2,
   LayoutDashboard,
   ListChecks,
-  ListTree,
   MessageSquareText,
   PackageCheck,
   PackageSearch,
@@ -67,6 +66,21 @@ export function dashboardTabHref(
   const params = new URLSearchParams({ tab })
   if (productionFloorCode) params.set("floor", productionFloorCode)
   return `/?${params.toString()}`
+}
+
+const legacyMasterEntryByDashboardTab: Partial<
+  Record<DashboardTabId, string>
+> = {
+  maintenanceMastersTab: "maintenance_master",
+  planningHolidayTab: "planning_holiday",
+  qualityMastersTab: "quality_parameter_master",
+  setupChecklistMasterTab: "setup_checklist_master",
+}
+
+export function legacyMasterEntryForDashboardTab(tab?: string) {
+  return tab
+    ? legacyMasterEntryByDashboardTab[tab as DashboardTabId]
+    : undefined
 }
 
 export function jobCardWorkspaceHref(
@@ -315,15 +329,7 @@ const universalProductionNavigationIds = new Set<DashboardTabId>([
   "machineMasterTab",
 ])
 
-const consolidatedProductionNavigationIds = new Set<DashboardTabId>([
-  "setupChecklistMasterTab",
-  "maintenanceMastersTab",
-  "qualityMastersTab",
-])
-
-export const consolidatedProductionNavigation = dashboardNavigation.filter(
-  (item) => consolidatedProductionNavigationIds.has(item.id)
-)
+export const consolidatedProductionNavigation = [] as const
 
 export const universalProductionNavigation = dashboardNavigation.filter(
   (item) => universalProductionNavigationIds.has(item.id)
@@ -334,7 +340,11 @@ export const productionFloorNavigation = dashboardNavigation
     (item) =>
       item.id !== planningHolidayNavigation.id &&
       !universalProductionNavigationIds.has(item.id) &&
-      !consolidatedProductionNavigationIds.has(item.id)
+      ![
+        "setupChecklistMasterTab",
+        "maintenanceMastersTab",
+        "qualityMastersTab",
+      ].includes(item.id)
   )
   .sort(
     (left, right) =>
@@ -371,11 +381,6 @@ export const commercialNavigation = [
     href: "/commercial/design",
     icon: Factory,
     label: "Design",
-  },
-  {
-    href: "/commercial/masters",
-    icon: ListTree,
-    label: "Pricing Masters",
   },
   {
     href: "/commercial/products",
@@ -429,6 +434,12 @@ export const commercialNavigation = [
   },
 ] as const
 
+export const commercialMasterNavigation = {
+  href: "/commercial/masters",
+  icon: Database,
+  label: "Pricing Masters",
+} as const
+
 export const storeNavigation = [
   {
     href: "/store",
@@ -470,7 +481,7 @@ export function storePurchaseOrderHref(input: {
   }).toString()}`
 }
 
-export const hrNavigation = [
+export const hrMasterNavigation = [
   {
     href: "/hr?panel=mastersPanel",
     icon: Database,
@@ -485,6 +496,9 @@ export const hrNavigation = [
     panelId: "postMasterPanel",
     requiredCapability: "hr.recruitment.read",
   },
+] as const
+
+export const hrNavigation = [
   {
     href: "/hr?panel=approvedPostPanel",
     icon: ListChecks,
