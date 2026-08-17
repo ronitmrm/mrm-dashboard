@@ -46,7 +46,7 @@ const masterOptions = [
 
 type MasterKey = (typeof masterOptions)[number][0]
 
-type MasterData = {
+export type StoreMasterData = {
   items: Array<{
     assetCategory: string
     assetName: string
@@ -95,12 +95,13 @@ type MasterData = {
 export function StoreMasterWorkspace({
   canManage,
   data,
+  mode = "combined",
 }: {
   canManage: boolean
-  data: MasterData
+  data: StoreMasterData
+  mode?: "combined" | "entry" | "table"
 }) {
-  const [selectedMaster, setSelectedMaster] =
-    useState<MasterKey>("ITEM_TYPE")
+  const [selectedMaster, setSelectedMaster] = useState<MasterKey>("ITEM_TYPE")
   const selectedLabel =
     masterOptions.find(([key]) => key === selectedMaster)?.[1] ?? "Master"
   const rows = masterRows(selectedMaster, data)
@@ -109,9 +110,14 @@ export function StoreMasterWorkspace({
     <div className="grid gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Select Store Data Entry</CardTitle>
+          <CardTitle>
+            {mode === "table"
+              ? "Select Store Master Table"
+              : "Select Store Data Entry"}
+          </CardTitle>
           <CardDescription>
-            Select one master. Only its entry form and saved records are shown.
+            Select one Store master. Only the corresponding{" "}
+            {mode === "table" ? "saved records" : "entry form"} are shown.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -134,7 +140,7 @@ export function StoreMasterWorkspace({
         </CardContent>
       </Card>
 
-      {canManage ? (
+      {canManage && mode !== "table" ? (
         <Card>
           <CardHeader>
             <CardTitle>{selectedLabel} Data Entry</CardTitle>
@@ -143,47 +149,49 @@ export function StoreMasterWorkspace({
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Saved {selectedLabel} Records</CardTitle>
-          <CardDescription>{rows.length} active records</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Details</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.key}>
-                  <TableCell className="font-medium">{row.code}</TableCell>
-                  <TableCell>{row.name}</TableCell>
-                  <TableCell>{row.details}</TableCell>
-                </TableRow>
-              ))}
-              {!rows.length ? (
+      {mode !== "entry" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Saved {selectedLabel} Records</CardTitle>
+            <CardDescription>{rows.length} active records</CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    className="h-24 text-center text-muted-foreground"
-                    colSpan={3}
-                  >
-                    No saved records for this master.
-                  </TableCell>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Details</TableHead>
                 </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={row.key}>
+                    <TableCell className="font-medium">{row.code}</TableCell>
+                    <TableCell>{row.name}</TableCell>
+                    <TableCell>{row.details}</TableCell>
+                  </TableRow>
+                ))}
+                {!rows.length ? (
+                  <TableRow>
+                    <TableCell
+                      className="h-24 text-center text-muted-foreground"
+                      colSpan={3}
+                    >
+                      No saved records for this master.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   )
 }
 
-function masterRows(selectedMaster: MasterKey, data: MasterData) {
+function masterRows(selectedMaster: MasterKey, data: StoreMasterData) {
   switch (selectedMaster) {
     case "ITEM_TYPE":
       return data.items.map((item) => ({
@@ -237,13 +245,17 @@ function masterRows(selectedMaster: MasterKey, data: MasterData) {
   }
 }
 
-function masterForm(selectedMaster: MasterKey, data: MasterData) {
+function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
   switch (selectedMaster) {
     case "ITEM_TYPE":
       return (
         <form action={createStoreItemTypeAction}>
           <FieldGroup className="grid gap-4 md:grid-cols-2">
-            <TextField label="Identification Name" name="identification_name" required />
+            <TextField
+              label="Identification Name"
+              name="identification_name"
+              required
+            />
             <SelectField
               label="Asset Type"
               name="asset_type"
@@ -276,7 +288,10 @@ function masterForm(selectedMaster: MasterKey, data: MasterData) {
                 value: row.id,
               }))}
             />
-            <TextField label="For Product / Item Code" name="applicable_item_code" />
+            <TextField
+              label="For Product / Item Code"
+              name="applicable_item_code"
+            />
             <TextField label="Drawing Number" name="drawing_number" />
             <TextField defaultValue="Nos" label="Unit" name="unit" required />
             <TextField
@@ -286,7 +301,11 @@ function masterForm(selectedMaster: MasterKey, data: MasterData) {
               type="number"
             />
           </FieldGroup>
-          <Button className="mt-5" disabled={!data.masters.assetNames.length} type="submit">
+          <Button
+            className="mt-5"
+            disabled={!data.masters.assetNames.length}
+            type="submit"
+          >
             Create & Generate Type Code
           </Button>
         </form>
@@ -294,8 +313,14 @@ function masterForm(selectedMaster: MasterKey, data: MasterData) {
     case "CATEGORY":
       return (
         <form action={createStoreAssetCategoryAction}>
-          <TextField label="Category Name" name="asset_category_name" required />
-          <Button className="mt-5" type="submit">Save Category</Button>
+          <TextField
+            label="Category Name"
+            name="asset_category_name"
+            required
+          />
+          <Button className="mt-5" type="submit">
+            Save Category
+          </Button>
         </form>
       )
     case "SUBCATEGORY":
@@ -310,9 +335,17 @@ function masterForm(selectedMaster: MasterKey, data: MasterData) {
                 value: row.id,
               }))}
             />
-            <TextField label="Subcategory Name" name="asset_subcategory_name" required />
+            <TextField
+              label="Subcategory Name"
+              name="asset_subcategory_name"
+              required
+            />
           </FieldGroup>
-          <Button className="mt-5" disabled={!data.masters.categories.length} type="submit">
+          <Button
+            className="mt-5"
+            disabled={!data.masters.categories.length}
+            type="submit"
+          >
             Save Subcategory
           </Button>
         </form>
@@ -331,7 +364,11 @@ function masterForm(selectedMaster: MasterKey, data: MasterData) {
             />
             <TextField label="Asset Name" name="asset_name" required />
           </FieldGroup>
-          <Button className="mt-5" disabled={!data.masters.subcategories.length} type="submit">
+          <Button
+            className="mt-5"
+            disabled={!data.masters.subcategories.length}
+            type="submit"
+          >
             Save Asset Name
           </Button>
         </form>
@@ -352,7 +389,9 @@ function masterForm(selectedMaster: MasterKey, data: MasterData) {
               ]}
             />
           </FieldGroup>
-          <Button className="mt-5" type="submit">Save Location</Button>
+          <Button className="mt-5" type="submit">
+            Save Location
+          </Button>
         </form>
       )
     case "SUPPLIER":
@@ -363,7 +402,9 @@ function masterForm(selectedMaster: MasterKey, data: MasterData) {
             <TextField label="Supplier Name" name="supplier_name" required />
             <TextField label="Contact Details" name="contact_details" />
           </FieldGroup>
-          <Button className="mt-5" type="submit">Save Supplier</Button>
+          <Button className="mt-5" type="submit">
+            Save Supplier
+          </Button>
         </form>
       )
     case "VENDOR":
@@ -374,7 +415,9 @@ function masterForm(selectedMaster: MasterKey, data: MasterData) {
             <TextField label="Vendor Name" name="vendor_name" required />
             <TextField label="Contact Details" name="contact_details" />
           </FieldGroup>
-          <Button className="mt-5" type="submit">Save Vendor</Button>
+          <Button className="mt-5" type="submit">
+            Save Vendor
+          </Button>
         </form>
       )
   }

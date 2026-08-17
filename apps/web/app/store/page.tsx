@@ -63,10 +63,10 @@ export default async function StoreOverviewPage() {
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline">
-            <Link href="/store/orders">Orders & Receipts</Link>
+            <Link href="/store/orders">Purchase Register</Link>
           </Button>
           <Button asChild>
-            <Link href="/store/requests">New Request</Link>
+            <Link href="/store/stock">Select Items</Link>
           </Button>
         </div>
       </div>
@@ -148,12 +148,12 @@ export default async function StoreOverviewPage() {
                 snapshot.codeRequests.filter((row) => row.status === "Pending")
                   .length
               }
-              href="/store/requests"
+              href="/store/new-item-requests"
             />
             <Attention
               label="Maintenance / Calibration Due"
               value={dueAssets.length}
-              href="/store/stock#asset-register"
+              href="/store/stock"
             />
           </CardContent>
         </Card>

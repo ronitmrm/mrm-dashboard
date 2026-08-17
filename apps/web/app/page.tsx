@@ -2,9 +2,14 @@ import {
   defaultProductionFloorCode,
   normalizeProductionFloorCode,
 } from "@workspace/db/production-floors"
+import { createStoreRepository } from "@workspace/db"
 import { redirect } from "next/navigation"
 
-import { requireCapability } from "@/lib/auth/require-capability"
+import { readAuthEnvironment } from "@/lib/auth/auth"
+import {
+  listGrantedCapabilities,
+  requireCapability,
+} from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import { productionModuleIsEnabled } from "@/lib/production-module"
 import {
@@ -17,6 +22,7 @@ export default async function Page({
 }: {
   searchParams: Promise<{
     floor?: string | string[]
+    entry?: string | string[]
     tab?: string | string[]
   }>
 }) {
@@ -26,6 +32,33 @@ export default async function Page({
   const query = await searchParams
   const session = await requireCapability("operations.dashboard.read", "/")
   const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
+  const capabilities = new Set(
+    await listGrantedCapabilities(session.user.id, [
+      "store.manage",
+      "store.read",
+    ])
+  )
+  const storeMasterData = capabilities.has("store.read")
+    ? await (async () => {
+        const repository = createStoreRepository({
+          connectionString: readAuthEnvironment().connectionString,
+        })
+        try {
+          const organizationId = await repository.organizationIdForCode("MRMPL")
+          const [items, locations, suppliers, vendors, masters] =
+            await Promise.all([
+              repository.listItemTypes(organizationId),
+              repository.listLocations(organizationId),
+              repository.listSuppliers(organizationId),
+              repository.listVendors(organizationId),
+              repository.listAssetClassificationMasters(organizationId),
+            ])
+          return { items, locations, masters, suppliers, vendors }
+        } finally {
+          await repository.close()
+        }
+      })()
+    : null
   const requestedTab = Array.isArray(query.tab) ? query.tab[0] : query.tab
   const initialDashboardTab = dashboardNavigation.some(
     (item) => item.id === requestedTab
@@ -35,14 +68,20 @@ export default async function Page({
   const requestedFloor = Array.isArray(query.floor)
     ? query.floor[0]
     : query.floor
+  const requestedEntry = Array.isArray(query.entry)
+    ? query.entry[0]
+    : query.entry
 
   return (
     <MrmplDashboard
       initialDashboardTab={initialDashboardTab}
+      initialDataEntryType={requestedEntry}
       initialProductionFloor={normalizeProductionFloorCode(
         requestedFloor ?? defaultProductionFloorCode
       )}
       navigationAccess={navigationAccess}
+      canManageStoreMasters={capabilities.has("store.manage")}
+      storeMasterData={storeMasterData}
       user={{ email: session.user.email, name: session.user.name }}
     />
   )

@@ -1,6 +1,5 @@
 import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
@@ -9,7 +8,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
 import {
   Table,
   TableBody,
@@ -24,322 +28,257 @@ import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
-import { formatIstDateTime, istDateValue } from "@/lib/date-time"
+import { istDateValue } from "@/lib/date-time"
+
+import { createStorePurchaseOrderAction } from "../actions"
+
+function firstValue(value: string | string[] | undefined) {
+  return (Array.isArray(value) ? value[0] : value) ?? ""
+}
 
 export default async function StoreStockPage({
   searchParams,
 }: {
   searchParams: Promise<{
     item?: string | string[]
-    q?: string | string[]
+    orderItemId?: string | string[]
+    orderQuantity?: string | string[]
+    requestNumber?: string | string[]
   }>
 }) {
   const session = await requireCapability("store.read", "/store/stock")
-  const canRequest = (
-    await listGrantedCapabilities(session.user.id, ["store.requests.write"])
-  ).includes("store.requests.write")
+  const capabilities = new Set(
+    await listGrantedCapabilities(session.user.id, [
+      "store.manage",
+      "store.requests.write",
+    ])
+  )
   const params = await searchParams
-  const rawQuery = params.q
-  const query = (Array.isArray(rawQuery) ? rawQuery[0] : rawQuery) ?? ""
-  const rawItemQuery = params.item
-  const itemQuery = (
-    (Array.isArray(rawItemQuery) ? rawItemQuery[0] : rawItemQuery) ?? ""
-  ).trim()
+  const itemQuery = firstValue(params.item).trim()
+  const orderItemId = firstValue(params.orderItemId)
+  const orderQuantity = firstValue(params.orderQuantity)
+  const requestNumber = firstValue(params.requestNumber)
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [assets, items, movements] = await Promise.all([
-      repository.listAssets({ organizationId, query }),
+    const [items, suppliers] = await Promise.all([
       repository.listItemTypes(organizationId),
-      repository.listRecentStockMovements(organizationId),
+      repository.listSuppliers(organizationId),
     ])
-    return { assets, items, movements }
+    return { items, suppliers }
   })().finally(() => repository.close())
-  const normalizedItemQuery = itemQuery.toLocaleLowerCase()
-  const matchingItems = data.items.filter((item) =>
-    [
-      item.typeCode,
-      item.identificationName,
-      item.assetCategory,
-      item.assetSubcategory,
-      item.assetName,
-    ].some((value) => value.toLocaleLowerCase().includes(normalizedItemQuery))
+  const normalizedQuery = itemQuery.toLocaleLowerCase()
+  const items = data.items.filter((item) =>
+    [item.typeCode, item.identificationName, item.assetName].some((value) =>
+      value.toLocaleLowerCase().includes(normalizedQuery)
+    )
   )
-  const today = istDateValue()
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Stock</h2>
         <p className="text-sm text-muted-foreground">
-          Current balances and immutable inward, issue, return, transfer, and
-          scrap movements.
+          One register for every Consumable and Non Consumable Store item.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Current Stock</CardTitle>
+          <CardTitle>Stock Register</CardTitle>
           <CardDescription>
-            Consumables use ledger quantity; Non Consumables count available
-            Asset Codes.
+            Search items, view live quantity and storage location, then select
+            rows for a Department Request or Purchase Order.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 overflow-x-auto">
+        <CardContent className="grid gap-5 overflow-x-auto">
           <form className="flex max-w-2xl gap-2">
             <Input
               defaultValue={itemQuery}
               name="item"
-              placeholder="Search Type Code, item, category, or asset name"
+              placeholder="Search item code or name"
               type="search"
             />
             <Button type="submit">Search</Button>
           </form>
-          <form action="/store/requests/new" method="get">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">Select</TableHead>
-                  <TableHead>Type Code</TableHead>
-                  <TableHead>Identification</TableHead>
-                  <TableHead>Asset Type</TableHead>
-                  <TableHead>Classification</TableHead>
-                  <TableHead>Available</TableHead>
-                  <TableHead>Alert Level</TableHead>
-                  <TableHead>State</TableHead>
+
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-16">Request</TableHead>
+                <TableHead className="w-16">Order</TableHead>
+                <TableHead>Item</TableHead>
+                <TableHead>Asset Type</TableHead>
+                <TableHead>Quantity</TableHead>
+                <TableHead>Storage Location</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <input
+                      aria-label={`Request ${item.typeCode} ${item.identificationName}`}
+                      className="size-4 accent-primary"
+                      disabled={!capabilities.has("store.requests.write")}
+                      form="stock-request-form"
+                      name="itemTypeId"
+                      type="checkbox"
+                      value={item.id}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <input
+                      aria-label={`Order ${item.typeCode} ${item.identificationName}`}
+                      className="size-4 accent-primary"
+                      defaultChecked={item.id === orderItemId}
+                      disabled={!capabilities.has("store.manage")}
+                      form="stock-purchase-form"
+                      name="item_type_id"
+                      required
+                      type="radio"
+                      value={item.id}
+                    />
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {item.typeCode}
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      {item.identificationName}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {item.assetType === "NON_CONSUMABLE"
+                      ? "Non Consumable"
+                      : "Consumable"}
+                  </TableCell>
+                  <TableCell>
+                    {item.availableStock} {item.unit}
+                  </TableCell>
+                  <TableCell>{item.storageLocations}</TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {matchingItems.map((item) => {
-                  const low =
-                    Number(item.availableStock) <= Number(item.minimumStock)
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <input
-                          aria-label={`Select ${item.typeCode} ${item.identificationName}`}
-                          className="size-4 accent-primary"
-                          disabled={!canRequest}
-                          name="itemTypeId"
-                          type="checkbox"
-                          value={item.id}
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {item.typeCode}
-                      </TableCell>
-                      <TableCell>{item.identificationName}</TableCell>
-                      <TableCell>
-                        {item.assetType === "NON_CONSUMABLE"
-                          ? "Non Consumable"
-                          : "Consumable"}
-                      </TableCell>
-                      <TableCell>
-                        {item.assetCategory} / {item.assetSubcategory} /{" "}
-                        {item.assetName}
-                      </TableCell>
-                      <TableCell>
-                        {item.availableStock} {item.unit}
-                      </TableCell>
-                      <TableCell>
-                        {item.minimumStock} {item.unit}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={low ? "destructive" : "secondary"}>
-                          {low ? "Reorder" : "Available"}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-                {!matchingItems.length ? (
-                  <TableRow>
-                    <TableCell
-                      className="h-24 text-center text-muted-foreground"
-                      colSpan={8}
-                    >
-                      No matching coded Store items.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-            {canRequest && matchingItems.length ? (
-              <Button className="mt-4" type="submit">
+              ))}
+              {!items.length ? (
+                <TableRow>
+                  <TableCell
+                    className="h-24 text-center text-muted-foreground"
+                    colSpan={6}
+                  >
+                    No matching Store items.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+
+          <div className="grid gap-5 border-t pt-5 xl:grid-cols-2">
+            <form
+              action="/store/requests/new"
+              id="stock-request-form"
+              method="get"
+            >
+              <p className="mb-3 text-sm text-muted-foreground">
+                Tick multiple Request boxes to create one Department Request.
+              </p>
+              <Button
+                disabled={
+                  !capabilities.has("store.requests.write") || !items.length
+                }
+                type="submit"
+              >
                 Request Selected Items
               </Button>
+            </form>
+
+            {capabilities.has("store.manage") ? (
+              <form
+                action={createStorePurchaseOrderAction}
+                className="grid gap-3 sm:grid-cols-2"
+                id="stock-purchase-form"
+              >
+                <Field>
+                  <FieldLabel htmlFor="stock-order-supplier">
+                    Supplier
+                  </FieldLabel>
+                  <NativeSelect
+                    id="stock-order-supplier"
+                    name="supplier_id"
+                    required
+                  >
+                    {data.suppliers.map((supplier) => (
+                      <NativeSelectOption key={supplier.id} value={supplier.id}>
+                        {supplier.code} — {supplier.name}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="stock-order-quantity">
+                    Order Quantity
+                  </FieldLabel>
+                  <Input
+                    defaultValue={orderQuantity}
+                    id="stock-order-quantity"
+                    min="0.001"
+                    name="quantity"
+                    required
+                    step="0.001"
+                    type="number"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="stock-order-price">
+                    Unit Price
+                  </FieldLabel>
+                  <Input
+                    id="stock-order-price"
+                    min="0"
+                    name="unit_price"
+                    required
+                    step="0.01"
+                    type="number"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="stock-order-date">Order Date</FieldLabel>
+                  <Input
+                    defaultValue={istDateValue()}
+                    id="stock-order-date"
+                    name="order_date"
+                    required
+                    type="date"
+                  />
+                </Field>
+                <Field className="sm:col-span-2">
+                  <FieldLabel htmlFor="stock-order-remark">Remark</FieldLabel>
+                  <Input
+                    defaultValue={requestNumber ? `For ${requestNumber}` : ""}
+                    id="stock-order-remark"
+                    name="remark"
+                  />
+                </Field>
+                <Button
+                  className="sm:col-span-2"
+                  disabled={!data.suppliers.length || !items.length}
+                  type="submit"
+                >
+                  Make Purchase Order for Selected Item
+                </Button>
+              </form>
             ) : null}
-          </form>
+          </div>
+
           <p className="text-sm text-muted-foreground">
             Cannot find the item?{" "}
             <Link
               className="font-medium text-foreground underline"
               href="/store/new-item-requests"
             >
-              Submit a separate New Item Request
+              Submit a New Item Request
             </Link>
             .
           </p>
-        </CardContent>
-      </Card>
-
-      <Card id="asset-register">
-        <CardHeader>
-          <CardTitle>Non Consumable Asset Register</CardTitle>
-          <CardDescription>
-            Every physical asset is listed here. Open an Asset Code for its
-            movement, calibration, maintenance, supplier, and document history.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5 overflow-x-auto">
-          <form className="flex max-w-2xl gap-2">
-            <Input
-              defaultValue={query}
-              name="q"
-              placeholder="Search Asset Code, item, or current holder"
-              type="search"
-            />
-            <Button type="submit">Search</Button>
-          </form>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Asset Code</TableHead>
-                <TableHead>Identification</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Current Assignment</TableHead>
-                <TableHead>Next Maintenance / Calibration</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.assets.map((asset) => {
-                const overdue =
-                  asset.nextDueOn !== null && asset.nextDueOn <= today
-                const assetHref = `/store/assets/${encodeURIComponent(asset.assetCode)}`
-                return (
-                  <TableRow key={asset.id}>
-                    <TableCell className="font-medium">
-                      <Link className="hover:underline" href={assetHref}>
-                        {asset.assetCode}
-                      </Link>
-                      <span className="block text-xs font-normal text-muted-foreground">
-                        {asset.typeCode}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {asset.identificationName}
-                      <span className="block text-xs text-muted-foreground">
-                        {asset.assetName}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          asset.status === "BROKEN"
-                            ? "destructive"
-                            : "secondary"
-                        }
-                      >
-                        {asset.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {asset.holderName ||
-                        asset.locationName ||
-                        asset.holderType}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={
-                          overdue ? "font-semibold text-destructive" : ""
-                        }
-                      >
-                        {asset.nextDueOn || "Not scheduled"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={assetHref}>Open Asset</Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-              {!data.assets.length ? (
-                <TableRow>
-                  <TableCell
-                    className="h-28 text-center text-muted-foreground"
-                    colSpan={6}
-                  >
-                    No matching physical assets.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Stock Movements</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Movement</TableHead>
-                <TableHead>Item / Asset</TableHead>
-                <TableHead>Quantity</TableHead>
-                <TableHead>Store</TableHead>
-                <TableHead>Supplier / Bill</TableHead>
-                <TableHead>Destination</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.movements.map((movement, index) => (
-                <TableRow
-                  key={`${movement.typeCode}-${movement.movedAt.toISOString()}-${index}`}
-                >
-                  <TableCell>{formatIstDateTime(movement.movedAt)}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{movement.movementType}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {movement.typeCode} — {movement.identificationName}
-                    <span className="block text-xs text-muted-foreground">
-                      {movement.assetCode || "Quantity item"}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {movement.quantity} {movement.unit}
-                  </TableCell>
-                  <TableCell>{movement.locationName}</TableCell>
-                  <TableCell>
-                    {movement.supplierName || "—"}
-                    <span className="block text-xs text-muted-foreground">
-                      {movement.billNumber ? `Bill ${movement.billNumber}` : ""}
-                    </span>
-                  </TableCell>
-                  <TableCell>{movement.toHolder || "—"}</TableCell>
-                </TableRow>
-              ))}
-              {!data.movements.length ? (
-                <TableRow>
-                  <TableCell
-                    className="h-24 text-center text-muted-foreground"
-                    colSpan={7}
-                  >
-                    No Store movements yet.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
         </CardContent>
       </Card>
     </div>
