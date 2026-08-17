@@ -12,6 +12,7 @@ import {
   ChevronRight,
   CheckCircle2,
   Download,
+  Eye,
   FileText,
   Gauge,
   GripVertical,
@@ -3135,6 +3136,7 @@ function PlannerPriorityForm({
   const firstUnconfirmedStepIndex = priorityPlan.steps.findIndex((step) => !confirmedPrioritySteps[step.key]);
   const allStepsConfirmed = priorityPlan.steps.length > 0 && firstUnconfirmedStepIndex === -1;
   const activeStepIndex = allStepsConfirmed ? -1 : firstUnconfirmedStepIndex;
+  const activePriorityStep = activeStepIndex >= 0 ? priorityPlan.steps[activeStepIndex] : undefined;
   const confirmedWindows = confirmedSteps
     .map((step) => priorityStepWindows.get(step.key))
     .filter((window): window is PriorityPlanWindow => Boolean(window));
@@ -3232,12 +3234,16 @@ function PlannerPriorityForm({
   }
 
   return (
-    <form className="grid gap-3 rounded-xl border bg-background p-3" onSubmit={submit}>
-      <div>
-        <div className="text-sm font-medium">Priority Change Details</div>
-        <div className="text-xs text-muted-foreground">Review The Setup-Wise Machine Impact Before Applying A Priority Change.</div>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
+    <form className="grid gap-5" onSubmit={submit}>
+      <section className="grid gap-4 rounded-xl border bg-background p-4 sm:p-5" aria-labelledby="priority-input-heading">
+        <div className="flex items-start gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">1</span>
+          <div>
+            <div id="priority-input-heading" className="font-semibold">Select the work to reprioritize</div>
+            <div className="text-sm text-muted-foreground">Choose an item, optionally narrow it to one job card, then set the required priority.</div>
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <Field label="Item Code">
           <SearchableSelect
             className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -3287,26 +3293,43 @@ function PlannerPriorityForm({
         <Field label="Reason">
           <Input value={remark} placeholder="Customer Urgent / Dispatch Commitment" onChange={(event) => setRemark(event.target.value)} />
         </Field>
-      </div>
+        </div>
+        {!planReady ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+            <span className="text-sm text-muted-foreground">Nothing is changed until you review and confirm every affected setup.</span>
+            <Button type="submit">
+              <Eye className="size-4" />
+              Review Probable Plan
+            </Button>
+          </div>
+        ) : null}
+      </section>
 
       {planReady ? (
-        <div className="grid gap-3 rounded-lg border bg-muted/20 p-3">
+        <section className="grid gap-4 rounded-xl border bg-muted/15 p-4 sm:p-5" aria-labelledby="priority-review-heading">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <div className="text-sm font-medium">Probable Priority Plan</div>
-              <div className="text-xs text-muted-foreground">{priorityPlan.steps.length} Target Setup{priorityPlan.steps.length === 1 ? "" : "s"} Checked From The Current Machine Queue.</div>
-              <div className="text-xs text-muted-foreground">Confirm Each Setup In Sequence. Later Setup Dates Open Only After The Previous Setup Action Is Confirmed.</div>
+            <div className="flex items-start gap-3">
+              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">2</span>
+              <div>
+                <div id="priority-review-heading" className="font-semibold">Review the setup sequence</div>
+                <div className="text-sm text-muted-foreground">{priorityPlan.steps.length} target setup{priorityPlan.steps.length === 1 ? "" : "s"}. Confirm the current setup to unlock the next one.</div>
+              </div>
             </div>
-            <Button type="button" variant="outline" onClick={resetPlanReview}>Recheck Inputs</Button>
+            <Button type="button" variant="outline" size="sm" onClick={resetPlanReview}>Change Inputs</Button>
           </div>
           {itemPlanWindow ? (
-            <div className="grid gap-1 rounded-md border bg-background p-3">
-              <div className="text-xs font-medium text-muted-foreground">Complete Item Plan</div>
-              <div className="text-sm font-semibold">{itemPlanWindow.startDate || "-"} To {itemPlanWindow.endDate || "-"}</div>
+            <div className="grid gap-1 rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Complete item plan</div>
+                  <div className="text-base font-semibold">{itemPlanWindow.startDate || "-"} to {itemPlanWindow.endDate || "-"}</div>
+                </div>
+                <Badge><CheckCircle2 className="size-3" /> Ready to apply</Badge>
+              </div>
             </div>
           ) : (
-            <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
-              Complete Item Dates Will Appear After All Setup Actions Are Confirmed.
+            <div className="rounded-lg border bg-background p-3 text-sm text-muted-foreground">
+              The complete item dates will appear after all setup actions are confirmed.
             </div>
           )}
           {priorityPlan.steps.length ? (
@@ -3316,30 +3339,26 @@ function PlannerPriorityForm({
                 windows={priorityStepWindows}
                 confirmedSteps={confirmedPrioritySteps}
                 activeStepKey={activeStepIndex >= 0 ? priorityPlan.steps[activeStepIndex]?.key ?? "" : ""}
+                onEdit={editPriorityStep}
               />
-              <div className="grid gap-2">
-              {priorityPlan.steps.map((step, index) => (
+              {activePriorityStep ? (
                 <PriorityPlanStepReview
-                  key={step.key}
-                  step={step}
-                  state={confirmedPrioritySteps[step.key] ? "confirmed" : index === activeStepIndex ? "active" : "locked"}
-                  previousSetupLabel={index > 0 ? `Setup ${priorityPlan.steps[index - 1]?.setupNo}` : ""}
-                  plannedWindow={priorityStepWindows.get(step.key) ?? { startDate: step.startDate, endDate: step.endDate }}
+                  key={activePriorityStep.key}
+                  step={activePriorityStep}
+                  plannedWindow={priorityStepWindows.get(activePriorityStep.key) ?? { startDate: activePriorityStep.startDate, endDate: activePriorityStep.endDate }}
                   selectedInterruptions={selectedInterruptions}
-                  queueAfterKey={queueAfterByStep[step.key] ?? ""}
+                  queueAfterKey={queueAfterByStep[activePriorityStep.key] ?? ""}
                   sessionRows={asArray(productionControl.productionCardRows)}
                   setSelectedInterruptions={setSelectedInterruptions}
                   onQueueAfterChange={(value) => setQueueAfterByStep((current) => {
                     const next = { ...current };
-                    if (value) next[step.key] = value;
-                    else delete next[step.key];
+                    if (value) next[activePriorityStep.key] = value;
+                    else delete next[activePriorityStep.key];
                     return next;
                   })}
-                  onConfirm={() => confirmPriorityStep(step.key)}
-                  onEdit={() => editPriorityStep(step.key)}
+                  onConfirm={() => confirmPriorityStep(activePriorityStep.key)}
                 />
-              ))}
-              </div>
+              ) : null}
             </>
           ) : (
             <div className="rounded-md border bg-background p-3 text-sm text-muted-foreground">No Planned Setup Was Found For This Item / Jc In The Current Machine Plan.</div>
@@ -3351,13 +3370,21 @@ function PlannerPriorityForm({
             onKeepExisting={resetPlanReview}
             onReverseExisting={reversePriorityConflict}
           />
-        </div>
+        </section>
       ) : null}
 
-      <Button className="w-fit" type="submit" disabled={planReady && (priorityPlan.steps.length === 0 || !allStepsConfirmed || priorityConflicts.length > 0)}>
-        <Wrench className="size-4" />
-        {planReady ? "Apply Confirmed Priority" : "Show Probable Plan"}
-      </Button>
+      {planReady ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background p-4">
+          <div>
+            <div className="font-semibold">3. Apply the decision</div>
+            <div className="text-sm text-muted-foreground">{allStepsConfirmed ? "All setup actions are confirmed." : "Confirm every setup above before applying this priority."}</div>
+          </div>
+          <Button type="submit" disabled={priorityPlan.steps.length === 0 || !allStepsConfirmed || priorityConflicts.length > 0}>
+            <Wrench className="size-4" />
+            Apply Confirmed Priority
+          </Button>
+        </div>
+      ) : null}
     </form>
   );
 }
@@ -3367,42 +3394,63 @@ function PrioritySetupPreviewSummary({
   windows,
   confirmedSteps,
   activeStepKey,
+  onEdit,
 }: {
   steps: PriorityPlanStep[];
   windows: Map<string, PriorityPlanWindow>;
   confirmedSteps: Record<string, boolean>;
   activeStepKey: string;
+  onEdit: (stepKey: string) => void;
 }) {
   return (
-    <div className="grid gap-2 rounded-md border bg-background p-3">
-      <div className="text-xs font-medium text-muted-foreground">Probable Setup Dates</div>
-      <div className="grid gap-2 md:grid-cols-3">
-        {steps.map((step) => {
+    <div className="overflow-hidden rounded-lg border bg-background">
+      <div className="border-b bg-muted/20 px-4 py-3">
+        <div className="text-sm font-semibold">Setup progress</div>
+        <div className="text-xs text-muted-foreground">One setup is open at a time. Confirmed setups can be edited from this list.</div>
+      </div>
+      <ol className="divide-y">
+        {steps.map((step, index) => {
           const window = windows.get(step.key) ?? { startDate: step.startDate, endDate: step.endDate };
           const previewState = priorityPlanStepPreviewState(step.key, confirmedSteps, activeStepKey);
+          const isConfirmed = Boolean(confirmedSteps[step.key]);
+          const isActive = step.key === activeStepKey;
           return (
-            <div key={step.key} className="grid gap-1 rounded-md border bg-muted/20 p-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-sm font-medium">Setup {step.setupNo}</div>
-                <Badge variant={confirmedSteps[step.key] ? "outline" : "secondary"}>{previewState.label}</Badge>
+            <li key={step.key} className={isActive ? "bg-primary/5" : undefined}>
+              <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(10rem,auto)_auto] sm:items-center">
+                <span className={[
+                  "grid size-8 place-items-center rounded-full border text-sm font-semibold",
+                  isConfirmed ? "border-primary bg-primary text-primary-foreground" : isActive ? "border-primary text-primary" : "bg-muted text-muted-foreground",
+                ].join(" ")}>
+                  {isConfirmed ? <CheckCircle2 className="size-4" /> : index + 1}
+                </span>
+                <div className="min-w-0">
+                  <div className="font-medium">Setup {step.setupNo}</div>
+                  <div className="truncate text-xs text-muted-foreground">{step.machine} · {step.itemCode} / {step.jcNo}</div>
+                </div>
+                <div className="col-start-2 sm:col-start-auto">
+                  <div className="text-xs text-muted-foreground">Probable dates</div>
+                  <div className="text-sm font-medium">
+                    {previewState.datesVisible
+                      ? `${window.startDate || "-"} to ${window.endDate || "-"}`
+                      : "Waiting for previous setup"}
+                  </div>
+                </div>
+                <div className="col-span-2 flex items-center justify-between gap-2 sm:col-span-1 sm:justify-end">
+                  <Badge variant={isActive ? "default" : isConfirmed ? "outline" : "secondary"}>{previewState.label}</Badge>
+                  {isConfirmed ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => onEdit(step.key)}>Edit</Button>
+                  ) : null}
+                </div>
               </div>
-              <div className="text-sm font-semibold">
-                {previewState.datesVisible
-                  ? `${window.startDate || "-"} To ${window.endDate || "-"}`
-                  : "Available After Previous Setup Confirmation"}
-              </div>
-              <div className="text-xs text-muted-foreground">{step.machine} - {step.itemCode} / {step.jcNo}</div>
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ol>
     </div>
   );
 }
 function PriorityPlanStepReview({
   step,
-  state,
-  previousSetupLabel,
   plannedWindow,
   selectedInterruptions,
   queueAfterKey,
@@ -3410,11 +3458,8 @@ function PriorityPlanStepReview({
   setSelectedInterruptions,
   onQueueAfterChange,
   onConfirm,
-  onEdit,
 }: {
   step: PriorityPlanStep;
-  state: "active" | "confirmed" | "locked";
-  previousSetupLabel: string;
   plannedWindow: PriorityPlanWindow;
   selectedInterruptions: Record<string, boolean>;
   queueAfterKey: string;
@@ -3422,7 +3467,6 @@ function PriorityPlanStepReview({
   setSelectedInterruptions: Dispatch<SetStateAction<Record<string, boolean>>>;
   onQueueAfterChange: (value: string) => void;
   onConfirm: () => void;
-  onEdit: () => void;
 }) {
   const selectedRunningKeys = step.blockers
     .filter((blocker) => blocker.state === "running" && selectedInterruptions[blocker.key])
@@ -3452,51 +3496,28 @@ function PriorityPlanStepReview({
   const planMode = [interruptMode, queueMode].filter(Boolean).join("; ");
 
   return (
-    <div className="grid gap-2 rounded-lg border bg-background p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="text-sm font-medium">{step.itemCode} / {step.jcNo} / Setup {step.setupNo}</div>
-          <div className="text-xs text-muted-foreground">
-            {state === "confirmed"
-              ? `Confirmed on ${step.machine} - ${plannedWindow.startDate || "-"} to ${plannedWindow.endDate || "-"}`
-              : `Preview on ${step.machine} - ${plannedWindow.startDate || "-"} to ${plannedWindow.endDate || "-"}`}
+    <div className="grid gap-4 rounded-lg border-2 border-primary/25 bg-background p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
+        <div className="flex items-start gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><ListChecks className="size-5" /></span>
+          <div>
+            <div className="font-semibold">Decide Setup {step.setupNo}</div>
+            <div className="text-sm text-muted-foreground">{step.itemCode} / {step.jcNo} on {step.machine}</div>
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          <Badge variant={step.blockers.length ? "secondary" : "outline"}>{step.blockers.length ? step.blockers.length + " queue impact" : "No Stop Needed"}</Badge>
-          {state === "confirmed" ? <Badge variant="outline">Confirmed</Badge> : null}
-          {state === "locked" ? <Badge variant="outline">Locked</Badge> : null}
+          <Badge>Current setup</Badge>
+          <Badge variant={step.blockers.length ? "secondary" : "outline"}>{step.blockers.length ? `${step.blockers.length} queue impact${step.blockers.length === 1 ? "" : "s"}` : "No queue impact"}</Badge>
         </div>
       </div>
 
-      {state === "locked" ? (
-        <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
-          Confirm {previousSetupLabel || "the previous setup"} Before Planning This Setup.
-        </div>
-      ) : null}
+      <PriorityScenarioCard
+        title="Probable setup plan"
+        window={plannedWindow}
+        detail={planMode || "No queue impact"}
+      />
 
-      {state === "confirmed" ? (
-        <div className="grid gap-2">
-          <PriorityScenarioCard
-            title="Confirmed Setup Plan"
-            window={plannedWindow}
-            detail={planMode}
-          />
-          <Button type="button" variant="outline" size="sm" className="w-fit" onClick={onEdit}>
-            Edit Setup Action
-          </Button>
-        </div>
-      ) : null}
-
-      {state === "active" ? (
-        <PriorityScenarioCard
-          title="Probable Setup Plan"
-          window={plannedWindow}
-          detail={planMode || "No queue impact"}
-        />
-      ) : null}
-
-      {state === "active" && queuedBlockers.length ? (
+      {queuedBlockers.length ? (
         <PriorityQueuePlacementBoard
           step={step}
           queueAfterKey={queueAfterKey}
@@ -3505,12 +3526,16 @@ function PriorityPlanStepReview({
         />
       ) : null}
 
-      {state === "active" && step.blockers.some((blocker) => blocker.requiresApproval) ? (
-        <div className="grid gap-2">
+      {step.blockers.some((blocker) => blocker.requiresApproval) ? (
+        <div className="grid gap-3 rounded-lg border bg-muted/10 p-3">
+          <div>
+            <div className="text-sm font-semibold">Work that may be interrupted</div>
+            <div className="text-xs text-muted-foreground">Choose explicitly whether each running or started setup may be stopped or moved.</div>
+          </div>
           {step.blockers.filter((blocker) => blocker.requiresApproval).map((blocker) => {
             const selected = Boolean(selectedInterruptions[blocker.key]);
             return (
-              <div key={blocker.key} className="grid gap-2 rounded-md border p-2 md:grid-cols-[1fr_auto] md:items-center">
+              <div key={blocker.key} className="grid gap-2 rounded-md border bg-background p-3 md:grid-cols-[1fr_auto] md:items-center">
                 <div>
                   <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
                   <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} To {blocker.endDate} - {blocker.label}</div>
@@ -3531,7 +3556,7 @@ function PriorityPlanStepReview({
         </div>
       ) : null}
 
-      {state === "active" && selectedRunningCount ? (
+      {selectedRunningCount ? (
         <PlannerSessionSettlementNotice
           mode="close"
           rows={step.blockers.filter((blocker) => blocker.state === "running" && selectedInterruptions[blocker.key]).map((blocker) => ({
@@ -3543,16 +3568,15 @@ function PriorityPlanStepReview({
         />
       ) : null}
 
-      {state === "active" ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" onClick={onConfirm}>
-            Confirm Setup Action
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            {runningBlockerCount ? "Leaving Running Blockers Unselected Keeps Them Running." : "No Running Setup Blocks This Target."}
-          </span>
-        </div>
-      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <span className="text-sm text-muted-foreground">
+          {runningBlockerCount ? "Running work left unselected will continue running." : "No running setup blocks this target."}
+        </span>
+        <Button type="button" onClick={onConfirm}>
+          Confirm Setup {step.setupNo}
+          <ChevronRight className="size-4" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -3602,12 +3626,12 @@ function PriorityQueuePlacementBoard({
     <div className="grid gap-2 rounded-md border bg-muted/20 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-xs font-medium text-muted-foreground">{step.machine} Queue Placement</div>
-          <div className="text-sm font-semibold">{plannedWindow.startDate || "-"} To {plannedWindow.endDate || "-"}</div>
+          <div className="text-sm font-semibold">Choose the position on {step.machine}</div>
+          <div className="text-xs text-muted-foreground">Click a placement row or drag the highlighted priority setup. Planned dates: {plannedWindow.startDate || "-"} to {plannedWindow.endDate || "-"}.</div>
         </div>
-        <Badge variant="secondary">{placementIndex === 0 ? "Position 1" : `After ${placementIndex} setup${placementIndex === 1 ? "" : "s"}`}</Badge>
+        <Badge variant="secondary">Selected position: {placementIndex + 1}</Badge>
       </div>
-      <div className="grid gap-1">
+      <div className="grid gap-2 rounded-lg border bg-background p-2">
         {Array.from({ length: queuedBlockers.length + 1 }, (_, index) => (
           <Fragment key={`${step.key}-slot-${index}`}>
             <PriorityQueueDropZone
@@ -3623,6 +3647,7 @@ function PriorityQueuePlacementBoard({
               <PriorityQueuePriorityTile
                 step={step}
                 plannedWindow={plannedWindow}
+                position={placementIndex + 1}
                 onDragStart={dragPriority}
                 onDragEnd={() => setDragOverIndex(null)}
               />
@@ -3631,6 +3656,7 @@ function PriorityQueuePlacementBoard({
               <PriorityQueueBlockerTile
                 blocker={queuedBlockers[index]!}
                 keptAhead={index < placementIndex}
+                position={index >= placementIndex ? index + 2 : index + 1}
                 onPlaceBefore={() => placeAt(index)}
                 onPlaceAfter={() => placeAt(index + 1)}
               />
@@ -3660,8 +3686,8 @@ function PriorityQueueDropZone({
   onDrop: (event: DragEvent<HTMLButtonElement>) => void;
 }) {
   const className = [
-    "h-3 rounded-full border transition-colors",
-    current ? "border-primary bg-primary/25" : "border-dashed border-transparent bg-transparent hover:border-primary/50 hover:bg-primary/10",
+    "flex min-h-8 w-full items-center justify-center rounded-md border px-3 text-xs font-medium transition-colors",
+    current ? "border-primary bg-primary/10 text-primary" : "border-dashed border-border bg-muted/10 text-muted-foreground hover:border-primary/50 hover:bg-primary/10 hover:text-primary",
     active ? "border-primary bg-primary/20" : "",
   ].filter(Boolean).join(" ");
 
@@ -3676,7 +3702,7 @@ function PriorityQueueDropZone({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <span className="sr-only">{label}</span>
+      <span>{current ? "Priority position selected" : label}</span>
     </button>
   );
 }
@@ -3684,27 +3710,30 @@ function PriorityQueueDropZone({
 function PriorityQueuePriorityTile({
   step,
   plannedWindow,
+  position,
   onDragStart,
   onDragEnd,
 }: {
   step: PriorityPlanStep;
   plannedWindow: PriorityPlanWindow;
+  position: number;
   onDragStart: (event: DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
 }) {
   return (
     <div
-      className="grid cursor-grab gap-2 rounded-md border border-primary/50 bg-primary/10 p-2 active:cursor-grabbing md:grid-cols-[auto_1fr_auto] md:items-center"
+      className="grid cursor-grab grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 rounded-md border-2 border-primary/50 bg-primary/10 p-3 active:cursor-grabbing md:grid-cols-[auto_auto_1fr_auto]"
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
       <GripVertical className="size-4 text-primary" aria-hidden="true" />
+      <span className="grid size-7 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{position}</span>
       <div>
         <div className="text-sm font-semibold">{step.itemCode} / {step.jcNo} / Setup {step.setupNo}</div>
-        <div className="text-xs text-muted-foreground">{step.machine} - {plannedWindow.startDate || "-"} To {plannedWindow.endDate || "-"}</div>
+        <div className="text-xs text-muted-foreground">{step.machine} · {plannedWindow.startDate || "-"} to {plannedWindow.endDate || "-"}</div>
       </div>
-      <Badge>Priority</Badge>
+      <Badge className="col-start-3 md:col-start-auto">New priority</Badge>
     </div>
   );
 }
@@ -3712,28 +3741,33 @@ function PriorityQueuePriorityTile({
 function PriorityQueueBlockerTile({
   blocker,
   keptAhead,
+  position,
   onPlaceBefore,
   onPlaceAfter,
 }: {
   blocker: PriorityPlanStep["blockers"][number];
   keptAhead: boolean;
+  position: number;
   onPlaceBefore: () => void;
   onPlaceAfter: () => void;
 }) {
   return (
-    <div className="grid gap-2 rounded-md border bg-background p-2 md:grid-cols-[1fr_auto] md:items-center">
-      <div>
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 rounded-md border bg-background p-3 md:grid-cols-[auto_1fr_auto]">
+      <span className="grid size-7 place-items-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">{position}</span>
+      <div className="min-w-0">
         <div className="text-sm font-medium">{blocker.itemCode} / {blocker.jcNo} / Setup {blocker.setupNo}</div>
-        <div className="text-xs text-muted-foreground">{blocker.machine} - {blocker.startDate} To {blocker.endDate}</div>
+        <div className="text-xs text-muted-foreground">{blocker.machine} · {blocker.startDate} to {blocker.endDate}</div>
       </div>
-      <div className="flex items-center gap-2">
-        <Badge variant={keptAhead ? "secondary" : "outline"}>{keptAhead ? "Ahead Of Priority" : "After Priority"}</Badge>
+      <div className="col-span-2 flex flex-wrap items-center justify-end gap-2 md:col-span-1">
+        <Badge variant={keptAhead ? "secondary" : "outline"}>{keptAhead ? "Ahead of priority" : "After priority"}</Badge>
         <div className="flex gap-1">
-          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority before ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place Priority Before This Setup" onClick={onPlaceBefore}>
+          <Button type="button" variant="outline" size="sm" aria-label={`Place priority before ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place Priority Before This Setup" onClick={onPlaceBefore}>
             <ArrowUp className="size-3" />
+            Before
           </Button>
-          <Button type="button" variant="outline" size="icon-xs" aria-label={`Place priority after ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place Priority After This Setup" onClick={onPlaceAfter}>
+          <Button type="button" variant="outline" size="sm" aria-label={`Place priority after ${blocker.itemCode} ${blocker.jcNo} setup ${blocker.setupNo}`} title="Place Priority After This Setup" onClick={onPlaceAfter}>
             <ArrowDown className="size-3" />
+            After
           </Button>
         </div>
       </div>
@@ -3762,10 +3796,12 @@ function PriorityScenarioCard({
   detail: string;
 }) {
   return (
-    <div className="grid gap-1 rounded-md border bg-muted/20 p-3">
-      <div className="text-xs font-medium text-muted-foreground">{title}</div>
-      <div className="text-sm font-semibold">{window.startDate || "-"} To {window.endDate || "-"}</div>
-      <div className="text-xs text-muted-foreground">{detail}</div>
+    <div className="grid gap-3 rounded-lg border bg-muted/15 p-4 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] sm:items-center">
+      <div>
+        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</div>
+        <div className="mt-1 text-base font-semibold">{window.startDate || "-"} to {window.endDate || "-"}</div>
+      </div>
+      <div className="rounded-md bg-background p-3 text-sm text-muted-foreground">{detail}</div>
     </div>
   );
 }

@@ -35,8 +35,10 @@ describe("PlannerDecisionWorkspace", () => {
     const html = renderWorkspace()
 
     expect(html).toContain("New Action")
+    expect(html).toContain("Create one planning decision")
     expect(html).toContain("Pending Review")
     expect(html).toContain("Decision History")
+    expect(html).toContain("Choose an action")
     expect(html).toContain("Change Priority")
     expect(html).toContain("Machine Unavailable")
     expect(html).toContain("Move Setup")
@@ -49,6 +51,7 @@ describe("PlannerDecisionWorkspace", () => {
     const html = renderWorkspace({ activeAction: "priority" })
 
     expect(html).toContain("Back to actions")
+    expect(html).toContain("Action in progress")
     expect(html).toContain("1. Enter Details")
     expect(html).toContain("2. Review Impact")
     expect(html).toContain("3. Confirm Decision")

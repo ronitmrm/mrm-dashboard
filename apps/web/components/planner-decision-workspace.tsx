@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   ArrowRightLeft,
   CheckCircle2,
   Clock3,
@@ -122,35 +123,49 @@ export function PlannerDecisionWorkspace({
             Recalculate Plan
           </Button>
         </div>
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Planner workspace">
+        <div className="grid gap-1 rounded-lg border bg-background p-1 sm:grid-cols-3" role="tablist" aria-label="Planner workspace">
           <Button
             type="button"
             role="tab"
             aria-selected={activeView === "new"}
-            variant={activeView === "new" ? "default" : "outline"}
+            variant={activeView === "new" ? "secondary" : "ghost"}
+            className="h-auto justify-start rounded-md px-3 py-2"
             onClick={() => onViewChange("new")}
           >
-            New Action
+            <FilePenLine className="size-4" />
+            <span className="grid text-left leading-tight">
+              <span>New Action</span>
+              <span className="hidden text-xs font-normal text-muted-foreground md:block">Create one planning decision</span>
+            </span>
           </Button>
           <Button
             type="button"
             role="tab"
             aria-selected={activeView === "pending"}
-            variant={activeView === "pending" ? "default" : "outline"}
+            variant={activeView === "pending" ? "secondary" : "ghost"}
+            className="h-auto justify-start rounded-md px-3 py-2"
             onClick={() => onViewChange("pending")}
           >
-            Pending Review
+            <AlertTriangle className="size-4" />
+            <span className="grid flex-1 text-left leading-tight">
+              <span>Pending Review</span>
+              <span className="hidden text-xs font-normal text-muted-foreground md:block">Resolve conflicts and constraints</span>
+            </span>
             {pendingCount ? <Badge variant="secondary">{pendingCount}</Badge> : null}
           </Button>
           <Button
             type="button"
             role="tab"
             aria-selected={activeView === "history"}
-            variant={activeView === "history" ? "default" : "outline"}
+            variant={activeView === "history" ? "secondary" : "ghost"}
+            className="h-auto justify-start rounded-md px-3 py-2"
             onClick={() => onViewChange("history")}
           >
             <Clock3 className="size-4" />
-            Decision History
+            <span className="grid flex-1 text-left leading-tight">
+              <span>Decision History</span>
+              <span className="hidden text-xs font-normal text-muted-foreground md:block">Find earlier planner decisions</span>
+            </span>
             {historyCount ? <Badge variant="secondary">{historyCount}</Badge> : null}
           </Button>
         </div>
@@ -159,9 +174,9 @@ export function PlannerDecisionWorkspace({
         {activeView === "new" && !activeAction ? (
           <div className="grid gap-4">
             <div>
-              <div className="text-base font-semibold">What needs to change?</div>
+              <div className="text-base font-semibold">Choose an action</div>
               <div className="text-sm text-muted-foreground">
-                Choose the situation. Only the information needed for that decision will open.
+                Select the planning situation. The page will show only the details and decisions needed for it.
               </div>
             </div>
             <div className="grid gap-3 @3xl/planner:grid-cols-2">
@@ -171,20 +186,20 @@ export function PlannerDecisionWorkspace({
                   <button
                     key={choice.key}
                     type="button"
-                    className="group grid min-h-36 gap-3 rounded-lg border bg-background p-4 text-left transition-colors hover:border-primary/50 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="group grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-lg border bg-background p-4 text-left transition-colors hover:border-primary/50 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[auto_1fr_auto]"
                     onClick={() => onActionChange(choice.key)}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="grid size-10 place-items-center rounded-md bg-primary/10 text-primary">
-                        <Icon className="size-5" />
-                      </span>
-                      <span className="text-xs font-medium text-primary">Open action</span>
-                    </div>
-                    <div>
+                    <span className="grid size-10 place-items-center rounded-md bg-primary/10 text-primary">
+                      <Icon className="size-5" />
+                    </span>
+                    <div className="min-w-0">
                       <div className="font-semibold">{choice.title}</div>
                       <div className="mt-1 text-sm text-muted-foreground">{choice.description}</div>
+                      <div className="mt-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Best for:</span> {choice.detail}</div>
                     </div>
-                    <div className="text-xs text-muted-foreground">{choice.detail}</div>
+                    <span className="col-start-2 flex items-center gap-1 text-xs font-medium text-primary sm:col-start-auto sm:pt-1">
+                      Select <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+                    </span>
                   </button>
                 )
               })}
@@ -193,7 +208,7 @@ export function PlannerDecisionWorkspace({
         ) : null}
         {activeView === "new" && activeChoice ? (
           <div className="grid gap-4" role="tabpanel" aria-label={activeChoice.title}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/15 p-4">
               <div>
                 <Button type="button" variant="ghost" className="-ml-3 mb-1" onClick={() => onActionChange(null)}>
                   <ArrowLeft className="size-4" />
@@ -202,9 +217,9 @@ export function PlannerDecisionWorkspace({
                 <div className="text-lg font-semibold">{activeChoice.title}</div>
                 <div className="text-sm text-muted-foreground">{activeChoice.description}</div>
               </div>
-              <Badge variant="outline">One decision in progress</Badge>
+              <Badge variant="secondary">Action in progress</Badge>
             </div>
-            <div className="grid overflow-hidden rounded-lg border bg-muted/15 @3xl/planner:grid-cols-3">
+            <div className="grid overflow-hidden rounded-lg border @3xl/planner:grid-cols-3" aria-label="Decision steps">
               <DecisionStage icon={FilePenLine} label="1. Enter Details" description="Choose the affected job, machine, dates, or route." />
               <DecisionStage icon={Eye} label="2. Review Impact" description="Check interruptions, queue movement, and probable dates." />
               <DecisionStage icon={CheckCircle2} label="3. Confirm Decision" description="Resolve conflicts and apply the approved plan." />
