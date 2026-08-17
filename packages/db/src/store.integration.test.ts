@@ -97,6 +97,60 @@ async function createPurchaseOrder(
 }
 
 describe("Store requests", () => {
+  test("creates one numbered Store Request containing multiple coded item lines", async () => {
+    const location = await store.createLocation({
+      code: `GROUP-${suffix}`,
+      name: "Grouped Request Store",
+      organizationId,
+    })
+    const firstClassification = await createClassification("Grouped Gloves")
+    const secondClassification = await createClassification("Grouped Inserts")
+    const gloves = await store.createItemType({
+      ...firstClassification,
+      assetType: "CONSUMABLE",
+      identificationName: "Grouped Safety Gloves",
+      organizationId,
+      unit: "Pairs",
+    })
+    const inserts = await store.createItemType({
+      ...secondClassification,
+      assetType: "CONSUMABLE",
+      identificationName: "Grouped Carbide Inserts",
+      organizationId,
+      unit: "Nos",
+    })
+
+    const request = await store.createRequisitionBatch({
+      department: "Production",
+      items: [
+        { itemTypeId: gloves.id, quantity: 3 },
+        { itemTypeId: inserts.id, quantity: 6 },
+      ],
+      locationId: location.id,
+      organizationId,
+      requestedBy: "Production Supervisor",
+    })
+
+    expect(request.requestNumber).toMatch(/^STR-REQ-\d{4}-\d{6}$/)
+    const listed = await store.listRequisitions({ organizationId })
+    const lines = listed.rows.filter(
+      (line) => line.requestNumber === request.requestNumber
+    )
+    expect(lines).toHaveLength(2)
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          itemTypeId: gloves.id,
+          requestedQuantity: "3",
+        }),
+        expect.objectContaining({
+          itemTypeId: inserts.id,
+          requestedQuantity: "6",
+        }),
+      ])
+    )
+  })
+
   test("receives stock only against the remaining Purchase Order quantity", async () => {
     const location = await store.createLocation({
       code: `PO-${suffix}`,

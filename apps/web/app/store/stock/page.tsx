@@ -20,17 +20,31 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  listGrantedCapabilities,
+  requireCapability,
+} from "@/lib/auth/require-capability"
 import { formatIstDateTime, istDateValue } from "@/lib/date-time"
 
 export default async function StoreStockPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[] }>
+  searchParams: Promise<{
+    item?: string | string[]
+    q?: string | string[]
+  }>
 }) {
-  await requireCapability("store.read", "/store/stock")
-  const rawQuery = (await searchParams).q
+  const session = await requireCapability("store.read", "/store/stock")
+  const canRequest = (
+    await listGrantedCapabilities(session.user.id, ["store.requests.write"])
+  ).includes("store.requests.write")
+  const params = await searchParams
+  const rawQuery = params.q
   const query = (Array.isArray(rawQuery) ? rawQuery[0] : rawQuery) ?? ""
+  const rawItemQuery = params.item
+  const itemQuery = (
+    (Array.isArray(rawItemQuery) ? rawItemQuery[0] : rawItemQuery) ?? ""
+  ).trim()
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -43,6 +57,16 @@ export default async function StoreStockPage({
     ])
     return { assets, items, movements }
   })().finally(() => repository.close())
+  const normalizedItemQuery = itemQuery.toLocaleLowerCase()
+  const matchingItems = data.items.filter((item) =>
+    [
+      item.typeCode,
+      item.identificationName,
+      item.assetCategory,
+      item.assetSubcategory,
+      item.assetName,
+    ].some((value) => value.toLocaleLowerCase().includes(normalizedItemQuery))
+  )
   const today = istDateValue()
 
   return (
@@ -50,7 +74,8 @@ export default async function StoreStockPage({
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Stock</h2>
         <p className="text-sm text-muted-foreground">
-          Current balances and immutable inward, issue, return, transfer, and scrap movements.
+          Current balances and immutable inward, issue, return, transfer, and
+          scrap movements.
         </p>
       </div>
 
@@ -58,48 +83,105 @@ export default async function StoreStockPage({
         <CardHeader>
           <CardTitle>Current Stock</CardTitle>
           <CardDescription>
-            Consumables use ledger quantity; Non Consumables count available Asset Codes.
+            Consumables use ledger quantity; Non Consumables count available
+            Asset Codes.
           </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type Code</TableHead>
-                <TableHead>Identification</TableHead>
-                <TableHead>Asset Type</TableHead>
-                <TableHead>Classification</TableHead>
-                <TableHead>Available</TableHead>
-                <TableHead>Alert Level</TableHead>
-                <TableHead>State</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.items.map((item) => {
-                const low = Number(item.availableStock) <= Number(item.minimumStock)
-                return (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.typeCode}</TableCell>
-                    <TableCell>{item.identificationName}</TableCell>
-                    <TableCell>
-                      {item.assetType === "NON_CONSUMABLE" ? "Non Consumable" : "Consumable"}
-                    </TableCell>
-                    <TableCell>{item.assetCategory} / {item.assetSubcategory} / {item.assetName}</TableCell>
-                    <TableCell>{item.availableStock} {item.unit}</TableCell>
-                    <TableCell>{item.minimumStock} {item.unit}</TableCell>
-                    <TableCell>
-                      <Badge variant={low ? "destructive" : "secondary"}>
-                        {low ? "Reorder" : "Available"}
-                      </Badge>
+        <CardContent className="grid gap-4 overflow-x-auto">
+          <form className="flex max-w-2xl gap-2">
+            <Input
+              defaultValue={itemQuery}
+              name="item"
+              placeholder="Search Type Code, item, category, or asset name"
+              type="search"
+            />
+            <Button type="submit">Search</Button>
+          </form>
+          <form action="/store/requests/new" method="get">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">Select</TableHead>
+                  <TableHead>Type Code</TableHead>
+                  <TableHead>Identification</TableHead>
+                  <TableHead>Asset Type</TableHead>
+                  <TableHead>Classification</TableHead>
+                  <TableHead>Available</TableHead>
+                  <TableHead>Alert Level</TableHead>
+                  <TableHead>State</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {matchingItems.map((item) => {
+                  const low =
+                    Number(item.availableStock) <= Number(item.minimumStock)
+                  return (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        <input
+                          aria-label={`Select ${item.typeCode} ${item.identificationName}`}
+                          className="size-4 accent-primary"
+                          disabled={!canRequest}
+                          name="itemTypeId"
+                          type="checkbox"
+                          value={item.id}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {item.typeCode}
+                      </TableCell>
+                      <TableCell>{item.identificationName}</TableCell>
+                      <TableCell>
+                        {item.assetType === "NON_CONSUMABLE"
+                          ? "Non Consumable"
+                          : "Consumable"}
+                      </TableCell>
+                      <TableCell>
+                        {item.assetCategory} / {item.assetSubcategory} /{" "}
+                        {item.assetName}
+                      </TableCell>
+                      <TableCell>
+                        {item.availableStock} {item.unit}
+                      </TableCell>
+                      <TableCell>
+                        {item.minimumStock} {item.unit}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={low ? "destructive" : "secondary"}>
+                          {low ? "Reorder" : "Available"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+                {!matchingItems.length ? (
+                  <TableRow>
+                    <TableCell
+                      className="h-24 text-center text-muted-foreground"
+                      colSpan={8}
+                    >
+                      No matching coded Store items.
                     </TableCell>
                   </TableRow>
-                )
-              })}
-              {!data.items.length ? (
-                <TableRow><TableCell className="h-24 text-center text-muted-foreground" colSpan={7}>No Store stock yet.</TableCell></TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
+                ) : null}
+              </TableBody>
+            </Table>
+            {canRequest && matchingItems.length ? (
+              <Button className="mt-4" type="submit">
+                Request Selected Items
+              </Button>
+            ) : null}
+          </form>
+          <p className="text-sm text-muted-foreground">
+            Cannot find the item?{" "}
+            <Link
+              className="font-medium text-foreground underline"
+              href="/store/new-item-requests"
+            >
+              Submit a separate New Item Request
+            </Link>
+            .
+          </p>
         </CardContent>
       </Card>
 
@@ -202,7 +284,9 @@ export default async function StoreStockPage({
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Stock Movements</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Stock Movements</CardTitle>
+        </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -218,16 +302,22 @@ export default async function StoreStockPage({
             </TableHeader>
             <TableBody>
               {data.movements.map((movement, index) => (
-                <TableRow key={`${movement.typeCode}-${movement.movedAt.toISOString()}-${index}`}>
+                <TableRow
+                  key={`${movement.typeCode}-${movement.movedAt.toISOString()}-${index}`}
+                >
                   <TableCell>{formatIstDateTime(movement.movedAt)}</TableCell>
-                  <TableCell><Badge variant="outline">{movement.movementType}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{movement.movementType}</Badge>
+                  </TableCell>
                   <TableCell>
                     {movement.typeCode} — {movement.identificationName}
                     <span className="block text-xs text-muted-foreground">
                       {movement.assetCode || "Quantity item"}
                     </span>
                   </TableCell>
-                  <TableCell>{movement.quantity} {movement.unit}</TableCell>
+                  <TableCell>
+                    {movement.quantity} {movement.unit}
+                  </TableCell>
                   <TableCell>{movement.locationName}</TableCell>
                   <TableCell>
                     {movement.supplierName || "—"}
@@ -239,7 +329,14 @@ export default async function StoreStockPage({
                 </TableRow>
               ))}
               {!data.movements.length ? (
-                <TableRow><TableCell className="h-24 text-center text-muted-foreground" colSpan={7}>No Store movements yet.</TableCell></TableRow>
+                <TableRow>
+                  <TableCell
+                    className="h-24 text-center text-muted-foreground"
+                    colSpan={7}
+                  >
+                    No Store movements yet.
+                  </TableCell>
+                </TableRow>
               ) : null}
             </TableBody>
           </Table>
