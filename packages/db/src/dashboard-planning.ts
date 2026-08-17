@@ -1126,7 +1126,23 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
           input.setupNumber,
           normalizeProductionFloorCode(input.productionFloorCode)
         )
-        const toolCode = requiredText(input.toolCode, "Tool code")
+        const requestedToolCode = requiredText(input.toolCode, "Asset code")
+        const toolingAsset = await client.query<{ type_code: string }>(
+          `
+            SELECT type_code
+            FROM store.item_types
+            WHERE organization_id = $1
+              AND lower(type_code) = lower($2)
+              AND active
+          `,
+          [input.organizationId, requestedToolCode]
+        )
+        if (!toolingAsset.rows[0]) {
+          throw new Error(
+            "Create the tooling Asset Code in Store first, then assign it in Tooling Master."
+          )
+        }
+        const toolCode = toolingAsset.rows[0].type_code
         const quantity = input.quantity ?? 1
         if (!(quantity > 0)) throw new Error("Tool quantity must be positive.")
         await businessKeyLock(

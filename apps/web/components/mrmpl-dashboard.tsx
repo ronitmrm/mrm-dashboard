@@ -282,7 +282,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "tooling",
     title: "Tooling",
-    description: "Fixture, Tooling, Foam Tool, And Planning Remarks.",
+    description: "Assign Existing Store Asset Codes As Fixture, Tooling, Or Foam Tool.",
     fields: [
       { name: "partNo", label: "Part No.", required: true },
       { name: "optionNumber", label: "Option No.", required: true },
@@ -6913,6 +6913,7 @@ function DataEntryPanel({
           masterRows={selectedMasterRows}
           productionControl={productionControl}
           productionFloorCode={productionFloorCode}
+          storeMasterData={storeMasterData}
         />
       ) : null}
     </section>
@@ -7647,6 +7648,7 @@ function DataEntryForm({
   masterRows = [],
   productionControl = {},
   productionFloorCode,
+  storeMasterData,
 }: {
   spec: DataEntrySpec;
   submitAction: (path: string, body: Record<string, unknown>, options?: { throwOnError?: boolean }) => Promise<void>;
@@ -7655,6 +7657,7 @@ function DataEntryForm({
   masterRows?: DashboardPayload[];
   productionControl?: DashboardPayload;
   productionFloorCode?: ProductionFloorCode;
+  storeMasterData?: StoreMasterData | null;
 }) {
   const [locallyGeneratedCodes, setLocallyGeneratedCodes] = useState<string[]>([]);
   const generatedCode = nextAutomaticMasterCode(spec.entryType, [
@@ -7662,6 +7665,12 @@ function DataEntryForm({
     ...locallyGeneratedCodes.map((code) => ({ code })),
   ]);
   const resolvedDefaults = generatedCode ? { ...defaults, code: generatedCode } : defaults;
+  const toolingAssetCodes = storeMasterData?.items.map((item) => item.typeCode) ?? [];
+  const resolvedFields = spec.entryType === "tooling" && toolingAssetCodes.length
+    ? spec.fields.map((field) => ["fixture", "tooling", "foamTool"].includes(field.name)
+      ? { ...field, options: ["", ...toolingAssetCodes] }
+      : field)
+    : spec.fields;
   const defaultsKey = JSON.stringify(resolvedDefaults);
   if (spec.entryType === "maintenance_master") {
     return <MaintenanceMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} productionControl={productionControl} />;
@@ -7686,7 +7695,7 @@ function DataEntryForm({
           key={`${spec.entryType}-${defaultsKey}`}
           title={`Save ${spec.title}`}
           description="Writes The Same Entry Type And Payload Shape Used By The Legacy Form."
-          fields={spec.fields}
+          fields={resolvedFields}
           defaults={resolvedDefaults}
           buttonLabel={`Save ${spec.title}`}
           onSubmit={async (body) => {
@@ -8618,7 +8627,11 @@ function LegacyActionForm({
                   <option key={option} value={option}>
                     {field.name === "productionFloorCode"
                       ? productionFloors.find((floor) => floor.code === option)?.shortLabel ?? option
-                      : option ? option.replaceAll("_", " ") : "Normal"}
+                      : option
+                        ? option.replaceAll("_", " ")
+                        : ["fixture", "tooling", "foamTool"].includes(field.name)
+                          ? "Select Store Asset Code"
+                          : "Normal"}
                   </option>
                 ))}
               </SearchableSelect>

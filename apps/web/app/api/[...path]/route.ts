@@ -609,20 +609,28 @@ async function savePlanningMasterEntry(
     }
     const results = []
     for (const row of toolingRows) {
-      results.push(
-        await repository.upsertTooling({
-          actorUserId,
-          description: optionalText(payload.remarks) || row.type,
-          itemUid,
-          organizationId,
-          productionFloorCode: text(payload.productionFloorCode),
-          quantity: numeric(row.quantity) || 1,
-          routeCode,
-          setupNumber: setupNumber!,
-          sourcePayload: payload,
-          toolCode: row.code,
-        })
-      )
+      try {
+        results.push(
+          await repository.upsertTooling({
+            actorUserId,
+            description: optionalText(payload.remarks) || row.type,
+            itemUid,
+            organizationId,
+            productionFloorCode: text(payload.productionFloorCode),
+            quantity: numeric(row.quantity) || 1,
+            routeCode,
+            setupNumber: setupNumber!,
+            sourcePayload: payload,
+            toolCode: row.code,
+          })
+        )
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (message.startsWith("Create the tooling Asset Code in Store first")) {
+          throw new RouteError(400, message)
+        }
+        throw error
+      }
     }
     return { id: results[0]!.id, ids: results.map((result) => result.id) }
   }

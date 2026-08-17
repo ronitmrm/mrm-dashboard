@@ -110,3 +110,12 @@ is an Asset Movement back to a Store location; Consumables never participate.
 one specific Unit ID. Completing the work records evidence and calculates
 the next due date from the definition frequency. Calibration is a maintenance
 type and does not belong to the Store Item Type.
+
+**Tooling Asset**: A Store Item Type created before it can be used as fixture,
+tooling, or foam tooling in production. Its Asset Code is the only identity
+that Tooling Master may assign; Tooling Master cannot create or accept a
+free-text tool.
+
+**Tooling Assignment**: A link from one existing Tooling Asset Code to a
+specific production item, route option, and setup with the required quantity.
+It does not create Store stock or a new Asset Code.

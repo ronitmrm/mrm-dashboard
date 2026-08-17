@@ -22,6 +22,8 @@ const firstJobCard = `JC-${suffix}-1`
 const secondJobCard = `JC-${suffix}-2`
 const firstMachine = `MC-${suffix}-1`
 const secondMachine = `MC-${suffix}-2`
+const toolingAssetCode = `ST-TOOL-${suffix}`
+const toolingItemUid = `TOOLING-ITEM-${suffix}`
 
 beforeAll(async () => {
   await migrateDatabase({ connectionString })
@@ -57,6 +59,41 @@ beforeAll(async () => {
     [organizationId, itemUid, randomUUID()]
   )
   itemId = item.rows[0]!.id
+  const category = await pool.query<{ id: string }>(
+    `INSERT INTO store.asset_categories (organization_id, name)
+     VALUES ($1, $2) RETURNING id`,
+    [organizationId, `Planning Tooling ${suffix}`]
+  )
+  const subcategory = await pool.query<{ id: string }>(
+    `INSERT INTO store.asset_subcategories (
+       organization_id, category_id, name
+     ) VALUES ($1, $2, $3) RETURNING id`,
+    [organizationId, category.rows[0]!.id, `Tooling ${suffix}`]
+  )
+  const assetName = await pool.query<{ id: string }>(
+    `INSERT INTO store.asset_names (organization_id, subcategory_id, name)
+     VALUES ($1, $2, $3) RETURNING id`,
+    [organizationId, subcategory.rows[0]!.id, `Cutting Tool ${suffix}`]
+  )
+  await pool.query(
+    `INSERT INTO store.item_types (
+       organization_id, type_code, asset_type, asset_category,
+       asset_subcategory, asset_name, identification_name, tracking_mode,
+       unit, asset_category_id, asset_subcategory_id, asset_name_id
+     ) VALUES ($1, $2, 'NON_CONSUMABLE', $3, $4, $5, $6, 'SERIALIZED',
+       'Nos', $7, $8, $9)`,
+    [
+      organizationId,
+      toolingAssetCode,
+      `Planning Tooling ${suffix}`,
+      `Tooling ${suffix}`,
+      `Cutting Tool ${suffix}`,
+      `Planning Cutting Tool ${suffix}`,
+      category.rows[0]!.id,
+      subcategory.rows[0]!.id,
+      assetName.rows[0]!.id,
+    ]
+  )
 })
 
 afterAll(async () => {
@@ -66,6 +103,36 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
+  test("assigns only existing Store Asset Codes in Tooling Master", async () => {
+    const routeCode = `TOOLING-${suffix}`
+    await repository.upsertRouteOption({
+      itemUid: toolingItemUid,
+      organizationId,
+      routeCode,
+      setups: [{ operationCode: "TOOL", sequence: 1, setupNumber: 1 }],
+    })
+
+    await expect(
+      repository.upsertTooling({
+        itemUid: toolingItemUid,
+        organizationId,
+        routeCode,
+        setupNumber: 1,
+        toolCode: `MISSING-${suffix}`,
+      })
+    ).rejects.toThrow("Create the tooling Asset Code in Store first")
+
+    await expect(
+      repository.upsertTooling({
+        itemUid: toolingItemUid,
+        organizationId,
+        routeCode,
+        setupNumber: 1,
+        toolCode: toolingAssetCode,
+      })
+    ).resolves.toEqual({ id: expect.any(String) })
+  })
+
   test("creates a missing recognized production floor for a machine import", async () => {
     const machineNumber = `FLOOR-${suffix}`
     await pool.query(
@@ -315,7 +382,7 @@ describe("dashboard planning writes", () => {
       quantity: 2,
       routeCode: "1",
       setupNumber: 1,
-      toolCode: `TOOL-${suffix}`,
+      toolCode: toolingAssetCode,
     })
     await repository.upsertPlanningCalendarException({
       exceptionDate: "2026-08-15",
