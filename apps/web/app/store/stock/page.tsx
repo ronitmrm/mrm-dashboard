@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
+import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
@@ -8,12 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
 import {
   Table,
   TableBody,
@@ -30,20 +26,35 @@ import {
 } from "@/lib/auth/require-capability"
 import { istDateValue } from "@/lib/date-time"
 
-import { createStorePurchaseOrderAction } from "../actions"
+import { createStorePurchaseOrdersAction } from "../actions"
 
 function firstValue(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value) ?? ""
+}
+
+function matches(value: string | null, filter: string) {
+  return (
+    !filter ||
+    (value ?? "").toLocaleLowerCase().includes(filter.toLocaleLowerCase())
+  )
 }
 
 export default async function StoreStockPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    item?: string | string[]
+    category?: string | string[]
+    code?: string | string[]
+    location?: string | string[]
+    mode?: string | string[]
+    name?: string | string[]
     orderItemId?: string | string[]
     orderQuantity?: string | string[]
+    price?: string | string[]
     requestNumber?: string | string[]
+    stock?: string | string[]
+    subcategory?: string | string[]
+    supplier?: string | string[]
   }>
 }) {
   const session = await requireCapability("store.read", "/store/stock")
@@ -54,220 +65,265 @@ export default async function StoreStockPage({
     ])
   )
   const params = await searchParams
-  const itemQuery = firstValue(params.item).trim()
+  const filters = {
+    category: firstValue(params.category).trim(),
+    code: firstValue(params.code).trim(),
+    location: firstValue(params.location).trim(),
+    name: firstValue(params.name).trim(),
+    price: firstValue(params.price).trim(),
+    stock: firstValue(params.stock).trim(),
+    subcategory: firstValue(params.subcategory).trim(),
+    supplier: firstValue(params.supplier).trim(),
+  }
+  const requestedMode = firstValue(params.mode)
+  const mode =
+    requestedMode === "order" && capabilities.has("store.manage")
+      ? "order"
+      : requestedMode === "request" && capabilities.has("store.requests.write")
+        ? "request"
+        : "view"
   const orderItemId = firstValue(params.orderItemId)
   const orderQuantity = firstValue(params.orderQuantity)
   const requestNumber = firstValue(params.requestNumber)
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const data = await (async () => {
+  const allItems = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, suppliers] = await Promise.all([
-      repository.listItemTypes(organizationId),
-      repository.listSuppliers(organizationId),
-    ])
-    return { items, suppliers }
+    return repository.listItemTypes(organizationId)
   })().finally(() => repository.close())
-  const normalizedQuery = itemQuery.toLocaleLowerCase()
-  const items = data.items.filter((item) =>
-    [item.typeCode, item.identificationName, item.assetName].some((value) =>
-      value.toLocaleLowerCase().includes(normalizedQuery)
-    )
+  const items = allItems.filter(
+    (item) =>
+      matches(item.typeCode, filters.code) &&
+      matches(`${item.assetName} ${item.identificationName}`, filters.name) &&
+      matches(item.assetCategory, filters.category) &&
+      matches(item.assetSubcategory, filters.subcategory) &&
+      matches(`${item.availableStock} ${item.unit}`, filters.stock) &&
+      matches(item.storageLocations, filters.location) &&
+      matches(item.currentSupplierName, filters.supplier) &&
+      matches(item.currentUnitPrice, filters.price)
   )
+  const filterHref =
+    mode === "view" ? "/store/stock" : `/store/stock?mode=${mode}`
+  const actionFormId = "stock-row-action"
+  const columnCount = mode === "view" ? 8 : mode === "request" ? 9 : 10
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Stock</h2>
         <p className="text-sm text-muted-foreground">
-          One register for every Consumable and Non Consumable Store item.
+          One filterable table for every Consumable and Non Consumable item.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Stock Register</CardTitle>
-          <CardDescription>
-            Search items, view live quantity and storage location, then select
-            rows for a Department Request or Purchase Order.
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>Stock Register</CardTitle>
+              <CardDescription>
+                Supplier and price come from the newest effective Supplier Price
+                Master entry.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {capabilities.has("store.requests.write") ? (
+                <Button
+                  asChild
+                  variant={mode === "request" ? "default" : "outline"}
+                >
+                  <Link href="/store/stock?mode=request">Request Items</Link>
+                </Button>
+              ) : null}
+              {capabilities.has("store.manage") ? (
+                <Button
+                  asChild
+                  variant={mode === "order" ? "default" : "outline"}
+                >
+                  <Link href="/store/stock?mode=order">
+                    Make Purchase Order
+                  </Link>
+                </Button>
+              ) : null}
+              {mode !== "view" ? (
+                <Button asChild variant="ghost">
+                  <Link href="/store/stock">Cancel Selection</Link>
+                </Button>
+              ) : null}
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="grid gap-5 overflow-x-auto">
-          <form className="flex max-w-2xl gap-2">
-            <Input
-              defaultValue={itemQuery}
-              name="item"
-              placeholder="Search item code or name"
-              type="search"
-            />
-            <Button type="submit">Search</Button>
+        <CardContent className="grid gap-4 overflow-x-auto">
+          <form id="stock-column-filters" method="get">
+            {mode !== "view" ? (
+              <input name="mode" type="hidden" value={mode} />
+            ) : null}
           </form>
+          {mode === "request" ? (
+            <form action="/store/requests/new" id={actionFormId} method="get" />
+          ) : mode === "order" ? (
+            <form action={createStorePurchaseOrdersAction} id={actionFormId}>
+              <input name="order_date" type="hidden" value={istDateValue()} />
+              <input
+                name="remark"
+                type="hidden"
+                value={requestNumber ? `For ${requestNumber}` : ""}
+              />
+            </form>
+          ) : null}
 
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-16">Request</TableHead>
-                <TableHead className="w-16">Order</TableHead>
-                <TableHead>Item</TableHead>
-                <TableHead>Asset Type</TableHead>
-                <TableHead>Quantity</TableHead>
+                {mode !== "view" ? <TableHead>Select</TableHead> : null}
+                <TableHead>Asset Code</TableHead>
+                <TableHead>Asset Name</TableHead>
+                <TableHead>Asset Category</TableHead>
+                <TableHead>Asset Subcategory</TableHead>
+                <TableHead>Stock Quantity</TableHead>
                 <TableHead>Storage Location</TableHead>
+                <TableHead>Supplier</TableHead>
+                <TableHead>Master Price</TableHead>
+                {mode === "order" ? (
+                  <TableHead>Order Quantity</TableHead>
+                ) : null}
+              </TableRow>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                {mode !== "view" ? <TableHead /> : null}
+                <FilterCell name="code" value={filters.code} />
+                <FilterCell name="name" value={filters.name} />
+                <FilterCell name="category" value={filters.category} />
+                <FilterCell name="subcategory" value={filters.subcategory} />
+                <FilterCell name="stock" value={filters.stock} />
+                <FilterCell name="location" value={filters.location} />
+                <FilterCell name="supplier" value={filters.supplier} />
+                <TableHead>
+                  <div className="grid min-w-36 gap-2">
+                    <Input
+                      aria-label="Filter Master Price"
+                      className="bg-background"
+                      defaultValue={filters.price}
+                      form="stock-column-filters"
+                      name="price"
+                      placeholder="Filter"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        form="stock-column-filters"
+                        size="sm"
+                        type="submit"
+                      >
+                        Apply
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={filterHref}>Clear</Link>
+                      </Button>
+                    </div>
+                  </div>
+                </TableHead>
+                {mode === "order" ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>
-                    <input
-                      aria-label={`Request ${item.typeCode} ${item.identificationName}`}
-                      className="size-4 accent-primary"
-                      disabled={!capabilities.has("store.requests.write")}
-                      form="stock-request-form"
-                      name="itemTypeId"
-                      type="checkbox"
-                      value={item.id}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <input
-                      aria-label={`Order ${item.typeCode} ${item.identificationName}`}
-                      className="size-4 accent-primary"
-                      defaultChecked={item.id === orderItemId}
-                      disabled={!capabilities.has("store.manage")}
-                      form="stock-purchase-form"
-                      name="item_type_id"
-                      required
-                      type="radio"
-                      value={item.id}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {item.typeCode}
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      {item.identificationName}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {item.assetType === "NON_CONSUMABLE"
-                      ? "Non Consumable"
-                      : "Consumable"}
-                  </TableCell>
-                  <TableCell>
-                    {item.availableStock} {item.unit}
-                  </TableCell>
-                  <TableCell>{item.storageLocations}</TableCell>
-                </TableRow>
-              ))}
+              {items.map((item) => {
+                const hasPrice = Boolean(
+                  item.currentSupplierId && item.currentUnitPrice
+                )
+                return (
+                  <TableRow key={item.id}>
+                    {mode !== "view" ? (
+                      <TableCell>
+                        <input
+                          aria-label={`Select ${item.typeCode} ${item.identificationName}`}
+                          className="size-4 accent-primary"
+                          defaultChecked={item.id === orderItemId}
+                          disabled={mode === "order" && !hasPrice}
+                          form={actionFormId}
+                          name={
+                            mode === "request" ? "itemTypeId" : "item_type_id"
+                          }
+                          type="checkbox"
+                          value={item.id}
+                        />
+                      </TableCell>
+                    ) : null}
+                    <TableCell className="font-medium">
+                      {item.typeCode}
+                    </TableCell>
+                    <TableCell>
+                      {item.assetName}
+                      <span className="block text-xs text-muted-foreground">
+                        {item.identificationName} ·{" "}
+                        {item.assetType === "NON_CONSUMABLE"
+                          ? "Non Consumable"
+                          : "Consumable"}
+                      </span>
+                    </TableCell>
+                    <TableCell>{item.assetCategory}</TableCell>
+                    <TableCell>{item.assetSubcategory}</TableCell>
+                    <TableCell>
+                      {item.availableStock} {item.unit}
+                    </TableCell>
+                    <TableCell>{item.storageLocations}</TableCell>
+                    <TableCell>
+                      {item.currentSupplierName ?? (
+                        <Badge variant="outline">Price Master Missing</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {item.currentUnitPrice
+                        ? `₹ ${item.currentUnitPrice}`
+                        : "—"}
+                    </TableCell>
+                    {mode === "order" ? (
+                      <TableCell>
+                        <Input
+                          aria-label={`Order quantity for ${item.typeCode}`}
+                          className="min-w-28"
+                          defaultValue={
+                            item.id === orderItemId ? orderQuantity : ""
+                          }
+                          disabled={!hasPrice}
+                          form={actionFormId}
+                          min="0.001"
+                          name={`quantity_${item.id}`}
+                          placeholder={item.unit}
+                          step="0.001"
+                          type="number"
+                        />
+                      </TableCell>
+                    ) : null}
+                  </TableRow>
+                )
+              })}
               {!items.length ? (
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={6}
+                    colSpan={columnCount}
                   >
-                    No matching Store items.
+                    No Store items match these column filters.
                   </TableCell>
                 </TableRow>
               ) : null}
             </TableBody>
           </Table>
 
-          <div className="grid gap-5 border-t pt-5 xl:grid-cols-2">
-            <form
-              action="/store/requests/new"
-              id="stock-request-form"
-              method="get"
-            >
-              <p className="mb-3 text-sm text-muted-foreground">
-                Tick multiple Request boxes to create one Department Request.
-              </p>
-              <Button
-                disabled={
-                  !capabilities.has("store.requests.write") || !items.length
-                }
-                type="submit"
-              >
-                Request Selected Items
+          {mode === "request" ? (
+            <Button className="w-fit" form={actionFormId} type="submit">
+              Continue with Selected Request Items
+            </Button>
+          ) : mode === "order" ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button className="w-fit" form={actionFormId} type="submit">
+                Save Supplier Purchase Orders
               </Button>
-            </form>
-
-            {capabilities.has("store.manage") ? (
-              <form
-                action={createStorePurchaseOrderAction}
-                className="grid gap-3 sm:grid-cols-2"
-                id="stock-purchase-form"
-              >
-                <Field>
-                  <FieldLabel htmlFor="stock-order-supplier">
-                    Supplier
-                  </FieldLabel>
-                  <NativeSelect
-                    id="stock-order-supplier"
-                    name="supplier_id"
-                    required
-                  >
-                    {data.suppliers.map((supplier) => (
-                      <NativeSelectOption key={supplier.id} value={supplier.id}>
-                        {supplier.code} — {supplier.name}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="stock-order-quantity">
-                    Order Quantity
-                  </FieldLabel>
-                  <Input
-                    defaultValue={orderQuantity}
-                    id="stock-order-quantity"
-                    min="0.001"
-                    name="quantity"
-                    required
-                    step="0.001"
-                    type="number"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="stock-order-price">
-                    Unit Price
-                  </FieldLabel>
-                  <Input
-                    id="stock-order-price"
-                    min="0"
-                    name="unit_price"
-                    required
-                    step="0.01"
-                    type="number"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="stock-order-date">Order Date</FieldLabel>
-                  <Input
-                    defaultValue={istDateValue()}
-                    id="stock-order-date"
-                    name="order_date"
-                    required
-                    type="date"
-                  />
-                </Field>
-                <Field className="sm:col-span-2">
-                  <FieldLabel htmlFor="stock-order-remark">Remark</FieldLabel>
-                  <Input
-                    defaultValue={requestNumber ? `For ${requestNumber}` : ""}
-                    id="stock-order-remark"
-                    name="remark"
-                  />
-                </Field>
-                <Button
-                  className="sm:col-span-2"
-                  disabled={!data.suppliers.length || !items.length}
-                  type="submit"
-                >
-                  Make Purchase Order for Selected Item
-                </Button>
-              </form>
-            ) : null}
-          </div>
+              <span className="text-sm text-muted-foreground">
+                Selected items are automatically split into one PO per Supplier.
+              </span>
+            </div>
+          ) : null}
 
           <p className="text-sm text-muted-foreground">
             Cannot find the item?{" "}
@@ -282,5 +338,20 @@ export default async function StoreStockPage({
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function FilterCell({ name, value }: { name: string; value: string }) {
+  return (
+    <TableHead>
+      <Input
+        aria-label={`Filter ${name}`}
+        className="min-w-32 bg-background"
+        defaultValue={value}
+        form="stock-column-filters"
+        name={name}
+        placeholder="Filter"
+      />
+    </TableHead>
   )
 }

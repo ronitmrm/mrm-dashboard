@@ -170,6 +170,7 @@ const expectedCanonicalTables = [
   "store.item_types",
   "store.locations",
   "store.number_counters",
+  "store.purchase_order_lines",
   "store.purchase_orders",
   "store.receipt_lines",
   "store.receipts",

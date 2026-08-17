@@ -199,7 +199,7 @@ describe("unified navigation", () => {
         requestNumber: "STR-REQ-2026-000123",
       })
     ).toBe(
-      "/store/stock?orderItemId=item-123&orderQuantity=3.5&requestNumber=STR-REQ-2026-000123"
+      "/store/stock?mode=order&orderItemId=item-123&orderQuantity=3.5&requestNumber=STR-REQ-2026-000123"
     )
   })
 

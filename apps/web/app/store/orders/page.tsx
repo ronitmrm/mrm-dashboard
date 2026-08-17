@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -82,7 +83,9 @@ export default async function StoreOrdersPage() {
                 <TableHead>Ordered</TableHead>
                 <TableHead>Received</TableHead>
                 <TableHead>Price</TableHead>
+                <TableHead>Order Total</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>PO Document</TableHead>
                 {canManage ? (
                   <TableHead>Receive Against This Order</TableHead>
                 ) : null}
@@ -90,9 +93,15 @@ export default async function StoreOrdersPage() {
             </TableHeader>
             <TableBody>
               {data.orders.map((order) => {
-                const canReceive = ["Open", "Partially Received"].includes(
-                  order.status
-                )
+                const canReceive =
+                  order.status !== "Cancelled" &&
+                  Number(order.remainingQuantity) > 0
+                const emailHref = order.supplierEmail
+                  ? `mailto:${order.supplierEmail}?${new URLSearchParams({
+                      body: `Please find Purchase Order ${order.orderNumber}. Download the PDF from the MRM Store Purchase Register and attach it to this email.`,
+                      subject: `Purchase Order ${order.orderNumber}`,
+                    }).toString()}`
+                  : null
                 return (
                   <TableRow key={order.id}>
                     <TableCell className="font-medium">
@@ -110,8 +119,29 @@ export default async function StoreOrdersPage() {
                       {order.receivedQuantity} {order.unit}
                     </TableCell>
                     <TableCell>₹ {order.unitPrice}</TableCell>
+                    <TableCell>₹ {order.orderTotal}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{order.status}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="grid min-w-32 gap-2">
+                        <Button asChild size="sm" variant="outline">
+                          <Link
+                            href={`/store/orders/${encodeURIComponent(order.purchaseOrderId)}/pdf`}
+                          >
+                            Download PDF
+                          </Link>
+                        </Button>
+                        {emailHref ? (
+                          <Button asChild size="sm" variant="outline">
+                            <a href={emailHref}>Email Supplier</a>
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            Add Supplier Email in Master
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     {canManage ? (
                       <TableCell>
@@ -122,7 +152,7 @@ export default async function StoreOrdersPage() {
                             encType="multipart/form-data"
                           >
                             <input
-                              name="purchase_order_id"
+                              name="purchase_order_line_id"
                               type="hidden"
                               value={order.id}
                             />
@@ -196,7 +226,7 @@ export default async function StoreOrdersPage() {
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={canManage ? 9 : 8}
+                    colSpan={canManage ? 11 : 10}
                   >
                     No Purchase Orders yet. Select an item from Stock to create
                     one.
