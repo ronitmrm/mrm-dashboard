@@ -119,6 +119,7 @@ import {
 } from "@/app/store/masters/master-workspace";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { plannerActionHistoryRows } from "@/lib/planner-action-history";
+import { plannerPendingMachineIssueRows } from "@/lib/planner-pending-review";
 import { productionPieceWeightGrams } from "@/lib/production-session-entry";
 import { duplicateQualityParameterCombination, mergeQualityInspectionParameterRows } from "@/lib/quality-parameter-set";
 import {
@@ -2048,7 +2049,7 @@ function PlannerDecisionConsole({
                 <div className="mt-1 text-sm text-muted-foreground">New conflicts will appear here before they affect the live plan.</div>
               </div>
             )}
-            <DataRowsCard title="Active Machine Issues" rows={machineIssues} empty="No machine constraints yet" />
+            <PlannerPendingMachineIssues rows={machineIssues} />
           </div>
         ),
         history: <ActionLogTable rows={history} />,
@@ -3010,6 +3011,25 @@ function PlannerActionConflictPanel({
     </div>
   );
 }
+
+function PlannerPendingMachineIssues({ rows }: { rows: DashboardPayload[] }) {
+  return (
+    <div className="grid gap-2">
+      {rows.length ? (
+        <div className="rounded-lg border bg-muted/15 p-3">
+          <div className="text-sm font-medium">Active machine issues are context only</div>
+          <div className="text-xs text-muted-foreground">These decisions are already saved. They are shown here only to explain machine constraints while resolving a pending conflict.</div>
+        </div>
+      ) : null}
+      <DataRowsCard
+        title="Active Machine Issues"
+        rows={plannerPendingMachineIssueRows(rows)}
+        empty="No active machine constraints"
+      />
+    </div>
+  );
+}
+
 function PlannerPreSaveConflictReview({
   conflicts,
   title,
@@ -9459,7 +9479,7 @@ function DataRowsCard({ title, rows, empty }: { title: string; rows: DashboardPa
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{rows.length ? `${formatNumber(rows.length)} rows` : empty}</CardDescription>
+        <CardDescription>{rows.length ? `${formatNumber(rows.length)} ${rows.length === 1 ? "row" : "rows"}` : empty}</CardDescription>
       </CardHeader>
       <CardContent>
         {rows.length && columns.length ? (
