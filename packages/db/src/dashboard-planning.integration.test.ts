@@ -103,7 +103,7 @@ afterAll(async () => {
 })
 
 describe("dashboard planning writes", () => {
-  test("assigns only existing Store Asset Codes in Tooling Master", async () => {
+  test("references only existing Store Asset Codes in Tooling Master", async () => {
     const routeCode = `TOOLING-${suffix}`
     await repository.upsertRouteOption({
       itemUid: toolingItemUid,
