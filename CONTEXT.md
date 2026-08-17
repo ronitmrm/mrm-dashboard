@@ -290,16 +290,24 @@ The stock-control classification of a Store Item Type: Consumable or Non Consuma
 _Avoid_: Tracking mode, free-text asset type.
 
 **Consumable Store Item**:
-A quantity-managed item that is allocated and issued without an Asset Code, Asset Movement, Store Return, maintenance, or calibration.
+A quantity-managed item whose quantities share one Asset Code and are allocated and issued without a Unit ID, Asset Movement, Store Return, maintenance, or calibration.
 _Avoid_: Physical Asset, returnable asset.
 
 **Non Consumable Asset**:
-One individually coded returnable item whose assignment, Asset Movement, Store Return, maintenance, and calibration remain attached to its permanent Asset Code.
+One returnable physical unit whose Unit ID / Serial ID keeps its assignment, Asset Movement, Store Return, maintenance, and calibration separate from other units sharing the same Asset Code.
 _Avoid_: Consumable quantity, Store Item Type row.
 
 **Asset Movement**:
-An immutable holder change for one Non Consumable Asset between the Store, a Department, a Machine, or a Vendor; movement back to Store is a Store Return.
+An immutable holder change for one Non Consumable Unit ID between the Store, a Department, a Machine, or a Vendor; movement back to Store is a Store Return.
 _Avoid_: Consumable issue, Purchase Order receipt.
+
+**Asset Code**:
+The permanent code shared by every quantity of one Store Item Type, whether Consumable or Non Consumable.
+_Avoid_: Type Code, per-unit code.
+
+**Unit ID / Serial ID**:
+The permanent identity of one Non Consumable physical unit used for its movement, maintenance, calibration, and lifecycle history.
+_Avoid_: Asset Code, Consumable unit code.
 
 **Store Purchase Order**:
 The authority to receive one or more Stock Register items from exactly one Supplier at their Current Supplier Prices; a mixed selection creates one order per Supplier.
@@ -322,7 +330,7 @@ The single table containing Store Purchase Orders and receipt progress, with rec
 _Avoid_: Separate Purchase Order and receipt workspaces.
 
 **Stock Register**:
-The single filterable inventory table for both Consumable and Non Consumable Store Item Types, showing Type Code, Asset Name, Category, Subcategory, quantity, and Storage Location.
+The single filterable inventory table for both Consumable and Non Consumable Store Item Types, showing Asset Code, Asset Name, Category, Subcategory, quantity, and Storage Location.
 _Avoid_: Separate Consumable table, Physical Asset register on Stock.
 
 **Store Request**:
@@ -334,7 +342,7 @@ One Store Item Type and requested quantity within a Store Request, allocated ind
 _Avoid_: New Item Request, physical Asset selection.
 
 **New Item Request**:
-Demand for an item that cannot be found in Current Stock and has no Type Code yet.
+Demand for an item that cannot be found in Current Stock and has no Asset Code yet.
 _Avoid_: Coded Item Request Line, missing-stock issue.
 
 **Request Allocation Queue**:

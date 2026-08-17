@@ -90,7 +90,7 @@ export function MachineStoreAssets({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Asset Code</TableHead>
+                <TableHead>Unit ID / Serial ID</TableHead>
                 <TableHead>Identification</TableHead>
                 <TableHead>Assigned</TableHead>
                 <TableHead>Status</TableHead>
@@ -107,7 +107,7 @@ export function MachineStoreAssets({
                       {asset.assetCode}
                     </Link>
                     <span className="block text-xs text-muted-foreground">
-                      {asset.typeCode}
+                      Asset Code {asset.typeCode}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -151,7 +151,7 @@ export function MachineStoreAssets({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    <TableHead>Asset</TableHead>
+                    <TableHead>Unit ID</TableHead>
                     <TableHead>Movement</TableHead>
                     <TableHead>From</TableHead>
                     <TableHead>To</TableHead>
@@ -169,7 +169,7 @@ export function MachineStoreAssets({
                           {row.assetCode}
                         </Link>
                         <span className="block text-xs text-muted-foreground">
-                          {row.identificationName}
+                          Asset Code {row.typeCode} · {row.identificationName}
                         </span>
                       </TableCell>
                       <TableCell>{row.movementType}</TableCell>

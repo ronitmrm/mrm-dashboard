@@ -67,7 +67,7 @@ export default async function NewItemRequestsPage() {
         </h2>
         <p className="text-sm text-muted-foreground">
           Use this only when the required item cannot be found in Current Stock
-          and has no Type Code.
+          and has no Asset Code.
         </p>
       </div>
 
@@ -77,7 +77,7 @@ export default async function NewItemRequestsPage() {
             <CardTitle>Request a New Item</CardTitle>
             <CardDescription>
               This stays separate from coded Store Requests until Store finds or
-              creates a Type Code.
+              creates an Asset Code.
             </CardDescription>
           </CardHeader>
           <CardContent>

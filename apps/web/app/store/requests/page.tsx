@@ -183,7 +183,7 @@ export default async function StoreRequestsPage() {
                                 <Input
                                   className="col-span-2"
                                   name="asset_code"
-                                  placeholder="Specific Asset Code"
+                                  placeholder="Specific Unit ID / Serial ID"
                                   required
                                 />
                               ) : null}

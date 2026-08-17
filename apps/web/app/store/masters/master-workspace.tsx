@@ -330,7 +330,7 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
             disabled={!data.masters.assetNames.length}
             type="submit"
           >
-            Create & Generate Type Code
+            Create & Generate Asset Code
           </Button>
         </form>
       )
