@@ -289,6 +289,18 @@ _Avoid_: Unordered audit row, log message.
 The stock-control classification of a Store Item Type: Consumable or Non Consumable.
 _Avoid_: Tracking mode, free-text asset type.
 
+**Consumable Store Item**:
+A quantity-managed item that is allocated and issued without an Asset Code, Asset Movement, Store Return, maintenance, or calibration.
+_Avoid_: Physical Asset, returnable asset.
+
+**Non Consumable Asset**:
+One individually coded returnable item whose assignment, Asset Movement, Store Return, maintenance, and calibration remain attached to its permanent Asset Code.
+_Avoid_: Consumable quantity, Store Item Type row.
+
+**Asset Movement**:
+An immutable holder change for one Non Consumable Asset between the Store, a Department, a Machine, or a Vendor; movement back to Store is a Store Return.
+_Avoid_: Consumable issue, Purchase Order receipt.
+
 **Store Purchase Order**:
 The authority to receive one or more Stock Register items from exactly one Supplier at their Current Supplier Prices; a mixed selection creates one order per Supplier.
 _Avoid_: Separate receipt workspace, direct stock entry.

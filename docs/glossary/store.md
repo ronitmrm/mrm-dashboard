@@ -27,13 +27,15 @@ assignment, movement, maintenance, calibration, breakage, and scrap.
 Type Code plus a sequential five-digit number, for example `N41-00001`. A
 replacement receives a new Asset Code; the old asset keeps its history.
 
-**Consumable**: A quantity-managed Store Item that is issued without an
-expected return or later movement tracking. Consumables do not receive
-individual Asset Codes.
+**Consumable**: A quantity-managed Store Item that is allocated and issued
+without an expected return. It has no individual Asset Code or Asset Workspace
+and never participates in Asset Movement, maintenance, or calibration; its
+issue only reduces Current Available Stock.
 
 **Non Consumable**: A returnable Store Item that receives one permanent Asset
 Code per physical unit. It may be held by a Department, Machine, Vendor, or the
-Store.
+Store and is the only Asset Type that participates in Asset Movement,
+maintenance, calibration, and Store Return.
 
 **Supplier**: The party from whom a Purchase Order is placed. Supplier and
 email are maintained in Supplier Master. Price history belongs to the ordered
@@ -96,6 +98,10 @@ Store. Every open request therefore sees the effect of the latest allocation.
 identity, current assignment, Department/Machine/Vendor movement history,
 maintenance and calibration timetable and history, Purchase Order, Supplier
 price history, bill, warranty, and guarantee documents.
+
+**Asset Movement**: An immutable change in the holder of one Non Consumable
+Asset between the Store, a Department, a Machine, or a Vendor. A Store Return
+is an Asset Movement back to a Store location; Consumables never participate.
 
 **Asset Maintenance Timetable**: A Maintenance Master definition assigned to
 one specific Asset Code. Completing the work records evidence and calculates
