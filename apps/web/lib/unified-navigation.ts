@@ -448,17 +448,12 @@ export const storeNavigation = [
   {
     href: "/store/orders",
     icon: ShoppingCart,
-    label: "Orders & Receipts",
+    label: "Purchase Register",
   },
   {
     href: "/store/stock",
     icon: Boxes,
     label: "Stock",
-  },
-  {
-    href: "/store/masters",
-    icon: Database,
-    label: "Store Masters",
   },
 ] as const
 
@@ -467,7 +462,11 @@ export function storePurchaseOrderHref(input: {
   quantity: string
   requestNumber: string
 }) {
-  return `/store/orders?${new URLSearchParams(input).toString()}`
+  return `/store/stock?${new URLSearchParams({
+    orderItemId: input.itemTypeId,
+    orderQuantity: input.quantity,
+    requestNumber: input.requestNumber,
+  }).toString()}`
 }
 
 export const hrNavigation = [

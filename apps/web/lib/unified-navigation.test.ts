@@ -138,9 +138,8 @@ describe("unified navigation", () => {
         { href: "/store", label: "Store Overview" },
         { href: "/store/requests", label: "Requests & Issues" },
         { href: "/store/new-item-requests", label: "New Item Requests" },
-        { href: "/store/orders", label: "Orders & Receipts" },
+        { href: "/store/orders", label: "Purchase Register" },
         { href: "/store/stock", label: "Stock" },
-        { href: "/store/masters", label: "Store Masters" },
       ]
     )
     expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([
@@ -200,7 +199,7 @@ describe("unified navigation", () => {
         requestNumber: "STR-REQ-2026-000123",
       })
     ).toBe(
-      "/store/orders?itemTypeId=item-123&quantity=3.5&requestNumber=STR-REQ-2026-000123"
+      "/store/stock?orderItemId=item-123&orderQuantity=3.5&requestNumber=STR-REQ-2026-000123"
     )
   })
 

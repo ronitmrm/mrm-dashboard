@@ -290,12 +290,20 @@ The stock-control classification of a Store Item Type: Consumable or Non Consuma
 _Avoid_: Tracking mode, free-text asset type.
 
 **Store Purchase Order**:
-The authority to receive a stated quantity of one Store Item Type from one Supplier at an agreed unit price.
-_Avoid_: Receipt, direct stock entry.
+The authority to receive a stated quantity of one Stock Register item from one Supplier at an agreed unit price.
+_Avoid_: Separate receipt workspace, direct stock entry.
 
 **Store Receipt**:
 A goods receipt against one Store Purchase Order that cannot exceed its remaining quantity.
 _Avoid_: Receipt without order, direct inward.
+
+**Store Purchase Register**:
+The single table containing Store Purchase Orders and receipt progress, with receiving completed against each order row.
+_Avoid_: Separate Purchase Order and receipt workspaces.
+
+**Stock Register**:
+The single inventory table for both Consumable and Non Consumable Store Item Types, showing quantity and Storage Location.
+_Avoid_: Separate Consumable table, Physical Asset register on Stock.
 
 **Store Request**:
 One numbered demand submitted by a Department and an individual, containing one or more Coded Item Request Lines selected from Current Stock.

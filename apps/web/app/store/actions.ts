@@ -81,6 +81,7 @@ async function withStore<T>(
 }
 
 function revalidateStore() {
+  revalidatePath("/")
   revalidatePath("/store")
   revalidatePath("/store/items")
   revalidatePath("/store/masters")
@@ -340,6 +341,7 @@ export async function createStorePurchaseOrderAction(formData: FormData) {
     })
   )
   revalidateStore()
+  redirect("/store/orders")
 }
 
 export async function moveStoreAssetAction(formData: FormData) {

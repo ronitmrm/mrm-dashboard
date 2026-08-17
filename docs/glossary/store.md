@@ -4,8 +4,8 @@
 Asset Subcategory, and Asset Name. A Subcategory belongs to one Category, and
 an Asset Name belongs to one Subcategory. Store item creation selects these
 values from the masters; users do not retype classification names. Store
-Masters shows one selector-driven data-entry form and its saved records at a
-time.
+masters are maintained in the company Data Entry workspace and reviewed in
+Master Tables; they are not a separate Store workspace.
 
 **Store Item Type**: The unique combination of Asset Type and one selected
 Store Classification Master path. It owns one permanent Type Code and one
@@ -45,7 +45,12 @@ separately maintained in both masters.
 
 **Store Purchase Order**: The authority to receive a quantity of one Store Item
 Type from one Supplier at an agreed unit price. It progresses through Open,
-Partially Received, Received, or Cancelled.
+Partially Received, Received, or Cancelled. It is started by selecting the
+Store Item from the Stock Register.
+
+**Store Purchase Register**: The single table containing every Store Purchase
+Order and its received quantity. Goods are received against the same order row;
+Purchase Order entry and receipt are not separate workspaces.
 
 **Store Receipt**: A goods receipt recorded against one Store Purchase Order.
 It cannot exceed the order's remaining quantity and inherits its Supplier,
@@ -69,11 +74,15 @@ Request Lines. It shows the Department, requesting individual, item, requested
 and remaining quantities, and Current Available Stock, and allows each line to
 be allocated independently.
 
+**Stock Register**: The single Store inventory table containing both Consumable
+and Non Consumable Store Item Types. Each row shows the Type Code, item,
+quantity, and Storage Location; users select rows here to request items or
+start a Purchase Order.
+
 **Current Available Stock**: A live derived value, never a request snapshot.
 For Consumables it is the signed movement-ledger balance at the requested
 Store. For Physical Assets it is the count of Available Asset Codes at that
-Store. Every open request therefore sees the effect of the latest issue. The
-Stock workspace also contains the complete clickable Physical Asset register.
+Store. Every open request therefore sees the effect of the latest allocation.
 
 **Asset Workspace**: The permanent view for one Asset Code containing its
 identity, current assignment, Department/Machine/Vendor movement history,

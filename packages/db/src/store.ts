@@ -747,6 +747,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         id: string
         identificationName: string
         minimumStock: string
+        storageLocations: string
         trackingMode: StoreTrackingMode
         typeCode: string
         unit: string
@@ -763,6 +764,26 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.drawing_number AS "drawingNumber",
             item.tracking_mode AS "trackingMode", item.unit,
             trim_scale(item.minimum_stock)::text AS "minimumStock",
+            COALESCE((
+              SELECT string_agg(location.name, ', ' ORDER BY location.name)
+              FROM store.locations location
+              WHERE location.organization_id = item.organization_id
+                AND location.location_type = 'STORE' AND location.active
+                AND CASE WHEN item.tracking_mode = 'SERIALIZED'
+                  THEN EXISTS (
+                    SELECT 1 FROM store.assets asset
+                    WHERE asset.item_type_id = item.id
+                      AND asset.current_location_id = location.id
+                      AND asset.status = 'AVAILABLE'
+                  )
+                  ELSE COALESCE((
+                    SELECT sum(movement.quantity)
+                    FROM store.stock_movements movement
+                    WHERE movement.item_type_id = item.id
+                      AND movement.location_id = location.id
+                  ), 0) <> 0
+                END
+            ), 'Not in stock') AS "storageLocations",
             trim_scale((CASE WHEN item.tracking_mode = 'SERIALIZED'
               THEN (SELECT count(*)::numeric FROM store.assets asset
                 WHERE asset.item_type_id = item.id AND asset.status = 'AVAILABLE')

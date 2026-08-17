@@ -112,6 +112,10 @@ import { compatibleDestinationMachineOptions, machineConstraintQueueReview, type
 import { dispatchReadyJobCards, jobCardActionAssignments } from "@/lib/job-card-action-planning";
 import { maintenanceChecklistRowsForSchedule, maintenanceMasterRowsForMachineAssignment } from "@/lib/maintenance-schedule-options";
 import { MachineStoreAssets } from "@/components/machine-store-assets";
+import {
+  StoreMasterWorkspace,
+  type StoreMasterData,
+} from "@/app/store/masters/master-workspace";
 import { planningRefreshStatusMessage, shouldQueuePlanningRefresh, shouldRefreshStalePlanningSnapshot, stalePlanningRefreshKey } from "@/lib/planning-refresh-policy";
 import { plannerActionHistoryRows } from "@/lib/planner-action-history";
 import { productionPieceWeightGrams } from "@/lib/production-session-entry";
@@ -463,6 +467,12 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "downtimeReason", label: "Downtime Reason" },
     ],
   },
+  {
+    entryType: "store_masters",
+    title: "Store Masters",
+    description: "Store Item Types, Classification, Locations, Suppliers, And Vendors.",
+    fields: [],
+  },
 ];
 const generalDataEntryTypes = [
   "route",
@@ -480,10 +490,14 @@ const universalDataEntryTypes = [
   ...checklistWorkspaceEntryTypes,
   ...maintenanceMasterEntryTypes,
   ...qualityWorkspaceEntryTypes,
+  "store_masters",
 ] as const;
 
 function masterTableSpecs() {
-  const allowed = new Set<string>(productionMasterTableEntryTypes);
+  const allowed = new Set<string>([
+    ...productionMasterTableEntryTypes,
+    "store_masters",
+  ]);
   return dataEntrySpecs.filter((spec) => allowed.has(spec.entryType));
 }
 const subscribeToHydration = () => () => {};
@@ -584,21 +598,30 @@ async function savePostgresDashboardEntry(entryType: string, payload: DashboardP
 }
 
 export function MrmplDashboard({
+  canManageStoreMasters = false,
   initialDashboardTab = "productionControlTab",
+  initialDataEntryType,
   initialProductionFloor = defaultProductionFloorCode,
   navigationAccess,
+  storeMasterData,
   user,
 }: {
+  canManageStoreMasters?: boolean;
   initialDashboardTab?: DashboardTabId;
+  initialDataEntryType?: string;
   initialProductionFloor?: ProductionFloorCode;
   navigationAccess: UnifiedNavigationAccess;
+  storeMasterData?: StoreMasterData | null;
   user: { email: string; name: string };
 }) {
   return (
     <DashboardShell
+      canManageStoreMasters={canManageStoreMasters}
       initialDashboardTab={initialDashboardTab}
+      initialDataEntryType={initialDataEntryType}
       initialProductionFloor={initialProductionFloor}
       navigationAccess={navigationAccess}
+      storeMasterData={storeMasterData}
       user={user}
     />
   );
@@ -1142,21 +1165,29 @@ function SetupChecklistShell({
 }
 
 function DashboardShell({
+  canManageStoreMasters,
   initialDashboardTab,
+  initialDataEntryType,
   initialProductionFloor,
   navigationAccess,
+  storeMasterData,
   user,
 }: {
+  canManageStoreMasters: boolean;
   initialDashboardTab: DashboardTabId;
+  initialDataEntryType?: string;
   initialProductionFloor: ProductionFloorCode;
   navigationAccess: UnifiedNavigationAccess;
+  storeMasterData?: StoreMasterData | null;
   user: { email: string; name: string };
 }) {
   const [activeTab, setActiveTab] = useState<DashboardTabId>(initialDashboardTab);
   const [activeProductionFloor] = useState<ProductionFloorCode>(
     initialProductionFloor,
   );
-  const [preferredDataEntryType, setPreferredDataEntryType] = useState(dataEntrySpecs[0]?.entryType ?? "route");
+  const [preferredDataEntryType, setPreferredDataEntryType] = useState(
+    initialDataEntryType ?? dataEntrySpecs[0]?.entryType ?? "route",
+  );
   const [preferredDataEntryDefaults, setPreferredDataEntryDefaults] = useState<Record<string, unknown>>({});
   const [firstPieceInspectionTasks, setFirstPieceInspectionTasks] = useState<DashboardPayload[]>([]);
   const [optimisticShopFloorStatuses, setOptimisticShopFloorStatuses] = useState<ShopFloorStatusPatch[]>([]);
@@ -1549,6 +1580,7 @@ function DashboardShell({
             <fieldset aria-busy={Boolean(processingAction)} className="contents" disabled={Boolean(processingAction)}>
               <DashboardContent
                 activeTab={activeTab}
+                canManageStoreMasters={canManageStoreMasters}
                 payload={payload}
                 submitAction={submitAction}
                 correctionCandidates={correctionCandidates}
@@ -1560,6 +1592,7 @@ function DashboardShell({
                 preferredDataEntryType={preferredDataEntryType}
                 preferredDataEntryDefaults={preferredDataEntryDefaults}
                 productionFloorCode={activeProductionFloor}
+                storeMasterData={storeMasterData}
                 onProductionFloorChange={(floorCode) => selectDashboardDestination(activeTab, floorCode)}
               />
             </fieldset>
@@ -1713,6 +1746,7 @@ function HeaderActions({
 
 function DashboardContent({
   activeTab,
+  canManageStoreMasters,
   payload,
   submitAction,
   correctionCandidates,
@@ -1724,9 +1758,11 @@ function DashboardContent({
   preferredDataEntryType,
   preferredDataEntryDefaults,
   productionFloorCode,
+  storeMasterData,
   onProductionFloorChange,
 }: {
   activeTab: DashboardTabId;
+  canManageStoreMasters: boolean;
   payload: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   correctionCandidates: DashboardPayload[];
@@ -1738,6 +1774,7 @@ function DashboardContent({
   preferredDataEntryType: string;
   preferredDataEntryDefaults: Record<string, unknown>;
   productionFloorCode: ProductionFloorCode;
+  storeMasterData?: StoreMasterData | null;
   onProductionFloorChange: (floorCode: ProductionFloorCode) => void;
 }) {
   const productionControl = asRecord(payload.productionControl);
@@ -1763,11 +1800,11 @@ function DashboardContent({
   }
 
   if (activeTab === "dataEntryTab") {
-    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={universalDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} />;
+    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={universalDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} />;
   }
 
   if (activeTab === "masterTablesTab") {
-    return <MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} />;
+    return <MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} />;
   }
 
   if (activeTab === "planningHolidayTab") {
@@ -4037,6 +4074,7 @@ function JobCardsPanel({
 }: {
   productionControl: DashboardPayload;
   productionFloorCode: ProductionFloorCode;
+  storeMasterData?: StoreMasterData | null;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   openMasterReadiness: () => void;
 }) {
@@ -6728,6 +6766,7 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
 }
 
 function DataEntryPanel({
+  canManageStoreMasters = false,
   payload,
   submitAction,
   preferredEntryType,
@@ -6735,9 +6774,11 @@ function DataEntryPanel({
   allowedEntryTypes,
   productionFloorCode,
   onProductionFloorChange,
+  storeMasterData,
   title = "Production data entry",
   description = "Use focused forms for manual entry or download the matching CSV template for a small import.",
 }: {
+  canManageStoreMasters?: boolean;
   payload: DashboardPayload;
   submitAction: (
     path: string,
@@ -6749,16 +6790,18 @@ function DataEntryPanel({
   allowedEntryTypes?: readonly string[];
   productionFloorCode?: ProductionFloorCode;
   onProductionFloorChange?: (floorCode: ProductionFloorCode) => void;
+  storeMasterData?: StoreMasterData | null;
   title?: string;
   description?: string;
 }) {
   const dataEntry = asRecord(payload.dataEntry);
   const productionControl = asRecord(payload.productionControl);
   const availableSpecs = useMemo(
-    () => allowedEntryTypes?.length
+    () => (allowedEntryTypes?.length
       ? dataEntrySpecs.filter((spec) => allowedEntryTypes.includes(spec.entryType))
-      : dataEntrySpecs,
-    [allowedEntryTypes],
+      : dataEntrySpecs
+    ).filter((spec) => spec.entryType !== "store_masters" || storeMasterData),
+    [allowedEntryTypes, storeMasterData],
   );
   const initialEntryType = availableSpecs.some((spec) => spec.entryType === preferredEntryType)
     ? preferredEntryType
@@ -6768,7 +6811,7 @@ function DataEntryPanel({
   const selectedSpec = availableSpecs.find((spec) => spec.entryType === bulkEntryType) ?? availableSpecs[0];
   const selectedMasterIsCompanyWide = companyWideQualityMasterEntryTypes.includes(
     bulkEntryType as typeof companyWideQualityMasterEntryTypes[number],
-  );
+  ) || bulkEntryType === "store_masters";
   const selectedMasterRows = useMemo(
     () => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [],
     [payload, productionControl, selectedSpec],
@@ -6806,7 +6849,7 @@ function DataEntryPanel({
         {isImporting ? <div className="px-6"><ProcessingNotice message="Reading and importing the CSV file..." /></div> : null}
         <fieldset aria-busy={isImporting} className="contents" disabled={isImporting}>
         <CardContent className="grid gap-4">
-          {productionFloorCode && onProductionFloorChange ? (
+          {productionFloorCode && onProductionFloorChange && bulkEntryType !== "store_masters" ? (
             <div className="grid gap-2 @3xl/main:grid-cols-[minmax(240px,360px)_1fr] @3xl/main:items-end">
               <Field label="Production Unit">
                 <SearchableSelect
@@ -6827,7 +6870,7 @@ function DataEntryPanel({
               </p>
             </div>
           ) : null}
-          <form className="grid gap-3 @3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]" onSubmit={importEntryTemplate}>
+          <form className={`grid gap-3 ${bulkEntryType === "store_masters" ? "@3xl/main:grid-cols-[220px]" : "@3xl/main:grid-cols-[220px_minmax(0,1fr)_auto]"}`} onSubmit={importEntryTemplate}>
             <Field label="Select Entry Form">
               <SearchableSelect
                 className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -6841,20 +6884,26 @@ function DataEntryPanel({
                 ))}
               </SearchableSelect>
             </Field>
-            <Field label="Filled Csv Template">
+            {bulkEntryType !== "store_masters" ? <Field label="Filled Csv Template">
               <Input name="file" type="file" accept=".csv,text/csv" />
-            </Field>
-            <Button className="self-end" type="submit" disabled={isImporting}>{isImporting ? "Importing..." : "Import Csv"}</Button>
+            </Field> : null}
+            {bulkEntryType !== "store_masters" ? <Button className="self-end" type="submit" disabled={isImporting}>{isImporting ? "Importing..." : "Import Csv"}</Button> : null}
           </form>
-          <div className="flex flex-wrap gap-2">
+          {bulkEntryType !== "store_masters" ? <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => downloadApi("data-template", bulkEntryType)}>
               Download Template
             </Button>
-          </div>
+          </div> : null}
         </CardContent>
         </fieldset>
       </Card>
-      {selectedSpec ? (
+      {selectedSpec?.entryType === "store_masters" && storeMasterData ? (
+        <StoreMasterWorkspace
+          canManage={canManageStoreMasters}
+          data={storeMasterData}
+          mode="entry"
+        />
+      ) : selectedSpec ? (
         <DataEntryForm
           key={selectedSpec.entryType}
           spec={selectedSpec}
@@ -6871,26 +6920,35 @@ function DataEntryPanel({
 }
 
 function MasterTablesPanel({
+  canManageStoreMasters,
   payload,
   productionControl,
   openDataEntry,
   productionFloorCode,
   onProductionFloorChange,
+  storeMasterData,
 }: {
+  canManageStoreMasters: boolean;
   payload: DashboardPayload;
   productionControl: DashboardPayload;
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
   productionFloorCode: ProductionFloorCode;
   onProductionFloorChange: (floorCode: ProductionFloorCode) => void;
+  storeMasterData?: StoreMasterData | null;
 }) {
-  const specs = useMemo(() => masterTableSpecs(), []);
+  const specs = useMemo(
+    () => masterTableSpecs().filter(
+      (spec) => spec.entryType !== "store_masters" || storeMasterData,
+    ),
+    [storeMasterData],
+  );
   const [entryType, setEntryType] = useState(() => specs[0]?.entryType ?? "");
   const [searchQuery, setSearchQuery] = useState("");
   const [tableResetKey, setTableResetKey] = useState(0);
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
   const selectedMasterIsCompanyWide = companyWideQualityMasterEntryTypes.includes(
     selectedSpec?.entryType as typeof companyWideQualityMasterEntryTypes[number],
-  );
+  ) || selectedSpec?.entryType === "store_masters";
   const dataEntry = asRecord(payload.dataEntry);
   const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [], [payload, productionControl, selectedSpec]);
   const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec) : [], [selectedSpec]);
@@ -6922,7 +6980,7 @@ function MasterTablesPanel({
           <CardDescription>Search Saved Master Data In Tabular Format. Use Data Entry Only When You Need To Add Or Edit Rows.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(220px,320px)_minmax(260px,1fr)]">
-          <Field label="Production Unit">
+          {selectedSpec.entryType !== "store_masters" ? <Field label="Production Unit">
             <SearchableSelect
               className="h-9 rounded-md border bg-background px-3 text-sm"
               required
@@ -6933,7 +6991,7 @@ function MasterTablesPanel({
                 <option key={floor.code} value={floor.code}>{floor.label}</option>
               ))}
             </SearchableSelect>
-          </Field>
+          </Field> : null}
           <Field label="Master">
             <SearchableSelect
               className="h-9 rounded-md border bg-background px-3 text-sm"
@@ -6945,12 +7003,12 @@ function MasterTablesPanel({
               ))}
             </SearchableSelect>
           </Field>
-          <Field label="Search All Visible Columns">
+          {selectedSpec.entryType !== "store_masters" ? <Field label="Search All Visible Columns">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input className="pl-9" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search Saved Rows" />
             </div>
-          </Field>
+          </Field> : null}
           <div className="flex flex-wrap items-end gap-2 @4xl/main:col-span-3">
             <Button type="button" variant="outline" onClick={() => { setSearchQuery(""); setTableResetKey((current) => current + 1); }}>Clear Filters</Button>
             <Button type="button" variant="outline" disabled={!rows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, rows, columns, "all-rows")}>
@@ -6969,7 +7027,13 @@ function MasterTablesPanel({
         </CardContent>
       </Card>
 
-      <Card>
+      {selectedSpec.entryType === "store_masters" && storeMasterData ? (
+        <StoreMasterWorkspace
+          canManage={canManageStoreMasters}
+          data={storeMasterData}
+          mode="table"
+        />
+      ) : <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -7009,8 +7073,8 @@ function MasterTablesPanel({
             </div>
           )}
         </CardContent>
-      </Card>
-      {summaryRows.length ? (
+      </Card>}
+      {selectedSpec.entryType !== "store_masters" && summaryRows.length ? (
         <Card>
           <CardHeader>
             <CardTitle>{selectedSpec.title} Summary</CardTitle>

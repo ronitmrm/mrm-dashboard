@@ -202,6 +202,12 @@ describe("Store requests", () => {
         status: "Partially Received",
       })
     )
+    expect(await store.listItemTypes(organizationId)).toContainEqual(
+      expect.objectContaining({
+        id: itemType.id,
+        storageLocations: "Purchase Receipt Store",
+      })
+    )
   })
 
   test("uses classification masters and generates immutable Type Codes", async () => {
