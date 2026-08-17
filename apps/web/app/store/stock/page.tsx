@@ -32,29 +32,14 @@ function firstValue(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value) ?? ""
 }
 
-function matches(value: string | null, filter: string) {
-  return (
-    !filter ||
-    (value ?? "").toLocaleLowerCase().includes(filter.toLocaleLowerCase())
-  )
-}
-
 export default async function StoreStockPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    category?: string | string[]
-    code?: string | string[]
-    location?: string | string[]
     mode?: string | string[]
-    name?: string | string[]
     orderItemId?: string | string[]
     orderQuantity?: string | string[]
-    price?: string | string[]
     requestNumber?: string | string[]
-    stock?: string | string[]
-    subcategory?: string | string[]
-    supplier?: string | string[]
   }>
 }) {
   const session = await requireCapability("store.read", "/store/stock")
@@ -65,16 +50,6 @@ export default async function StoreStockPage({
     ])
   )
   const params = await searchParams
-  const filters = {
-    category: firstValue(params.category).trim(),
-    code: firstValue(params.code).trim(),
-    location: firstValue(params.location).trim(),
-    name: firstValue(params.name).trim(),
-    price: firstValue(params.price).trim(),
-    stock: firstValue(params.stock).trim(),
-    subcategory: firstValue(params.subcategory).trim(),
-    supplier: firstValue(params.supplier).trim(),
-  }
   const requestedMode = firstValue(params.mode)
   const mode =
     requestedMode === "order" && capabilities.has("store.manage")
@@ -88,23 +63,10 @@ export default async function StoreStockPage({
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const allItems = await (async () => {
+  const items = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     return repository.listItemTypes(organizationId)
   })().finally(() => repository.close())
-  const items = allItems.filter(
-    (item) =>
-      matches(item.typeCode, filters.code) &&
-      matches(`${item.assetName} ${item.identificationName}`, filters.name) &&
-      matches(item.assetCategory, filters.category) &&
-      matches(item.assetSubcategory, filters.subcategory) &&
-      matches(`${item.availableStock} ${item.unit}`, filters.stock) &&
-      matches(item.storageLocations, filters.location) &&
-      matches(item.currentSupplierName, filters.supplier) &&
-      matches(item.currentUnitPrice, filters.price)
-  )
-  const filterHref =
-    mode === "view" ? "/store/stock" : `/store/stock?mode=${mode}`
   const actionFormId = "stock-row-action"
   const columnCount = mode === "view" ? 8 : mode === "request" ? 9 : 10
 
@@ -155,11 +117,6 @@ export default async function StoreStockPage({
           </div>
         </CardHeader>
         <CardContent className="grid gap-4 overflow-x-auto">
-          <form id="stock-column-filters" method="get">
-            {mode !== "view" ? (
-              <input name="mode" type="hidden" value={mode} />
-            ) : null}
-          </form>
           {mode === "request" ? (
             <form action="/store/requests/new" id={actionFormId} method="get" />
           ) : mode === "order" ? (
@@ -188,41 +145,6 @@ export default async function StoreStockPage({
                 {mode === "order" ? (
                   <TableHead>Order Quantity</TableHead>
                 ) : null}
-              </TableRow>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                {mode !== "view" ? <TableHead /> : null}
-                <FilterCell name="code" value={filters.code} />
-                <FilterCell name="name" value={filters.name} />
-                <FilterCell name="category" value={filters.category} />
-                <FilterCell name="subcategory" value={filters.subcategory} />
-                <FilterCell name="stock" value={filters.stock} />
-                <FilterCell name="location" value={filters.location} />
-                <FilterCell name="supplier" value={filters.supplier} />
-                <TableHead>
-                  <div className="grid min-w-36 gap-2">
-                    <Input
-                      aria-label="Filter Master Price"
-                      className="bg-background"
-                      defaultValue={filters.price}
-                      form="stock-column-filters"
-                      name="price"
-                      placeholder="Filter"
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        form="stock-column-filters"
-                        size="sm"
-                        type="submit"
-                      >
-                        Apply
-                      </Button>
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={filterHref}>Clear</Link>
-                      </Button>
-                    </div>
-                  </div>
-                </TableHead>
-                {mode === "order" ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -303,7 +225,7 @@ export default async function StoreStockPage({
                     className="h-24 text-center text-muted-foreground"
                     colSpan={columnCount}
                   >
-                    No Store items match these column filters.
+                    No Store items available.
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -338,20 +260,5 @@ export default async function StoreStockPage({
         </CardContent>
       </Card>
     </div>
-  )
-}
-
-function FilterCell({ name, value }: { name: string; value: string }) {
-  return (
-    <TableHead>
-      <Input
-        aria-label={`Filter ${name}`}
-        className="min-w-32 bg-background"
-        defaultValue={value}
-        form="stock-column-filters"
-        name={name}
-        placeholder="Filter"
-      />
-    </TableHead>
   )
 }

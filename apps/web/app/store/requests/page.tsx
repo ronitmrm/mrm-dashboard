@@ -33,63 +33,18 @@ import { storePurchaseOrderHref } from "@/lib/unified-navigation"
 
 import { issueStoreRequisitionAction } from "../actions"
 
-function firstValue(value: string | string[] | undefined) {
-  return (Array.isArray(value) ? value[0] : value) ?? ""
-}
-
-export default async function StoreRequestsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    department?: string | string[]
-    issued?: string | string[]
-    item?: string | string[]
-    remaining?: string | string[]
-    request?: string | string[]
-    requested?: string | string[]
-    status?: string | string[]
-    stock?: string | string[]
-  }>
-}) {
+export default async function StoreRequestsPage() {
   const session = await requireCapability("store.read", "/store/requests")
   const canManage = (
     await listGrantedCapabilities(session.user.id, ["store.manage"])
   ).includes("store.manage")
-  const params = await searchParams
-  const departmentFilter = firstValue(params.department)
-  const issuedFilter = firstValue(params.issued)
-  const itemFilter = firstValue(params.item)
-  const remainingFilter = firstValue(params.remaining)
-  const requestFilter = firstValue(params.request)
-  const requestedFilter = firstValue(params.requested)
-  const statusFilter = firstValue(params.status)
-  const stockFilter = firstValue(params.stock)
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const allRequests = await (async () => {
+  const requests = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
     return (await repository.listRequisitions({ organizationId })).rows
   })().finally(() => repository.close())
-  const statuses = Array.from(
-    new Set(allRequests.map((request) => request.status))
-  ).sort((left, right) => left.localeCompare(right))
-  const matches = (value: string, filter: string) =>
-    !filter || value.toLocaleLowerCase().includes(filter.toLocaleLowerCase())
-  const requests = allRequests.filter((request) => {
-    const itemLabel = `${request.typeCode} ${request.identificationName}`
-    const departmentLabel = `${request.department} ${request.requestedBy}`
-    return (
-      matches(request.requestNumber, requestFilter) &&
-      matches(departmentLabel, departmentFilter) &&
-      (matches(itemLabel, itemFilter) || request.itemTypeId === itemFilter) &&
-      matches(request.requestedQuantity, requestedFilter) &&
-      matches(request.issuedQuantity, issuedFilter) &&
-      matches(request.remainingQuantity, remainingFilter) &&
-      matches(request.availableStock, stockFilter) &&
-      matches(request.status, statusFilter)
-    )
-  })
 
   return (
     <div className="flex flex-col gap-6">
@@ -107,13 +62,11 @@ export default async function StoreRequestsPage({
         <CardHeader>
           <CardTitle>Request Allocation Queue</CardTitle>
           <CardDescription>
-            Filter directly below any column, then allocate each line
+            Use the filter in each column heading, then allocate each line
             independently.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 overflow-x-auto">
-          <form id="request-column-filters" method="get" />
-
           <Table>
             <TableHeader>
               <TableRow>
@@ -126,109 +79,6 @@ export default async function StoreRequestsPage({
                 <TableHead>Current Stock</TableHead>
                 <TableHead>Status</TableHead>
                 {canManage ? <TableHead>Allocate Line</TableHead> : null}
-              </TableRow>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead>
-                  <Input
-                    aria-label="Filter request number"
-                    className="min-w-32 bg-background"
-                    defaultValue={requestFilter}
-                    form="request-column-filters"
-                    name="request"
-                    placeholder="Filter"
-                  />
-                </TableHead>
-                <TableHead>
-                  <Input
-                    aria-label="Filter department or individual"
-                    className="min-w-40 bg-background"
-                    defaultValue={departmentFilter}
-                    form="request-column-filters"
-                    name="department"
-                    placeholder="Filter"
-                  />
-                </TableHead>
-                <TableHead>
-                  <Input
-                    aria-label="Filter item"
-                    className="min-w-40 bg-background"
-                    defaultValue={itemFilter}
-                    form="request-column-filters"
-                    name="item"
-                    placeholder="Filter"
-                  />
-                </TableHead>
-                <TableHead>
-                  <Input
-                    aria-label="Filter requested quantity"
-                    className="min-w-24 bg-background"
-                    defaultValue={requestedFilter}
-                    form="request-column-filters"
-                    name="requested"
-                    placeholder="Filter"
-                  />
-                </TableHead>
-                <TableHead>
-                  <Input
-                    aria-label="Filter issued quantity"
-                    className="min-w-24 bg-background"
-                    defaultValue={issuedFilter}
-                    form="request-column-filters"
-                    name="issued"
-                    placeholder="Filter"
-                  />
-                </TableHead>
-                <TableHead>
-                  <Input
-                    aria-label="Filter remaining quantity"
-                    className="min-w-24 bg-background"
-                    defaultValue={remainingFilter}
-                    form="request-column-filters"
-                    name="remaining"
-                    placeholder="Filter"
-                  />
-                </TableHead>
-                <TableHead>
-                  <Input
-                    aria-label="Filter current stock"
-                    className="min-w-24 bg-background"
-                    defaultValue={stockFilter}
-                    form="request-column-filters"
-                    name="stock"
-                    placeholder="Filter"
-                  />
-                </TableHead>
-                <TableHead>
-                  <div className="grid min-w-36 gap-2">
-                    <NativeSelect
-                      aria-label="Filter status"
-                      className="bg-background"
-                      defaultValue={statusFilter}
-                      form="request-column-filters"
-                      name="status"
-                    >
-                      <NativeSelectOption value="">All</NativeSelectOption>
-                      {statuses.map((status) => (
-                        <NativeSelectOption key={status} value={status}>
-                          {status}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                    <div className="flex gap-2">
-                      <Button
-                        form="request-column-filters"
-                        size="sm"
-                        type="submit"
-                      >
-                        Apply
-                      </Button>
-                      <Button asChild size="sm" variant="outline">
-                        <Link href="/store/requests">Clear</Link>
-                      </Button>
-                    </div>
-                  </div>
-                </TableHead>
-                {canManage ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -360,7 +210,7 @@ export default async function StoreRequestsPage({
                     className="h-24 text-center text-muted-foreground"
                     colSpan={canManage ? 9 : 8}
                   >
-                    No coded item request lines match these filters.
+                    No coded item request lines available.
                   </TableCell>
                 </TableRow>
               ) : null}
