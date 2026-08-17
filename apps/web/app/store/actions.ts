@@ -115,8 +115,24 @@ export async function createStoreSupplierAction(formData: FormData) {
       actorUserId,
       code: requiredText(formData, "supplier_code"),
       contactDetails: optionalText(formData, "contact_details"),
+      email: optionalText(formData, "supplier_email"),
       name: requiredText(formData, "supplier_name"),
       organizationId,
+    })
+  )
+  revalidateStore()
+}
+
+export async function createStoreSupplierPriceAction(formData: FormData) {
+  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+    repository.createSupplierPrice({
+      actorUserId,
+      itemTypeId: requiredText(formData, "item_type_id"),
+      organizationId,
+      quoteReference: optionalText(formData, "quote_reference"),
+      supplierId: requiredText(formData, "supplier_id"),
+      unitPrice: requiredText(formData, "unit_price"),
+      validFrom: optionalText(formData, "valid_from"),
     })
   )
   revalidateStore()
@@ -314,7 +330,7 @@ export async function receiveStoreStockAction(formData: FormData) {
         guaranteeCardStorageKey: savedFile?.storageKey,
         locationId: requiredText(formData, "location_id"),
         organizationId,
-        purchaseOrderId: requiredText(formData, "purchase_order_id"),
+        purchaseOrderLineId: requiredText(formData, "purchase_order_line_id"),
         quantity: positiveNumber(formData, "quantity"),
         receivedBy: optionalText(formData, "received_by"),
         warrantyUntil: optionalText(formData, "warranty_until"),
@@ -327,17 +343,23 @@ export async function receiveStoreStockAction(formData: FormData) {
   revalidateStore()
 }
 
-export async function createStorePurchaseOrderAction(formData: FormData) {
+export async function createStorePurchaseOrdersAction(formData: FormData) {
+  const itemTypeIds = formData
+    .getAll("item_type_id")
+    .map((value) => value.toString().trim())
+  if (!itemTypeIds.length) {
+    throw new Error("Select at least one Store item to order.")
+  }
   await withStore("store.manage", (repository, actorUserId, organizationId) =>
-    repository.createPurchaseOrder({
+    repository.createPurchaseOrdersFromSelection({
       actorUserId,
-      itemTypeId: requiredText(formData, "item_type_id"),
+      items: itemTypeIds.map((itemTypeId) => ({
+        itemTypeId,
+        quantity: positiveNumber(formData, `quantity_${itemTypeId}`),
+      })),
       orderDate: optionalText(formData, "order_date"),
       organizationId,
-      quantity: positiveNumber(formData, "quantity"),
       remark: optionalText(formData, "remark"),
-      supplierId: requiredText(formData, "supplier_id"),
-      unitPrice: requiredText(formData, "unit_price"),
     })
   )
   revalidateStore()

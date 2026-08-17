@@ -36,17 +36,25 @@ Code per physical unit. It may be held by a Department, Machine, Vendor, or the
 Store.
 
 **Supplier**: The party from whom a Purchase Order is placed. Supplier and
-price history belong to the ordered Store Item and are visible from its
-individual Asset workspace.
+email are maintained in Supplier Master. Price history belongs to the ordered
+Store Item and is visible from its individual Asset workspace.
+
+**Current Supplier Price**: The newest effective Supplier Price Master entry
+for one Store Item Type. It determines both the Supplier and unit price when
+that item is added to a Purchase Order; an item without one cannot be ordered.
 
 **Vendor**: An external party that may temporarily hold a Non Consumable Asset,
 for example for repair or calibration. A Vendor is not a Supplier unless it is
 separately maintained in both masters.
 
-**Store Purchase Order**: The authority to receive a quantity of one Store Item
-Type from one Supplier at an agreed unit price. It progresses through Open,
-Partially Received, Received, or Cancelled. It is started by selecting the
-Store Item from the Stock Register.
+**Store Purchase Order**: The authority to receive one or more Store Item lines
+from exactly one Supplier at their Current Supplier Prices. Selecting items
+from multiple Suppliers creates one Purchase Order per Supplier. Each order
+progresses through Open, Partially Received, Received, or Cancelled.
+
+**Store Purchase Order Line**: One Store Item Type, ordered quantity, Current
+Supplier Price, and received quantity within a Store Purchase Order. Receiving
+is saved against the line and cannot exceed its remaining quantity.
 
 **Store Purchase Register**: The single table containing every Store Purchase
 Order and its received quantity. Goods are received against the same order row;
@@ -74,10 +82,10 @@ Request Lines. It shows the Department, requesting individual, item, requested
 and remaining quantities, and Current Available Stock, and allows each line to
 be allocated independently.
 
-**Stock Register**: The single Store inventory table containing both Consumable
-and Non Consumable Store Item Types. Each row shows the Type Code, item,
-quantity, and Storage Location; users select rows here to request items or
-start a Purchase Order.
+**Stock Register**: The single filterable Store inventory table containing both
+Consumable and Non Consumable Store Item Types. Each row shows Type Code, Asset
+Name, Category, Subcategory, quantity, and Storage Location. Purchase Order
+mode adds row selection and ordered quantity without opening another form.
 
 **Current Available Stock**: A live derived value, never a request snapshot.
 For Consumables it is the signed movement-ledger balance at the requested

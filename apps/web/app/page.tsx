@@ -45,15 +45,29 @@ export default async function Page({
         })
         try {
           const organizationId = await repository.organizationIdForCode("MRMPL")
-          const [items, locations, suppliers, vendors, masters] =
-            await Promise.all([
-              repository.listItemTypes(organizationId),
-              repository.listLocations(organizationId),
-              repository.listSuppliers(organizationId),
-              repository.listVendors(organizationId),
-              repository.listAssetClassificationMasters(organizationId),
-            ])
-          return { items, locations, masters, suppliers, vendors }
+          const [
+            items,
+            locations,
+            suppliers,
+            supplierPrices,
+            vendors,
+            masters,
+          ] = await Promise.all([
+            repository.listItemTypes(organizationId),
+            repository.listLocations(organizationId),
+            repository.listSuppliers(organizationId),
+            repository.listSupplierPrices(organizationId),
+            repository.listVendors(organizationId),
+            repository.listAssetClassificationMasters(organizationId),
+          ])
+          return {
+            items,
+            locations,
+            masters,
+            supplierPrices,
+            suppliers,
+            vendors,
+          }
         } finally {
           await repository.close()
         }

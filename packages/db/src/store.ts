@@ -455,18 +455,20 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       actorUserId?: string | null
       code: string
       contactDetails?: string | null
+      email?: string | null
       name: string
       organizationId: string
     }) {
       const result = await pool.query<{ id: string }>(
         `
           INSERT INTO store.suppliers (
-            organization_id, code, name, contact_details,
+            organization_id, code, name, contact_details, email,
             created_by_user_id, updated_by_user_id
-          ) VALUES ($1, $2, $3, $4, $5, $5)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $6)
           ON CONFLICT (organization_id, lower(code))
           DO UPDATE SET name = EXCLUDED.name,
             contact_details = EXCLUDED.contact_details,
+            email = EXCLUDED.email,
             active = true, updated_at = now(),
             updated_by_user_id = EXCLUDED.updated_by_user_id
           RETURNING id
@@ -476,6 +478,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           requiredText(input.code, "Supplier code"),
           requiredText(input.name, "Supplier name"),
           input.contactDetails?.trim() || null,
+          input.email?.trim().toLocaleLowerCase() || null,
           input.actorUserId ?? null,
         ]
       )
@@ -486,11 +489,12 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       const result = await pool.query<{
         code: string
         contactDetails: string | null
+        email: string | null
         id: string
         name: string
       }>(
         `
-          SELECT id, code, name, contact_details AS "contactDetails"
+          SELECT id, code, name, contact_details AS "contactDetails", email
           FROM store.suppliers
           WHERE organization_id = $1 AND active
           ORDER BY name
@@ -498,6 +502,50 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         [organizationId]
       )
       return result.rows
+    },
+
+    async createSupplierPrice(input: {
+      actorUserId?: string | null
+      itemTypeId: string
+      organizationId: string
+      quoteReference?: string | null
+      supplierId: string
+      unitPrice: string
+      validFrom?: string | null
+    }) {
+      const unitPrice = Number(input.unitPrice)
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        throw new Error("Unit price must be zero or greater.")
+      }
+      const result = await pool.query<{ id: string }>(
+        `
+          INSERT INTO store.supplier_prices (
+            organization_id, item_type_id, supplier_id, unit_price,
+            valid_from, quote_reference, created_by_user_id
+          )
+          SELECT $1, item.id, supplier.id, $4,
+            COALESCE(NULLIF($5, '')::date, current_date), $6, $7
+          FROM store.item_types item
+          JOIN store.suppliers supplier
+            ON supplier.organization_id = item.organization_id
+          WHERE item.organization_id = $1 AND item.id = $2
+            AND supplier.id = $3 AND item.active AND supplier.active
+          RETURNING id
+        `,
+        [
+          input.organizationId,
+          input.itemTypeId,
+          input.supplierId,
+          input.unitPrice,
+          input.validFrom ?? null,
+          input.quoteReference?.trim() || null,
+          input.actorUserId ?? null,
+        ]
+      )
+      if (!result.rows[0]) {
+        throw new Error("Select a valid Store Item and Supplier.")
+      }
+      return result.rows[0]
     },
 
     async createVendor(input: {
@@ -583,29 +631,160 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           organizationId: input.organizationId,
           prefix: "STR-PO",
         })
-        const result = await client.query<{ id: string }>(
+        const order = await client.query<{ id: string }>(
           `
             INSERT INTO store.purchase_orders (
-              organization_id, order_number, supplier_id, item_type_id,
-              order_date, ordered_quantity, unit_price, remark,
+              organization_id, order_number, supplier_id, order_date, remark,
               created_by_user_id, updated_by_user_id
-            ) VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5, '')::date, current_date),
-              $6, $7, $8, $9, $9)
+            ) VALUES ($1, $2, $3, COALESCE(NULLIF($4, '')::date, current_date),
+              $5, $6, $6)
             RETURNING id
           `,
           [
             input.organizationId,
             orderNumber,
             input.supplierId,
-            input.itemTypeId,
             input.orderDate ?? null,
-            quantity,
-            input.unitPrice,
             input.remark?.trim() || null,
             input.actorUserId ?? null,
           ]
         )
-        return { id: result.rows[0]!.id, orderNumber }
+        const line = await client.query<{ id: string }>(
+          `
+            INSERT INTO store.purchase_order_lines (
+              organization_id, purchase_order_id, item_type_id,
+              ordered_quantity, unit_price, created_by_user_id,
+              updated_by_user_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $6)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            order.rows[0]!.id,
+            input.itemTypeId,
+            quantity,
+            input.unitPrice,
+            input.actorUserId ?? null,
+          ]
+        )
+        return {
+          id: line.rows[0]!.id,
+          orderNumber,
+          purchaseOrderId: order.rows[0]!.id,
+        }
+      })
+    },
+
+    async createPurchaseOrdersFromSelection(input: {
+      actorUserId?: string | null
+      items: Array<{ itemTypeId: string; quantity: number }>
+      orderDate?: string | null
+      organizationId: string
+      remark?: string | null
+    }) {
+      return withTransaction(pool, async (client) => {
+        if (!input.items.length) {
+          throw new Error("Select at least one Store item to order.")
+        }
+        const quantities = new Map<string, number>()
+        for (const item of input.items) {
+          if (quantities.has(item.itemTypeId)) {
+            throw new Error("Each Store item can appear only once per order.")
+          }
+          quantities.set(
+            item.itemTypeId,
+            positiveQuantity(item.quantity, "Order quantity")
+          )
+        }
+        const orderDate = input.orderDate?.trim() || null
+        const prices = await client.query<{
+          item_type_id: string
+          supplier_id: string
+          unit_price: string
+        }>(
+          `
+            SELECT DISTINCT ON (price.item_type_id)
+              price.item_type_id, price.supplier_id, price.unit_price::text
+            FROM store.supplier_prices price
+            JOIN store.item_types item ON item.id = price.item_type_id
+            JOIN store.suppliers supplier ON supplier.id = price.supplier_id
+            WHERE price.organization_id = $1
+              AND price.item_type_id = ANY($2::uuid[])
+              AND price.valid_from <= COALESCE(NULLIF($3, '')::date, current_date)
+              AND item.active AND supplier.active
+            ORDER BY price.item_type_id, price.valid_from DESC,
+              price.created_at DESC, price.id DESC
+          `,
+          [input.organizationId, [...quantities.keys()], orderDate]
+        )
+        if (prices.rows.length !== quantities.size) {
+          throw new Error(
+            "Every selected Store item needs a current Supplier Price Master entry."
+          )
+        }
+        const bySupplier = new Map<string, typeof prices.rows>()
+        for (const price of prices.rows) {
+          const supplierLines = bySupplier.get(price.supplier_id) ?? []
+          supplierLines.push(price)
+          bySupplier.set(price.supplier_id, supplierLines)
+        }
+        const orders: Array<{
+          id: string
+          lineCount: number
+          orderNumber: string
+          supplierId: string
+        }> = []
+        for (const [supplierId, supplierLines] of bySupplier) {
+          const orderNumber = await nextDocumentNumber(client, {
+            counterKey: "PURCHASE_ORDER",
+            organizationId: input.organizationId,
+            prefix: "STR-PO",
+          })
+          const order = await client.query<{ id: string }>(
+            `
+              INSERT INTO store.purchase_orders (
+                organization_id, order_number, supplier_id, order_date,
+                remark, created_by_user_id, updated_by_user_id
+              ) VALUES ($1, $2, $3,
+                COALESCE(NULLIF($4, '')::date, current_date), $5, $6, $6)
+              RETURNING id
+            `,
+            [
+              input.organizationId,
+              orderNumber,
+              supplierId,
+              orderDate,
+              input.remark?.trim() || null,
+              input.actorUserId ?? null,
+            ]
+          )
+          for (const line of supplierLines) {
+            await client.query(
+              `
+                INSERT INTO store.purchase_order_lines (
+                  organization_id, purchase_order_id, item_type_id,
+                  ordered_quantity, unit_price, created_by_user_id,
+                  updated_by_user_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $6)
+              `,
+              [
+                input.organizationId,
+                order.rows[0]!.id,
+                line.item_type_id,
+                quantities.get(line.item_type_id),
+                line.unit_price,
+                input.actorUserId ?? null,
+              ]
+            )
+          }
+          orders.push({
+            id: order.rows[0]!.id,
+            lineCount: supplierLines.length,
+            orderNumber,
+            supplierId,
+          })
+        }
+        return { orders }
       })
     },
 
@@ -617,33 +796,41 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         orderDate: string
         orderedQuantity: string
         orderNumber: string
+        orderTotal: string
+        purchaseOrderId: string
         receivedQuantity: string
         remainingQuantity: string
         status: string
         supplierId: string
+        supplierEmail: string | null
         supplierName: string
         typeCode: string
         unit: string
         unitPrice: string
       }>(
         `
-          SELECT purchase_order.id,
+          SELECT line.id, purchase_order.id AS "purchaseOrderId",
             purchase_order.order_number AS "orderNumber",
             purchase_order.order_date::text AS "orderDate",
             purchase_order.supplier_id AS "supplierId",
             supplier.name AS "supplierName",
-            purchase_order.item_type_id AS "itemTypeId",
+            supplier.email AS "supplierEmail",
+            line.item_type_id AS "itemTypeId",
             item.type_code AS "typeCode",
             item.identification_name AS "itemName", item.unit,
-            trim_scale(purchase_order.ordered_quantity)::text AS "orderedQuantity",
-            trim_scale(purchase_order.received_quantity)::text AS "receivedQuantity",
-            trim_scale(purchase_order.ordered_quantity - purchase_order.received_quantity)::text
+            trim_scale(line.ordered_quantity)::text AS "orderedQuantity",
+            trim_scale(line.received_quantity)::text AS "receivedQuantity",
+            trim_scale(line.ordered_quantity - line.received_quantity)::text
               AS "remainingQuantity",
-            purchase_order.unit_price::text AS "unitPrice",
+            line.unit_price::text AS "unitPrice",
+            trim_scale(sum(line.ordered_quantity * line.unit_price)
+              OVER (PARTITION BY purchase_order.id))::text AS "orderTotal",
             purchase_order.status
           FROM store.purchase_orders purchase_order
           JOIN store.suppliers supplier ON supplier.id = purchase_order.supplier_id
-          JOIN store.item_types item ON item.id = purchase_order.item_type_id
+          JOIN store.purchase_order_lines line
+            ON line.purchase_order_id = purchase_order.id
+          JOIN store.item_types item ON item.id = line.item_type_id
           WHERE purchase_order.organization_id = $1
           ORDER BY purchase_order.order_date DESC, purchase_order.created_at DESC
           LIMIT 500
@@ -653,17 +840,79 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
+    async getPurchaseOrder(input: {
+      organizationId: string
+      purchaseOrderId: string
+    }) {
+      const order = await pool.query<{
+        id: string
+        orderDate: string
+        orderNumber: string
+        remark: string | null
+        status: string
+        supplierCode: string
+        supplierEmail: string | null
+        supplierName: string
+      }>(
+        `
+          SELECT purchase_order.id,
+            purchase_order.order_number AS "orderNumber",
+            purchase_order.order_date::text AS "orderDate",
+            purchase_order.status, purchase_order.remark,
+            supplier.code AS "supplierCode",
+            supplier.name AS "supplierName", supplier.email AS "supplierEmail"
+          FROM store.purchase_orders purchase_order
+          JOIN store.suppliers supplier ON supplier.id = purchase_order.supplier_id
+          WHERE purchase_order.id = $1 AND purchase_order.organization_id = $2
+        `,
+        [input.purchaseOrderId, input.organizationId]
+      )
+      if (!order.rows[0]) return null
+      const lines = await pool.query<{
+        assetCategory: string
+        assetName: string
+        assetSubcategory: string
+        itemName: string
+        orderedQuantity: string
+        receivedQuantity: string
+        typeCode: string
+        unit: string
+        unitPrice: string
+      }>(
+        `
+          SELECT item.type_code AS "typeCode",
+            item.identification_name AS "itemName",
+            item.asset_name AS "assetName",
+            item.asset_category AS "assetCategory",
+            item.asset_subcategory AS "assetSubcategory", item.unit,
+            trim_scale(line.ordered_quantity)::text AS "orderedQuantity",
+            trim_scale(line.received_quantity)::text AS "receivedQuantity",
+            line.unit_price::text AS "unitPrice"
+          FROM store.purchase_order_lines line
+          JOIN store.item_types item ON item.id = line.item_type_id
+          WHERE line.purchase_order_id = $1 AND line.organization_id = $2
+          ORDER BY line.created_at, line.id
+        `,
+        [input.purchaseOrderId, input.organizationId]
+      )
+      return { lines: lines.rows, order: order.rows[0] }
+    },
+
     async listSupplierPrices(organizationId: string) {
       const result = await pool.query<{
+        id: string
+        itemTypeId: string
         itemName: string
         quoteReference: string | null
+        supplierId: string
         supplierName: string
         typeCode: string
         unitPrice: string
         validFrom: string
       }>(
         `
-          SELECT item.type_code AS "typeCode",
+          SELECT price.id, price.item_type_id AS "itemTypeId",
+            price.supplier_id AS "supplierId", item.type_code AS "typeCode",
             item.identification_name AS "itemName",
             supplier.name AS "supplierName",
             price.unit_price::text AS "unitPrice",
@@ -743,6 +992,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         assetType: string
         applicableItemCode: string | null
         availableStock: string
+        currentPriceValidFrom: string | null
+        currentSupplierEmail: string | null
+        currentSupplierId: string | null
+        currentSupplierName: string | null
+        currentUnitPrice: string | null
         drawingNumber: string | null
         id: string
         identificationName: string
@@ -764,6 +1018,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             item.drawing_number AS "drawingNumber",
             item.tracking_mode AS "trackingMode", item.unit,
             trim_scale(item.minimum_stock)::text AS "minimumStock",
+            current_price.supplier_id AS "currentSupplierId",
+            current_price.supplier_name AS "currentSupplierName",
+            current_price.supplier_email AS "currentSupplierEmail",
+            current_price.unit_price AS "currentUnitPrice",
+            current_price.valid_from AS "currentPriceValidFrom",
             COALESCE((
               SELECT string_agg(location.name, ', ' ORDER BY location.name)
               FROM store.locations location
@@ -792,6 +1051,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 WHERE movement.item_type_id = item.id)
             END)::numeric)::text AS "availableStock"
           FROM store.item_types item
+          LEFT JOIN LATERAL (
+            SELECT price.supplier_id, supplier.name AS supplier_name,
+              supplier.email AS supplier_email,
+              price.unit_price::text AS unit_price,
+              price.valid_from::text AS valid_from
+            FROM store.supplier_prices price
+            JOIN store.suppliers supplier ON supplier.id = price.supplier_id
+            WHERE price.organization_id = item.organization_id
+              AND price.item_type_id = item.id
+              AND price.valid_from <= current_date AND supplier.active
+            ORDER BY price.valid_from DESC, price.created_at DESC, price.id DESC
+            LIMIT 1
+          ) current_price ON true
           WHERE item.organization_id = $1 AND item.active
           ORDER BY item.type_code
         `,
@@ -963,7 +1235,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       locationId: string
       manufacturerSerialNumbers?: string[]
       organizationId: string
-      purchaseOrderId: string
+      purchaseOrderLineId: string
       quantity: number
       receivedBy?: string | null
       warrantyUntil?: string | null
@@ -984,17 +1256,19 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           unit_price: string
         }>(
           `
-            SELECT purchase_order.item_type_id, purchase_order.supplier_id,
-              purchase_order.order_number, purchase_order.ordered_quantity::text,
-              purchase_order.received_quantity::text, purchase_order.unit_price::text,
+            SELECT line.item_type_id, purchase_order.supplier_id,
+              purchase_order.order_number, line.ordered_quantity::text,
+              line.received_quantity::text, line.unit_price::text,
               purchase_order.status, item.type_code, item.identification_name,
               item.tracking_mode, item.next_asset_number
-            FROM store.purchase_orders purchase_order
-            JOIN store.item_types item ON item.id = purchase_order.item_type_id
-            WHERE purchase_order.id = $1 AND purchase_order.organization_id = $2
-            FOR UPDATE OF purchase_order, item
+            FROM store.purchase_order_lines line
+            JOIN store.purchase_orders purchase_order
+              ON purchase_order.id = line.purchase_order_id
+            JOIN store.item_types item ON item.id = line.item_type_id
+            WHERE line.id = $1 AND line.organization_id = $2
+            FOR UPDATE OF line, purchase_order, item
           `,
-          [input.purchaseOrderId, input.organizationId]
+          [input.purchaseOrderLineId, input.organizationId]
         )
         if (!order.rows[0]) throw new Error("Purchase Order was not found.")
         if (order.rows[0].status === "Cancelled") {
@@ -1022,7 +1296,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         const receipt = await client.query<{ id: string }>(
           `
             INSERT INTO store.receipts (
-              organization_id, receipt_number, purchase_order_id, location_id,
+              organization_id, receipt_number, purchase_order_line_id, location_id,
               supplier_id, bill_number, bill_date, received_by, created_by_user_id
             ) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::date, $8, $9)
             RETURNING id
@@ -1030,7 +1304,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           [
             input.organizationId,
             receiptNumber,
-            input.purchaseOrderId,
+            input.purchaseOrderLineId,
             input.locationId,
             order.rows[0].supplier_id,
             input.billNumber?.trim() || null,
@@ -1072,23 +1346,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             ]
           )
         }
-        await client.query(
-          `
-            INSERT INTO store.supplier_prices (
-              organization_id, item_type_id, supplier_id, unit_price,
-              valid_from, quote_reference, created_by_user_id
-            ) VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5, '')::date, current_date), $6, $7)
-          `,
-          [
-            input.organizationId,
-            order.rows[0].item_type_id,
-            order.rows[0].supplier_id,
-            order.rows[0].unit_price,
-            input.billDate ?? null,
-            input.billNumber?.trim() || order.rows[0].order_number,
-            input.actorUserId ?? null,
-          ]
-        )
         const assetCodes: string[] = []
         if (order.rows[0].tracking_mode === "SERIALIZED") {
           for (let index = 0; index < quantity; index += 1) {
@@ -1187,16 +1444,37 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         }
         await client.query(
           `
-            UPDATE store.purchase_orders
+            UPDATE store.purchase_order_lines
             SET received_quantity = received_quantity + $1,
-              status = CASE
-                WHEN received_quantity + $1 = ordered_quantity THEN 'Received'
-                ELSE 'Partially Received'
-              END,
               updated_at = now(), updated_by_user_id = $2
             WHERE id = $3
           `,
-          [quantity, input.actorUserId ?? null, input.purchaseOrderId]
+          [quantity, input.actorUserId ?? null, input.purchaseOrderLineId]
+        )
+        await client.query(
+          `
+            UPDATE store.purchase_orders purchase_order
+            SET status = CASE
+                WHEN NOT EXISTS (
+                  SELECT 1 FROM store.purchase_order_lines line
+                  WHERE line.purchase_order_id = purchase_order.id
+                    AND line.received_quantity < line.ordered_quantity
+                ) THEN 'Received'
+                WHEN EXISTS (
+                  SELECT 1 FROM store.purchase_order_lines line
+                  WHERE line.purchase_order_id = purchase_order.id
+                    AND line.received_quantity > 0
+                ) THEN 'Partially Received'
+                ELSE 'Open'
+              END,
+              updated_at = now(), updated_by_user_id = $1
+            WHERE purchase_order.id = (
+              SELECT line.purchase_order_id
+              FROM store.purchase_order_lines line
+              WHERE line.id = $2
+            )
+          `,
+          [input.actorUserId ?? null, input.purchaseOrderLineId]
         )
         return { assetCodes, receiptNumber }
       })
@@ -1547,8 +1825,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           LEFT JOIN store.receipt_lines receipt_line
             ON receipt_line.id = asset.receipt_line_id
           LEFT JOIN store.receipts receipt ON receipt.id = receipt_line.receipt_id
+          LEFT JOIN store.purchase_order_lines purchase_order_line
+            ON purchase_order_line.id = receipt.purchase_order_line_id
           LEFT JOIN store.purchase_orders purchase_order
-            ON purchase_order.id = receipt.purchase_order_id
+            ON purchase_order.id = purchase_order_line.purchase_order_id
           LEFT JOIN store.suppliers supplier ON supplier.id = receipt.supplier_id
           WHERE asset.organization_id = $1 AND lower(asset.asset_code) = lower($2)
         `,

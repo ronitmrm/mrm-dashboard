@@ -30,6 +30,7 @@ import {
   createStoreAssetSubcategoryAction,
   createStoreItemTypeAction,
   createStoreLocationAction,
+  createStoreSupplierPriceAction,
   createStoreSupplierAction,
   createStoreVendorAction,
 } from "../actions"
@@ -41,6 +42,7 @@ const masterOptions = [
   ["ASSET_NAME", "Asset Name"],
   ["LOCATION", "Store Location"],
   ["SUPPLIER", "Supplier"],
+  ["SUPPLIER_PRICE", "Supplier Price"],
   ["VENDOR", "Vendor"],
 ] as const
 
@@ -81,8 +83,20 @@ export type StoreMasterData = {
   suppliers: Array<{
     code: string
     contactDetails: string | null
+    email: string | null
     id: string
     name: string
+  }>
+  supplierPrices: Array<{
+    id: string
+    itemName: string
+    itemTypeId: string
+    quoteReference: string | null
+    supplierId: string
+    supplierName: string
+    typeCode: string
+    unitPrice: string
+    validFrom: string
   }>
   vendors: Array<{
     code: string
@@ -231,9 +245,19 @@ function masterRows(selectedMaster: MasterKey, data: StoreMasterData) {
     case "SUPPLIER":
       return data.suppliers.map((supplier) => ({
         code: supplier.code,
-        details: supplier.contactDetails || "No contact details",
+        details:
+          [supplier.email, supplier.contactDetails]
+            .filter(Boolean)
+            .join(" · ") || "No contact details",
         key: supplier.id,
         name: supplier.name,
+      }))
+    case "SUPPLIER_PRICE":
+      return data.supplierPrices.map((price) => ({
+        code: price.typeCode,
+        details: `${price.supplierName} · ₹ ${price.unitPrice} · Effective ${price.validFrom}${price.quoteReference ? ` · ${price.quoteReference}` : ""}`,
+        key: price.id,
+        name: price.itemName,
       }))
     case "VENDOR":
       return data.vendors.map((vendor) => ({
@@ -400,10 +424,55 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
           <FieldGroup className="grid gap-4 md:grid-cols-3">
             <TextField label="Supplier Code" name="supplier_code" required />
             <TextField label="Supplier Name" name="supplier_name" required />
+            <TextField
+              label="Supplier Email"
+              name="supplier_email"
+              type="email"
+            />
             <TextField label="Contact Details" name="contact_details" />
           </FieldGroup>
           <Button className="mt-5" type="submit">
             Save Supplier
+          </Button>
+        </form>
+      )
+    case "SUPPLIER_PRICE":
+      return (
+        <form action={createStoreSupplierPriceAction}>
+          <FieldGroup className="grid gap-4 md:grid-cols-3">
+            <SelectField
+              label="Store Item"
+              name="item_type_id"
+              options={data.items.map((item) => ({
+                label: `${item.typeCode} — ${item.identificationName}`,
+                value: item.id,
+              }))}
+            />
+            <SelectField
+              label="Supplier"
+              name="supplier_id"
+              options={data.suppliers.map((supplier) => ({
+                label: `${supplier.code} — ${supplier.name}`,
+                value: supplier.id,
+              }))}
+            />
+            <TextField
+              label="Unit Price"
+              min="0"
+              name="unit_price"
+              required
+              step="0.01"
+              type="number"
+            />
+            <TextField label="Effective From" name="valid_from" type="date" />
+            <TextField label="Quote Reference" name="quote_reference" />
+          </FieldGroup>
+          <Button
+            className="mt-5"
+            disabled={!data.items.length || !data.suppliers.length}
+            type="submit"
+          >
+            Save Supplier Price
           </Button>
         </form>
       )

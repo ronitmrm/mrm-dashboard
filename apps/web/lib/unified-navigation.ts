@@ -463,6 +463,7 @@ export function storePurchaseOrderHref(input: {
   requestNumber: string
 }) {
   return `/store/stock?${new URLSearchParams({
+    mode: "order",
     orderItemId: input.itemTypeId,
     orderQuantity: input.quantity,
     requestNumber: input.requestNumber,
