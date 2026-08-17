@@ -51,12 +51,23 @@ Partially Received, Received, or Cancelled.
 It cannot exceed the order's remaining quantity and inherits its Supplier,
 Store Item Type, and agreed unit price.
 
-**Store Request**: One department requisition for one Store Item Type and one
-Store location. It receives an immutable number such as
-`STR-REQ-2026-000001` and progresses through Pending, Partially Issued,
-Fulfilled, or Cancelled. An open request may start a Purchase Order with its
-Store Item Type and remaining quantity prefilled; Supplier and agreed price
-must still be selected before the order is saved.
+**Store Request**: One numbered demand submitted by a Department and an
+individual to one Store location. It contains one or more Coded Item Request
+Lines selected from Current Stock and receives an immutable number such as
+`STR-REQ-2026-000001`.
+
+**Coded Item Request Line**: One Store Item Type and requested quantity within
+a Store Request. Store allocates and saves each line independently; its live
+available stock changes immediately after an issue is saved.
+
+**New Item Request**: Demand for an item that cannot be found in Current Stock
+and therefore has no Type Code. It is reviewed separately from Store Requests
+and cannot be allocated until it resolves to a Store Item Type.
+
+**Request Allocation Queue**: The filterable Store worklist of Coded Item
+Request Lines. It shows the Department, requesting individual, item, requested
+and remaining quantities, and Current Available Stock, and allows each line to
+be allocated independently.
 
 **Current Available Stock**: A live derived value, never a request snapshot.
 For Consumables it is the signed movement-ledger balance at the requested

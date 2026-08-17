@@ -297,6 +297,22 @@ _Avoid_: Receipt, direct stock entry.
 A goods receipt against one Store Purchase Order that cannot exceed its remaining quantity.
 _Avoid_: Receipt without order, direct inward.
 
+**Store Request**:
+One numbered demand submitted by a Department and an individual, containing one or more Coded Item Request Lines selected from Current Stock.
+_Avoid_: One request number per item, New Item Request.
+
+**Coded Item Request Line**:
+One Store Item Type and requested quantity within a Store Request, allocated independently by Store.
+_Avoid_: New Item Request, physical Asset selection.
+
+**New Item Request**:
+Demand for an item that cannot be found in Current Stock and has no Type Code yet.
+_Avoid_: Coded Item Request Line, missing-stock issue.
+
+**Request Allocation Queue**:
+The filterable Store worklist of Coded Item Request Lines awaiting or undergoing allocation.
+_Avoid_: Request creation form, New Item Request list.
+
 **Store Vendor**:
 An external party that may temporarily hold a Non Consumable Asset.
 _Avoid_: Supplier when referring to an asset holder.

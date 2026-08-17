@@ -16,6 +16,17 @@ export type StoreHolderType =
   | "UNIT"
   | "VENDOR"
 
+type StoreRequisitionBatchInput = {
+  actorUserId?: string | null
+  department: string
+  items: Array<{ itemTypeId: string; quantity: number }>
+  locationId: string
+  organizationId: string
+  purpose?: string | null
+  requestedBy: string
+  requiredOn?: string | null
+}
+
 function requiredText(value: unknown, label: string) {
   const text = String(value ?? "").trim()
   if (!text) throw new Error(`${label} is required.`)
@@ -34,7 +45,9 @@ function storeAssetType(value: unknown): StoreAssetType {
   throw new Error("Asset type must be Consumable or Non Consumable.")
 }
 
-function trackingModeForAssetType(assetType: StoreAssetType): StoreTrackingMode {
+function trackingModeForAssetType(
+  assetType: StoreAssetType
+): StoreTrackingMode {
   return assetType === "NON_CONSUMABLE" ? "SERIALIZED" : "CONSUMABLE"
 }
 
@@ -64,10 +77,7 @@ async function nextDocumentNumber(
   return `${input.prefix}-${year}-${String(counter.rows[0]!.current_value).padStart(6, "0")}`
 }
 
-async function nextStoreTypeCode(
-  client: PoolClient,
-  organizationId: string
-) {
+async function nextStoreTypeCode(client: PoolClient, organizationId: string) {
   const counter = await client.query<{ current_value: number }>(
     `
       INSERT INTO store.number_counters (
@@ -148,6 +158,98 @@ async function machineIdForReference(
 
 export function createStoreRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
+
+  const createRequisitionBatch = async (input: StoreRequisitionBatchInput) =>
+    withTransaction(pool, async (client) => {
+      if (!input.items.length) {
+        throw new Error("Select at least one coded Store item.")
+      }
+      const itemTypeIds = input.items.map(({ itemTypeId }) => itemTypeId)
+      if (new Set(itemTypeIds).size !== itemTypeIds.length) {
+        throw new Error(
+          "Each coded Store item can appear only once per request."
+        )
+      }
+      const department = requiredText(input.department, "Department")
+      const requestedBy = requiredText(input.requestedBy, "Requested by")
+      const location = await client.query<{ id: string }>(
+        `
+          SELECT id FROM store.locations
+          WHERE id = $1 AND organization_id = $2
+            AND location_type = 'STORE' AND active
+        `,
+        [input.locationId, input.organizationId]
+      )
+      if (!location.rows[0]) {
+        throw new Error("Select an active Store location.")
+      }
+      const itemTypes = await client.query<{ id: string }>(
+        `
+          SELECT id FROM store.item_types
+          WHERE organization_id = $1 AND active AND id = ANY($2::uuid[])
+        `,
+        [input.organizationId, itemTypeIds]
+      )
+      if (itemTypes.rowCount !== itemTypeIds.length) {
+        throw new Error("One or more selected Store items are unavailable.")
+      }
+      const requestNumber = await nextDocumentNumber(client, {
+        counterKey: "REQUISITION",
+        organizationId: input.organizationId,
+        prefix: "STR-REQ",
+      })
+      const header = await client.query<{ id: string }>(
+        `
+          INSERT INTO store.requisition_headers (
+            organization_id, request_number, location_id, department,
+            requested_by, required_on, purpose,
+            created_by_user_id, updated_by_user_id
+          ) VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::date, $7, $8, $8)
+          RETURNING id
+        `,
+        [
+          input.organizationId,
+          requestNumber,
+          input.locationId,
+          department,
+          requestedBy,
+          input.requiredOn ?? null,
+          input.purpose?.trim() || null,
+          input.actorUserId ?? null,
+        ]
+      )
+      const lineIds: string[] = []
+      for (const [index, item] of input.items.entries()) {
+        const lineNumber = `${requestNumber}-${String(index + 1).padStart(2, "0")}`
+        const line = await client.query<{ id: string }>(
+          `
+            INSERT INTO store.requisitions (
+              organization_id, request_header_id, request_number,
+              item_type_id, location_id, department, requested_by,
+              requested_quantity, required_on, purpose,
+              created_by_user_id, updated_by_user_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+              NULLIF($9, '')::date, $10, $11, $11)
+            RETURNING id
+          `,
+          [
+            input.organizationId,
+            header.rows[0]!.id,
+            lineNumber,
+            item.itemTypeId,
+            input.locationId,
+            department,
+            requestedBy,
+            positiveQuantity(item.quantity),
+            input.requiredOn ?? null,
+            input.purpose?.trim() || null,
+            input.actorUserId ?? null,
+          ]
+        )
+        lineIds.push(line.rows[0]!.id)
+      }
+      return { id: header.rows[0]!.id, lineIds, requestNumber }
+    })
 
   return {
     close,
@@ -1079,6 +1181,8 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    createRequisitionBatch,
+
     async createRequisition(input: {
       actorUserId?: string | null
       department: string
@@ -1090,37 +1194,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       requestedBy: string
       requiredOn?: string | null
     }) {
-      return withTransaction(pool, async (client) => {
-        const requestNumber = await nextDocumentNumber(client, {
-          counterKey: "REQUISITION",
-          organizationId: input.organizationId,
-          prefix: "STR-REQ",
-        })
-        const result = await client.query<{ id: string }>(
-          `
-            INSERT INTO store.requisitions (
-              organization_id, request_number, item_type_id, location_id,
-              department, requested_by, requested_quantity, required_on,
-              purpose, created_by_user_id, updated_by_user_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7,
-              NULLIF($8, '')::date, $9, $10, $10)
-            RETURNING id
-          `,
-          [
-            input.organizationId,
-            requestNumber,
-            input.itemTypeId,
-            input.locationId,
-            requiredText(input.department, "Department"),
-            requiredText(input.requestedBy, "Requested by"),
-            positiveQuantity(input.quantity),
-            input.requiredOn ?? null,
-            input.purpose?.trim() || null,
-            input.actorUserId ?? null,
-          ]
-        )
-        return { id: result.rows[0]!.id, requestNumber }
+      const result = await createRequisitionBatch({
+        ...input,
+        items: [{ itemTypeId: input.itemTypeId, quantity: input.quantity }],
       })
+      return { id: result.lineIds[0]!, requestNumber: result.requestNumber }
     },
 
     async listRequisitions(input: {
@@ -1148,12 +1226,12 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       }>(
         `
           SELECT request.id, request.item_type_id AS "itemTypeId",
-            request.request_number AS "requestNumber",
-            request.department, request.requested_by AS "requestedBy",
+            header.request_number AS "requestNumber",
+            header.department, header.requested_by AS "requestedBy",
             trim_scale(request.requested_quantity)::text AS "requestedQuantity",
             trim_scale(request.issued_quantity)::text AS "issuedQuantity",
             trim_scale(request.requested_quantity - request.issued_quantity)::text AS "remainingQuantity",
-            request.status, request.created_at AS "requestedAt",
+            request.status, header.created_at AS "requestedAt",
             item.type_code AS "typeCode",
             item.identification_name AS "identificationName",
             item.tracking_mode AS "trackingMode", item.unit,
@@ -1170,13 +1248,15 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                   AND movement.location_id = request.location_id)
             END)::numeric)::text AS "availableStock"
           FROM store.requisitions request
+          JOIN store.requisition_headers header
+            ON header.id = request.request_header_id
           JOIN store.item_types item ON item.id = request.item_type_id
           JOIN store.locations location ON location.id = request.location_id
           WHERE request.organization_id = $1
             AND ($2::uuid IS NULL OR request.location_id = $2)
           ORDER BY
             CASE request.status WHEN 'Pending' THEN 0 WHEN 'Partially Issued' THEN 1 ELSE 2 END,
-            request.created_at DESC
+            header.created_at DESC, request.created_at
         `,
         [input.organizationId, input.locationId ?? null]
       )

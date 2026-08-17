@@ -10,6 +10,7 @@ import {
   type StoreHolderType,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -86,6 +87,8 @@ function revalidateStore() {
   revalidatePath("/store/orders")
   revalidatePath("/store/stock")
   revalidatePath("/store/requests")
+  revalidatePath("/store/requests/new")
+  revalidatePath("/store/new-item-requests")
   revalidatePath("/store/assets")
 }
 
@@ -221,23 +224,37 @@ export async function resolveMissingStoreCodeAction(formData: FormData) {
   revalidateStore()
 }
 
-export async function createStoreRequisitionAction(formData: FormData) {
+export async function createStoreRequisitionBatchAction(formData: FormData) {
+  const itemTypeIds = formData
+    .getAll("item_type_id")
+    .map((value) => value.toString().trim())
+  const quantities = formData
+    .getAll("quantity")
+    .map((value) => Number(value.toString()))
+  if (!itemTypeIds.length || itemTypeIds.length !== quantities.length) {
+    throw new Error(
+      "Select at least one coded Store item and enter its quantity."
+    )
+  }
   await withStore(
     "store.requests.write",
     (repository, actorUserId, organizationId) =>
-      repository.createRequisition({
+      repository.createRequisitionBatch({
         actorUserId,
         department: requiredText(formData, "department"),
-        itemTypeId: requiredText(formData, "item_type_id"),
+        items: itemTypeIds.map((itemTypeId, index) => ({
+          itemTypeId,
+          quantity: quantities[index]!,
+        })),
         locationId: requiredText(formData, "location_id"),
         organizationId,
         purpose: optionalText(formData, "purpose"),
-        quantity: positiveNumber(formData, "quantity"),
         requestedBy: requiredText(formData, "requested_by"),
         requiredOn: optionalText(formData, "required_on"),
       })
   )
   revalidateStore()
+  redirect("/store/requests")
 }
 
 export async function issueStoreRequisitionAction(formData: FormData) {

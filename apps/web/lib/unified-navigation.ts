@@ -441,6 +441,11 @@ export const storeNavigation = [
     label: "Requests & Issues",
   },
   {
+    href: "/store/new-item-requests",
+    icon: PackageSearch,
+    label: "New Item Requests",
+  },
+  {
     href: "/store/orders",
     icon: ShoppingCart,
     label: "Orders & Receipts",

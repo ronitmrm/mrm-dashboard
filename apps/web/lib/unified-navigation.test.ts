@@ -137,6 +137,7 @@ describe("unified navigation", () => {
       [
         { href: "/store", label: "Store Overview" },
         { href: "/store/requests", label: "Requests & Issues" },
+        { href: "/store/new-item-requests", label: "New Item Requests" },
         { href: "/store/orders", label: "Orders & Receipts" },
         { href: "/store/stock", label: "Stock" },
         { href: "/store/masters", label: "Store Masters" },
