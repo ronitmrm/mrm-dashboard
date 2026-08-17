@@ -1611,9 +1611,9 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         const holderName = input.holderName?.trim() || row.department
         if (row.tracking_mode === "SERIALIZED") {
           if (quantity !== 1) {
-            throw new Error("Issue serialized assets one Asset Code at a time.")
+            throw new Error("Issue Non Consumables one Unit ID at a time.")
           }
-          const assetCode = requiredText(input.assetCode, "Asset code")
+          const assetCode = requiredText(input.assetCode, "Unit ID")
           const machineId =
             holderType === "MACHINE"
               ? await machineIdForReference(
@@ -1650,7 +1650,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           )
           if (!asset.rows[0]) {
             throw new Error(
-              "Asset Code is not available in the selected Store."
+              "Unit ID is not available in the selected Store."
             )
           }
           await client.query(
@@ -1832,7 +1832,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           LEFT JOIN store.suppliers supplier ON supplier.id = receipt.supplier_id
           WHERE asset.organization_id = $1 AND lower(asset.asset_code) = lower($2)
         `,
-        [input.organizationId, requiredText(input.assetCode, "Asset code")]
+        [input.organizationId, requiredText(input.assetCode, "Unit ID")]
       )
       if (!asset.rows[0]) return null
       const movements = await pool.query<{
@@ -1983,7 +1983,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             WHERE organization_id = $1 AND lower(asset_code) = lower($2)
             FOR UPDATE
           `,
-          [input.organizationId, requiredText(input.assetCode, "Asset code")]
+          [input.organizationId, requiredText(input.assetCode, "Unit ID")]
         )
         if (!asset.rows[0]) throw new Error("Asset was not found.")
         if (asset.rows[0].status === "SCRAPPED") {
@@ -2122,14 +2122,14 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         `,
         [
           input.organizationId,
-          requiredText(input.assetCode, "Asset code"),
+          requiredText(input.assetCode, "Unit ID"),
           requiredText(input.definitionCode, "Maintenance code"),
           requiredText(input.firstDueOn, "First due date"),
           input.actorUserId ?? null,
         ]
       )
       if (!result.rows[0]) {
-        throw new Error("Asset Code or Maintenance Master code was not found.")
+        throw new Error("Unit ID or Maintenance Master code was not found.")
       }
       return result.rows[0]
     },
@@ -2158,7 +2158,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             WHERE organization_id = $1 AND lower(asset_code) = lower($2)
             FOR UPDATE
           `,
-          [input.organizationId, requiredText(input.assetCode, "Asset code")]
+          [input.organizationId, requiredText(input.assetCode, "Unit ID")]
         )
         if (!asset.rows[0]) throw new Error("Asset was not found.")
         const fallbackLocation = await client.query<{ id: string }>(
@@ -2225,7 +2225,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         const asset = await client.query<{ id: string }>(
           `SELECT id FROM store.assets
            WHERE organization_id = $1 AND lower(asset_code) = lower($2)`,
-          [input.organizationId, requiredText(input.assetCode, "Asset code")]
+          [input.organizationId, requiredText(input.assetCode, "Unit ID")]
         )
         if (!asset.rows[0]) throw new Error("Asset was not found.")
         let nextDueOn: string | null = null

@@ -311,7 +311,7 @@ describe("Store requests", () => {
     )
   })
 
-  test("uses classification masters and generates immutable Type Codes", async () => {
+  test("uses classification masters and generates immutable Asset Codes", async () => {
     const category = await store.createAssetCategory({
       name: `Safety ${suffix}`,
       organizationId,

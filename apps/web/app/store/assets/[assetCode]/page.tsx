@@ -82,7 +82,8 @@ export default async function StoreAssetWorkspacePage({
             {asset.assetCode}
           </h2>
           <p className="text-sm text-muted-foreground">
-            {asset.identificationName} · {asset.typeCode}
+            Unit ID / Serial ID · Asset Code {asset.typeCode} ·{" "}
+            {asset.identificationName}
           </p>
         </div>
         <Badge
@@ -93,6 +94,12 @@ export default async function StoreAssetWorkspacePage({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Info label="Asset Code" value={asset.typeCode} />
+        <Info label="Unit ID" value={asset.assetCode} />
+        <Info
+          label="Manufacturer Serial"
+          value={asset.manufacturerSerialNumber || "Not recorded"}
+        />
         <Info
           label="Classification"
           value={`${asset.assetType} / ${asset.category} / ${asset.subcategory}`}
@@ -183,7 +190,7 @@ export default async function StoreAssetWorkspacePage({
               <CardTitle>Add Timetable</CardTitle>
               <CardDescription>
                 Schedules come from Maintenance Master and belong to this
-                specific Asset Code.
+                specific Unit ID.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -322,7 +329,7 @@ export default async function StoreAssetWorkspacePage({
             <CardTitle>Asset Lifecycle</CardTitle>
             <CardDescription>
               A broken or scrapped physical asset keeps its history. A purchased
-              replacement receives a new Asset Code. Use Store Return above to
+              replacement receives a new Unit ID. Use Store Return above to
               make an asset available again.
             </CardDescription>
           </CardHeader>
