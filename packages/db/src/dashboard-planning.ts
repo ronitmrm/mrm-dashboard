@@ -1139,7 +1139,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         )
         if (!toolingAsset.rows[0]) {
           throw new Error(
-            "Create the tooling Asset Code in Store first, then assign it in Tooling Master."
+            "Create the tooling Asset Code in Store first, then reference it in Tooling Master."
           )
         }
         const toolCode = toolingAsset.rows[0].type_code

@@ -282,7 +282,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "tooling",
     title: "Tooling",
-    description: "Assign Existing Store Asset Codes As Fixture, Tooling, Or Foam Tool.",
+    description: "Record Existing Store Asset Codes Used To Manufacture This Item.",
     fields: [
       { name: "partNo", label: "Part No.", required: true },
       { name: "optionNumber", label: "Option No.", required: true },

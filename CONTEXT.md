@@ -310,12 +310,12 @@ The permanent identity of one Non Consumable physical unit used for its movement
 _Avoid_: Asset Code, Consumable unit code.
 
 **Tooling Asset**:
-A Store Item Type whose existing Asset Code is eligible for assignment in Tooling Master.
+A Store Item Type whose existing Asset Code may be referenced in Tooling Master.
 _Avoid_: Free-text tool, tool created inside Tooling Master.
 
-**Tooling Assignment**:
-The required quantity of one existing Tooling Asset Code assigned to a production item, route option, and setup.
-_Avoid_: Tooling inventory, Tooling Asset creation.
+**Tooling Requirement**:
+A manufacturing master record stating that a quantity of one existing Tooling Asset Code is used to manufacture a production item at a route option and setup; it is not a physical assignment or Store movement.
+_Avoid_: Tooling assignment, Tooling inventory, Tooling Asset creation.
 
 **Store Purchase Order**:
 The authority to receive one or more Stock Register items from exactly one Supplier at their Current Supplier Prices; a mixed selection creates one order per Supplier.

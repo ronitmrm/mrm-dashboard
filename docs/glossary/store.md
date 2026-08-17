@@ -113,9 +113,10 @@ type and does not belong to the Store Item Type.
 
 **Tooling Asset**: A Store Item Type created before it can be used as fixture,
 tooling, or foam tooling in production. Its Asset Code is the only identity
-that Tooling Master may assign; Tooling Master cannot create or accept a
+that Tooling Master may reference; Tooling Master cannot create or accept a
 free-text tool.
 
-**Tooling Assignment**: A link from one existing Tooling Asset Code to a
-specific production item, route option, and setup with the required quantity.
-It does not create Store stock or a new Asset Code.
+**Tooling Requirement**: A manufacturing master record stating that a quantity
+of one existing Tooling Asset Code is used to manufacture a specific production
+item at a route option and setup. It does not assign, reserve, issue, or move a
+physical Store unit, and it does not change Store stock or its holder.
