@@ -27,7 +27,7 @@ function jobCardStage(row: Row) {
   if (progress >= 100) return "Production complete"
   if (progress > 0 || numeric(row.rawRows) > 0 || numeric(row.rawActualQty) > 0 || numeric(row.rawOutputQty) > 0) return "Production"
   if (first(row, ["rmStatus"]).toLowerCase() !== "received") return "Awaiting RM"
-  if (["routeStatus", "cycleStatus", "toolingStatus", "machineMasterStatus"].some((key) => text(row[key]).toLowerCase().includes("missing"))) return "Master readiness"
+  if (["routeStatus", "cycleStatus", "toolingStatus", "machineMasterStatus"].some((key) => text(row[key]).toLowerCase().includes("missing"))) return "Part readiness"
   return "Ready for setup"
 }
 

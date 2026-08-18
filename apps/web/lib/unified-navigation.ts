@@ -281,7 +281,7 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     icon: Database,
     id: "masterGapsTab",
     subtitle: "Missing Planning Data",
-    title: "Master Readiness",
+    title: "Part Readiness",
   },
   {
     href: dashboardTabHref("machineMasterTab"),
