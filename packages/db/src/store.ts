@@ -1146,6 +1146,39 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return withTransaction(pool, async (client) => {
         const classification = await assetClassificationPath(client, input)
         const assetType = storeAssetType(input.assetType)
+        const trackingMode = trackingModeForAssetType(assetType)
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+          [
+            [
+              "store-item-type",
+              input.organizationId,
+              assetType,
+              input.assetCategoryId,
+              input.assetSubcategoryId,
+              input.assetNameId,
+            ].join(":"),
+          ]
+        )
+        const existing = await client.query<{
+          id: string
+          typeCode: string
+        }>(
+          `SELECT id, type_code AS "typeCode"
+           FROM store.item_types
+           WHERE organization_id = $1 AND tracking_mode = $2
+             AND asset_category_id = $3 AND asset_subcategory_id = $4
+             AND asset_name_id = $5
+           LIMIT 1`,
+          [
+            input.organizationId,
+            trackingMode,
+            input.assetCategoryId,
+            input.assetSubcategoryId,
+            input.assetNameId,
+          ]
+        )
+        if (existing.rows[0]) return existing.rows[0]
         const typeCode = await nextStoreTypeCode(
           client,
           input.organizationId,
@@ -1178,7 +1211,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             requiredText(input.identificationName, "Identification name"),
             input.applicableItemCode?.trim() || null,
             input.drawingNumber?.trim() || null,
-            trackingModeForAssetType(assetType),
+            trackingMode,
             requiredText(input.unit, "Unit"),
             input.minimumStock ?? 0,
             input.actorUserId ?? null,

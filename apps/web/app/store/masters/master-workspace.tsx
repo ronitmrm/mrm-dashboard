@@ -46,6 +46,7 @@ import {
   deleteStoreMasterAction,
 } from "../actions"
 import {
+  findExistingStoreItem,
   normalizeStoreMasterKey,
   storeMasterShowsCode,
   storeMasterOptions,
@@ -473,104 +474,7 @@ function masterForm(
   const editing = Boolean(defaults.master_id)
   switch (selectedMaster) {
     case "ITEM_TYPE":
-      return (
-        <form action={createStoreItemTypeAction}>
-          <input
-            name="master_id"
-            type="hidden"
-            value={defaults.master_id ?? ""}
-          />
-          <FieldGroup className="grid gap-4 md:grid-cols-2">
-            {editing ? (
-              <TextField
-                defaultValue={defaults.type_code}
-                label="Asset Code"
-                name="type_code"
-                readOnly
-              />
-            ) : null}
-            <TextField
-              defaultValue={defaults.identification_name}
-              label="Identification Name"
-              name="identification_name"
-              required
-            />
-            {editing ? (
-              <input
-                name="asset_type"
-                type="hidden"
-                value={defaults.asset_type}
-              />
-            ) : null}
-            <SelectField
-              defaultValue={defaults.asset_type}
-              disabled={editing}
-              label="Asset Type"
-              name={editing ? "asset_type_display" : "asset_type"}
-              options={[
-                { label: "Non Consumable", value: "NON_CONSUMABLE" },
-                { label: "Consumable", value: "CONSUMABLE" },
-              ]}
-            />
-            <SelectField
-              defaultValue={defaults.asset_category_id}
-              label="Category"
-              name="asset_category_id"
-              options={data.masters.categories.map((row) => ({
-                label: row.name,
-                value: row.id,
-              }))}
-            />
-            <SelectField
-              defaultValue={defaults.asset_subcategory_id}
-              label="Subcategory"
-              name="asset_subcategory_id"
-              options={data.masters.subcategories.map((row) => ({
-                label: `${row.categoryName} — ${row.name}`,
-                value: row.id,
-              }))}
-            />
-            <SelectField
-              defaultValue={defaults.asset_name_id}
-              label="Asset Name"
-              name="asset_name_id"
-              options={data.masters.assetNames.map((row) => ({
-                label: `${row.categoryName} — ${row.subcategoryName} — ${row.name}`,
-                value: row.id,
-              }))}
-            />
-            <TextField
-              defaultValue={defaults.applicable_item_code}
-              label="For Product / Item Code"
-              name="applicable_item_code"
-            />
-            <TextField
-              defaultValue={defaults.drawing_number}
-              label="Drawing Number"
-              name="drawing_number"
-            />
-            <TextField
-              defaultValue={defaults.unit ?? "Nos"}
-              label="Unit"
-              name="unit"
-              required
-            />
-            <TextField
-              defaultValue={defaults.minimum_stock ?? "0"}
-              label="Minimum Stock Alert"
-              name="minimum_stock"
-              type="number"
-            />
-          </FieldGroup>
-          <Button
-            className="mt-5"
-            disabled={!data.masters.assetNames.length}
-            type="submit"
-          >
-            {editing ? "Save Changes" : "Create & Generate Asset Code"}
-          </Button>
-        </form>
-      )
+      return <StoreItemTypeForm data={data} defaults={defaults} />
     case "CATEGORY":
       return (
         <form action={createStoreAssetCategoryAction}>
@@ -601,7 +505,7 @@ function masterForm(
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             <SelectField
               defaultValue={defaults.asset_category_id}
-              label="Category"
+              label="Parent Category"
               name="asset_category_id"
               options={data.masters.categories.map((row) => ({
                 label: row.name,
@@ -811,6 +715,184 @@ function masterForm(
   }
 }
 
+function StoreItemTypeForm({
+  data,
+  defaults,
+}: {
+  data: StoreMasterData
+  defaults: Record<string, string>
+}) {
+  const editing = Boolean(defaults.master_id)
+  const initialAssetType = defaults.asset_type ?? "NON_CONSUMABLE"
+  const initialCategoryId =
+    defaults.asset_category_id ?? data.masters.categories[0]?.id ?? ""
+  const initialSubcategoryId =
+    defaults.asset_subcategory_id ??
+    data.masters.subcategories.find(
+      (row) => row.categoryId === initialCategoryId
+    )?.id ??
+    ""
+  const initialAssetNameId =
+    defaults.asset_name_id ??
+    data.masters.assetNames.find(
+      (row) => row.subcategoryId === initialSubcategoryId
+    )?.id ??
+    ""
+  const [assetType, setAssetType] = useState(initialAssetType)
+  const [categoryId, setCategoryId] = useState(initialCategoryId)
+  const [subcategoryId, setSubcategoryId] = useState(initialSubcategoryId)
+  const [assetNameId, setAssetNameId] = useState(initialAssetNameId)
+  const subcategories = data.masters.subcategories.filter(
+    (row) => row.categoryId === categoryId
+  )
+  const assetNames = data.masters.assetNames.filter(
+    (row) => row.subcategoryId === subcategoryId
+  )
+  const existingItem = findExistingStoreItem(
+    data.items,
+    {
+      assetCategoryId: categoryId,
+      assetNameId,
+      assetSubcategoryId: subcategoryId,
+      assetType,
+    },
+    defaults.master_id
+  )
+
+  function selectCategory(nextCategoryId: string) {
+    const nextSubcategoryId =
+      data.masters.subcategories.find(
+        (row) => row.categoryId === nextCategoryId
+      )?.id ?? ""
+    const nextAssetNameId =
+      data.masters.assetNames.find(
+        (row) => row.subcategoryId === nextSubcategoryId
+      )?.id ?? ""
+    setCategoryId(nextCategoryId)
+    setSubcategoryId(nextSubcategoryId)
+    setAssetNameId(nextAssetNameId)
+  }
+
+  function selectSubcategory(nextSubcategoryId: string) {
+    setSubcategoryId(nextSubcategoryId)
+    setAssetNameId(
+      data.masters.assetNames.find(
+        (row) => row.subcategoryId === nextSubcategoryId
+      )?.id ?? ""
+    )
+  }
+
+  return (
+    <form action={createStoreItemTypeAction}>
+      <input name="master_id" type="hidden" value={defaults.master_id ?? ""} />
+      <FieldGroup className="grid gap-4 md:grid-cols-2">
+        {editing ? (
+          <TextField
+            defaultValue={defaults.type_code}
+            label="Asset Code"
+            name="type_code"
+            readOnly
+          />
+        ) : null}
+        <TextField
+          defaultValue={defaults.identification_name}
+          label="Identification Name"
+          name="identification_name"
+          required
+        />
+        {editing ? (
+          <input name="asset_type" type="hidden" value={defaults.asset_type} />
+        ) : null}
+        <SelectField
+          disabled={editing}
+          label="Asset Type"
+          name={editing ? "asset_type_display" : "asset_type"}
+          onChange={(event) => setAssetType(event.target.value)}
+          options={[
+            { label: "Non Consumable", value: "NON_CONSUMABLE" },
+            { label: "Consumable", value: "CONSUMABLE" },
+          ]}
+          value={assetType}
+        />
+        <SelectField
+          label="Category"
+          name="asset_category_id"
+          onChange={(event) => selectCategory(event.target.value)}
+          options={data.masters.categories.map((row) => ({
+            label: row.name,
+            value: row.id,
+          }))}
+          value={categoryId}
+        />
+        <SelectField
+          label="Subcategory"
+          name="asset_subcategory_id"
+          onChange={(event) => selectSubcategory(event.target.value)}
+          options={subcategories.map((row) => ({
+            label: row.name,
+            value: row.id,
+          }))}
+          value={subcategoryId}
+        />
+        <SelectField
+          label="Asset Name"
+          name="asset_name_id"
+          onChange={(event) => setAssetNameId(event.target.value)}
+          options={assetNames.map((row) => ({
+            label: row.name,
+            value: row.id,
+          }))}
+          value={assetNameId}
+        />
+        <TextField
+          defaultValue={defaults.applicable_item_code}
+          label="For Product / Item Code"
+          name="applicable_item_code"
+        />
+        <TextField
+          defaultValue={defaults.drawing_number}
+          label="Drawing Number"
+          name="drawing_number"
+        />
+        <TextField
+          defaultValue={defaults.unit ?? "Nos"}
+          label="Unit"
+          name="unit"
+          required
+        />
+        <TextField
+          defaultValue={defaults.minimum_stock ?? "0"}
+          label="Minimum Stock Alert"
+          name="minimum_stock"
+          type="number"
+        />
+      </FieldGroup>
+      {!editing && existingItem ? (
+        <div className="mt-5 rounded-md border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100">
+          <div className="font-semibold">
+            Existing Asset Code: {existingItem.typeCode}
+          </div>
+          <div>
+            {existingItem.identificationName}. This exact combination already
+            exists, so no new code will be generated.
+          </div>
+        </div>
+      ) : null}
+      <Button
+        className="mt-5"
+        disabled={!assetNameId || Boolean(existingItem)}
+        type="submit"
+      >
+        {editing
+          ? "Save Changes"
+          : existingItem
+            ? `Existing Code ${existingItem.typeCode}`
+            : "Create & Generate Asset Code"}
+      </Button>
+    </form>
+  )
+}
+
 function TextField({
   label,
   name,
@@ -830,17 +912,21 @@ function SelectField({
   disabled = false,
   label,
   name,
+  onChange,
   options,
   placeholder,
   required = true,
+  value,
 }: {
   defaultValue?: string
   disabled?: boolean
   label: string
   name: string
+  onChange?: React.ChangeEventHandler<HTMLSelectElement>
   options: Array<{ label: string; value: string }>
   placeholder?: string
   required?: boolean
+  value?: string
 }) {
   const id = `master-${name}`
   return (
@@ -851,7 +937,9 @@ function SelectField({
         disabled={disabled}
         id={id}
         name={name}
+        onChange={onChange}
         required={required}
+        value={value}
       >
         {placeholder ? (
           <NativeSelectOption value="">{placeholder}</NativeSelectOption>

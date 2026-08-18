@@ -396,6 +396,34 @@ describe("Store requests", () => {
     expect(migratedLegacyAsset.rows[0]?.next_asset_number).toBe(2)
   })
 
+  test("reuses the Asset Code for an existing Store Item combination", async () => {
+    const classification = await createClassification("Idempotent Store Item")
+    const first = await store.createItemType({
+      ...classification,
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Existing Drill ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const repeated = await store.createItemType({
+      ...classification,
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Repeated Drill ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+
+    expect(repeated).toEqual(first)
+    const matchingItems = (await store.listItemTypes(organizationId)).filter(
+      (item) =>
+        item.assetType === "NON_CONSUMABLE" &&
+        item.assetCategoryId === classification.assetCategoryId &&
+        item.assetSubcategoryId === classification.assetSubcategoryId &&
+        item.assetNameId === classification.assetNameId
+    )
+    expect(matchingItems).toHaveLength(1)
+  })
+
   test("generates request numbers and shows every department the live shared stock", async () => {
     const location = await store.createLocation({
       code: `MAIN-${suffix}`,
