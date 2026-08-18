@@ -38,6 +38,7 @@ export type DashboardTabId =
   | "masterGapsTab"
   | "masterTablesTab"
   | "dataEntryTab"
+  | "operationalEntryTab"
   | "planningHolidayTab"
   | "setupChecklistMasterTab"
   | "maintenanceMastersTab"
@@ -269,6 +270,13 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     title: "Master Tables",
   },
   {
+    href: dashboardTabHref("operationalEntryTab"),
+    icon: ClipboardList,
+    id: "operationalEntryTab",
+    subtitle: "Work Orders, Inward, Output",
+    title: "Data Entry",
+  },
+  {
     href: dashboardTabHref("masterGapsTab"),
     icon: Database,
     id: "masterGapsTab",
@@ -324,9 +332,6 @@ const universalProductionNavigationIds = new Set<DashboardTabId>([
   "productionDashboardTab",
   "maintenanceTab",
   "correctionsTab",
-  "dataEntryTab",
-  "masterTablesTab",
-  "machineMasterTab",
 ])
 
 export const consolidatedProductionNavigation = [] as const
@@ -335,12 +340,29 @@ export const universalProductionNavigation = dashboardNavigation.filter(
   (item) => universalProductionNavigationIds.has(item.id)
 )
 
+const masterDataNavigationIds = new Set<DashboardTabId>([
+  "dataEntryTab",
+  "masterTablesTab",
+])
+
+export const masterDataNavigation = dashboardNavigation.filter((item) =>
+  masterDataNavigationIds.has(item.id)
+)
+
+export const operationalEntryNavigation = dashboardNavigation.filter(
+  (item) => item.id === "operationalEntryTab"
+)
+
 export const productionFloorNavigation = dashboardNavigation
   .filter(
     (item) =>
       item.id !== planningHolidayNavigation.id &&
       !universalProductionNavigationIds.has(item.id) &&
       ![
+        "dataEntryTab",
+        "masterTablesTab",
+        "operationalEntryTab",
+        "machineMasterTab",
         "setupChecklistMasterTab",
         "maintenanceMastersTab",
         "qualityMastersTab",

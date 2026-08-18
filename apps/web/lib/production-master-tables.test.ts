@@ -42,7 +42,9 @@ describe("Production master table rows", () => {
   })
 
   it("uses only canonical master row sources", () => {
-    expect(productionMasterRowSources.machine_master).toBeUndefined()
+    expect(productionMasterRowSources.machine_master).toEqual([
+      "machinePlanningRows",
+    ])
     expect(productionMasterRowSources.route).toEqual(["routeMasterRows"])
   })
 
@@ -116,9 +118,11 @@ describe("Production master table rows", () => {
     expect(productionMasterRowSources.employee).toBeUndefined()
   })
 
-  it("keeps the central Machine Master outside Production master tables", () => {
-    expect(productionMasterTableEntryTypes).not.toContain("machine_master")
-    expect(productionMasterRowSources.machine_master).toBeUndefined()
+  it("includes the central Machine Master in company Master Data", () => {
+    expect(productionMasterTableEntryTypes).toContain("machine_master")
+    expect(productionMasterRowSources.machine_master).toEqual([
+      "machinePlanningRows",
+    ])
   })
 
   it("uses the Route Master line as the quality parameter set selector", () => {
