@@ -191,7 +191,7 @@ export function JobCardWorkspace({ floor, jobCardNumber }: { floor: ProductionFl
             : setupTimings.some((row) => row.settingStartedAt)
               ? "Setup in progress"
               : !selectedRoute
-                ? "Master readiness"
+                ? "Part readiness"
                 : receipts.length === 0
                   ? "Awaiting raw material"
                   : "Ready for setup"

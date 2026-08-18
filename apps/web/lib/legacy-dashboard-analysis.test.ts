@@ -2272,7 +2272,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     ).toEqual([])
   })
 
-  it("holds an accepted work order with no planning item in Master Readiness", () => {
+  it("holds an accepted work order with no planning item in Part Readiness", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "PostgreSQL",
       productionEntries: [],
@@ -2297,7 +2297,7 @@ describe("buildLegacyDashboardSnapshot", () => {
     expect(productionControl.allWorkOrderGaps).toContainEqual(
       expect.objectContaining({
         jcNo: "JC-M3",
-        nextAction: "Create the Product Route in Master Readiness",
+        nextAction: "Create the Product Route in Part Readiness",
         partCode: "M3",
         planningItemMissing: true,
         routeMasterMissing: true,

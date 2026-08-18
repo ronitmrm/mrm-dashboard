@@ -1497,7 +1497,7 @@ async function post(request: NextRequest, context: RouteContext) {
             rowsUpdated: 1,
             savedText:
               entryType === "work_order"
-                ? "Work Order accepted. Missing masters are held in Master Readiness for planner action."
+                ? "Work Order accepted. Missing masters are held in Part Readiness for planner action."
                 : "Saved to PostgreSQL.",
           })
         )
@@ -1598,7 +1598,7 @@ async function post(request: NextRequest, context: RouteContext) {
             duplicatesSkipped: importBatch.duplicateCount,
             message:
               entryType === "work_order"
-                ? `${importMessage(entryType, inserted, importBatch.duplicateCount)} Missing masters are held in Master Readiness for planner action.`
+                ? `${importMessage(entryType, inserted, importBatch.duplicateCount)} Missing masters are held in Part Readiness for planner action.`
                 : importMessage(
                     entryType,
                     inserted,

@@ -1142,7 +1142,7 @@ function buildProductionControl({
       rawRows: actual?.rows ?? 0,
       dispatchStatus,
       planningBlocker: planningItemPending
-        ? "Create the Product Route in Master Readiness"
+        ? "Create the Product Route in Part Readiness"
         : routeReadyForPlanning
         ? (missingCycle.length
             ? `Add cycle time for setup ${compactJoin(missingCycle)}`

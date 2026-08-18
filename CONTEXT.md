@@ -93,7 +93,7 @@ A rebuild of forecast planning from the latest masters, holidays, constraints, p
 _Avoid_: Manual date refresh.
 
 **Planning Readiness Hold**:
-An accepted Work Order that cannot enter planning because one or more required planning masters are missing. It remains visible in Master Readiness until a planner completes the required master actions.
+An accepted Work Order that cannot enter planning because one or more required planning masters are missing. It remains visible in Part Readiness until a planner completes the required master actions.
 _Avoid_: Rejected Work Order, failed import.
 
 **Work Order Line**:
