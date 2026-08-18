@@ -1,13 +1,4 @@
-# Attachment storage backup and restore
-
-Local development stores attachment bytes below `LOCAL_FILE_STORAGE_PATH`.
-Vercel deployments store new attachment bytes in a connected private Vercel
-Blob store instead; the deployment must provide `BLOB_READ_WRITE_TOKEN`.
-Authenticated application routes remain the only download interface in both
-environments.
-
-The filesystem procedure below applies only to local attachment storage. Blob
-retention and recovery must be managed through the connected Vercel store.
+# Local file-storage backup and restore
 
 PostgreSQL is canonical for file metadata, ownership, entity links, sizes,
 MIME types, and SHA-256 values. The bytes addressed by those rows live below

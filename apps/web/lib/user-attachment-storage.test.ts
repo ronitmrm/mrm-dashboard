@@ -4,59 +4,51 @@ import path from "node:path"
 
 import { describe, expect, test } from "vitest"
 
-import {
-  createUserAttachmentStorage,
-  type HostedAttachmentClient,
-} from "./user-attachment-storage"
+import { createUserAttachmentStorage } from "./user-attachment-storage"
 
 describe("user attachment storage", () => {
-  test("keeps a deployed PDF retrievable without a local application folder", async () => {
-    const objects = new Map<string, Uint8Array>()
-    const hostedClient: HostedAttachmentClient = {
-      async delete(storageKey) {
-        objects.delete(storageKey)
-      },
-      async read(storageKey) {
-        const bytes = objects.get(storageKey)
-        return bytes
-          ? {
-              body: bytes.buffer.slice(
-                bytes.byteOffset,
-                bytes.byteOffset + bytes.byteLength
-              ) as ArrayBuffer,
-              byteSize: bytes.byteLength,
-            }
-          : null
-      },
-      async save({ bytes, storageKey }) {
-        objects.set(storageKey, Uint8Array.from(bytes))
-      },
+  test("keeps attachment storage local when Vercel variables are present", async () => {
+    const localRoot = await mkdtemp(path.join(tmpdir(), "mrm-attachments-"))
+    const previousEnvironment = {
+      blobToken: process.env.BLOB_READ_WRITE_TOKEN,
+      localRoot: process.env.LOCAL_FILE_STORAGE_PATH,
+      managed: process.env.MRM_MANAGED_RUNTIME,
+      vercel: process.env.VERCEL,
     }
-    const storage = createUserAttachmentStorage({
-      environment: {
-        blobToken: "test-token",
-        hosted: true,
-        localRoot: "/var/task/apps/web/local-data",
-      },
-      hostedClient,
-    })
+    delete process.env.BLOB_READ_WRITE_TOKEN
+    process.env.LOCAL_FILE_STORAGE_PATH = localRoot
+    process.env.MRM_MANAGED_RUNTIME = "1"
+    process.env.VERCEL = "1"
     const storageKey = "attachments/candidate-resumes/candidate-1/resume.pdf"
-    const bytes = Buffer.from("%PDF-1.7\n")
 
-    await storage.save({
-      bytes,
-      mediaType: "application/pdf",
-      storageKey,
-    })
+    try {
+      const storage = createUserAttachmentStorage()
+      await storage.save({
+        bytes: Buffer.from("%PDF-local-only\n"),
+        mediaType: "application/pdf",
+        storageKey,
+      })
 
-    const saved = await storage.read(storageKey)
-    expect(saved.byteSize).toBe(bytes.byteLength)
-    expect(await new Response(saved.body).text()).toBe("%PDF-1.7\n")
+      const saved = await storage.read(storageKey)
+      expect(await new Response(saved.body).text()).toBe("%PDF-local-only\n")
 
-    await storage.delete(storageKey)
-    await expect(storage.read(storageKey)).rejects.toThrow(
-      "Attachment file was not found."
-    )
+      await storage.delete(storageKey)
+      await expect(storage.read(storageKey)).rejects.toThrow(
+        "Attachment file was not found."
+      )
+    } finally {
+      for (const [key, value] of Object.entries(previousEnvironment)) {
+        const environmentKey = {
+          blobToken: "BLOB_READ_WRITE_TOKEN",
+          localRoot: "LOCAL_FILE_STORAGE_PATH",
+          managed: "MRM_MANAGED_RUNTIME",
+          vercel: "VERCEL",
+        }[key]!
+        if (value === undefined) delete process.env[environmentKey]
+        else process.env[environmentKey] = value
+      }
+      await rm(localRoot, { force: true, recursive: true })
+    }
   })
 
   test("keeps managed local uploads on the configured local filesystem", async () => {
