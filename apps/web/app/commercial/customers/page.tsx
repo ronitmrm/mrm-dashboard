@@ -164,12 +164,12 @@ export default async function CustomersPage({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Customer Id</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Country</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead data-filterable="true">Customer Id</TableHead>
+                  <TableHead data-filterable="true">Company</TableHead>
+                  <TableHead data-filterable="true">Email</TableHead>
+                  <TableHead data-filterable="true">Phone</TableHead>
+                  <TableHead data-filterable="true">Country</TableHead>
+                  <TableHead data-filterable="true">Status</TableHead>
                   {canWrite ? <TableHead>Action</TableHead> : null}
                 </TableRow>
               </TableHeader>
@@ -179,7 +179,10 @@ export default async function CustomersPage({
                     const formId = `customer-${customer.id}`
                     return (
                       <TableRow key={customer.id}>
-                        <TableCell className="font-medium">
+                        <TableCell
+                          className="font-medium"
+                          data-filter-value={customer.customerUid}
+                        >
                           {canWrite ? (
                             <form action={updateCustomerAction} id={formId}>
                               <input
@@ -191,7 +194,7 @@ export default async function CustomersPage({
                           ) : null}
                           {customer.customerUid}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-filter-value={customer.companyName}>
                           {canWrite ? (
                             <Field className="min-w-52">
                               <FieldLabel
@@ -212,7 +215,7 @@ export default async function CustomersPage({
                             customer.companyName
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-filter-value={customer.email ?? ""}>
                           {canWrite ? (
                             <Field className="min-w-52">
                               <FieldLabel
@@ -233,7 +236,7 @@ export default async function CustomersPage({
                             customer.email || "—"
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-filter-value={customer.phone ?? ""}>
                           {canWrite ? (
                             <Field className="min-w-44">
                               <FieldLabel
@@ -253,7 +256,7 @@ export default async function CustomersPage({
                             customer.phone || "—"
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-filter-value={customer.country ?? ""}>
                           {canWrite ? (
                             <Field className="min-w-36">
                               <FieldLabel
@@ -273,7 +276,7 @@ export default async function CustomersPage({
                             customer.country || "—"
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-filter-value={customer.status}>
                           {canWrite ? (
                             <Field className="min-w-32">
                               <FieldLabel

@@ -28,7 +28,13 @@ export function PricingTable({
         <TableHeader className="sticky top-0 z-10 bg-background">
           <TableRow>
             {pricingHeaders.map((header) => (
-              <TableHead className="max-w-56 whitespace-nowrap" key={header}>
+              <TableHead
+                className="max-w-56 whitespace-nowrap"
+                data-filterable={
+                  header === "Customer Part Code" ? "true" : undefined
+                }
+                key={header}
+              >
                 {header}
               </TableHead>
             ))}

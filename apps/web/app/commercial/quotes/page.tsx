@@ -65,7 +65,7 @@ export default async function QuotesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Quote</TableHead>
+                <TableHead data-filterable="true">Quote</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Product</TableHead>
                 <TableHead>Revision</TableHead>
