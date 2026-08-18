@@ -8906,7 +8906,7 @@ function LegacyActionForm({
                 {field.options.map((option) => (
                   <option key={option} value={option}>
                     {field.name === "productionFloorCode"
-                      ? productionFloors.find((floor) => floor.code === option)?.shortLabel ?? option
+                      ? productionFloors.find((floor) => floor.code === option)?.label ?? option
                       : option
                         ? option.replaceAll("_", " ")
                         : ["fixture", "tooling", "foamTool"].includes(field.name)
