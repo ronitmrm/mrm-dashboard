@@ -90,16 +90,26 @@ describe("Production operational page loading", () => {
     expect(panel).not.toContain("Search Work Orders")
   })
 
-  it("opens a machine schedule and history workspace from its URL", () => {
+  it("keeps machine identity entry in Master Data and opens history from Machines", () => {
     const source = readFileSync(
       new URL("./mrmpl-dashboard.tsx", import.meta.url),
       "utf8"
+    )
+    const workspace = source.slice(
+      source.indexOf("function CentralMachineMasterWorkspace"),
+      source.indexOf("function MachineMasterPanel")
     )
     const panel = source.slice(
       source.indexOf("function MachineMasterPanel"),
       source.indexOf("function MaintenancePanel")
     )
 
+    expect(workspace).not.toContain("<DataEntryPanel")
+    expect(panel).not.toContain(">Add Machine</Button>")
+    expect(panel).not.toContain(">Edit</Button>")
+    expect(panel).toContain("Open Machine Master")
+    expect(panel).toContain('TileField label="Machine Status"')
+    expect(panel).toContain('TileField label="Remarks"')
     expect(panel).toContain("useSyncExternalStore(")
     expect(panel).toContain("machineMasterQueryFromLocation()")
     expect(panel).not.toContain("const [selectedMachineNo] = useState")
