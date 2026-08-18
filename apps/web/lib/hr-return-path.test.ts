@@ -10,9 +10,10 @@ describe("HR action return path", () => {
     const formData = new FormData()
     formData.set("panel", "mastersPanel")
     formData.set("master_view", "masterTables")
+    formData.set("master_kind", "designation")
 
     expect(hrReturnPath(formData)).toBe(
-      "/hr?panel=mastersPanel&masterView=masterTables"
+      "/hr?panel=mastersPanel&masterView=masterTables&kind=designation"
     )
   })
 
@@ -32,6 +33,8 @@ describe("HR action return path", () => {
     const panelForm = new FormData()
     panelForm.set("panel", "candidateSearchPanel")
     panelForm.set("job_id", jobId)
-    expect(hrReturnPath(panelForm)).toBe(`/hr?panel=candidateSearchPanel&job=${jobId}`)
+    expect(hrReturnPath(panelForm)).toBe(
+      `/hr?panel=candidateSearchPanel&job=${jobId}`
+    )
   })
 })

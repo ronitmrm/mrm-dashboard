@@ -11,13 +11,17 @@ describe("Master Data workspace", () => {
 
     expect(source).toContain('<MasterDataTabs activeView="dataEntry"')
     expect(source).toContain('<MasterDataTabs activeView="masterTables"')
-    expect(source).toContain('entryType={preferredDataEntryType}')
-    expect(source).toContain('onEntryTypeChange={onMasterEntryTypeChange}')
-    expect(source).toContain('Data Entry</Link>')
-    expect(source).toContain('Master Tables</Link>')
+    expect(source).toContain("entryType={preferredDataEntryType}")
+    expect(source).toContain("onEntryTypeChange={onMasterEntryTypeChange}")
+    expect(source).toContain("Data Entry</Link>")
+    expect(source).toContain("Master Tables</Link>")
     expect(source).toContain("masterEditDefaults(selectedSpec.entryType, row)")
     expect(source).toContain("immutableMasterFields(spec.entryType)")
     expect(source).toContain('submitAction("master-delete"')
     expect(source).toContain("Select Replacement (Required Only If Used)")
+    expect(source).not.toContain('<optgroup label="Other Modules">')
+    expect(source).toContain(
+      'key={`${initialDashboardTab}|${initialDataEntryType ?? ""}|${initialProductionFloor}`}'
+    )
   })
 })
