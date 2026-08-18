@@ -17,6 +17,7 @@ const maintenance = createMaintenanceRepository({ connectionString })
 const suffix = randomUUID().slice(0, 8)
 let organizationId: string
 let legacyItemTypeId: string
+let legacyAssetId: string
 
 beforeAll(async () => {
   await migrateDatabase({
@@ -45,6 +46,16 @@ beforeAll(async () => {
     [organizationId]
   )
   legacyItemTypeId = legacyItemType.rows[0]!.id
+  const legacyAsset = await pool.query<{ id: string }>(
+    `
+      INSERT INTO store.assets (
+        organization_id, item_type_id, asset_code, identification_name
+      ) VALUES ($1, $2, 'N41-00001', 'Legacy Operator Chair Unit')
+      RETURNING id
+    `,
+    [organizationId, legacyItemTypeId]
+  )
+  legacyAssetId = legacyAsset.rows[0]!.id
   await migrateDatabase({ connectionString })
 })
 
@@ -346,10 +357,8 @@ describe("Store requests", () => {
       unit: "Nos",
     })
 
-    expect(first.typeCode).toMatch(/^ST\d{3,}$/)
-    expect(Number(second.typeCode.slice(2))).toBe(
-      Number(first.typeCode.slice(2)) + 1
-    )
+    expect(first.typeCode).toMatch(/^NC\d{3,}$/)
+    expect(second.typeCode).toMatch(/^C\d{3,}$/)
 
     const masters = await store.listAssetClassificationMasters(organizationId)
     expect(masters.assetNames).toContainEqual(
@@ -366,9 +375,25 @@ describe("Store requests", () => {
         subcategoryName: "Chairs",
       })
     )
-    expect(await store.listItemTypes(organizationId)).toContainEqual(
-      expect.objectContaining({ id: legacyItemTypeId, typeCode: "N41" })
+    const items = await store.listItemTypes(organizationId)
+    const migratedLegacyItem = items.find(
+      (item) => item.id === legacyItemTypeId
     )
+    expect(migratedLegacyItem?.typeCode).toMatch(/^NC\d{3,}$/)
+    const migratedLegacyAsset = await pool.query<{
+      asset_code: string
+      next_asset_number: number
+    }>(
+      `SELECT asset.asset_code, item.next_asset_number
+       FROM store.assets asset
+       JOIN store.item_types item ON item.id = asset.item_type_id
+       WHERE asset.id = $1`,
+      [legacyAssetId]
+    )
+    expect(migratedLegacyAsset.rows[0]?.asset_code).toBe(
+      `${migratedLegacyItem?.typeCode}-00001`
+    )
+    expect(migratedLegacyAsset.rows[0]?.next_asset_number).toBe(2)
   })
 
   test("generates request numbers and shows every department the live shared stock", async () => {

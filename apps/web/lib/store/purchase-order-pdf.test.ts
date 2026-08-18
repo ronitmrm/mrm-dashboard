@@ -10,14 +10,14 @@ describe("Store Purchase Order PDF", () => {
         {
           itemName: "Cutting Oil",
           orderedQuantity: "10",
-          typeCode: "ST001",
+          typeCode: "C001",
           unit: "Ltr",
           unitPrice: "125.00",
         },
         {
           itemName: "Safety Gloves",
           orderedQuantity: "5",
-          typeCode: "ST002",
+          typeCode: "NC001",
           unit: "Pairs",
           unitPrice: "80.00",
         },

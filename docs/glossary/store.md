@@ -18,18 +18,20 @@ combination is saved.
 Consumable or Non Consumable; users select it from a dropdown and never enter
 another value.
 
-**Asset Code**: The immutable, company-wide Store Item code generated in sequence as
-`ST001`, `ST002`, and so on when a Store Item Type is created. Users and CSV
-imports cannot supply or replace it. Every ordered quantity of the same Store
-Item shares this code; Store checks the requested combination before generating
-another code.
+**Asset Code**: The immutable, company-wide Store Item code generated from two
+independent sequences when a Store Item Type is created: Consumables use
+`C001`, `C002`, and so on; Non Consumables use `NC001`, `NC002`, and so on.
+Users and CSV imports cannot supply or replace it. Every ordered quantity of
+the same Store Item shares this code; Store checks the requested combination
+before generating another code. Replacing the previous shared series is a
+one-time normalization; after that migration, the new codes remain immutable.
 
 **Physical Asset**: One Non Consumable item tracked individually through receipt,
 assignment, movement, maintenance, calibration, breakage, and scrap.
 
 **Unit ID / Serial ID**: The permanent identity of one Physical Asset, separate
 from its shared Asset Code. It may use the manufacturer's serial number and has
-a system Unit ID, for example `ST041-00001`; a replacement receives a new Unit
+a system Unit ID, for example `NC041-00001`; a replacement receives a new Unit
 ID while the old unit keeps its history.
 
 **Consumable**: A quantity-managed Store Item that is allocated and issued
