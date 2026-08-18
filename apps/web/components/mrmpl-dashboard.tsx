@@ -96,6 +96,10 @@ import {
 } from "@/lib/production-master-tables";
 import { isCompanyWideMasterEntryType } from "@/lib/master-data-navigation";
 import {
+  masterDataEntryTypes,
+  operationalDataEntryTypes,
+} from "@/lib/master-data-workspaces";
+import {
   refreshLockFromStatus,
   refreshLockHasSettled,
   type PlanningRefreshLock,
@@ -246,8 +250,41 @@ function validDashboardTab(tab: DashboardTabId | null) {
 }
 
 function dataEntryDestination(entryType: string): DashboardTabId {
-  if (entryType === "machine_master") return "machineMasterTab";
+  if ((operationalDataEntryTypes as readonly string[]).includes(entryType)) {
+    return "operationalEntryTab";
+  }
   return "dataEntryTab";
+}
+
+function MasterDataTabs({
+  activeView,
+  productionFloorCode,
+}: {
+  activeView: "dataEntry" | "masterTables";
+  productionFloorCode: ProductionFloorCode;
+}) {
+  const linkClass =
+    "border-b-2 px-4 py-3 text-sm font-medium transition-colors";
+  return (
+    <nav
+      aria-label="Master Data views"
+      className="flex border-b"
+      role="tablist"
+    >
+      <Link
+        aria-selected={activeView === "dataEntry"}
+        className={`${linkClass} ${activeView === "dataEntry" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        href={dashboardTabHref("dataEntryTab", productionFloorCode)}
+        role="tab"
+      >Data Entry</Link>
+      <Link
+        aria-selected={activeView === "masterTables"}
+        className={`${linkClass} ${activeView === "masterTables" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        href={dashboardTabHref("masterTablesTab", productionFloorCode)}
+        role="tab"
+      >Master Tables</Link>
+    </nav>
+  );
 }
 const dataEntrySpecs: DataEntrySpec[] = [
   {
@@ -475,25 +512,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
     fields: [],
   },
 ];
-const generalDataEntryTypes = [
-  "route",
-  "cycle",
-  "tooling",
-  "work_order",
-  "rm_inward",
-  "software_raw",
-] as const;
-
 const maintenanceMasterEntryTypes = ["maintenance_master"] as const;
-
-const universalDataEntryTypes = [
-  ...generalDataEntryTypes,
-  ...checklistWorkspaceEntryTypes,
-  ...maintenanceMasterEntryTypes,
-  ...qualityWorkspaceEntryTypes,
-  "planning_holiday",
-  "store_masters",
-] as const;
 
 function masterTableSpecs() {
   const allowed = new Set<string>([
@@ -1805,11 +1824,15 @@ function DashboardContent({
   }
 
   if (activeTab === "dataEntryTab") {
-    return <DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={universalDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "dataEntry")} />;
+    return <div className="grid gap-4"><MasterDataTabs activeView="dataEntry" productionFloorCode={productionFloorCode} /><DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={masterDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "dataEntry")} title="Master Data Entry" description="Create Or Maintain Reusable Records Used Across The Software." /></div>;
+  }
+
+  if (activeTab === "operationalEntryTab") {
+    return <DataEntryPanel key={`operational-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={operationalDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} title="Operational Entry" description="Enter Work Orders, Raw-Material Inward, And Production Output Without Mixing Them With Master Data." />;
   }
 
   if (activeTab === "masterTablesTab") {
-    return <MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} preferredEntryType={preferredDataEntryType} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "masterTables")} />;
+    return <div className="grid gap-4"><MasterDataTabs activeView="masterTables" productionFloorCode={productionFloorCode} /><MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} preferredEntryType={preferredDataEntryType} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "masterTables")} /></div>;
   }
 
   if (activeTab === "planningHolidayTab") {

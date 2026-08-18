@@ -1,5 +1,16 @@
 # Master Data Scope
 
+**Master Data Workspace**: The company workspace containing two views of the
+same reusable records: Data Entry creates or maintains a master, and Master
+Tables searches and reviews the saved masters. Machine, route, quality,
+maintenance, Store, HR, and Commercial masters belong here when the user has
+permission to access them.
+
+**Operational Entry Workspace**: The separate company workspace for business
+events currently entered manually: Work Orders, Raw-Material Inward, and
+Production Output. These records are corrected or reversed under their own
+lifecycle and never use Master Rename, Master Replacement, or Master Deletion.
+
 **Company-wide Master**: A master whose records apply to the whole MRMPL
 software and are not owned by one Production Unit. In Data Entry and Master
 Tables, its Production Unit is shown automatically as **Full Software / Not

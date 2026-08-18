@@ -45,7 +45,9 @@ import {
   consolidatedProductionNavigation,
   dashboardNavigationDestination,
   hrNavigation,
+  masterDataNavigation,
   navigationHrefMatches,
+  operationalEntryNavigation,
   productionFloorNavigation,
   storeNavigation,
   universalProductionNavigation,
@@ -58,6 +60,8 @@ const stateChangedEvent = "mrmpl:sidebar:expanded-modules-changed"
 type SectionId =
   | "costing"
   | "hr"
+  | "masterData"
+  | "operationalEntry"
   | "store"
   | "productionConventional"
   | "productionConventional02"
@@ -74,12 +78,17 @@ const productionSectionIds: Record<ProductionFloorCode, SectionId> = {
 
 function defaultExpandedSections(
   pathname: string,
-  activeProductionFloor: ProductionFloorCode
+  activeProductionFloor: ProductionFloorCode,
+  activeDashboardTab?: DashboardTabId
 ): ExpandedSections {
   const onProduction = pathname === "/" || pathname.startsWith("/dashboard")
   return {
     costing: pathname.startsWith("/commercial"),
     hr: pathname.startsWith("/hr"),
+    masterData:
+      activeDashboardTab === "dataEntryTab" ||
+      activeDashboardTab === "masterTablesTab",
+    operationalEntry: activeDashboardTab === "operationalEntryTab",
     store: pathname.startsWith("/store"),
     productionConventional:
       onProduction && activeProductionFloor === "conventional",
@@ -104,6 +113,14 @@ function storedExpandedSections(
       costing:
         typeof parsed.costing === "boolean" ? parsed.costing : fallback.costing,
       hr: typeof parsed.hr === "boolean" ? parsed.hr : fallback.hr,
+      masterData:
+        typeof parsed.masterData === "boolean"
+          ? parsed.masterData
+          : fallback.masterData,
+      operationalEntry:
+        typeof parsed.operationalEntry === "boolean"
+          ? parsed.operationalEntry
+          : fallback.operationalEntry,
       store: typeof parsed.store === "boolean" ? parsed.store : fallback.store,
       productionConventional:
         typeof parsed.productionConventional === "boolean"
@@ -176,7 +193,8 @@ export function UnifiedSidebarNavigation({
       pathname,
       normalizeProductionFloorCode(
         searchParams.get("floor") ?? activeProductionFloor
-      )
+      ),
+      activeDashboardTab
     )
   )
   const visibleCommercialNavigation = commercialNavigation.filter((item) =>
@@ -221,17 +239,45 @@ export function UnifiedSidebarNavigation({
         "universal production corrections reverse wrong entries data entry master tables machine master checklists maintenance quality masters"
       )
     : []
+  const visibleMasterDataNavigation = navigationAccess.operations
+    ? masterDataNavigation.map((item) => ({
+        destination: universalProductionNavigationHref(
+          item.id,
+          activeProductionFloor
+        ),
+        id: item.id,
+        title: item.title,
+      }))
+    : masterDataFallbackLinks(navigationAccess)
+  const filteredMasterDataNavigation = visibleMasterDataNavigation.filter(
+    (item) =>
+      !normalizedMenuSearch ||
+      item.title.toLowerCase().includes(normalizedMenuSearch) ||
+      "company master data masters".includes(normalizedMenuSearch)
+  )
+  const visibleOperationalEntryNavigation = navigationAccess.operations
+    ? operationalEntryNavigation.map((item) => ({
+        destination: universalProductionNavigationHref(
+          item.id,
+          activeProductionFloor
+        ),
+        id: item.id,
+        title: item.title,
+      }))
+    : []
+  const filteredOperationalEntryNavigation =
+    visibleOperationalEntryNavigation.filter(
+      (item) =>
+        !normalizedMenuSearch ||
+        item.title.toLowerCase().includes(normalizedMenuSearch) ||
+        "operational entry work orders rm inward production output".includes(
+          normalizedMenuSearch
+        )
+    )
   const administrationMatchesSearch =
     navigationAccess.administration &&
     (!normalizedMenuSearch ||
       "administration access".includes(normalizedMenuSearch))
-  const fallbackMasterDataLinks = masterDataFallbackLinks(navigationAccess).filter(
-    (item) =>
-      !normalizedMenuSearch ||
-      item.title.toLowerCase().includes(normalizedMenuSearch) ||
-      "company master data".includes(normalizedMenuSearch)
-  )
-
   useEffect(() => {
     function focusMenuSearch(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -287,34 +333,80 @@ export function UnifiedSidebarNavigation({
         </div>
       </div>
 
-      {fallbackMasterDataLinks.length ? (
-        <SidebarGroup className="px-3 py-0.5">
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {fallbackMasterDataLinks.map((item) => {
-                const Icon = item.id === "dataEntryTab" ? ListChecks : Database
-                return (
-                  <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton
-                      asChild
-                      className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
-                      isActive={navigationHrefMatches(
+      {filteredMasterDataNavigation.length ? (
+        <NavigationSection
+          icon={Database}
+          isActive={visibleMasterDataNavigation.some((item) =>
+            navigationAccess.operations
+              ? activeDashboardTab === item.id
+              : navigationHrefMatches(pathname, searchParams, item.destination)
+          )}
+          label="Master Data"
+          onOpenChange={(open) => {
+            if (!normalizedMenuSearch) setSectionOpen("masterData", open)
+          }}
+          open={normalizedMenuSearch ? true : expandedSections.masterData}
+        >
+          {filteredMasterDataNavigation.map((item) => (
+            <SidebarMenuSubItem key={item.id}>
+              <SidebarMenuSubButton
+                asChild
+                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                isActive={
+                  navigationAccess.operations
+                    ? activeDashboardTab === item.id
+                    : navigationHrefMatches(
                         pathname,
                         searchParams,
                         item.destination
-                      )}
-                    >
-                      <a href={item.destination}>
-                        <Icon />
-                        <span>{item.title}</span>
-                      </a>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                      )
+                }
+              >
+                <a href={item.destination}>
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
+                  />
+                  <span>{item.title}</span>
+                </a>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </NavigationSection>
+      ) : null}
+
+      {filteredOperationalEntryNavigation.length ? (
+        <NavigationSection
+          icon={ListChecks}
+          isActive={visibleOperationalEntryNavigation.some(
+            (item) => activeDashboardTab === item.id
+          )}
+          label="Operational Entry"
+          onOpenChange={(open) => {
+            if (!normalizedMenuSearch) setSectionOpen("operationalEntry", open)
+          }}
+          open={
+            normalizedMenuSearch ? true : expandedSections.operationalEntry
+          }
+        >
+          {filteredOperationalEntryNavigation.map((item) => (
+            <SidebarMenuSubItem key={item.id}>
+              <SidebarMenuSubButton
+                asChild
+                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                isActive={activeDashboardTab === item.id}
+              >
+                <a href={item.destination}>
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
+                  />
+                  <span>{item.title}</span>
+                </a>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </NavigationSection>
       ) : null}
 
       {filteredHrNavigation.length ? (
@@ -550,7 +642,8 @@ export function UnifiedSidebarNavigation({
       !filteredHrNavigation.length &&
       !filteredStoreNavigation.length &&
       !filteredCommercialNavigation.length &&
-      !fallbackMasterDataLinks.length &&
+      !filteredMasterDataNavigation.length &&
+      !filteredOperationalEntryNavigation.length &&
       !filteredUniversalProductionNavigation.length &&
       !filteredProductionNavigation.length &&
       !administrationMatchesSearch ? (

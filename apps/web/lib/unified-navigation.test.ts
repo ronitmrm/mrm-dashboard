@@ -14,7 +14,9 @@ import {
   jobCardWorkspaceHref,
   legacyMasterEntryForDashboardTab,
   machineMasterNavigation,
+  masterDataNavigation,
   navigationHrefMatches,
+  operationalEntryNavigation,
   planningHolidayNavigation,
   productionFloorNavigation,
   storeNavigation,
@@ -23,6 +25,18 @@ import {
 } from "./unified-navigation"
 
 describe("unified navigation", () => {
+  it("groups master and operational entry destinations into separate modules", () => {
+    const source = readFileSync(
+      new URL("../components/unified-sidebar-navigation.tsx", import.meta.url),
+      "utf8"
+    )
+
+    expect(source).toContain('label="Master Data"')
+    expect(source).toContain('label="Operational Entry"')
+    expect(source).toContain("filteredMasterDataNavigation.map")
+    expect(source).toContain("filteredOperationalEntryNavigation.map")
+  })
+
   it("uses native navigation for data-heavy sidebar destinations", () => {
     const source = readFileSync(
       new URL("../components/unified-sidebar-navigation.tsx", import.meta.url),
@@ -62,7 +76,7 @@ describe("unified navigation", () => {
     ]
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
-    expect(dashboardNavigation).toHaveLength(21)
+    expect(dashboardNavigation).toHaveLength(22)
     expect(productionFloorNavigation).toHaveLength(11)
     expect(productionFloorNavigation).not.toContainEqual(
       planningHolidayNavigation
@@ -78,9 +92,15 @@ describe("unified navigation", () => {
       "productionDashboardTab",
       "maintenanceTab",
       "correctionsTab",
-      "dataEntryTab",
-      "masterTablesTab",
-      "machineMasterTab",
+    ])
+    expect(masterDataNavigation.map(({ id, title }) => ({ id, title }))).toEqual([
+      { id: "dataEntryTab", title: "Data Entry" },
+      { id: "masterTablesTab", title: "Master Tables" },
+    ])
+    expect(
+      operationalEntryNavigation.map(({ id, title }) => ({ id, title }))
+    ).toEqual([
+      { id: "operationalEntryTab", title: "Data Entry" },
     ])
     expect(consolidatedProductionNavigation).toEqual([])
     expect(productionFloorNavigation.map(({ id }) => id)).not.toEqual(
@@ -113,6 +133,7 @@ describe("unified navigation", () => {
       "correctionsTab",
       "dataEntryTab",
       "masterTablesTab",
+      "operationalEntryTab",
       "masterGapsTab",
       "machineMasterTab",
       "planningHolidayTab",
