@@ -11,6 +11,8 @@ describe("Master Data workspace", () => {
 
     expect(source).toContain('<MasterDataTabs activeView="dataEntry"')
     expect(source).toContain('<MasterDataTabs activeView="masterTables"')
+    expect(source).toContain('entryType={preferredDataEntryType}')
+    expect(source).toContain('onEntryTypeChange={onMasterEntryTypeChange}')
     expect(source).toContain('Data Entry</Link>')
     expect(source).toContain('Master Tables</Link>')
     expect(source).toContain("masterEditDefaults(selectedSpec.entryType, row)")

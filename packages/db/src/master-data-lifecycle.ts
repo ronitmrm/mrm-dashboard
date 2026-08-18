@@ -75,7 +75,7 @@ const renamableMasterColumns: Partial<
   commercial_rod_type: "name",
   commercial_shipping: "name",
   commercial_subcategory: "name",
-  commercial_website_field: "name",
+  commercial_website_field: "option_value",
 }
 
 export type MasterDataKind = keyof typeof masterTargets
@@ -249,7 +249,9 @@ export function createMasterDataLifecycleRepository(
         const [schemaName, tableName] = target
         await client.query(
           `UPDATE ${qualifiedTable(schemaName, tableName)}
-           SET ${identifier(nameColumn)} = $1, updated_at = now()
+           SET ${identifier(nameColumn)} = $1,
+             ${input.kind === "commercial_website_field" ? "label = $1," : ""}
+             updated_at = now()
            WHERE id = $2 AND organization_id = $3`,
           [name, source.id, input.organizationId]
         )
