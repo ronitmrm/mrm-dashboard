@@ -1,7 +1,6 @@
 "use server"
 
 import { createHash, randomUUID } from "node:crypto"
-import { mkdir, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import { createCommercialOrdersRepository } from "@workspace/db"
@@ -13,6 +12,10 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { optionalText, requiredText } from "@/lib/form-data"
+import {
+  deleteUserAttachment,
+  saveUserAttachment,
+} from "@/lib/user-attachment-storage"
 import { validateUserAttachment } from "@/lib/user-attachment-security"
 
 const ordersPath = "/commercial/orders"
@@ -195,15 +198,7 @@ export async function uploadPurchaseOrderFileAction(formData: FormData) {
         sourceId,
         fileName
       )
-      const storageRoot =
-        process.env.LOCAL_FILE_STORAGE_PATH ??
-        path.join(/*turbopackIgnore: true*/ process.cwd(), "local-data")
-      const filePath = path.join(
-        /*turbopackIgnore: true*/ storageRoot,
-        ...storageKey.split("/")
-      )
-      await mkdir(path.dirname(filePath), { recursive: true })
-      await writeFile(filePath, bytes, { flag: "wx" })
+      await saveUserAttachment({ bytes, mediaType, storageKey })
       try {
         await repository.recordPurchaseOrderFile({
           actorUserId,
@@ -216,7 +211,7 @@ export async function uploadPurchaseOrderFileAction(formData: FormData) {
           storageKey,
         })
       } catch (error) {
-        await unlink(filePath).catch(() => undefined)
+        await deleteUserAttachment(storageKey).catch(() => undefined)
         throw error
       }
     }

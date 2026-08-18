@@ -1,7 +1,6 @@
 "use server"
 
 import { createHash, randomUUID } from "node:crypto"
-import { mkdir, unlink, writeFile } from "node:fs/promises"
 import nodePath from "node:path"
 
 import {
@@ -19,6 +18,10 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { hrReturnPath } from "@/lib/hr-return-path"
 import { istDateTimeInputToIso } from "@/lib/date-time"
+import {
+  deleteUserAttachment,
+  saveUserAttachment,
+} from "@/lib/user-attachment-storage"
 
 const hrPath = "/hr"
 
@@ -371,15 +374,11 @@ export async function saveCandidateAction(formData: FormData) {
         sourceId,
         fileName
       )
-      const storageRoot =
-        process.env.LOCAL_FILE_STORAGE_PATH ??
-        nodePath.join(/*turbopackIgnore: true*/ process.cwd(), "local-data")
-      const filePath = nodePath.join(
-        /*turbopackIgnore: true*/ storageRoot,
-        ...storageKey.split("/")
-      )
-      await mkdir(nodePath.dirname(filePath), { recursive: true })
-      await writeFile(filePath, bytes, { flag: "wx" })
+      await saveUserAttachment({
+        bytes,
+        mediaType: "application/pdf",
+        storageKey,
+      })
       try {
         await repository.recordCandidateResume({
           actorUserId: session.user.id,
@@ -393,7 +392,7 @@ export async function saveCandidateAction(formData: FormData) {
           storageKey,
         })
       } catch (error) {
-        await unlink(filePath).catch(() => undefined)
+        await deleteUserAttachment(storageKey).catch(() => undefined)
         throw error
       }
     }
