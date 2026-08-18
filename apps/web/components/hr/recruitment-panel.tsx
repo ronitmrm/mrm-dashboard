@@ -53,6 +53,7 @@ import {
 } from "@/components/hr/candidate-assignment-panel"
 import { CombinedRoleForm } from "@/components/hr/combined-role-form"
 import { CombinedRolesTable as EditableCombinedRolesTable } from "@/components/hr/combined-roles-table"
+import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { EmployeeAssignmentUpload } from "@/components/hr/employee-assignment-upload"
 import {
@@ -198,6 +199,7 @@ function MastersPanel({
           masterView={masterView}
           title="Add A Master"
         >
+          <CompanyWideMasterScope />
           <Field>
             <FieldLabel htmlFor="master-kind">Master Type</FieldLabel>
             <NativeSelect className="w-full" id="master-kind" name="kind">
@@ -258,6 +260,7 @@ function TemplatePanel({
           masterView={masterView}
           title="Job Requirement Template"
         >
+          <CompanyWideMasterScope />
           <TextField
             defaultValue={templateCode}
             label="Template Code (Auto-Generated)"
