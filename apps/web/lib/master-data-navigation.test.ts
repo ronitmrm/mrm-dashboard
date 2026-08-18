@@ -5,6 +5,7 @@ import {
   externalMasterDataOptions,
   isCompanyWideMasterEntryType,
   masterDataFallbackLinks,
+  masterDataNavigationLinks,
   masterPayloadForScope,
 } from "./master-data-navigation"
 
@@ -110,6 +111,67 @@ describe("master data navigation", () => {
       {
         destination:
           "/hr?panel=mastersPanel&masterView=masterTables",
+        id: "masterTablesTab",
+        title: "Master Tables",
+      },
+    ])
+  })
+
+  it("keeps HR master view switching inside the current HR master", () => {
+    const access = {
+      administration: false,
+      commercialHrefs: ["/commercial/masters"],
+      hrHrefs: ["/hr?panel=approvedPostPanel"],
+      operations: true,
+      store: true,
+    }
+
+    expect(
+      masterDataNavigationLinks(access, {
+        pathname: "/hr",
+        productionFloorCode: "cnc",
+        searchParams: new URLSearchParams(
+          "panel=mastersPanel&masterView=dataEntry"
+        ),
+      })
+    ).toEqual([
+      {
+        destination: "/hr?panel=mastersPanel&masterView=dataEntry",
+        id: "dataEntryTab",
+        title: "Data Entry",
+      },
+      {
+        destination: "/hr?panel=mastersPanel&masterView=masterTables",
+        id: "masterTablesTab",
+        title: "Master Tables",
+      },
+    ])
+  })
+
+  it("keeps Cycle Time selected when switching to its master table", () => {
+    const access = {
+      administration: false,
+      commercialHrefs: [],
+      hrHrefs: [],
+      operations: true,
+      store: false,
+    }
+
+    expect(
+      masterDataNavigationLinks(access, {
+        entryType: "cycle",
+        pathname: "/",
+        productionFloorCode: "cnc",
+        searchParams: new URLSearchParams("tab=dataEntryTab&floor=cnc"),
+      })
+    ).toEqual([
+      {
+        destination: "/?tab=dataEntryTab&floor=cnc&entry=cycle",
+        id: "dataEntryTab",
+        title: "Data Entry",
+      },
+      {
+        destination: "/?tab=masterTablesTab&floor=cnc&entry=cycle",
         id: "masterTablesTab",
         title: "Master Tables",
       },

@@ -38,14 +38,13 @@ import {
 import { Input } from "@workspace/ui/components/input"
 
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
-import { masterDataFallbackLinks } from "@/lib/master-data-navigation"
+import { masterDataNavigationLinks } from "@/lib/master-data-navigation"
 import {
   administrationNavigation,
   commercialNavigation,
   consolidatedProductionNavigation,
   dashboardNavigationDestination,
   hrNavigation,
-  masterDataNavigation,
   navigationHrefMatches,
   operationalEntryNavigation,
   productionFloorNavigation,
@@ -166,11 +165,13 @@ function serverExpandedSectionsSnapshot() {
 
 export function UnifiedSidebarNavigation({
   activeDashboardTab,
+  activeMasterEntryType,
   activeProductionFloor = defaultProductionFloorCode,
   navigationAccess,
   onDashboardTabSelect,
 }: {
   activeDashboardTab?: DashboardTabId
+  activeMasterEntryType?: string
   activeProductionFloor?: ProductionFloorCode
   navigationAccess: UnifiedNavigationAccess
   onDashboardTabSelect?: (
@@ -239,16 +240,15 @@ export function UnifiedSidebarNavigation({
         "universal production corrections reverse wrong entries data entry master tables machine master checklists maintenance quality masters"
       )
     : []
-  const visibleMasterDataNavigation = navigationAccess.operations
-    ? masterDataNavigation.map((item) => ({
-        destination: universalProductionNavigationHref(
-          item.id,
-          activeProductionFloor
-        ),
-        id: item.id,
-        title: item.title,
-      }))
-    : masterDataFallbackLinks(navigationAccess)
+  const visibleMasterDataNavigation = masterDataNavigationLinks(
+    navigationAccess,
+    {
+      entryType: activeMasterEntryType,
+      pathname,
+      productionFloorCode: activeProductionFloor,
+      searchParams,
+    }
+  )
   const filteredMasterDataNavigation = visibleMasterDataNavigation.filter(
     (item) =>
       !normalizedMenuSearch ||
@@ -337,9 +337,8 @@ export function UnifiedSidebarNavigation({
         <NavigationSection
           icon={Database}
           isActive={visibleMasterDataNavigation.some((item) =>
-            navigationAccess.operations
-              ? activeDashboardTab === item.id
-              : navigationHrefMatches(pathname, searchParams, item.destination)
+            activeDashboardTab === item.id ||
+            navigationHrefMatches(pathname, searchParams, item.destination)
           )}
           label="Master Data"
           onOpenChange={(open) => {
@@ -353,13 +352,12 @@ export function UnifiedSidebarNavigation({
                 asChild
                 className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
                 isActive={
-                  navigationAccess.operations
-                    ? activeDashboardTab === item.id
-                    : navigationHrefMatches(
-                        pathname,
-                        searchParams,
-                        item.destination
-                      )
+                  activeDashboardTab === item.id ||
+                  navigationHrefMatches(
+                    pathname,
+                    searchParams,
+                    item.destination
+                  )
                 }
               >
                 <a href={item.destination}>

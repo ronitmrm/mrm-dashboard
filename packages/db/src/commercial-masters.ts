@@ -1020,7 +1020,7 @@ export function createCommercialMasterRepository(
          UNION ALL SELECT id, 'commercial_process', name FROM catalog.design_processes WHERE organization_id = $1
          UNION ALL SELECT id, 'commercial_rod_type', name FROM catalog.rod_types WHERE organization_id = $1
          UNION ALL SELECT id, 'commercial_subcategory', name FROM catalog.item_subcategories WHERE organization_id = $1
-         UNION ALL SELECT id, 'commercial_website_field', name FROM catalog.website_field_options WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_website_field', option_value FROM catalog.website_field_options WHERE organization_id = $1
          UNION ALL SELECT id, 'commercial_commercial_term', name FROM sales.commercial_terms WHERE organization_id = $1
          UNION ALL SELECT id, 'commercial_packaging', name FROM sales.packaging_options WHERE organization_id = $1
          UNION ALL SELECT id, 'commercial_quote_term', label FROM sales.quote_term_templates WHERE organization_id = $1

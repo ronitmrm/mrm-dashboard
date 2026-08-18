@@ -103,7 +103,7 @@ import {
   qualityWorkspaceEntryTypes,
   rowsForProductionMaster,
 } from "@/lib/production-master-tables";
-import { isCompanyWideMasterEntryType } from "@/lib/master-data-navigation";
+import { isCompanyWideMasterEntryType, masterDataDashboardHref } from "@/lib/master-data-navigation";
 import {
   immutableMasterFields,
   masterDataEntryTypes,
@@ -269,9 +269,11 @@ function dataEntryDestination(entryType: string): DashboardTabId {
 
 function MasterDataTabs({
   activeView,
+  entryType,
   productionFloorCode,
 }: {
   activeView: "dataEntry" | "masterTables";
+  entryType: string;
   productionFloorCode: ProductionFloorCode;
 }) {
   const linkClass =
@@ -285,13 +287,13 @@ function MasterDataTabs({
       <Link
         aria-selected={activeView === "dataEntry"}
         className={`${linkClass} ${activeView === "dataEntry" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-        href={dashboardTabHref("dataEntryTab", productionFloorCode)}
+        href={masterDataDashboardHref("dataEntry", productionFloorCode, entryType)}
         role="tab"
       >Data Entry</Link>
       <Link
         aria-selected={activeView === "masterTables"}
         className={`${linkClass} ${activeView === "masterTables" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-        href={dashboardTabHref("masterTablesTab", productionFloorCode)}
+        href={masterDataDashboardHref("masterTables", productionFloorCode, entryType)}
         role="tab"
       >Master Tables</Link>
     </nav>
@@ -1523,6 +1525,7 @@ function DashboardShell({
         <SidebarContent>
           <UnifiedSidebarNavigation
             activeDashboardTab={activeTab}
+            activeMasterEntryType={preferredDataEntryType}
             activeProductionFloor={activeProductionFloor}
             navigationAccess={navigationAccess}
             onDashboardTabSelect={selectDashboardDestination}
@@ -1623,6 +1626,7 @@ function DashboardShell({
                 closeFirstPieceInspection={closeFirstPieceInspection}
                 firstPieceInspectionTasks={firstPieceInspectionTasks}
                 navigationAccess={navigationAccess}
+                onMasterEntryTypeChange={setPreferredDataEntryType}
                 preferredDataEntryType={preferredDataEntryType}
                 preferredDataEntryDefaults={preferredDataEntryDefaults}
                 productionFloorCode={activeProductionFloor}
@@ -1791,6 +1795,7 @@ function DashboardContent({
   closeFirstPieceInspection,
   firstPieceInspectionTasks,
   navigationAccess,
+  onMasterEntryTypeChange,
   preferredDataEntryType,
   preferredDataEntryDefaults,
   productionFloorCode,
@@ -1809,6 +1814,7 @@ function DashboardContent({
   closeFirstPieceInspection: (row: DashboardPayload) => void;
   firstPieceInspectionTasks: DashboardPayload[];
   navigationAccess: UnifiedNavigationAccess;
+  onMasterEntryTypeChange: (entryType: string) => void;
   preferredDataEntryType: string;
   preferredDataEntryDefaults: Record<string, unknown>;
   productionFloorCode: ProductionFloorCode;
@@ -1838,7 +1844,7 @@ function DashboardContent({
   }
 
   if (activeTab === "dataEntryTab") {
-    return <div className="grid gap-4"><MasterDataTabs activeView="dataEntry" productionFloorCode={productionFloorCode} /><DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={masterDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "dataEntry")} title="Master Data Entry" description="Create Or Maintain Reusable Records Used Across The Software." /></div>;
+    return <div className="grid gap-4"><MasterDataTabs activeView="dataEntry" entryType={preferredDataEntryType} productionFloorCode={productionFloorCode} /><DataEntryPanel key={preferredDataEntryType} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={masterDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} onEntryTypeChange={onMasterEntryTypeChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "dataEntry")} title="Master Data Entry" description="Create Or Maintain Reusable Records Used Across The Software." /></div>;
   }
 
   if (activeTab === "operationalEntryTab") {
@@ -1846,7 +1852,7 @@ function DashboardContent({
   }
 
   if (activeTab === "masterTablesTab") {
-    return <div className="grid gap-4"><MasterDataTabs activeView="masterTables" productionFloorCode={productionFloorCode} /><MasterTablesPanel payload={payload} productionControl={productionControl} submitAction={submitAction} openDataEntry={openDataEntry} preferredEntryType={preferredDataEntryType} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canDeleteMasters={canDeleteMasters} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "masterTables")} /></div>;
+    return <div className="grid gap-4"><MasterDataTabs activeView="masterTables" entryType={preferredDataEntryType} productionFloorCode={productionFloorCode} /><MasterTablesPanel payload={payload} productionControl={productionControl} submitAction={submitAction} openDataEntry={openDataEntry} preferredEntryType={preferredDataEntryType} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} onEntryTypeChange={onMasterEntryTypeChange} canDeleteMasters={canDeleteMasters} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "masterTables")} /></div>;
   }
 
   if (activeTab === "planningHolidayTab") {
@@ -6870,6 +6876,7 @@ function DataEntryPanel({
   allowedEntryTypes,
   productionFloorCode,
   onProductionFloorChange,
+  onEntryTypeChange,
   storeMasterData,
   title = "Production data entry",
   description = "Use focused forms for manual entry or download the matching CSV template for a small import.",
@@ -6887,6 +6894,7 @@ function DataEntryPanel({
   allowedEntryTypes?: readonly string[];
   productionFloorCode?: ProductionFloorCode;
   onProductionFloorChange?: (floorCode: ProductionFloorCode) => void;
+  onEntryTypeChange?: (entryType: string) => void;
   storeMasterData?: StoreMasterData | null;
   title?: string;
   description?: string;
@@ -6993,6 +7001,7 @@ function DataEntryPanel({
                     return;
                   }
                   setBulkEntryType(event.target.value);
+                  onEntryTypeChange?.(event.target.value);
                 }}
               >
                 {availableSpecs.map((spec) => (
@@ -7055,6 +7064,7 @@ function MasterTablesPanel({
   preferredEntryType,
   productionFloorCode,
   onProductionFloorChange,
+  onEntryTypeChange,
   storeMasterData,
   externalOptions = [],
 }: {
@@ -7071,6 +7081,7 @@ function MasterTablesPanel({
   preferredEntryType?: string;
   productionFloorCode: ProductionFloorCode;
   onProductionFloorChange: (floorCode: ProductionFloorCode) => void;
+  onEntryTypeChange: (entryType: string) => void;
   storeMasterData?: StoreMasterData | null;
   externalOptions?: ExternalMasterDataOption[];
 }) {
@@ -7179,7 +7190,7 @@ function MasterTablesPanel({
                   window.location.assign(external.href);
                   return;
                 }
-                setEntryType(event.target.value); setSearchQuery(""); setTableResetKey((current) => current + 1);
+                setEntryType(event.target.value); onEntryTypeChange(event.target.value); setSearchQuery(""); setTableResetKey((current) => current + 1);
               }}
             >
               {specs.map((spec) => (

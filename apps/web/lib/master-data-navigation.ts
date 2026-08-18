@@ -1,4 +1,7 @@
+import type { ProductionFloorCode } from "@workspace/db/production-floors"
+
 import type { UnifiedNavigationAccess } from "./auth/unified-navigation-access"
+import { masterDataEntryTypes } from "./master-data-workspaces"
 
 export type ExternalMasterDataOption = {
   href: string
@@ -67,6 +70,88 @@ export function masterDataFallbackLinks(
     },
     {
       destination: `${baseDestination}${separator}masterView=masterTables`,
+      id: "masterTablesTab",
+      title: "Master Tables",
+    },
+  ]
+}
+
+export function masterDataDashboardHref(
+  view: "dataEntry" | "masterTables",
+  productionFloorCode: ProductionFloorCode,
+  entryType?: string | null
+) {
+  const params = new URLSearchParams({
+    tab: view === "dataEntry" ? "dataEntryTab" : "masterTablesTab",
+    floor: productionFloorCode,
+  })
+  const normalizedEntryType = entryType?.trim()
+  if (normalizedEntryType) params.set("entry", normalizedEntryType)
+  return `/?${params.toString()}`
+}
+
+export function masterDataNavigationLinks(
+  access: UnifiedNavigationAccess,
+  context: {
+    entryType?: string
+    pathname: string
+    productionFloorCode: ProductionFloorCode
+    searchParams: Pick<URLSearchParams, "get">
+  }
+): MasterDataFallbackLink[] {
+  if (!access.operations) return masterDataFallbackLinks(access)
+
+  const panel = context.searchParams.get("panel")
+  const hrPanel =
+    context.pathname === "/hr" &&
+    (panel === "mastersPanel" || panel === "postMasterPanel")
+      ? panel
+      : null
+  const baseDestination = hrPanel
+    ? `/hr?panel=${hrPanel}`
+    : context.pathname.startsWith("/commercial/masters")
+      ? "/commercial/masters"
+      : null
+
+  if (baseDestination) {
+    const separator = baseDestination.includes("?") ? "&" : "?"
+    return [
+      {
+        destination: `${baseDestination}${separator}masterView=dataEntry`,
+        id: "dataEntryTab",
+        title: "Data Entry",
+      },
+      {
+        destination: `${baseDestination}${separator}masterView=masterTables`,
+        id: "masterTablesTab",
+        title: "Master Tables",
+      },
+    ]
+  }
+
+  const requestedEntryType =
+    context.entryType ?? context.searchParams.get("entry")
+  const entryType = (masterDataEntryTypes as readonly string[]).includes(
+    requestedEntryType ?? ""
+  )
+    ? requestedEntryType
+    : undefined
+  return [
+    {
+      destination: masterDataDashboardHref(
+        "dataEntry",
+        context.productionFloorCode,
+        entryType
+      ),
+      id: "dataEntryTab",
+      title: "Data Entry",
+    },
+    {
+      destination: masterDataDashboardHref(
+        "masterTables",
+        context.productionFloorCode,
+        entryType
+      ),
       id: "masterTablesTab",
       title: "Master Tables",
     },
