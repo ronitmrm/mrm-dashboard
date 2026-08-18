@@ -101,36 +101,10 @@ export function masterDataNavigationLinks(
 ): MasterDataFallbackLink[] {
   if (!access.operations) return masterDataFallbackLinks(access)
 
-  const panel = context.searchParams.get("panel")
-  const hrPanel =
-    context.pathname === "/hr" &&
-    (panel === "mastersPanel" || panel === "postMasterPanel")
-      ? panel
-      : null
-  const baseDestination = hrPanel
-    ? `/hr?panel=${hrPanel}`
-    : context.pathname.startsWith("/commercial/masters")
-      ? "/commercial/masters"
-      : null
-
-  if (baseDestination) {
-    const separator = baseDestination.includes("?") ? "&" : "?"
-    return [
-      {
-        destination: `${baseDestination}${separator}masterView=dataEntry`,
-        id: "dataEntryTab",
-        title: "Data Entry",
-      },
-      {
-        destination: `${baseDestination}${separator}masterView=masterTables`,
-        id: "masterTablesTab",
-        title: "Master Tables",
-      },
-    ]
-  }
-
   const requestedEntryType =
-    context.entryType ?? context.searchParams.get("entry")
+    context.pathname === "/"
+      ? context.entryType ?? context.searchParams.get("entry")
+      : undefined
   const entryType = (masterDataEntryTypes as readonly string[]).includes(
     requestedEntryType ?? ""
   )

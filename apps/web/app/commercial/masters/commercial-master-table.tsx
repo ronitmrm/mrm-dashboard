@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Pencil, Trash2 } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -31,6 +32,12 @@ import {
   deleteCommercialMasterAction,
   renameCommercialMasterAction,
 } from "./actions"
+import {
+  commercialMasterKinds,
+  commercialMasterSelection,
+  commercialMasterViewHref,
+  type CommercialMasterEntryKind,
+} from "@/lib/commercial-master-workspace"
 
 type CommercialMasterRow = {
   id: string
@@ -47,15 +54,18 @@ function kindLabel(kind: string) {
 
 export function CommercialMasterTable({
   canWrite,
+  initialKind,
   rows,
 }: {
   canWrite: boolean
+  initialKind: CommercialMasterEntryKind
   rows: CommercialMasterRow[]
 }) {
-  const [kind, setKind] = useState(rows[0]?.kind ?? "")
+  const router = useRouter()
+  const initialTableKind = commercialMasterSelection(initialKind).tableKind
+  const [kind, setKind] = useState(initialTableKind)
   const [editing, setEditing] = useState<CommercialMasterRow | null>(null)
   const [deleting, setDeleting] = useState<CommercialMasterRow | null>(null)
-  const kinds = useMemo(() => [...new Set(rows.map((row) => row.kind))], [rows])
   const visibleRows = rows.filter((row) => row.kind === kind)
   const replacementRows = deleting
     ? rows.filter((row) => row.kind === deleting.kind && row.id !== deleting.id)
@@ -67,12 +77,22 @@ export function CommercialMasterTable({
         <FieldLabel htmlFor="commercial-master-table-kind">Master</FieldLabel>
         <NativeSelect
           id="commercial-master-table-kind"
-          onChange={(event) => setKind(event.target.value)}
+          onChange={(event) => {
+            const nextKind = commercialMasterSelection(event.target.value)
+            setKind(nextKind.tableKind)
+            router.replace(
+              commercialMasterViewHref("masterTables", nextKind.entryKind),
+              { scroll: false }
+            )
+          }}
           value={kind}
         >
-          {kinds.map((value) => (
-            <NativeSelectOption key={value} value={value}>
-              {kindLabel(value)}
+          {commercialMasterKinds.map((option) => (
+            <NativeSelectOption
+              key={option.tableKind}
+              value={option.tableKind}
+            >
+              {option.label}
             </NativeSelectOption>
           ))}
         </NativeSelect>
@@ -117,6 +137,17 @@ export function CommercialMasterTable({
                 ) : null}
               </TableRow>
             ))}
+            {visibleRows.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  className="py-10 text-center text-muted-foreground"
+                  colSpan={canWrite ? 2 : 1}
+                >
+                  No {commercialMasterSelection(kind).label.toLowerCase()} records
+                  yet.
+                </TableCell>
+              </TableRow>
+            ) : null}
           </TableBody>
         </Table>
       </div>
