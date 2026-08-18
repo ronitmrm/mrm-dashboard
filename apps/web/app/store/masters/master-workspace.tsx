@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -44,19 +45,11 @@ import {
   createStoreVendorAction,
   deleteStoreMasterAction,
 } from "../actions"
-
-const masterOptions = [
-  ["ITEM_TYPE", "Store Item Type"],
-  ["CATEGORY", "Asset Category"],
-  ["SUBCATEGORY", "Asset Subcategory"],
-  ["ASSET_NAME", "Asset Name"],
-  ["LOCATION", "Store Location"],
-  ["SUPPLIER", "Supplier"],
-  ["SUPPLIER_PRICE", "Supplier Price"],
-  ["VENDOR", "Vendor"],
-] as const
-
-type MasterKey = (typeof masterOptions)[number][0]
+import {
+  normalizeStoreMasterKey,
+  storeMasterOptions,
+  type StoreMasterKey,
+} from "@/lib/store-master-selection"
 
 type StoreMasterRow = {
   code: string
@@ -142,12 +135,19 @@ export function StoreMasterWorkspace({
   data: StoreMasterData
   mode?: "combined" | "entry" | "table"
 }) {
-  const [selectedMaster, setSelectedMaster] = useState<MasterKey>("ITEM_TYPE")
+  const searchParams = useSearchParams()
+  const selectedMaster = normalizeStoreMasterKey(searchParams.get("storeMaster"))
   const [editRow, setEditRow] = useState<StoreMasterRow | null>(null)
   const [deleteRow, setDeleteRow] = useState<StoreMasterRow | null>(null)
   const selectedLabel =
-    masterOptions.find(([key]) => key === selectedMaster)?.[1] ?? "Master"
+    storeMasterOptions.find(([key]) => key === selectedMaster)?.[1] ?? "Master"
   const rows = masterRows(selectedMaster, data)
+
+  function selectMaster(master: StoreMasterKey) {
+    const url = new URL(window.location.href)
+    url.searchParams.set("storeMaster", master)
+    window.history.replaceState(null, "", url)
+  }
 
   return (
     <div className="grid gap-6">
@@ -169,11 +169,11 @@ export function StoreMasterWorkspace({
             <NativeSelect
               id="store-master-selector"
               onChange={(event) =>
-                setSelectedMaster(event.target.value as MasterKey)
+                selectMaster(event.target.value as StoreMasterKey)
               }
               value={selectedMaster}
             >
-              {masterOptions.map(([value, label]) => (
+              {storeMasterOptions.map(([value, label]) => (
                 <NativeSelectOption key={value} value={value}>
                   {label}
                 </NativeSelectOption>
@@ -335,7 +335,7 @@ export function StoreMasterWorkspace({
 }
 
 function masterRows(
-  selectedMaster: MasterKey,
+  selectedMaster: StoreMasterKey,
   data: StoreMasterData
 ): StoreMasterRow[] {
   switch (selectedMaster) {
@@ -465,7 +465,7 @@ function masterRows(
 }
 
 function masterForm(
-  selectedMaster: MasterKey,
+  selectedMaster: StoreMasterKey,
   data: StoreMasterData,
   defaults: Record<string, string> = {}
 ) {
