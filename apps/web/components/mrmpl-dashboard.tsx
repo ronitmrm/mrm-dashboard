@@ -1836,7 +1836,7 @@ function DashboardContent({
   }
 
   if (activeTab === "machineMasterTab") {
-    return <CentralMachineMasterWorkspace payload={payload} submitAction={submitAction} openDataEntry={openDataEntry} preferredDefaults={preferredDataEntryDefaults} />;
+    return <CentralMachineMasterWorkspace payload={payload} submitAction={submitAction} openDataEntry={openDataEntry} />;
   }
 
   if (activeTab === "masterGapsTab") {
@@ -7525,12 +7525,10 @@ function CentralMachineMasterWorkspace({
   payload,
   submitAction,
   openDataEntry,
-  preferredDefaults,
 }: {
   payload: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
-  preferredDefaults: Record<string, unknown>;
 }) {
   const [reloadKey, setReloadKey] = useState(0);
   const conventional = usePostgresOperationalPage("/api/dashboard?floor=conventional", 0, undefined, 0, reloadKey);
@@ -7545,31 +7543,12 @@ function CentralMachineMasterWorkspace({
     () => combinedMachineMasterProductionControl(floorPages.length ? floorPages : [payload]),
     [floorPages, payload],
   );
-  const workspacePayload = useMemo(
-    () => ({ ...payload, productionControl }),
-    [payload, productionControl],
-  );
-
   async function saveAndReload(path: string, body: Record<string, unknown>) {
     await submitAction(path, body);
     setReloadKey((current) => current + 1);
   }
 
-  return (
-    <div className="grid gap-6">
-      <DataEntryPanel
-        key={`central-machine-master-${JSON.stringify(preferredDefaults)}`}
-        payload={workspacePayload}
-        submitAction={saveAndReload}
-        preferredEntryType="machine_master"
-        preferredDefaults={preferredDefaults}
-        allowedEntryTypes={["machine_master"]}
-        title="Central Machine Master"
-        description="Create, import, or reallocate machines here. Production screens only receive machines assigned to their Production unit."
-      />
-      <MachineMasterPanel productionControl={productionControl} submitAction={saveAndReload} openDataEntry={openDataEntry} />
-    </div>
-  );
+  return <MachineMasterPanel productionControl={productionControl} submitAction={saveAndReload} openDataEntry={openDataEntry} />;
 }
 
 function MachineMasterPanel({
@@ -7669,21 +7648,22 @@ function MachineMasterPanel({
         <Card>
           <CardHeader>
             <CardTitle>All Machines</CardTitle>
-            <CardDescription>One Company-Wide Machine Master. Production Unit Allocation Controls Where Each Machine Is Available.</CardDescription>
+            <CardDescription>Open A Machine To Review Its Details, Store Assets, Maintenance Schedules, History, And Reports.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2"><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("machine_master", { status: "Active", productionFloorCode: "conventional", __returnTab: "machineMasterTab" })}>Add Machine</Button><div className="text-xs text-muted-foreground">{formatNumber(machineRows.length)} Machines</div></div>
+              <div className="text-xs text-muted-foreground">{formatNumber(machineRows.length)} Machines</div>
+              <Button asChild type="button" size="sm" variant="outline"><Link href={masterDataDashboardHref("dataEntry", defaultProductionFloorCode, "machine_master")}>Open Machine Master</Link></Button>
             </div>
             <div className="max-h-[72vh] overflow-auto rounded-lg border">
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow><TableHead>Machine No.</TableHead><TableHead>Machine Family</TableHead><TableHead>Machine Type</TableHead><TableHead>Machine Name</TableHead><TableHead>Production Unit</TableHead><TableHead>Machine Location</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow>
+                  <TableRow><TableHead>Machine No.</TableHead><TableHead>Machine Family</TableHead><TableHead>Machine Type</TableHead><TableHead>Machine Name</TableHead><TableHead>Production Unit</TableHead><TableHead>Machine Location</TableHead><TableHead>Status</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>{machineRows.length ? machineRows.map((row) => {
                   const machineNo = displayValue(row.machineNo);
-                  return <TableRow key={machineNo}><TableCell><Link className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline" href={`${dashboardTabHref("machineMasterTab")}&machine=${encodeURIComponent(machineNo)}`} title={`Open Machine ${machineNo}`}>{machineNo}</Link></TableCell><TableCell>{displayValue(row.machineFamily)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{machineProductionUnitLabel(row)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell><TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openDataEntry("machine_master", { ...row, productionFloorCode: normalizeProductionFloorCode(row.productionFloorCode), __returnTab: "machineMasterTab" })}>Edit</Button></TableCell></TableRow>;
-                }) : <TableRow><TableCell colSpan={8} className="h-24 text-center text-sm text-muted-foreground">No Machines Match The Selected Filters.</TableCell></TableRow>}</TableBody>
+                  return <TableRow key={machineNo}><TableCell><Link className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline" href={`${dashboardTabHref("machineMasterTab")}&machine=${encodeURIComponent(machineNo)}`} title={`Open Machine ${machineNo}`}>{machineNo}</Link></TableCell><TableCell>{displayValue(row.machineFamily)}</TableCell><TableCell>{displayValue(row.machineType)}</TableCell><TableCell>{displayValue(row.machineName)}</TableCell><TableCell>{machineProductionUnitLabel(row)}</TableCell><TableCell>{displayValue(row.location)}</TableCell><TableCell><StatusBadge value={row.status || "Active"} /></TableCell></TableRow>;
+                }) : <TableRow><TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">No Machines Match The Selected Filters.</TableCell></TableRow>}</TableBody>
               </Table>
             </div>
           </CardContent>
@@ -7711,14 +7691,14 @@ function MachineMasterPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Machine {displayValue(selectedMachine.machineNo)}</h2>
-          <p className="text-sm text-muted-foreground">Maintenance Schedule, History, And Reports For This Machine.</p>
+          <p className="text-sm text-muted-foreground">Identity, Store Assets, Maintenance Schedules, History, And Reports For This Machine.</p>
         </div>
         <Button type="button" variant="outline" onClick={closeMachine}>Back To Machines</Button>
       </div>
       <TrackingSummary items={[["Schedules", formatNumber(machineSchedules.length)], ["Records", formatNumber(machineHistory.length)], ["Filtered", formatNumber(filteredHistory.length)], ["Schedule master", formatNumber(maintenanceMasterRows.length)]]} />
       <Card>
-        <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Machine Maintenance Schedules And Records.</CardDescription></CardHeader>
-        <CardContent><div className="grid gap-3 md:grid-cols-6"><TileField label="Machine Family" value={selectedMachine.machineFamily} important /><TileField label="Machine Type" value={selectedMachine.machineType} /><TileField label="Machine Name" value={selectedMachine.machineName} /><TileField label="Production Unit" value={machineProductionUnitLabel(selectedMachine)} /><TileField label="Machine Location" value={selectedMachine.location} /><TileField label="Records" value={machineHistory.length} numeric /></div></CardContent>
+        <CardHeader><CardTitle>{displayValue(selectedMachine.machineNo)}</CardTitle><CardDescription>Canonical Machine Identity And Current Assignment.</CardDescription></CardHeader>
+        <CardContent><div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-4"><TileField label="Machine Family" value={selectedMachine.machineFamily} important /><TileField label="Machine Type" value={selectedMachine.machineType} /><TileField label="Machine Name" value={selectedMachine.machineName} /><TileField label="Production Unit" value={machineProductionUnitLabel(selectedMachine)} /><TileField label="Machine Location" value={selectedMachine.location} /><TileField label="Machine Status" value={selectedMachine.status || "Active"} /><TileField label="Remarks" value={selectedMachine.remarks} /><TileField label="Maintenance Records" value={machineHistory.length} numeric /></div></CardContent>
       </Card>
       <MachineStoreAssets machineNumber={displayValue(selectedMachine.machineNo)} />
       <Card>

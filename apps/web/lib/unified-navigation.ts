@@ -287,8 +287,8 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     href: dashboardTabHref("machineMasterTab"),
     icon: Factory,
     id: "machineMasterTab",
-    subtitle: "Schedules And History",
-    title: "Machine Master",
+    subtitle: "History And Maintenance",
+    title: "Machines",
   },
   {
     href: dashboardTabHref("planningHolidayTab"),
@@ -328,16 +328,24 @@ export const machineMasterNavigation = dashboardNavigation.find(
   (item) => item.id === "machineMasterTab"
 )!
 
-const universalProductionNavigationIds = new Set<DashboardTabId>([
+const universalProductionNavigationOrder: DashboardTabId[] = [
   "productionDashboardTab",
+  "machineMasterTab",
   "maintenanceTab",
   "correctionsTab",
-])
+]
+const universalProductionNavigationIds = new Set(
+  universalProductionNavigationOrder
+)
 
 export const consolidatedProductionNavigation = [] as const
 
 export const universalProductionNavigation = dashboardNavigation.filter(
   (item) => universalProductionNavigationIds.has(item.id)
+).sort(
+  (left, right) =>
+    universalProductionNavigationOrder.indexOf(left.id) -
+    universalProductionNavigationOrder.indexOf(right.id)
 )
 
 const masterDataNavigationIds = new Set<DashboardTabId>([

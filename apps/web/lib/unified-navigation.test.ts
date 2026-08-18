@@ -86,10 +86,12 @@ describe("unified navigation", () => {
     )
     expect(machineMasterNavigation).toMatchObject({
       id: "machineMasterTab",
-      title: "Machine Master",
+      subtitle: "History And Maintenance",
+      title: "Machines",
     })
     expect(universalProductionNavigation.map(({ id }) => id)).toEqual([
       "productionDashboardTab",
+      "machineMasterTab",
       "maintenanceTab",
       "correctionsTab",
     ])

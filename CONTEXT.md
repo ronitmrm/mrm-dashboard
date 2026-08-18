@@ -184,6 +184,10 @@ _Avoid_: Free-text person names, employees from another Production Floor, leader
 The company-wide operational workspace for planned and breakdown maintenance across every Production Floor. Schedules and maintenance history belong to a physical machine; its Production Unit assignment does not create a separate maintenance workspace.
 _Avoid_: Production-floor maintenance tab, separate maintenance workspace per Production Unit.
 
+**Machine Workspace**:
+The company-wide operational record for physical machines. Its machine list opens one machine's identity, Production Unit, Store assets, assigned maintenance schedules, planned and breakdown maintenance history, and reports without copying those canonical records. Machine creation and identity changes belong only to Machine Master in Master Data.
+_Avoid_: Editing Machine Master inside the Machine Workspace, duplicate machine-history storage, Production-floor-specific machine registers.
+
 **Factory Planning Holiday**:
 A non-working date applied to Conventional, CNC, and Forging production-floor planning.
 _Avoid_: Re-entering the same factory holiday separately for each floor.
