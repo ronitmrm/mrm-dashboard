@@ -11,6 +11,12 @@ export const storeMasterOptions = [
 
 export type StoreMasterKey = (typeof storeMasterOptions)[number][0]
 
+const codeLessStoreMasters = new Set<StoreMasterKey>([
+  "CATEGORY",
+  "SUBCATEGORY",
+  "ASSET_NAME",
+])
+
 export function parseStoreMasterKey(value: unknown): StoreMasterKey | null {
   return typeof value === "string" &&
     storeMasterOptions.some(([key]) => key === value)
@@ -20,4 +26,8 @@ export function parseStoreMasterKey(value: unknown): StoreMasterKey | null {
 
 export function normalizeStoreMasterKey(value: unknown): StoreMasterKey {
   return parseStoreMasterKey(value) ?? "ITEM_TYPE"
+}
+
+export function storeMasterShowsCode(master: StoreMasterKey) {
+  return !codeLessStoreMasters.has(master)
 }
