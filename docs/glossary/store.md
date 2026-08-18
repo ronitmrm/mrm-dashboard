@@ -5,11 +5,14 @@ Asset Subcategory, and Asset Name. A Subcategory belongs to one Category, and
 an Asset Name belongs to one Subcategory. Store item creation selects these
 values from the masters; users do not retype classification names. Store
 masters are maintained in the company Data Entry workspace and reviewed in
-Master Tables; they are not a separate Store workspace.
+Master Tables; they are not a separate Store workspace. Asset Category, Asset
+Subcategory, and Asset Name do not own user-facing codes. Their hierarchy is
+combined only when creating a Store Item Type.
 
 **Store Item Type**: The unique combination of Asset Type and one selected
 Store Classification Master path. It owns one permanent Asset Code and one
-Identification Name.
+Identification Name. The Asset Code is generated automatically only after the
+combination is saved.
 
 **Asset Type**: The stock-control choice for a Store Item Type. It is either
 Consumable or Non Consumable; users select it from a dropdown and never enter

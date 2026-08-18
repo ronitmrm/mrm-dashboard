@@ -47,12 +47,13 @@ import {
 } from "../actions"
 import {
   normalizeStoreMasterKey,
+  storeMasterShowsCode,
   storeMasterOptions,
   type StoreMasterKey,
 } from "@/lib/store-master-selection"
 
 type StoreMasterRow = {
-  code: string
+  code?: string
   details: string
   editable: boolean
   editDefaults: Record<string, string>
@@ -142,6 +143,7 @@ export function StoreMasterWorkspace({
   const selectedLabel =
     storeMasterOptions.find(([key]) => key === selectedMaster)?.[1] ?? "Master"
   const rows = masterRows(selectedMaster, data)
+  const showsCode = storeMasterShowsCode(selectedMaster)
 
   function selectMaster(master: StoreMasterKey) {
     const url = new URL(window.location.href)
@@ -202,7 +204,7 @@ export function StoreMasterWorkspace({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Code</TableHead>
+                  {showsCode ? <TableHead>Code</TableHead> : null}
                   <TableHead>Name</TableHead>
                   <TableHead>Details</TableHead>
                   {canManage ? (
@@ -213,7 +215,9 @@ export function StoreMasterWorkspace({
               <TableBody>
                 {rows.map((row) => (
                   <TableRow key={row.key}>
-                    <TableCell className="font-medium">{row.code}</TableCell>
+                    {showsCode ? (
+                      <TableCell className="font-medium">{row.code}</TableCell>
+                    ) : null}
                     <TableCell>{row.name}</TableCell>
                     <TableCell>{row.details}</TableCell>
                     {canManage ? (
@@ -246,7 +250,7 @@ export function StoreMasterWorkspace({
                   <TableRow>
                     <TableCell
                       className="h-24 text-center text-muted-foreground"
-                      colSpan={canManage ? 4 : 3}
+                      colSpan={(showsCode ? 3 : 2) + (canManage ? 1 : 0)}
                     >
                       No saved records for this master.
                     </TableCell>
@@ -295,7 +299,7 @@ export function StoreMasterWorkspace({
               <input name="master_id" type="hidden" value={deleteRow.key} />
               <input name="master_kind" type="hidden" value={deleteRow.kind} />
               <div className="rounded-md border bg-muted/40 p-3 text-sm">
-                {deleteRow.code} — {deleteRow.name}
+                {deleteRow.code ? `${deleteRow.code} — ` : ""}{deleteRow.name}
               </div>
               <SelectField
                 label="Replacement (Required Only If Used)"
@@ -363,7 +367,6 @@ function masterRows(
       }))
     case "CATEGORY":
       return data.masters.categories.map((category) => ({
-        code: "—",
         details: "Asset Category",
         key: category.id,
         kind: "store_category",
@@ -376,7 +379,6 @@ function masterRows(
       }))
     case "SUBCATEGORY":
       return data.masters.subcategories.map((subcategory) => ({
-        code: "—",
         details: `Category: ${subcategory.categoryName}`,
         key: subcategory.id,
         kind: "store_subcategory",
@@ -390,7 +392,6 @@ function masterRows(
       }))
     case "ASSET_NAME":
       return data.masters.assetNames.map((assetName) => ({
-        code: "—",
         details: `${assetName.categoryName} / ${assetName.subcategoryName}`,
         key: assetName.id,
         kind: "store_asset_name",
