@@ -1,5 +1,10 @@
 # Quality and Checklist Masters
 
+Rejection Type, Rejection Remark, and Defect / Downtime Reason are
+company-wide masters. Their Production Unit is **Full Software / Not
+Applicable**. Quality Inspection Parameter Master remains scoped to one
+Production Unit.
+
 ## Generated master codes
 
 Rejection Type, Defect / Downtime Reason, Rejection Remark, Setup Checklist,

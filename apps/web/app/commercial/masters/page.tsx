@@ -29,6 +29,7 @@ import {
 
 import { importMastersWorkbookAction, setMasterActiveAction } from "./actions"
 import { MasterMaintenanceForm } from "./master-maintenance-form"
+import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 
 export const dynamic = "force-dynamic"
 
@@ -152,6 +153,7 @@ export default async function MastersPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
+          <CompanyWideMasterScope />
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="outline">
               <Link href="/commercial/masters/template.xlsx">

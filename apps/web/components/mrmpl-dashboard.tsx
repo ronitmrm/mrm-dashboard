@@ -87,7 +87,6 @@ import {
 import { formatIstDateTime, formatIstTime, istDateValue } from "@/lib/date-time";
 import {
   checklistWorkspaceEntryTypes,
-  companyWideQualityMasterEntryTypes,
   columnsForProductionMaster,
   dataEntryRowsForProductionMaster,
   productionMasterTableEntryTypes,
@@ -95,6 +94,7 @@ import {
   qualityWorkspaceEntryTypes,
   rowsForProductionMaster,
 } from "@/lib/production-master-tables";
+import { isCompanyWideMasterEntryType } from "@/lib/master-data-navigation";
 import {
   refreshLockFromStatus,
   refreshLockHasSettled,
@@ -6870,9 +6870,7 @@ function DataEntryPanel({
   const [bulkEntryType, setBulkEntryType] = useState(initialEntryType);
   const [isImporting, setIsImporting] = useState(false);
   const selectedSpec = availableSpecs.find((spec) => spec.entryType === bulkEntryType) ?? availableSpecs[0];
-  const selectedMasterIsCompanyWide = companyWideQualityMasterEntryTypes.includes(
-    bulkEntryType as typeof companyWideQualityMasterEntryTypes[number],
-  ) || bulkEntryType === "store_masters";
+  const selectedMasterIsCompanyWide = isCompanyWideMasterEntryType(bulkEntryType);
   const selectedMasterRows = useMemo(
     () => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [],
     [payload, productionControl, selectedSpec],
@@ -6889,7 +6887,12 @@ function DataEntryPanel({
       const fileBase64 = await readFileAsDataUrl(file);
       await submitAction(
         "data-import",
-        { entryType: bulkEntryType, productionFloorCode, fileName: file.name, fileBase64 },
+        {
+          entryType: bulkEntryType,
+          fileName: file.name,
+          fileBase64,
+          ...(selectedMasterIsCompanyWide ? {} : { productionFloorCode }),
+        },
         { throwOnError: true },
       );
       if (typeof form.reset === "function") form.reset();
@@ -6910,23 +6913,33 @@ function DataEntryPanel({
         {isImporting ? <div className="px-6"><ProcessingNotice message="Reading and importing the CSV file..." /></div> : null}
         <fieldset aria-busy={isImporting} className="contents" disabled={isImporting}>
         <CardContent className="grid gap-4">
-          {productionFloorCode && onProductionFloorChange && bulkEntryType !== "store_masters" ? (
+          {productionFloorCode && onProductionFloorChange ? (
             <div className="grid gap-2 @3xl/main:grid-cols-[minmax(240px,360px)_1fr] @3xl/main:items-end">
               <Field label="Production Unit">
-                <SearchableSelect
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
-                  required
-                  value={productionFloorCode}
-                  onChange={(event) => onProductionFloorChange(normalizeProductionFloorCode(event.target.value))}
-                >
-                  {productionFloors.map((floor) => (
-                    <option key={floor.code} value={floor.code}>{floor.label}</option>
-                  ))}
-                </SearchableSelect>
+                {selectedMasterIsCompanyWide ? (
+                  <SearchableSelect
+                    className="h-9 rounded-md border bg-muted px-3 text-sm"
+                    disabled
+                    value="company-wide"
+                  >
+                    <option value="company-wide">Full Software / Not Applicable</option>
+                  </SearchableSelect>
+                ) : (
+                  <SearchableSelect
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    required
+                    value={productionFloorCode}
+                    onChange={(event) => onProductionFloorChange(normalizeProductionFloorCode(event.target.value))}
+                  >
+                    {productionFloors.map((floor) => (
+                      <option key={floor.code} value={floor.code}>{floor.label}</option>
+                    ))}
+                  </SearchableSelect>
+                )}
               </Field>
               <p className="pb-2 text-sm text-muted-foreground">
                 {selectedMasterIsCompanyWide
-                  ? "This quality code master is shared by every Production Unit."
+                  ? "This master applies to the full software and is not tied to one Production Unit."
                   : "Uploads and manual entries are saved for the selected Production Unit."}
               </p>
             </div>
@@ -6987,7 +7000,7 @@ function DataEntryPanel({
           dataEntry={dataEntry}
           masterRows={selectedMasterRows}
           productionControl={productionControl}
-          productionFloorCode={productionFloorCode}
+          productionFloorCode={selectedMasterIsCompanyWide ? undefined : productionFloorCode}
           storeMasterData={storeMasterData}
         />
       ) : null}
@@ -7030,9 +7043,7 @@ function MasterTablesPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [tableResetKey, setTableResetKey] = useState(0);
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
-  const selectedMasterIsCompanyWide = companyWideQualityMasterEntryTypes.includes(
-    selectedSpec?.entryType as typeof companyWideQualityMasterEntryTypes[number],
-  ) || selectedSpec?.entryType === "store_masters";
+  const selectedMasterIsCompanyWide = isCompanyWideMasterEntryType(selectedSpec?.entryType ?? "");
   const dataEntry = asRecord(payload.dataEntry);
   const rows = useMemo(() => selectedSpec ? masterTableRows(selectedSpec.entryType, payload, productionControl) : [], [payload, productionControl, selectedSpec]);
   const columns = useMemo(() => selectedSpec ? masterTableColumns(selectedSpec) : [], [selectedSpec]);
@@ -7064,18 +7075,28 @@ function MasterTablesPanel({
           <CardDescription>Search Saved Master Data In Tabular Format. Use Data Entry Only When You Need To Add Or Edit Rows.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(220px,320px)_minmax(260px,1fr)]">
-          {selectedSpec.entryType !== "store_masters" ? <Field label="Production Unit">
-            <SearchableSelect
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              required
-              value={productionFloorCode}
-              onChange={(event) => onProductionFloorChange(normalizeProductionFloorCode(event.target.value))}
-            >
-              {productionFloors.map((floor) => (
-                <option key={floor.code} value={floor.code}>{floor.label}</option>
-              ))}
-            </SearchableSelect>
-          </Field> : null}
+          <Field label="Production Unit">
+            {selectedMasterIsCompanyWide ? (
+              <SearchableSelect
+                className="h-9 rounded-md border bg-muted px-3 text-sm"
+                disabled
+                value="company-wide"
+              >
+                <option value="company-wide">Full Software / Not Applicable</option>
+              </SearchableSelect>
+            ) : (
+              <SearchableSelect
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                required
+                value={productionFloorCode}
+                onChange={(event) => onProductionFloorChange(normalizeProductionFloorCode(event.target.value))}
+              >
+                {productionFloors.map((floor) => (
+                  <option key={floor.code} value={floor.code}>{floor.label}</option>
+                ))}
+              </SearchableSelect>
+            )}
+          </Field>
           <Field label="Master">
             <SearchableSelect
               className="h-9 rounded-md border bg-background px-3 text-sm"

@@ -69,6 +69,10 @@ import {
   readPostgresSetupChecklistPage,
 } from "@/lib/postgres-operational-entry-server"
 import { telemetryRequestId } from "../../../lib/request-telemetry"
+import {
+  isCompanyWideMasterEntryType,
+  masterPayloadForScope,
+} from "../../../lib/master-data-navigation"
 
 class RouteError extends Error {
   constructor(
@@ -1080,10 +1084,13 @@ async function post(request: NextRequest, context: RouteContext) {
 
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
-      const payload = productionFloorPayload(
-        plainRecord(body.payload),
-        body.productionFloorCode
+      const rawPayload = masterPayloadForScope(
+        entryType,
+        plainRecord(body.payload)
       )
+      const payload = isCompanyWideMasterEntryType(entryType)
+        ? rawPayload
+        : productionFloorPayload(rawPayload, body.productionFloorCode)
       if (isPostgresOperationalEntryType(entryType)) {
         const result = await executePostgresOperationalEntry(
           request,
@@ -1465,11 +1472,13 @@ async function post(request: NextRequest, context: RouteContext) {
           fileName,
           fileBase64
         )
-        const importedRows = importBatch.rows.map((payload) =>
-          entryType === "machine_master"
-            ? machineMasterImportPayload(payload, body.productionFloorCode)
-            : productionFloorPayload(payload, body.productionFloorCode)
-        )
+        const importedRows = importBatch.rows.map((payload) => {
+          const rawPayload = masterPayloadForScope(entryType, payload)
+          if (isCompanyWideMasterEntryType(entryType)) return rawPayload
+          return entryType === "machine_master"
+            ? machineMasterImportPayload(rawPayload, body.productionFloorCode)
+            : productionFloorPayload(rawPayload, body.productionFloorCode)
+        })
         const importPolicy = browserImportPolicy(entryType, importedRows.length)
         if (!importPolicy.ok) {
           throw new RouteError(importPolicy.status, importPolicy.error)

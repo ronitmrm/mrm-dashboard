@@ -12,6 +12,30 @@ export type MasterDataFallbackLink = {
   title: "Data Entry" | "Master Tables"
 }
 
+export const companyWideMasterEntryTypes = [
+  "rejection_type_master",
+  "rejection_remark_master",
+  "rejection_reason_master",
+  "store_masters",
+  "hr_masters",
+  "hr_job_templates",
+  "commercial_pricing_masters",
+] as const
+
+export function isCompanyWideMasterEntryType(entryType: string) {
+  return (companyWideMasterEntryTypes as readonly string[]).includes(entryType)
+}
+
+export function masterPayloadForScope(
+  entryType: string,
+  payload: Record<string, unknown>
+) {
+  if (!isCompanyWideMasterEntryType(entryType)) return payload
+  const companyWidePayload = { ...payload }
+  delete companyWidePayload.productionFloorCode
+  return companyWidePayload
+}
+
 function canReadRecruitmentMasters(access: UnifiedNavigationAccess) {
   return access.hrHrefs.some((href) =>
     [
