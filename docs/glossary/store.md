@@ -31,7 +31,7 @@ assignment, movement, maintenance, calibration, breakage, and scrap.
 
 **Unit ID / Serial ID**: The permanent identity of one Physical Asset, separate
 from its shared Asset Code. It may use the manufacturer's serial number and has
-a system Unit ID, for example `NC041-00001`; a replacement receives a new Unit
+a system Unit ID, for example `NC041-0001`; a replacement receives a new Unit
 ID while the old unit keeps its history.
 
 **Consumable**: A quantity-managed Store Item that is allocated and issued

@@ -391,7 +391,7 @@ describe("Store requests", () => {
       [legacyAssetId]
     )
     expect(migratedLegacyAsset.rows[0]?.asset_code).toBe(
-      `${migratedLegacyItem?.typeCode}-00001`
+      `${migratedLegacyItem?.typeCode}-0001`
     )
     expect(migratedLegacyAsset.rows[0]?.next_asset_number).toBe(2)
   })
@@ -483,8 +483,8 @@ describe("Store requests", () => {
       quantity: 2,
     })
     expect(receipt.assetCodes).toEqual([
-      `${itemType.typeCode}-00001`,
-      `${itemType.typeCode}-00002`,
+      `${itemType.typeCode}-0001`,
+      `${itemType.typeCode}-0002`,
     ])
 
     const request = await store.createRequisition({
@@ -558,7 +558,7 @@ describe("Store requests", () => {
       purchaseOrderLineId: replacementOrder.id,
       quantity: 1,
     })
-    expect(replacement.assetCodes).toEqual([`${itemType.typeCode}-00003`])
+    expect(replacement.assetCodes).toEqual([`${itemType.typeCode}-0003`])
 
     const workspace = await store.getAssetWorkspace({
       assetCode: receipt.assetCodes[0]!,

@@ -32,7 +32,7 @@ SELECT asset.id AS asset_id,
       PARTITION BY asset.item_type_id
       ORDER BY asset.created_at, asset.id
     )::text,
-    5,
+    4,
     '0'
   ) AS new_asset_code
 FROM store.assets asset
