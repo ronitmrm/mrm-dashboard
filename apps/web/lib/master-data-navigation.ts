@@ -2,6 +2,7 @@ import type { ProductionFloorCode } from "@workspace/db/production-floors"
 
 import type { UnifiedNavigationAccess } from "./auth/unified-navigation-access"
 import { masterDataEntryTypes } from "./master-data-workspaces"
+import { parseStoreMasterKey } from "./store-master-selection"
 
 export type ExternalMasterDataOption = {
   href: string
@@ -79,7 +80,8 @@ export function masterDataFallbackLinks(
 export function masterDataDashboardHref(
   view: "dataEntry" | "masterTables",
   productionFloorCode: ProductionFloorCode,
-  entryType?: string | null
+  entryType?: string | null,
+  storeMaster?: string | null
 ) {
   const params = new URLSearchParams({
     tab: view === "dataEntry" ? "dataEntryTab" : "masterTablesTab",
@@ -87,6 +89,10 @@ export function masterDataDashboardHref(
   })
   const normalizedEntryType = entryType?.trim()
   if (normalizedEntryType) params.set("entry", normalizedEntryType)
+  const selectedStoreMaster = parseStoreMasterKey(storeMaster)
+  if (normalizedEntryType === "store_masters" && selectedStoreMaster) {
+    params.set("storeMaster", selectedStoreMaster)
+  }
   return `/?${params.toString()}`
 }
 
@@ -110,12 +116,17 @@ export function masterDataNavigationLinks(
   )
     ? requestedEntryType
     : undefined
+  const storeMaster =
+    entryType === "store_masters"
+      ? parseStoreMasterKey(context.searchParams.get("storeMaster"))
+      : null
   return [
     {
       destination: masterDataDashboardHref(
         "dataEntry",
         context.productionFloorCode,
-        entryType
+        entryType,
+        storeMaster
       ),
       id: "dataEntryTab",
       title: "Data Entry",
@@ -124,7 +135,8 @@ export function masterDataNavigationLinks(
       destination: masterDataDashboardHref(
         "masterTables",
         context.productionFloorCode,
-        entryType
+        entryType,
+        storeMaster
       ),
       id: "masterTablesTab",
       title: "Master Tables",

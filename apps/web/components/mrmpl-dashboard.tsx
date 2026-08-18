@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type Dispatch, type DragEvent, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Activity,
   ArrowDown,
@@ -276,6 +277,8 @@ function MasterDataTabs({
   entryType: string;
   productionFloorCode: ProductionFloorCode;
 }) {
+  const searchParams = useSearchParams();
+  const selectedStoreMaster = searchParams.get("storeMaster");
   const linkClass =
     "border-b-2 px-4 py-3 text-sm font-medium transition-colors";
   return (
@@ -287,13 +290,13 @@ function MasterDataTabs({
       <Link
         aria-selected={activeView === "dataEntry"}
         className={`${linkClass} ${activeView === "dataEntry" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-        href={masterDataDashboardHref("dataEntry", productionFloorCode, entryType)}
+        href={masterDataDashboardHref("dataEntry", productionFloorCode, entryType, selectedStoreMaster)}
         role="tab"
       >Data Entry</Link>
       <Link
         aria-selected={activeView === "masterTables"}
         className={`${linkClass} ${activeView === "masterTables" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-        href={masterDataDashboardHref("masterTables", productionFloorCode, entryType)}
+        href={masterDataDashboardHref("masterTables", productionFloorCode, entryType, selectedStoreMaster)}
         role="tab"
       >Master Tables</Link>
     </nav>

@@ -4,6 +4,7 @@ import {
   companyWideMasterEntryTypes,
   externalMasterDataOptions,
   isCompanyWideMasterEntryType,
+  masterDataDashboardHref,
   masterDataFallbackLinks,
   masterDataNavigationLinks,
   masterPayloadForScope,
@@ -175,6 +176,42 @@ describe("master data navigation", () => {
         id: "masterTablesTab",
         title: "Master Tables",
       },
+    ])
+  })
+
+  it("keeps Asset Category selected when switching Store Master views", () => {
+    expect(
+      masterDataDashboardHref(
+        "masterTables",
+        "conventional",
+        "store_masters",
+        "CATEGORY"
+      )
+    ).toBe(
+      "/?tab=masterTablesTab&floor=conventional&entry=store_masters&storeMaster=CATEGORY"
+    )
+
+    expect(
+      masterDataNavigationLinks(
+        {
+          administration: false,
+          commercialHrefs: [],
+          hrHrefs: [],
+          operations: true,
+          store: true,
+        },
+        {
+          entryType: "store_masters",
+          pathname: "/",
+          productionFloorCode: "conventional",
+          searchParams: new URLSearchParams(
+            "tab=dataEntryTab&entry=store_masters&storeMaster=CATEGORY"
+          ),
+        }
+      ).map((link) => link.destination)
+    ).toEqual([
+      "/?tab=dataEntryTab&floor=conventional&entry=store_masters&storeMaster=CATEGORY",
+      "/?tab=masterTablesTab&floor=conventional&entry=store_masters&storeMaster=CATEGORY",
     ])
   })
 
