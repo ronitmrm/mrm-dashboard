@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises"
-import path from "node:path"
-
 import {
   createCommercialWorkflowRepository,
   createCustomerRepository,
@@ -9,6 +6,7 @@ import {
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
+import { readUserAttachment } from "@/lib/user-attachment-storage"
 
 const purposes = new Set(["cad", "customer_marked", "internal_drawing"])
 
@@ -37,28 +35,13 @@ export async function GET(
     if (!attachment) {
       return new Response("Design attachment was not found.", { status: 404 })
     }
-    const storageRoot = path.resolve(
-      process.env.LOCAL_FILE_STORAGE_PATH ??
-        path.join(/*turbopackIgnore: true*/ process.cwd(), "local-data")
-    )
-    const filePath = path.resolve(
-      /*turbopackIgnore: true*/
-      storageRoot,
-      ...attachment.storageKey.split("/")
-    )
-    if (!filePath.startsWith(storageRoot + path.sep)) {
-      throw new Error("Design attachment storage key is invalid.")
-    }
-    const bytes = await readFile(filePath)
-    return new Response(
-      bytes.buffer.slice(
-        bytes.byteOffset,
-        bytes.byteOffset + bytes.byteLength
-      ) as ArrayBuffer,
-      {
-        headers: userAttachmentDownloadHeaders(attachment.fileName, bytes.byteLength),
-      }
-    )
+    const file = await readUserAttachment(attachment.storageKey)
+    return new Response(file.body, {
+      headers: userAttachmentDownloadHeaders(
+        attachment.fileName,
+        file.byteSize
+      ),
+    })
   } finally {
     await workflow.close()
     await customers.close()

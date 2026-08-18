@@ -1,8 +1,6 @@
 "use server"
 
 import { randomUUID } from "node:crypto"
-import { mkdir, unlink, writeFile } from "node:fs/promises"
-import path from "node:path"
 
 import {
   createMasterDataLifecycleRepository,
@@ -16,6 +14,10 @@ import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  deleteUserAttachment,
+  saveUserAttachment,
+} from "@/lib/user-attachment-storage"
 import { validateUserAttachment } from "@/lib/user-attachment-security"
 
 const storePath = "/store"
@@ -405,15 +407,13 @@ async function saveGuaranteeCard(upload: FormDataEntryValue | null) {
     fileName: upload.name,
     purpose: "purchase-order",
   })
-  const storageRoot = path.resolve(
-    process.env.LOCAL_FILE_STORAGE_PATH ??
-      path.join(/*turbopackIgnore: true*/ process.cwd(), "local-data")
-  )
   const storageKey = `store/${randomUUID()}-${validated.fileName}`
-  const filePath = path.join(storageRoot, ...storageKey.split("/"))
-  await mkdir(path.dirname(filePath), { recursive: true })
-  await writeFile(filePath, bytes, { flag: "wx" })
-  return { fileName: validated.fileName, filePath, storageKey }
+  await saveUserAttachment({
+    bytes,
+    mediaType: validated.mediaType,
+    storageKey,
+  })
+  return { fileName: validated.fileName, storageKey }
 }
 
 export async function receiveStoreStockAction(formData: FormData) {
@@ -435,7 +435,9 @@ export async function receiveStoreStockAction(formData: FormData) {
       })
     )
   } catch (error) {
-    if (savedFile) await unlink(savedFile.filePath).catch(() => undefined)
+    if (savedFile) {
+      await deleteUserAttachment(savedFile.storageKey).catch(() => undefined)
+    }
     throw error
   }
   revalidateStore()
