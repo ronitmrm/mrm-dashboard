@@ -22,7 +22,7 @@ const firstJobCard = `JC-${suffix}-1`
 const secondJobCard = `JC-${suffix}-2`
 const firstMachine = `MC-${suffix}-1`
 const secondMachine = `MC-${suffix}-2`
-const toolingAssetCode = `ST-TOOL-${suffix}`
+const toolingAssetCode = `NC${Date.now()}`
 const toolingItemUid = `TOOLING-ITEM-${suffix}`
 
 beforeAll(async () => {

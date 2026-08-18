@@ -5,6 +5,7 @@ import {
   withTransaction,
   type RepositoryPoolOptions,
 } from "./postgres-runtime"
+import { storeItemCodeSeries } from "./store-item-codes"
 
 export type StoreTrackingMode = "CONSUMABLE" | "SERIALIZED"
 export type StoreAssetType = "CONSUMABLE" | "NON_CONSUMABLE"
@@ -77,19 +78,24 @@ async function nextDocumentNumber(
   return `${input.prefix}-${year}-${String(counter.rows[0]!.current_value).padStart(6, "0")}`
 }
 
-async function nextStoreTypeCode(client: PoolClient, organizationId: string) {
+async function nextStoreTypeCode(
+  client: PoolClient,
+  organizationId: string,
+  assetType: StoreAssetType
+) {
+  const series = storeItemCodeSeries(assetType)
   const counter = await client.query<{ current_value: number }>(
     `
       INSERT INTO store.number_counters (
         organization_id, counter_key, counter_year, current_value
-      ) VALUES ($1, 'TYPE_CODE', 0, 1)
+      ) VALUES ($1, $2, 0, 1)
       ON CONFLICT (organization_id, counter_key, counter_year)
       DO UPDATE SET current_value = store.number_counters.current_value + 1
       RETURNING current_value
     `,
-    [organizationId]
+    [organizationId, series.counterKey]
   )
-  return `ST${String(counter.rows[0]!.current_value).padStart(3, "0")}`
+  return `${series.prefix}${String(counter.rows[0]!.current_value).padStart(3, "0")}`
 }
 
 async function assetClassificationPath(
@@ -1140,7 +1146,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return withTransaction(pool, async (client) => {
         const classification = await assetClassificationPath(client, input)
         const assetType = storeAssetType(input.assetType)
-        const typeCode = await nextStoreTypeCode(client, input.organizationId)
+        const typeCode = await nextStoreTypeCode(
+          client,
+          input.organizationId,
+          assetType
+        )
         const result = await client.query<{ id: string }>(
           `
             INSERT INTO store.item_types (
