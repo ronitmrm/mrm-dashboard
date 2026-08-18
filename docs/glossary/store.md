@@ -11,8 +11,11 @@ combined only when creating a Store Item Type.
 
 **Store Item Type**: The unique combination of Asset Type and one selected
 Store Classification Master path. It owns one permanent Asset Code and one
-Identification Name. The Asset Code is generated automatically only after the
-combination is saved.
+Identification Name. During Data Entry, the exact Asset Type, Asset Category,
+Asset Subcategory, and Asset Name combination is checked before saving. An
+existing combination displays and reuses its existing Asset Code without
+creating another Store Item Type; only a new combination generates a new Asset
+Code.
 
 **Asset Type**: The stock-control choice for a Store Item Type. It is either
 Consumable or Non Consumable; users select it from a dropdown and never enter

@@ -11,6 +11,21 @@ export const storeMasterOptions = [
 
 export type StoreMasterKey = (typeof storeMasterOptions)[number][0]
 
+export type StoreItemIdentity = {
+  assetCategoryId: string
+  assetNameId: string
+  assetSubcategoryId: string
+  assetType: string
+  id: string
+  identificationName: string
+  typeCode: string
+}
+
+export type StoreItemSelection = Pick<
+  StoreItemIdentity,
+  "assetCategoryId" | "assetNameId" | "assetSubcategoryId" | "assetType"
+>
+
 const codeLessStoreMasters = new Set<StoreMasterKey>([
   "CATEGORY",
   "SUBCATEGORY",
@@ -30,4 +45,21 @@ export function normalizeStoreMasterKey(value: unknown): StoreMasterKey {
 
 export function storeMasterShowsCode(master: StoreMasterKey) {
   return !codeLessStoreMasters.has(master)
+}
+
+export function findExistingStoreItem<T extends StoreItemIdentity>(
+  items: readonly T[],
+  selection: StoreItemSelection,
+  excludedItemId?: string
+): T | null {
+  return (
+    items.find(
+      (item) =>
+        item.id !== excludedItemId &&
+        item.assetType === selection.assetType &&
+        item.assetCategoryId === selection.assetCategoryId &&
+        item.assetSubcategoryId === selection.assetSubcategoryId &&
+        item.assetNameId === selection.assetNameId
+    ) ?? null
+  )
 }
