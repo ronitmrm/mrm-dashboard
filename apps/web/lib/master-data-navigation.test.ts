@@ -117,7 +117,7 @@ describe("master data navigation", () => {
     ])
   })
 
-  it("keeps HR master view switching inside the current HR master", () => {
+  it("opens the unfiltered unified workspace from HR masters", () => {
     const access = {
       administration: false,
       commercialHrefs: ["/commercial/masters"],
@@ -136,12 +136,12 @@ describe("master data navigation", () => {
       })
     ).toEqual([
       {
-        destination: "/hr?panel=mastersPanel&masterView=dataEntry",
+        destination: "/?tab=dataEntryTab&floor=cnc",
         id: "dataEntryTab",
         title: "Data Entry",
       },
       {
-        destination: "/hr?panel=mastersPanel&masterView=masterTables",
+        destination: "/?tab=masterTablesTab&floor=cnc",
         id: "masterTablesTab",
         title: "Master Tables",
       },
@@ -172,6 +172,36 @@ describe("master data navigation", () => {
       },
       {
         destination: "/?tab=masterTablesTab&floor=cnc&entry=cycle",
+        id: "masterTablesTab",
+        title: "Master Tables",
+      },
+    ])
+  })
+
+  it("opens the unfiltered unified workspace from Pricing Masters", () => {
+    const access = {
+      administration: false,
+      commercialHrefs: ["/commercial/masters"],
+      hrHrefs: ["/hr?panel=approvedPostPanel"],
+      operations: true,
+      store: true,
+    }
+
+    expect(
+      masterDataNavigationLinks(access, {
+        entryType: "commercial_pricing_masters",
+        pathname: "/commercial/masters",
+        productionFloorCode: "cnc",
+        searchParams: new URLSearchParams("masterView=dataEntry"),
+      })
+    ).toEqual([
+      {
+        destination: "/?tab=dataEntryTab&floor=cnc",
+        id: "dataEntryTab",
+        title: "Data Entry",
+      },
+      {
+        destination: "/?tab=masterTablesTab&floor=cnc",
         id: "masterTablesTab",
         title: "Master Tables",
       },

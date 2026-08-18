@@ -62,6 +62,7 @@ import {
 } from "@/components/hr/interview-workspace"
 import { InterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { JobTemplatesTable } from "@/components/hr/job-templates-table"
+import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import { MasterTables } from "@/components/hr/master-tables"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
@@ -187,16 +188,22 @@ function MastersPanel({
   masterView,
   masters,
 }: Pick<RecruitmentPanelProps, "canWrite" | "masterView" | "masters">) {
-  const showDataEntry = masterView !== "masterTables"
-  const showMasterTables = masterView !== "dataEntry"
+  const activeView = masterView ?? "dataEntry"
+  const showDataEntry = activeView === "dataEntry"
+  const showMasterTables = activeView === "masterTables"
   return (
     <>
+      <MasterDataViewTabs
+        activeView={activeView}
+        dataEntryHref="/hr?panel=mastersPanel&masterView=dataEntry"
+        masterTablesHref="/hr?panel=mastersPanel&masterView=masterTables"
+      />
       {canWrite && showDataEntry ? (
         <PanelForm
           action={saveMasterAction}
           description="The Code Is Generated Automatically From The Department Or Designation Name."
           panelId="mastersPanel"
-          masterView={masterView}
+          masterView={activeView}
           title="Add A Master"
         >
           <CompanyWideMasterScope />
@@ -220,7 +227,7 @@ function MastersPanel({
       {showMasterTables ? (
         <MasterTables
           canWrite={canWrite}
-          masterView={masterView}
+          masterView={activeView}
           masters={masters}
         />
       ) : null}
@@ -247,17 +254,26 @@ function TemplatePanel({
   const templateCode = nextRecruitmentTemplateCode(
     templates.map((template) => template.templateCode)
   )
-  const showDataEntry = masterView !== "masterTables"
-  const showMasterTables = masterView !== "dataEntry"
+  const activeView = masterView ?? "dataEntry"
+  const showDataEntry = activeView === "dataEntry"
+  const showMasterTables = activeView === "masterTables"
+  const templateParam = selectedTemplateCode
+    ? `&template=${encodeURIComponent(selectedTemplateCode)}`
+    : ""
 
   return (
     <>
+      <MasterDataViewTabs
+        activeView={activeView}
+        dataEntryHref={`/hr?panel=postMasterPanel&masterView=dataEntry${templateParam}`}
+        masterTablesHref={`/hr?panel=postMasterPanel&masterView=masterTables${templateParam}`}
+      />
       {canWrite && showDataEntry ? (
         <PanelForm
           action={saveTemplateAction}
           description="Create The Reusable Qualification And Salary Profile Used By Recruitment Openings."
           panelId="postMasterPanel"
-          masterView={masterView}
+          masterView={activeView}
           title="Job Requirement Template"
         >
           <CompanyWideMasterScope />
@@ -309,7 +325,7 @@ function TemplatePanel({
           canWrite={canWrite}
           combinedRoles={combinedRoles}
           initialTemplateCode={selectedTemplateCode}
-          masterView={masterView}
+          masterView={activeView}
           masters={masters}
           templates={templates}
         />

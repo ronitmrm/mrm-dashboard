@@ -8,28 +8,16 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 
+import {
+  commercialMasterKinds,
+  commercialMasterViewHref,
+  type CommercialMasterEntryKind,
+} from "@/lib/commercial-master-workspace"
+
 import { upsertMasterAction } from "./actions"
-
-const kinds = [
-  ["materialGrade", "Material grade"],
-  ["rodType", "Rod type"],
-  ["machineType", "Machine type"],
-  ["category", "Design category"],
-  ["subcategory", "Design subcategory"],
-  ["process", "Design process"],
-  ["application", "Website application"],
-  ["certification", "Website certification"],
-  ["websiteField", "Website field option"],
-  ["materialRate", "Material rate"],
-  ["shippingTerm", "Shipping term"],
-  ["packagingOption", "Packaging option"],
-  ["commercialTerm", "Commercial term"],
-  ["quoteTerm", "Quote PDF term"],
-] as const
-
-type MasterKind = (typeof kinds)[number][0]
 
 function NumberInput({ label, name }: { label: string; name: string }) {
   return (
@@ -56,11 +44,14 @@ function NameInput({ label = "Name" }: { label?: string }) {
 }
 
 export function MasterMaintenanceForm({
+  initialKind,
   snapshot,
 }: {
+  initialKind: CommercialMasterEntryKind
   snapshot: CommercialMasterSnapshot
 }) {
-  const [kind, setKind] = useState<MasterKind>("materialGrade")
+  const router = useRouter()
+  const [kind, setKind] = useState<CommercialMasterEntryKind>(initialKind)
   const isSimple = [
     "materialGrade",
     "rodType",
@@ -69,7 +60,8 @@ export function MasterMaintenanceForm({
   ].includes(kind)
 
   return (
-    <form action={upsertMasterAction} onReset={() => setKind("materialGrade")}>
+    <form action={upsertMasterAction}>
+      <input name="master_view" type="hidden" value="dataEntry" />
       <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Field>
           <FieldLabel htmlFor="master-kind">Master</FieldLabel>
@@ -77,12 +69,21 @@ export function MasterMaintenanceForm({
             className="w-full"
             id="master-kind"
             name="kind"
-            onChange={(event) => setKind(event.target.value as MasterKind)}
+            onChange={(event) => {
+              const nextKind = event.target.value as CommercialMasterEntryKind
+              setKind(nextKind)
+              router.replace(commercialMasterViewHref("dataEntry", nextKind), {
+                scroll: false,
+              })
+            }}
             value={kind}
           >
-            {kinds.map(([value, label]) => (
-              <NativeSelectOption key={value} value={value}>
-                {label}
+            {commercialMasterKinds.map((option) => (
+              <NativeSelectOption
+                key={option.entryKind}
+                value={option.entryKind}
+              >
+                {option.label}
               </NativeSelectOption>
             ))}
           </NativeSelect>

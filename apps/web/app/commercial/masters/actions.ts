@@ -14,6 +14,10 @@ import * as XLSX from "xlsx"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  commercialMasterSelection,
+  commercialMasterViewHref,
+} from "@/lib/commercial-master-workspace"
 
 import { parseMastersWorkbook } from "./workbook"
 
@@ -22,7 +26,13 @@ const mastersPath = "/commercial/masters"
 function mastersReturnPath(formData: FormData) {
   const view = formData.get("master_view")?.toString()
   return view === "dataEntry" || view === "masterTables"
-    ? `${mastersPath}?masterView=${view}`
+    ? commercialMasterViewHref(
+        view,
+        commercialMasterSelection(
+          formData.get("kind")?.toString() ??
+            formData.get("master_kind")?.toString()
+        ).entryKind
+      )
     : mastersPath
 }
 

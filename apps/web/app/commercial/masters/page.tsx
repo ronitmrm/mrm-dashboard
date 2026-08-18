@@ -26,6 +26,11 @@ import {
 import { importMastersWorkbookAction } from "./actions"
 import { MasterMaintenanceForm } from "./master-maintenance-form"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
+import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
+import {
+  commercialMasterSelection,
+  commercialMasterViewHref,
+} from "@/lib/commercial-master-workspace"
 import { CommercialMasterTable } from "./commercial-master-table"
 
 export const dynamic = "force-dynamic"
@@ -41,6 +46,7 @@ export default async function MastersPage({
 }: {
   searchParams: Promise<{
     error?: string
+    kind?: string
     masterView?: string
     success?: string
   }>
@@ -66,11 +72,25 @@ export default async function MastersPage({
     await customers.close()
   }
   const feedback = await searchParams
-  const showDataEntry = feedback.masterView !== "masterTables"
-  const showMasterTables = feedback.masterView !== "dataEntry"
+  const activeView =
+    feedback.masterView === "masterTables" ? "masterTables" : "dataEntry"
+  const selection = commercialMasterSelection(feedback.kind)
+  const showDataEntry = activeView === "dataEntry"
+  const showMasterTables = activeView === "masterTables"
 
   return (
     <div className="flex flex-col gap-6">
+      <MasterDataViewTabs
+        activeView={activeView}
+        dataEntryHref={commercialMasterViewHref(
+          "dataEntry",
+          selection.entryKind
+        )}
+        masterTablesHref={commercialMasterViewHref(
+          "masterTables",
+          selection.entryKind
+        )}
+      />
       {feedback.error ? (
         <Alert variant="destructive">
           <AlertDescription>{feedback.error}</AlertDescription>
@@ -138,7 +158,11 @@ export default async function MastersPage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <MasterMaintenanceForm snapshot={snapshot} />
+                <MasterMaintenanceForm
+                  initialKind={selection.entryKind}
+                  key={selection.entryKind}
+                  snapshot={snapshot}
+                />
               </CardContent>
             </Card>
           ) : null}
@@ -161,6 +185,8 @@ export default async function MastersPage({
           <CardContent>
             <CommercialMasterTable
               canWrite={canWrite}
+              initialKind={selection.entryKind}
+              key={selection.entryKind}
               rows={editable.allMasters}
             />
           </CardContent>
