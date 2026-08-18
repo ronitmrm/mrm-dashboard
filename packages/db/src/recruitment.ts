@@ -297,7 +297,6 @@ function requiredYesNo(value: unknown, label: string) {
   throw new Error(`${label} is required.`)
 }
 
-
 type AuditInput = MutationContext & {
   afterState?: Record<string, unknown> | null
   beforeState?: Record<string, unknown> | null
@@ -1943,6 +1942,38 @@ export function createRecruitmentRepository(options: RepositoryPoolOptions) {
           targetTable: "departments",
         })
         return outcome
+      })
+    },
+
+    async renameDesignationMaster(
+      input: MutationContext & {
+        designationId: string
+        name: string
+      }
+    ) {
+      return transaction(pool, async (client) => {
+        const designationId = required(input.designationId, "Designation")
+        const name = requiredProperCase(input.name, "Designation name")
+        const result = await client.query<{
+          id: string
+          previous_name: string
+        }>(
+          `UPDATE recruitment.designations
+           SET name = $1, updated_by_user_id = $2, updated_at = now()
+           WHERE id = $3 AND organization_id = $4
+           RETURNING id, name AS previous_name`,
+          [name, input.actorUserId ?? null, designationId, input.organizationId]
+        )
+        const saved = result.rows[0]
+        if (!saved) throw new Error("Designation was not found.")
+        await audit(client, {
+          ...input,
+          afterState: { name },
+          eventType: "recruitment.designation.renamed",
+          targetId: saved.id,
+          targetTable: "designations",
+        })
+        return { id: saved.id }
       })
     },
 

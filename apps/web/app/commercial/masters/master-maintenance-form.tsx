@@ -55,23 +55,6 @@ function NameInput({ label = "Name" }: { label?: string }) {
   )
 }
 
-function ActiveInput() {
-  return (
-    <Field>
-      <FieldLabel htmlFor="master-active">State</FieldLabel>
-      <NativeSelect
-        className="w-full"
-        defaultValue="true"
-        id="master-active"
-        name="active"
-      >
-        <NativeSelectOption value="true">Active</NativeSelectOption>
-        <NativeSelectOption value="false">Inactive</NativeSelectOption>
-      </NativeSelect>
-    </Field>
-  )
-}
-
 export function MasterMaintenanceForm({
   snapshot,
 }: {
@@ -219,7 +202,6 @@ export function MasterMaintenanceForm({
             </Field>
             <NumberInput label="Alloy Premium (Inr/Kg)" name="alloy_premium" />
             <NumberInput label="Extrusion Cost (Inr/Kg)" name="ext_cost" />
-            <ActiveInput />
           </>
         ) : null}
 
@@ -227,7 +209,6 @@ export function MasterMaintenanceForm({
           <>
             <NameInput />
             <NumberInput label="Shipping Cost" name="shipping_cost" />
-            <ActiveInput />
           </>
         ) : null}
 
@@ -235,7 +216,6 @@ export function MasterMaintenanceForm({
           <>
             <NameInput />
             <NumberInput label="Packing Cost" name="packing_cost" />
-            <ActiveInput />
           </>
         ) : null}
 
@@ -261,7 +241,6 @@ export function MasterMaintenanceForm({
               </NativeSelect>
             </Field>
             <NameInput label="Value" />
-            <ActiveInput />
           </>
         ) : null}
 
@@ -280,7 +259,6 @@ export function MasterMaintenanceForm({
               <Input id="master-value" name="value" required />
             </Field>
             <NumberInput label="Sort Order" name="sort_order" />
-            <ActiveInput />
           </>
         ) : null}
       </FieldGroup>

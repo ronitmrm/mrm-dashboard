@@ -20,6 +20,7 @@ import {
   ListChecks,
   LogOut,
   Moon,
+  Pencil,
   Plus,
   RefreshCw,
   Route,
@@ -42,6 +43,14 @@ import {
 } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog";
 import { SearchableSelect } from "@workspace/ui/components/searchable-select";
 import { Separator } from "@workspace/ui/components/separator";
 import {
@@ -96,7 +105,9 @@ import {
 } from "@/lib/production-master-tables";
 import { isCompanyWideMasterEntryType } from "@/lib/master-data-navigation";
 import {
+  immutableMasterFields,
   masterDataEntryTypes,
+  masterEditDefaults,
   operationalDataEntryTypes,
 } from "@/lib/master-data-workspaces";
 import {
@@ -370,7 +381,7 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "machineType", label: "Machine Type", required: true },
       { name: "machineName", label: "Machine Name" },
       { name: "location", label: "Machine Location Within Unit", required: true },
-      { name: "status", label: "Status", options: ["Active", "Inactive", "Maintenance"], defaultValue: "Active" },
+      { name: "status", label: "Status", options: ["Active", "Maintenance"], defaultValue: "Active" },
       { name: "remarks", label: "Remarks" },
     ],
   },
@@ -385,7 +396,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "frequencyBasis", label: "Frequency Basis", options: ["Calendar days", "Running days"], defaultValue: "Calendar days" },
       { name: "checklistCode", label: "Checklist Code" },
       { name: "estimatedMinutes", label: "Estimated Minutes", type: "number", min: "0" },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
@@ -427,7 +437,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "required", label: "Required", options: ["Yes", "No"], defaultValue: "Yes" },
       { name: "section", label: "Section", defaultValue: "Pre setting / setting" },
       { name: "effectiveFrom", label: "Effective From", type: "date" },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
@@ -438,7 +447,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
     fields: [
       { name: "code", label: "Code", required: true, readOnly: true },
       { name: "typeOfRejection", label: "Type Of Rejection", required: true },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
@@ -449,7 +457,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
     fields: [
       { name: "code", label: "Code", required: true, readOnly: true },
       { name: "rejectionRemark", label: "Rejection Remark", required: true },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
@@ -460,7 +467,6 @@ const dataEntrySpecs: DataEntrySpec[] = [
     fields: [
       { name: "code", label: "Code", required: true, readOnly: true },
       { name: "rejectionReason", label: "Defect / Downtime Reason", required: true },
-      { name: "status", label: "Status", options: ["Active", "Inactive"], defaultValue: "Active" },
       { name: "remark", label: "Remark" },
     ],
   },
@@ -619,6 +625,7 @@ async function savePostgresDashboardEntry(entryType: string, payload: DashboardP
 }
 
 export function MrmplDashboard({
+  canDeleteMasters = false,
   canManageStoreMasters = false,
   initialDashboardTab = "productionControlTab",
   initialDataEntryType,
@@ -627,6 +634,7 @@ export function MrmplDashboard({
   storeMasterData,
   user,
 }: {
+  canDeleteMasters?: boolean;
   canManageStoreMasters?: boolean;
   initialDashboardTab?: DashboardTabId;
   initialDataEntryType?: string;
@@ -637,6 +645,7 @@ export function MrmplDashboard({
 }) {
   return (
     <DashboardShell
+      canDeleteMasters={canDeleteMasters}
       canManageStoreMasters={canManageStoreMasters}
       initialDashboardTab={initialDashboardTab}
       initialDataEntryType={initialDataEntryType}
@@ -1186,6 +1195,7 @@ function SetupChecklistShell({
 }
 
 function DashboardShell({
+  canDeleteMasters,
   canManageStoreMasters,
   initialDashboardTab,
   initialDataEntryType,
@@ -1194,6 +1204,7 @@ function DashboardShell({
   storeMasterData,
   user,
 }: {
+  canDeleteMasters: boolean;
   canManageStoreMasters: boolean;
   initialDashboardTab: DashboardTabId;
   initialDataEntryType?: string;
@@ -1601,6 +1612,7 @@ function DashboardShell({
             <fieldset aria-busy={Boolean(processingAction)} className="contents" disabled={Boolean(processingAction)}>
               <DashboardContent
                 activeTab={activeTab}
+                canDeleteMasters={canDeleteMasters}
                 canManageStoreMasters={canManageStoreMasters}
                 payload={payload}
                 submitAction={submitAction}
@@ -1768,6 +1780,7 @@ function HeaderActions({
 
 function DashboardContent({
   activeTab,
+  canDeleteMasters,
   canManageStoreMasters,
   payload,
   submitAction,
@@ -1785,6 +1798,7 @@ function DashboardContent({
   onProductionFloorChange,
 }: {
   activeTab: DashboardTabId;
+  canDeleteMasters: boolean;
   canManageStoreMasters: boolean;
   payload: DashboardPayload;
   submitAction: (path: string, body: Record<string, unknown>) => Promise<void>;
@@ -1832,7 +1846,7 @@ function DashboardContent({
   }
 
   if (activeTab === "masterTablesTab") {
-    return <div className="grid gap-4"><MasterDataTabs activeView="masterTables" productionFloorCode={productionFloorCode} /><MasterTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} preferredEntryType={preferredDataEntryType} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "masterTables")} /></div>;
+    return <div className="grid gap-4"><MasterDataTabs activeView="masterTables" productionFloorCode={productionFloorCode} /><MasterTablesPanel payload={payload} productionControl={productionControl} submitAction={submitAction} openDataEntry={openDataEntry} preferredEntryType={preferredDataEntryType} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} canDeleteMasters={canDeleteMasters} canManageStoreMasters={canManageStoreMasters} storeMasterData={storeMasterData} externalOptions={externalMasterDataOptions(navigationAccess, "masterTables")} /></div>;
   }
 
   if (activeTab === "planningHolidayTab") {
@@ -7032,9 +7046,11 @@ function DataEntryPanel({
 }
 
 function MasterTablesPanel({
+  canDeleteMasters,
   canManageStoreMasters,
   payload,
   productionControl,
+  submitAction,
   openDataEntry,
   preferredEntryType,
   productionFloorCode,
@@ -7042,9 +7058,15 @@ function MasterTablesPanel({
   storeMasterData,
   externalOptions = [],
 }: {
+  canDeleteMasters: boolean;
   canManageStoreMasters: boolean;
   payload: DashboardPayload;
   productionControl: DashboardPayload;
+  submitAction: (
+    path: string,
+    body: Record<string, unknown>,
+    options?: { throwOnError?: boolean },
+  ) => Promise<void>;
   openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
   preferredEntryType?: string;
   productionFloorCode: ProductionFloorCode;
@@ -7065,6 +7087,10 @@ function MasterTablesPanel({
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [tableResetKey, setTableResetKey] = useState(0);
+  const [deleteRow, setDeleteRow] = useState<DashboardPayload | null>(null);
+  const [replacementRecordId, setReplacementRecordId] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
   const selectedMasterIsCompanyWide = isCompanyWideMasterEntryType(selectedSpec?.entryType ?? "");
   const dataEntry = asRecord(payload.dataEntry);
@@ -7078,6 +7104,29 @@ function MasterTablesPanel({
     () => selectedSpec ? masterTableKeySummaryRows(selectedSpec, dataEntry, rows, filteredRows) : [],
     [selectedSpec, dataEntry, rows, filteredRows],
   );
+  const deleteRecordId = deleteRow ? masterTableRecordId(deleteRow) : "";
+  const replacementRows = rows.filter(
+    (row) => masterTableRecordId(row) && masterTableRecordId(row) !== deleteRecordId,
+  );
+
+  async function deleteSelectedMaster() {
+    if (!deleteRow || !deleteRecordId || !deleteReason.trim() || !selectedSpec) return;
+    setIsDeleting(true);
+    try {
+      await submitAction("master-delete", {
+        kind: selectedSpec.entryType,
+        reason: deleteReason.trim(),
+        recordId: deleteRecordId,
+        replacementRecordId: replacementRecordId || undefined,
+        returnTab: "masterTablesTab",
+      }, { throwOnError: true });
+      setDeleteRow(null);
+      setReplacementRecordId("");
+      setDeleteReason("");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   if (!selectedSpec) {
     return (
@@ -7198,6 +7247,7 @@ function MasterTablesPanel({
                     {columns.map((column) => (
                       <TableHead key={column.key} className="h-10 min-w-28 px-2 py-1 text-xs">{column.label}</TableHead>
                     ))}
+                    <TableHead className="h-10 w-24 px-2 py-1 text-right text-xs">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -7208,6 +7258,39 @@ function MasterTablesPanel({
                           {masterTableCellText(row, column.key)}
                         </TableCell>
                       ))}
+                      <TableCell className="px-2 py-1.5 align-top">
+                        <div className="flex justify-end gap-1">
+                        <Button
+                          onClick={() =>
+                            openDataEntry(
+                              selectedSpec.entryType,
+                              masterEditDefaults(selectedSpec.entryType, row),
+                            )
+                          }
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Pencil className="size-3.5" />
+                          Edit
+                        </Button>
+                        {canDeleteMasters ? <Button
+                          aria-label={`Delete ${masterTableRowLabel(row, columns)}`}
+                          disabled={!masterTableRecordId(row)}
+                          onClick={() => {
+                            setDeleteRow(row);
+                            setReplacementRecordId("");
+                            setDeleteReason("");
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          <Trash2 className="size-3.5" />
+                          Delete
+                        </Button> : null}
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -7246,6 +7329,52 @@ function MasterTablesPanel({
           </CardContent>
         </Card>
       ) : null}
+      <Dialog open={canDeleteMasters && Boolean(deleteRow)} onOpenChange={(open) => { if (!open && !isDeleting) setDeleteRow(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {selectedSpec.title} Row</DialogTitle>
+            <DialogDescription>
+              Unused rows delete immediately. If this row is used, select the correct replacement so linked records remain valid.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              <span className="text-muted-foreground">Selected: </span>
+              <span className="font-medium">{deleteRow ? masterTableRowLabel(deleteRow, columns) : ""}</span>
+            </div>
+            <Field label="Select Replacement (Required Only If Used)">
+              <SearchableSelect
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                disabled={isDeleting}
+                value={replacementRecordId}
+                onChange={(event) => setReplacementRecordId(event.target.value)}
+              >
+                <option value="">No replacement — row must be unused</option>
+                {replacementRows.map((row, index) => (
+                  <option key={masterTableRowKey(selectedSpec.entryType, row, index)} value={masterTableRecordId(row)}>
+                    {masterTableRowLabel(row, columns)}
+                  </option>
+                ))}
+              </SearchableSelect>
+            </Field>
+            <Field label="Reason For Deletion">
+              <Input
+                disabled={isDeleting}
+                onChange={(event) => setDeleteReason(event.target.value)}
+                placeholder="Example: Duplicate master"
+                required
+                value={deleteReason}
+              />
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button disabled={isDeleting} onClick={() => setDeleteRow(null)} type="button" variant="outline">Cancel</Button>
+            <Button disabled={!deleteReason.trim() || !deleteRecordId || isDeleting} onClick={deleteSelectedMaster} type="button" variant="destructive">
+              {isDeleting ? "Deleting..." : replacementRecordId ? "Replace And Delete" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -7312,6 +7441,18 @@ function humanizeMasterTableColumn(key: string) {
 
 function masterTableCellText(row: DashboardPayload, key: string) {
   return displayValue(row[key]);
+}
+
+function masterTableRecordId(row: DashboardPayload) {
+  return str(row._id || row.sourceId || row.id);
+}
+
+function masterTableRowLabel(row: DashboardPayload, columns: MasterTableColumn[]) {
+  return columns
+    .slice(0, 3)
+    .map((column) => masterTableCellText(row, column.key))
+    .filter((value) => value && value !== "-")
+    .join(" — ") || masterTableRecordId(row) || "Master row";
 }
 
 
@@ -7807,11 +7948,20 @@ function DataEntryForm({
   ]);
   const resolvedDefaults = generatedCode ? { ...defaults, code: generatedCode } : defaults;
   const toolingAssetCodes = storeMasterData?.items.map((item) => item.typeCode) ?? [];
-  const resolvedFields = spec.entryType === "tooling" && toolingAssetCodes.length
-    ? spec.fields.map((field) => ["fixture", "tooling", "foamTool"].includes(field.name)
-      ? { ...field, options: ["", ...toolingAssetCodes] }
-      : field)
-    : spec.fields;
+  const lockedFields = new Set(
+    defaults.__editingMaster ? immutableMasterFields(spec.entryType) : [],
+  );
+  const resolvedFields = spec.fields.map((field) => {
+    const withOptions =
+      spec.entryType === "tooling" &&
+      toolingAssetCodes.length &&
+      ["fixture", "tooling", "foamTool"].includes(field.name)
+        ? { ...field, options: ["", ...toolingAssetCodes] }
+        : field;
+    return lockedFields.has(field.name)
+      ? { ...withOptions, readOnly: true }
+      : withOptions;
+  });
   const defaultsKey = JSON.stringify(resolvedDefaults);
   if (spec.entryType === "maintenance_master") {
     return <MaintenanceMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} productionControl={productionControl} />;
@@ -8087,7 +8237,7 @@ function MaintenanceMasterForm({
       checklistCode,
       checklistTitle: maintenanceChecklistTitle(checklistRows, checklistCode),
       estimatedMinutes: optionalNumber(formData.get("estimatedMinutes")) ?? str(formData.get("estimatedMinutes")),
-      status: str(formData.get("status")) || "Active",
+      status: "Active",
       remark: str(formData.get("remark")),
     };
     void submitAction("data-entry", {
@@ -8108,7 +8258,6 @@ function MaintenanceMasterForm({
   const selectedFrequency = displayValue(selectedMaster?.frequencyDays ?? defaults.frequencyDays);
   const selectedFrequencyBasis = displayValue(selectedMaster?.frequencyBasis ?? defaults.frequencyBasis);
   const selectedEstimatedMinutes = displayValue(selectedMaster?.estimatedMinutes ?? defaults.estimatedMinutes);
-  const selectedStatus = displayValue(selectedMaster?.status ?? defaults.status);
   const selectedRemark = displayValue(selectedMaster?.remark ?? defaults.remark);
 
   return (
@@ -8140,7 +8289,6 @@ function MaintenanceMasterForm({
             <Field label="Frequency Basis"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="frequencyBasis" defaultValue={selectedFrequencyBasis !== "-" ? selectedFrequencyBasis : "Calendar Days"}><option value="Calendar days">Calendar Days</option><option value="Running days">Running Days</option></SearchableSelect></Field>
             <Field label="Checklist"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="checklistCode" value={previewChecklistCode} onChange={(event) => setChecklistCodeOverride(event.target.value)}><option value="">No Checklist</option>{checklistOptions.map((row) => <option key={row.code} value={row.code}>{row.code} - {row.title}</option>)}</SearchableSelect></Field>
             <Field label="Estimated Minutes"><Input name="estimatedMinutes" type="number" min="0" defaultValue={selectedEstimatedMinutes !== "-" ? selectedEstimatedMinutes : ""} /></Field>
-            <Field label="Status"><SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name="status" defaultValue={selectedStatus !== "-" ? selectedStatus : "Active"}><option value="Active">Active</option><option value="Inactive">Inactive</option></SearchableSelect></Field>
             <Field label="Remark"><Input name="remark" defaultValue={selectedRemark !== "-" ? selectedRemark : ""} /></Field>
           </div>
           <Button className="w-fit" type="submit"><Wrench className="size-4" />{isExistingSchedule ? "Update Schedule" : "Create Schedule"}</Button>

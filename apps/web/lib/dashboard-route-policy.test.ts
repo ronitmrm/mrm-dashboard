@@ -34,6 +34,9 @@ describe("dashboard route policy", () => {
     expect(dashboardMutationCapabilities("job-card-delivery-target")).toEqual([
       "planning.override.write",
     ])
+    expect(dashboardMutationCapabilities("master-delete")).toEqual([
+      "operations.corrections.write",
+    ])
     expect(dashboardMutationCapabilities("unknown")).toBeUndefined()
   })
 

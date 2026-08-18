@@ -5,6 +5,7 @@ const autoRefreshActionPaths = new Set([
   "route-change",
   "route-selection",
   "mark-complete",
+  "master-delete",
 ]);
 
 const autoRefreshDataEntryTypes = new Set([

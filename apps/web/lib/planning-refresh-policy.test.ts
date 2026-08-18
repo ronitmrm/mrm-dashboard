@@ -16,6 +16,7 @@ describe("planning refresh policy", () => {
     expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "plannerPriorities" })).toBe(true);
     expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "shop_floor_status", payload: { stage: "operator_started" } })).toBe(true);
     expect(shouldQueuePlanningRefresh("reverse-entry", { targetTable: "dataEntries", entryType: "shop_floor_status", payload: { stage: "item_complete" } })).toBe(true);
+    expect(shouldQueuePlanningRefresh("master-delete")).toBe(true);
   });
 
   it("does not recalculate for workflow progress that does not move planning dates", () => {

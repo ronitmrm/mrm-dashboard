@@ -48,6 +48,11 @@ export {
 export { createDashboardReadModelRepository } from "./dashboard-read-model-repository"
 export { createMaintenanceRepository } from "./maintenance"
 export {
+  createMasterDataLifecycleRepository,
+  isMasterDataKind,
+  type MasterDataKind,
+} from "./master-data-lifecycle"
+export {
   createStoreRepository,
   type StoreAssetType,
   type StoreHolderType,

@@ -18,6 +18,18 @@ import {
 import { Field, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -34,8 +46,12 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
+import { Trash2 } from "lucide-react"
 
-import { saveTemplateAction } from "@/app/hr/actions"
+import {
+  deleteRecruitmentMasterAction,
+  saveTemplateAction,
+} from "@/app/hr/actions"
 import {
   ExcelColumnFilter,
   matchesColumnFilter,
@@ -200,6 +216,8 @@ export function JobTemplatesTable({
         : null
     )
   const [filters, setFilters] = useState({ ...emptyFilters })
+  const [deletingTemplate, setDeletingTemplate] =
+    useState<RecruitmentTemplateRow | null>(null)
   const options = useMemo(
     () => ({
       code: uniqueFilterOptions(templates.map((row) => row.templateCode)),
@@ -258,6 +276,9 @@ export function JobTemplatesTable({
                 {filterKeys.map(({ key, label }) => (
                   <TableHead key={key}>{label}</TableHead>
                 ))}
+                {canWrite ? (
+                  <TableHead className="text-right">Actions</TableHead>
+                ) : null}
               </TableRow>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 {filterKeys.map(({ key, label }) => (
@@ -275,6 +296,7 @@ export function JobTemplatesTable({
                     />
                   </TableHead>
                 ))}
+                {canWrite ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -303,13 +325,25 @@ export function JobTemplatesTable({
                   <TableCell>{row.designation}</TableCell>
                   <TableCell>{row.education ?? "—"}</TableCell>
                   <TableCell>{row.experienceRequirement ?? "—"}</TableCell>
+                  {canWrite ? (
+                    <TableCell className="text-right">
+                      <Button
+                        onClick={() => setDeletingTemplate(row)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Trash2 className="size-3.5" /> Delete
+                      </Button>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
               {!visibleTemplates.length ? (
                 <TableRow>
                   <TableCell
                     className="py-10 text-center text-muted-foreground"
-                    colSpan={6}
+                    colSpan={canWrite ? 7 : 6}
                   >
                     No Job Templates Match The Selected Filters.
                   </TableCell>
@@ -329,6 +363,79 @@ export function JobTemplatesTable({
           />
         </SheetContent>
       ) : null}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setDeletingTemplate(null)
+        }}
+        open={deletingTemplate !== null}
+      >
+        {deletingTemplate ? (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Job Template</DialogTitle>
+              <DialogDescription>
+                Unused templates delete immediately. If used, choose a
+                replacement first.
+              </DialogDescription>
+            </DialogHeader>
+            <form action={deleteRecruitmentMasterAction} className="grid gap-4">
+              <input name="panel" type="hidden" value="postMasterPanel" />
+              {masterView ? (
+                <input name="master_view" type="hidden" value={masterView} />
+              ) : null}
+              <input
+                name="master_id"
+                type="hidden"
+                value={deletingTemplate.id}
+              />
+              <input name="master_kind" type="hidden" value="job_template" />
+              <Field>
+                <FieldLabel htmlFor="replacement-job-template">
+                  Replacement (Required Only If Used)
+                </FieldLabel>
+                <NativeSelect
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  id="replacement-job-template"
+                  name="replacement_master_id"
+                >
+                  <NativeSelectOption value="">
+                    No replacement — template must be unused
+                  </NativeSelectOption>
+                  {templates
+                    .filter((row) => row.id !== deletingTemplate.id)
+                    .map((row) => (
+                      <NativeSelectOption key={row.id} value={row.id}>
+                        {row.templateCode} — {row.name}
+                      </NativeSelectOption>
+                    ))}
+                </NativeSelect>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="delete-template-reason">
+                  Reason For Deletion
+                </FieldLabel>
+                <Input
+                  id="delete-template-reason"
+                  name="deletion_reason"
+                  required
+                />
+              </Field>
+              <DialogFooter>
+                <Button
+                  onClick={() => setDeletingTemplate(null)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="destructive">
+                  Delete
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        ) : null}
+      </Dialog>
     </Sheet>
   )
 }

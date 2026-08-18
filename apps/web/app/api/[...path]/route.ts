@@ -1,10 +1,10 @@
 import {
   createDashboardPlanningRepository,
+  createMasterDataLifecycleRepository,
   createProductionShopFloorRepository,
+  isMasterDataKind,
 } from "@workspace/db"
-import {
-  parseProductionFloorCode,
-} from "@workspace/db/production-floors"
+import { parseProductionFloorCode } from "@workspace/db/production-floors"
 import { validConfirmedPrioritySetupNumbers } from "@workspace/db/planning-rules"
 import { NextResponse, type NextRequest } from "next/server"
 
@@ -209,13 +209,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "inputType",
     "remark",
   ],
-  planning_holiday: [
-    "date",
-    "reason",
-    "scope",
-    "department",
-    "remark",
-  ],
+  planning_holiday: ["date", "reason", "scope", "department", "remark"],
   first_piece_inspection_master: [
     "jcNo",
     "uid",
@@ -496,9 +490,7 @@ async function savePlanningMasterEntry(
   payload: Record<string, unknown>
 ) {
   if (entryType === "machine_master") {
-    const requestedFloor = parseProductionFloorCode(
-      payload.productionFloorCode
-    )
+    const requestedFloor = parseProductionFloorCode(payload.productionFloorCode)
     if (!requestedFloor) {
       throw new RouteError(
         400,
@@ -630,7 +622,9 @@ async function savePlanningMasterEntry(
         )
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        if (message.startsWith("Create the tooling Asset Code in Store first")) {
+        if (
+          message.startsWith("Create the tooling Asset Code in Store first")
+        ) {
           throw new RouteError(400, message)
         }
         throw error
@@ -703,11 +697,12 @@ async function get(request: NextRequest, context: RouteContext) {
         await withProductionRepository(
           request,
           "operations.dashboard.read",
-          ({ organizationId, repository }) => repository.readJobCardWorkspace({
-            jobCardNumber: path.slice("job-cards/".length),
-            organizationId,
-            productionFloorCode: search.get("floor") || undefined,
-          })
+          ({ organizationId, repository }) =>
+            repository.readJobCardWorkspace({
+              jobCardNumber: path.slice("job-cards/".length),
+              organizationId,
+              productionFloorCode: search.get("floor") || undefined,
+            })
         )
       )
     }
@@ -731,9 +726,11 @@ async function get(request: NextRequest, context: RouteContext) {
               ? repository.readProductionSessionEvents(input)
               : repository.readProductionSessions({
                   ...input,
-                  status: search.get("status") === "open" || search.get("status") === "closed"
-                    ? search.get("status") as "open" | "closed"
-                    : undefined,
+                  status:
+                    search.get("status") === "open" ||
+                    search.get("status") === "closed"
+                      ? (search.get("status") as "open" | "closed")
+                      : undefined,
                 })
           }
         )
@@ -1082,6 +1079,40 @@ async function post(request: NextRequest, context: RouteContext) {
       )
     }
 
+    if (path === "master-delete") {
+      try {
+        const kind = text(body.kind)
+        if (!isMasterDataKind(kind)) {
+          throw new RouteError(400, "This master does not support deletion.")
+        }
+        const result = await withMasterDataLifecycleRepository(
+          request,
+          ({ actorUserId, organizationId, repository }) =>
+            repository.deleteMaster({
+              actorUserId,
+              kind,
+              organizationId,
+              reason: requiredDashboardText(body.reason, "Deletion reason"),
+              recordId: requiredDashboardText(body.recordId, "Master record"),
+              replacementRecordId: optionalText(body.replacementRecordId),
+            })
+        )
+        return json(
+          await withPlanningRefresh(path, body, {
+            ...result,
+            message: result.replacementId
+              ? "Master references moved and the duplicate was deleted."
+              : "Unused master deleted.",
+          })
+        )
+      } catch (error) {
+        throw new RouteError(
+          400,
+          error instanceof Error ? error.message : "Master deletion failed."
+        )
+      }
+    }
+
     if (path === "data-entry") {
       const entryType = String(body.entryType || "")
       const rawPayload = masterPayloadForScope(
@@ -1117,7 +1148,10 @@ async function post(request: NextRequest, context: RouteContext) {
               operationSetupCode: text(payload.setupNo),
               operatorCode: text(payload.operatorCode || payload.operatorId),
               organizationId,
-              pieceWeightGrams: firstNumeric(payload.pieceWeightGrams, payload.pieceWeight),
+              pieceWeightGrams: firstNumeric(
+                payload.pieceWeightGrams,
+                payload.pieceWeight
+              ),
               productionDate: text(payload.productionDate || payload.prodDate),
               productionFloorCode: text(payload.productionFloorCode),
               shift: text(payload.shift),
@@ -1141,13 +1175,17 @@ async function post(request: NextRequest, context: RouteContext) {
           ({ actorUserId, organizationId, repository }) =>
             repository.closeProductionSession({
               actorUserId,
-              crateCount: optionalNumeric(payload.crateCount ?? payload.cratesUsed),
+              crateCount: optionalNumeric(
+                payload.crateCount ?? payload.cratesUsed
+              ),
               crateWeightKg: optionalNumeric(payload.crateWeightKg),
               endCount: optionalNumeric(payload.endCount),
               endedAt: text(payload.endedAt),
               endReason: text(payload.endReason),
               enteredRole: text(payload.enteredRole) || undefined,
-              grossWeightKg: optionalNumeric(payload.grossWeightKg ?? payload.grossWeight),
+              grossWeightKg: optionalNumeric(
+                payload.grossWeightKg ?? payload.grossWeight
+              ),
               organizationId,
               sessionId: text(payload.sessionId),
             })
@@ -1193,7 +1231,11 @@ async function post(request: NextRequest, context: RouteContext) {
               startedAt: text(payload.startedAt),
             })
         )
-        return json({ ...result, rowsUpdated: 1, savedText: "Downtime started." })
+        return json({
+          ...result,
+          rowsUpdated: 1,
+          savedText: "Downtime started.",
+        })
       }
       if (entryType === "production_session_downtime_end") {
         const result = await withProductionRepository(
@@ -1211,9 +1253,10 @@ async function post(request: NextRequest, context: RouteContext) {
         return json({
           ...result,
           rowsUpdated: 1,
-          savedText: result.endOutcome === "shift_end_unresolved"
-            ? "Downtime closed and carried to the next shift."
-            : "Downtime closed; production can resume.",
+          savedText:
+            result.endOutcome === "shift_end_unresolved"
+              ? "Downtime closed and carried to the next shift."
+              : "Downtime closed; production can resume.",
         })
       }
       if (entryType === "production_session_downtime_carry_resolve") {
@@ -1244,16 +1287,24 @@ async function post(request: NextRequest, context: RouteContext) {
               enteredRole: "quality",
               organizationId,
               quantity: firstNumeric(payload.quantity, payload.rejectQty),
-              reasonCode: text(payload.reasonCode || payload.rejectionReasonCode),
+              reasonCode: text(
+                payload.reasonCode || payload.rejectionReasonCode
+              ),
               reasonName: text(payload.reasonName || payload.rejectionReason),
-              remarkCode: text(payload.remarkCode || payload.rejectionRemarkCode),
+              remarkCode: text(
+                payload.remarkCode || payload.rejectionRemarkCode
+              ),
               remarkName: text(payload.remarkName || payload.rejectionRemark),
               sessionId: text(payload.sessionId),
               typeCode: text(payload.typeCode || payload.rejectionTypeCode),
               typeName: text(payload.typeName || payload.rejectionType),
             })
         )
-        return json({ ...result, rowsUpdated: 1, savedText: "Rejection saved." })
+        return json({
+          ...result,
+          rowsUpdated: 1,
+          savedText: "Rejection saved.",
+        })
       }
       if (entryType === "production_card") {
         const cardNumber =
@@ -1291,9 +1342,7 @@ async function post(request: NextRequest, context: RouteContext) {
               productionFloorCode: text(payload.productionFloorCode),
               quantityKg: firstNumeric(payload.rmInwardKg),
               receiptNumber: text(payload.rmPoNo) || text(payload.jcNo),
-              receivedOn:
-                text(payload.rmInwardDate) ||
-                istDateValue(),
+              receivedOn: text(payload.rmInwardDate) || istDateValue(),
             })
         )
         return json(
@@ -1342,8 +1391,7 @@ async function post(request: NextRequest, context: RouteContext) {
               organizationId,
               payload,
               productionFloorCode: text(payload.productionFloorCode),
-              productionDate:
-                text(payload.prodDate) || istDateValue(),
+              productionDate: text(payload.prodDate) || istDateValue(),
               quantityGood: firstNumeric(payload.outputQty, payload.actualQty),
               quantityRejected: firstNumeric(payload.rejectQty),
               shift: optionalText(payload.shift),
@@ -1366,11 +1414,7 @@ async function post(request: NextRequest, context: RouteContext) {
       const entryType = String(body.entryType || "")
       const fileName = String(body.fileName || "")
       const fileBase64 = String(body.fileBase64 || "")
-      const importBatch = parseTemplateUpload(
-        entryType,
-        fileName,
-        fileBase64
-      )
+      const importBatch = parseTemplateUpload(entryType, fileName, fileBase64)
       const importedRows = importBatch.rows.map((payload) =>
         productionFloorPayload(payload, body.productionFloorCode)
       )
@@ -1391,9 +1435,7 @@ async function post(request: NextRequest, context: RouteContext) {
                 productionFloorCode: text(payload.productionFloorCode),
                 quantityKg: firstNumeric(payload.rmInwardKg),
                 receiptNumber: text(payload.rmPoNo) || text(payload.jcNo),
-                receivedOn:
-                  text(payload.rmInwardDate) ||
-                  istDateValue(),
+                receivedOn: text(payload.rmInwardDate) || istDateValue(),
               }))
             )
             return importedRows.length
@@ -1409,9 +1451,7 @@ async function post(request: NextRequest, context: RouteContext) {
               organizationId,
               payload,
               productionFloorCode: text(payload.productionFloorCode),
-              productionDate:
-                text(payload.prodDate) ||
-                istDateValue(),
+              productionDate: text(payload.prodDate) || istDateValue(),
               quantityGood: firstNumeric(payload.outputQty, payload.actualQty),
               quantityRejected: firstNumeric(payload.rejectQty),
               shift: optionalText(payload.shift),
@@ -1441,9 +1481,10 @@ async function post(request: NextRequest, context: RouteContext) {
       const entryType = String(body.entryType || "")
       if (postgresMasterEntryTypes.has(entryType)) {
         const rawPayload = plainRecord(body.payload)
-        const payload = entryType === "machine_master"
-          ? machineMasterImportPayload(rawPayload, body.productionFloorCode)
-          : productionFloorPayload(rawPayload, body.productionFloorCode)
+        const payload =
+          entryType === "machine_master"
+            ? machineMasterImportPayload(rawPayload, body.productionFloorCode)
+            : productionFloorPayload(rawPayload, body.productionFloorCode)
         const result = await withPlanningRepository(
           request,
           "operations.shop_floor.write",
@@ -1454,9 +1495,10 @@ async function post(request: NextRequest, context: RouteContext) {
           await withPlanningRefresh(path, body, {
             ...result,
             rowsUpdated: 1,
-            savedText: entryType === "work_order"
-              ? "Work Order accepted. Missing masters are held in Master Readiness for planner action."
-              : "Saved to PostgreSQL.",
+            savedText:
+              entryType === "work_order"
+                ? "Work Order accepted. Missing masters are held in Master Readiness for planner action."
+                : "Saved to PostgreSQL.",
           })
         )
       }
@@ -1467,11 +1509,7 @@ async function post(request: NextRequest, context: RouteContext) {
       if (isPostgresOperationalEntryType(entryType)) {
         const fileName = String(body.fileName || "")
         const fileBase64 = String(body.fileBase64 || "")
-        const importBatch = parseTemplateUpload(
-          entryType,
-          fileName,
-          fileBase64
-        )
+        const importBatch = parseTemplateUpload(entryType, fileName, fileBase64)
         const importedRows = importBatch.rows.map((payload) => {
           const rawPayload = masterPayloadForScope(entryType, payload)
           if (isCompanyWideMasterEntryType(entryType)) return rawPayload
@@ -1483,10 +1521,8 @@ async function post(request: NextRequest, context: RouteContext) {
         if (!importPolicy.ok) {
           throw new RouteError(importPolicy.status, importPolicy.error)
         }
-        await importAutoCodedMasterRows(
-          entryType,
-          importedRows,
-          (payload) => executePostgresOperationalEntry(request, entryType, payload)
+        await importAutoCodedMasterRows(entryType, importedRows, (payload) =>
+          executePostgresOperationalEntry(request, entryType, payload)
         )
         return json({
           inserted: importedRows.length,
@@ -1503,11 +1539,7 @@ async function post(request: NextRequest, context: RouteContext) {
       if (postgresMasterEntryTypes.has(entryType)) {
         const fileName = String(body.fileName || "")
         const fileBase64 = String(body.fileBase64 || "")
-        const importBatch = parseTemplateUpload(
-          entryType,
-          fileName,
-          fileBase64
-        )
+        const importBatch = parseTemplateUpload(entryType, fileName, fileBase64)
         const importedRows = importBatch.rows.map((payload) =>
           entryType === "machine_master"
             ? machineMasterImportPayload(payload, body.productionFloorCode)
@@ -1521,7 +1553,9 @@ async function post(request: NextRequest, context: RouteContext) {
           request,
           "operations.shop_floor.write",
           async (planningContext) => {
-            if (["route", "cycle", "tooling", "work_order"].includes(entryType)) {
+            if (
+              ["route", "cycle", "tooling", "work_order"].includes(entryType)
+            ) {
               const missingItemUids = ["cycle", "tooling"].includes(entryType)
                 ? await planningContext.repository.missingItemUids(
                     planningContext.organizationId,
@@ -1537,16 +1571,24 @@ async function post(request: NextRequest, context: RouteContext) {
                 throw new RouteError(400, validationError)
               }
             }
-            await executeBoundedImport(importedRows, async (payload, index) => {
-              try {
-                await savePlanningMasterEntry(planningContext, entryType, payload)
-              } catch (error) {
-                throw new RouteError(
-                  400,
-                  planningImportRowError(entryType, index, payload, error)
-                )
-              }
-            }, entryType === "machine_master" ? 4 : 1)
+            await executeBoundedImport(
+              importedRows,
+              async (payload, index) => {
+                try {
+                  await savePlanningMasterEntry(
+                    planningContext,
+                    entryType,
+                    payload
+                  )
+                } catch (error) {
+                  throw new RouteError(
+                    400,
+                    planningImportRowError(entryType, index, payload, error)
+                  )
+                }
+              },
+              entryType === "machine_master" ? 4 : 1
+            )
             return importedRows.length
           }
         )
@@ -1554,9 +1596,14 @@ async function post(request: NextRequest, context: RouteContext) {
           await withPlanningRefresh(path, body, {
             inserted,
             duplicatesSkipped: importBatch.duplicateCount,
-            message: entryType === "work_order"
-              ? `${importMessage(entryType, inserted, importBatch.duplicateCount)} Missing masters are held in Master Readiness for planner action.`
-              : importMessage(entryType, inserted, importBatch.duplicateCount),
+            message:
+              entryType === "work_order"
+                ? `${importMessage(entryType, inserted, importBatch.duplicateCount)} Missing masters are held in Master Readiness for planner action.`
+                : importMessage(
+                    entryType,
+                    inserted,
+                    importBatch.duplicateCount
+                  ),
             ok: true,
             rowsUpdated: inserted,
           })
@@ -1650,6 +1697,31 @@ function parseTemplateUpload(
     .map((payload) => normalizeUserEnteredPayload(payload))
     .filter((row) => Object.values(row).some((value) => text(value)))
   return dedupeCsvImportRows(entryType, rows)
+}
+
+async function withMasterDataLifecycleRepository<T>(
+  request: NextRequest,
+  operation: (context: {
+    actorUserId: string
+    organizationId: string
+    repository: ReturnType<typeof createMasterDataLifecycleRepository>
+  }) => Promise<T>
+) {
+  const { connectionString, session } = await authorizedDashboardSession(
+    request,
+    "operations.corrections.write"
+  )
+  const repository = createMasterDataLifecycleRepository({ connectionString })
+  try {
+    const organizationId = await repository.organizationIdForCode("MRMPL")
+    return await operation({
+      actorUserId: session.user.id,
+      organizationId,
+      repository,
+    })
+  } finally {
+    await repository.close()
+  }
 }
 
 function importMessage(

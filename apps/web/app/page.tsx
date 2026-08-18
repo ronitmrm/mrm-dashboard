@@ -35,6 +35,7 @@ export default async function Page({
   const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
   const capabilities = new Set(
     await listGrantedCapabilities(session.user.id, [
+      "operations.corrections.write",
       "store.manage",
       "store.read",
     ])
@@ -99,6 +100,7 @@ export default async function Page({
         requestedFloor ?? defaultProductionFloorCode
       )}
       navigationAccess={navigationAccess}
+      canDeleteMasters={capabilities.has("operations.corrections.write")}
       canManageStoreMasters={capabilities.has("store.manage")}
       storeMasterData={storeMasterData}
       user={{ email: session.user.email, name: session.user.name }}

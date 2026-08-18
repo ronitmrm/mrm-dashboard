@@ -49,4 +49,5 @@ must be valid for every affected record.
 **Master Deletion**: Permanent removal of a master that has no references. A
 referenced master cannot be deleted directly; it first requires a valid Master
 Replacement. If no valid replacement exists, deletion is prohibited. Every
-deletion and replacement remains recorded in the audit history.
+deletion and replacement remains recorded in the audit history. Master
+workspaces do not offer Deactivate as an alternative to this lifecycle.
