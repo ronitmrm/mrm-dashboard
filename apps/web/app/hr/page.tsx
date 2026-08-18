@@ -22,6 +22,7 @@ import {
   requireCapability,
 } from "@/lib/auth/require-capability"
 import { hrMasterNavigation, hrNavigation } from "@/lib/unified-navigation"
+import { normalizeRecruitmentMasterKind } from "@/lib/recruitment-master-navigation"
 
 export const dynamic = "force-dynamic"
 
@@ -32,6 +33,7 @@ export default async function HrRecruitmentPage({
     appointment?: string
     error?: string
     job?: string
+    kind?: string
     masterView?: string
     panel?: string
     returnJob?: string
@@ -190,7 +192,9 @@ export default async function HrRecruitmentPage({
         </Alert>
       ) : null}
 
-      {activeItem.panelId !== "interviewsPanel" &&
+      {activeItem.panelId !== "mastersPanel" &&
+      activeItem.panelId !== "postMasterPanel" &&
+      activeItem.panelId !== "interviewsPanel" &&
       activeItem.panelId !== "interviewWorkspacePanel" ? (
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           {[
@@ -216,6 +220,7 @@ export default async function HrRecruitmentPage({
         interviewRecords={interviewRecords}
         jobs={jobs}
         masters={masters}
+        masterKind={normalizeRecruitmentMasterKind(feedback.kind)}
         masterView={
           feedback.masterView === "dataEntry" ||
           feedback.masterView === "masterTables"

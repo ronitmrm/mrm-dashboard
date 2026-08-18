@@ -650,6 +650,7 @@ export function MrmplDashboard({
 }) {
   return (
     <DashboardShell
+      key={`${initialDashboardTab}|${initialDataEntryType ?? ""}|${initialProductionFloor}`}
       canDeleteMasters={canDeleteMasters}
       canManageStoreMasters={canManageStoreMasters}
       initialDashboardTab={initialDashboardTab}
@@ -7012,13 +7013,9 @@ function DataEntryPanel({
                     {spec.title}
                   </option>
                 ))}
-                {externalOptions.length ? (
-                  <optgroup label="Other Modules">
-                    {externalOptions.map((option) => (
-                      <option key={option.id} value={option.id}>{option.title}</option>
-                    ))}
-                  </optgroup>
-                ) : null}
+                {externalOptions.map((option) => (
+                  <option key={option.id} value={option.id}>{option.title}</option>
+                ))}
               </SearchableSelect>
             </Field>
             {bulkEntryType !== "store_masters" ? <Field label="Filled Csv Template">
@@ -7199,13 +7196,9 @@ function MasterTablesPanel({
               {specs.map((spec) => (
                 <option key={spec.entryType} value={spec.entryType}>{spec.title}</option>
               ))}
-              {externalOptions.length ? (
-                <optgroup label="Other Modules">
-                  {externalOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.title}</option>
-                  ))}
-                </optgroup>
-              ) : null}
+              {externalOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.title}</option>
+              ))}
             </SearchableSelect>
           </Field>
           {selectedSpec.entryType !== "store_masters" ? <Field label="Search All Visible Columns">

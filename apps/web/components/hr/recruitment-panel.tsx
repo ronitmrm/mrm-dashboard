@@ -64,6 +64,7 @@ import { InterviewScheduleForm } from "@/components/hr/interview-schedule-form"
 import { JobTemplatesTable } from "@/components/hr/job-templates-table"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import { MasterTables } from "@/components/hr/master-tables"
+import { RecruitmentMasterKindSelect } from "@/components/hr/recruitment-master-kind-select"
 import { RecruitablePostFields } from "@/components/hr/recruitable-post-fields"
 import { TemplateScopeFields } from "@/components/hr/template-scope-fields"
 import { candidateSourceOptions } from "@/lib/recruitment-candidate-sources"
@@ -71,6 +72,10 @@ import {
   recruitmentInterviewerOptions,
   sharedEmployeeMasterRows,
 } from "@/lib/shared-employee-master"
+import {
+  recruitmentMasterHref,
+  type RecruitmentMasterKind,
+} from "@/lib/recruitment-master-navigation"
 
 type RecruitmentPanelProps = {
   canManageEmployees: boolean
@@ -83,6 +88,7 @@ type RecruitmentPanelProps = {
   jobs: RecruitmentJobRow[]
   masters: RecruitmentMasterSnapshot
   masterView?: "dataEntry" | "masterTables"
+  masterKind?: RecruitmentMasterKind
   panelId: string
   posts: RecruitmentPostRow[]
   returnJobId?: string
@@ -185,9 +191,13 @@ function StatusBadge({ status }: { status: string }) {
 
 function MastersPanel({
   canWrite,
+  masterKind = "department",
   masterView,
   masters,
-}: Pick<RecruitmentPanelProps, "canWrite" | "masterView" | "masters">) {
+}: Pick<
+  RecruitmentPanelProps,
+  "canWrite" | "masterKind" | "masterView" | "masters"
+>) {
   const activeView = masterView ?? "dataEntry"
   const showDataEntry = activeView === "dataEntry"
   const showMasterTables = activeView === "masterTables"
@@ -195,29 +205,21 @@ function MastersPanel({
     <>
       <MasterDataViewTabs
         activeView={activeView}
-        dataEntryHref="/hr?panel=mastersPanel&masterView=dataEntry"
-        masterTablesHref="/hr?panel=mastersPanel&masterView=masterTables"
+        allMastersHref="/?tab=dataEntryTab"
+        dataEntryHref={recruitmentMasterHref("dataEntry", masterKind)}
+        masterTablesHref={recruitmentMasterHref("masterTables", masterKind)}
       />
+      <RecruitmentMasterKindSelect kind={masterKind} view={activeView} />
       {canWrite && showDataEntry ? (
         <PanelForm
           action={saveMasterAction}
           description="The Code Is Generated Automatically From The Department Or Designation Name."
           panelId="mastersPanel"
           masterView={activeView}
-          title="Add A Master"
+          title={`Add A ${masterKind === "department" ? "Department" : "Designation"}`}
         >
           <CompanyWideMasterScope />
-          <Field>
-            <FieldLabel htmlFor="master-kind">Master Type</FieldLabel>
-            <NativeSelect className="w-full" id="master-kind" name="kind">
-              <NativeSelectOption value="department">
-                Department
-              </NativeSelectOption>
-              <NativeSelectOption value="designation">
-                Designation
-              </NativeSelectOption>
-            </NativeSelect>
-          </Field>
+          <input name="kind" type="hidden" value={masterKind} />
           <TextField label="Name" name="name" required />
           <Button className="md:col-span-2 xl:col-span-3" type="submit">
             Save Master
@@ -227,6 +229,7 @@ function MastersPanel({
       {showMasterTables ? (
         <MasterTables
           canWrite={canWrite}
+          kind={masterKind}
           masterView={activeView}
           masters={masters}
         />
@@ -265,6 +268,7 @@ function TemplatePanel({
     <>
       <MasterDataViewTabs
         activeView={activeView}
+        allMastersHref="/?tab=dataEntryTab"
         dataEntryHref={`/hr?panel=postMasterPanel&masterView=dataEntry${templateParam}`}
         masterTablesHref={`/hr?panel=postMasterPanel&masterView=masterTables${templateParam}`}
       />
@@ -787,6 +791,13 @@ export function RecruitmentPanel(props: RecruitmentPanelProps) {
         />
       )
     default:
-      return <MastersPanel canWrite={props.canWrite} masterView={props.masterView} masters={props.masters} />
+      return (
+        <MastersPanel
+          canWrite={props.canWrite}
+          masterKind={props.masterKind}
+          masterView={props.masterView}
+          masters={props.masters}
+        />
+      )
   }
 }

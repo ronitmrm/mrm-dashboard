@@ -293,29 +293,24 @@ function MasterTable({
 
 export function MasterTables({
   canWrite = false,
+  kind,
   masterView,
   masters,
 }: {
   canWrite?: boolean
+  kind: "department" | "designation"
   masterView?: "dataEntry" | "masterTables"
   masters: RecruitmentMasterSnapshot
 }) {
+  const rows =
+    kind === "department" ? masters.departments : masters.designations
   return (
-    <div className="grid gap-6 xl:grid-cols-2">
-      <MasterTable
-        canWrite={canWrite}
-        kind="department"
-        masterView={masterView}
-        rows={masters.departments}
-        title="Departments"
-      />
-      <MasterTable
-        canWrite={canWrite}
-        kind="designation"
-        masterView={masterView}
-        rows={masters.designations}
-        title="Designations"
-      />
-    </div>
+    <MasterTable
+      canWrite={canWrite}
+      kind={kind}
+      masterView={masterView}
+      rows={rows}
+      title={kind === "department" ? "Departments" : "Designations"}
+    />
   )
 }
