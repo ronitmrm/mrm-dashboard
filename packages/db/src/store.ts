@@ -5,7 +5,7 @@ import {
   withTransaction,
   type RepositoryPoolOptions,
 } from "./postgres-runtime"
-import { storeItemCodeSeries } from "./store-item-codes"
+import { storeItemCodeSeries, storeUnitId } from "./store-item-codes"
 
 export type StoreTrackingMode = "CONSUMABLE" | "SERIALIZED"
 export type StoreAssetType = "CONSUMABLE" | "NON_CONSUMABLE"
@@ -1612,7 +1612,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         if (order.rows[0].tracking_mode === "SERIALIZED") {
           for (let index = 0; index < quantity; index += 1) {
             const number = order.rows[0].next_asset_number + index
-            const assetCode = `${order.rows[0].type_code}-${String(number).padStart(5, "0")}`
+            const assetCode = storeUnitId(order.rows[0].type_code, number)
             const asset = await client.query<{ id: string }>(
               `
                 INSERT INTO store.assets (
