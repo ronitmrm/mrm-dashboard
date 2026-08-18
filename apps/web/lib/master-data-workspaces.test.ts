@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  immutableMasterFields,
+  masterEditDefaults,
   masterDataEntryTypes,
   operationalDataEntryTypes,
 } from "./master-data-workspaces"
@@ -26,6 +28,29 @@ describe("master data workspaces", () => {
       "work_order",
       "rm_inward",
       "software_raw",
+    ])
+  })
+
+  it("preserves the existing identity when a master is opened for editing", () => {
+    expect(
+      masterEditDefaults("rejection_type_master", {
+        _id: "source-17",
+        code: "RT004",
+        typeOfRejection: "Crack",
+      })
+    ).toEqual({
+      __editingMaster: true,
+      __entryId: "source-17",
+      __returnTab: "masterTablesTab",
+      _id: "source-17",
+      code: "RT004",
+      typeOfRejection: "Crack",
+    })
+    expect(immutableMasterFields("rejection_type_master")).toEqual(["code"])
+    expect(immutableMasterFields("route")).toEqual([
+      "partNo",
+      "optionNumber",
+      "setupNo",
     ])
   })
 })

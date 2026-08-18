@@ -33,9 +33,12 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { Pencil } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 
-import { renameDepartmentMasterAction } from "@/app/hr/actions"
+import {
+  deleteRecruitmentMasterAction,
+  renameRecruitmentMasterAction,
+} from "@/app/hr/actions"
 
 import {
   ExcelColumnFilter,
@@ -61,10 +64,10 @@ function MasterTable({
   const [editingRow, setEditingRow] = useState<(typeof rows)[number] | null>(
     null
   )
-  const [referenceMode, setReferenceMode] = useState<"clear" | "propagate">(
-    "propagate"
+  const [deletingRow, setDeletingRow] = useState<(typeof rows)[number] | null>(
+    null
   )
-  const canEdit = canWrite && kind === "department"
+  const canEdit = canWrite
   const options = useMemo(
     () => ({
       codes: uniqueFilterOptions(rows.map((row) => row.code)),
@@ -127,7 +130,6 @@ function MasterTable({
                       <Button
                         aria-label={`Edit ${row.name}`}
                         onClick={() => {
-                          setReferenceMode("propagate")
                           setEditingRow(row)
                         }}
                         size="sm"
@@ -136,6 +138,17 @@ function MasterTable({
                       >
                         <Pencil data-icon="inline-start" />
                         Edit
+                      </Button>
+                      <Button
+                        aria-label={`Delete ${row.name}`}
+                        className="ml-1"
+                        onClick={() => setDeletingRow(row)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Trash2 data-icon="inline-start" />
+                        Delete
                       </Button>
                     </TableCell>
                   ) : null}
@@ -164,22 +177,21 @@ function MasterTable({
         {editingRow ? (
           <DialogContent className="max-w-xl">
             <DialogHeader>
-              <DialogTitle>Edit Department</DialogTitle>
+              <DialogTitle>
+                Edit {kind === "department" ? "Department" : "Designation"}
+              </DialogTitle>
               <DialogDescription>
-                Change {editingRow.code} - {editingRow.name}. Should The New
-                Name Be Applied To Every Existing Record?
+                Change {editingRow.code} - {editingRow.name}. The code remains
+                fixed and the new name is used everywhere.
               </DialogDescription>
             </DialogHeader>
-            <form action={renameDepartmentMasterAction} className="grid gap-5">
+            <form action={renameRecruitmentMasterAction} className="grid gap-5">
               <input name="panel" type="hidden" value="mastersPanel" />
               {masterView ? (
                 <input name="master_view" type="hidden" value={masterView} />
               ) : null}
-              <input
-                name="department_id"
-                type="hidden"
-                value={editingRow.id}
-              />
+              <input name="master_id" type="hidden" value={editingRow.id} />
+              <input name="master_kind" type="hidden" value={kind} />
               <Field>
                 <FieldLabel htmlFor="edit-department-code">Code</FieldLabel>
                 <Input
@@ -197,43 +209,78 @@ function MasterTable({
                   required
                 />
               </Field>
+              <DialogFooter>
+                <Button type="submit">Save Changes</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        ) : null}
+      </Dialog>
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setDeletingRow(null)
+        }}
+        open={deletingRow !== null}
+      >
+        {deletingRow ? (
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>
+                Delete {kind === "department" ? "Department" : "Designation"}
+              </DialogTitle>
+              <DialogDescription>
+                Unused records delete immediately. If used, select the correct
+                replacement first.
+              </DialogDescription>
+            </DialogHeader>
+            <form action={deleteRecruitmentMasterAction} className="grid gap-5">
+              <input name="panel" type="hidden" value="mastersPanel" />
+              {masterView ? (
+                <input name="master_view" type="hidden" value={masterView} />
+              ) : null}
+              <input name="master_id" type="hidden" value={deletingRow.id} />
+              <input name="master_kind" type="hidden" value={kind} />
               <Field>
-                <FieldLabel htmlFor="edit-department-reference-mode">
-                  Apply Change To Existing Records?
+                <FieldLabel htmlFor={`replacement-${kind}`}>
+                  Replacement (Required Only If Used)
                 </FieldLabel>
                 <NativeSelect
-                  className="w-full"
-                  id="edit-department-reference-mode"
-                  name="reference_mode"
-                  onChange={(event) =>
-                    setReferenceMode(
-                      event.target.value === "clear" ? "clear" : "propagate"
-                    )
-                  }
-                  value={referenceMode}
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  id={`replacement-${kind}`}
+                  name="replacement_master_id"
                 >
-                  <NativeSelectOption value="propagate">
-                    Yes - Update Everywhere
+                  <NativeSelectOption value="">
+                    No replacement — record must be unused
                   </NativeSelectOption>
-                  <NativeSelectOption value="clear">
-                    No - Clear Existing Department Selections
-                  </NativeSelectOption>
+                  {rows
+                    .filter((row) => row.id !== deletingRow.id)
+                    .map((row) => (
+                      <NativeSelectOption key={row.id} value={row.id}>
+                        {row.code} — {row.name}
+                      </NativeSelectOption>
+                    ))}
                 </NativeSelect>
               </Field>
-              {referenceMode === "clear" ? (
-                <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                  Existing Approved Posts, Templates, And Candidates Will Keep
-                  Their Records, But Their Department Will Become Blank.
-                </p>
-              ) : null}
+              <Field>
+                <FieldLabel htmlFor={`deletion-reason-${kind}`}>
+                  Reason For Deletion
+                </FieldLabel>
+                <Input
+                  id={`deletion-reason-${kind}`}
+                  name="deletion_reason"
+                  required
+                />
+              </Field>
               <DialogFooter>
                 <Button
-                  type="submit"
-                  variant={
-                    referenceMode === "clear" ? "destructive" : "default"
-                  }
+                  onClick={() => setDeletingRow(null)}
+                  type="button"
+                  variant="outline"
                 >
-                  Save Department Change
+                  Cancel
+                </Button>
+                <Button type="submit" variant="destructive">
+                  Delete
                 </Button>
               </DialogFooter>
             </form>

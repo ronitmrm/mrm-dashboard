@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
@@ -11,6 +12,14 @@ import {
 } from "@workspace/ui/components/card"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog"
 import {
   NativeSelect,
   NativeSelectOption,
@@ -33,6 +42,7 @@ import {
   createStoreSupplierPriceAction,
   createStoreSupplierAction,
   createStoreVendorAction,
+  deleteStoreMasterAction,
 } from "../actions"
 
 const masterOptions = [
@@ -48,14 +58,30 @@ const masterOptions = [
 
 type MasterKey = (typeof masterOptions)[number][0]
 
+type StoreMasterRow = {
+  code: string
+  details: string
+  editable: boolean
+  editDefaults: Record<string, string>
+  key: string
+  kind: string
+  name: string
+}
+
 export type StoreMasterData = {
   items: Array<{
     assetCategory: string
+    assetCategoryId: string
     assetName: string
+    assetNameId: string
     assetSubcategory: string
+    assetSubcategoryId: string
     assetType: string
+    applicableItemCode?: string | null
+    drawingNumber?: string | null
     id: string
     identificationName: string
+    minimumStock?: string
     typeCode: string
     unit: string
   }>
@@ -70,6 +96,7 @@ export type StoreMasterData = {
       categoryName: string
       id: string
       name: string
+      subcategoryId: string
       subcategoryName: string
     }>
     categories: Array<{ id: string; name: string }>
@@ -116,6 +143,8 @@ export function StoreMasterWorkspace({
   mode?: "combined" | "entry" | "table"
 }) {
   const [selectedMaster, setSelectedMaster] = useState<MasterKey>("ITEM_TYPE")
+  const [editRow, setEditRow] = useState<StoreMasterRow | null>(null)
+  const [deleteRow, setDeleteRow] = useState<StoreMasterRow | null>(null)
   const selectedLabel =
     masterOptions.find(([key]) => key === selectedMaster)?.[1] ?? "Master"
   const rows = masterRows(selectedMaster, data)
@@ -176,6 +205,9 @@ export function StoreMasterWorkspace({
                   <TableHead>Code</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Details</TableHead>
+                  {canManage ? (
+                    <TableHead className="text-right">Actions</TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -184,13 +216,37 @@ export function StoreMasterWorkspace({
                     <TableCell className="font-medium">{row.code}</TableCell>
                     <TableCell>{row.name}</TableCell>
                     <TableCell>{row.details}</TableCell>
+                    {canManage ? (
+                      <TableCell>
+                        <div className="flex justify-end gap-1">
+                          {row.editable ? (
+                            <Button
+                              onClick={() => setEditRow(row)}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              <Pencil className="size-3.5" /> Edit
+                            </Button>
+                          ) : null}
+                          <Button
+                            onClick={() => setDeleteRow(row)}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            <Trash2 className="size-3.5" /> Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
                 {!rows.length ? (
                   <TableRow>
                     <TableCell
                       className="h-24 text-center text-muted-foreground"
-                      colSpan={3}
+                      colSpan={canManage ? 4 : 3}
                     >
                       No saved records for this master.
                     </TableCell>
@@ -201,46 +257,165 @@ export function StoreMasterWorkspace({
           </CardContent>
         </Card>
       ) : null}
+      <Dialog
+        open={Boolean(editRow)}
+        onOpenChange={(open) => {
+          if (!open) setEditRow(null)
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Edit {selectedLabel}</DialogTitle>
+            <DialogDescription>
+              Codes remain fixed. Changes apply everywhere this master is
+              referenced.
+            </DialogDescription>
+          </DialogHeader>
+          {editRow
+            ? masterForm(selectedMaster, data, editRow.editDefaults)
+            : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(deleteRow)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteRow(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {selectedLabel}</DialogTitle>
+            <DialogDescription>
+              Unused records delete immediately. If this record is used, choose
+              a replacement before deleting it.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteRow ? (
+            <form action={deleteStoreMasterAction} className="grid gap-4">
+              <input name="master_id" type="hidden" value={deleteRow.key} />
+              <input name="master_kind" type="hidden" value={deleteRow.kind} />
+              <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                {deleteRow.code} — {deleteRow.name}
+              </div>
+              <SelectField
+                label="Replacement (Required Only If Used)"
+                name="replacement_master_id"
+                required={false}
+                options={rows
+                  .filter((row) => row.key !== deleteRow.key)
+                  .map((row) => ({
+                    label: `${row.code} — ${row.name}`,
+                    value: row.key,
+                  }))}
+                placeholder="No replacement — record must be unused"
+              />
+              <TextField
+                label="Reason For Deletion"
+                name="deletion_reason"
+                required
+              />
+              <DialogFooter>
+                <Button
+                  onClick={() => setDeleteRow(null)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="destructive">
+                  Delete
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
-function masterRows(selectedMaster: MasterKey, data: StoreMasterData) {
+function masterRows(
+  selectedMaster: MasterKey,
+  data: StoreMasterData
+): StoreMasterRow[] {
   switch (selectedMaster) {
     case "ITEM_TYPE":
       return data.items.map((item) => ({
         code: item.typeCode,
         details: `${item.assetType === "NON_CONSUMABLE" ? "Non Consumable" : "Consumable"} · ${item.assetCategory} / ${item.assetSubcategory} / ${item.assetName} · ${item.unit}`,
         key: item.id,
+        kind: "store_item_type",
         name: item.identificationName,
+        editable: true,
+        editDefaults: {
+          applicable_item_code: item.applicableItemCode ?? "",
+          asset_category_id: item.assetCategoryId,
+          asset_name_id: item.assetNameId,
+          asset_subcategory_id: item.assetSubcategoryId,
+          asset_type: item.assetType,
+          drawing_number: item.drawingNumber ?? "",
+          identification_name: item.identificationName,
+          master_id: item.id,
+          minimum_stock: item.minimumStock ?? "0",
+          type_code: item.typeCode,
+          unit: item.unit,
+        },
       }))
     case "CATEGORY":
       return data.masters.categories.map((category) => ({
         code: "—",
         details: "Asset Category",
         key: category.id,
+        kind: "store_category",
         name: category.name,
+        editable: true,
+        editDefaults: {
+          asset_category_name: category.name,
+          master_id: category.id,
+        },
       }))
     case "SUBCATEGORY":
       return data.masters.subcategories.map((subcategory) => ({
         code: "—",
         details: `Category: ${subcategory.categoryName}`,
         key: subcategory.id,
+        kind: "store_subcategory",
         name: subcategory.name,
+        editable: true,
+        editDefaults: {
+          asset_category_id: subcategory.categoryId,
+          asset_subcategory_name: subcategory.name,
+          master_id: subcategory.id,
+        },
       }))
     case "ASSET_NAME":
       return data.masters.assetNames.map((assetName) => ({
         code: "—",
         details: `${assetName.categoryName} / ${assetName.subcategoryName}`,
         key: assetName.id,
+        kind: "store_asset_name",
         name: assetName.name,
+        editable: true,
+        editDefaults: {
+          asset_name: assetName.name,
+          asset_subcategory_id: assetName.subcategoryId,
+          master_id: assetName.id,
+        },
       }))
     case "LOCATION":
       return data.locations.map((location) => ({
         code: location.code,
         details: location.locationType,
         key: location.id,
+        kind: "store_location",
         name: location.name,
+        editable: true,
+        editDefaults: {
+          location_code: location.code,
+          location_name: location.name,
+          location_type: location.locationType,
+          master_id: location.id,
+        },
       }))
     case "SUPPLIER":
       return data.suppliers.map((supplier) => ({
@@ -250,45 +425,94 @@ function masterRows(selectedMaster: MasterKey, data: StoreMasterData) {
             .filter(Boolean)
             .join(" · ") || "No contact details",
         key: supplier.id,
+        kind: "store_supplier",
         name: supplier.name,
+        editable: true,
+        editDefaults: {
+          contact_details: supplier.contactDetails ?? "",
+          master_id: supplier.id,
+          supplier_code: supplier.code,
+          supplier_email: supplier.email ?? "",
+          supplier_name: supplier.name,
+        },
       }))
     case "SUPPLIER_PRICE":
       return data.supplierPrices.map((price) => ({
         code: price.typeCode,
         details: `${price.supplierName} · ₹ ${price.unitPrice} · Effective ${price.validFrom}${price.quoteReference ? ` · ${price.quoteReference}` : ""}`,
         key: price.id,
+        kind: "store_supplier_price",
         name: price.itemName,
+        editable: false,
+        editDefaults: {},
       }))
     case "VENDOR":
       return data.vendors.map((vendor) => ({
         code: vendor.code,
         details: vendor.contactDetails || "No contact details",
         key: vendor.id,
+        kind: "store_vendor",
         name: vendor.name,
+        editable: true,
+        editDefaults: {
+          contact_details: vendor.contactDetails ?? "",
+          master_id: vendor.id,
+          vendor_code: vendor.code,
+          vendor_name: vendor.name,
+        },
       }))
   }
 }
 
-function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
+function masterForm(
+  selectedMaster: MasterKey,
+  data: StoreMasterData,
+  defaults: Record<string, string> = {}
+) {
+  const editing = Boolean(defaults.master_id)
   switch (selectedMaster) {
     case "ITEM_TYPE":
       return (
         <form action={createStoreItemTypeAction}>
+          <input
+            name="master_id"
+            type="hidden"
+            value={defaults.master_id ?? ""}
+          />
           <FieldGroup className="grid gap-4 md:grid-cols-2">
+            {editing ? (
+              <TextField
+                defaultValue={defaults.type_code}
+                label="Asset Code"
+                name="type_code"
+                readOnly
+              />
+            ) : null}
             <TextField
+              defaultValue={defaults.identification_name}
               label="Identification Name"
               name="identification_name"
               required
             />
+            {editing ? (
+              <input
+                name="asset_type"
+                type="hidden"
+                value={defaults.asset_type}
+              />
+            ) : null}
             <SelectField
+              defaultValue={defaults.asset_type}
+              disabled={editing}
               label="Asset Type"
-              name="asset_type"
+              name={editing ? "asset_type_display" : "asset_type"}
               options={[
                 { label: "Non Consumable", value: "NON_CONSUMABLE" },
                 { label: "Consumable", value: "CONSUMABLE" },
               ]}
             />
             <SelectField
+              defaultValue={defaults.asset_category_id}
               label="Category"
               name="asset_category_id"
               options={data.masters.categories.map((row) => ({
@@ -297,6 +521,7 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
               }))}
             />
             <SelectField
+              defaultValue={defaults.asset_subcategory_id}
               label="Subcategory"
               name="asset_subcategory_id"
               options={data.masters.subcategories.map((row) => ({
@@ -305,6 +530,7 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
               }))}
             />
             <SelectField
+              defaultValue={defaults.asset_name_id}
               label="Asset Name"
               name="asset_name_id"
               options={data.masters.assetNames.map((row) => ({
@@ -313,13 +539,23 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
               }))}
             />
             <TextField
+              defaultValue={defaults.applicable_item_code}
               label="For Product / Item Code"
               name="applicable_item_code"
             />
-            <TextField label="Drawing Number" name="drawing_number" />
-            <TextField defaultValue="Nos" label="Unit" name="unit" required />
             <TextField
-              defaultValue="0"
+              defaultValue={defaults.drawing_number}
+              label="Drawing Number"
+              name="drawing_number"
+            />
+            <TextField
+              defaultValue={defaults.unit ?? "Nos"}
+              label="Unit"
+              name="unit"
+              required
+            />
+            <TextField
+              defaultValue={defaults.minimum_stock ?? "0"}
               label="Minimum Stock Alert"
               name="minimum_stock"
               type="number"
@@ -330,14 +566,20 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
             disabled={!data.masters.assetNames.length}
             type="submit"
           >
-            Create & Generate Asset Code
+            {editing ? "Save Changes" : "Create & Generate Asset Code"}
           </Button>
         </form>
       )
     case "CATEGORY":
       return (
         <form action={createStoreAssetCategoryAction}>
+          <input
+            name="master_id"
+            type="hidden"
+            value={defaults.master_id ?? ""}
+          />
           <TextField
+            defaultValue={defaults.asset_category_name}
             label="Category Name"
             name="asset_category_name"
             required
@@ -350,8 +592,14 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
     case "SUBCATEGORY":
       return (
         <form action={createStoreAssetSubcategoryAction}>
+          <input
+            name="master_id"
+            type="hidden"
+            value={defaults.master_id ?? ""}
+          />
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             <SelectField
+              defaultValue={defaults.asset_category_id}
               label="Category"
               name="asset_category_id"
               options={data.masters.categories.map((row) => ({
@@ -360,6 +608,7 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
               }))}
             />
             <TextField
+              defaultValue={defaults.asset_subcategory_name}
               label="Subcategory Name"
               name="asset_subcategory_name"
               required
@@ -377,8 +626,14 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
     case "ASSET_NAME":
       return (
         <form action={createStoreAssetNameAction}>
+          <input
+            name="master_id"
+            type="hidden"
+            value={defaults.master_id ?? ""}
+          />
           <FieldGroup className="grid gap-4 md:grid-cols-2">
             <SelectField
+              defaultValue={defaults.asset_subcategory_id}
               label="Subcategory"
               name="asset_subcategory_id"
               options={data.masters.subcategories.map((row) => ({
@@ -386,7 +641,12 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
                 value: row.id,
               }))}
             />
-            <TextField label="Asset Name" name="asset_name" required />
+            <TextField
+              defaultValue={defaults.asset_name}
+              label="Asset Name"
+              name="asset_name"
+              required
+            />
           </FieldGroup>
           <Button
             className="mt-5"
@@ -400,10 +660,27 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
     case "LOCATION":
       return (
         <form action={createStoreLocationAction}>
+          <input
+            name="master_id"
+            type="hidden"
+            value={defaults.master_id ?? ""}
+          />
           <FieldGroup className="grid gap-4 md:grid-cols-3">
-            <TextField label="Code" name="location_code" required />
-            <TextField label="Name" name="location_name" required />
+            <TextField
+              defaultValue={defaults.location_code}
+              label="Code"
+              name="location_code"
+              readOnly={editing}
+              required
+            />
+            <TextField
+              defaultValue={defaults.location_name}
+              label="Name"
+              name="location_name"
+              required
+            />
             <SelectField
+              defaultValue={defaults.location_type}
               label="Type"
               name="location_type"
               options={[
@@ -421,15 +698,36 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
     case "SUPPLIER":
       return (
         <form action={createStoreSupplierAction}>
+          <input
+            name="master_id"
+            type="hidden"
+            value={defaults.master_id ?? ""}
+          />
           <FieldGroup className="grid gap-4 md:grid-cols-3">
-            <TextField label="Supplier Code" name="supplier_code" required />
-            <TextField label="Supplier Name" name="supplier_name" required />
             <TextField
+              defaultValue={defaults.supplier_code}
+              label="Supplier Code"
+              name="supplier_code"
+              readOnly={editing}
+              required
+            />
+            <TextField
+              defaultValue={defaults.supplier_name}
+              label="Supplier Name"
+              name="supplier_name"
+              required
+            />
+            <TextField
+              defaultValue={defaults.supplier_email}
               label="Supplier Email"
               name="supplier_email"
               type="email"
             />
-            <TextField label="Contact Details" name="contact_details" />
+            <TextField
+              defaultValue={defaults.contact_details}
+              label="Contact Details"
+              name="contact_details"
+            />
           </FieldGroup>
           <Button className="mt-5" type="submit">
             Save Supplier
@@ -479,10 +777,30 @@ function masterForm(selectedMaster: MasterKey, data: StoreMasterData) {
     case "VENDOR":
       return (
         <form action={createStoreVendorAction}>
+          <input
+            name="master_id"
+            type="hidden"
+            value={defaults.master_id ?? ""}
+          />
           <FieldGroup className="grid gap-4 md:grid-cols-3">
-            <TextField label="Vendor Code" name="vendor_code" required />
-            <TextField label="Vendor Name" name="vendor_name" required />
-            <TextField label="Contact Details" name="contact_details" />
+            <TextField
+              defaultValue={defaults.vendor_code}
+              label="Vendor Code"
+              name="vendor_code"
+              readOnly={editing}
+              required
+            />
+            <TextField
+              defaultValue={defaults.vendor_name}
+              label="Vendor Name"
+              name="vendor_name"
+              required
+            />
+            <TextField
+              defaultValue={defaults.contact_details}
+              label="Contact Details"
+              name="contact_details"
+            />
           </FieldGroup>
           <Button className="mt-5" type="submit">
             Save Vendor
@@ -507,19 +825,36 @@ function TextField({
 }
 
 function SelectField({
+  defaultValue,
+  disabled = false,
   label,
   name,
   options,
+  placeholder,
+  required = true,
 }: {
+  defaultValue?: string
+  disabled?: boolean
   label: string
   name: string
   options: Array<{ label: string; value: string }>
+  placeholder?: string
+  required?: boolean
 }) {
   const id = `master-${name}`
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <NativeSelect id={id} name={name} required>
+      <NativeSelect
+        defaultValue={defaultValue}
+        disabled={disabled}
+        id={id}
+        name={name}
+        required={required}
+      >
+        {placeholder ? (
+          <NativeSelectOption value="">{placeholder}</NativeSelectOption>
+        ) : null}
         {options.map((option) => (
           <NativeSelectOption key={option.value} value={option.value}>
             {option.label}

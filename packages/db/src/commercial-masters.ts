@@ -129,7 +129,6 @@ function number(value: number | null | undefined) {
   return Number.isFinite(value) ? Number(value) : 0
 }
 
-
 async function audit(
   client: PoolClient,
   input: MutationContext & {
@@ -1008,6 +1007,33 @@ export function createCommercialMasterRepository(
     },
 
     async listEditable(organizationId: string) {
+      const allMasters = await pool.query<{
+        id: string
+        kind: string
+        label: string
+      }>(
+        `SELECT id, 'commercial_application' AS kind, name AS label FROM catalog.website_applications WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_category', name FROM catalog.item_categories WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_certification', name FROM catalog.website_certifications WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_machine_type', name FROM catalog.machine_types WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_material_grade', name FROM catalog.material_grades WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_process', name FROM catalog.design_processes WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_rod_type', name FROM catalog.rod_types WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_subcategory', name FROM catalog.item_subcategories WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_website_field', name FROM catalog.website_field_options WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_commercial_term', name FROM sales.commercial_terms WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_packaging', name FROM sales.packaging_options WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_quote_term', label FROM sales.quote_term_templates WHERE organization_id = $1
+         UNION ALL SELECT id, 'commercial_shipping', name FROM sales.shipping_terms WHERE organization_id = $1
+         UNION ALL
+           SELECT rate.id, 'commercial_material_rate', grade.name || ' / ' || rod.name
+           FROM sales.material_rates rate
+           JOIN catalog.material_grades grade ON grade.id = rate.material_grade_id
+           JOIN catalog.rod_types rod ON rod.id = rate.rod_type_id
+           WHERE rate.organization_id = $1
+         ORDER BY kind, label`,
+        [organizationId]
+      )
       const commercialTerms = await pool.query(
         `SELECT id, name, term_type, active
          FROM sales.commercial_terms
@@ -1047,6 +1073,7 @@ export function createCommercialMasterRepository(
         [organizationId]
       )
       return {
+        allMasters: allMasters.rows,
         commercialTerms: commercialTerms.rows.map((row) => ({
           active: row.active as boolean,
           id: row.id as string,

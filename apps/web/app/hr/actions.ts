@@ -5,7 +5,9 @@ import { mkdir, unlink, writeFile } from "node:fs/promises"
 import nodePath from "node:path"
 
 import {
+  createMasterDataLifecycleRepository,
   createRecruitmentRepository,
+  type MasterDataKind,
   recruitmentInterviewRound,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
@@ -94,22 +96,66 @@ export async function saveMasterAction(formData: FormData) {
   )
 }
 
-export async function renameDepartmentMasterAction(formData: FormData) {
-  const referenceMode =
-    value(formData, "reference_mode") === "clear" ? "clear" : "propagate"
+export async function renameRecruitmentMasterAction(formData: FormData) {
+  const kind =
+    value(formData, "master_kind") === "designation"
+      ? "designation"
+      : "department"
   await mutate(
     formData,
     "hr.recruitment.write",
     (repository, context) =>
-      repository.renameDepartmentMaster({
-        ...context,
-        departmentId: value(formData, "department_id"),
-        name: value(formData, "name"),
-        referenceMode,
-      }),
-    referenceMode === "clear"
-      ? "Department renamed and existing department selections cleared."
-      : "Department renamed everywhere."
+      kind === "designation"
+        ? repository.renameDesignationMaster({
+            ...context,
+            designationId: value(formData, "master_id"),
+            name: value(formData, "name"),
+          })
+        : repository.renameDepartmentMaster({
+            ...context,
+            departmentId: value(formData, "master_id"),
+            name: value(formData, "name"),
+            referenceMode: "propagate",
+          }),
+    `${kind === "designation" ? "Designation" : "Department"} renamed everywhere.`
+  )
+}
+
+export async function deleteRecruitmentMasterAction(formData: FormData) {
+  const path = hrReturnPath(formData)
+  const session = await requireCapability("hr.recruitment.write", path)
+  const connectionString = readAuthEnvironment().connectionString
+  const recruitment = createRecruitmentRepository({ connectionString })
+  const lifecycle = createMasterDataLifecycleRepository({ connectionString })
+  const kind: MasterDataKind =
+    value(formData, "master_kind") === "designation"
+      ? "hr_designation"
+      : value(formData, "master_kind") === "job_template"
+        ? "hr_job_template"
+        : "hr_department"
+  let outcome: { error?: string; success?: string }
+  try {
+    const organizationId = await recruitment.organizationIdForCode("MRMPL")
+    await lifecycle.deleteMaster({
+      actorUserId: session.user.id,
+      kind,
+      organizationId,
+      reason: value(formData, "deletion_reason"),
+      recordId: value(formData, "master_id"),
+      replacementRecordId: value(formData, "replacement_master_id") || null,
+    })
+    outcome = { success: "Master deleted successfully." }
+  } catch (error) {
+    outcome = {
+      error: error instanceof Error ? error.message : "Master deletion failed.",
+    }
+  } finally {
+    await lifecycle.close()
+    await recruitment.close()
+  }
+  revalidatePath(hrPath)
+  redirect(
+    `${path}${path.includes("?") ? "&" : "?"}${new URLSearchParams(outcome)}`
   )
 }
 

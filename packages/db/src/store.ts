@@ -294,6 +294,31 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows[0]!
     },
 
+    async updateLocation(input: {
+      actorUserId?: string | null
+      id: string
+      locationType?: "DEPARTMENT" | "STORE" | "UNIT"
+      name: string
+      organizationId: string
+    }) {
+      const result = await pool.query<{ id: string }>(
+        `UPDATE store.locations
+         SET name = $1, location_type = $2, updated_by_user_id = $3,
+           updated_at = now()
+         WHERE id = $4 AND organization_id = $5
+         RETURNING id`,
+        [
+          requiredText(input.name, "Location name"),
+          input.locationType ?? "STORE",
+          input.actorUserId ?? null,
+          input.id,
+          input.organizationId,
+        ]
+      )
+      if (!result.rows[0]) throw new Error("Store Location was not found.")
+      return result.rows[0]
+    },
+
     async listLocations(organizationId: string) {
       const result = await pool.query<{
         code: string
@@ -336,6 +361,31 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows[0]!
     },
 
+    async updateAssetCategory(input: {
+      actorUserId?: string | null
+      id: string
+      name: string
+      organizationId: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const name = requiredText(input.name, "Asset category")
+        const result = await client.query<{ id: string }>(
+          `UPDATE store.asset_categories
+           SET name = $1, updated_by_user_id = $2, updated_at = now()
+           WHERE id = $3 AND organization_id = $4
+           RETURNING id`,
+          [name, input.actorUserId ?? null, input.id, input.organizationId]
+        )
+        if (!result.rows[0]) throw new Error("Store Category was not found.")
+        await client.query(
+          `UPDATE store.item_types SET asset_category = $1, updated_at = now()
+           WHERE organization_id = $2 AND asset_category_id = $3`,
+          [name, input.organizationId, input.id]
+        )
+        return result.rows[0]
+      })
+    },
+
     async createAssetSubcategory(input: {
       actorUserId?: string | null
       categoryId: string
@@ -368,6 +418,50 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows[0]
     },
 
+    async updateAssetSubcategory(input: {
+      actorUserId?: string | null
+      categoryId: string
+      id: string
+      name: string
+      organizationId: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const result = await client.query<{ id: string }>(
+          `UPDATE store.asset_subcategories subcategory
+         SET category_id = category.id, name = $1, updated_by_user_id = $2,
+           updated_at = now()
+         FROM store.asset_categories category
+         WHERE subcategory.id = $3
+           AND subcategory.organization_id = $4
+           AND category.id = $5 AND category.organization_id = $4
+           AND category.active
+         RETURNING subcategory.id`,
+          [
+            requiredText(input.name, "Asset subcategory"),
+            input.actorUserId ?? null,
+            input.id,
+            input.organizationId,
+            input.categoryId,
+          ]
+        )
+        if (!result.rows[0]) throw new Error("Store Subcategory was not found.")
+        await client.query(
+          `UPDATE store.item_types SET asset_subcategory = $1,
+           asset_category_id = $2,
+           asset_category = (SELECT name FROM store.asset_categories WHERE id = $2),
+           updated_at = now()
+         WHERE organization_id = $3 AND asset_subcategory_id = $4`,
+          [
+            requiredText(input.name, "Asset subcategory"),
+            input.categoryId,
+            input.organizationId,
+            input.id,
+          ]
+        )
+        return result.rows[0]
+      })
+    },
+
     async createAssetName(input: {
       actorUserId?: string | null
       name: string
@@ -398,6 +492,54 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       )
       if (!result.rows[0]) throw new Error("Store Subcategory was not found.")
       return result.rows[0]
+    },
+
+    async updateAssetName(input: {
+      actorUserId?: string | null
+      id: string
+      name: string
+      organizationId: string
+      subcategoryId: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const result = await client.query<{ id: string }>(
+          `UPDATE store.asset_names asset_name
+         SET subcategory_id = subcategory.id, name = $1,
+           updated_by_user_id = $2, updated_at = now()
+         FROM store.asset_subcategories subcategory
+         WHERE asset_name.id = $3
+           AND asset_name.organization_id = $4
+           AND subcategory.id = $5 AND subcategory.organization_id = $4
+           AND subcategory.active
+         RETURNING asset_name.id`,
+          [
+            requiredText(input.name, "Asset name"),
+            input.actorUserId ?? null,
+            input.id,
+            input.organizationId,
+            input.subcategoryId,
+          ]
+        )
+        if (!result.rows[0]) throw new Error("Store Asset Name was not found.")
+        await client.query(
+          `UPDATE store.item_types item
+         SET asset_name = $1, asset_subcategory_id = subcategory.id,
+           asset_subcategory = subcategory.name,
+           asset_category_id = category.id, asset_category = category.name,
+           updated_at = now()
+         FROM store.asset_subcategories subcategory
+         JOIN store.asset_categories category ON category.id = subcategory.category_id
+         WHERE item.organization_id = $2 AND item.asset_name_id = $3
+           AND subcategory.id = $4`,
+          [
+            requiredText(input.name, "Asset name"),
+            input.organizationId,
+            input.id,
+            input.subcategoryId,
+          ]
+        )
+        return result.rows[0]
+      })
     },
 
     async listAssetClassificationMasters(organizationId: string) {
@@ -483,6 +625,33 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         ]
       )
       return result.rows[0]!
+    },
+
+    async updateSupplier(input: {
+      actorUserId?: string | null
+      contactDetails?: string | null
+      email?: string | null
+      id: string
+      name: string
+      organizationId: string
+    }) {
+      const result = await pool.query<{ id: string }>(
+        `UPDATE store.suppliers
+         SET name = $1, contact_details = $2, email = $3,
+           updated_by_user_id = $4, updated_at = now()
+         WHERE id = $5 AND organization_id = $6
+         RETURNING id`,
+        [
+          requiredText(input.name, "Supplier name"),
+          input.contactDetails?.trim() || null,
+          input.email?.trim().toLocaleLowerCase() || null,
+          input.actorUserId ?? null,
+          input.id,
+          input.organizationId,
+        ]
+      )
+      if (!result.rows[0]) throw new Error("Store Supplier was not found.")
+      return result.rows[0]
     },
 
     async listSuppliers(organizationId: string) {
@@ -577,6 +746,31 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         ]
       )
       return result.rows[0]!
+    },
+
+    async updateVendor(input: {
+      actorUserId?: string | null
+      contactDetails?: string | null
+      id: string
+      name: string
+      organizationId: string
+    }) {
+      const result = await pool.query<{ id: string }>(
+        `UPDATE store.vendors
+         SET name = $1, contact_details = $2, updated_by_user_id = $3,
+           updated_at = now()
+         WHERE id = $4 AND organization_id = $5
+         RETURNING id`,
+        [
+          requiredText(input.name, "Vendor name"),
+          input.contactDetails?.trim() || null,
+          input.actorUserId ?? null,
+          input.id,
+          input.organizationId,
+        ]
+      )
+      if (!result.rows[0]) throw new Error("Store Vendor was not found.")
+      return result.rows[0]
     },
 
     async listVendors(organizationId: string) {
@@ -984,11 +1178,66 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       })
     },
 
+    async updateItemType(input: {
+      actorUserId?: string | null
+      assetCategoryId: string
+      assetNameId: string
+      assetSubcategoryId: string
+      assetType: StoreAssetType
+      applicableItemCode?: string | null
+      drawingNumber?: string | null
+      id: string
+      identificationName: string
+      minimumStock?: number
+      organizationId: string
+      unit: string
+    }) {
+      return withTransaction(pool, async (client) => {
+        const classification = await assetClassificationPath(client, input)
+        const assetType = storeAssetType(input.assetType)
+        const result = await client.query<{ id: string }>(
+          `UPDATE store.item_types
+           SET asset_type = $1, asset_category = $2, asset_subcategory = $3,
+             asset_name = $4, asset_category_id = $5,
+             asset_subcategory_id = $6, asset_name_id = $7,
+             identification_name = $8, applicable_item_code = $9,
+             drawing_number = $10, tracking_mode = $11, unit = $12,
+             minimum_stock = $13, updated_by_user_id = $14,
+             updated_at = now()
+           WHERE id = $15 AND organization_id = $16
+           RETURNING id`,
+          [
+            assetType === "NON_CONSUMABLE" ? "Non Consumable" : "Consumable",
+            classification.asset_category,
+            classification.asset_subcategory,
+            classification.asset_name,
+            input.assetCategoryId,
+            input.assetSubcategoryId,
+            input.assetNameId,
+            requiredText(input.identificationName, "Identification name"),
+            input.applicableItemCode?.trim() || null,
+            input.drawingNumber?.trim() || null,
+            trackingModeForAssetType(assetType),
+            requiredText(input.unit, "Unit"),
+            input.minimumStock ?? 0,
+            input.actorUserId ?? null,
+            input.id,
+            input.organizationId,
+          ]
+        )
+        if (!result.rows[0]) throw new Error("Store Item Type was not found.")
+        return result.rows[0]
+      })
+    },
+
     async listItemTypes(organizationId: string) {
       const result = await pool.query<{
         assetCategory: string
+        assetCategoryId: string
         assetName: string
+        assetNameId: string
         assetSubcategory: string
+        assetSubcategoryId: string
         assetType: string
         applicableItemCode: string | null
         availableStock: string
@@ -1011,8 +1260,11 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             CASE WHEN item.tracking_mode = 'SERIALIZED'
               THEN 'NON_CONSUMABLE' ELSE 'CONSUMABLE' END AS "assetType",
             item.asset_category AS "assetCategory",
+            item.asset_category_id AS "assetCategoryId",
             item.asset_subcategory AS "assetSubcategory",
+            item.asset_subcategory_id AS "assetSubcategoryId",
             item.asset_name AS "assetName",
+            item.asset_name_id AS "assetNameId",
             item.identification_name AS "identificationName",
             item.applicable_item_code AS "applicableItemCode",
             item.drawing_number AS "drawingNumber",
@@ -1649,9 +1901,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             ]
           )
           if (!asset.rows[0]) {
-            throw new Error(
-              "Unit ID is not available in the selected Store."
-            )
+            throw new Error("Unit ID is not available in the selected Store.")
           }
           await client.query(
             `

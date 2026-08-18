@@ -3,6 +3,8 @@
 import {
   createCommercialMasterRepository,
   createCustomerRepository,
+  createMasterDataLifecycleRepository,
+  isMasterDataKind,
   type CommercialTermType,
   type WebsiteFieldType,
 } from "@workspace/db"
@@ -153,31 +155,88 @@ export async function upsertMasterAction(formData: FormData) {
   revalidatePath(mastersPath)
 }
 
-export async function setMasterActiveAction(formData: FormData) {
-  const [kind, id] = required(formData, "target").split(":")
-  if (!kind || !id) throw new Error("Commercial master target is invalid.")
-  await withMasters((repository, actorUserId, organizationId) =>
-    repository.setActive({
-      active: formData.get("state")?.toString() === "active",
-      actorUserId,
-      id,
-      kind: kind as
-        | "commercialTerm"
-        | "materialRate"
-        | "packagingOption"
-        | "quoteTerm"
-        | "shippingTerm",
-      organizationId,
-    })
-  )
+async function commercialLifecycleAction(
+  formData: FormData,
+  operation: (
+    repository: ReturnType<typeof createMasterDataLifecycleRepository>,
+    actorUserId: string,
+    organizationId: string
+  ) => Promise<unknown>,
+  success: string
+) {
+  const returnPath = mastersReturnPath(formData)
+  const session = await requireCapability("pricing.masters.write", returnPath)
+  const connectionString = readAuthEnvironment().connectionString
+  const customers = createCustomerRepository({ connectionString })
+  const lifecycle = createMasterDataLifecycleRepository({ connectionString })
+  let outcome: { error?: string; success?: string }
+  try {
+    const organizationId = await customers.organizationIdForCode("MRMPL")
+    await operation(lifecycle, session.user.id, organizationId)
+    outcome = { success }
+  } catch (error) {
+    outcome = {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Commercial master change failed.",
+    }
+  } finally {
+    await lifecycle.close()
+    await customers.close()
+  }
   revalidatePath(mastersPath)
+  redirect(
+    `${returnPath}${returnPath.includes("?") ? "&" : "?"}${new URLSearchParams(outcome)}`
+  )
+}
+
+export async function renameCommercialMasterAction(formData: FormData) {
+  const kind = required(formData, "master_kind")
+  if (!isMasterDataKind(kind) || !kind.startsWith("commercial_")) {
+    throw new Error("Commercial master is invalid.")
+  }
+  await commercialLifecycleAction(
+    formData,
+    (repository, actorUserId, organizationId) =>
+      repository.renameMaster({
+        actorUserId,
+        kind,
+        name: required(formData, "name"),
+        organizationId,
+        recordId: required(formData, "master_id"),
+      }),
+    "Master renamed everywhere."
+  )
+}
+
+export async function deleteCommercialMasterAction(formData: FormData) {
+  const kind = required(formData, "master_kind")
+  if (!isMasterDataKind(kind) || !kind.startsWith("commercial_")) {
+    throw new Error("Commercial master is invalid.")
+  }
+  await commercialLifecycleAction(
+    formData,
+    (repository, actorUserId, organizationId) =>
+      repository.deleteMaster({
+        actorUserId,
+        kind,
+        organizationId,
+        reason: required(formData, "deletion_reason"),
+        recordId: required(formData, "master_id"),
+        replacementRecordId: optional(formData, "replacement_master_id"),
+      }),
+    "Master deleted successfully."
+  )
 }
 
 export async function importMastersWorkbookAction(formData: FormData) {
   const returnPath = mastersReturnPath(formData)
   const file = formData.get("masters_file")
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${returnPath}${returnPath.includes("?") ? "&" : "?"}error=Masters%20workbook%20is%20required`)
+    redirect(
+      `${returnPath}${returnPath.includes("?") ? "&" : "?"}error=Masters%20workbook%20is%20required`
+    )
   }
   if (!/\.(xlsx|xls)$/i.test(file.name)) {
     redirect(
@@ -202,9 +261,13 @@ export async function importMastersWorkbookAction(formData: FormData) {
   } catch (error) {
     outcome =
       error instanceof Error ? error.message : "Masters workbook import failed"
-    redirect(`${returnPath}${returnPath.includes("?") ? "&" : "?"}error=${encodeURIComponent(outcome)}`)
+    redirect(
+      `${returnPath}${returnPath.includes("?") ? "&" : "?"}error=${encodeURIComponent(outcome)}`
+    )
   }
 
   revalidatePath(mastersPath)
-  redirect(`${returnPath}${returnPath.includes("?") ? "&" : "?"}success=${encodeURIComponent(outcome)}`)
+  redirect(
+    `${returnPath}${returnPath.includes("?") ? "&" : "?"}success=${encodeURIComponent(outcome)}`
+  )
 }

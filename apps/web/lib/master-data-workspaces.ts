@@ -19,3 +19,40 @@ export const operationalDataEntryTypes = [
   "rm_inward",
   "software_raw",
 ] as const
+
+const identityFieldsByEntryType: Record<string, readonly string[]> = {
+  cycle: ["partNo", "optionNumber", "setupNo"],
+  machine_master: ["machineNo"],
+  maintenance_checklist_master: ["checklistCode", "sequence"],
+  maintenance_master: ["maintenanceCode"],
+  planning_holiday: ["date", "reason"],
+  quality_parameter_master: [
+    "partNo",
+    "optionNumber",
+    "setupNo",
+    "parameterCode",
+  ],
+  rejection_reason_master: ["code"],
+  rejection_remark_master: ["code"],
+  rejection_type_master: ["code"],
+  route: ["partNo", "optionNumber", "setupNo"],
+  setup_checklist_master: ["checklistCode", "sequence"],
+  tooling: ["partNo", "optionNumber", "setupNo"],
+}
+
+export function immutableMasterFields(entryType: string) {
+  return [...(identityFieldsByEntryType[entryType] ?? [])]
+}
+
+export function masterEditDefaults(
+  _entryType: string,
+  row: Record<string, unknown>
+) {
+  const entryId = String(row._id ?? "").trim()
+  return {
+    ...row,
+    __editingMaster: true,
+    ...(entryId ? { __entryId: entryId } : {}),
+    __returnTab: "masterTablesTab",
+  }
+}
