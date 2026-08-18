@@ -120,7 +120,7 @@ export default async function QuoteDetailPage({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Component</TableHead>
+                  <TableHead data-filterable="true">Component</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead className="text-right">Quantity</TableHead>
                   <TableHead className="text-right">Unit Inr</TableHead>
