@@ -11,10 +11,6 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
-import {
   Table,
   TableBody,
   TableCell,
@@ -24,8 +20,10 @@ import {
 } from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
 
+import { StoreRequestIdentityFields } from "@/components/store/store-request-identity-fields"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { storeRequestFormPolicy } from "@/lib/store-request-policy"
 
 import { createStoreRequisitionBatchAction } from "../../actions"
 
@@ -34,7 +32,10 @@ export default async function NewStoreRequestPage({
 }: {
   searchParams: Promise<{ itemTypeId?: string | string[] }>
 }) {
-  await requireCapability("store.requests.write", "/store/requests/new")
+  const session = await requireCapability(
+    "store.requests.write",
+    "/store/requests/new"
+  )
   const rawIds = (await searchParams).itemTypeId
   const selectedIds = Array.from(
     new Set(
@@ -46,9 +47,12 @@ export default async function NewStoreRequestPage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, locations] = await Promise.all([
+    const [items, requestContext] = await Promise.all([
       repository.listItemTypes(organizationId),
-      repository.listLocations(organizationId),
+      repository.requisitionRequestContext({
+        organizationId,
+        userId: session.user.id,
+      }),
     ])
     const itemById = new Map(items.map((item) => [item.id, item]))
     return {
@@ -56,11 +60,10 @@ export default async function NewStoreRequestPage({
         const item = itemById.get(id)
         return item ? [item] : []
       }),
-      locations: locations.filter(
-        (location) => location.locationType === "STORE"
-      ),
+      requestContext,
     }
   })().finally(() => repository.close())
+  const requestPolicy = storeRequestFormPolicy(data.requestContext)
 
   return (
     <div className="flex flex-col gap-6">
@@ -99,37 +102,16 @@ export default async function NewStoreRequestPage({
           <CardContent>
             <form action={createStoreRequisitionBatchAction}>
               <FieldGroup className="grid gap-4 md:grid-cols-2">
-                <Field>
-                  <FieldLabel htmlFor="request-department">
-                    Department
-                  </FieldLabel>
-                  <Input id="request-department" name="department" required />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="request-requested-by">
-                    Requested By / Individual
-                  </FieldLabel>
-                  <Input
-                    id="request-requested-by"
-                    name="requested_by"
-                    required
-                  />
-                </Field>
+                <StoreRequestIdentityFields policy={requestPolicy} />
                 <Field>
                   <FieldLabel htmlFor="request-location">
                     Requested From Store
                   </FieldLabel>
-                  <NativeSelect
+                  <Input
                     id="request-location"
-                    name="location_id"
-                    required
-                  >
-                    {data.locations.map((location) => (
-                      <NativeSelectOption key={location.id} value={location.id}>
-                        {location.code} — {location.name}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    readOnly
+                    value={requestPolicy.storeLabel}
+                  />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="request-required-on">
@@ -189,7 +171,7 @@ export default async function NewStoreRequestPage({
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
-                <Button disabled={!data.locations.length} type="submit">
+                <Button disabled={requestPolicy.submitDisabled} type="submit">
                   Release Request to Store
                 </Button>
                 <Button asChild variant="outline">

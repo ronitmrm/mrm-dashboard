@@ -300,6 +300,133 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows[0].id
     },
 
+    async requisitionRequestContext(input: {
+      organizationId: string
+      userId: string
+    }) {
+      const [account, employeeDepartments, organizationDepartments, location] =
+        await Promise.all([
+          pool.query<{ email: string; is_administrator: boolean }>(
+            `SELECT email, COALESCE(role = 'admin', false) AS is_administrator
+             FROM identity.users
+             WHERE id = $1`,
+            [input.userId]
+          ),
+          pool.query<{ department: string }>(
+            `WITH linked_employee_codes AS (
+               SELECT employee_code
+               FROM identity.employee_links
+               WHERE user_id = $1 AND organization_id = $2
+               UNION
+               SELECT employee_code
+               FROM workforce.employees
+               WHERE user_id = $1 AND organization_id = $2 AND active
+             ), assigned_departments AS (
+               SELECT department.name AS department
+               FROM linked_employee_codes employee
+               JOIN recruitment.posts post
+                 ON post.organization_id = $2
+                AND lower(btrim(post.employee_code)) =
+                    lower(btrim(employee.employee_code))
+               JOIN recruitment.departments department
+                 ON department.id = post.department_id AND department.active
+               WHERE post.status = 'Occupied'
+                  OR (
+                    post.status = 'Appointed'
+                    AND post.joining_date <= current_date
+                  )
+                  OR (
+                    post.status = 'Resigned'
+                    AND post.last_working_date >= current_date
+                  )
+               UNION
+               SELECT employee.department
+               FROM workforce.employees employee
+               WHERE employee.user_id = $1
+                 AND employee.organization_id = $2
+                 AND employee.active
+                 AND nullif(btrim(employee.department), '') IS NOT NULL
+             )
+             SELECT DISTINCT department
+             FROM assigned_departments
+             WHERE nullif(btrim(department), '') IS NOT NULL
+             ORDER BY department`,
+            [input.userId, input.organizationId]
+          ),
+          pool.query<{ department: string }>(
+            `SELECT DISTINCT name AS department
+             FROM recruitment.departments
+             WHERE organization_id = $1 AND active
+               AND nullif(btrim(name), '') IS NOT NULL
+             ORDER BY department`,
+            [input.organizationId]
+          ),
+          pool.query<{ code: string; id: string; name: string }>(
+            `SELECT id, code, name
+             FROM store.locations
+             WHERE organization_id = $1
+               AND location_type = 'STORE' AND active
+             ORDER BY CASE WHEN upper(btrim(code)) = 'MAIN' THEN 0 ELSE 1 END,
+               created_at, id
+             LIMIT 1`,
+            [input.organizationId]
+          ),
+        ])
+      const user = account.rows[0]
+      if (!user) throw new Error("The signed-in user account was not found.")
+
+      return {
+        employeeDepartments: employeeDepartments.rows.map(
+          ({ department }) => department
+        ),
+        isAdministrator: user.is_administrator,
+        organizationDepartments: organizationDepartments.rows.map(
+          ({ department }) => department
+        ),
+        requesterEmail: user.email,
+        storeLocation: location.rows[0] ?? null,
+      }
+    },
+
+    async ensurePrimaryStoreLocation(input: {
+      actorUserId?: string | null
+      organizationId: string
+    }) {
+      const existing = await pool.query<{
+        code: string
+        id: string
+        name: string
+      }>(
+        `SELECT id, code, name
+         FROM store.locations
+         WHERE organization_id = $1
+           AND location_type = 'STORE' AND active
+         ORDER BY CASE WHEN upper(btrim(code)) = 'MAIN' THEN 0 ELSE 1 END,
+           created_at, id
+         LIMIT 1`,
+        [input.organizationId]
+      )
+      if (existing.rows[0]) return existing.rows[0]
+
+      const created = await pool.query<{
+        code: string
+        id: string
+        name: string
+      }>(
+        `INSERT INTO store.locations (
+           organization_id, code, name, location_type,
+           created_by_user_id, updated_by_user_id
+         ) VALUES ($1, 'MAIN', 'Main Store', 'STORE', $2, $2)
+         ON CONFLICT (organization_id, lower(code))
+         DO UPDATE SET name = EXCLUDED.name,
+           location_type = 'STORE', active = true, updated_at = now(),
+           updated_by_user_id = EXCLUDED.updated_by_user_id
+         RETURNING id, code, name`,
+        [input.organizationId, input.actorUserId ?? null]
+      )
+      return created.rows[0]!
+    },
+
     async createLocation(input: {
       actorUserId?: string | null
       code: string

@@ -23,12 +23,14 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 
+import { StoreRequestIdentityFields } from "@/components/store/store-request-identity-fields"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
 import { formatIstDateTime } from "@/lib/date-time"
+import { storeRequestFormPolicy } from "@/lib/store-request-policy"
 
 import {
   requestMissingStoreCodeAction,
@@ -51,13 +53,18 @@ export default async function NewItemRequestsPage() {
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [items, requests, masters] = await Promise.all([
+    const [items, requests, masters, requestContext] = await Promise.all([
       repository.listItemTypes(organizationId),
       repository.listCodeRequests(organizationId),
       repository.listAssetClassificationMasters(organizationId),
+      repository.requisitionRequestContext({
+        organizationId,
+        userId: session.user.id,
+      }),
     ])
-    return { items, masters, requests }
+    return { items, masters, requestContext, requests }
   })().finally(() => repository.close())
+  const requestPolicy = storeRequestFormPolicy(data.requestContext)
 
   return (
     <div className="flex flex-col gap-6">
@@ -120,12 +127,7 @@ export default async function NewItemRequestsPage() {
                   name="identification_name"
                   required
                 />
-                <TextField label="Department" name="department" required />
-                <TextField
-                  label="Requested By / Individual"
-                  name="requested_by"
-                  required
-                />
+                <StoreRequestIdentityFields policy={requestPolicy} />
                 <TextField label="Reason / Use" name="reason" />
               </FieldGroup>
               <Button
@@ -133,7 +135,8 @@ export default async function NewItemRequestsPage() {
                 disabled={
                   !data.masters.categories.length ||
                   !data.masters.subcategories.length ||
-                  !data.masters.assetNames.length
+                  !data.masters.assetNames.length ||
+                  requestPolicy.submitDisabled
                 }
                 type="submit"
               >

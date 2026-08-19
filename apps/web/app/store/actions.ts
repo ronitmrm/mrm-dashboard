@@ -15,6 +15,10 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import {
+  resolveStoreRequestDepartment,
+  storeRequestFormPolicy,
+} from "@/lib/store-request-policy"
+import {
   deleteUserAttachment,
   saveUserAttachment,
 } from "@/lib/user-attachment-storage"
@@ -385,19 +389,29 @@ export async function deleteStoreMasterAction(formData: FormData) {
 export async function requestMissingStoreCodeAction(formData: FormData) {
   await withStore(
     "store.requests.write",
-    (repository, actorUserId, organizationId) =>
-      repository.createCodeRequest({
+    async (repository, actorUserId, organizationId) => {
+      const policy = storeRequestFormPolicy(
+        await repository.requisitionRequestContext({
+          organizationId,
+          userId: actorUserId,
+        })
+      )
+      return repository.createCodeRequest({
         actorUserId,
         assetCategoryId: requiredText(formData, "asset_category_id"),
         assetNameId: requiredText(formData, "asset_name_id"),
         assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
         assetType: assetType(formData),
-        department: requiredText(formData, "department"),
+        department: resolveStoreRequestDepartment(
+          policy,
+          optionalText(formData, "department")
+        ),
         identificationName: requiredText(formData, "identification_name"),
         organizationId,
         reason: optionalText(formData, "reason"),
-        requestedBy: requiredText(formData, "requested_by"),
+        requestedBy: policy.requestedBy,
       })
+    }
   )
   revalidateStore()
 }
@@ -432,20 +446,35 @@ export async function createStoreRequisitionBatchAction(formData: FormData) {
   }
   await withStore(
     "store.requests.write",
-    (repository, actorUserId, organizationId) =>
-      repository.createRequisitionBatch({
+    async (repository, actorUserId, organizationId) => {
+      const policy = storeRequestFormPolicy(
+        await repository.requisitionRequestContext({
+          organizationId,
+          userId: actorUserId,
+        })
+      )
+      const department = resolveStoreRequestDepartment(
+        policy,
+        optionalText(formData, "department")
+      )
+      const location = await repository.ensurePrimaryStoreLocation({
         actorUserId,
-        department: requiredText(formData, "department"),
+        organizationId,
+      })
+      return repository.createRequisitionBatch({
+        actorUserId,
+        department,
         items: itemTypeIds.map((itemTypeId, index) => ({
           itemTypeId,
           quantity: quantities[index]!,
         })),
-        locationId: requiredText(formData, "location_id"),
+        locationId: location.id,
         organizationId,
         purpose: optionalText(formData, "purpose"),
-        requestedBy: requiredText(formData, "requested_by"),
+        requestedBy: policy.requestedBy,
         requiredOn: optionalText(formData, "required_on"),
       })
+    }
   )
   revalidateStore()
   redirect("/store/requests")
