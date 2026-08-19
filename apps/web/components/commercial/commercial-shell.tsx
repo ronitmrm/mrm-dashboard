@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { Settings2 } from "lucide-react"
+import { KeyRound, Settings2 } from "lucide-react"
 
 import {
   defaultProductionFloorCode,
@@ -83,7 +83,9 @@ export function CommercialShell({
     searchParams.get("floor") ?? defaultProductionFloorCode
   )
   const current =
-    productionPage ??
+    (pathname === "/account/password"
+      ? { label: "Password & Security" }
+      : productionPage) ??
     [
       ...commercialNavigation,
       commercialMasterNavigation,
@@ -126,7 +128,11 @@ export function CommercialShell({
           />
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-3">
-          <div className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2">
+          <Link
+            className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            href="/account/password"
+            title="Password & Security"
+          >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/12 text-sm font-semibold text-sidebar-primary">
               {(user.name || user.email).trim().charAt(0).toUpperCase()}
             </span>
@@ -138,7 +144,8 @@ export function CommercialShell({
                 {user.email}
               </span>
             </span>
-          </div>
+            <KeyRound className="size-4 shrink-0 text-muted-foreground" />
+          </Link>
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>

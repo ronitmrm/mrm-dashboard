@@ -9,6 +9,7 @@ import {
 } from "@workspace/db"
 
 import { createAuthSystem } from "./auth"
+import { createPasswordResetService } from "./password-reset"
 
 const baseConnectionString =
   process.env.TEST_DATABASE_URL ??
@@ -180,6 +181,182 @@ describe("PostgreSQL Better Auth", () => {
       ).resolves.toBe(false)
     } finally {
       await authorization.close()
+      await provisioner.close()
+      await system.close()
+    }
+  })
+
+  it("lets a user change only their own password", async () => {
+    const system = createAuthSystem({
+      allowSignUp: true,
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const reset = createPasswordResetService({ auth: system.auth })
+
+    try {
+      const user = await system.auth.api.signUpEmail({
+        body: {
+          email: "self-password@mrmpl.test",
+          name: "Self Password",
+          password: "current-self-password",
+        },
+      })
+      const otherUser = await system.auth.api.signUpEmail({
+        body: {
+          email: "other-password@mrmpl.test",
+          name: "Other Password",
+          password: "current-other-password",
+        },
+      })
+      const signIn = await system.auth.api.signInEmail({
+        body: {
+          email: user.user.email,
+          password: "current-self-password",
+        },
+        returnHeaders: true,
+      })
+      const headers = new Headers({
+        cookie: signIn.headers
+          .getSetCookie()
+          .map((value) => value.split(";", 1)[0])
+          .join("; "),
+      })
+
+      await expect(reset.getScreenContext(headers)).resolves.toMatchObject({
+        isAdministrator: false,
+        users: [{ id: user.user.id }],
+      })
+
+      await expect(
+        reset.resetPassword({
+          currentPassword: "current-self-password",
+          headers,
+          newPassword: "changed-other-password",
+          targetUserId: otherUser.user.id,
+        })
+      ).rejects.toThrow("only change your own password")
+
+      await reset.resetPassword({
+        currentPassword: "current-self-password",
+        headers,
+        newPassword: "changed-self-password",
+        targetUserId: user.user.id,
+      })
+
+      await expect(
+        system.auth.api.signInEmail({
+          body: {
+            email: user.user.email,
+            password: "current-self-password",
+          },
+        })
+      ).rejects.toThrow()
+      await expect(
+        system.auth.api.signInEmail({
+          body: {
+            email: user.user.email,
+            password: "changed-self-password",
+          },
+        })
+      ).resolves.toMatchObject({ user: { id: user.user.id } })
+    } finally {
+      await system.close()
+    }
+  })
+
+  it("lets an administrator reset any user's password and revoke their sessions", async () => {
+    const system = createAuthSystem({
+      allowSignUp: true,
+      baseURL: "http://localhost:3001",
+      connectionString,
+      secret: "test-only-better-auth-secret-000000000000",
+    })
+    const provisioner = createInitialAdministratorProvisioner({
+      connectionString,
+    })
+    const reset = createPasswordResetService({ auth: system.auth })
+
+    try {
+      const administrator = await system.auth.api.signUpEmail({
+        body: {
+          email: "password-admin@mrmpl.test",
+          name: "Password Administrator",
+          password: "password-admin-current",
+        },
+      })
+      await provisioner.promote({
+        email: administrator.user.email,
+        userId: administrator.user.id,
+      })
+      const staff = await system.auth.api.signUpEmail({
+        body: {
+          email: "password-staff@mrmpl.test",
+          name: "Password Staff",
+          password: "password-staff-current",
+        },
+      })
+      const administratorSignIn = await system.auth.api.signInEmail({
+        body: {
+          email: administrator.user.email,
+          password: "password-admin-current",
+        },
+        returnHeaders: true,
+      })
+      const staffSignIn = await system.auth.api.signInEmail({
+        body: {
+          email: staff.user.email,
+          password: "password-staff-current",
+        },
+        returnHeaders: true,
+      })
+      const cookie = (responseHeaders: Headers) =>
+        responseHeaders
+          .getSetCookie()
+          .map((value) => value.split(";", 1)[0])
+          .join("; ")
+
+      await expect(
+        reset.getScreenContext(
+          new Headers({ cookie: cookie(administratorSignIn.headers) })
+        )
+      ).resolves.toMatchObject({
+        isAdministrator: true,
+        users: expect.arrayContaining([
+          { id: administrator.user.id },
+          { id: staff.user.id },
+        ]),
+      })
+
+      await reset.resetPassword({
+        headers: new Headers({ cookie: cookie(administratorSignIn.headers) }),
+        newPassword: "password-staff-reset",
+        targetUserId: staff.user.id,
+      })
+
+      await expect(
+        system.auth.api.signInEmail({
+          body: {
+            email: staff.user.email,
+            password: "password-staff-current",
+          },
+        })
+      ).rejects.toThrow()
+      await expect(
+        system.auth.api.signInEmail({
+          body: {
+            email: staff.user.email,
+            password: "password-staff-reset",
+          },
+        })
+      ).resolves.toMatchObject({ user: { id: staff.user.id } })
+      await expect(
+        system.auth.api.getSession({
+          headers: new Headers({ cookie: cookie(staffSignIn.headers) }),
+        })
+      ).resolves.toBeNull()
+    } finally {
       await provisioner.close()
       await system.close()
     }
