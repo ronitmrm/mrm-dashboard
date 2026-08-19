@@ -42,7 +42,9 @@ import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-acce
 import { masterDataNavigationLinks } from "@/lib/master-data-navigation"
 import {
   administrationNavigation,
-  commercialNavigation,
+  commercialCostingNavigation,
+  commercialMasterDataNavigation,
+  commercialOperationalEntryNavigation,
   consolidatedProductionNavigation,
   dashboardNavigationDestination,
   hrNavigation,
@@ -83,13 +85,26 @@ function defaultExpandedSections(
   activeDashboardTab?: DashboardTabId
 ): ExpandedSections {
   const onProduction = pathname === "/" || pathname.startsWith("/dashboard")
+  const onCommercialMasterData = commercialMasterDataNavigation.some(
+    ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
+  )
+  const onCommercialOperationalEntry =
+    commercialOperationalEntryNavigation.some(
+      ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
+    )
   return {
-    costing: pathname.startsWith("/commercial"),
+    costing:
+      pathname.startsWith("/commercial") &&
+      !onCommercialMasterData &&
+      !onCommercialOperationalEntry,
     hr: pathname.startsWith("/hr"),
     masterData:
       activeDashboardTab === "dataEntryTab" ||
-      activeDashboardTab === "masterTablesTab",
-    operationalEntry: activeDashboardTab === "operationalEntryTab",
+      activeDashboardTab === "masterTablesTab" ||
+      onCommercialMasterData,
+    operationalEntry:
+      activeDashboardTab === "operationalEntryTab" ||
+      onCommercialOperationalEntry,
     store: pathname.startsWith("/store"),
     productionConventional:
       onProduction && activeProductionFloor === "conventional",
@@ -200,9 +215,17 @@ export function UnifiedSidebarNavigation({
       activeDashboardTab
     )
   )
-  const visibleCommercialNavigation = commercialNavigation.filter((item) =>
-    navigationAccess.commercialHrefs.includes(item.href)
+  const visibleCommercialNavigation = commercialCostingNavigation.filter(
+    (item) => navigationAccess.commercialHrefs.includes(item.href)
   )
+  const visibleCommercialMasterDataNavigation =
+    commercialMasterDataNavigation.filter((item) =>
+      navigationAccess.commercialHrefs.includes(item.href)
+    )
+  const visibleCommercialOperationalEntryNavigation =
+    commercialOperationalEntryNavigation.filter((item) =>
+      navigationAccess.commercialHrefs.includes(item.href)
+    )
   const visibleHrNavigation = hrNavigation.filter((item) =>
     navigationAccess.hrHrefs.includes(item.href)
   )
@@ -246,37 +269,50 @@ export function UnifiedSidebarNavigation({
         "universal production corrections reverse wrong entries data entry master tables machine master checklists maintenance quality masters"
       )
     : []
-  const visibleMasterDataNavigation = masterDataNavigationLinks(
-    navigationAccess,
-    {
+  const visibleMasterDataNavigation = [
+    ...masterDataNavigationLinks(navigationAccess, {
       entryType: activeMasterEntryType,
       pathname,
       productionFloorCode: activeProductionFloor,
       searchParams,
-    }
-  )
+    }),
+    ...visibleCommercialMasterDataNavigation.map((item) => ({
+      destination: item.href,
+      id: item.href,
+      title: item.label,
+    })),
+  ]
   const filteredMasterDataNavigation = visibleMasterDataNavigation.filter(
     (item) =>
       !normalizedMenuSearch ||
       item.title.toLowerCase().includes(normalizedMenuSearch) ||
-      "company master data masters".includes(normalizedMenuSearch)
+      "company master data masters customers website products".includes(
+        normalizedMenuSearch
+      )
   )
-  const visibleOperationalEntryNavigation = navigationAccess.operations
-    ? operationalEntryNavigation.map((item) => ({
-        destination: universalProductionNavigationHref(
-          item.id,
-          activeProductionFloor
-        ),
-        id: item.id,
-        title: item.title,
-      }))
-    : []
+  const visibleOperationalEntryNavigation = [
+    ...(navigationAccess.operations
+      ? operationalEntryNavigation.map((item) => ({
+          destination: universalProductionNavigationHref(
+            item.id,
+            activeProductionFloor
+          ),
+          id: item.id,
+          title: item.title,
+        }))
+      : []),
+    ...visibleCommercialOperationalEntryNavigation.map((item) => ({
+      destination: item.href,
+      id: item.href,
+      title: item.label,
+    })),
+  ]
   const filteredOperationalEntryNavigation =
     visibleOperationalEntryNavigation.filter(
       (item) =>
         !normalizedMenuSearch ||
         item.title.toLowerCase().includes(normalizedMenuSearch) ||
-        "operational entry work orders rm inward production output".includes(
+        "operational entry work orders rm inward production output enquiries".includes(
           normalizedMenuSearch
         )
     )
@@ -407,7 +443,9 @@ export function UnifiedSidebarNavigation({
         <NavigationSection
           icon={ListChecks}
           isActive={visibleOperationalEntryNavigation.some(
-            (item) => activeDashboardTab === item.id
+            (item) =>
+              activeDashboardTab === item.id ||
+              navigationHrefMatches(pathname, searchParams, item.destination)
           )}
           label="Operational Entry"
           onOpenChange={(open) => {
@@ -422,7 +460,14 @@ export function UnifiedSidebarNavigation({
               <SidebarMenuSubButton
                 asChild
                 className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
-                isActive={activeDashboardTab === item.id}
+                isActive={
+                  activeDashboardTab === item.id ||
+                  navigationHrefMatches(
+                    pathname,
+                    searchParams,
+                    item.destination
+                  )
+                }
               >
                 <a href={item.destination}>
                   <span

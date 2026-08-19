@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest"
 import { commercialNavigationAccess } from "./auth/commercial-capabilities"
 import {
   administrationNavigation,
+  commercialCostingNavigation,
+  commercialMasterDataNavigation,
   commercialNavigation,
+  commercialOperationalEntryNavigation,
   consolidatedProductionNavigation,
   dashboardNavigation,
   dashboardNavigationDestination,
@@ -155,6 +158,28 @@ describe("unified navigation", () => {
       title: "Mechanical Maintenance",
     })
     expect(commercialNavigation).toHaveLength(16)
+    expect(
+      commercialMasterDataNavigation.map(({ href, label }) => ({ href, label }))
+    ).toEqual([
+      { href: "/commercial/customers", label: "Customers" },
+      { href: "/commercial/website-products", label: "Website Products" },
+    ])
+    expect(
+      commercialOperationalEntryNavigation.map(({ href, label }) => ({
+        href,
+        label,
+      }))
+    ).toEqual([
+      { href: "/commercial/enquiries", label: "Enquiries" },
+    ])
+    expect(commercialCostingNavigation.map(({ label }) => label)).not.toEqual(
+      expect.arrayContaining(["Customers", "Enquiries", "Website Products"])
+    )
+    expect(
+      commercialCostingNavigation.length +
+        commercialMasterDataNavigation.length +
+        commercialOperationalEntryNavigation.length
+    ).toBe(commercialNavigation.length)
     expect(commercialNavigation.map(({ label }) => label)).not.toContain(
       "Pricing Masters"
     )
