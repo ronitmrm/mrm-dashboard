@@ -9,11 +9,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Input } from "@workspace/ui/components/input"
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@workspace/ui/components/dialog"
+import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
+import { Input } from "@workspace/ui/components/input"
 import {
   Table,
   TableBody,
@@ -41,16 +48,7 @@ export default async function StoreOrdersPage() {
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [locations, orders] = await Promise.all([
-      repository.listLocations(organizationId),
-      repository.listPurchaseOrders(organizationId),
-    ])
-    return {
-      locations: locations.filter(
-        (location) => location.locationType === "STORE"
-      ),
-      orders,
-    }
+    return repository.listPurchaseOrders(organizationId)
   })().finally(() => repository.close())
 
   return (
@@ -93,7 +91,7 @@ export default async function StoreOrdersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.orders.map((order) => {
+              {data.map((order) => {
                 const canReceive =
                   order.orderType === "GOODS" &&
                   order.status !== "Cancelled" &&
@@ -151,74 +149,118 @@ export default async function StoreOrdersPage() {
                     {canManage ? (
                       <TableCell>
                         {canReceive ? (
-                          <form
-                            action={receiveStoreStockAction}
-                            className="grid min-w-96 grid-cols-2 gap-2"
-                            encType="multipart/form-data"
-                          >
-                            <input
-                              name="purchase_order_line_id"
-                              type="hidden"
-                              value={order.id}
-                            />
-                            <NativeSelect
-                              aria-label={`Storage location for ${order.orderNumber}`}
-                              name="location_id"
-                              required
-                            >
-                              {data.locations.map((location) => (
-                                <NativeSelectOption
-                                  key={location.id}
-                                  value={location.id}
-                                >
-                                  {location.code} — {location.name}
-                                </NativeSelectOption>
-                              ))}
-                            </NativeSelect>
-                            <Input
-                              aria-label={`Receipt quantity for ${order.orderNumber}`}
-                              max={order.remainingQuantity}
-                              min="0.001"
-                              name="quantity"
-                              placeholder={`${order.remainingQuantity} ${order.unit} remaining`}
-                              required
-                              step="0.001"
-                              type="number"
-                            />
-                            <Input
-                              name="bill_number"
-                              placeholder="Bill Number"
-                            />
-                            <Input
-                              aria-label="Bill Date"
-                              name="bill_date"
-                              type="date"
-                            />
-                            <Input
-                              aria-label="Warranty or Guarantee Until"
-                              name="warranty_until"
-                              type="date"
-                            />
-                            <Input
-                              name="received_by"
-                              placeholder="Received By"
-                            />
-                            <Input
-                              accept="application/pdf,image/jpeg,image/png"
-                              aria-label="Guarantee Card"
-                              className="col-span-2"
-                              name="guarantee_card"
-                              type="file"
-                            />
-                            <Button
-                              className="col-span-2"
-                              disabled={!data.locations.length}
-                              size="sm"
-                              type="submit"
-                            >
-                              Receive Against Order
-                            </Button>
-                          </form>
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button size="sm">Receive Items</Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Receive {order.typeCode}</DialogTitle>
+                                <DialogDescription>
+                                  {order.orderNumber} · {order.remainingQuantity}{" "}
+                                  {order.unit} remaining. Stock will be received
+                                  into Main Store under your signed-in ID.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <form
+                                action={receiveStoreStockAction}
+                                className="grid gap-5"
+                                encType="multipart/form-data"
+                              >
+                                <input
+                                  name="purchase_order_line_id"
+                                  type="hidden"
+                                  value={order.id}
+                                />
+                                <FieldGroup className="grid gap-4 sm:grid-cols-2">
+                                  <Field>
+                                    <FieldLabel
+                                      htmlFor={`receipt-quantity-${order.id}`}
+                                    >
+                                      Quantity Received
+                                    </FieldLabel>
+                                    <Input
+                                      defaultValue={order.remainingQuantity}
+                                      id={`receipt-quantity-${order.id}`}
+                                      max={order.remainingQuantity}
+                                      min="0.001"
+                                      name="quantity"
+                                      required
+                                      step="0.001"
+                                      type="number"
+                                    />
+                                  </Field>
+                                  <Field>
+                                    <FieldLabel
+                                      htmlFor={`receipt-bill-number-${order.id}`}
+                                    >
+                                      Supplier Bill Number (optional)
+                                    </FieldLabel>
+                                    <Input
+                                      id={`receipt-bill-number-${order.id}`}
+                                      name="bill_number"
+                                    />
+                                  </Field>
+                                  <Field>
+                                    <FieldLabel
+                                      htmlFor={`receipt-bill-date-${order.id}`}
+                                    >
+                                      Supplier Bill Date (optional)
+                                    </FieldLabel>
+                                    <Input
+                                      id={`receipt-bill-date-${order.id}`}
+                                      name="bill_date"
+                                      type="date"
+                                    />
+                                  </Field>
+                                </FieldGroup>
+
+                                <details className="rounded-lg border px-4 py-3">
+                                  <summary className="cursor-pointer font-medium">
+                                    Warranty &amp; document (optional)
+                                  </summary>
+                                  <div className="mt-4 grid gap-4">
+                                    <Field>
+                                      <FieldLabel
+                                        htmlFor={`receipt-warranty-${order.id}`}
+                                      >
+                                        Warranty / Guarantee Until
+                                      </FieldLabel>
+                                      <Input
+                                        id={`receipt-warranty-${order.id}`}
+                                        name="warranty_until"
+                                        type="date"
+                                      />
+                                    </Field>
+                                    <Field>
+                                      <FieldLabel
+                                        htmlFor={`receipt-card-${order.id}`}
+                                      >
+                                        Warranty / Guarantee Card
+                                      </FieldLabel>
+                                      <Input
+                                        accept="application/pdf,image/jpeg,image/png"
+                                        id={`receipt-card-${order.id}`}
+                                        name="guarantee_card"
+                                        type="file"
+                                      />
+                                    </Field>
+                                  </div>
+                                </details>
+
+                                <DialogFooter>
+                                  <DialogClose asChild>
+                                    <Button type="button" variant="outline">
+                                      Cancel
+                                    </Button>
+                                  </DialogClose>
+                                  <Button type="submit">
+                                    Receive Into Main Store
+                                  </Button>
+                                </DialogFooter>
+                              </form>
+                            </DialogContent>
+                          </Dialog>
                         ) : order.orderType === "REPAIR" ? (
                           "Service PO — no stock receipt"
                         ) : (
@@ -229,7 +271,7 @@ export default async function StoreOrdersPage() {
                   </TableRow>
                 )
               })}
-              {!data.orders.length ? (
+              {!data.length ? (
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"

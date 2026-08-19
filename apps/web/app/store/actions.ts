@@ -525,20 +525,36 @@ async function saveGuaranteeCard(upload: FormDataEntryValue | null) {
 export async function receiveStoreStockAction(formData: FormData) {
   const savedFile = await saveGuaranteeCard(formData.get("guarantee_card"))
   try {
-    await withStore("store.manage", (repository, actorUserId, organizationId) =>
-      repository.receiveStock({
-        actorUserId,
-        billDate: optionalText(formData, "bill_date"),
-        billNumber: optionalText(formData, "bill_number"),
-        guaranteeCardFileName: savedFile?.fileName,
-        guaranteeCardStorageKey: savedFile?.storageKey,
-        locationId: requiredText(formData, "location_id"),
-        organizationId,
-        purchaseOrderLineId: requiredText(formData, "purchase_order_line_id"),
-        quantity: positiveNumber(formData, "quantity"),
-        receivedBy: optionalText(formData, "received_by"),
-        warrantyUntil: optionalText(formData, "warranty_until"),
-      })
+    await withStore(
+      "store.manage",
+      async (repository, actorUserId, organizationId) => {
+        const [requestContext, location] = await Promise.all([
+          repository.requisitionRequestContext({
+            organizationId,
+            userId: actorUserId,
+          }),
+          repository.ensurePrimaryStoreLocation({
+            actorUserId,
+            organizationId,
+          }),
+        ])
+        return repository.receiveStock({
+          actorUserId,
+          billDate: optionalText(formData, "bill_date"),
+          billNumber: optionalText(formData, "bill_number"),
+          guaranteeCardFileName: savedFile?.fileName,
+          guaranteeCardStorageKey: savedFile?.storageKey,
+          locationId: location.id,
+          organizationId,
+          purchaseOrderLineId: requiredText(
+            formData,
+            "purchase_order_line_id"
+          ),
+          quantity: positiveNumber(formData, "quantity"),
+          receivedBy: requestContext.requesterEmail,
+          warrantyUntil: optionalText(formData, "warranty_until"),
+        })
+      }
     )
   } catch (error) {
     if (savedFile) {
