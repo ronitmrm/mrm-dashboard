@@ -92,11 +92,15 @@ async function createPurchaseOrder(
   quantity: number,
   unitPrice: string
 ) {
-  const supplier = await store.createSupplier({
-    code: `SUPPLIER-${suffix}`,
-    name: "Store Test Supplier",
-    organizationId,
-  })
+  const supplierName = `Store Test Supplier ${suffix}`
+  const supplier =
+    (await store.listSuppliers(organizationId)).find(
+      (candidate) => candidate.name === supplierName
+    ) ??
+    (await store.createSupplier({
+      name: supplierName,
+      organizationId,
+    }))
   return store.createPurchaseOrder({
     itemTypeId,
     orderDate: "2026-08-17",
@@ -108,15 +112,117 @@ async function createPurchaseOrder(
 }
 
 describe("Store requests", () => {
+  test("auto-generates Supplier codes and rejects duplicate names and GST numbers", async () => {
+    const supplier = await store.createSupplier({
+      address: "Industrial Area, Pune",
+      gstNumber: `27AAAC${suffix.slice(0, 4).toUpperCase()}1Z5`,
+      name: `  Precision   Supply ${suffix}  `,
+      organizationId,
+    })
+
+    expect(supplier.code).toMatch(/^SUP-\d{3,}$/)
+    await expect(
+      store.createSupplier({
+        name: `precision supply ${suffix}`,
+        organizationId,
+      })
+    ).rejects.toThrow("Supplier name already exists")
+    await expect(
+      store.createSupplier({
+        gstNumber: `27aaac${suffix.slice(0, 4)}1z5`,
+        name: `Another Supplier ${suffix}`,
+        organizationId,
+      })
+    ).rejects.toThrow("GST number already belongs")
+  })
+
+  test("keeps price revisions and defaults to the cheapest active Supplier", async () => {
+    const preferredSupplier = await store.createSupplier({
+      name: `Lowest Quote Supplier ${suffix}`,
+      organizationId,
+    })
+    const alternateSupplier = await store.createSupplier({
+      name: `Alternate Quote Supplier ${suffix}`,
+      organizationId,
+    })
+    const item = await store.createItemType({
+      ...(await createClassification("Price Revision")),
+      assetType: "CONSUMABLE",
+      identificationName: `Price Revision Item ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    await store.createSupplierPrice({
+      itemTypeId: item.id,
+      organizationId,
+      supplierId: preferredSupplier.id,
+      unitPrice: "120.00",
+      validFrom: "2026-08-01",
+    })
+    await store.createSupplierPrice({
+      itemTypeId: item.id,
+      organizationId,
+      supplierId: preferredSupplier.id,
+      unitPrice: "100.00",
+      validFrom: "2026-08-10",
+    })
+    await store.createSupplierPrice({
+      itemTypeId: item.id,
+      organizationId,
+      supplierId: alternateSupplier.id,
+      unitPrice: "110.00",
+      validFrom: "2026-08-10",
+    })
+
+    const prices = (await store.listSupplierPrices(organizationId)).filter(
+      (price) => price.itemTypeId === item.id
+    )
+    expect(prices).toHaveLength(3)
+    expect(
+      prices.filter(
+        (price) => price.supplierId === preferredSupplier.id && price.active
+      )
+    ).toHaveLength(1)
+    expect(
+      (await store.listItemTypes(organizationId)).find(
+        (candidate) => candidate.id === item.id
+      )
+    ).toEqual(
+      expect.objectContaining({
+        currentSupplierId: preferredSupplier.id,
+        currentUnitPrice: "100.00",
+      })
+    )
+
+    const override = await store.createPurchaseOrdersFromSelection({
+      items: [
+        {
+          itemTypeId: item.id,
+          quantity: 2,
+          supplierId: alternateSupplier.id,
+        },
+      ],
+      orderDate: "2026-08-17",
+      organizationId,
+    })
+    const overrideLines = (
+      await store.listPurchaseOrders(organizationId)
+    ).filter((line) => line.purchaseOrderId === override.orders[0]?.id)
+    expect(overrideLines).toContainEqual(
+      expect.objectContaining({
+        supplierId: alternateSupplier.id,
+        unitPrice: "110.00",
+      })
+    )
+  })
+
   test("creates one multi-line Purchase Order per current Supplier Price", async () => {
     const firstSupplier = await store.createSupplier({
-      code: `PO-A-${suffix}`,
-      name: "Grouped PO Supplier A",
+      name: `Grouped PO Supplier A ${suffix}`,
       organizationId,
     })
     const secondSupplier = await store.createSupplier({
-      code: `PO-B-${suffix}`,
-      name: "Grouped PO Supplier B",
+      name: `Grouped PO Supplier B ${suffix}`,
       organizationId,
     })
     const firstItem = await store.createItemType({
@@ -270,8 +376,7 @@ describe("Store requests", () => {
       organizationId,
     })
     const supplier = await store.createSupplier({
-      code: `SUP-${suffix}`,
-      name: "Test Supplier",
+      name: `Test Supplier ${suffix}`,
       organizationId,
     })
     const classification = await createClassification("Purchase Order")
@@ -602,5 +707,92 @@ describe("Store requests", () => {
     )
     expect(workspace?.maintenance[0]?.maintenanceType).toBe("CALIBRATION")
     expect(workspace?.schedules[0]?.nextDueOn).toBe("2026-09-19")
+  })
+
+  test("creates a Repair PO against one Physical Asset and keeps its drawing", async () => {
+    const location = await store.createLocation({
+      code: `REPAIR-STORE-${suffix}`,
+      name: `Repair Store ${suffix}`,
+      organizationId,
+    })
+    const item = await store.createItemType({
+      ...(await createClassification("Repair PO")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Repairable Gauge ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const receipt = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: (await createPurchaseOrder(item.id, 1, "5000.00"))
+        .id,
+      quantity: 1,
+    })
+    const repairSupplier = await store.createSupplier({
+      name: `Repair Service Supplier ${suffix}`,
+      organizationId,
+    })
+    const repairOrder = await store.createRepairPurchaseOrder({
+      assetCode: receipt.assetCodes[0]!,
+      organizationId,
+      orderDate: "2026-08-19",
+      serviceDescription: "Replace bearing and recalibrate",
+      servicePrice: "850.00",
+      supplierId: repairSupplier.id,
+    })
+    await expect(
+      store.createRepairPurchaseOrder({
+        assetCode: receipt.assetCodes[0]!,
+        organizationId,
+        serviceDescription: "Duplicate open repair",
+        servicePrice: "900.00",
+        supplierId: repairSupplier.id,
+      })
+    ).rejects.toThrow("already has an open Repair PO")
+    const drawing = await store.recordItemTypeDrawing({
+      fileName: "gauge-drawing.pdf",
+      itemTypeId: item.id,
+      organizationId,
+      storageKey: `store/drawings/${suffix}-gauge.pdf`,
+    })
+
+    expect(
+      (await store.listPurchaseOrders(organizationId)).find(
+        (order) => order.purchaseOrderId === repairOrder.id
+      )
+    ).toEqual(
+      expect.objectContaining({
+        orderType: "REPAIR",
+        supplierId: repairSupplier.id,
+        typeCode: receipt.assetCodes[0],
+      })
+    )
+    const workspace = await store.getAssetWorkspace({
+      assetCode: receipt.assetCodes[0]!,
+      organizationId,
+    })
+    expect(workspace?.asset.holderType).toBe("SUPPLIER")
+    expect(workspace?.asset.holderName).toBe(
+      `Repair Service Supplier ${suffix}`
+    )
+    expect(workspace?.repairOrders).toContainEqual(
+      expect.objectContaining({ id: repairOrder.id })
+    )
+    await store.completeRepairPurchaseOrder({
+      assetCode: receipt.assetCodes[0]!,
+      organizationId,
+      purchaseOrderId: repairOrder.id,
+    })
+    expect(
+      await store.getItemTypeDrawing({
+        documentId: drawing.id,
+        itemTypeId: item.id,
+        organizationId,
+      })
+    ).toEqual({
+      fileName: "gauge-drawing.pdf",
+      storageKey: `store/drawings/${suffix}-gauge.pdf`,
+    })
   })
 })

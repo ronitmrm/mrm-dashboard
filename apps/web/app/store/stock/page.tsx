@@ -11,6 +11,10 @@ import {
 } from "@workspace/ui/components/card"
 import { Input } from "@workspace/ui/components/input"
 import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
+import {
   Table,
   TableBody,
   TableCell,
@@ -63,9 +67,13 @@ export default async function StoreStockPage({
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const items = await (async () => {
+  const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    return repository.listItemTypes(organizationId)
+    const [items, supplierPrices] = await Promise.all([
+      repository.listItemTypes(organizationId),
+      repository.listSupplierPrices(organizationId),
+    ])
+    return { items, supplierPrices }
   })().finally(() => repository.close())
   const actionFormId = "stock-row-action"
   const columnCount = mode === "view" ? 8 : mode === "request" ? 9 : 10
@@ -85,8 +93,8 @@ export default async function StoreStockPage({
             <div>
               <CardTitle>Stock Register</CardTitle>
               <CardDescription>
-                Supplier and price come from the newest effective Supplier Price
-                Master entry.
+                The cheapest active quote is selected by default. Store can
+                choose another quoted Supplier before saving the PO.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -148,10 +156,19 @@ export default async function StoreStockPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((item) => {
-                const hasPrice = Boolean(
-                  item.currentSupplierId && item.currentUnitPrice
-                )
+              {data.items.map((item) => {
+                const supplierOptions = data.supplierPrices
+                  .filter(
+                    (price) =>
+                      price.itemTypeId === item.id &&
+                      price.active &&
+                      price.validFrom <= istDateValue()
+                  )
+                  .sort(
+                    (left, right) =>
+                      Number(left.unitPrice) - Number(right.unitPrice)
+                  )
+                const hasPrice = supplierOptions.length > 0
                 return (
                   <TableRow key={item.id}>
                     {mode !== "view" ? (
@@ -189,7 +206,25 @@ export default async function StoreStockPage({
                     </TableCell>
                     <TableCell>{item.storageLocations}</TableCell>
                     <TableCell>
-                      {item.currentSupplierName ?? (
+                      {mode === "order" && supplierOptions.length ? (
+                        <NativeSelect
+                          aria-label={`Supplier for ${item.typeCode}`}
+                          defaultValue={item.currentSupplierId ?? undefined}
+                          form={actionFormId}
+                          name={`supplier_${item.id}`}
+                        >
+                          {supplierOptions.map((price) => (
+                            <NativeSelectOption
+                              key={price.id}
+                              value={price.supplierId}
+                            >
+                              {price.supplierName} — ₹ {price.unitPrice}
+                            </NativeSelectOption>
+                          ))}
+                        </NativeSelect>
+                      ) : item.currentSupplierName ? (
+                        item.currentSupplierName
+                      ) : (
                         <Badge variant="outline">Price Master Missing</Badge>
                       )}
                     </TableCell>
@@ -219,7 +254,7 @@ export default async function StoreStockPage({
                   </TableRow>
                 )
               })}
-              {!items.length ? (
+              {!data.items.length ? (
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"

@@ -346,6 +346,49 @@ export function createMasterDataLifecycleRepository(
         }
 
         if (replacement) {
+          if (input.kind === "store_supplier") {
+            await client.query(
+              `UPDATE store.supplier_prices source_price
+               SET active = false, superseded_at = now()
+               WHERE source_price.supplier_id = $1 AND source_price.active
+                 AND EXISTS (
+                   SELECT 1 FROM store.supplier_prices replacement_price
+                   WHERE replacement_price.organization_id = source_price.organization_id
+                     AND replacement_price.item_type_id = source_price.item_type_id
+                     AND replacement_price.supplier_id = $2
+                     AND replacement_price.active
+                 )`,
+              [source.id, replacement.id]
+            )
+          }
+          if (input.kind === "store_item_type") {
+            await client.query(
+              `UPDATE store.supplier_prices source_price
+               SET active = false, superseded_at = now()
+               WHERE source_price.item_type_id = $1 AND source_price.active
+                 AND EXISTS (
+                   SELECT 1 FROM store.supplier_prices replacement_price
+                   WHERE replacement_price.organization_id = source_price.organization_id
+                     AND replacement_price.item_type_id = $2
+                     AND replacement_price.supplier_id = source_price.supplier_id
+                     AND replacement_price.active
+                 )`,
+              [source.id, replacement.id]
+            )
+            await client.query(
+              `UPDATE store.documents source_drawing
+               SET document_type = 'OTHER'
+               WHERE source_drawing.item_type_id = $1
+                 AND source_drawing.document_type = 'ASSET_DRAWING'
+                 AND EXISTS (
+                   SELECT 1 FROM store.documents replacement_drawing
+                   WHERE replacement_drawing.organization_id = source_drawing.organization_id
+                     AND replacement_drawing.item_type_id = $2
+                     AND replacement_drawing.document_type = 'ASSET_DRAWING'
+                 )`,
+              [source.id, replacement.id]
+            )
+          }
           for (const reference of usedReferences) {
             await client.query(
               `UPDATE ${qualifiedTable(reference.schemaName, reference.tableName)}
