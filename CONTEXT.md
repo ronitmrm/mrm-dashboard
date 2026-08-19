@@ -309,6 +309,10 @@ _Avoid_: Consumable issue, Purchase Order receipt.
 The permanent code shared by every quantity of one Store Item Type, whether Consumable or Non Consumable.
 _Avoid_: Type Code, per-unit code.
 
+**Store Item Workspace**:
+The permanent Asset Code view containing Store Item details, Supplier Price history, Suppliers, and every physical Unit ID belonging to the Store Item.
+_Avoid_: Individual Unit ID lifecycle view.
+
 **Unit ID / Serial ID**:
 The permanent identity of one Non Consumable physical unit used for its movement, maintenance, calibration, and lifecycle history.
 _Avoid_: Asset Code, Consumable unit code.
