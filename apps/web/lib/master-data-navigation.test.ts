@@ -20,6 +20,8 @@ describe("master data navigation", () => {
       "hr_masters",
       "hr_job_templates",
       "commercial_pricing_masters",
+      "commercial_customers",
+      "commercial_website_products",
     ])
 
     for (const entryType of companyWideMasterEntryTypes) {
@@ -51,7 +53,11 @@ describe("master data navigation", () => {
     const options = externalMasterDataOptions(
       {
         administration: false,
-        commercialHrefs: ["/commercial/masters"],
+        commercialHrefs: [
+          "/commercial/masters",
+          "/commercial/customers",
+          "/commercial/website-products",
+        ],
         hrHrefs: ["/hr?panel=approvedPostPanel"],
         operations: true,
         store: true,
@@ -74,6 +80,37 @@ describe("master data navigation", () => {
         href: "/commercial/masters?masterView=dataEntry",
         id: "commercial_pricing_masters",
         title: "Commercial Pricing Masters",
+      },
+      {
+        href: "/commercial/customers?masterView=dataEntry",
+        id: "commercial_customers",
+        title: "Customers",
+      },
+      {
+        href: "/commercial/website-products?masterView=dataEntry",
+        id: "commercial_website_products",
+        title: "Website Products",
+      },
+    ])
+  })
+
+  it("requires each Commercial master permission independently", () => {
+    expect(
+      externalMasterDataOptions(
+        {
+          administration: false,
+          commercialHrefs: ["/commercial/customers"],
+          hrHrefs: [],
+          operations: true,
+          store: false,
+        },
+        "masterTables"
+      )
+    ).toEqual([
+      {
+        href: "/commercial/customers?masterView=masterTables",
+        id: "commercial_customers",
+        title: "Customers",
       },
     ])
   })

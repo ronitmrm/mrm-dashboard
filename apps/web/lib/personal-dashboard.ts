@@ -38,7 +38,14 @@ export type PersonalDashboardWidget = {
   description: string
   href: string
   id: PersonalDashboardWidgetId
-  module: "Administration" | "Costing" | "HR & Recruitment" | "Production" | "Store"
+  module:
+    | "Administration"
+    | "Costing"
+    | "HR & Recruitment"
+    | "Master Data"
+    | "Operational Entry"
+    | "Production"
+    | "Store"
   requiredHref?: string
   scope: "administration" | "commercial" | "hr" | "operations" | "store"
   summary: "commercial" | "hr" | "none" | "store"
@@ -47,7 +54,7 @@ export type PersonalDashboardWidget = {
 
 const widgetCatalog: readonly PersonalDashboardWidget[] = [
   { id: "commercial-overview", title: "Commercial Overview", description: "Commercial workload, quoting and follow-ups.", href: "/commercial", module: "Costing", requiredHref: "/commercial", scope: "commercial", summary: "commercial" },
-  { id: "commercial-enquiries", title: "Enquiries", description: "Open the enquiry register and incoming work.", href: "/commercial/enquiries", module: "Costing", requiredHref: "/commercial/enquiries", scope: "commercial", summary: "none" },
+  { id: "commercial-enquiries", title: "Enquiries", description: "Open the enquiry register and incoming work.", href: "/commercial/enquiries", module: "Operational Entry", requiredHref: "/commercial/enquiries", scope: "commercial", summary: "none" },
   { id: "commercial-technical-review", title: "Technical Review", description: "Review commercial items awaiting technical input.", href: "/commercial/technical-review", module: "Costing", requiredHref: "/commercial/technical-review", scope: "commercial", summary: "none" },
   { id: "commercial-design", title: "Design", description: "Open design tasks and product drawings.", href: "/commercial/design", module: "Costing", requiredHref: "/commercial/design", scope: "commercial", summary: "none" },
   { id: "commercial-costing", title: "Product Costing", description: "Prepare and review product costing.", href: "/commercial/costing", module: "Costing", requiredHref: "/commercial/costing", scope: "commercial", summary: "none" },
@@ -55,7 +62,7 @@ const widgetCatalog: readonly PersonalDashboardWidget[] = [
   { id: "commercial-pricing", title: "Pricing", description: "View current product pricing records.", href: "/commercial/pricing", module: "Costing", requiredHref: "/commercial/pricing", scope: "commercial", summary: "none" },
   { id: "commercial-orders", title: "Purchase Orders", description: "Open customer purchase orders and processing.", href: "/commercial/orders", module: "Costing", requiredHref: "/commercial/orders", scope: "commercial", summary: "none" },
   { id: "commercial-revisions", title: "Price Revisions", description: "Review and apply approved price revisions.", href: "/commercial/revisions", module: "Costing", requiredHref: "/commercial/revisions", scope: "commercial", summary: "none" },
-  { id: "commercial-customers", title: "Customers", description: "Open customer master records.", href: "/commercial/customers", module: "Costing", requiredHref: "/commercial/customers", scope: "commercial", summary: "none" },
+  { id: "commercial-customers", title: "Customers", description: "Open customer master records.", href: "/commercial/customers?masterView=masterTables", module: "Master Data", requiredHref: "/commercial/customers", scope: "commercial", summary: "none" },
   { id: "hr-approved-posts", title: "Approved Posts", description: "Create and review approved employee posts.", href: "/hr?panel=approvedPostPanel", module: "HR & Recruitment", requiredHref: "/hr?panel=approvedPostPanel", scope: "hr", summary: "none" },
   { id: "hr-employees", title: "Employee Master", description: "Open active and historical employee records.", href: "/hr?panel=employeeMasterPanel", module: "HR & Recruitment", requiredHref: "/hr?panel=employeeMasterPanel", scope: "hr", summary: "none" },
   { id: "hr-job-posts", title: "Job Posts", description: "Recruitment vacancies, candidates and interviews.", href: "/hr?panel=jobsPanel", module: "HR & Recruitment", requiredHref: "/hr?panel=jobsPanel", scope: "hr", summary: "hr" },
@@ -75,8 +82,8 @@ const widgetCatalog: readonly PersonalDashboardWidget[] = [
   { id: "part-readiness", title: "Part Readiness", description: "Missing Route, Cycle and Tooling masters.", href: "/?tab=masterGapsTab", module: "Production", scope: "operations", summary: "none" },
   { id: "machines", title: "Machines", description: "Machine details, maintenance and history.", href: "/?tab=machineMasterTab", module: "Production", scope: "operations", summary: "none" },
   { id: "mechanical-maintenance", title: "Mechanical Maintenance", description: "Planned and breakdown maintenance work.", href: "/?tab=maintenanceTab", module: "Production", scope: "operations", summary: "none" },
-  { id: "master-data", title: "Master Data", description: "Add and review company master records.", href: "/?tab=dataEntryTab", module: "Production", scope: "operations", summary: "none" },
-  { id: "operational-entry", title: "Operational Entry", description: "Work Orders, RM Inward and production entry.", href: "/?tab=operationalEntryTab", module: "Production", scope: "operations", summary: "none" },
+  { id: "master-data", title: "Master Data", description: "Add and review company master records.", href: "/?tab=dataEntryTab", module: "Master Data", scope: "operations", summary: "none" },
+  { id: "operational-entry", title: "Operational Entry", description: "Work Orders, RM Inward and production entry.", href: "/?tab=operationalEntryTab", module: "Operational Entry", scope: "operations", summary: "none" },
   { id: "access-administration", title: "Access Administration", description: "Accounts, roles and application access.", href: "/administration/access", module: "Administration", scope: "administration", summary: "none" },
 ]
 

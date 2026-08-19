@@ -25,7 +25,14 @@ The company-wide masters are:
 - Store Masters;
 - HR Departments & Designations;
 - HR Job Templates; and
-- Commercial Pricing Masters.
+- Commercial Pricing Masters;
+- Customers; and
+- Website Products.
+
+Customers and Website Products are selected inside Data Entry or Master Tables
+like the other company-wide masters. Their legacy Commercial URLs remain the
+implementation routes for forms, tables, exports, and saved links; they are not
+separate sidebar submodules.
 
 **Production-unit Master**: A master whose records differ by Production Unit.
 Its Data Entry and CSV import require one of the recognized Production Units.

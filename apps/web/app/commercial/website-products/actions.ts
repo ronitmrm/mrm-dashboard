@@ -9,6 +9,7 @@ import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { externalMasterViewHref } from "@/lib/external-master-workspace"
 
 const websiteProductsPath = "/commercial/website-products"
 
@@ -72,5 +73,5 @@ export async function updateWebsiteProductAction(formData: FormData) {
     await customers.close()
   }
   revalidatePath(websiteProductsPath)
-  redirect(websiteProductsPath)
+  redirect(externalMasterViewHref(websiteProductsPath, "masterTables"))
 }

@@ -6,7 +6,7 @@ import { commercialNavigationAccess } from "./auth/commercial-capabilities"
 import {
   administrationNavigation,
   commercialCostingNavigation,
-  commercialMasterDataNavigation,
+  commercialMasterDataWorkspaceNavigation,
   commercialNavigation,
   commercialOperationalEntryNavigation,
   consolidatedProductionNavigation,
@@ -38,6 +38,7 @@ describe("unified navigation", () => {
     expect(source).toContain('label="Operational Entry"')
     expect(source).toContain("filteredMasterDataNavigation.map")
     expect(source).toContain("filteredOperationalEntryNavigation.map")
+    expect(source).not.toContain("visibleCommercialMasterDataNavigation.map")
   })
 
   it("uses native navigation for data-heavy sidebar destinations", () => {
@@ -159,7 +160,10 @@ describe("unified navigation", () => {
     })
     expect(commercialNavigation).toHaveLength(16)
     expect(
-      commercialMasterDataNavigation.map(({ href, label }) => ({ href, label }))
+      commercialMasterDataWorkspaceNavigation.map(({ href, label }) => ({
+        href,
+        label,
+      }))
     ).toEqual([
       { href: "/commercial/customers", label: "Customers" },
       { href: "/commercial/website-products", label: "Website Products" },
@@ -177,7 +181,7 @@ describe("unified navigation", () => {
     )
     expect(
       commercialCostingNavigation.length +
-        commercialMasterDataNavigation.length +
+        commercialMasterDataWorkspaceNavigation.length +
         commercialOperationalEntryNavigation.length
     ).toBe(commercialNavigation.length)
     expect(commercialNavigation.map(({ label }) => label)).not.toContain(

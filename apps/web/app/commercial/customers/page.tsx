@@ -25,22 +25,38 @@ import {
 } from "@workspace/ui/components/table"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
+import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
+import {
+  externalMasterAllMastersHref,
+  externalMasterView,
+  externalMasterViewHref,
+} from "@/lib/external-master-workspace"
 import { pageBounds } from "@/lib/page-bounds"
 
 import { createCustomerAction, updateCustomerAction } from "./actions"
 
 export const dynamic = "force-dynamic"
 
+const customersPath = "/commercial/customers"
+
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string | string[] }>
+  searchParams: Promise<{
+    masterView?: string | string[]
+    page?: string | string[]
+  }>
 }) {
-  const bounds = pageBounds((await searchParams).page, 15)
+  const params = await searchParams
+  const activeView = externalMasterView(params.masterView)
+  const showDataEntry = activeView === "dataEntry"
+  const showMasterTables = activeView === "masterTables"
+  const bounds = pageBounds(params.page, 15)
   const session = await requireCapability(
     "pricing.masters.read",
     "/commercial/customers"
@@ -58,14 +74,24 @@ export default async function CustomersPage({
     .finally(() => repository.close())
   const visibleCustomers = customerPage.rows
   if (!visibleCustomers.length && bounds.page > 1) {
-    redirect("/commercial/customers")
+    redirect(externalMasterViewHref(customersPath, "masterTables"))
   }
   const totalCount = customerPage.coverage.total ?? 0
   const totalPages = Math.max(1, Math.ceil(totalCount / bounds.limit))
 
   return (
     <div className="flex flex-col gap-6">
-      {canWrite ? (
+      <MasterDataViewTabs
+        activeView={activeView}
+        allMastersHref={externalMasterAllMastersHref(activeView)}
+        dataEntryHref={externalMasterViewHref(customersPath, "dataEntry")}
+        masterTablesHref={externalMasterViewHref(
+          customersPath,
+          "masterTables"
+        )}
+      />
+
+      {canWrite && showDataEntry ? (
         <Card>
           <CardHeader>
             <CardTitle>Add Customer</CardTitle>
@@ -73,7 +99,8 @@ export default async function CustomersPage({
               Customer Ids Are Allocated From The Pricing Customer Sequence.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="grid gap-5">
+            <CompanyWideMasterScope />
             <form action={createCustomerAction}>
               <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <Field>
@@ -118,7 +145,7 @@ export default async function CustomersPage({
         </Card>
       ) : null}
 
-      <Card>
+      {showMasterTables ? <Card>
         <CardHeader>
           <CardTitle>Customers</CardTitle>
           <CardDescription>
@@ -135,7 +162,13 @@ export default async function CustomersPage({
             <div className="flex items-center gap-2">
               {bounds.page > 1 ? (
                 <Button asChild size="sm" variant="outline">
-                  <a href={`/commercial/customers?page=${bounds.page - 1}`}>
+                  <a
+                    href={externalMasterViewHref(
+                      customersPath,
+                      "masterTables",
+                      { page: String(bounds.page - 1) }
+                    )}
+                  >
                     Previous
                   </a>
                 </Button>
@@ -149,7 +182,13 @@ export default async function CustomersPage({
               </span>
               {bounds.page < totalPages ? (
                 <Button asChild size="sm" variant="outline">
-                  <a href={`/commercial/customers?page=${bounds.page + 1}`}>
+                  <a
+                    href={externalMasterViewHref(
+                      customersPath,
+                      "masterTables",
+                      { page: String(bounds.page + 1) }
+                    )}
+                  >
                     Next
                   </a>
                 </Button>
@@ -333,7 +372,7 @@ export default async function CustomersPage({
             </Table>
           </div>
         </CardContent>
-      </Card>
+      </Card> : null}
     </div>
   )
 }

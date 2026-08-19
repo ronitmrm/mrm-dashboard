@@ -43,7 +43,7 @@ import { masterDataNavigationLinks } from "@/lib/master-data-navigation"
 import {
   administrationNavigation,
   commercialCostingNavigation,
-  commercialMasterDataNavigation,
+  commercialMasterDataWorkspaceNavigation,
   commercialOperationalEntryNavigation,
   consolidatedProductionNavigation,
   dashboardNavigationDestination,
@@ -85,7 +85,7 @@ function defaultExpandedSections(
   activeDashboardTab?: DashboardTabId
 ): ExpandedSections {
   const onProduction = pathname === "/" || pathname.startsWith("/dashboard")
-  const onCommercialMasterData = commercialMasterDataNavigation.some(
+  const onCommercialMasterData = commercialMasterDataWorkspaceNavigation.some(
     ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
   )
   const onCommercialOperationalEntry =
@@ -218,10 +218,6 @@ export function UnifiedSidebarNavigation({
   const visibleCommercialNavigation = commercialCostingNavigation.filter(
     (item) => navigationAccess.commercialHrefs.includes(item.href)
   )
-  const visibleCommercialMasterDataNavigation =
-    commercialMasterDataNavigation.filter((item) =>
-      navigationAccess.commercialHrefs.includes(item.href)
-    )
   const visibleCommercialOperationalEntryNavigation =
     commercialOperationalEntryNavigation.filter((item) =>
       navigationAccess.commercialHrefs.includes(item.href)
@@ -276,11 +272,6 @@ export function UnifiedSidebarNavigation({
       productionFloorCode: activeProductionFloor,
       searchParams,
     }),
-    ...visibleCommercialMasterDataNavigation.map((item) => ({
-      destination: item.href,
-      id: item.href,
-      title: item.label,
-    })),
   ]
   const filteredMasterDataNavigation = visibleMasterDataNavigation.filter(
     (item) =>
@@ -405,6 +396,8 @@ export function UnifiedSidebarNavigation({
           isActive={visibleMasterDataNavigation.some((item) =>
             activeDashboardTab === item.id ||
             navigationHrefMatches(pathname, searchParams, item.destination)
+          ) || commercialMasterDataWorkspaceNavigation.some((item) =>
+            navigationHrefMatches(pathname, searchParams, item.href)
           )}
           label="Master Data"
           onOpenChange={(open) => {

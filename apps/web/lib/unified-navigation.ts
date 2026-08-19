@@ -471,18 +471,21 @@ export const commercialNavigation = [
   },
 ] as const
 
-export const commercialMasterDataNavigation = commercialNavigation.filter(
-  ({ href }) =>
-    href === "/commercial/customers" ||
-    href === "/commercial/website-products"
-)
+export const commercialMasterDataWorkspaceNavigation =
+  commercialNavigation.filter(
+    ({ href }) =>
+      href === "/commercial/customers" ||
+      href === "/commercial/website-products"
+  )
 
 export const commercialOperationalEntryNavigation =
   commercialNavigation.filter(({ href }) => href === "/commercial/enquiries")
 
 export const commercialCostingNavigation = commercialNavigation.filter(
   ({ href }) =>
-    !commercialMasterDataNavigation.some((item) => item.href === href) &&
+    !commercialMasterDataWorkspaceNavigation.some(
+      (item) => item.href === href
+    ) &&
     !commercialOperationalEntryNavigation.some((item) => item.href === href)
 )
 

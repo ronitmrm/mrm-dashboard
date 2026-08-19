@@ -31,7 +31,14 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
+import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  externalMasterAllMastersHref,
+  externalMasterView,
+  externalMasterViewHref,
+} from "@/lib/external-master-workspace"
 
 import { updateWebsiteProductAction } from "./actions"
 
@@ -214,12 +221,16 @@ export default async function WebsiteProductsPage({
     active?: string
     category?: string
     edit?: string
+    masterView?: string | string[]
     q?: string
     status?: string
   }>
 }) {
   await requireCapability("pricing.masters.read", websiteProductsPath)
   const filters = await searchParams
+  const activeView = externalMasterView(filters.masterView)
+  const showDataEntry = activeView === "dataEntry"
+  const showMasterTables = activeView === "masterTables"
   const connectionString = readAuthEnvironment().connectionString
   const customers = createCustomerRepository({ connectionString })
   const mastersRepository = createCommercialMasterRepository({
@@ -258,7 +269,21 @@ export default async function WebsiteProductsPage({
 
   return (
     <div className="grid gap-6">
-      <Card>
+      <MasterDataViewTabs
+        activeView={activeView}
+        allMastersHref={externalMasterAllMastersHref(activeView)}
+        dataEntryHref={externalMasterViewHref(
+          websiteProductsPath,
+          "dataEntry",
+          { edit: editing?.profileId }
+        )}
+        masterTablesHref={externalMasterViewHref(
+          websiteProductsPath,
+          "masterTables"
+        )}
+      />
+
+      {showMasterTables ? <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -277,6 +302,7 @@ export default async function WebsiteProductsPage({
         </CardHeader>
         <CardContent>
           <form className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_12rem_12rem_12rem_auto_auto]">
+            <input name="masterView" type="hidden" value="masterTables" />
             <Input
               aria-label="Search Website Products"
               defaultValue={filters.q}
@@ -318,15 +344,54 @@ export default async function WebsiteProductsPage({
             </SearchableSelect>
             <Button type="submit">Apply Filters</Button>
             <Button asChild variant="ghost">
-              <Link href={websiteProductsPath}>
+              <Link
+                href={externalMasterViewHref(
+                  websiteProductsPath,
+                  "masterTables"
+                )}
+              >
                 <RotateCcw /> Reset
               </Link>
             </Button>
           </form>
         </CardContent>
-      </Card>
+      </Card> : null}
 
-      {editing ? (
+      {showDataEntry && !editing ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Select Website Product</CardTitle>
+            <CardDescription>
+              Choose The Existing Product Profile You Want To Maintain.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <CompanyWideMasterScope />
+            <form className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <input name="masterView" type="hidden" value="dataEntry" />
+              <div className="grid min-w-0 flex-1 gap-2">
+                <Label htmlFor="website-product-profile">Website Product</Label>
+                <SearchableSelect
+                  className={selectClassName}
+                  id="website-product-profile"
+                  name="edit"
+                  required
+                >
+                  <option value="">Select Website Product</option>
+                  {rows.map((row) => (
+                    <option key={row.profileId} value={row.profileId}>
+                      {row.uid} — {row.productDescription || row.partCode}
+                    </option>
+                  ))}
+                </SearchableSelect>
+              </div>
+              <Button type="submit">Open For Editing</Button>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showDataEntry && editing ? (
         <Card>
           <CardHeader>
             <CardTitle>Edit {editing.uid}</CardTitle>
@@ -338,6 +403,7 @@ export default async function WebsiteProductsPage({
           </CardHeader>
           <CardContent>
             <form action={updateWebsiteProductAction} className="grid gap-5">
+              <CompanyWideMasterScope />
               <input
                 name="profile_id"
                 type="hidden"
@@ -530,7 +596,14 @@ export default async function WebsiteProductsPage({
               <div className="flex gap-2">
                 <Button type="submit">Save Website Product</Button>
                 <Button asChild variant="outline">
-                  <Link href={websiteProductsPath}>Cancel</Link>
+                  <Link
+                    href={externalMasterViewHref(
+                      websiteProductsPath,
+                      "masterTables"
+                    )}
+                  >
+                    Cancel
+                  </Link>
                 </Button>
               </div>
             </form>
@@ -538,7 +611,7 @@ export default async function WebsiteProductsPage({
         </Card>
       ) : null}
 
-      <Card>
+      {showMasterTables ? <Card>
         <CardHeader>
           <CardTitle>Website Product Excel View</CardTitle>
           <CardDescription>
@@ -565,7 +638,11 @@ export default async function WebsiteProductsPage({
                       <TableCell className="sticky left-0 bg-background">
                         <Button asChild size="sm" variant="ghost">
                           <Link
-                            href={`${websiteProductsPath}?edit=${row.profileId}`}
+                            href={externalMasterViewHref(
+                              websiteProductsPath,
+                              "dataEntry",
+                              { edit: row.profileId }
+                            )}
                           >
                             <Pencil /> Edit
                           </Link>
@@ -595,7 +672,7 @@ export default async function WebsiteProductsPage({
             </Table>
           </div>
         </CardContent>
-      </Card>
+      </Card> : null}
     </div>
   )
 }
