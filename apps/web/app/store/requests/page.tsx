@@ -29,6 +29,7 @@ import {
   requireCapability,
 } from "@/lib/auth/require-capability"
 import { formatIstDateTime } from "@/lib/date-time"
+import { createStoreIssueFormModel } from "@/lib/store-issue-form"
 import { storePurchaseOrderHref } from "@/lib/unified-navigation"
 
 import { issueStoreRequisitionAction } from "../actions"
@@ -86,6 +87,12 @@ export default async function StoreRequestsPage() {
                 const isOpen = ["Pending", "Partially Issued"].includes(
                   request.status
                 )
+                const issueForm = createStoreIssueFormModel({
+                  actorEmail: session.user.email,
+                  availableUnitIds: request.availableUnitIds,
+                  department: request.department,
+                  trackingMode: request.trackingMode,
+                })
                 return (
                   <TableRow key={request.id}>
                     <TableCell className="font-medium whitespace-nowrap">
@@ -142,7 +149,7 @@ export default async function StoreRequestsPage() {
                             </Button>
                             <form
                               action={issueStoreRequisitionAction}
-                              className="grid grid-cols-2 gap-2"
+                              className="grid gap-2"
                             >
                               <input
                                 name="requisition_id"
@@ -152,47 +159,61 @@ export default async function StoreRequestsPage() {
                               <Input
                                 aria-label={`Allocate quantity for ${request.requestNumber} ${request.typeCode}`}
                                 defaultValue={
-                                  request.assetCodeRequired
+                                  issueForm.requiresUnitSelection
                                     ? "1"
                                     : request.remainingQuantity
                                 }
                                 max={request.remainingQuantity}
                                 min="0.001"
                                 name="issue_quantity"
+                                readOnly={issueForm.requiresUnitSelection}
                                 step="0.001"
                                 type="number"
                               />
-                              <NativeSelect
-                                aria-label="Assign to"
-                                name="holder_type"
-                              >
-                                <NativeSelectOption value="DEPARTMENT">
-                                  Department
-                                </NativeSelectOption>
-                                <NativeSelectOption value="PERSON">
-                                  Individual
-                                </NativeSelectOption>
-                              </NativeSelect>
-                              <Input
-                                defaultValue={request.department}
-                                name="holder_name"
-                                placeholder="Department or individual"
-                              />
-                              <Input name="issued_by" placeholder="Issued by" />
-                              {request.assetCodeRequired ? (
-                                <Input
-                                  className="col-span-2"
+                              <label className="grid gap-1 text-xs font-medium">
+                                Department
+                                <Input readOnly value={issueForm.department} />
+                              </label>
+                              <label className="grid gap-1 text-xs font-medium">
+                                Issued By
+                                <Input readOnly value={issueForm.issuedBy} />
+                              </label>
+                              {issueForm.requiresUnitSelection ? (
+                                <NativeSelect
+                                  aria-label="Specific Unit ID / Serial ID"
+                                  defaultValue={
+                                    issueForm.availableUnitIds.length === 1
+                                      ? issueForm.availableUnitIds[0]
+                                      : ""
+                                  }
                                   name="asset_code"
-                                  placeholder="Specific Unit ID / Serial ID"
                                   required
-                                />
+                                >
+                                  <NativeSelectOption disabled value="">
+                                    Select available Unit ID / Serial ID
+                                  </NativeSelectOption>
+                                  {issueForm.availableUnitIds.map((unitId) => (
+                                    <NativeSelectOption
+                                      key={unitId}
+                                      value={unitId}
+                                    >
+                                      {unitId}
+                                    </NativeSelectOption>
+                                  ))}
+                                </NativeSelect>
                               ) : null}
                               <Button
-                                className="col-span-2"
+                                disabled={
+                                  issueForm.requiresUnitSelection &&
+                                  !issueForm.availableUnitIds.length
+                                }
                                 size="sm"
                                 type="submit"
                               >
-                                Save Allocation
+                                {issueForm.requiresUnitSelection &&
+                                !issueForm.availableUnitIds.length
+                                  ? "No Unit Available"
+                                  : "Save Allocation"}
                               </Button>
                             </form>
                           </div>

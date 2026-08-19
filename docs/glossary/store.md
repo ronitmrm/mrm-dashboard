@@ -113,13 +113,18 @@ and cannot be allocated until it resolves to a Store Item Type.
 **Request Allocation Queue**: The filterable Store worklist of Coded Item
 Request Lines. It shows the Department, requesting individual, item, requested
 and remaining quantities, and Current Available Stock, and allows each line to
-be allocated independently.
+be allocated independently. Issuing uses the request's Department and the
+signed-in Store user's identity. A Non Consumable Unit ID is selected from the
+available physical units for that request's Asset Code and Store; it is never
+entered as free text.
 
 **Stock Register**: The single filterable Store inventory table containing both
 Consumable and Non Consumable Store Item Types. Each row shows Asset Code, Asset
 Name, Category, Subcategory, quantity, and Storage Location. Purchase Order
 mode adds row selection and ordered quantity without opening another form. The
-Asset Code opens its Store Item Workspace.
+Asset Code opens its Store Item Workspace. A Non Consumable row also lists each
+available Unit ID, such as `NC001-0001` and `NC001-0002`; its quantity is the
+count of those available physical units, not a shared consumable balance.
 
 **Current Available Stock**: A live derived value, never a request snapshot.
 For Consumables it is the signed movement-ledger balance at the requested

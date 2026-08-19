@@ -1855,6 +1855,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         assetType: string
         applicableItemCode: string | null
         availableStock: string
+        availableUnitIds: string[]
         currentPriceValidFrom: string | null
         currentSupplierEmail: string | null
         currentSupplierId: string | null
@@ -1915,7 +1916,14 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
               ELSE (SELECT COALESCE(sum(movement.quantity), 0)
                 FROM store.stock_movements movement
                 WHERE movement.item_type_id = item.id)
-            END)::numeric)::text AS "availableStock"
+            END)::numeric)::text AS "availableStock",
+            CASE WHEN item.tracking_mode = 'SERIALIZED' THEN ARRAY(
+                SELECT asset.asset_code
+                FROM store.assets asset
+                WHERE asset.item_type_id = item.id
+                  AND asset.status = 'AVAILABLE'
+                ORDER BY asset.asset_code
+              ) ELSE ARRAY[]::text[] END AS "availableUnitIds"
           FROM store.item_types item
           LEFT JOIN LATERAL (
             SELECT price.supplier_id, supplier.name AS supplier_name,
@@ -2375,6 +2383,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       const result = await pool.query<{
         assetCodeRequired: boolean
         availableStock: string
+        availableUnitIds: string[]
         department: string
         id: string
         identificationName: string
@@ -2413,7 +2422,15 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
                 FROM store.stock_movements movement
                 WHERE movement.item_type_id = request.item_type_id
                   AND movement.location_id = request.location_id)
-            END)::numeric)::text AS "availableStock"
+            END)::numeric)::text AS "availableStock",
+            CASE WHEN item.tracking_mode = 'SERIALIZED' THEN ARRAY(
+              SELECT asset.asset_code
+              FROM store.assets asset
+              WHERE asset.item_type_id = request.item_type_id
+                AND asset.current_location_id = request.location_id
+                AND asset.status = 'AVAILABLE'
+              ORDER BY asset.asset_code
+            ) ELSE ARRAY[]::text[] END AS "availableUnitIds"
           FROM store.requisitions request
           JOIN store.requisition_headers header
             ON header.id = request.request_header_id
@@ -2456,8 +2473,10 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           `
             SELECT request.item_type_id, request.location_id,
               request.requested_quantity::text, request.issued_quantity::text,
-              request.status, request.department, item.tracking_mode
+              request.status, header.department, item.tracking_mode
             FROM store.requisitions request
+            JOIN store.requisition_headers header
+              ON header.id = request.request_header_id
             JOIN store.item_types item ON item.id = request.item_type_id
             WHERE request.id = $1 AND request.organization_id = $2
             FOR UPDATE OF request, item
