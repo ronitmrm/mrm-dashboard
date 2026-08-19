@@ -24,6 +24,8 @@ export const companyWideMasterEntryTypes = [
   "hr_masters",
   "hr_job_templates",
   "commercial_pricing_masters",
+  "commercial_customers",
+  "commercial_website_products",
 ] as const
 
 export function isCompanyWideMasterEntryType(entryType: string) {
@@ -59,6 +61,10 @@ export function masterDataFallbackLinks(
     ? "/hr?panel=mastersPanel"
     : access.commercialHrefs.includes("/commercial/masters")
       ? "/commercial/masters"
+      : access.commercialHrefs.includes("/commercial/customers")
+        ? "/commercial/customers"
+        : access.commercialHrefs.includes("/commercial/website-products")
+          ? "/commercial/website-products"
       : ""
   if (!baseDestination) return []
 
@@ -169,6 +175,22 @@ export function externalMasterDataOptions(
       href: `/commercial/masters?masterView=${view}`,
       id: "commercial_pricing_masters",
       title: "Commercial Pricing Masters",
+    })
+  }
+
+  if (access.commercialHrefs.includes("/commercial/customers")) {
+    options.push({
+      href: `/commercial/customers?masterView=${view}`,
+      id: "commercial_customers",
+      title: "Customers",
+    })
+  }
+
+  if (access.commercialHrefs.includes("/commercial/website-products")) {
+    options.push({
+      href: `/commercial/website-products?masterView=${view}`,
+      id: "commercial_website_products",
+      title: "Website Products",
     })
   }
 

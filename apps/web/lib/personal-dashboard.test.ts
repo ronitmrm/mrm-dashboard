@@ -62,4 +62,25 @@ describe("personal dashboard", () => {
       resolvePersonalDashboardSelection(null, available).map(({ id }) => id)
     ).toEqual(["production-dashboard", "store-overview"])
   })
+
+  it("uses the unified Master Data and Operational Entry ownership", () => {
+    const widgets = availablePersonalDashboardWidgets({
+      ...noAccess,
+      commercialHrefs: [
+        "/commercial/customers",
+        "/commercial/enquiries",
+      ],
+      operations: true,
+    })
+    const modules = Object.fromEntries(
+      widgets.map((widget) => [widget.id, widget.module])
+    )
+
+    expect(modules).toMatchObject({
+      "commercial-customers": "Master Data",
+      "commercial-enquiries": "Operational Entry",
+      "master-data": "Master Data",
+      "operational-entry": "Operational Entry",
+    })
+  })
 })
