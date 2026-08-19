@@ -33,6 +33,7 @@ import {
   hrMasterNavigation,
   hrNavigation,
   navigationHrefMatches,
+  personalDashboardNavigation,
   storeNavigation,
   type DashboardTabId,
 } from "@/lib/unified-navigation"
@@ -87,6 +88,7 @@ export function CommercialShell({
       ? { label: "Password & Security" }
       : productionPage) ??
     [
+      personalDashboardNavigation,
       ...commercialNavigation,
       commercialMasterNavigation,
       ...hrMasterNavigation,
@@ -96,7 +98,7 @@ export function CommercialShell({
     ].find((item) =>
       navigationHrefMatches(pathname, searchParams, item.href)
     ) ??
-    commercialNavigation[0]!
+    personalDashboardNavigation
 
   return (
     <SidebarProvider
@@ -109,7 +111,7 @@ export function CommercialShell({
     >
       <Sidebar variant="sidebar">
         <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
-          <Link className="flex items-center px-2 py-2" href="/">
+          <Link className="flex items-center px-2 py-2" href="/home">
             <Image
               src="/mrm-green.svg"
               alt="Mrmpl"

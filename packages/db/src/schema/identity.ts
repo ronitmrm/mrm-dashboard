@@ -29,6 +29,7 @@ export const user = identity.table("users", {
     mode: "date",
     withTimezone: true,
   }),
+  dashboardWidgets: text("dashboard_widgets").array(),
 })
 
 export const session = identity.table("sessions", {

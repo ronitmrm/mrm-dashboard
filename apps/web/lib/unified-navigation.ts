@@ -60,6 +60,12 @@ type DashboardNavigationItem = {
   title: string
 }
 
+export const personalDashboardNavigation = {
+  href: "/home",
+  icon: LayoutDashboard,
+  label: "Dashboard",
+} as const
+
 export function dashboardTabHref(
   tab: DashboardTabId,
   productionFloorCode?: ProductionFloorCode

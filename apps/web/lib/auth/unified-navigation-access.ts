@@ -14,7 +14,7 @@ export type UnifiedNavigationAccess = {
   store: boolean
 }
 
-export async function getUnifiedNavigationAccess(
+async function readUnifiedNavigationAccess(
   userId: string
 ): Promise<UnifiedNavigationAccess> {
   const capabilities = [
@@ -46,3 +46,6 @@ export async function getUnifiedNavigationAccess(
     store: grantedCapabilities.has("store.read"),
   }
 }
+
+export const getUnifiedNavigationAccess = cache(readUnifiedNavigationAccess)
+import { cache } from "react"

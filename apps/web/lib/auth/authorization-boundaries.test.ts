@@ -34,12 +34,20 @@ describe("protected server boundaries", () => {
       "authorizedDashboardSession(",
       "authorizePostgresDashboardEvents(",
     ]
+    const authenticatedAccountOnlyBoundaries = new Map([
+      ["home/actions.ts", "requireAuthenticatedSession("],
+    ])
     const missing: string[] = []
 
     for (const path of files) {
       const source = await readFile(path, "utf8")
-      if (!guards.some((guard) => source.includes(guard))) {
-        missing.push(relativeAppPath(path))
+      const relativePath = relativeAppPath(path)
+      const accountGuard = authenticatedAccountOnlyBoundaries.get(relativePath)
+      if (
+        !guards.some((guard) => source.includes(guard)) &&
+        !(accountGuard && source.includes(accountGuard))
+      ) {
+        missing.push(relativePath)
       }
     }
 
