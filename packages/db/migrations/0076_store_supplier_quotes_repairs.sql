@@ -125,7 +125,7 @@ CREATE INDEX store_supplier_prices_recommendation_idx
   );
 
 ALTER TABLE store.purchase_orders
-  DROP CONSTRAINT purchase_orders_status_check,
+  DROP CONSTRAINT IF EXISTS purchase_orders_status_check,
   ADD COLUMN order_type text NOT NULL DEFAULT 'GOODS',
   ADD COLUMN repair_asset_id uuid REFERENCES store.assets(id),
   ADD COLUMN service_description text,
