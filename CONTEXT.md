@@ -346,7 +346,7 @@ The single filterable inventory table for both Consumable and Non Consumable Sto
 _Avoid_: Separate Consumable table, Physical Asset register on Stock.
 
 **Store Request**:
-One numbered demand submitted by a Department and an individual, containing one or more Coded Item Request Lines selected from Current Stock.
+One numbered demand submitted by a Department and a signed-in individual, containing one or more Coded Item Request Lines selected from Current Stock. Requested By is the signed-in account email; Department comes from that account's linked Employee Master assignments, with a choice only when multiple assignments apply. All requests use the single central Store automatically.
 _Avoid_: One request number per item, New Item Request.
 
 **Coded Item Request Line**:
