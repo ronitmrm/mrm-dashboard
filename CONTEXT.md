@@ -334,7 +334,7 @@ The newest effective Supplier Price Master entry for one Store Item, which deter
 _Avoid_: Price typed while creating a Purchase Order, arbitrary Supplier selection.
 
 **Store Receipt**:
-A goods receipt against one Store Purchase Order that cannot exceed its remaining quantity.
+A goods receipt against one Store Purchase Order that cannot exceed its remaining quantity. It enters the single central Store under the signed-in account; Supplier Bill Date and optional Warranty / Guarantee Until remain separate dates.
 _Avoid_: Receipt without order, direct inward.
 
 **Store Purchase Register**:
