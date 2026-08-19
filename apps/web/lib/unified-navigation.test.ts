@@ -167,6 +167,12 @@ describe("unified navigation", () => {
         { href: "/store/stock", label: "Stock" },
       ]
     )
+    expect(
+      administrationNavigation.map(({ href, label }) => ({ href, label }))
+    ).toEqual([
+      { href: "/administration/access", label: "Access Administration" },
+      { href: "/account/password", label: "Password & Security" },
+    ])
     expect(hrNavigation.map(({ href, label }) => ({ href, label }))).toEqual([
       { href: "/hr?panel=approvedPostPanel", label: "Approved Post Form" },
       { href: "/hr?panel=employeeMasterPanel", label: "Employee Master" },
