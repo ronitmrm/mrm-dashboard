@@ -2644,6 +2644,128 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       return result.rows
     },
 
+    async getItemTypeWorkspace(input: {
+      organizationId: string
+      typeCode: string
+    }) {
+      const item = await pool.query<{
+        assetCategory: string
+        assetName: string
+        assetSubcategory: string
+        assetType: StoreAssetType
+        availableStock: string
+        id: string
+        identificationName: string
+        minimumStock: string
+        storageLocations: string
+        typeCode: string
+        unit: string
+      }>(
+        `
+          SELECT item.id, item.type_code AS "typeCode",
+            CASE WHEN item.tracking_mode = 'SERIALIZED'
+              THEN 'NON_CONSUMABLE' ELSE 'CONSUMABLE' END AS "assetType",
+            item.asset_category AS "assetCategory",
+            item.asset_subcategory AS "assetSubcategory",
+            item.asset_name AS "assetName",
+            item.identification_name AS "identificationName", item.unit,
+            trim_scale(item.minimum_stock)::text AS "minimumStock",
+            trim_scale((CASE WHEN item.tracking_mode = 'SERIALIZED'
+              THEN (SELECT count(*)::numeric FROM store.assets asset
+                WHERE asset.item_type_id = item.id AND asset.status = 'AVAILABLE')
+              ELSE (SELECT COALESCE(sum(movement.quantity), 0)
+                FROM store.stock_movements movement
+                WHERE movement.item_type_id = item.id)
+            END)::numeric)::text AS "availableStock",
+            COALESCE((
+              SELECT string_agg(location.name, ', ' ORDER BY location.name)
+              FROM store.locations location
+              WHERE location.organization_id = item.organization_id
+                AND location.location_type = 'STORE' AND location.active
+                AND CASE WHEN item.tracking_mode = 'SERIALIZED'
+                  THEN EXISTS (
+                    SELECT 1 FROM store.assets asset
+                    WHERE asset.item_type_id = item.id
+                      AND asset.current_location_id = location.id
+                      AND asset.status = 'AVAILABLE'
+                  )
+                  ELSE COALESCE((
+                    SELECT sum(movement.quantity)
+                    FROM store.stock_movements movement
+                    WHERE movement.item_type_id = item.id
+                      AND movement.location_id = location.id
+                  ), 0) <> 0
+                END
+            ), 'Not in stock') AS "storageLocations"
+          FROM store.item_types item
+          WHERE item.organization_id = $1 AND item.active
+            AND lower(item.type_code) = lower($2)
+        `,
+        [input.organizationId, requiredText(input.typeCode, "Asset Code")]
+      )
+      if (!item.rows[0]) return null
+      const [assets, supplierPrices] = await Promise.all([
+        pool.query<{
+          acquiredOn: string | null
+          assetCode: string
+          holderName: string | null
+          holderType: StoreHolderType
+          id: string
+          locationName: string | null
+          nextDueOn: string | null
+          status: string
+        }>(
+          `
+            SELECT asset.id, asset.asset_code AS "assetCode", asset.status,
+              asset.current_holder_type AS "holderType",
+              asset.current_holder_name AS "holderName",
+              location.name AS "locationName",
+              asset.acquired_on::text AS "acquiredOn",
+              (SELECT min(schedule.next_due_on)::text
+                FROM store.asset_maintenance_schedules schedule
+                WHERE schedule.asset_id = asset.id AND schedule.active
+              ) AS "nextDueOn"
+            FROM store.assets asset
+            LEFT JOIN store.locations location
+              ON location.id = asset.current_location_id
+            WHERE asset.organization_id = $1 AND asset.item_type_id = $2
+            ORDER BY asset.asset_code
+          `,
+          [input.organizationId, item.rows[0].id]
+        ),
+        pool.query<{
+          active: boolean
+          contactDetails: string | null
+          email: string | null
+          quoteReference: string | null
+          supplierCode: string
+          supplierName: string
+          unitPrice: string
+          validFrom: string
+        }>(
+          `
+            SELECT price.active, supplier.code AS "supplierCode",
+              supplier.name AS "supplierName", supplier.email,
+              supplier.contact_details AS "contactDetails",
+              price.unit_price::text AS "unitPrice",
+              price.valid_from::text AS "validFrom",
+              price.quote_reference AS "quoteReference"
+            FROM store.supplier_prices price
+            JOIN store.suppliers supplier ON supplier.id = price.supplier_id
+            WHERE price.organization_id = $1 AND price.item_type_id = $2
+            ORDER BY price.active DESC, price.valid_from DESC,
+              price.created_at DESC
+          `,
+          [input.organizationId, item.rows[0].id]
+        ),
+      ])
+      return {
+        assets: assets.rows,
+        item: item.rows[0],
+        supplierPrices: supplierPrices.rows,
+      }
+    },
+
     async getAssetWorkspace(input: {
       assetCode: string
       organizationId: string

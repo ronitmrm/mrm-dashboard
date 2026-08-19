@@ -1,4 +1,5 @@
-import { createStoreRepository } from "@workspace/db"
+import { createStoreRepository, storeUnitId } from "@workspace/db"
+import Link from "next/link"
 import { notFound } from "next/navigation"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -27,6 +28,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { formatIstDateTime, istDateValue } from "@/lib/date-time"
+import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
 import {
   listGrantedCapabilities,
   requireCapability,
@@ -59,15 +61,36 @@ export default async function StoreAssetWorkspacePage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [workspace, definitions, suppliers, vendors] = await Promise.all([
-      repository.getAssetWorkspace({ assetCode, organizationId }),
+    const workspace = await repository.getAssetWorkspace({
+      assetCode,
+      organizationId,
+    })
+    if (!workspace) {
+      return {
+        kind: "item" as const,
+        workspace: await repository.getItemTypeWorkspace({
+          organizationId,
+          typeCode: assetCode,
+        }),
+      }
+    }
+    const [definitions, suppliers, vendors] = await Promise.all([
       repository.listMaintenanceDefinitions(organizationId),
       repository.listSuppliers(organizationId),
       repository.listVendors(organizationId),
     ])
-    return { definitions, suppliers, vendors, workspace }
+    return {
+      definitions,
+      kind: "asset" as const,
+      suppliers,
+      vendors,
+      workspace,
+    }
   })().finally(() => repository.close())
   if (!data.workspace) notFound()
+  if (data.kind === "item") {
+    return <StoreItemWorkspace workspace={data.workspace} />
+  }
   const {
     asset,
     documents,
@@ -756,6 +779,188 @@ export default async function StoreAssetWorkspacePage({
               No bill or guarantee documents recorded.
             </p>
           ) : null}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+type StoreItemWorkspaceData = NonNullable<
+  Awaited<
+    ReturnType<
+      ReturnType<typeof createStoreRepository>["getItemTypeWorkspace"]
+    >
+  >
+>
+
+function StoreItemWorkspace({
+  workspace,
+}: {
+  workspace: StoreItemWorkspaceData
+}) {
+  const { assets, item, supplierPrices } = workspace
+  const isNonConsumable = item.assetType === "NON_CONSUMABLE"
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">
+            {item.typeCode}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Asset Code · {item.identificationName}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">
+            {isNonConsumable ? "Non Consumable" : "Consumable"}
+          </Badge>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/store/stock">Back to Stock</Link>
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Info label="Asset Name" value={item.assetName} />
+        <Info label="Identification" value={item.identificationName} />
+        <Info
+          label="Classification"
+          value={`${item.assetCategory} / ${item.assetSubcategory}`}
+        />
+        <Info
+          label="Available Stock"
+          value={`${item.availableStock} ${item.unit}`}
+        />
+        <Info label="Storage Location" value={item.storageLocations} />
+        <Info
+          label="Minimum Stock"
+          value={`${item.minimumStock} ${item.unit}`}
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Physical Units</CardTitle>
+          <CardDescription>
+            Open a Unit ID to see its movement, maintenance, calibration,
+            purchase, warranty and document history.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Unit ID</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Current Assignment</TableHead>
+                <TableHead>Acquired On</TableHead>
+                <TableHead>Next Maintenance / Calibration</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {assets.map((asset) => (
+                <TableRow key={asset.id}>
+                  <TableCell className="font-medium">
+                    <Link
+                      className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
+                      href={storeAssetWorkspaceHref(asset.assetCode)}
+                    >
+                      {asset.assetCode}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        asset.status === "BROKEN" ? "destructive" : "outline"
+                      }
+                    >
+                      {asset.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {asset.holderName ||
+                      asset.locationName ||
+                      asset.holderType}
+                  </TableCell>
+                  <TableCell>{asset.acquiredOn || "Not recorded"}</TableCell>
+                  <TableCell>{asset.nextDueOn || "Not scheduled"}</TableCell>
+                </TableRow>
+              ))}
+              {!assets.length ? (
+                <TableRow>
+                  <TableCell
+                    className="h-24 text-center text-muted-foreground"
+                    colSpan={5}
+                  >
+                    {isNonConsumable
+                      ? `No physical unit received yet. The first Unit ID will be ${storeUnitId(item.typeCode, 1)}.`
+                      : "Consumable items do not receive individual Unit IDs."}
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Suppliers & Price History</CardTitle>
+          <CardDescription>
+            Every recorded supplier quote remains visible; active prices can be
+            selected for a Purchase Order.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Supplier</TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Quote</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {supplierPrices.map((price, index) => (
+                <TableRow
+                  key={`${price.supplierCode}-${price.validFrom}-${index}`}
+                >
+                  <TableCell>{price.validFrom}</TableCell>
+                  <TableCell>
+                    <span className="font-medium">{price.supplierName}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {price.supplierCode}
+                    </span>
+                  </TableCell>
+                  <TableCell>₹ {price.unitPrice}</TableCell>
+                  <TableCell>
+                    <Badge variant={price.active ? "secondary" : "outline"}>
+                      {price.active ? "Available" : "History"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {price.email || price.contactDetails || "Not recorded"}
+                  </TableCell>
+                  <TableCell>{price.quoteReference || "—"}</TableCell>
+                </TableRow>
+              ))}
+              {!supplierPrices.length ? (
+                <TableRow>
+                  <TableCell
+                    className="h-24 text-center text-muted-foreground"
+                    colSpan={6}
+                  >
+                    No Supplier Price has been recorded for this Asset Code.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>

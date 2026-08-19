@@ -58,6 +58,7 @@ export {
   type StoreHolderType,
   type StoreTrackingMode,
 } from "./store"
+export { storeUnitId } from "./store-item-codes"
 export {
   createRecruitmentRepository,
   type RecruitmentCandidateRow,

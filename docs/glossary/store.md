@@ -118,14 +118,20 @@ be allocated independently.
 **Stock Register**: The single filterable Store inventory table containing both
 Consumable and Non Consumable Store Item Types. Each row shows Asset Code, Asset
 Name, Category, Subcategory, quantity, and Storage Location. Purchase Order
-mode adds row selection and ordered quantity without opening another form.
+mode adds row selection and ordered quantity without opening another form. The
+Asset Code opens its Store Item Workspace.
 
 **Current Available Stock**: A live derived value, never a request snapshot.
 For Consumables it is the signed movement-ledger balance at the requested
 Store. For Physical Assets it is the count of Available Unit IDs at that
 Store. Every open request therefore sees the effect of the latest allocation.
 
-**Asset Workspace**: The permanent view for one Unit ID containing its
+**Store Item Workspace**: The permanent view for one Asset Code containing the
+Store Item identity and classification, every Supplier Price revision and
+Supplier able to supply it, and every physical Unit ID created for the item.
+For a Non Consumable, each Unit ID opens its individual Asset Workspace.
+
+**Asset Workspace**: The permanent view for one Non Consumable Unit ID containing its
 identity, current assignment, Department/Machine/Supplier/Vendor movement history,
 maintenance and calibration timetable and history, Purchase Order, Supplier
 price history, bill, warranty, and guarantee documents.

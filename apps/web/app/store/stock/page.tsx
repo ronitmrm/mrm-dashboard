@@ -29,6 +29,7 @@ import {
   requireCapability,
 } from "@/lib/auth/require-capability"
 import { istDateValue } from "@/lib/date-time"
+import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
 
 import { createStorePurchaseOrdersAction } from "../actions"
 
@@ -188,7 +189,12 @@ export default async function StoreStockPage({
                       </TableCell>
                     ) : null}
                     <TableCell className="font-medium">
-                      {item.typeCode}
+                      <Link
+                        className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
+                        href={storeAssetWorkspaceHref(item.typeCode)}
+                      >
+                        {item.typeCode}
+                      </Link>
                     </TableCell>
                     <TableCell>
                       {item.assetName}

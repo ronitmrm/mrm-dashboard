@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@workspace/ui/components/button"
@@ -33,6 +34,8 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
+
+import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
 
 import {
   createStoreAssetCategoryAction,
@@ -242,7 +245,12 @@ export function StoreMasterWorkspace({
                     return (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">
-                          {item.typeCode}
+                          <Link
+                            className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
+                            href={storeAssetWorkspaceHref(item.typeCode)}
+                          >
+                            {item.typeCode}
+                          </Link>
                         </TableCell>
                         <TableCell>{item.assetCategory}</TableCell>
                         <TableCell>{item.assetSubcategory}</TableCell>

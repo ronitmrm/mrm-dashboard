@@ -620,6 +620,21 @@ describe("Store requests", () => {
       `${itemType.typeCode}-0002`,
     ])
 
+    const itemWorkspace = await store.getItemTypeWorkspace({
+      organizationId,
+      typeCode: itemType.typeCode,
+    })
+    expect(itemWorkspace?.item.typeCode).toBe(itemType.typeCode)
+    expect(itemWorkspace?.assets.map((asset) => asset.assetCode)).toEqual(
+      receipt.assetCodes
+    )
+    expect(itemWorkspace?.supplierPrices).toContainEqual(
+      expect.objectContaining({
+        supplierName: expect.any(String),
+        unitPrice: "4500.00",
+      })
+    )
+
     const request = await store.createRequisition({
       department: "Production",
       itemTypeId: itemType.id,
