@@ -78,6 +78,7 @@ export default async function StoreOrdersPage() {
               <TableRow>
                 <TableHead>Order</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Item</TableHead>
                 <TableHead>Ordered</TableHead>
@@ -94,6 +95,7 @@ export default async function StoreOrdersPage() {
             <TableBody>
               {data.orders.map((order) => {
                 const canReceive =
+                  order.orderType === "GOODS" &&
                   order.status !== "Cancelled" &&
                   Number(order.remainingQuantity) > 0
                 const emailHref = order.supplierEmail
@@ -108,6 +110,9 @@ export default async function StoreOrdersPage() {
                       {order.orderNumber}
                     </TableCell>
                     <TableCell>{order.orderDate}</TableCell>
+                    <TableCell>
+                      {order.orderType === "REPAIR" ? "Repair" : "Goods"}
+                    </TableCell>
                     <TableCell>{order.supplierName}</TableCell>
                     <TableCell>
                       {order.typeCode} — {order.itemName}
@@ -214,6 +219,8 @@ export default async function StoreOrdersPage() {
                               Receive Against Order
                             </Button>
                           </form>
+                        ) : order.orderType === "REPAIR" ? (
+                          "Service PO — no stock receipt"
                         ) : (
                           "Fully received"
                         )}
@@ -226,7 +233,7 @@ export default async function StoreOrdersPage() {
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={canManage ? 11 : 10}
+                    colSpan={canManage ? 12 : 11}
                   >
                     No Purchase Orders yet. Select an item from Stock to create
                     one.

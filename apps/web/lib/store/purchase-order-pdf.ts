@@ -10,8 +10,11 @@ export type StorePurchaseOrderDocument = {
   }>
   orderDate: string
   orderNumber: string
+  orderType?: "GOODS" | "REPAIR"
   remark?: string | null
+  supplierAddress?: string | null
   supplierCode: string
+  supplierGstNumber?: string | null
   supplierName: string
 }
 
@@ -57,9 +60,18 @@ export async function buildStorePurchaseOrderPdf(
   }
 
   draw("M.R.M. METPROTECH PRIVATE LIMITED", { bold: true, size: 16 })
-  draw(`PURCHASE ORDER ${document.orderNumber}`, { bold: true, size: 13 })
+  draw(
+    `${document.orderType === "REPAIR" ? "REPAIR " : ""}PURCHASE ORDER ${document.orderNumber}`,
+    { bold: true, size: 13 }
+  )
   draw(`Order Date: ${document.orderDate}`)
   draw(`Supplier: ${document.supplierCode} - ${document.supplierName}`)
+  if (document.supplierGstNumber) {
+    draw(`Supplier GST: ${document.supplierGstNumber}`)
+  }
+  if (document.supplierAddress) {
+    draw(`Supplier Address: ${document.supplierAddress}`)
+  }
   y -= 10
   draw("Code | Item | Quantity | Unit | INR/Unit | Amount INR", {
     bold: true,

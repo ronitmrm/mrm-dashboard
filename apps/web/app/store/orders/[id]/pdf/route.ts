@@ -26,8 +26,11 @@ export async function GET(
     lines: document.lines,
     orderDate: document.order.orderDate,
     orderNumber: document.order.orderNumber,
+    orderType: document.order.orderType,
     remark: document.order.remark,
+    supplierAddress: document.order.supplierAddress,
     supplierCode: document.order.supplierCode,
+    supplierGstNumber: document.order.supplierGstNumber,
     supplierName: document.order.supplierName,
   })
   const safeName = document.order.orderNumber.replace(/[^a-zA-Z0-9_-]/g, "-")

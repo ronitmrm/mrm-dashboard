@@ -44,6 +44,7 @@ import {
   createStoreSupplierAction,
   createStoreVendorAction,
   deleteStoreMasterAction,
+  uploadStoreItemDrawingAction,
 } from "../actions"
 import {
   findExistingStoreItem,
@@ -64,6 +65,12 @@ type StoreMasterRow = {
 }
 
 export type StoreMasterData = {
+  itemDrawings: Array<{
+    fileName: string
+    id: string
+    itemTypeId: string
+    storageKey: string
+  }>
   items: Array<{
     assetCategory: string
     assetCategoryId: string
@@ -103,13 +110,16 @@ export type StoreMasterData = {
     }>
   }
   suppliers: Array<{
+    address: string | null
     code: string
     contactDetails: string | null
     email: string | null
+    gstNumber: string | null
     id: string
     name: string
   }>
   supplierPrices: Array<{
+    active: boolean
     id: string
     itemName: string
     itemTypeId: string
@@ -138,7 +148,9 @@ export function StoreMasterWorkspace({
   mode?: "combined" | "entry" | "table"
 }) {
   const searchParams = useSearchParams()
-  const selectedMaster = normalizeStoreMasterKey(searchParams.get("storeMaster"))
+  const selectedMaster = normalizeStoreMasterKey(
+    searchParams.get("storeMaster")
+  )
   const [editRow, setEditRow] = useState<StoreMasterRow | null>(null)
   const [deleteRow, setDeleteRow] = useState<StoreMasterRow | null>(null)
   const selectedLabel =
@@ -202,63 +214,174 @@ export function StoreMasterWorkspace({
             <CardDescription>{rows.length} active records</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {showsCode ? <TableHead>Code</TableHead> : null}
-                  <TableHead>Name</TableHead>
-                  <TableHead>Details</TableHead>
-                  {canManage ? (
-                    <TableHead className="text-right">Actions</TableHead>
-                  ) : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.key}>
-                    {showsCode ? (
-                      <TableCell className="font-medium">{row.code}</TableCell>
-                    ) : null}
-                    <TableCell>{row.name}</TableCell>
-                    <TableCell>{row.details}</TableCell>
+            {selectedMaster === "ITEM_TYPE" ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Asset Code</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Subcategory</TableHead>
+                    <TableHead>Asset Name</TableHead>
+                    <TableHead>Asset Type</TableHead>
+                    <TableHead>Identification</TableHead>
+                    <TableHead>Drawing</TableHead>
+                    <TableHead>Unit</TableHead>
                     {canManage ? (
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          {row.editable ? (
+                      <TableHead className="text-right">Actions</TableHead>
+                    ) : null}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.items.map((item) => {
+                    const row = rows.find(
+                      (candidate) => candidate.key === item.id
+                    )!
+                    const drawing = data.itemDrawings.find(
+                      (candidate) => candidate.itemTypeId === item.id
+                    )
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                          {item.typeCode}
+                        </TableCell>
+                        <TableCell>{item.assetCategory}</TableCell>
+                        <TableCell>{item.assetSubcategory}</TableCell>
+                        <TableCell>{item.assetName}</TableCell>
+                        <TableCell>
+                          {item.assetType === "NON_CONSUMABLE"
+                            ? "Non Consumable"
+                            : "Consumable"}
+                        </TableCell>
+                        <TableCell>{item.identificationName}</TableCell>
+                        <TableCell>
+                          {drawing ? (
+                            <Button asChild size="sm" variant="outline">
+                              <a
+                                href={`/store/items/${item.id}/drawings/${drawing.id}`}
+                              >
+                                {drawing.fileName}
+                              </a>
+                            </Button>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                        <TableCell>{item.unit}</TableCell>
+                        {canManage ? (
+                          <TableCell>
+                            <div className="grid min-w-72 gap-2">
+                              <form
+                                action={uploadStoreItemDrawingAction}
+                                className="flex gap-2"
+                                encType="multipart/form-data"
+                              >
+                                <input
+                                  name="item_type_id"
+                                  type="hidden"
+                                  value={item.id}
+                                />
+                                <Input
+                                  accept="application/pdf,image/jpeg,image/png"
+                                  aria-label={`Drawing for ${item.typeCode}`}
+                                  name="asset_drawing"
+                                  required
+                                  type="file"
+                                />
+                                <Button
+                                  size="sm"
+                                  type="submit"
+                                  variant="outline"
+                                >
+                                  {drawing ? "Replace" : "Upload"}
+                                </Button>
+                              </form>
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  onClick={() => setEditRow(row)}
+                                  size="sm"
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  <Pencil className="size-3.5" /> Edit
+                                </Button>
+                                <Button
+                                  onClick={() => setDeleteRow(row)}
+                                  size="sm"
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  <Trash2 className="size-3.5" /> Delete
+                                </Button>
+                              </div>
+                            </div>
+                          </TableCell>
+                        ) : null}
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {showsCode ? <TableHead>Code</TableHead> : null}
+                    <TableHead>Name</TableHead>
+                    <TableHead>Details</TableHead>
+                    {canManage ? (
+                      <TableHead className="text-right">Actions</TableHead>
+                    ) : null}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow key={row.key}>
+                      {showsCode ? (
+                        <TableCell className="font-medium">
+                          {row.code}
+                        </TableCell>
+                      ) : null}
+                      <TableCell>{row.name}</TableCell>
+                      <TableCell>{row.details}</TableCell>
+                      {canManage ? (
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            {row.editable ? (
+                              <Button
+                                onClick={() => setEditRow(row)}
+                                size="sm"
+                                type="button"
+                                variant="outline"
+                              >
+                                <Pencil className="size-3.5" /> Edit
+                              </Button>
+                            ) : null}
                             <Button
-                              onClick={() => setEditRow(row)}
+                              onClick={() => setDeleteRow(row)}
                               size="sm"
                               type="button"
                               variant="outline"
                             >
-                              <Pencil className="size-3.5" /> Edit
+                              <Trash2 className="size-3.5" /> Delete
                             </Button>
-                          ) : null}
-                          <Button
-                            onClick={() => setDeleteRow(row)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            <Trash2 className="size-3.5" /> Delete
-                          </Button>
-                        </div>
+                          </div>
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  ))}
+                  {!rows.length ? (
+                    <TableRow>
+                      <TableCell
+                        className="h-24 text-center text-muted-foreground"
+                        colSpan={(showsCode ? 3 : 2) + (canManage ? 1 : 0)}
+                      >
+                        No saved records for this master.
                       </TableCell>
-                    ) : null}
-                  </TableRow>
-                ))}
-                {!rows.length ? (
-                  <TableRow>
-                    <TableCell
-                      className="h-24 text-center text-muted-foreground"
-                      colSpan={(showsCode ? 3 : 2) + (canManage ? 1 : 0)}
-                    >
-                      No saved records for this master.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       ) : null}
@@ -300,7 +423,8 @@ export function StoreMasterWorkspace({
               <input name="master_id" type="hidden" value={deleteRow.key} />
               <input name="master_kind" type="hidden" value={deleteRow.kind} />
               <div className="rounded-md border bg-muted/40 p-3 text-sm">
-                {deleteRow.code ? `${deleteRow.code} — ` : ""}{deleteRow.name}
+                {deleteRow.code ? `${deleteRow.code} — ` : ""}
+                {deleteRow.name}
               </div>
               <SelectField
                 label="Replacement (Required Only If Used)"
@@ -423,7 +547,12 @@ function masterRows(
       return data.suppliers.map((supplier) => ({
         code: supplier.code,
         details:
-          [supplier.email, supplier.contactDetails]
+          [
+            supplier.gstNumber,
+            supplier.email,
+            supplier.contactDetails,
+            supplier.address,
+          ]
             .filter(Boolean)
             .join(" · ") || "No contact details",
         key: supplier.id,
@@ -432,7 +561,9 @@ function masterRows(
         editable: true,
         editDefaults: {
           contact_details: supplier.contactDetails ?? "",
+          gst_number: supplier.gstNumber ?? "",
           master_id: supplier.id,
+          supplier_address: supplier.address ?? "",
           supplier_code: supplier.code,
           supplier_email: supplier.email ?? "",
           supplier_name: supplier.name,
@@ -441,7 +572,7 @@ function masterRows(
     case "SUPPLIER_PRICE":
       return data.supplierPrices.map((price) => ({
         code: price.typeCode,
-        details: `${price.supplierName} · ₹ ${price.unitPrice} · Effective ${price.validFrom}${price.quoteReference ? ` · ${price.quoteReference}` : ""}`,
+        details: `${price.supplierName} · ₹ ${price.unitPrice} · Effective ${price.validFrom} · ${price.active ? "Active" : "History"}${price.quoteReference ? ` · ${price.quoteReference}` : ""}`,
         key: price.id,
         kind: "store_supplier_price",
         name: price.itemName,
@@ -608,19 +739,20 @@ function masterForm(
             type="hidden"
             value={defaults.master_id ?? ""}
           />
-          <FieldGroup className="grid gap-4 md:grid-cols-3">
-            <TextField
-              defaultValue={defaults.supplier_code}
-              label="Supplier Code"
-              name="supplier_code"
-              readOnly={editing}
-              required
-            />
+          <p className="mb-4 text-sm text-muted-foreground">
+            Supplier Code is generated automatically when the record is saved.
+          </p>
+          <FieldGroup className="grid gap-4 md:grid-cols-2">
             <TextField
               defaultValue={defaults.supplier_name}
               label="Supplier Name"
               name="supplier_name"
               required
+            />
+            <TextField
+              defaultValue={defaults.gst_number}
+              label="GST Number"
+              name="gst_number"
             />
             <TextField
               defaultValue={defaults.supplier_email}
@@ -632,6 +764,11 @@ function masterForm(
               defaultValue={defaults.contact_details}
               label="Contact Details"
               name="contact_details"
+            />
+            <TextField
+              defaultValue={defaults.supplier_address}
+              label="Supplier Address"
+              name="supplier_address"
             />
           </FieldGroup>
           <Button className="mt-5" type="submit">
@@ -783,7 +920,7 @@ function StoreItemTypeForm({
   }
 
   return (
-    <form action={createStoreItemTypeAction}>
+    <form action={createStoreItemTypeAction} encType="multipart/form-data">
       <input name="master_id" type="hidden" value={defaults.master_id ?? ""} />
       <FieldGroup className="grid gap-4 md:grid-cols-2">
         {editing ? (
@@ -796,7 +933,7 @@ function StoreItemTypeForm({
         ) : null}
         <TextField
           defaultValue={defaults.identification_name}
-          label="Identification Name"
+          label="Identification"
           name="identification_name"
           required
         />
@@ -866,6 +1003,17 @@ function StoreItemTypeForm({
           name="minimum_stock"
           type="number"
         />
+        <Field>
+          <FieldLabel htmlFor="master-asset-drawing">
+            Asset Drawing (PDF, JPG, or PNG)
+          </FieldLabel>
+          <Input
+            accept="application/pdf,image/jpeg,image/png"
+            id="master-asset-drawing"
+            name="asset_drawing"
+            type="file"
+          />
+        </Field>
       </FieldGroup>
       {!editing && existingItem ? (
         <div className="mt-5 rounded-md border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100">

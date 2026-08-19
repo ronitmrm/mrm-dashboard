@@ -11,11 +11,12 @@ combined only when creating a Store Item Type.
 
 **Store Item Type**: The unique combination of Asset Type and one selected
 Store Classification Master path. It owns one permanent Asset Code and one
-Identification Name. During Data Entry, the exact Asset Type, Asset Category,
+Identification. During Data Entry, the exact Asset Type, Asset Category,
 Asset Subcategory, and Asset Name combination is checked before saving. An
 existing combination displays and reuses its existing Asset Code without
 creating another Store Item Type; only a new combination generates a new Asset
-Code.
+Code. Its Master Table shows Asset Type, Category, Subcategory, Asset Name, and
+Identification in separate columns.
 
 **Asset Type**: The stock-control choice for a Store Item Type. It is either
 Consumable or Non Consumable; users select it from a dropdown and never enter
@@ -48,26 +49,45 @@ Code but each receive a Unit ID / Serial ID. It may be held by a Department,
 Machine, Vendor, or the Store and is the only Asset Type that participates in
 Asset Movement, maintenance, calibration, and Store Return.
 
-**Supplier**: The party from whom a Purchase Order is placed. Supplier and
-email are maintained in Supplier Master. Price history belongs to the ordered
-Store Item and is visible from its individual Asset workspace.
+**Supplier**: The party from whom goods or repair services are purchased. A
+Supplier owns one immutable system-generated code (`SUP-001`, `SUP-002`, and so
+on), name, GST number, address, email, and contact details. Supplier names are
+unique after trimming and ignoring letter case; a GST number, when supplied,
+also belongs to only one Supplier. The same Supplier record is used when that
+party temporarily holds an Asset for paid repair, avoiding a duplicate Vendor
+record.
 
-**Current Supplier Price**: The newest effective Supplier Price Master entry
-for one Store Item Type. It determines both the Supplier and unit price when
-that item is added to a Purchase Order; an item without one cannot be ordered.
+**Supplier Price Revision**: One dated price quoted by one Supplier for one
+Store Item Type. Saving a new active revision makes the previous revision for
+that exact Supplier and Store Item inactive; history is never overwritten.
+There is at most one active revision per Supplier and Store Item.
 
-**Vendor**: An external party that may temporarily hold a Non Consumable Asset,
-for example for repair or calibration. A Vendor is not a Supplier unless it is
-separately maintained in both masters.
+**Recommended Supplier Price**: The cheapest active Supplier Price Revision
+effective on the Purchase Order date. It is selected by default. Store may
+explicitly choose another Supplier with an active effective price; the
+Purchase Order Line permanently keeps the chosen Supplier price as its price
+snapshot. An item without an eligible price cannot be ordered.
+
+**Vendor**: An external holder that does not receive a Purchase Order. Paid
+repair and calibration providers are Suppliers, not duplicate Vendor records.
 
 **Store Purchase Order**: The authority to receive one or more Store Item lines
-from exactly one Supplier at their Current Supplier Prices. Selecting items
-from multiple Suppliers creates one Purchase Order per Supplier. Each order
-progresses through Open, Partially Received, Received, or Cancelled.
+from exactly one Supplier at their chosen Supplier Price Revisions. Selecting
+items from multiple Suppliers creates one Purchase Order per Supplier. Each
+goods order progresses through Open, Partially Received, Received, or
+Cancelled.
 
-**Store Purchase Order Line**: One Store Item Type, ordered quantity, Current
-Supplier Price, and received quantity within a Store Purchase Order. Receiving
-is saved against the line and cannot exceed its remaining quantity.
+**Store Purchase Order Line**: One Store Item Type, ordered quantity, chosen
+Supplier Price Revision snapshot, and received quantity within a Store Purchase
+Order. Receiving is saved against the line and cannot exceed its remaining
+quantity.
+
+**Repair Purchase Order**: A Purchase Order for one individually tracked Non
+Consumable Unit ID sent to one Supplier for repair or calibration. It records
+the service description and agreed price, temporarily assigns the Physical
+Asset to that Supplier, and remains visible in the Purchase Register and Asset
+Workspace. Completing the work returns through the normal Asset Movement and
+Maintenance History flows; it does not create stock receipt quantity.
 
 **Store Purchase Register**: The single table containing every Store Purchase
 Order and its received quantity. Goods are received against the same order row;
@@ -106,9 +126,15 @@ Store. For Physical Assets it is the count of Available Unit IDs at that
 Store. Every open request therefore sees the effect of the latest allocation.
 
 **Asset Workspace**: The permanent view for one Unit ID containing its
-identity, current assignment, Department/Machine/Vendor movement history,
+identity, current assignment, Department/Machine/Supplier/Vendor movement history,
 maintenance and calibration timetable and history, Purchase Order, Supplier
 price history, bill, warranty, and guarantee documents.
+
+**Asset Drawing**: A PDF, JPG, or PNG drawing attached to one Store Item Type,
+not to an individual Unit ID. Every Physical Asset of that Store Item Type sees
+the same current drawing. The file is limited to 10 MB and uses the configured
+attachment storage; adding this feature does not introduce a new object-storage
+provider.
 
 **Asset Movement**: An immutable change in the holder of one Non Consumable
 Unit ID between the Store, a Department, a Machine, or a Vendor. A Store Return

@@ -34,6 +34,8 @@ import {
 
 import {
   completeStoreAssetMaintenanceAction,
+  completeStoreRepairPurchaseOrderAction,
+  createStoreRepairPurchaseOrderAction,
   moveStoreAssetAction,
   scheduleStoreAssetMaintenanceAction,
   setStoreAssetLifecycleAction,
@@ -57,12 +59,13 @@ export default async function StoreAssetWorkspacePage({
   })
   const data = await (async () => {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    const [workspace, definitions, vendors] = await Promise.all([
+    const [workspace, definitions, suppliers, vendors] = await Promise.all([
       repository.getAssetWorkspace({ assetCode, organizationId }),
       repository.listMaintenanceDefinitions(organizationId),
+      repository.listSuppliers(organizationId),
       repository.listVendors(organizationId),
     ])
-    return { definitions, vendors, workspace }
+    return { definitions, suppliers, vendors, workspace }
   })().finally(() => repository.close())
   if (!data.workspace) notFound()
   const {
@@ -70,6 +73,7 @@ export default async function StoreAssetWorkspacePage({
     documents,
     maintenance,
     movements,
+    repairOrders,
     schedules,
     supplierPrices,
   } = data.workspace
@@ -113,7 +117,10 @@ export default async function StoreAssetWorkspacePage({
           label="Warranty Until"
           value={asset.warrantyUntil || "Not recorded"}
         />
-        <Info label="Purchase Order" value={asset.orderNumber || "Legacy receipt"} />
+        <Info
+          label="Purchase Order"
+          value={asset.orderNumber || "Legacy receipt"}
+        />
         <Info label="Supplier" value={asset.supplierName || "Not recorded"} />
         <Info
           label="Purchase Price"
@@ -123,7 +130,7 @@ export default async function StoreAssetWorkspacePage({
       </div>
 
       {canManage ? (
-        <div className="grid gap-6 xl:grid-cols-3">
+        <div className="grid gap-6 xl:grid-cols-2 2xl:grid-cols-4">
           <Card>
             <CardHeader>
               <CardTitle>Move / Assign Asset</CardTitle>
@@ -174,12 +181,85 @@ export default async function StoreAssetWorkspacePage({
                     label="Reference / Machine No. / Store Code"
                     name="holder_reference"
                   />
-                  <TextField label="Department / Destination Name" name="holder_name" />
+                  <TextField
+                    label="Department / Destination Name"
+                    name="holder_name"
+                  />
                   <TextField label="Moved By" name="moved_by" />
                   <TextField label="Remark" name="remark" />
                 </FieldGroup>
                 <Button className="mt-5" type="submit">
                   Record Movement
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Create Repair PO</CardTitle>
+              <CardDescription>
+                Creates a service PO and moves this Unit ID to the selected
+                Supplier without duplicating a repair Vendor.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={createStoreRepairPurchaseOrderAction}>
+                <input
+                  name="asset_code"
+                  type="hidden"
+                  value={asset.assetCode}
+                />
+                <FieldGroup className="gap-4">
+                  <Field>
+                    <FieldLabel htmlFor="repair-supplier">Supplier</FieldLabel>
+                    <NativeSelect
+                      id="repair-supplier"
+                      name="supplier_id"
+                      required
+                    >
+                      {data.suppliers.map((supplier) => (
+                        <NativeSelectOption
+                          key={supplier.id}
+                          value={supplier.id}
+                        >
+                          {supplier.code} — {supplier.name}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+                  <TextField
+                    defaultValue={istDateValue()}
+                    label="PO Date"
+                    name="order_date"
+                    type="date"
+                  />
+                  <TextField
+                    label="Agreed Repair Price"
+                    min="0"
+                    name="service_price"
+                    required
+                    step="0.01"
+                    type="number"
+                  />
+                  <Field>
+                    <FieldLabel htmlFor="repair-description">
+                      Repair / Calibration Scope
+                    </FieldLabel>
+                    <Textarea
+                      id="repair-description"
+                      name="service_description"
+                      required
+                    />
+                  </Field>
+                  <TextField label="Remark" name="remark" />
+                </FieldGroup>
+                <Button
+                  className="mt-5"
+                  disabled={!data.suppliers.length}
+                  type="submit"
+                >
+                  Create Repair PO
                 </Button>
               </form>
             </CardContent>
@@ -329,8 +409,8 @@ export default async function StoreAssetWorkspacePage({
             <CardTitle>Asset Lifecycle</CardTitle>
             <CardDescription>
               A broken or scrapped physical asset keeps its history. A purchased
-              replacement receives a new Unit ID. Use Store Return above to
-              make an asset available again.
+              replacement receives a new Unit ID. Use Store Return above to make
+              an asset available again.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -360,6 +440,85 @@ export default async function StoreAssetWorkspacePage({
           </CardContent>
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Repair Purchase Orders</CardTitle>
+          <CardDescription>
+            Every outsourced repair PO remains linked to this Unit ID.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Order</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Supplier</TableHead>
+                <TableHead>Scope</TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>PDF</TableHead>
+                {canManage ? <TableHead>Completion</TableHead> : null}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {repairOrders.map((order) => (
+                <TableRow key={order.id}>
+                  <TableCell className="font-medium">
+                    {order.orderNumber}
+                  </TableCell>
+                  <TableCell>{order.orderDate}</TableCell>
+                  <TableCell>{order.supplierName}</TableCell>
+                  <TableCell>{order.serviceDescription}</TableCell>
+                  <TableCell>₹ {order.servicePrice}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{order.status}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button asChild size="sm" variant="outline">
+                      <a href={`/store/orders/${order.id}/pdf`}>Download</a>
+                    </Button>
+                  </TableCell>
+                  {canManage ? (
+                    <TableCell>
+                      {order.status === "Open" ? (
+                        <form action={completeStoreRepairPurchaseOrderAction}>
+                          <input
+                            name="asset_code"
+                            type="hidden"
+                            value={asset.assetCode}
+                          />
+                          <input
+                            name="purchase_order_id"
+                            type="hidden"
+                            value={order.id}
+                          />
+                          <Button size="sm" type="submit" variant="outline">
+                            Mark Completed
+                          </Button>
+                        </form>
+                      ) : (
+                        "Completed"
+                      )}
+                    </TableCell>
+                  ) : null}
+                </TableRow>
+              ))}
+              {!repairOrders.length ? (
+                <TableRow>
+                  <TableCell
+                    className="h-24 text-center text-muted-foreground"
+                    colSpan={canManage ? 8 : 7}
+                  >
+                    No Repair Purchase Orders for this Unit ID.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -526,6 +685,7 @@ export default async function StoreAssetWorkspacePage({
                 <TableHead>Date</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Price</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Bill / Order</TableHead>
               </TableRow>
             </TableHeader>
@@ -537,6 +697,11 @@ export default async function StoreAssetWorkspacePage({
                   <TableCell>{price.validFrom}</TableCell>
                   <TableCell>{price.supplierName}</TableCell>
                   <TableCell>₹ {price.unitPrice}</TableCell>
+                  <TableCell>
+                    <Badge variant={price.active ? "secondary" : "outline"}>
+                      {price.active ? "Active" : "History"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>{price.quoteReference || "—"}</TableCell>
                 </TableRow>
               ))}
@@ -544,7 +709,7 @@ export default async function StoreAssetWorkspacePage({
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={4}
+                    colSpan={5}
                   >
                     No supplier price history for this Asset Type.
                   </TableCell>

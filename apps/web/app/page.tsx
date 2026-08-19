@@ -54,6 +54,7 @@ export default async function Page({
             supplierPrices,
             vendors,
             masters,
+            itemDrawings,
           ] = await Promise.all([
             repository.listItemTypes(organizationId),
             repository.listLocations(organizationId),
@@ -61,8 +62,10 @@ export default async function Page({
             repository.listSupplierPrices(organizationId),
             repository.listVendors(organizationId),
             repository.listAssetClassificationMasters(organizationId),
+            repository.listItemTypeDrawings(organizationId),
           ])
           return {
+            itemDrawings,
             items,
             locations,
             masters,
@@ -79,9 +82,7 @@ export default async function Page({
   const legacyMasterEntry = legacyMasterEntryForDashboardTab(requestedTab)
   const initialDashboardTab = legacyMasterEntry
     ? "dataEntryTab"
-    : dashboardNavigation.some(
-          (item) => item.id === requestedTab
-        )
+    : dashboardNavigation.some((item) => item.id === requestedTab)
       ? (requestedTab as DashboardTabId)
       : "productionControlTab"
   const requestedFloor = Array.isArray(query.floor)

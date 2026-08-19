@@ -58,7 +58,7 @@ function assetType(formData: FormData): StoreAssetType {
 
 function holderType(formData: FormData) {
   const value = requiredText(formData, "holder_type")
-  if (!holderTypes.includes(value as StoreHolderType)) {
+  if (!holderTypes.includes(value as (typeof holderTypes)[number])) {
     throw new Error("Holder type is invalid.")
   }
   return value as StoreHolderType
@@ -131,17 +131,20 @@ export async function createStoreSupplierAction(formData: FormData) {
     return masterId
       ? repository.updateSupplier({
           actorUserId,
+          address: optionalText(formData, "supplier_address"),
           contactDetails: optionalText(formData, "contact_details"),
           email: optionalText(formData, "supplier_email"),
+          gstNumber: optionalText(formData, "gst_number"),
           id: masterId,
           name: requiredText(formData, "supplier_name"),
           organizationId,
         })
       : repository.createSupplier({
           actorUserId,
-          code: requiredText(formData, "supplier_code"),
+          address: optionalText(formData, "supplier_address"),
           contactDetails: optionalText(formData, "contact_details"),
           email: optionalText(formData, "supplier_email"),
+          gstNumber: optionalText(formData, "gst_number"),
           name: requiredText(formData, "supplier_name"),
           organizationId,
         })
@@ -248,25 +251,99 @@ export async function createStoreAssetNameAction(formData: FormData) {
 }
 
 export async function createStoreItemTypeAction(formData: FormData) {
-  await withStore("store.manage", (repository, actorUserId, organizationId) => {
-    const masterId = optionalText(formData, "master_id")
-    const input = {
-      actorUserId,
-      assetCategoryId: requiredText(formData, "asset_category_id"),
-      assetNameId: requiredText(formData, "asset_name_id"),
-      assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
-      assetType: assetType(formData),
-      applicableItemCode: optionalText(formData, "applicable_item_code"),
-      drawingNumber: optionalText(formData, "drawing_number"),
-      identificationName: requiredText(formData, "identification_name"),
-      minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
-      organizationId,
-      unit: requiredText(formData, "unit"),
+  const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
+  try {
+    const previousStorageKey = await withStore(
+      "store.manage",
+      async (repository, actorUserId, organizationId) => {
+        const masterId = optionalText(formData, "master_id")
+        const input = {
+          actorUserId,
+          assetCategoryId: requiredText(formData, "asset_category_id"),
+          assetNameId: requiredText(formData, "asset_name_id"),
+          assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
+          assetType: assetType(formData),
+          applicableItemCode: optionalText(formData, "applicable_item_code"),
+          drawingNumber: optionalText(formData, "drawing_number"),
+          identificationName: requiredText(formData, "identification_name"),
+          minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
+          organizationId,
+          unit: requiredText(formData, "unit"),
+        }
+        const item = masterId
+          ? await repository.updateItemType({ ...input, id: masterId })
+          : await repository.createItemType(input)
+        if (!savedDrawing) return null
+        const drawing = await repository.recordItemTypeDrawing({
+          actorUserId,
+          fileName: savedDrawing.fileName,
+          itemTypeId: item.id,
+          organizationId,
+          storageKey: savedDrawing.storageKey,
+        })
+        return drawing.previousStorageKey
+      }
+    )
+    if (previousStorageKey && previousStorageKey !== savedDrawing?.storageKey) {
+      await deleteUserAttachment(previousStorageKey).catch(() => undefined)
     }
-    return masterId
-      ? repository.updateItemType({ ...input, id: masterId })
-      : repository.createItemType(input)
+  } catch (error) {
+    if (savedDrawing) {
+      await deleteUserAttachment(savedDrawing.storageKey).catch(() => undefined)
+    }
+    throw error
+  }
+  revalidateStore()
+}
+
+async function saveAssetDrawing(upload: FormDataEntryValue | null) {
+  if (!(upload instanceof File) || upload.size === 0) return null
+  if (upload.size > 10 * 1024 * 1024) {
+    throw new Error("Asset drawing must be 10 MB or smaller.")
+  }
+  const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"])
+  if (!allowedTypes.has(upload.type)) {
+    throw new Error("Asset drawing must be a PDF, JPG, or PNG file.")
+  }
+  const bytes = Buffer.from(await upload.arrayBuffer())
+  const validated = validateUserAttachment({
+    bytes,
+    fileName: upload.name,
+    purpose: "drawing",
   })
+  const storageKey = `store/drawings/${randomUUID()}-${validated.fileName}`
+  await saveUserAttachment({
+    bytes,
+    mediaType: validated.mediaType,
+    storageKey,
+  })
+  return { fileName: validated.fileName, storageKey }
+}
+
+export async function uploadStoreItemDrawingAction(formData: FormData) {
+  const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
+  if (!savedDrawing) throw new Error("Select an Asset drawing to upload.")
+  try {
+    const previousStorageKey = await withStore(
+      "store.manage",
+      async (repository, actorUserId, organizationId) =>
+        (
+          await repository.recordItemTypeDrawing({
+            actorUserId,
+            fileName: savedDrawing.fileName,
+            itemTypeId: requiredText(formData, "item_type_id"),
+            organizationId,
+            storageKey: savedDrawing.storageKey,
+          })
+        ).previousStorageKey
+    )
+    if (previousStorageKey && previousStorageKey !== savedDrawing.storageKey) {
+      await deleteUserAttachment(previousStorageKey).catch(() => undefined)
+    }
+  } catch (error) {
+    await deleteUserAttachment(savedDrawing.storageKey).catch(() => undefined)
+    throw error
+  }
   revalidateStore()
 }
 
@@ -456,6 +533,7 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
       items: itemTypeIds.map((itemTypeId) => ({
         itemTypeId,
         quantity: positiveNumber(formData, `quantity_${itemTypeId}`),
+        supplierId: optionalText(formData, `supplier_${itemTypeId}`),
       })),
       orderDate: optionalText(formData, "order_date"),
       organizationId,
@@ -464,6 +542,41 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
   )
   revalidateStore()
   redirect("/store/orders")
+}
+
+export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
+  const assetCode = requiredText(formData, "asset_code")
+  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+    repository.createRepairPurchaseOrder({
+      actorUserId,
+      assetCode,
+      orderDate: optionalText(formData, "order_date"),
+      organizationId,
+      remark: optionalText(formData, "remark"),
+      serviceDescription: requiredText(formData, "service_description"),
+      servicePrice: requiredText(formData, "service_price"),
+      supplierId: requiredText(formData, "supplier_id"),
+    })
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
+  redirect(`/store/assets/${encodeURIComponent(assetCode)}`)
+}
+
+export async function completeStoreRepairPurchaseOrderAction(
+  formData: FormData
+) {
+  const assetCode = requiredText(formData, "asset_code")
+  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+    repository.completeRepairPurchaseOrder({
+      actorUserId,
+      assetCode,
+      organizationId,
+      purchaseOrderId: requiredText(formData, "purchase_order_id"),
+    })
+  )
+  revalidatePath(`/store/assets/${encodeURIComponent(assetCode)}`)
+  revalidateStore()
 }
 
 export async function moveStoreAssetAction(formData: FormData) {
