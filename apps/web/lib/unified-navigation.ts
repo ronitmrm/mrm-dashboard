@@ -9,6 +9,7 @@ import {
   FileClock,
   Gauge,
   Globe2,
+  KeyRound,
   LayoutDashboard,
   ListChecks,
   MessageSquareText,
@@ -598,5 +599,10 @@ export const administrationNavigation = [
     href: "/administration/access",
     icon: ShieldCheck,
     label: "Access Administration",
+  },
+  {
+    href: "/account/password",
+    icon: KeyRound,
+    label: "Password & Security",
   },
 ] as const

@@ -207,6 +207,10 @@ export function UnifiedSidebarNavigation({
     navigationAccess.hrHrefs.includes(item.href)
   )
   const visibleStoreNavigation = navigationAccess.store ? storeNavigation : []
+  const visibleAdministrationNavigation = administrationNavigation.filter(
+    (item) =>
+      item.href !== "/administration/access" || navigationAccess.administration
+  )
   const normalizedMenuSearch = menuSearch.trim().toLowerCase()
   const filteredCommercialNavigation = filterNavigationItems(
     visibleCommercialNavigation,
@@ -276,10 +280,11 @@ export function UnifiedSidebarNavigation({
           normalizedMenuSearch
         )
     )
-  const administrationMatchesSearch =
-    navigationAccess.administration &&
-    (!normalizedMenuSearch ||
-      "administration access".includes(normalizedMenuSearch))
+  const filteredAdministrationNavigation = filterNavigationItems(
+    visibleAdministrationNavigation,
+    normalizedMenuSearch,
+    "administration access account password security"
+  )
   const dashboardMatchesSearch =
     !normalizedMenuSearch || "dashboard home my dashboard".includes(normalizedMenuSearch)
   useEffect(() => {
@@ -634,11 +639,11 @@ export function UnifiedSidebarNavigation({
         </SidebarGroup>
       ) : null}
 
-      {administrationMatchesSearch ? (
+      {filteredAdministrationNavigation.length ? (
         <SidebarGroup className="px-3 py-0.5">
           <SidebarGroupContent>
             <SidebarMenu>
-              {administrationNavigation.map((item) => (
+              {filteredAdministrationNavigation.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
@@ -670,7 +675,7 @@ export function UnifiedSidebarNavigation({
       !filteredUniversalProductionNavigation.length &&
       !filteredProductionNavigation.length &&
       !dashboardMatchesSearch &&
-      !administrationMatchesSearch ? (
+      !filteredAdministrationNavigation.length ? (
         <p className="px-6 py-8 text-center text-sm text-muted-foreground">
           No menu items found.
         </p>
