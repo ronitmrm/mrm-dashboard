@@ -114,6 +114,7 @@ export {
 export { createWorkforceRepository } from "./workforce"
 export { createDatabase } from "./database"
 export { createInitialAdministratorProvisioner } from "./initial-administrator"
+export { createUserDashboardRepository } from "./user-dashboard"
 export { migrateDatabase } from "./migrate"
 export { createProductRepository } from "./products"
 export {

@@ -10,7 +10,11 @@ describe("safeReturnPath", () => {
   })
 
   it("rejects absolute and protocol-relative redirects", () => {
-    expect(safeReturnPath("https://attacker.test")).toBe("/commercial")
-    expect(safeReturnPath("//attacker.test")).toBe("/commercial")
+    expect(safeReturnPath("https://attacker.test")).toBe("/home")
+    expect(safeReturnPath("//attacker.test")).toBe("/home")
+  })
+
+  it("opens the personal dashboard when sign-in has no requested page", () => {
+    expect(safeReturnPath(undefined)).toBe("/home")
   })
 })

@@ -10,6 +10,7 @@ import {
   Factory,
   Database,
   ListChecks,
+  LayoutDashboard,
   Search,
   X,
 } from "lucide-react"
@@ -47,6 +48,7 @@ import {
   hrNavigation,
   navigationHrefMatches,
   operationalEntryNavigation,
+  personalDashboardNavigation,
   productionFloorNavigation,
   storeNavigation,
   universalProductionNavigation,
@@ -278,6 +280,8 @@ export function UnifiedSidebarNavigation({
     navigationAccess.administration &&
     (!normalizedMenuSearch ||
       "administration access".includes(normalizedMenuSearch))
+  const dashboardMatchesSearch =
+    !normalizedMenuSearch || "dashboard home my dashboard".includes(normalizedMenuSearch)
   useEffect(() => {
     function focusMenuSearch(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -332,6 +336,27 @@ export function UnifiedSidebarNavigation({
           )}
         </div>
       </div>
+
+      {dashboardMatchesSearch ? (
+        <SidebarGroup className="px-3 py-0.5">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                  isActive={pathname === personalDashboardNavigation.href}
+                >
+                  <a href={personalDashboardNavigation.href}>
+                    <LayoutDashboard />
+                    <span>{personalDashboardNavigation.label}</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ) : null}
 
       {filteredMasterDataNavigation.length ? (
         <NavigationSection
@@ -644,6 +669,7 @@ export function UnifiedSidebarNavigation({
       !filteredOperationalEntryNavigation.length &&
       !filteredUniversalProductionNavigation.length &&
       !filteredProductionNavigation.length &&
+      !dashboardMatchesSearch &&
       !administrationMatchesSearch ? (
         <p className="px-6 py-8 text-center text-sm text-muted-foreground">
           No menu items found.
