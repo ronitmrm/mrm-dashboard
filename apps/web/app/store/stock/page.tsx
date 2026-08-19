@@ -77,7 +77,7 @@ export default async function StoreStockPage({
     return { items, supplierPrices }
   })().finally(() => repository.close())
   const actionFormId = "stock-row-action"
-  const columnCount = mode === "view" ? 8 : mode === "request" ? 9 : 10
+  const columnCount = mode === "view" ? 9 : mode === "request" ? 10 : 11
 
   return (
     <div className="flex flex-col gap-6">
@@ -148,6 +148,7 @@ export default async function StoreStockPage({
                 <TableHead>Asset Category</TableHead>
                 <TableHead>Asset Subcategory</TableHead>
                 <TableHead>Stock Quantity</TableHead>
+                <TableHead>Available Unit IDs</TableHead>
                 <TableHead>Storage Location</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Master Price</TableHead>
@@ -208,7 +209,30 @@ export default async function StoreStockPage({
                     <TableCell>{item.assetCategory}</TableCell>
                     <TableCell>{item.assetSubcategory}</TableCell>
                     <TableCell>
-                      {item.availableStock} {item.unit}
+                      {item.trackingMode === "SERIALIZED"
+                        ? `${item.availableUnitIds.length} physical unit${item.availableUnitIds.length === 1 ? "" : "s"}`
+                        : `${item.availableStock} ${item.unit}`}
+                    </TableCell>
+                    <TableCell>
+                      {item.trackingMode === "SERIALIZED" ? (
+                        item.availableUnitIds.length ? (
+                          <div className="flex min-w-32 flex-col gap-1">
+                            {item.availableUnitIds.map((unitId) => (
+                              <Link
+                                className="font-medium underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
+                                href={storeAssetWorkspaceHref(unitId)}
+                                key={unitId}
+                              >
+                                {unitId}
+                              </Link>
+                            ))}
+                          </div>
+                        ) : (
+                          "None available"
+                        )
+                      ) : (
+                        "Not applicable"
+                      )}
                     </TableCell>
                     <TableCell>{item.storageLocations}</TableCell>
                     <TableCell>

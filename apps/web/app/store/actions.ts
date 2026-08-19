@@ -73,7 +73,8 @@ async function withStore<T>(
   operation: (
     repository: ReturnType<typeof createStoreRepository>,
     actorUserId: string,
-    organizationId: string
+    organizationId: string,
+    actorEmail: string
   ) => Promise<T>
 ) {
   const session = await requireCapability(capability, storePath)
@@ -82,7 +83,12 @@ async function withStore<T>(
   })
   try {
     const organizationId = await repository.organizationIdForCode("MRMPL")
-    return await operation(repository, session.user.id, organizationId)
+    return await operation(
+      repository,
+      session.user.id,
+      organizationId,
+      session.user.email
+    )
   } finally {
     await repository.close()
   }
@@ -481,19 +487,19 @@ export async function createStoreRequisitionBatchAction(formData: FormData) {
 }
 
 export async function issueStoreRequisitionAction(formData: FormData) {
-  await withStore("store.manage", (repository, actorUserId, organizationId) =>
-    repository.issueRequisition({
-      actorUserId,
-      assetCode: optionalText(formData, "asset_code"),
-      holderName: optionalText(formData, "holder_name"),
-      holderReference: optionalText(formData, "holder_reference"),
-      holderType: holderType(formData),
-      issuedBy: optionalText(formData, "issued_by"),
-      organizationId,
-      quantity: positiveNumber(formData, "issue_quantity"),
-      remark: optionalText(formData, "remark"),
-      requisitionId: requiredText(formData, "requisition_id"),
-    })
+  await withStore(
+    "store.manage",
+    async (repository, actorUserId, organizationId, actorEmail) =>
+      repository.issueRequisition({
+        actorUserId,
+        assetCode: optionalText(formData, "asset_code"),
+        holderType: "DEPARTMENT",
+        issuedBy: actorEmail,
+        organizationId,
+        quantity: positiveNumber(formData, "issue_quantity"),
+        remark: optionalText(formData, "remark"),
+        requisitionId: requiredText(formData, "requisition_id"),
+      })
   )
   revalidateStore()
 }

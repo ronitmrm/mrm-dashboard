@@ -353,6 +353,10 @@ _Avoid_: Separate Consumable table, Physical Asset register on Stock.
 One numbered demand submitted by a Department and a signed-in individual, containing one or more Coded Item Request Lines selected from Current Stock. Requested By is the signed-in account email; Department comes from that account's linked Employee Master assignments, with a choice only when multiple assignments apply. All requests use the single central Store automatically.
 _Avoid_: One request number per item, New Item Request.
 
+**Store Issue Allocation**:
+The fulfillment of one Coded Item Request Line to its saved Department by the signed-in Store user. For a Non Consumable, one available Unit ID for that Asset Code is selected from the Store at a time; Department, Issued By, and Unit ID eligibility are not free text.
+_Avoid_: Typed Department, typed issuer identity, typed Unit ID, issuing multiple physical units as one shared quantity.
+
 **Coded Item Request Line**:
 One Store Item Type and requested quantity within a Store Request, allocated independently by Store.
 _Avoid_: New Item Request, physical Asset selection.

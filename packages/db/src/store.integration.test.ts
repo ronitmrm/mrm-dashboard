@@ -619,6 +619,11 @@ describe("Store requests", () => {
       `${itemType.typeCode}-0001`,
       `${itemType.typeCode}-0002`,
     ])
+    expect(
+      (await store.listItemTypes(organizationId)).find(
+        (item) => item.id === itemType.id
+      )?.availableUnitIds
+    ).toEqual(receipt.assetCodes)
 
     const itemWorkspace = await store.getItemTypeWorkspace({
       organizationId,
@@ -643,15 +648,34 @@ describe("Store requests", () => {
       quantity: 1,
       requestedBy: "Production Supervisor",
     })
+    expect(
+      (await store.listRequisitions({ organizationId })).rows.find(
+        (row) => row.id === request.id
+      )?.availableUnitIds
+    ).toEqual(receipt.assetCodes)
     await store.issueRequisition({
       assetCode: receipt.assetCodes[0],
-      holderName: "Production Department",
-      holderReference: "PROD",
       holderType: "DEPARTMENT",
+      issuedBy: "store.manager@mayankrawmint.com",
       organizationId,
       quantity: 1,
       requisitionId: request.id,
     })
+    expect(
+      (await store.listRequisitions({ organizationId })).rows.find(
+        (row) => row.id === request.id
+      )?.availableUnitIds
+    ).toEqual([receipt.assetCodes[1]])
+    expect(
+      (await store.listRecentStockMovements(organizationId)).find(
+        (movement) => movement.assetCode === receipt.assetCodes[0]
+      )
+    ).toEqual(
+      expect.objectContaining({
+        movedBy: "store.manager@mayankrawmint.com",
+        toHolder: expect.stringContaining("Production"),
+      })
+    )
     const vendor = await store.createVendor({
       code: `REPAIR-${suffix}`,
       name: "Approved Repair Vendor",
