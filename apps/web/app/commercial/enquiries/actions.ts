@@ -576,26 +576,6 @@ export async function applyEnquiryImportReviewAction(formData: FormData) {
   redirect(`${enquiriesPath}/${enquiryId}`)
 }
 
-export async function createFollowupAction(formData: FormData) {
-  const enquiryId = requiredText(formData, "enquiry_id")
-  await withWorkflow(
-    "pricing.sales.write",
-    "/commercial/sales",
-    (workflow, actorUserId) =>
-      workflow.createFollowup({
-        actorUserId,
-        channel: requiredText(formData, "channel"),
-        dueOn: requiredText(formData, "due_on"),
-        enquiryId,
-        note: optionalText(formData, "note"),
-        organizationId: requiredText(formData, "organization_id"),
-        quoteItemId: optionalText(formData, "quote_item_id"),
-        status: requiredText(formData, "status"),
-      })
-  )
-  revalidatePath("/commercial/sales")
-}
-
 export async function completeFollowupAction(formData: FormData) {
   await withWorkflow(
     "pricing.sales.write",

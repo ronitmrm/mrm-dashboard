@@ -257,31 +257,37 @@ describe("PostgreSQL product-costing and quote workflow", () => {
     })
     expect(updatedDraft.id).toBe(quote.id)
 
-    const sent = await repository.sendQuote({ quoteItemId: quote.id })
+    const followupDueOn = "2026-09-30"
+    const sent = await repository.sendQuote({
+      followupDueOn,
+      quoteItemId: quote.id,
+    })
     expect(sent).toMatchObject({ isActive: true, revision: 1, status: "Sent" })
-    await repository.sendQuote({ quoteItemId: quote.id })
+    await repository.sendQuote({ followupDueOn, quoteItemId: quote.id })
     const followup = await pool.query<{
       count: string
-      due_in_days: number
+      due_on: string
       note: string
+      quote_item_id: string
     }>(
       `
         SELECT count(*)::text AS count,
-          (max(due_on) - current_date)::integer AS due_in_days,
-          max(note) AS note
+          max(due_on)::text AS due_on, max(note) AS note,
+          max(quote_item_id)::text AS quote_item_id
         FROM sales.followups
         WHERE enquiry_id = (
           SELECT enquiry_id FROM sales.enquiry_items WHERE id = $1
         )
           AND status = 'Pending'
-          AND note = 'Quote sent to Costing Customer. Follow up within 15 days.'
+          AND quote_item_id = $2
       `,
-      [enquiryItemId]
+      [enquiryItemId, quote.id]
     )
     expect(followup.rows[0]).toEqual({
       count: "1",
-      due_in_days: 15,
-      note: "Quote sent to Costing Customer. Follow up within 15 days.",
+      due_on: followupDueOn,
+      note: "Quote sent to Costing Customer.",
+      quote_item_id: quote.id,
     })
     await pool.query(
       `
@@ -307,7 +313,10 @@ describe("PostgreSQL product-costing and quote workflow", () => {
       `,
       [organizationId, randomUUID(), enquiryItemId]
     )
-    await repository.sendQuote({ quoteItemId: quote.id })
+    await repository.sendQuote({
+      followupDueOn: "2026-09-30",
+      quoteItemId: quote.id,
+    })
     const followupLifecycle = await pool.query<{
       completed_exact: string
       email_count: string
@@ -390,7 +399,10 @@ describe("PostgreSQL product-costing and quote workflow", () => {
       itemId,
       quantity: 50,
     })
-    const sent = await repository.sendQuote({ quoteItemId: second.id })
+    const sent = await repository.sendQuote({
+      followupDueOn: "2026-09-30",
+      quoteItemId: second.id,
+    })
     expect(sent.revision).toBe(2)
 
     const lineage = await pool.query<{
@@ -459,7 +471,10 @@ describe("PostgreSQL product-costing and quote workflow", () => {
         quantity: 10 + index,
       })
       quoteIds.push(quote.id)
-      const sent = await repository.sendQuote({ quoteItemId: quote.id })
+      const sent = await repository.sendQuote({
+        followupDueOn: "2026-09-30",
+        quoteItemId: quote.id,
+      })
       expect(sent.revision).toBe(index + 1)
     }
 
@@ -538,7 +553,12 @@ describe("PostgreSQL product-costing and quote workflow", () => {
     )
 
     const sent = await Promise.all(
-      quoteIds.map((quoteItemId) => repository.sendQuote({ quoteItemId }))
+      quoteIds.map((quoteItemId) =>
+        repository.sendQuote({
+          followupDueOn: "2026-09-30",
+          quoteItemId,
+        })
+      )
     )
     expect(sent.map((quote) => quote.revision).sort()).toEqual([2, 3])
 
@@ -682,7 +702,10 @@ describe("PostgreSQL product-costing and quote workflow", () => {
         itemId: packageId,
       })
     ).resolves.toEqual({ nextStageStatus: "Product Costing" })
-    await repository.sendQuote({ quoteItemId: quote.id })
+    await repository.sendQuote({
+      followupDueOn: "2026-09-30",
+      quoteItemId: quote.id,
+    })
     await expect(
       repository.sendQuoteBackToProductCosting({
         enquiryId: packageEnquiry.rows[0]!.enquiry_id,

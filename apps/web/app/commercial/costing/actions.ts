@@ -10,7 +10,6 @@ import { optionalText, requiredText } from "@/lib/form-data"
 
 const costingPath = "/commercial/costing"
 
-
 function numberValue(formData: FormData, name: string, fallback?: number) {
   const raw = optionalText(formData, name)
   if (raw === undefined && fallback !== undefined) {
@@ -197,13 +196,15 @@ export async function sendQuoteBackToProductCostingAction(formData: FormData) {
 
 export async function sendQuoteAction(formData: FormData) {
   const quoteItemId = requiredText(formData, "quote_item_id")
+  const followupDueOn = requiredText(formData, "followup_due_on")
   await withCosting(
     commercialCapabilities.quotes.write,
     "/commercial/quotes",
     (repository, actorUserId) =>
-      repository.sendQuote({ actorUserId, quoteItemId })
+      repository.sendQuote({ actorUserId, followupDueOn, quoteItemId })
   )
   revalidatePath(costingPath)
   revalidatePath("/commercial/quotes")
   revalidatePath(`/commercial/quotes/${quoteItemId}`)
+  revalidatePath("/commercial/sales")
 }
