@@ -113,9 +113,10 @@ describe("commercial drawing, website, and analytics parity", () => {
       revisionDate: "2026-07-22",
     })
 
-    await expect(
-      repository.listDrawingHistory({ organizationId })
-    ).resolves.toEqual([
+    const drawingRegister = await repository.listDrawingRegister({
+      organizationId,
+    })
+    expect(drawingRegister).toEqual([
       expect.objectContaining({
         buffoliLaminatedQuantity: 12,
         cncLaminatedQuantity: 34,
@@ -126,6 +127,40 @@ describe("commercial drawing, website, and analytics parity", () => {
         revision: "1",
         revisionDate: "2026-07-22",
       }),
+    ])
+    const revisionHistory = await repository.listDrawingHistory({
+      organizationId,
+    })
+    expect(
+      revisionHistory
+        .filter((row) => row.itemId === itemId)
+        .map((row) => row.revision)
+    ).toEqual(["0", "1"])
+
+    await repository.updateDrawingHistory({
+      actorUserId,
+      buffoliLaminatedQuantity: 12,
+      cncLaminatedQuantity: 34,
+      conventionalLaminatedQuantity: 23,
+      drawingId: drawingRegister[0]!.drawingId,
+      drawingNumber: "DWG-NEW",
+      organizationId,
+      remarks: "Production quantity confirmed",
+      revision: "1",
+      revisionDate: "2026-07-22",
+    })
+    const itemChanges = (
+      await repository.listDrawingChangeLog({ organizationId })
+    ).filter((row) => row.itemId === itemId)
+    expect(itemChanges).toHaveLength(3)
+    expect(itemChanges[0]).toMatchObject({
+      after: { remarks: "Production quantity confirmed", revision: "1" },
+      before: { remarks: "Released to production", revision: "1" },
+      changeType: "Drawing Updated",
+    })
+    expect(itemChanges.slice(1).map((row) => row.changeType)).toEqual([
+      "Revision Created",
+      "Revision Created",
     ])
     await expect(
       repository.updateDrawingHistory({

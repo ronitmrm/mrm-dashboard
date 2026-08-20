@@ -38,6 +38,29 @@ export type DrawingHistoryRow = {
   uid: string
 }
 
+export type DrawingChangeValues = {
+  buffoliLaminatedQuantity: number
+  cncLaminatedQuantity: number
+  conventionalLaminatedQuantity: number
+  drawingNumber: string
+  remarks: string | null
+  revision: string
+  revisionDate: string
+}
+
+export type DrawingChangeLogRow = {
+  after: DrawingChangeValues
+  before: DrawingChangeValues | null
+  changeId: string
+  changeType: "Drawing Updated" | "Revision Created"
+  changedAt: string
+  changedBy: string
+  drawingId: string
+  itemDescription: string
+  itemId: string
+  uid: string
+}
+
 type DrawingHistoryDatabaseRow = {
   buffoli_laminated_quantity: number
   cnc_laminated_quantity: number
@@ -51,6 +74,19 @@ type DrawingHistoryDatabaseRow = {
   revision_date: string | Date | null
   row_number: string
   source_quote_item_id: string | null
+  uid: string
+}
+
+type DrawingChangeLogDatabaseRow = {
+  after_state: unknown
+  before_state: unknown
+  change_id: string
+  change_type: "Drawing Updated" | "Revision Created"
+  changed_at: string | Date
+  changed_by: string | null
+  drawing_id: string
+  item_description: string
+  item_id: string
   uid: string
 }
 
@@ -220,6 +256,46 @@ function drawingHistoryRow(row: DrawingHistoryDatabaseRow): DrawingHistoryRow {
   }
 }
 
+function drawingChangeValues(value: unknown): DrawingChangeValues {
+  const record =
+    value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+  const quantity = (key: string) => {
+    const parsed = Number(record[key] ?? 0)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  const text = (key: string) => String(record[key] ?? "")
+
+  return {
+    buffoliLaminatedQuantity: quantity("buffoliLaminatedQuantity"),
+    cncLaminatedQuantity: quantity("cncLaminatedQuantity"),
+    conventionalLaminatedQuantity: quantity("conventionalLaminatedQuantity"),
+    drawingNumber: text("drawingNumber"),
+    remarks: record.remarks ? String(record.remarks) : null,
+    revision: text("revision"),
+    revisionDate: text("revisionDate").slice(0, 10),
+  }
+}
+
+function drawingChangeLogRow(
+  row: DrawingChangeLogDatabaseRow
+): DrawingChangeLogRow {
+  return {
+    after: drawingChangeValues(row.after_state),
+    before: row.before_state ? drawingChangeValues(row.before_state) : null,
+    changeId: row.change_id,
+    changeType: row.change_type,
+    changedAt:
+      row.changed_at instanceof Date
+        ? row.changed_at.toISOString()
+        : String(row.changed_at),
+    changedBy: row.changed_by ?? "System",
+    drawingId: row.drawing_id,
+    itemDescription: row.item_description,
+    itemId: row.item_id,
+    uid: row.uid,
+  }
+}
+
 export function deriveThreadStandard(
   threadEntries: Array<string | null | undefined>
 ) {
@@ -315,6 +391,8 @@ const websiteSelect = `
 async function writeAudit(
   client: PoolClient,
   input: ActorContext & {
+    afterState?: Record<string, unknown> | null
+    beforeState?: Record<string, unknown> | null
     eventType: string
     metadata: Record<string, unknown>
     targetId: string
@@ -325,11 +403,11 @@ async function writeAudit(
     `
       INSERT INTO audit.events (
         organization_id, event_type, target_schema, target_table,
-        target_id, actor_user_id, metadata, source_system, source_table,
-        source_id
+        target_id, actor_user_id, before_state, after_state, metadata,
+        source_system, source_table, source_id
       )
-      VALUES ($1, $2, 'catalog', $3, $4, $5, $6,
-        'mrm-dashboard', 'commercial_reporting_events', $7)
+      VALUES ($1, $2, 'catalog', $3, $4, $5, $6, $7, $8,
+        'mrm-dashboard', 'commercial_reporting_events', $9)
     `,
     [
       input.organizationId,
@@ -337,6 +415,8 @@ async function writeAudit(
       input.targetTable,
       input.targetId,
       input.actorUserId ?? null,
+      input.beforeState ?? null,
+      input.afterState ?? null,
       input.metadata,
       randomUUID(),
     ]
@@ -714,6 +794,131 @@ export function createCommercialReportingRepository(
       return result.rows.map(drawingHistoryRow)
     },
 
+    async listDrawingRegister(input: { organizationId: string }) {
+      const result = await pool.query<DrawingHistoryDatabaseRow>(
+        `
+          WITH ranked_drawings AS (
+            SELECT drawings.id drawing_id, drawings.item_id,
+              drawings.source_quote_item_id, items.uid,
+              items.description item_description,
+              COALESCE(drawings.drawing_number, '') drawing_number,
+              drawings.revision,
+              to_char(
+                COALESCE(drawings.effective_at, drawings.created_at),
+                'YYYY-MM-DD'
+              ) revision_date,
+              drawings.buffoli_laminated_quantity,
+              drawings.conventional_laminated_quantity,
+              drawings.cnc_laminated_quantity, drawings.remarks,
+              ROW_NUMBER() OVER (
+                PARTITION BY drawings.item_id
+                ORDER BY (drawings.status = 'current') DESC,
+                  COALESCE(drawings.effective_at, drawings.created_at) DESC,
+                  drawings.created_at DESC,
+                  CASE WHEN drawings.revision ~ '^[0-9]+$'
+                    THEN drawings.revision::bigint END DESC NULLS LAST,
+                  drawings.revision DESC, drawings.id DESC
+              ) item_revision_rank
+            FROM catalog.drawings drawings
+            JOIN catalog.items items ON items.id = drawings.item_id
+            WHERE drawings.organization_id = $1
+          ), drawing_register AS (
+            SELECT *, ROW_NUMBER() OVER (
+              ORDER BY CASE WHEN uid ~ '^M[0-9]+$'
+                  THEN substring(uid from 2)::bigint
+                  ELSE 9223372036854775807 END,
+                uid, drawing_id
+            ) row_number
+            FROM ranked_drawings
+            WHERE item_revision_rank = 1
+          )
+          SELECT buffoli_laminated_quantity, cnc_laminated_quantity,
+            conventional_laminated_quantity, drawing_id, drawing_number,
+            item_description, item_id, remarks, revision, revision_date,
+            row_number, source_quote_item_id, uid
+          FROM drawing_register
+          ORDER BY row_number
+        `,
+        [input.organizationId]
+      )
+      return result.rows.map(drawingHistoryRow)
+    },
+
+    async listDrawingChangeLog(input: { organizationId: string }) {
+      const result = await pool.query<DrawingChangeLogDatabaseRow>(
+        `
+          WITH drawing_changes AS (
+            SELECT drawings.id change_id, drawings.id drawing_id,
+              drawings.item_id, items.uid,
+              items.description item_description,
+              'Revision Created'::text change_type,
+              drawings.created_at changed_at,
+              COALESCE(users.name, users.email) changed_by,
+              NULL::jsonb before_state,
+              jsonb_build_object(
+                'drawingNumber', COALESCE(drawings.drawing_number, ''),
+                'revision', drawings.revision,
+                'revisionDate', to_char(
+                  COALESCE(drawings.effective_at, drawings.created_at),
+                  'YYYY-MM-DD'
+                ),
+                'buffoliLaminatedQuantity',
+                  drawings.buffoli_laminated_quantity,
+                'conventionalLaminatedQuantity',
+                  drawings.conventional_laminated_quantity,
+                'cncLaminatedQuantity', drawings.cnc_laminated_quantity,
+                'remarks', drawings.remarks
+              ) after_state
+            FROM catalog.drawings drawings
+            JOIN catalog.items items ON items.id = drawings.item_id
+            LEFT JOIN identity.users users
+              ON users.id = drawings.created_by_user_id
+            WHERE drawings.organization_id = $1
+              AND NOT EXISTS (
+                SELECT 1
+                FROM audit.events revision_event
+                WHERE revision_event.target_schema = 'catalog'
+                  AND revision_event.target_table = 'drawings'
+                  AND revision_event.target_id = drawings.id
+                  AND revision_event.event_type =
+                    'drawing_history.revision_created'
+              )
+
+            UNION ALL
+
+            SELECT events.id, drawings.id, drawings.item_id, items.uid,
+              items.description,
+              CASE
+                WHEN events.event_type = 'drawing_history.revision_created'
+                  THEN 'Revision Created'
+                ELSE 'Drawing Updated'
+              END,
+              events.occurred_at,
+              COALESCE(users.name, users.email, events.legacy_actor),
+              events.before_state,
+              COALESCE(events.after_state, events.metadata)
+            FROM audit.events events
+            JOIN catalog.drawings drawings ON drawings.id = events.target_id
+            JOIN catalog.items items ON items.id = drawings.item_id
+            LEFT JOIN identity.users users ON users.id = events.actor_user_id
+            WHERE events.organization_id = $1
+              AND events.target_schema = 'catalog'
+              AND events.target_table = 'drawings'
+              AND events.event_type IN (
+                'drawing_history.updated',
+                'drawing_history.revision_created'
+              )
+          )
+          SELECT change_id, drawing_id, item_id, uid, item_description,
+            change_type, changed_at, changed_by, before_state, after_state
+          FROM drawing_changes
+          ORDER BY changed_at DESC, change_id DESC
+        `,
+        [input.organizationId]
+      )
+      return result.rows.map(drawingChangeLogRow)
+    },
+
     async listWebsiteProducts(input: {
       active?: boolean | null
       category?: string | null
@@ -909,46 +1114,133 @@ export function createCommercialReportingRepository(
       const client = await pool.connect()
       try {
         await client.query("BEGIN")
-        const result = await client.query<{ id: string }>(
+        const currentResult = await client.query<{
+          buffoli_laminated_quantity: number
+          cnc_laminated_quantity: number
+          conventional_laminated_quantity: number
+          drawing_number: string | null
+          item_id: string
+          remarks: string | null
+          revision: string
+          revision_date: string
+          source_quote_item_id: string | null
+        }>(
           `
-            UPDATE catalog.drawings
-            SET drawing_number = $1, revision = $2, effective_at = $3::date,
-              buffoli_laminated_quantity = $4,
-              conventional_laminated_quantity = $5,
-              cnc_laminated_quantity = $6, remarks = $7,
-              updated_by_user_id = $8, updated_at = now(),
-              row_version = row_version + 1
-            WHERE id = $9 AND organization_id = $10
-            RETURNING id
+            SELECT item_id, source_quote_item_id, revision,
+              COALESCE(drawing_number, '') drawing_number,
+              to_char(COALESCE(effective_at, created_at), 'YYYY-MM-DD')
+                revision_date,
+              buffoli_laminated_quantity,
+              conventional_laminated_quantity,
+              cnc_laminated_quantity, remarks
+            FROM catalog.drawings
+            WHERE id = $1 AND organization_id = $2
+            FOR UPDATE
           `,
-          [
-            drawingNumber,
-            revision,
-            revisionDate,
-            ...quantities,
-            optional(input.remarks),
-            input.actorUserId ?? null,
-            input.drawingId,
-            input.organizationId,
-          ]
+          [input.drawingId, input.organizationId]
         )
-        if (!result.rows[0])
-          throw new Error("Drawing history row was not found.")
+        const current = currentResult.rows[0]
+        if (!current) throw new Error("Drawing history row was not found.")
+        const remarks = optional(input.remarks)
+        const beforeState = {
+          buffoliLaminatedQuantity: current.buffoli_laminated_quantity,
+          cncLaminatedQuantity: current.cnc_laminated_quantity,
+          conventionalLaminatedQuantity:
+            current.conventional_laminated_quantity,
+          drawingNumber: current.drawing_number ?? "",
+          remarks: current.remarks,
+          revision: current.revision,
+          revisionDate: current.revision_date,
+        }
+        const afterState = {
+          buffoliLaminatedQuantity: quantities[0],
+          cncLaminatedQuantity: quantities[2],
+          conventionalLaminatedQuantity: quantities[1],
+          drawingNumber,
+          remarks,
+          revision,
+          revisionDate,
+        }
+
+        let savedDrawingId = input.drawingId
+        let eventType = "drawing_history.updated"
+        if (revision !== current.revision) {
+          const inserted = await client.query<{ id: string }>(
+            `
+              INSERT INTO catalog.drawings (
+                organization_id, item_id, source_quote_item_id, revision,
+                drawing_number, status, effective_at,
+                buffoli_laminated_quantity,
+                conventional_laminated_quantity,
+                cnc_laminated_quantity, remarks,
+                created_by_user_id, updated_by_user_id,
+                source_system, source_table, source_id, source_payload
+              )
+              VALUES (
+                $1, $2, $3, $4, $5, 'current', $6::date,
+                $7, $8, $9, $10, $11, $11,
+                'mrm-dashboard', 'drawing_revisions', $12,
+                jsonb_build_object('previousDrawingId', $13::text)
+              )
+              RETURNING id
+            `,
+            [
+              input.organizationId,
+              current.item_id,
+              current.source_quote_item_id,
+              revision,
+              drawingNumber,
+              revisionDate,
+              ...quantities,
+              remarks,
+              input.actorUserId ?? null,
+              randomUUID(),
+              input.drawingId,
+            ]
+          )
+          await client.query(
+            `UPDATE catalog.drawings
+             SET status = 'superseded', updated_by_user_id = $1,
+               updated_at = now(), row_version = row_version + 1
+             WHERE id = $2`,
+            [input.actorUserId ?? null, input.drawingId]
+          )
+          savedDrawingId = inserted.rows[0]!.id
+          eventType = "drawing_history.revision_created"
+        } else {
+          await client.query(
+            `
+              UPDATE catalog.drawings
+              SET drawing_number = $1, effective_at = $2::date,
+                buffoli_laminated_quantity = $3,
+                conventional_laminated_quantity = $4,
+                cnc_laminated_quantity = $5, remarks = $6,
+                updated_by_user_id = $7, updated_at = now(),
+                row_version = row_version + 1
+              WHERE id = $8 AND organization_id = $9
+            `,
+            [
+              drawingNumber,
+              revisionDate,
+              ...quantities,
+              remarks,
+              input.actorUserId ?? null,
+              input.drawingId,
+              input.organizationId,
+            ]
+          )
+        }
         await writeAudit(client, {
           ...input,
-          eventType: "drawing_history.updated",
-          metadata: {
-            buffoliLaminatedQuantity: quantities[0],
-            cncLaminatedQuantity: quantities[2],
-            conventionalLaminatedQuantity: quantities[1],
-            drawingNumber,
-            revision,
-            revisionDate,
-          },
-          targetId: input.drawingId,
+          afterState,
+          beforeState,
+          eventType,
+          metadata: afterState,
+          targetId: savedDrawingId,
           targetTable: "drawings",
         })
         await client.query("COMMIT")
+        return savedDrawingId
       } catch (error) {
         await client.query("ROLLBACK")
         throw error
