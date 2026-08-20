@@ -62,6 +62,56 @@ type AddEnquiryItem = {
 
 type TechnicalChecklist = Record<string, boolean>
 
+type TechnicalReviewDatabaseRow = {
+  company_name: string
+  customer_part_code: string
+  customer_uid: string
+  description: string
+  drawing_file_name: string | null
+  drawing_reference: string | null
+  enquiry_id: string
+  enquiry_item_id: string
+  enquiry_number: string
+  feasibility_reason: string | null
+  grade: string | null
+  latest_clarification_message: string | null
+  latest_clarification_source: string | null
+  line_number: number
+  missing_information: string | null
+  quantity: string
+  reviewed_at: Date | null
+  target_price: string | null
+  technical_checklist: TechnicalChecklist
+  technical_remarks: string | null
+  technical_review_status: string
+}
+
+function technicalReviewItemFromRow(row: TechnicalReviewDatabaseRow) {
+  return {
+    companyName: row.company_name,
+    customerPartCode: row.customer_part_code,
+    customerUid: row.customer_uid,
+    description: row.description,
+    drawingFileName: row.drawing_file_name,
+    drawingReference: row.drawing_reference,
+    enquiryId: row.enquiry_id,
+    enquiryItemId: row.enquiry_item_id,
+    enquiryNumber: row.enquiry_number,
+    feasibilityReason: row.feasibility_reason,
+    grade: row.grade,
+    latestClarificationMessage: row.latest_clarification_message,
+    latestClarificationSource: row.latest_clarification_source,
+    lineNumber: row.line_number,
+    missingInformation: row.missing_information,
+    quantity: Number(row.quantity),
+    reviewedAt: row.reviewed_at,
+    targetPrice: row.target_price === null ? null : Number(row.target_price),
+    technicalChecklist: row.technical_checklist ?? {},
+    technicalRemarks: row.technical_remarks,
+    technicalReviewStatus: row.technical_review_status,
+  }
+}
+
 type DesignBomLine = {
   bomItem?: string | null
   casting?: number | null
@@ -2606,6 +2656,112 @@ export function createCommercialWorkflowRepository(
       return selectorResult(candidates.rows.map(salesMatchCandidateFromRow))
     },
 
+    async getTechnicalReviewQueueSummary(organizationCode: string) {
+      const result = await pool.query<{
+        need_clarification: string
+        open_review_tasks: string
+        pending_review: string
+      }>(
+        `
+          SELECT count(*) FILTER (
+              WHERE enquiry_item.technical_review_status = 'Need Clarification'
+            )::text AS need_clarification,
+            count(*)::text AS open_review_tasks,
+            count(*) FILTER (
+              WHERE enquiry_item.technical_review_status = 'Pending Review'
+            )::text AS pending_review
+          FROM sales.enquiry_items enquiry_item
+          JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          WHERE lower(organization.code) = lower($1)
+            AND enquiry_item.linked_enquiry_item_id IS NULL
+            AND enquiry.technical_handover_status = 'Handed Over'
+            AND enquiry_item.technical_review_status IN (
+              'Pending Review', 'Need Clarification'
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM sales.clarification_tasks sales_clarification
+              WHERE sales_clarification.enquiry_item_id = enquiry_item.id
+                AND sales_clarification.status = 'Open'
+                AND sales_clarification.target_stage = 'Sales'
+            )
+        `,
+        [organizationCode.trim()]
+      )
+      const summary = result.rows[0]!
+      return {
+        needClarification: Number(summary.need_clarification),
+        openReviewTasks: Number(summary.open_review_tasks),
+        pendingReview: Number(summary.pending_review),
+      }
+    },
+
+    async getTechnicalReviewItem(
+      organizationCode: string,
+      enquiryItemId: string
+    ) {
+      const result = await pool.query<TechnicalReviewDatabaseRow>(
+        `
+          SELECT enquiry_item.id AS enquiry_item_id,
+            enquiry.id AS enquiry_id, enquiry.enquiry_number,
+            customer.customer_uid, customer.company_name,
+            enquiry_item.line_number, enquiry_item.customer_part_code,
+            enquiry_item.description, enquiry_item.grade,
+            enquiry_item.quantity::text, enquiry_item.target_price::text,
+            enquiry_item.drawing_reference,
+            drawing.file_name AS drawing_file_name,
+            enquiry_item.technical_review_status,
+            enquiry_item.technical_checklist,
+            enquiry_item.missing_information,
+            enquiry_item.feasibility_reason,
+            enquiry_item.technical_remarks, enquiry_item.reviewed_at,
+            clarification.question AS latest_clarification_message,
+            clarification.source_stage AS latest_clarification_source
+          FROM sales.enquiry_items enquiry_item
+          JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          LEFT JOIN LATERAL (
+            SELECT file.file_name
+            FROM core.file_links file_link
+            JOIN core.files file ON file.id = file_link.file_id
+            WHERE file_link.target_schema = 'sales'
+              AND file_link.target_table = 'enquiry_items'
+              AND file_link.target_id = enquiry_item.id
+              AND file_link.purpose = 'drawing'
+            ORDER BY file.created_at DESC, file.id DESC
+            LIMIT 1
+          ) drawing ON true
+          LEFT JOIN LATERAL (
+            SELECT task.question, task.source_stage
+            FROM sales.clarification_tasks task
+            WHERE task.enquiry_item_id = enquiry_item.id
+              AND task.status = 'Open'
+              AND task.target_stage = 'Technical'
+            ORDER BY task.created_at DESC, task.id DESC
+            LIMIT 1
+          ) clarification ON true
+          WHERE lower(organization.code) = lower($1)
+            AND enquiry_item.id = $2
+            AND enquiry_item.linked_enquiry_item_id IS NULL
+            AND enquiry.technical_handover_status = 'Handed Over'
+            AND enquiry_item.technical_review_status IN (
+              'Pending Review', 'Need Clarification'
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM sales.clarification_tasks sales_clarification
+              WHERE sales_clarification.enquiry_item_id = enquiry_item.id
+                AND sales_clarification.status = 'Open'
+                AND sales_clarification.target_stage = 'Sales'
+            )
+        `,
+        [organizationCode.trim(), enquiryItemId]
+      )
+      return result.rows[0] ? technicalReviewItemFromRow(result.rows[0]) : null
+    },
+
     async listTechnicalReviewQueue(organizationCode: string) {
       const result = await pool.query<{
         company_name: string
@@ -5093,28 +5249,50 @@ export function createCommercialWorkflowRepository(
         [organizationCode.trim(), limit + 1]
       )
       const returnedRoots = roots.rows.slice(0, limit)
-      const clarifications = returnedRoots.length
-        ? await pool.query<{
-            enquiry_item_id: string
-            question: string
-            source_stage: string
-          }>(
-            `
-              SELECT DISTINCT ON (clarification.enquiry_item_id)
-                clarification.enquiry_item_id, clarification.question,
-                clarification.source_stage
-              FROM sales.clarification_tasks clarification
-              WHERE clarification.enquiry_item_id = ANY($1::uuid[])
-                AND clarification.status = 'Open'
-                AND clarification.target_stage = 'Technical'
-              ORDER BY clarification.enquiry_item_id,
-                clarification.created_at DESC, clarification.id DESC
-            `,
-            [returnedRoots.map((root) => root.enquiry_item_id)]
-          )
-        : { rows: [] }
+      const [clarifications, drawings] = returnedRoots.length
+        ? await Promise.all([
+            pool.query<{
+              enquiry_item_id: string
+              question: string
+              source_stage: string
+            }>(
+              `
+                SELECT DISTINCT ON (clarification.enquiry_item_id)
+                  clarification.enquiry_item_id, clarification.question,
+                  clarification.source_stage
+                FROM sales.clarification_tasks clarification
+                WHERE clarification.enquiry_item_id = ANY($1::uuid[])
+                  AND clarification.status = 'Open'
+                  AND clarification.target_stage = 'Technical'
+                ORDER BY clarification.enquiry_item_id,
+                  clarification.created_at DESC, clarification.id DESC
+              `,
+              [returnedRoots.map((root) => root.enquiry_item_id)]
+            ),
+            pool.query<{ enquiry_item_id: string; file_name: string }>(
+              `
+                SELECT DISTINCT ON (file_link.target_id)
+                  file_link.target_id AS enquiry_item_id, file.file_name
+                FROM core.file_links file_link
+                JOIN core.files file ON file.id = file_link.file_id
+                WHERE file_link.target_schema = 'sales'
+                  AND file_link.target_table = 'enquiry_items'
+                  AND file_link.target_id = ANY($1::uuid[])
+                  AND file_link.purpose = 'drawing'
+                ORDER BY file_link.target_id,
+                  file.created_at DESC, file.id DESC
+              `,
+              [returnedRoots.map((root) => root.enquiry_item_id)]
+            ),
+          ])
+        : [{ rows: [] }, { rows: [] }]
       const clarificationByItem = new Map(
         clarifications.rows.map((row) => [row.enquiry_item_id, row] as const)
+      )
+      const drawingByItem = new Map(
+        drawings.rows.map(
+          (row) => [row.enquiry_item_id, row.file_name] as const
+        )
       )
       const rows = returnedRoots.map((row) => {
         const clarification = clarificationByItem.get(row.enquiry_item_id)
@@ -5123,6 +5301,7 @@ export function createCommercialWorkflowRepository(
           customerPartCode: row.customer_part_code,
           customerUid: row.customer_uid,
           description: row.description,
+          drawingFileName: drawingByItem.get(row.enquiry_item_id) ?? null,
           drawingReference: row.drawing_reference,
           enquiryId: row.enquiry_id,
           enquiryItemId: row.enquiry_item_id,

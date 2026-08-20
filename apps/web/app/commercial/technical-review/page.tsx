@@ -9,6 +9,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  MetricCard,
 } from "@workspace/ui/components/card"
 import {
   Table,
@@ -22,6 +23,10 @@ import {
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  countTechnicalReviewChecks,
+  technicalReviewChecklist,
+} from "@/lib/pricing/technical-review"
 
 export const dynamic = "force-dynamic"
 
@@ -33,9 +38,10 @@ export default async function TechnicalReviewPage() {
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const result = await workflow
-    .listTechnicalReviewQueueBounded("MRMPL")
-    .finally(() => workflow.close())
+  const [result, summary] = await Promise.all([
+    workflow.listTechnicalReviewQueueBounded("MRMPL"),
+    workflow.getTechnicalReviewQueueSummary("MRMPL"),
+  ]).finally(() => workflow.close())
 
   return (
     <div className="grid gap-6">
@@ -53,6 +59,15 @@ export default async function TechnicalReviewPage() {
           coverage={result.coverage}
           section="Technical review"
         />
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <MetricCard label="Pending Review" value={summary.pendingReview} />
+        <MetricCard
+          label="Need Clarification"
+          value={summary.needClarification}
+        />
+        <MetricCard label="Open Review Tasks" value={summary.openReviewTasks} />
       </section>
 
       <Card>
@@ -78,6 +93,7 @@ export default async function TechnicalReviewPage() {
                   <TableHead data-filterable="true">Target Price</TableHead>
                   <TableHead data-filterable="true">Drawing</TableHead>
                   <TableHead data-filterable="true">Status</TableHead>
+                  <TableHead>Checks</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -97,11 +113,17 @@ export default async function TechnicalReviewPage() {
                     <TableCell>{item.grade ?? "—"}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
                     <TableCell>{item.targetPrice ?? "—"}</TableCell>
-                    <TableCell>{item.drawingReference ?? "—"}</TableCell>
+                    <TableCell>
+                      {item.drawingFileName ?? item.drawingReference ?? "—"}
+                    </TableCell>
                     <TableCell data-filter-value={item.technicalReviewStatus}>
                       <Badge variant="outline">
                         {item.technicalReviewStatus}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap tabular-nums">
+                      {countTechnicalReviewChecks(item.technicalChecklist)} /{" "}
+                      {technicalReviewChecklist.length}
                     </TableCell>
                     <TableCell>
                       <Button asChild size="sm" variant="outline">
@@ -118,7 +140,7 @@ export default async function TechnicalReviewPage() {
                   <TableRow>
                     <TableCell
                       className="py-10 text-center text-muted-foreground"
-                      colSpan={12}
+                      colSpan={13}
                     >
                       No Lines Are Waiting For Technical Review.
                     </TableCell>

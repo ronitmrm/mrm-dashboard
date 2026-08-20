@@ -28,19 +28,15 @@ import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { formatIstDateTime } from "@/lib/date-time"
+import {
+  technicalReviewChecklist,
+  technicalReviewStatuses,
+} from "@/lib/pricing/technical-review"
 
 import { updateTechnicalReviewAction } from "../../enquiries/actions"
 
 export const dynamic = "force-dynamic"
-
-const checklist = [
-  ["drawing_available", "Drawing available"],
-  ["grade_material_clear", "Grade / material clear"],
-  ["drawing_information_complete", "Drawing information complete"],
-  ["finish_plating_clear", "Finish / plating clear"],
-  ["packaging_clear", "Packaging clear"],
-  ["tooling_process_feasible", "Tooling / process feasible"],
-] as const
 
 export default async function TechnicalReviewItemPage({
   params,
@@ -55,12 +51,9 @@ export default async function TechnicalReviewItemPage({
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const result = await workflow
-    .listTechnicalReviewQueueBounded("MRMPL")
+  const item = await workflow
+    .getTechnicalReviewItem("MRMPL", itemId)
     .finally(() => workflow.close())
-  const item = result.rows.find(
-    (candidate) => candidate.enquiryItemId === itemId
-  )
   if (!item) notFound()
 
   return (
@@ -122,7 +115,17 @@ export default async function TechnicalReviewItemPage({
                 <Field>
                   <FieldLabel>Drawing Reference</FieldLabel>
                   <p className="text-sm font-medium">
-                    {item.drawingReference ?? "—"}
+                    {item.drawingFileName ? (
+                      <Link
+                        className="underline underline-offset-4"
+                        href={`/commercial/technical-review/${item.enquiryItemId}/drawing`}
+                        target="_blank"
+                      >
+                        {item.drawingFileName}
+                      </Link>
+                    ) : (
+                      (item.drawingReference ?? "—")
+                    )}
                   </p>
                 </Field>
               </div>
@@ -130,7 +133,7 @@ export default async function TechnicalReviewItemPage({
               <FieldSet>
                 <FieldLegend>Technical Checklist</FieldLegend>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {checklist.map(([key, label]) => (
+                  {technicalReviewChecklist.map(([key, label]) => (
                     <Field
                       className="items-center"
                       key={key}
@@ -159,13 +162,7 @@ export default async function TechnicalReviewItemPage({
                     id="technical-review-status"
                     name="technical_review_status"
                   >
-                    {[
-                      "Pending Review",
-                      "Need Clarification",
-                      "Feasible",
-                      "Not Feasible",
-                      "Duplicate / Existing Product",
-                    ].map((status) => (
+                    {technicalReviewStatuses.map((status) => (
                       <NativeSelectOption key={status} value={status}>
                         {status}
                       </NativeSelectOption>
@@ -219,6 +216,14 @@ export default async function TechnicalReviewItemPage({
                   name="technical_remarks"
                 />
               </Field>
+
+              <p className="text-sm text-muted-foreground">
+                {item.technicalReviewStatus === "Need Clarification"
+                  ? "Saving as Need Clarification creates pending work for Sales."
+                  : item.reviewedAt
+                    ? `Last reviewed ${formatIstDateTime(item.reviewedAt)}`
+                    : "Not reviewed yet."}
+              </p>
 
               <div className="flex flex-wrap gap-2">
                 <Button type="submit">Save Technical Review</Button>

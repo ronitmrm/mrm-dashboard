@@ -10,6 +10,7 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { optionalText, requiredText } from "@/lib/form-data"
+import { technicalReviewChecklistFromFormData } from "@/lib/pricing/technical-review"
 import {
   deleteUserAttachment,
   saveUserAttachment,
@@ -282,23 +283,13 @@ export async function updateTechnicalReviewAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   const status = requiredText(formData, "technical_review_status")
-  const checklistKeys = [
-    "drawing_available",
-    "grade_material_clear",
-    "drawing_information_complete",
-    "finish_plating_clear",
-    "packaging_clear",
-    "tooling_process_feasible",
-  ]
   await withWorkflow(
     "pricing.technical_review.write",
     `${technicalReviewPath}/${enquiryItemId}`,
     (workflow, actorUserId) =>
       workflow.updateTechnicalReview({
         actorUserId,
-        checklist: Object.fromEntries(
-          checklistKeys.map((key) => [key, formData.get(key) === "on"])
-        ),
+        checklist: technicalReviewChecklistFromFormData(formData),
         enquiryItemId,
         feasibilityReason: optionalText(formData, "feasibility_reason"),
         grade: optionalText(formData, "grade"),
