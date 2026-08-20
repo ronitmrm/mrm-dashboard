@@ -19,7 +19,6 @@ import {
   GripVertical,
   LayoutDashboard,
   ListChecks,
-  LogOut,
   Moon,
   Pencil,
   Plus,
@@ -161,13 +160,13 @@ import {
 } from "@/lib/shop-floor-optimistic";
 import { useTheme } from "@/components/theme-provider";
 import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation";
+import { UserAccountFooter } from "@/components/user-account-footer";
 import { JobCardRegister } from "@/components/job-card-register";
 import {
   PlannerDecisionWorkspace,
   type PlannerDecisionAction,
   type PlannerDecisionView,
 } from "@/components/planner-decision-workspace";
-import { authClient } from "@/lib/auth/auth-client";
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access";
 import { externalMasterDataOptions, type ExternalMasterDataOption } from "@/lib/master-data-navigation";
 import {
@@ -1550,15 +1549,7 @@ function DashboardShell({
           />
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-3">
-          <div className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/12 text-sm font-semibold text-sidebar-primary">
-              {(user.name || user.email).trim().charAt(0).toUpperCase()}
-            </span>
-            <span className="grid min-w-0 flex-1 gap-0.5">
-              <span className="truncate text-sm font-semibold">{user.name}</span>
-              <span className="truncate text-xs text-muted-foreground">{user.email}</span>
-            </span>
-          </div>
+          <UserAccountFooter user={user} />
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
@@ -1785,16 +1776,6 @@ function HeaderActions({
         onClick={() => setTheme(isDark ? "light" : "dark")}
       >
         {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={() => void authClient.signOut().then(() => window.location.assign("/sign-in"))}
-      >
-        <LogOut className="size-4" />
-        <span className="hidden sm:inline">Sign Out</span>
       </Button>
     </div>
   );
