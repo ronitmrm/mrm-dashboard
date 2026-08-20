@@ -5,22 +5,31 @@ import { useMemo, useState } from "react"
 
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
-import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
-  Field,
   FieldDescription,
-  FieldGroup,
-  FieldLabel,
   FieldLegend,
   FieldSet,
 } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
 
-type PermissionOption = {
-  key: string
-  module: string
-  name: string
-}
+import {
+  type PermissionAccessLevel,
+  type PermissionOption,
+  permissionAccessRows,
+  permissionKeysForSelections,
+} from "./permission-access"
 
 export function PermissionSelector({
   permissions,
@@ -28,34 +37,27 @@ export function PermissionSelector({
   permissions: readonly PermissionOption[]
 }) {
   const [query, setQuery] = useState("")
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  const [selections, setSelections] = useState<
+    Record<string, PermissionAccessLevel>
+  >({})
   const normalizedQuery = query.trim().toLowerCase()
-  const permissionsByModule = useMemo(() => {
-    const groups = new Map<string, PermissionOption[]>()
-    for (const permission of permissions) {
-      const group = groups.get(permission.module) ?? []
-      group.push(permission)
-      groups.set(permission.module, group)
-    }
-    return [...groups.entries()]
-  }, [permissions])
-
-  function permissionMatches(permission: PermissionOption) {
-    return (
+  const rows = useMemo(() => permissionAccessRows(permissions), [permissions])
+  const visibleRows = rows.filter(
+    (row) =>
       !normalizedQuery ||
-      permission.module.toLowerCase().includes(normalizedQuery) ||
-      permission.name.toLowerCase().includes(normalizedQuery) ||
-      permission.key.toLowerCase().includes(normalizedQuery)
-    )
-  }
+      row.module.toLowerCase().includes(normalizedQuery) ||
+      row.label.toLowerCase().includes(normalizedQuery) ||
+      row.fullPermissionKeys.some((key) =>
+        key.toLowerCase().includes(normalizedQuery)
+      )
+  )
+  const selectedPermissionKeys = permissionKeysForSelections(rows, selections)
+  const configuredCount = Object.values(selections).filter(
+    (level) => level !== "none"
+  ).length
 
-  function setPermission(key: string, checked: boolean) {
-    setSelectedKeys((current) => {
-      const next = new Set(current)
-      if (checked) next.add(key)
-      else next.delete(key)
-      return next
-    })
+  function setAccess(id: string, level: PermissionAccessLevel) {
+    setSelections((current) => ({ ...current, [id]: level }))
   }
 
   return (
@@ -64,12 +66,16 @@ export function PermissionSelector({
         <div>
           <FieldLegend>Capabilities</FieldLegend>
           <FieldDescription>
-            Search by page, task, or module. Selected capabilities remain saved
-            while filtering.
+            Choose one access level for each page or task. Full Access includes
+            its Read Only permission automatically.
           </FieldDescription>
         </div>
-        <Badge variant="secondary">{selectedKeys.size} selected</Badge>
+        <Badge variant="secondary">{configuredCount} configured</Badge>
       </div>
+
+      {selectedPermissionKeys.map((key) => (
+        <input key={key} name="permissionKeys" type="hidden" value={key} />
+      ))}
 
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative min-w-0 flex-1">
@@ -82,11 +88,11 @@ export function PermissionSelector({
             value={query}
           />
         </div>
-        {query || selectedKeys.size ? (
+        {query || configuredCount ? (
           <Button
             onClick={() => {
               setQuery("")
-              setSelectedKeys(new Set())
+              setSelections({})
             }}
             type="button"
             variant="outline"
@@ -96,50 +102,64 @@ export function PermissionSelector({
         ) : null}
       </div>
 
-      <div className="max-h-[32rem] space-y-4 overflow-y-auto pr-1">
-        {permissionsByModule.map(([module, modulePermissions]) => {
-          const hasVisiblePermission = modulePermissions.some(permissionMatches)
-          return (
-            <FieldGroup
-              className="gap-3 rounded-lg border bg-muted/20 p-3"
-              hidden={!hasVisiblePermission}
-              key={module}
-            >
-              <FieldLegend
-                className="text-muted-foreground capitalize"
-                variant="label"
-              >
-                {module}
-              </FieldLegend>
-              <div className="grid gap-2 lg:grid-cols-2">
-                {modulePermissions.map((permission) => {
-                  const id = `role-permission-${permission.key}`
-                  return (
-                    <Field
-                      className="rounded-md border bg-background p-2.5"
-                      hidden={!permissionMatches(permission)}
-                      key={permission.key}
-                      orientation="horizontal"
+      <div className="max-h-[36rem] overflow-y-auto rounded-lg border">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-background">
+            <TableRow>
+              <TableHead className="w-40">Module</TableHead>
+              <TableHead>Page / Task</TableHead>
+              <TableHead className="w-52">Access</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visibleRows.length ? (
+              visibleRows.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="capitalize text-muted-foreground">
+                    {row.module}
+                  </TableCell>
+                  <TableCell className="font-medium">{row.label}</TableCell>
+                  <TableCell>
+                    <NativeSelect
+                      aria-label={`${row.label} access`}
+                      className="w-full"
+                      onChange={(event) =>
+                        setAccess(
+                          row.id,
+                          event.target.value as PermissionAccessLevel
+                        )
+                      }
+                      value={selections[row.id] ?? "none"}
                     >
-                      <Checkbox
-                        checked={selectedKeys.has(permission.key)}
-                        id={id}
-                        name="permissionKeys"
-                        onCheckedChange={(checked) =>
-                          setPermission(permission.key, checked === true)
-                        }
-                        value={permission.key}
-                      />
-                      <FieldLabel className="leading-snug" htmlFor={id}>
-                        {permission.name}
-                      </FieldLabel>
-                    </Field>
-                  )
-                })}
-              </div>
-            </FieldGroup>
-          )
-        })}
+                      <NativeSelectOption value="none">
+                        No Access
+                      </NativeSelectOption>
+                      {row.supportedLevels.includes("read") ? (
+                        <NativeSelectOption value="read">
+                          Read Only
+                        </NativeSelectOption>
+                      ) : null}
+                      {row.supportedLevels.includes("full") ? (
+                        <NativeSelectOption value="full">
+                          Full Access
+                        </NativeSelectOption>
+                      ) : null}
+                    </NativeSelect>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell
+                  className="h-24 text-center text-muted-foreground"
+                  colSpan={3}
+                >
+                  No Pages Or Tasks Match This Search.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
     </FieldSet>
   )
