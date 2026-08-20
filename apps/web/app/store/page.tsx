@@ -24,7 +24,7 @@ import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 export default async function StoreOverviewPage() {
-  await requireCapability("store.read", "/store")
+  await requireCapability("store.overview.read", "/store")
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

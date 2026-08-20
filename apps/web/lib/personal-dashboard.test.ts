@@ -50,6 +50,16 @@ describe("personal dashboard", () => {
     ).toEqual(["store-stock", "production-dashboard"])
   })
 
+  it("offers only the specific Store pages granted to the user", () => {
+    const widgets = availablePersonalDashboardWidgets({
+      ...noAccess,
+      store: true,
+      storeHrefs: ["/store/stock"],
+    })
+
+    expect(widgets.map(({ id }) => id)).toEqual(["store-stock"])
+  })
+
   it("keeps an intentionally empty dashboard different from a new user's defaults", () => {
     const available = availablePersonalDashboardWidgets({
       ...noAccess,

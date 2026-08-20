@@ -50,12 +50,15 @@ export default async function StoreAssetWorkspacePage({
 }) {
   const { assetCode } = await params
   const session = await requireCapability(
-    "store.read",
+    "store.asset_history.read",
     `/store/assets/${encodeURIComponent(assetCode)}`
   )
   const canManage =
-    (await listGrantedCapabilities(session.user.id, ["store.manage"])).length >
-    0
+    (
+      await listGrantedCapabilities(session.user.id, [
+        "store.asset_history.write",
+      ])
+    ).length > 0
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

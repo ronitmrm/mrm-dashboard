@@ -69,11 +69,11 @@ const widgetCatalog: readonly PersonalDashboardWidget[] = [
   { id: "hr-log-candidate", title: "Log Candidate", description: "Add a new candidate to Recruitment.", href: "/hr?panel=candidatesPanel", module: "HR & Recruitment", requiredHref: "/hr?panel=candidatesPanel", scope: "hr", summary: "none" },
   { id: "hr-candidate-search", title: "Search Candidate", description: "Find candidates and application history.", href: "/hr?panel=candidateSearchPanel", module: "HR & Recruitment", requiredHref: "/hr?panel=candidateSearchPanel", scope: "hr", summary: "none" },
   { id: "hr-interviews", title: "Interview Schedule", description: "Upcoming and completed interviews.", href: "/hr?panel=interviewsPanel", module: "HR & Recruitment", requiredHref: "/hr?panel=interviewsPanel", scope: "hr", summary: "none" },
-  { id: "store-overview", title: "Store Overview", description: "Stock, requests, assets and attention required.", href: "/store", module: "Store", scope: "store", summary: "store" },
-  { id: "store-requests", title: "Requests & Issues", description: "Department requests and Store issues.", href: "/store/requests", module: "Store", scope: "store", summary: "none" },
-  { id: "store-new-item-requests", title: "New Item Requests", description: "Review requests for new Store codes.", href: "/store/new-item-requests", module: "Store", scope: "store", summary: "none" },
-  { id: "store-purchase-register", title: "Purchase Register", description: "Store purchase orders and receipts.", href: "/store/orders", module: "Store", scope: "store", summary: "none" },
-  { id: "store-stock", title: "Stock", description: "Current consumable and non-consumable stock.", href: "/store/stock", module: "Store", scope: "store", summary: "none" },
+  { id: "store-overview", title: "Store Overview", description: "Stock, requests, assets and attention required.", href: "/store", module: "Store", requiredHref: "/store", scope: "store", summary: "store" },
+  { id: "store-requests", title: "Requests & Issues", description: "Department requests and Store issues.", href: "/store/requests", module: "Store", requiredHref: "/store/requests", scope: "store", summary: "none" },
+  { id: "store-new-item-requests", title: "New Item Requests", description: "Review requests for new Store codes.", href: "/store/new-item-requests", module: "Store", requiredHref: "/store/new-item-requests", scope: "store", summary: "none" },
+  { id: "store-purchase-register", title: "Purchase Register", description: "Store purchase orders and receipts.", href: "/store/orders", module: "Store", requiredHref: "/store/orders", scope: "store", summary: "none" },
+  { id: "store-stock", title: "Stock", description: "Current consumable and non-consumable stock.", href: "/store/stock", module: "Store", requiredHref: "/store/stock", scope: "store", summary: "none" },
   { id: "production-dashboard", title: "Production Dashboard", description: "Orders, Production Units and dispatch dates.", href: "/?tab=productionDashboardTab", module: "Production", scope: "operations", summary: "none" },
   { id: "production-sessions", title: "Production Sessions", description: "Start, close and review production sessions.", href: "/dashboard/production-sessions", module: "Production", scope: "operations", summary: "none" },
   { id: "planner-actions", title: "Planner Actions", description: "Priority, route and machine decisions.", href: "/?tab=productionControlTab", module: "Production", scope: "operations", summary: "none" },
@@ -93,7 +93,14 @@ export function availablePersonalDashboardWidgets(
   return widgetCatalog.filter((widget) => {
     if (widget.scope === "administration") return access.administration
     if (widget.scope === "operations") return access.operations
-    if (widget.scope === "store") return access.store
+    if (widget.scope === "store") {
+      return access.storeHrefs
+        ? Boolean(
+            widget.requiredHref &&
+              access.storeHrefs.includes(widget.requiredHref)
+          )
+        : access.store
+    }
     if (widget.scope === "commercial") {
       return Boolean(
         widget.requiredHref && access.commercialHrefs.includes(widget.requiredHref)

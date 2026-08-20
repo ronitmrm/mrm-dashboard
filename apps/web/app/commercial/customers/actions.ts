@@ -28,7 +28,7 @@ async function withCustomers<T>(
   ) => Promise<T>
 ) {
   const session = await requireCapability(
-    "pricing.masters.write",
+    "pricing.customers.write",
     customersPath
   )
   const repository = createCustomerRepository({

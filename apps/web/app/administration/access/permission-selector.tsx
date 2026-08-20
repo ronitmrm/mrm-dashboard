@@ -66,8 +66,8 @@ export function PermissionSelector({
         <div>
           <FieldLegend>Capabilities</FieldLegend>
           <FieldDescription>
-            Choose one access level for each page or task. Full Access includes
-            its Read Only permission automatically.
+            Pages are listed separately. Task permissions are shown only when
+            they do not represent a page. Full Access includes Read Only.
           </FieldDescription>
         </div>
         <Badge variant="secondary">{configuredCount} configured</Badge>
@@ -107,6 +107,7 @@ export function PermissionSelector({
           <TableHeader className="sticky top-0 z-10 bg-background">
             <TableRow>
               <TableHead className="w-40">Module</TableHead>
+              <TableHead className="w-24">Type</TableHead>
               <TableHead>Page / Task</TableHead>
               <TableHead className="w-52">Access</TableHead>
             </TableRow>
@@ -118,7 +119,19 @@ export function PermissionSelector({
                   <TableCell className="capitalize text-muted-foreground">
                     {row.module}
                   </TableCell>
-                  <TableCell className="font-medium">{row.label}</TableCell>
+                  <TableCell>
+                    <Badge variant={row.kind === "page" ? "default" : "outline"}>
+                      {row.kind === "page" ? "Page" : "Task"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <span className="font-medium">{row.label}</span>
+                    {row.href ? (
+                      <span className="block text-xs text-muted-foreground">
+                        {row.href}
+                      </span>
+                    ) : null}
+                  </TableCell>
                   <TableCell>
                     <NativeSelect
                       aria-label={`${row.label} access`}
@@ -152,7 +165,7 @@ export function PermissionSelector({
               <TableRow>
                 <TableCell
                   className="h-24 text-center text-muted-foreground"
-                  colSpan={3}
+                  colSpan={4}
                 >
                   No Pages Or Tasks Match This Search.
                 </TableCell>

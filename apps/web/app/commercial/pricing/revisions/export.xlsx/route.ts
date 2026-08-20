@@ -11,7 +11,7 @@ import {
 
 export async function GET(request: Request) {
   await requireCapability(
-    "pricing.quotes.read",
+    "pricing.pricing.read",
     "/commercial/pricing/revisions"
   )
   const url = new URL(request.url)

@@ -22,7 +22,7 @@ export default async function PricingRevisionsPage({
   searchParams: Promise<{ code?: string; customer?: string }>
 }) {
   await requireCapability(
-    "pricing.quotes.read",
+    "pricing.pricing.read",
     "/commercial/pricing/revisions"
   )
   const { code = "", customer = "" } = await searchParams

@@ -11,7 +11,7 @@ export async function GET(
 ) {
   const { assetCode, documentId } = await params
   await requireCapability(
-    "store.read",
+    "store.asset_history.read",
     `/store/assets/${encodeURIComponent(assetCode)}`
   )
   const repository = createStoreRepository({

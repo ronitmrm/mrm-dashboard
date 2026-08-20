@@ -10,7 +10,7 @@ import {
 } from "../pricing-workbook"
 
 export async function GET() {
-  await requireCapability("pricing.quotes.read", "/commercial/pricing")
+  await requireCapability("pricing.pricing.read", "/commercial/pricing")
   const repository = createCommercialCostingRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

@@ -15,7 +15,10 @@ import {
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  await requireCapability("pricing.masters.read", "/commercial/drawing-history")
+  await requireCapability(
+    "pricing.drawing_history.read",
+    "/commercial/drawing-history"
+  )
   const connectionString = readAuthEnvironment().connectionString
   const customers = createCustomerRepository({ connectionString })
   const repository = createCommercialReportingRepository({ connectionString })

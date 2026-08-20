@@ -31,7 +31,7 @@ function selected(formData: FormData, key: string) {
 
 export async function updateWebsiteProductAction(formData: FormData) {
   const session = await requireCapability(
-    "pricing.masters.write",
+    "pricing.website_products.write",
     websiteProductsPath
   )
   const connectionString = readAuthEnvironment().connectionString

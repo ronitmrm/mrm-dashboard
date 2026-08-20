@@ -69,7 +69,13 @@ function holderType(formData: FormData) {
 }
 
 async function withStore<T>(
-  capability: "store.manage" | "store.requests.write",
+  capability:
+    | "store.asset_history.write"
+    | "store.masters.write"
+    | "store.new_item_requests.write"
+    | "store.purchase_register.write"
+    | "store.requests.write"
+    | "store.stock.write",
   operation: (
     repository: ReturnType<typeof createStoreRepository>,
     actorUserId: string,
@@ -108,7 +114,11 @@ function revalidateStore() {
 }
 
 export async function createStoreLocationAction(formData: FormData) {
-  await withStore("store.manage", (repository, actorUserId, organizationId) => {
+  await withStore("store.masters.write", (
+    repository,
+    actorUserId,
+    organizationId
+  ) => {
     const masterId = optionalText(formData, "master_id")
     return masterId
       ? repository.updateLocation({
@@ -136,7 +146,11 @@ export async function createStoreLocationAction(formData: FormData) {
 }
 
 export async function createStoreSupplierAction(formData: FormData) {
-  await withStore("store.manage", (repository, actorUserId, organizationId) => {
+  await withStore("store.masters.write", (
+    repository,
+    actorUserId,
+    organizationId
+  ) => {
     const masterId = optionalText(formData, "master_id")
     return masterId
       ? repository.updateSupplier({
@@ -163,8 +177,10 @@ export async function createStoreSupplierAction(formData: FormData) {
 }
 
 export async function createStoreSupplierPriceAction(formData: FormData) {
-  await withStore("store.manage", (repository, actorUserId, organizationId) =>
-    repository.createSupplierPrice({
+  await withStore(
+    "store.masters.write",
+    (repository, actorUserId, organizationId) =>
+      repository.createSupplierPrice({
       actorUserId,
       itemTypeId: requiredText(formData, "item_type_id"),
       organizationId,
@@ -172,13 +188,17 @@ export async function createStoreSupplierPriceAction(formData: FormData) {
       supplierId: requiredText(formData, "supplier_id"),
       unitPrice: requiredText(formData, "unit_price"),
       validFrom: optionalText(formData, "valid_from"),
-    })
+      })
   )
   revalidateStore()
 }
 
 export async function createStoreVendorAction(formData: FormData) {
-  await withStore("store.manage", (repository, actorUserId, organizationId) => {
+  await withStore("store.masters.write", (
+    repository,
+    actorUserId,
+    organizationId
+  ) => {
     const masterId = optionalText(formData, "master_id")
     return masterId
       ? repository.updateVendor({
@@ -200,7 +220,7 @@ export async function createStoreVendorAction(formData: FormData) {
 }
 
 export async function createStoreAssetCategoryAction(formData: FormData) {
-  await withStore("store.manage", (repository, actorUserId, organizationId) => {
+  await withStore("store.masters.write", (repository, actorUserId, organizationId) => {
     const masterId = optionalText(formData, "master_id")
     return masterId
       ? repository.updateAssetCategory({
@@ -219,7 +239,7 @@ export async function createStoreAssetCategoryAction(formData: FormData) {
 }
 
 export async function createStoreAssetSubcategoryAction(formData: FormData) {
-  await withStore("store.manage", (repository, actorUserId, organizationId) => {
+  await withStore("store.masters.write", (repository, actorUserId, organizationId) => {
     const masterId = optionalText(formData, "master_id")
     return masterId
       ? repository.updateAssetSubcategory({
@@ -240,7 +260,7 @@ export async function createStoreAssetSubcategoryAction(formData: FormData) {
 }
 
 export async function createStoreAssetNameAction(formData: FormData) {
-  await withStore("store.manage", (repository, actorUserId, organizationId) => {
+  await withStore("store.masters.write", (repository, actorUserId, organizationId) => {
     const masterId = optionalText(formData, "master_id")
     return masterId
       ? repository.updateAssetName({
@@ -264,7 +284,7 @@ export async function createStoreItemTypeAction(formData: FormData) {
   const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
   try {
     const previousStorageKey = await withStore(
-      "store.manage",
+      "store.masters.write",
       async (repository, actorUserId, organizationId) => {
         const masterId = optionalText(formData, "master_id")
         const input = {
@@ -335,7 +355,7 @@ export async function uploadStoreItemDrawingAction(formData: FormData) {
   if (!savedDrawing) throw new Error("Select an Asset drawing to upload.")
   try {
     const previousStorageKey = await withStore(
-      "store.manage",
+      "store.masters.write",
       async (repository, actorUserId, organizationId) =>
         (
           await repository.recordItemTypeDrawing({
@@ -371,7 +391,7 @@ const storeMasterKinds = new Set<MasterDataKind>([
 export async function deleteStoreMasterAction(formData: FormData) {
   const kind = requiredText(formData, "master_kind") as MasterDataKind
   if (!storeMasterKinds.has(kind)) throw new Error("Store master is invalid.")
-  const session = await requireCapability("store.manage", storePath)
+  const session = await requireCapability("store.masters.write", storePath)
   const connectionString = readAuthEnvironment().connectionString
   const store = createStoreRepository({ connectionString })
   const lifecycle = createMasterDataLifecycleRepository({ connectionString })
@@ -394,7 +414,7 @@ export async function deleteStoreMasterAction(formData: FormData) {
 
 export async function requestMissingStoreCodeAction(formData: FormData) {
   await withStore(
-    "store.requests.write",
+    "store.new_item_requests.write",
     async (repository, actorUserId, organizationId) => {
       const policy = storeRequestFormPolicy(
         await repository.requisitionRequestContext({
@@ -423,17 +443,19 @@ export async function requestMissingStoreCodeAction(formData: FormData) {
 }
 
 export async function resolveMissingStoreCodeAction(formData: FormData) {
-  await withStore("store.manage", (repository, actorUserId, organizationId) =>
-    repository.resolveCodeRequest({
-      actorUserId,
-      codeRequestId: requiredText(formData, "code_request_id"),
-      itemTypeId: requiredText(formData, "item_type_id"),
-      organizationId,
-      resolution:
-        requiredText(formData, "resolution") === "Existing Code Found"
-          ? "Existing Code Found"
-          : "Code Created",
-    })
+  await withStore(
+    "store.new_item_requests.write",
+    (repository, actorUserId, organizationId) =>
+      repository.resolveCodeRequest({
+        actorUserId,
+        codeRequestId: requiredText(formData, "code_request_id"),
+        itemTypeId: requiredText(formData, "item_type_id"),
+        organizationId,
+        resolution:
+          requiredText(formData, "resolution") === "Existing Code Found"
+            ? "Existing Code Found"
+            : "Code Created",
+      })
   )
   revalidateStore()
 }
@@ -488,7 +510,7 @@ export async function createStoreRequisitionBatchAction(formData: FormData) {
 
 export async function issueStoreRequisitionAction(formData: FormData) {
   await withStore(
-    "store.manage",
+    "store.requests.write",
     async (repository, actorUserId, organizationId, actorEmail) =>
       repository.issueRequisition({
         actorUserId,
@@ -532,7 +554,7 @@ export async function receiveStoreStockAction(formData: FormData) {
   const savedFile = await saveGuaranteeCard(formData.get("guarantee_card"))
   try {
     await withStore(
-      "store.manage",
+      "store.purchase_register.write",
       async (repository, actorUserId, organizationId) => {
         const [requestContext, location] = await Promise.all([
           repository.requisitionRequestContext({
@@ -578,7 +600,7 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
   if (!itemTypeIds.length) {
     throw new Error("Select at least one Store item to order.")
   }
-  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+  await withStore("store.stock.write", (repository, actorUserId, organizationId) =>
     repository.createPurchaseOrdersFromSelection({
       actorUserId,
       items: itemTypeIds.map((itemTypeId) => ({
@@ -597,7 +619,7 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
 
 export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
     repository.createRepairPurchaseOrder({
       actorUserId,
       assetCode,
@@ -618,7 +640,7 @@ export async function completeStoreRepairPurchaseOrderAction(
   formData: FormData
 ) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
     repository.completeRepairPurchaseOrder({
       actorUserId,
       assetCode,
@@ -632,7 +654,7 @@ export async function completeStoreRepairPurchaseOrderAction(
 
 export async function moveStoreAssetAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
     repository.moveAsset({
       actorUserId,
       assetCode,
@@ -651,7 +673,7 @@ export async function moveStoreAssetAction(formData: FormData) {
 
 export async function scheduleStoreAssetMaintenanceAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
     repository.scheduleAssetMaintenance({
       actorUserId,
       assetCode,
@@ -670,7 +692,7 @@ export async function setStoreAssetLifecycleAction(formData: FormData) {
   if (!["BROKEN", "SCRAPPED", "UNDER_MAINTENANCE"].includes(status)) {
     throw new Error("Asset status is invalid.")
   }
-  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
     repository.setAssetLifecycleStatus({
       actorUserId,
       assetCode,
@@ -690,7 +712,7 @@ export async function completeStoreAssetMaintenanceAction(formData: FormData) {
   if (!["MAINTENANCE", "CALIBRATION", "BREAKDOWN"].includes(type)) {
     throw new Error("Maintenance type is invalid.")
   }
-  await withStore("store.manage", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
     repository.completeAssetMaintenance({
       actorUserId,
       assetCode,

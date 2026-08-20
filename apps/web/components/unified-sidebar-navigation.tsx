@@ -225,7 +225,13 @@ export function UnifiedSidebarNavigation({
   const visibleHrNavigation = hrNavigation.filter((item) =>
     navigationAccess.hrHrefs.includes(item.href)
   )
-  const visibleStoreNavigation = navigationAccess.store ? storeNavigation : []
+  const visibleStoreNavigation = navigationAccess.storeHrefs
+    ? storeNavigation.filter((item) =>
+        navigationAccess.storeHrefs?.includes(item.href)
+      )
+    : navigationAccess.store
+      ? storeNavigation
+      : []
   const visibleAdministrationNavigation = administrationNavigation.filter(
     (item) =>
       item.href !== "/administration/access" || navigationAccess.administration

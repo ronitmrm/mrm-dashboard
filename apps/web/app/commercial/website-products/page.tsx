@@ -226,7 +226,7 @@ export default async function WebsiteProductsPage({
     status?: string
   }>
 }) {
-  await requireCapability("pricing.masters.read", websiteProductsPath)
+  await requireCapability("pricing.website_products.read", websiteProductsPath)
   const filters = await searchParams
   const activeView = externalMasterView(filters.masterView)
   const showDataEntry = activeView === "dataEntry"

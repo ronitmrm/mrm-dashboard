@@ -35,10 +35,13 @@ import { storePurchaseOrderHref } from "@/lib/unified-navigation"
 import { issueStoreRequisitionAction } from "../actions"
 
 export default async function StoreRequestsPage() {
-  const session = await requireCapability("store.read", "/store/requests")
+  const session = await requireCapability(
+    "store.requests.read",
+    "/store/requests"
+  )
   const canManage = (
-    await listGrantedCapabilities(session.user.id, ["store.manage"])
-  ).includes("store.manage")
+    await listGrantedCapabilities(session.user.id, ["store.requests.write"])
+  ).includes("store.requests.write")
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

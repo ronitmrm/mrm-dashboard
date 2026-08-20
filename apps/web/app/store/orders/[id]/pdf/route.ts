@@ -8,7 +8,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireCapability("store.read", "/store/orders")
+  await requireCapability("store.purchase_register.read", "/store/orders")
   const { id } = await params
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,

@@ -38,7 +38,7 @@ export default async function DrawingHistoryPage({
 }: {
   searchParams: Promise<{ edit?: string; q?: string; revision?: string }>
 }) {
-  await requireCapability("pricing.masters.read", drawingHistoryPath)
+  await requireCapability("pricing.drawing_history.read", drawingHistoryPath)
   const filters = await searchParams
   const connectionString = readAuthEnvironment().connectionString
   const customers = createCustomerRepository({ connectionString })

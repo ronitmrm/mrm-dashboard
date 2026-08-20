@@ -126,6 +126,15 @@ Asset Code opens its Store Item Workspace. A Non Consumable row also lists each
 available Unit ID, such as `NC001-0001` and `NC001-0002`; its quantity is the
 count of those available physical units, not a shared consumable balance.
 
+**Store Page Access**: Access is granted per Store page rather than through one
+module-wide permission. Store Overview, Requests & Issues, New Item Requests,
+Purchase Register, and Stock each have independent Read Only access and, where
+the page changes data, independent Full Access. Stock Read Only reveals product
+rows, quantities, and available Unit IDs but does not grant access to a Store
+Item Workspace or Asset Workspace. Asset Movement & Maintenance History has its
+own Read Only and Full Access levels covering item/unit details, movements,
+maintenance, calibration, repair, Supplier, and price history.
+
 **Current Available Stock**: A live derived value, never a request snapshot.
 For Consumables it is the signed movement-ledger balance at the requested
 Store. For Physical Assets it is the count of Available Unit IDs at that
