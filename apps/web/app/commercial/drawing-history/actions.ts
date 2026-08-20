@@ -53,5 +53,6 @@ export async function updateDrawingHistoryAction(formData: FormData) {
     await customers.close()
   }
   revalidatePath(drawingHistoryPath)
+  revalidatePath(`${drawingHistoryPath}/log`)
   redirect(drawingHistoryPath)
 }

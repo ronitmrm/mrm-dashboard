@@ -2,7 +2,7 @@ import {
   createCommercialReportingRepository,
   createCustomerRepository,
 } from "@workspace/db"
-import { Download, Pencil, RotateCcw } from "lucide-react"
+import { Download, History, Pencil } from "lucide-react"
 import Link from "next/link"
 
 import { Badge } from "@workspace/ui/components/badge"
@@ -36,7 +36,7 @@ const drawingHistoryPath = "/commercial/drawing-history"
 export default async function DrawingHistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string; q?: string; revision?: string }>
+  searchParams: Promise<{ edit?: string }>
 }) {
   await requireCapability("pricing.drawing_history.read", drawingHistoryPath)
   const filters = await searchParams
@@ -45,10 +45,8 @@ export default async function DrawingHistoryPage({
   const repository = createCommercialReportingRepository({ connectionString })
   let rows
   try {
-    rows = await repository.listDrawingHistory({
+    rows = await repository.listDrawingRegister({
       organizationId: await customers.organizationIdForCode("MRMPL"),
-      query: filters.q,
-      revision: filters.revision,
     })
   } finally {
     await repository.close()
@@ -69,35 +67,20 @@ export default async function DrawingHistoryPage({
                 Products.
               </CardDescription>
             </div>
-            <Button asChild variant="outline">
-              <Link href={`${drawingHistoryPath}/export.xlsx`}>
-                <Download /> Export Excel
-              </Link>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline">
+                <Link href={`${drawingHistoryPath}/log`}>
+                  <History /> Change Log
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={`${drawingHistoryPath}/export.xlsx`}>
+                  <Download /> Export Excel
+                </Link>
+              </Button>
+            </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <form className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto_auto]">
-            <Input
-              aria-label="Search Drawing History"
-              defaultValue={filters.q}
-              name="q"
-              placeholder="Search Uid, Drawing Or Remarks"
-            />
-            <Input
-              aria-label="Filter Revision"
-              defaultValue={filters.revision}
-              name="revision"
-              placeholder="Revision"
-            />
-            <Button type="submit">Apply Filters</Button>
-            <Button asChild variant="ghost">
-              <Link href={drawingHistoryPath}>
-                <RotateCcw /> Reset
-              </Link>
-            </Button>
-          </form>
-        </CardContent>
       </Card>
 
       {editing ? (
@@ -198,22 +181,24 @@ export default async function DrawingHistoryPage({
         <CardHeader>
           <CardTitle>Production Drawing Control</CardTitle>
           <CardDescription>
-            {rows.length} Matching Revision Rows.
+            {rows.length} Parts. Each Row Shows The Latest Saved Revision.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-2xl border">
-            <Table>
+            <Table excelFilters>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Sr. No.</TableHead>
-                  <TableHead>Part Name</TableHead>
-                  <TableHead>Uid</TableHead>
-                  <TableHead>Drawing No.</TableHead>
-                  <TableHead>Revision</TableHead>
-                  <TableHead>Rev Date</TableHead>
-                  <TableHead>Laminated B / C / Cnc</TableHead>
-                  <TableHead>Remarks</TableHead>
+                  <TableHead data-filterable="true">Sr. No.</TableHead>
+                  <TableHead data-filterable="true">Part Name</TableHead>
+                  <TableHead data-filterable="true">Uid</TableHead>
+                  <TableHead data-filterable="true">Drawing No.</TableHead>
+                  <TableHead data-filterable="true">Revision</TableHead>
+                  <TableHead data-filterable="true">Rev Date</TableHead>
+                  <TableHead data-filterable="true">
+                    Laminated B / C / Cnc
+                  </TableHead>
+                  <TableHead data-filterable="true">Remarks</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>

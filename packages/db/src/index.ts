@@ -23,6 +23,8 @@ export { createCommercialOrdersRepository } from "./commercial-orders"
 export {
   createCommercialReportingRepository,
   deriveThreadStandard,
+  type DrawingChangeLogRow,
+  type DrawingChangeValues,
   type DrawingHistoryRow,
   type WebsiteProductInput,
   type WebsiteProductRow,
