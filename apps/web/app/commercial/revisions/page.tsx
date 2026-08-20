@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import {
   bulkRevisionFields,
   createCommercialRevisionsRepository,
@@ -30,7 +32,6 @@ import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 
 import {
-  applyEngineeringChangeDecisionAction,
   completeBulkPriceRevisionAction,
   completeEngineeringChangeDesignAction,
   completeEngineeringChangeProductCostingAction,
@@ -87,26 +88,13 @@ export default async function CommercialRevisionsPage() {
   const repository = createCommercialRevisionsRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const { affectedByEcn, bulkRevisions, ecns, reference, stagesByRevision } =
+  const { bulkRevisions, ecns, reference, stagesByRevision } =
     await (async () => {
       const [bulkRevisions, ecns, reference] = await Promise.all([
         repository.listBulkPriceRevisions("MRMPL"),
         repository.listEngineeringChangeNotes("MRMPL"),
         repository.listRevisionReferenceData("MRMPL"),
       ])
-      const affectedByEcn = new Map(
-        await Promise.all(
-          ecns
-            .filter((ecn) => ecn.status === "Pending Costing")
-            .map(
-              async (ecn) =>
-                [
-                  ecn.id,
-                  await repository.listEngineeringChangeAffectedPrices(ecn.id),
-                ] as const
-            )
-        )
-      )
       const stagesByRevision = new Map(
         await Promise.all(
           bulkRevisions
@@ -121,7 +109,6 @@ export default async function CommercialRevisionsPage() {
         )
       )
       return {
-        affectedByEcn,
         bulkRevisions,
         ecns,
         reference,
@@ -495,7 +482,6 @@ export default async function CommercialRevisionsPage() {
         <CardContent className="grid gap-4">
           {ecns.length ? (
             ecns.map((ecn) => {
-              const affected = affectedByEcn.get(ecn.id) ?? []
               return (
                 <div className="grid gap-4 rounded-3xl border p-4" key={ecn.id}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -678,77 +664,15 @@ export default async function CommercialRevisionsPage() {
                     </form>
                   ) : null}
                   {ecn.status === "Pending Costing" ? (
-                    affected.length ? (
-                      <div className="grid gap-3 border-t pt-4">
-                        {affected.map((price) => (
-                          <div
-                            className="grid gap-3 rounded-2xl border p-3 lg:grid-cols-[1.1fr_1fr_1fr_2fr]"
-                            key={price.quoteItemId}
-                          >
-                            <div>
-                              <p className="font-medium">
-                                {price.customerPartCode}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                Current Usd {money(price.approvedPriceUsd)}
-                              </p>
-                            </div>
-                            <div className="text-sm">
-                              <p className="font-medium">Keep Price Same</p>
-                              <p className="text-muted-foreground">
-                                Usd {money(price.keepSamePriceUsd)} · Profit{" "}
-                                {money(price.keepSameProfitPercent * 100)}%
-                              </p>
-                            </div>
-                            <div className="text-sm">
-                              <p className="font-medium">Revise Price</p>
-                              <p className="text-muted-foreground">
-                                Usd {money(price.revisePriceUsd)} · Profit{" "}
-                                {money(price.reviseProfitPercent * 100)}%
-                              </p>
-                            </div>
-                            {price.decision ? (
-                              <div className="flex items-center justify-end">
-                                <Badge>{price.decision}</Badge>
-                              </div>
-                            ) : (
-                              <form
-                                action={applyEngineeringChangeDecisionAction}
-                                className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]"
-                              >
-                                <input
-                                  name="engineering_change_note_id"
-                                  type="hidden"
-                                  value={ecn.id}
-                                />
-                                <input
-                                  name="source_quote_item_id"
-                                  type="hidden"
-                                  value={price.quoteItemId}
-                                />
-                                <NativeSelect name="decision" required>
-                                  <NativeSelectOption value="Keep Price Same">
-                                    Keep Price Same
-                                  </NativeSelectOption>
-                                  <NativeSelectOption value="Revise Price">
-                                    Revise Price
-                                  </NativeSelectOption>
-                                </NativeSelect>
-                                <Input
-                                  name="notes"
-                                  placeholder="Decision Note"
-                                />
-                                <Button type="submit">Record</Button>
-                              </form>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="border-t pt-4 text-sm text-muted-foreground">
-                        No Active Customer Price Contains This Product.
-                      </p>
-                    )
+                    <div className="border-t pt-4">
+                      <Button asChild variant="outline">
+                        <Link
+                          href={`/commercial/ecns?ecn=${encodeURIComponent(ecn.id)}#ecn-workbench`}
+                        >
+                          Open Customer Costing
+                        </Link>
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
               )

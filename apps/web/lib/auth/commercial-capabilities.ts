@@ -164,6 +164,12 @@ export const commercialPageAccess = [
     commercialCapabilities.purchaseOrders
   ),
   page(
+    "commercial.ecns",
+    "Engineering Change Notes",
+    "/commercial/ecns",
+    commercialCapabilities.revisions
+  ),
+  page(
     "commercial.revisions",
     "Price Revisions",
     "/commercial/revisions",

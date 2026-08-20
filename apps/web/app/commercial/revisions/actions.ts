@@ -2,6 +2,7 @@
 
 import { createCommercialRevisionsRepository } from "@workspace/db"
 import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
@@ -9,7 +10,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { optionalText, requiredText } from "@/lib/form-data"
 
 const revisionsPath = "/commercial/revisions"
-
+const ecnsPath = "/commercial/ecns"
 
 function numberValue(formData: FormData, name: string) {
   const value = Number(requiredText(formData, name))
@@ -91,9 +92,10 @@ async function withRevisions<T>(
     repository: ReturnType<typeof createCommercialRevisionsRepository>,
     actorUserId: string
   ) => Promise<T>,
-  capability: string = commercialCapabilities.revisions.write
+  capability: string = commercialCapabilities.revisions.write,
+  returnPath: string = revisionsPath
 ) {
-  const session = await requireCapability(capability, revisionsPath)
+  const session = await requireCapability(capability, returnPath)
   const repository = createCommercialRevisionsRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -162,44 +164,53 @@ export async function completeBulkPriceRevisionAction(formData: FormData) {
 }
 
 export async function createEngineeringChangeNoteAction(formData: FormData) {
-  await withRevisions((repository, actorUserId) =>
-    repository.createEngineeringChangeNote({
-      actorUserId,
-      effectiveOn: optionalText(formData, "effective_on"),
-      itemId: requiredText(formData, "item_id"),
-      organizationId: requiredText(formData, "organization_id"),
-      reason: requiredText(formData, "reason"),
-    })
+  const created = await withRevisions(
+    (repository, actorUserId) =>
+      repository.createEngineeringChangeNote({
+        actorUserId,
+        effectiveOn: optionalText(formData, "effective_on"),
+        itemId: requiredText(formData, "item_id"),
+        organizationId: requiredText(formData, "organization_id"),
+        reason: requiredText(formData, "reason"),
+      }),
+    commercialCapabilities.revisions.write,
+    ecnsPath
   )
   revalidatePath(revisionsPath)
+  revalidatePath(ecnsPath)
+  redirect(`${ecnsPath}?ecn=${encodeURIComponent(created.id)}#ecn-workbench`)
 }
 
 export async function completeEngineeringChangeDesignAction(
   formData: FormData
 ) {
-  await withRevisions((repository, actorUserId) =>
-    repository.completeEngineeringChangeDesign({
-      actorUserId,
-      engineeringChangeNoteId: requiredText(
-        formData,
-        "engineering_change_note_id"
-      ),
-      itemPatch: {
-        bomLines: optionalBomLines(formData),
-        casting: optionalNumber(formData, "casting"),
-        description: optionalText(formData, "description"),
-        dieCode: optionalText(formData, "die_code"),
-        itemType: optionalText(formData, "item_type"),
-        materialGradeId: optionalText(formData, "material_grade_id"),
-        productionType: optionalText(formData, "production_type"),
-        remarks: optionalText(formData, "remarks"),
-        rodSize: optionalText(formData, "rod_size"),
-        rodTypeId: optionalText(formData, "rod_type_id"),
-        weight100Pcs: optionalNumber(formData, "weight_100_pcs"),
-      },
-    })
+  await withRevisions(
+    (repository, actorUserId) =>
+      repository.completeEngineeringChangeDesign({
+        actorUserId,
+        engineeringChangeNoteId: requiredText(
+          formData,
+          "engineering_change_note_id"
+        ),
+        itemPatch: {
+          bomLines: optionalBomLines(formData),
+          casting: optionalNumber(formData, "casting"),
+          description: optionalText(formData, "description"),
+          dieCode: optionalText(formData, "die_code"),
+          itemType: optionalText(formData, "item_type"),
+          materialGradeId: optionalText(formData, "material_grade_id"),
+          productionType: optionalText(formData, "production_type"),
+          remarks: optionalText(formData, "remarks"),
+          rodSize: optionalText(formData, "rod_size"),
+          rodTypeId: optionalText(formData, "rod_type_id"),
+          weight100Pcs: optionalNumber(formData, "weight_100_pcs"),
+        },
+      }),
+    commercialCapabilities.revisions.write,
+    ecnsPath
   )
   revalidatePath(revisionsPath)
+  revalidatePath(ecnsPath)
 }
 
 export async function completeEngineeringChangeProductCostingAction(
@@ -207,70 +218,78 @@ export async function completeEngineeringChangeProductCostingAction(
 ) {
   const rejectionPercent = optionalNumber(formData, "rejection_percent")
   const burningLossPercent = optionalNumber(formData, "burning_loss_percent")
-  await withRevisions((repository, actorUserId) =>
-    repository.completeEngineeringChangeProductCosting({
-      actorUserId,
-      engineeringChangeNoteId: requiredText(
-        formData,
-        "engineering_change_note_id"
-      ),
-      itemPatch: {
-        alloyPremium: optionalNumber(formData, "alloy_premium"),
-        annealing: optionalNumber(formData, "annealing"),
-        assemblyOperationCost: optionalNumber(
+  await withRevisions(
+    (repository, actorUserId) =>
+      repository.completeEngineeringChangeProductCosting({
+        actorUserId,
+        engineeringChangeNoteId: requiredText(
           formData,
-          "assembly_operation_cost"
+          "engineering_change_note_id"
         ),
-        buffing: optionalNumber(formData, "buffing"),
-        burningLossPercent:
-          burningLossPercent === undefined
-            ? undefined
-            : burningLossPercent / 100,
-        checking: optionalNumber(formData, "checking"),
-        deburring: optionalNumber(formData, "deburring"),
-        directPurchasePricePerKg: optionalNumber(
-          formData,
-          "direct_purchase_price_per_kg"
-        ),
-        directPurchasePricePerPiece: optionalNumber(
-          formData,
-          "direct_purchase_price_per_piece"
-        ),
-        extrusionCost: optionalNumber(formData, "ext_cost"),
-        forgingCost: optionalNumber(formData, "forging_cost"),
-        machiningCost: optionalNumber(formData, "machining_cost"),
-        marking: optionalNumber(formData, "marking"),
-        overheadCost: optionalNumber(formData, "overhead_cost"),
-        piecesPerKg: optionalNumber(formData, "pieces_per_kg"),
-        plating: optionalNumber(formData, "plating"),
-        pricingMethod: optionalText(formData, "pricing_method"),
-        productCostInr: optionalNumber(formData, "product_cost_inr"),
-        rejectionPercent:
-          rejectionPercent === undefined ? undefined : rejectionPercent / 100,
-        sealant: optionalNumber(formData, "sealant"),
-        washing: optionalNumber(formData, "washing"),
-      },
-    })
+        itemPatch: {
+          alloyPremium: optionalNumber(formData, "alloy_premium"),
+          annealing: optionalNumber(formData, "annealing"),
+          assemblyOperationCost: optionalNumber(
+            formData,
+            "assembly_operation_cost"
+          ),
+          buffing: optionalNumber(formData, "buffing"),
+          burningLossPercent:
+            burningLossPercent === undefined
+              ? undefined
+              : burningLossPercent / 100,
+          checking: optionalNumber(formData, "checking"),
+          deburring: optionalNumber(formData, "deburring"),
+          directPurchasePricePerKg: optionalNumber(
+            formData,
+            "direct_purchase_price_per_kg"
+          ),
+          directPurchasePricePerPiece: optionalNumber(
+            formData,
+            "direct_purchase_price_per_piece"
+          ),
+          extrusionCost: optionalNumber(formData, "ext_cost"),
+          forgingCost: optionalNumber(formData, "forging_cost"),
+          machiningCost: optionalNumber(formData, "machining_cost"),
+          marking: optionalNumber(formData, "marking"),
+          overheadCost: optionalNumber(formData, "overhead_cost"),
+          piecesPerKg: optionalNumber(formData, "pieces_per_kg"),
+          plating: optionalNumber(formData, "plating"),
+          pricingMethod: optionalText(formData, "pricing_method"),
+          productCostInr: optionalNumber(formData, "product_cost_inr"),
+          rejectionPercent:
+            rejectionPercent === undefined ? undefined : rejectionPercent / 100,
+          sealant: optionalNumber(formData, "sealant"),
+          washing: optionalNumber(formData, "washing"),
+        },
+      }),
+    commercialCapabilities.revisions.write,
+    ecnsPath
   )
   revalidatePath(revisionsPath)
+  revalidatePath(ecnsPath)
 }
 
 export async function applyEngineeringChangeDecisionAction(formData: FormData) {
   const decision = requiredText(formData, "decision") as
     | "Keep Price Same"
     | "Revise Price"
-  await withRevisions((repository, actorUserId) =>
-    repository.applyEngineeringChangeDecision({
-      actorUserId,
-      decision,
-      engineeringChangeNoteId: requiredText(
-        formData,
-        "engineering_change_note_id"
-      ),
-      notes: optionalText(formData, "notes"),
-      sourceQuoteItemId: requiredText(formData, "source_quote_item_id"),
-    })
+  await withRevisions(
+    (repository, actorUserId) =>
+      repository.applyEngineeringChangeDecision({
+        actorUserId,
+        decision,
+        engineeringChangeNoteId: requiredText(
+          formData,
+          "engineering_change_note_id"
+        ),
+        notes: optionalText(formData, "notes"),
+        sourceQuoteItemId: requiredText(formData, "source_quote_item_id"),
+      }),
+    commercialCapabilities.revisions.write,
+    ecnsPath
   )
   revalidatePath(revisionsPath)
+  revalidatePath(ecnsPath)
   revalidatePath("/commercial/quotes")
 }

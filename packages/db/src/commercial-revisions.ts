@@ -9,7 +9,6 @@ import {
 } from "./postgres-runtime"
 import { calculateCosting } from "./pricing-calculation"
 
-
 type QuoteRow = {
   alloy_premium: string
   approved_price_usd: string
@@ -292,7 +291,6 @@ const asNumber = (value: unknown, fallback = 0) => {
 
 const asText = (value: unknown) =>
   typeof value === "string" ? value.trim() : ""
-
 
 async function writeAuditEvent(
   client: PoolClient,
@@ -1593,8 +1591,14 @@ export function createCommercialRevisionsRepository(
       }))
     },
 
-    async listEngineeringChangeNotes(organizationCode: string) {
+    async listEngineeringChangeNotes(
+      organizationCode: string,
+      options: { limit?: number } = {}
+    ) {
+      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 100), 1), 250)
       const result = await pool.query<{
+        affected_price_count: number
+        created_at: Date
         decision_count: string
         description: string
         ecn_number: string
@@ -1609,7 +1613,9 @@ export function createCommercialRevisionsRepository(
         `
           SELECT ecn.id, ecn.ecn_number, ecn.item_id, ecn.status,
             ecn.reason, ecn.effective_on::text, item.uid AS item_uid,
-            item.description, item.item_type,
+            item.description, item.item_type, ecn.created_at,
+            jsonb_array_length(ecn.affected_quote_item_ids_json)
+              AS affected_price_count,
             count(decision.id)::text AS decision_count
           FROM sales.engineering_change_notes ecn
           JOIN core.organizations organization
@@ -1620,10 +1626,13 @@ export function createCommercialRevisionsRepository(
           WHERE lower(organization.code) = lower($1)
           GROUP BY ecn.id, item.uid, item.description, item.item_type
           ORDER BY ecn.created_at DESC, ecn.id DESC
+          LIMIT $2
         `,
-        [organizationCode]
+        [organizationCode, limit]
       )
       return result.rows.map((row) => ({
+        affectedPriceCount: row.affected_price_count,
+        createdAt: row.created_at,
         decisionCount: Number(row.decision_count),
         description: row.description,
         ecnNumber: row.ecn_number,
@@ -1635,6 +1644,132 @@ export function createCommercialRevisionsRepository(
         reason: row.reason,
         status: row.status,
       }))
+    },
+
+    async getEngineeringChangeNote(
+      organizationCode: string,
+      engineeringChangeNoteId: string
+    ) {
+      const result = await pool.query<{
+        affected_price_count: number
+        created_at: Date
+        decision_count: string
+        description: string
+        ecn_number: string
+        effective_on: string | null
+        id: string
+        item_id: string
+        item_type: string
+        item_uid: string
+        reason: string
+        status: string
+      }>(
+        `
+          SELECT ecn.id, ecn.ecn_number, ecn.item_id, ecn.status,
+            ecn.reason, ecn.effective_on::text, item.uid AS item_uid,
+            item.description, item.item_type, ecn.created_at,
+            jsonb_array_length(ecn.affected_quote_item_ids_json)
+              AS affected_price_count,
+            count(decision.id)::text AS decision_count
+          FROM sales.engineering_change_notes ecn
+          JOIN core.organizations organization
+            ON organization.id = ecn.organization_id
+          JOIN catalog.items item ON item.id = ecn.item_id
+          LEFT JOIN sales.engineering_change_decisions decision
+            ON decision.engineering_change_note_id = ecn.id
+          WHERE lower(organization.code) = lower($1) AND ecn.id = $2
+          GROUP BY ecn.id, item.uid, item.description, item.item_type
+        `,
+        [organizationCode, engineeringChangeNoteId]
+      )
+      const row = result.rows[0]
+      return row
+        ? {
+            affectedPriceCount: row.affected_price_count,
+            createdAt: row.created_at,
+            decisionCount: Number(row.decision_count),
+            description: row.description,
+            ecnNumber: row.ecn_number,
+            effectiveOn: row.effective_on,
+            id: row.id,
+            itemId: row.item_id,
+            itemType: row.item_type,
+            itemUid: row.item_uid,
+            reason: row.reason,
+            status: row.status,
+          }
+        : null
+    },
+
+    async getEngineeringChangeMetrics(organizationCode: string) {
+      const result = await pool.query<{
+        completed_count: string
+        open_count: string
+        pending_costing_count: string
+        pending_design_count: string
+        pending_product_costing_count: string
+        total_count: string
+      }>(
+        `
+          SELECT count(*)::text AS total_count,
+            count(*) FILTER (WHERE ecn.status <> 'Completed')::text AS open_count,
+            count(*) FILTER (WHERE ecn.status = 'Pending Design')::text
+              AS pending_design_count,
+            count(*) FILTER (WHERE ecn.status = 'Pending Product Costing')::text
+              AS pending_product_costing_count,
+            count(*) FILTER (WHERE ecn.status = 'Pending Costing')::text
+              AS pending_costing_count,
+            count(*) FILTER (WHERE ecn.status = 'Completed')::text
+              AS completed_count
+          FROM sales.engineering_change_notes ecn
+          JOIN core.organizations organization
+            ON organization.id = ecn.organization_id
+          WHERE lower(organization.code) = lower($1)
+        `,
+        [organizationCode]
+      )
+      const row = result.rows[0]!
+      return {
+        completed: Number(row.completed_count),
+        open: Number(row.open_count),
+        pendingCosting: Number(row.pending_costing_count),
+        pendingDesign: Number(row.pending_design_count),
+        pendingProductCosting: Number(row.pending_product_costing_count),
+        total: Number(row.total_count),
+      }
+    },
+
+    async listEngineeringChangeReferenceData(organizationCode: string) {
+      const organization = await pool.query<{ id: string }>(
+        "SELECT id FROM core.organizations WHERE lower(code) = lower($1)",
+        [organizationCode]
+      )
+      const organizationId = organization.rows[0]?.id
+      if (!organizationId) return { items: [], organizationId: null }
+      const items = await pool.query<{
+        description: string
+        id: string
+        item_type: string
+        uid: string
+      }>(
+        `
+          SELECT id, uid, description, item_type
+          FROM catalog.items
+          WHERE organization_id = $1
+            AND uid_kind = 'INTERNAL' AND lifecycle_status = 'P'
+          ORDER BY uid, id
+        `,
+        [organizationId]
+      )
+      return {
+        items: items.rows.map((row) => ({
+          description: row.description,
+          id: row.id,
+          itemType: row.item_type,
+          uid: row.uid,
+        })),
+        organizationId,
+      }
     },
 
     async listRevisionReferenceData(organizationCode: string) {
@@ -2339,12 +2474,26 @@ export function createCommercialRevisionsRepository(
       reason: string
     }) {
       return transaction(pool, async (client) => {
-        const item = await client.query(
-          "SELECT id FROM catalog.items WHERE id = $1 AND organization_id = $2",
+        const item = await client.query<{
+          id: string
+          lifecycle_status: string
+          uid_kind: string
+        }>(
+          `
+            SELECT id, uid_kind, lifecycle_status
+            FROM catalog.items
+            WHERE id = $1 AND organization_id = $2
+          `,
           [input.itemId, input.organizationId]
         )
         if (!item.rows[0]) {
           throw new Error("Product was not found for ECN.")
+        }
+        if (
+          item.rows[0].uid_kind !== "INTERNAL" ||
+          item.rows[0].lifecycle_status !== "P"
+        ) {
+          throw new Error("ECN product must be an ordered internal product.")
         }
         const ecnNumber = await nextRevisionNumber(
           client,
