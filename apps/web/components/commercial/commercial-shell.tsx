@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { KeyRound, Settings2 } from "lucide-react"
+import { Settings2 } from "lucide-react"
 
 import {
   defaultProductionFloorCode,
@@ -24,6 +24,7 @@ import {
 } from "@workspace/ui/components/sidebar"
 
 import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation"
+import { UserAccountFooter } from "@/components/user-account-footer"
 import type { UnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import {
   administrationNavigation,
@@ -130,24 +131,7 @@ export function CommercialShell({
           />
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-3">
-          <Link
-            className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            href="/account/password"
-            title="Password & Security"
-          >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/12 text-sm font-semibold text-sidebar-primary">
-              {(user.name || user.email).trim().charAt(0).toUpperCase()}
-            </span>
-            <span className="grid min-w-0 flex-1 gap-0.5">
-              <span className="truncate text-sm font-semibold">
-                {user.name}
-              </span>
-              <span className="truncate text-xs text-muted-foreground">
-                {user.email}
-              </span>
-            </span>
-            <KeyRound className="size-4 shrink-0 text-muted-foreground" />
-          </Link>
+          <UserAccountFooter user={user} />
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
