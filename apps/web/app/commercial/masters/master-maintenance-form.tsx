@@ -1,6 +1,9 @@
 "use client"
 
-import type { CommercialMasterSnapshot } from "@workspace/db"
+import type {
+  CommercialMasterSnapshot,
+  CommercialTermType,
+} from "@workspace/db"
 import { Button } from "@workspace/ui/components/button"
 import { Field, FieldGroup, FieldLabel } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
@@ -18,6 +21,15 @@ import {
 } from "@/lib/commercial-master-workspace"
 
 import { upsertMasterAction } from "./actions"
+
+const commercialTermTypes = [
+  "buyer",
+  "incoterms",
+  "payment_terms",
+  "shipment_mode",
+  "packaging_terms",
+  "currency",
+] as const satisfies readonly CommercialTermType[]
 
 function NumberInput({ label, name }: { label: string; name: string }) {
   return (
@@ -229,12 +241,7 @@ export function MasterMaintenanceForm({
                 id="master-term-type"
                 name="term_type"
               >
-                {[
-                  "incoterms",
-                  "payment_terms",
-                  "shipment_mode",
-                  "packaging_terms",
-                ].map((termType) => (
+                {commercialTermTypes.map((termType) => (
                   <NativeSelectOption key={termType} value={termType}>
                     {termType.replaceAll("_", " ")}
                   </NativeSelectOption>

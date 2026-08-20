@@ -1,4 +1,8 @@
-import type { CommercialMasterSnapshot, WebsiteFieldType } from "@workspace/db"
+import {
+  commercialTermTypes,
+  type CommercialMasterSnapshot,
+  type WebsiteFieldType,
+} from "@workspace/db"
 import * as XLSX from "xlsx"
 
 type MasterImportCell = boolean | null | number | string | undefined
@@ -19,10 +23,16 @@ const sheetDefinitions: SheetDefinition[] = [
       company_name: "",
       country: "",
       customer_uid: "",
+      default_buyer_name: "",
+      default_currency: "",
+      default_incoterms: "",
+      default_packaging_terms: "",
+      default_payment_terms: "",
+      default_shipment_mode: "",
       email: "",
       phone: "",
     },
-    widths: [16, 32, 28, 18, 18],
+    widths: [16, 32, 28, 18, 18, 24, 18, 20, 24, 24, 18],
   },
   {
     key: "machines",
@@ -215,6 +225,12 @@ function snapshotRows(
         company_name: row.companyName,
         country: row.country ?? "",
         customer_uid: row.customerUid,
+        default_buyer_name: row.defaultBuyerName ?? "",
+        default_currency: row.defaultCurrency ?? "",
+        default_incoterms: row.defaultIncoterms ?? "",
+        default_packaging_terms: row.defaultPackagingTerms ?? "",
+        default_payment_terms: row.defaultPaymentTerms ?? "",
+        default_shipment_mode: row.defaultShipmentMode ?? "",
         email: row.email ?? "",
         phone: row.phone ?? "",
         status: row.status,
@@ -355,6 +371,18 @@ export function parseMastersWorkbook(
       companyName,
       country: optional(cell(row, "country")),
       customerUid: cell(row, "customer_uid", "uid"),
+      defaultBuyerName: optional(cell(row, "default_buyer_name", "buyer")),
+      defaultCurrency: optional(cell(row, "default_currency", "currency")),
+      defaultIncoterms: optional(cell(row, "default_incoterms", "incoterms")),
+      defaultPackagingTerms: optional(
+        cell(row, "default_packaging_terms", "packaging_terms", "packaging")
+      ),
+      defaultPaymentTerms: optional(
+        cell(row, "default_payment_terms", "payment_terms")
+      ),
+      defaultShipmentMode: optional(
+        cell(row, "default_shipment_mode", "shipment_mode")
+      ),
       email: optional(cell(row, "email")),
       phone: optional(cell(row, "phone")),
       status: cell(row, "status") || "Active",
@@ -461,12 +489,9 @@ export function parseMastersWorkbook(
     const name = cell(row, "name", "value")
     if (
       name &&
-      [
-        "incoterms",
-        "payment_terms",
-        "shipment_mode",
-        "packaging_terms",
-      ].includes(termType)
+      commercialTermTypes.includes(
+        termType as (typeof commercialTermTypes)[number]
+      )
     ) {
       result.commercialTerms.push({
         active: active(row),

@@ -63,6 +63,38 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL enquiry-to-design workflow", () => {
+  test("copies customer commercial defaults into a new enquiry", async () => {
+    await pool.query(
+      `
+        UPDATE sales.customers
+        SET default_buyer_name = 'Default buyer',
+          default_incoterms = 'FOB',
+          default_payment_terms = 'Net 30',
+          default_shipment_mode = 'Sea',
+          default_packaging_terms = 'Export box',
+          default_currency = 'EUR'
+        WHERE id = $1
+      `,
+      [customerId]
+    )
+
+    const enquiry = await repository.createEnquiry({
+      customerId,
+      organizationId,
+      receivedOn: "2026-08-20",
+    })
+    const workspace = await repository.getEnquiry(enquiry.id)
+
+    expect(workspace.enquiry).toMatchObject({
+      buyerName: "Default buyer",
+      currency: "EUR",
+      incoterms: "FOB",
+      packagingTerms: "Export box",
+      paymentTerms: "Net 30",
+      shipmentMode: "Sea",
+    })
+  })
+
   test("loads attachments for many targets in one statement", async () => {
     const enquiry = await repository.createEnquiry({
       customerId,
@@ -994,7 +1026,9 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
     const candidatePool = new Pool({ connectionString })
     const originalQuery = candidatePool.query.bind(candidatePool)
     let candidateStatements = 0
-    candidatePool.query = ((...args: Parameters<typeof candidatePool.query>) => {
+    candidatePool.query = ((
+      ...args: Parameters<typeof candidatePool.query>
+    ) => {
       candidateStatements += 1
       return originalQuery(...args)
     }) as typeof candidatePool.query
@@ -1178,9 +1212,8 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       },
     })
 
-    const afterFirstImport = (
-      await repository.listEnquiries(organizationCode)
-    ).length
+    const afterFirstImport = (await repository.listEnquiries(organizationCode))
+      .length
     await expect(
       repository.importEnquiryRegister({
         organizationId,

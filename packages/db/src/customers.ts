@@ -37,11 +37,16 @@ type CreateCustomer = {
   status?: string
 }
 
-
 type CreateManagedCustomer = {
   actorUserId?: string | null
   companyName: string
   country?: string | null
+  defaultBuyerName?: string | null
+  defaultCurrency?: string | null
+  defaultIncoterms?: string | null
+  defaultPackagingTerms?: string | null
+  defaultPaymentTerms?: string | null
+  defaultShipmentMode?: string | null
   email?: string | null
   organizationId: string
   phone?: string | null
@@ -53,21 +58,24 @@ type UpdateManagedCustomer = {
   companyName: string
   country?: string | null
   customerId: string
+  defaultBuyerName?: string | null
+  defaultCurrency?: string | null
+  defaultIncoterms?: string | null
+  defaultPackagingTerms?: string | null
+  defaultPaymentTerms?: string | null
+  defaultShipmentMode?: string | null
   email?: string | null
   organizationId: string
   phone?: string | null
   status?: string | null
 }
 
-
 function optionalText(value: string | null | undefined) {
   const normalized = value?.trim()
   return normalized ? normalized : null
 }
 
-export function createCustomerRepository(
-  options: RepositoryPoolOptions
-) {
+export function createCustomerRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
   const database = drizzle(pool)
 
@@ -161,12 +169,14 @@ export function createCustomerRepository(
             INSERT INTO sales.customers (
               organization_id, customer_uid, company_name, status,
               contact_name, email, phone, country, notes,
+              default_buyer_name, default_incoterms, default_payment_terms,
+              default_shipment_mode, default_packaging_terms, default_currency,
               created_by_user_id, updated_by_user_id, source_system,
               source_table, source_id
             )
             VALUES (
-              $1, $2, $3, $4, NULL, $5, $6, $7, NULL, $8, $8,
-              'mrm-dashboard', 'customers', $9
+              $1, $2, $3, $4, NULL, $5, $6, $7, NULL, $8, $9, $10,
+              $11, $12, $13, $14, $14, 'mrm-dashboard', 'customers', $15
             )
             RETURNING id
           `,
@@ -178,6 +188,12 @@ export function createCustomerRepository(
             optionalText(input.email),
             optionalText(input.phone),
             optionalText(input.country),
+            optionalText(input.defaultBuyerName),
+            optionalText(input.defaultIncoterms),
+            optionalText(input.defaultPaymentTerms),
+            optionalText(input.defaultShipmentMode),
+            optionalText(input.defaultPackagingTerms),
+            optionalText(input.defaultCurrency),
             input.actorUserId ?? null,
             randomUUID(),
           ]
@@ -224,6 +240,12 @@ export function createCustomerRepository(
       const after = {
         companyName,
         country: optionalText(input.country),
+        defaultBuyerName: optionalText(input.defaultBuyerName),
+        defaultCurrency: optionalText(input.defaultCurrency),
+        defaultIncoterms: optionalText(input.defaultIncoterms),
+        defaultPackagingTerms: optionalText(input.defaultPackagingTerms),
+        defaultPaymentTerms: optionalText(input.defaultPaymentTerms),
+        defaultShipmentMode: optionalText(input.defaultShipmentMode),
         email: optionalText(input.email),
         phone: optionalText(input.phone),
         status: input.status?.trim() || "Active",
@@ -233,12 +255,20 @@ export function createCustomerRepository(
         const current = await client.query<{
           company_name: string
           country: string | null
+          default_buyer_name: string | null
+          default_currency: string | null
+          default_incoterms: string | null
+          default_packaging_terms: string | null
+          default_payment_terms: string | null
+          default_shipment_mode: string | null
           email: string | null
           phone: string | null
           status: string
         }>(
           `
-            SELECT company_name, status, email, phone, country
+            SELECT company_name, status, email, phone, country,
+              default_buyer_name, default_incoterms, default_payment_terms,
+              default_shipment_mode, default_packaging_terms, default_currency
             FROM sales.customers
             WHERE id = $1 AND organization_id = $2
             FOR UPDATE
@@ -258,10 +288,16 @@ export function createCustomerRepository(
               email = $3,
               phone = $4,
               country = $5,
-              updated_by_user_id = $6,
+              default_buyer_name = $6,
+              default_incoterms = $7,
+              default_payment_terms = $8,
+              default_shipment_mode = $9,
+              default_packaging_terms = $10,
+              default_currency = $11,
+              updated_by_user_id = $12,
               updated_at = now(),
               row_version = row_version + 1
-            WHERE id = $7 AND organization_id = $8
+            WHERE id = $13 AND organization_id = $14
           `,
           [
             after.companyName,
@@ -269,6 +305,12 @@ export function createCustomerRepository(
             after.email,
             after.phone,
             after.country,
+            after.defaultBuyerName,
+            after.defaultIncoterms,
+            after.defaultPaymentTerms,
+            after.defaultShipmentMode,
+            after.defaultPackagingTerms,
+            after.defaultCurrency,
             input.actorUserId ?? null,
             input.customerId,
             input.organizationId,
@@ -295,6 +337,12 @@ export function createCustomerRepository(
               before: {
                 companyName: existing.company_name,
                 country: existing.country,
+                defaultBuyerName: existing.default_buyer_name,
+                defaultCurrency: existing.default_currency,
+                defaultIncoterms: existing.default_incoterms,
+                defaultPackagingTerms: existing.default_packaging_terms,
+                defaultPaymentTerms: existing.default_payment_terms,
+                defaultShipmentMode: existing.default_shipment_mode,
                 email: existing.email,
                 phone: existing.phone,
                 status: existing.status,

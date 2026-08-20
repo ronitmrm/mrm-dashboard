@@ -17,10 +17,12 @@ export const websiteFieldTypes = [
 ] as const
 
 export const commercialTermTypes = [
+  "buyer",
   "incoterms",
   "payment_terms",
   "shipment_mode",
   "packaging_terms",
+  "currency",
 ] as const
 
 export type WebsiteFieldType = (typeof websiteFieldTypes)[number]
@@ -40,6 +42,12 @@ export type CommercialMasterSnapshot = {
     companyName: string
     country: string | null
     customerUid: string
+    defaultBuyerName: string | null
+    defaultCurrency: string | null
+    defaultIncoterms: string | null
+    defaultPackagingTerms: string | null
+    defaultPaymentTerms: string | null
+    defaultShipmentMode: string | null
     email: string | null
     phone: string | null
     status: string
@@ -698,16 +706,42 @@ async function upsertCustomerClient(
     `
       INSERT INTO sales.customers (
         organization_id, customer_uid, company_name, status, email,
-        phone, country, created_by_user_id, updated_by_user_id,
-        source_system, source_table, source_id
+        phone, country, default_buyer_name, default_incoterms,
+        default_payment_terms, default_shipment_mode,
+        default_packaging_terms, default_currency, created_by_user_id,
+        updated_by_user_id, source_system, source_table, source_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8,
-        'mrm-dashboard', 'customers', $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+        $13, $14, $14, 'mrm-dashboard', 'customers', $15)
       ON CONFLICT (organization_id, lower(customer_uid)) DO UPDATE SET
         company_name = EXCLUDED.company_name,
         email = EXCLUDED.email,
         phone = EXCLUDED.phone,
         country = EXCLUDED.country,
+        default_buyer_name = COALESCE(
+          EXCLUDED.default_buyer_name,
+          sales.customers.default_buyer_name
+        ),
+        default_incoterms = COALESCE(
+          EXCLUDED.default_incoterms,
+          sales.customers.default_incoterms
+        ),
+        default_payment_terms = COALESCE(
+          EXCLUDED.default_payment_terms,
+          sales.customers.default_payment_terms
+        ),
+        default_shipment_mode = COALESCE(
+          EXCLUDED.default_shipment_mode,
+          sales.customers.default_shipment_mode
+        ),
+        default_packaging_terms = COALESCE(
+          EXCLUDED.default_packaging_terms,
+          sales.customers.default_packaging_terms
+        ),
+        default_currency = COALESCE(
+          EXCLUDED.default_currency,
+          sales.customers.default_currency
+        ),
         updated_by_user_id = EXCLUDED.updated_by_user_id,
         updated_at = now(),
         row_version = sales.customers.row_version + 1
@@ -721,6 +755,12 @@ async function upsertCustomerClient(
       optionalText(input.email),
       optionalText(input.phone),
       optionalText(input.country),
+      optionalText(input.defaultBuyerName),
+      optionalText(input.defaultIncoterms),
+      optionalText(input.defaultPaymentTerms),
+      optionalText(input.defaultShipmentMode),
+      optionalText(input.defaultPackagingTerms),
+      optionalText(input.defaultCurrency),
       input.actorUserId ?? null,
       randomUUID(),
     ]
@@ -764,7 +804,12 @@ export function createCommercialMasterRepository(
         [organizationId]
       )
       const customers = await client.query(
-        `SELECT customer_uid, company_name, status, email, phone, country FROM sales.customers WHERE organization_id = $1 ORDER BY lower(customer_uid)`,
+        `SELECT customer_uid, company_name, status, email, phone, country,
+          default_buyer_name, default_incoterms, default_payment_terms,
+          default_shipment_mode, default_packaging_terms, default_currency
+         FROM sales.customers
+         WHERE organization_id = $1
+         ORDER BY lower(customer_uid)`,
         [organizationId]
       )
       const machineTypes = await client.query(
@@ -829,6 +874,12 @@ export function createCommercialMasterRepository(
           companyName: row.company_name,
           country: row.country,
           customerUid: row.customer_uid,
+          defaultBuyerName: row.default_buyer_name,
+          defaultCurrency: row.default_currency,
+          defaultIncoterms: row.default_incoterms,
+          defaultPackagingTerms: row.default_packaging_terms,
+          defaultPaymentTerms: row.default_payment_terms,
+          defaultShipmentMode: row.default_shipment_mode,
           email: row.email,
           phone: row.phone,
           status: row.status,

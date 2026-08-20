@@ -4,6 +4,10 @@ MRM Dashboard supports production planning and shop-floor tracking for job cards
 
 ## Language
 
+**Customer Commercial Defaults**:
+The buyer, Incoterms, payment terms, shipment mode, packaging, and currency normally used for a Customer. A new Enquiry copies these defaults, while that Enquiry may select different active Commercial Master values without changing the Customer.
+_Avoid_: Fixed customer terms, enquiry-only terms.
+
 **Setup**:
 One operation in a part route. A setup may run on one machine or be split across compatible parallel machines.
 _Avoid_: Operation when referring to a route step in the dashboard.
