@@ -1,4 +1,12 @@
-import { ShieldCheck, UserRoundPlus, UsersRound } from "lucide-react"
+import Link from "next/link"
+
+import {
+  BriefcaseBusiness,
+  ShieldCheck,
+  UserRoundCog,
+  UserRoundPlus,
+  UsersRound,
+} from "lucide-react"
 
 import {
   Alert,
@@ -14,7 +22,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
   Empty,
   EmptyDescription,
@@ -27,8 +34,6 @@ import {
   FieldDescription,
   FieldGroup,
   FieldLabel,
-  FieldLegend,
-  FieldSet,
 } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import {
@@ -57,10 +62,46 @@ import {
   setPermissionOverrideAction,
   setPostRoleAction,
 } from "./actions"
+import { PermissionSelector } from "./permission-selector"
 
 export const dynamic = "force-dynamic"
 
-export default async function AccessAdministrationPage() {
+const accessSections = [
+  {
+    description: "Create roles and assign them to approved posts.",
+    icon: BriefcaseBusiness,
+    id: "roles",
+    label: "Roles & Posts",
+  },
+  {
+    description: "Create, link, and review staff accounts.",
+    icon: UsersRound,
+    id: "staff",
+    label: "Staff Accounts",
+  },
+  {
+    description: "Handle exceptional direct access and overrides.",
+    icon: UserRoundCog,
+    id: "exceptions",
+    label: "Exceptions",
+  },
+] as const
+
+type AccessSection = (typeof accessSections)[number]["id"]
+
+function selectedAccessSection(value: string | string[] | undefined) {
+  const section = Array.isArray(value) ? value[0] : value
+  return accessSections.some(({ id }) => id === section)
+    ? (section as AccessSection)
+    : "roles"
+}
+
+export default async function AccessAdministrationPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ section?: string | string[] }>
+}) {
+  const activeSection = selectedAccessSection((await searchParams).section)
   const session = await requireCapability(
     "administration.roles.manage",
     "/administration/access"
@@ -113,8 +154,39 @@ export default async function AccessAdministrationPage() {
         </AlertDescription>
       </Alert>
 
+      <nav
+        aria-label="Access administration sections"
+        className="grid gap-2 rounded-xl border bg-muted/20 p-2 lg:grid-cols-3"
+      >
+        {accessSections.map((section) => {
+          const Icon = section.icon
+          const selected = activeSection === section.id
+          return (
+            <Button
+              asChild
+              className="h-auto justify-start px-4 py-3 text-left"
+              key={section.id}
+              variant={selected ? "default" : "ghost"}
+            >
+              <Link
+                aria-current={selected ? "page" : undefined}
+                href={`/administration/access?section=${section.id}`}
+              >
+                <Icon className="size-5 shrink-0" />
+                <span className="grid gap-0.5">
+                  <span>{section.label}</span>
+                  <span className={selected ? "text-xs font-normal text-primary-foreground/80" : "text-xs font-normal text-muted-foreground"}>
+                    {section.description}
+                  </span>
+                </span>
+              </Link>
+            </Button>
+          )
+        })}
+      </nav>
+
       <section className="grid gap-6 xl:grid-cols-2">
-        <Card>
+        {activeSection === "staff" ? <Card>
           <CardHeader>
             <CardTitle>Provision Staff Account</CardTitle>
             <CardDescription>
@@ -188,9 +260,9 @@ export default async function AccessAdministrationPage() {
               </FieldGroup>
             </form>
           </CardContent>
-        </Card>
+        </Card> : null}
 
-        <Card>
+        {activeSection === "roles" ? <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle>Create Application Role</CardTitle>
             <CardDescription>
@@ -223,48 +295,16 @@ export default async function AccessAdministrationPage() {
                   </FieldLabel>
                   <Input id="role-description" name="description" />
                 </Field>
-                <FieldSet className="max-h-80 overflow-y-auto rounded-2xl border p-4">
-                  <FieldLegend>Capabilities</FieldLegend>
-                  {[...permissionsByModule.entries()].map(
-                    ([module, permissions]) => (
-                      <FieldGroup key={module} className="gap-3">
-                        <FieldLegend
-                          className="text-muted-foreground capitalize"
-                          variant="label"
-                        >
-                          {module}
-                        </FieldLegend>
-                        {permissions.map((permission) => {
-                          const id = `role-permission-${permission.key}`
-                          return (
-                            <Field
-                              key={permission.key}
-                              orientation="horizontal"
-                            >
-                              <Checkbox
-                                id={id}
-                                name="permissionKeys"
-                                value={permission.key}
-                              />
-                              <FieldLabel htmlFor={id}>
-                                {permission.name}
-                              </FieldLabel>
-                            </Field>
-                          )
-                        })}
-                      </FieldGroup>
-                    )
-                  )}
-                </FieldSet>
+                <PermissionSelector permissions={snapshot.permissions} />
                 <Button type="submit">Create Role</Button>
               </FieldGroup>
             </form>
           </CardContent>
-        </Card>
+        </Card> : null}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
-        <Card>
+        {activeSection === "staff" ? <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle>Link Existing Account</CardTitle>
             <CardDescription>
@@ -327,9 +367,9 @@ export default async function AccessAdministrationPage() {
               </FieldGroup>
             </form>
           </CardContent>
-        </Card>
+        </Card> : null}
 
-        <Card>
+        {activeSection === "roles" ? <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle>Post Access Profile</CardTitle>
             <CardDescription>
@@ -393,31 +433,36 @@ export default async function AccessAdministrationPage() {
                 <Button type="submit">Save Post Access</Button>
               </FieldGroup>
             </form>
-            <div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border p-3">
-              {snapshot.postAccessProfiles.map((post) => (
-                <div
-                  className="flex items-start justify-between gap-3 text-sm"
-                  key={post.id}
-                >
-                  <span>
-                    {post.postCode} · {post.department}
-                  </span>
-                  <span className="text-right text-muted-foreground">
-                    {post.roleKeys.join(", ") || "No role"}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <details className="rounded-xl border">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+                Review Current Post Profiles ({snapshot.postAccessProfiles.length})
+              </summary>
+              <div className="max-h-64 space-y-2 overflow-y-auto border-t p-3">
+                {snapshot.postAccessProfiles.map((post) => (
+                  <div
+                    className="flex items-start justify-between gap-3 text-sm"
+                    key={post.id}
+                  >
+                    <span>
+                      {post.postCode} · {post.department}
+                    </span>
+                    <span className="text-right text-muted-foreground">
+                      {post.roleKeys.join(", ") || "No role"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </details>
           </CardContent>
-        </Card>
+        </Card> : null}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      {activeSection === "exceptions" ? <section className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Assign Direct Role</CardTitle>
             <CardDescription>
-              Exceptional Access Only. Normal Access Comes From The Employee's
+              Exceptional Access Only. Normal Access Comes From The Employee&apos;s
               Approved Post Profile.
             </CardDescription>
           </CardHeader>
@@ -541,9 +586,9 @@ export default async function AccessAdministrationPage() {
             </form>
           </CardContent>
         </Card>
-      </section>
+      </section> : null}
 
-      <Card>
+      {activeSection === "staff" ? <Card>
         <CardHeader>
           <CardTitle>Staff Access</CardTitle>
           <CardDescription>
@@ -658,9 +703,9 @@ export default async function AccessAdministrationPage() {
             </Table>
           )}
         </CardContent>
-      </Card>
+      </Card> : null}
 
-      <Card>
+      {activeSection === "roles" ? <Card>
         <CardHeader>
           <CardTitle>Application Roles</CardTitle>
           <CardDescription>
@@ -686,7 +731,7 @@ export default async function AccessAdministrationPage() {
             </div>
           ))}
         </CardContent>
-      </Card>
+      </Card> : null}
     </>
   )
 }
