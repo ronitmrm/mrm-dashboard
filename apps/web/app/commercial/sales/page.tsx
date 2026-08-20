@@ -30,6 +30,7 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { salesTaskRows } from "@/lib/sales-task-rows"
 
 import {
   completeFollowupAction,
@@ -40,6 +41,46 @@ import {
 
 export const dynamic = "force-dynamic"
 
+const salesWorkspaceViews = [
+  { id: "tasks", label: "Tasks" },
+  { id: "manual-followup", label: "Manual Follow-Up" },
+  { id: "followup-history", label: "Follow-Up History" },
+  { id: "sent-quotes", label: "Sent Quotes" },
+] as const
+
+type SalesWorkspaceView = (typeof salesWorkspaceViews)[number]["id"]
+
+function salesView(value: string | undefined): SalesWorkspaceView {
+  return salesWorkspaceViews.some((view) => view.id === value)
+    ? (value as SalesWorkspaceView)
+    : "tasks"
+}
+
+function SalesWorkspaceTabs({
+  activeView,
+}: {
+  activeView: SalesWorkspaceView
+}) {
+  const linkClass =
+    "border-b-2 px-4 py-3 text-sm font-medium transition-colors"
+
+  return (
+    <nav aria-label="Sales views" className="flex overflow-x-auto border-b" role="tablist">
+      {salesWorkspaceViews.map((view) => (
+        <Link
+          aria-selected={activeView === view.id}
+          className={`${linkClass} ${activeView === view.id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          href={{ pathname: "/commercial/sales", query: { view: view.id } }}
+          key={view.id}
+          role="tab"
+        >
+          {view.label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
 export default async function SalesPage({
   searchParams,
 }: {
@@ -47,6 +88,7 @@ export default async function SalesPage({
     candidate?: string
     candidate_item?: string
     followup?: string
+    view?: string
   }>
 }) {
   await requireCapability("pricing.sales.read", "/commercial/sales")
@@ -54,6 +96,7 @@ export default async function SalesPage({
   const candidateSearch = params.candidate?.trim() ?? ""
   const requestedCandidateItemId = params.candidate_item?.trim() ?? ""
   const requestedFollowupId = params.followup?.trim() ?? ""
+  const activeView = salesView(params.view)
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -77,16 +120,14 @@ export default async function SalesPage({
     const enquiries = enquiryResults.rows
     const followups = followupResults.rows
     const selectedFollowup =
-      followups.find((followup) => followup.id === requestedFollowupId) ??
-      followups.find((followup) => followup.status === "Pending") ??
-      followups[0]
+      followups.find((followup) => followup.id === requestedFollowupId)
     const handoverTasks = handoverResults.rows
     const quoteReadyTasks = quoteReadyResults.rows
     const sentQuoteTasks = sentQuoteResults.rows
     const selectedClarification =
       clarificationTasks.find(
         (task) => task.enquiryItemId === requestedCandidateItemId
-      ) ?? clarificationTasks[0]
+      )
     const candidateItemId = selectedClarification?.enquiryItemId ?? ""
     const candidateResults =
       await workflow.listSalesMatchCandidatesForItemsBounded(
@@ -111,40 +152,125 @@ export default async function SalesPage({
     }
     const organizationId = enquiries[0]?.organizationId
     const today = istDateValue()
+    const taskRows = salesTaskRows({
+      clarifications: clarificationTasks,
+      followups,
+      handovers: handoverTasks,
+      quoteReady: quoteReadyTasks,
+    })
 
     return (
       <div className="grid gap-6">
         <section className="grid gap-2">
           <h2 className="text-2xl font-semibold tracking-tight">Sales</h2>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Clarification Matching, Technical Handover, Quote Readiness, Sent
-            History, And Due Follow-Ups Share One Source-Equivalent Queue.
+            One Sales Task Queue With Separate Workspaces For Manual Follow-Up,
+            Follow-Up History, And Sent Quotes.
           </p>
-          <div className="flex flex-wrap gap-2 pt-2">
-            <Button asChild size="sm" variant="outline">
-              <Link href="/commercial/sales/history/export.xlsx">
-                Export Sales History
-              </Link>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/commercial/sales/history/followups/export.xlsx">
-                Export Follow-Ups
-              </Link>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/commercial/sales/history/sent-quotes/export.xlsx">
-                Export Sent Quotes
-              </Link>
-            </Button>
-          </div>
-          <BoundedResultNotice
-            actionHref="/commercial/enquiries/register/export.xlsx"
-            actionLabel="Export the complete enquiry register"
-            coverage={enquiryResults.coverage}
-            section="Enquiry options"
-          />
         </section>
 
+        <SalesWorkspaceTabs activeView={activeView} />
+
+        {activeView === "tasks" ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Sales Task List</CardTitle>
+              <CardDescription>
+                Clarifications, Technical Handovers, Quote-Ready Work, And
+                Pending Follow-Ups In One Filterable Table.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="max-h-[70vh] overflow-auto rounded-md border">
+                <Table excelFilters>
+                  <TableHeader className="sticky top-0 z-10 bg-background">
+                    <TableRow>
+                      <TableHead data-filterable="true">Date / Due</TableHead>
+                      <TableHead data-filterable="true">Task</TableHead>
+                      <TableHead data-filterable="true">Enq</TableHead>
+                      <TableHead data-filterable="true">Line</TableHead>
+                      <TableHead data-filterable="true">Customer UID</TableHead>
+                      <TableHead data-filterable="true">Customer</TableHead>
+                      <TableHead data-filterable="true">Details</TableHead>
+                      <TableHead data-filterable="true">Status</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {taskRows.map((task) => (
+                      <TableRow key={task.key}>
+                        <TableCell>{task.taskDate || "—"}</TableCell>
+                        <TableCell className="font-medium">
+                          {task.taskType}
+                        </TableCell>
+                        <TableCell>{task.enquiryNumber}</TableCell>
+                        <TableCell>{task.line}</TableCell>
+                        <TableCell>{task.customerUid}</TableCell>
+                        <TableCell>{task.companyName}</TableCell>
+                        <TableCell className="max-w-96 whitespace-normal">
+                          {task.details || "—"}
+                        </TableCell>
+                        <TableCell data-filter-value={task.status}>
+                          <Badge variant="outline">{task.status}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {task.action === "handover" ? (
+                            <form action={handOverEnquiryAction}>
+                              <input
+                                name="enquiry_id"
+                                type="hidden"
+                                value={task.enquiryId}
+                              />
+                              <Button
+                                disabled={task.status === "Blocked"}
+                                size="sm"
+                                type="submit"
+                              >
+                                Hand Over
+                              </Button>
+                            </form>
+                          ) : task.action === "quote" ? (
+                            <Button asChild size="sm" variant="outline">
+                              <Link href="/commercial/quotes">Open Quotes</Link>
+                            </Button>
+                          ) : (
+                            <Button asChild size="sm" variant="outline">
+                              <Link
+                                href={{
+                                  pathname: "/commercial/sales",
+                                  query: {
+                                    view: "tasks",
+                                    ...(task.action === "clarification"
+                                      ? { candidate_item: task.sourceId }
+                                      : { followup: task.sourceId }),
+                                  },
+                                }}
+                              >
+                                Open
+                              </Link>
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!taskRows.length ? (
+                      <TableRow>
+                        <TableCell
+                          className="py-10 text-center text-muted-foreground"
+                          colSpan={9}
+                        >
+                          No Open Sales Tasks.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {activeView === "tasks" && selectedClarification ? (
         <Card>
           <CardHeader>
             <CardTitle>Sales Clarification</CardTitle>
@@ -152,12 +278,6 @@ export default async function SalesPage({
               Choose New Work, A Commercial Requote, Or A Technical Revision.
               Quote Candidates Are Scoped To The Same Customer.
             </CardDescription>
-            <BoundedResultNotice
-              actionHref="/commercial/sales/history/export.xlsx"
-              actionLabel="Export complete Sales history"
-              coverage={clarificationResults.coverage}
-              section="Sales clarification"
-            />
           </CardHeader>
           <CardContent className="grid gap-5">
             {clarificationTasks.length ? (
@@ -166,9 +286,9 @@ export default async function SalesPage({
                 id="sales-candidate-search"
               >
                 <input
-                  name="followup"
+                  name="view"
                   type="hidden"
-                  value={selectedFollowup?.id ?? ""}
+                  value="tasks"
                 />
                 <Field>
                   <FieldLabel htmlFor="candidate-item">
@@ -204,46 +324,6 @@ export default async function SalesPage({
                   Search
                 </Button>
               </form>
-            ) : null}
-            {clarificationTasks.length ? (
-              <div className="grid gap-2">
-                {clarificationTasks.map((task) => (
-                  <div
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-3"
-                    key={task.clarificationTaskId}
-                  >
-                    <div>
-                      <p className="font-medium">
-                        {task.enquiryNumber} / Line {task.lineNumber}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {task.customerUid} · {task.companyName} ·{" "}
-                        {task.customerPartCode}
-                      </p>
-                    </div>
-                    <Button asChild size="sm" variant="outline">
-                      <Link
-                        aria-current={
-                          task.enquiryItemId === candidateItemId
-                            ? "true"
-                            : undefined
-                        }
-                        href={{
-                          pathname: "/commercial/sales",
-                          query: {
-                            candidate_item: task.enquiryItemId,
-                            ...(selectedFollowup
-                              ? { followup: selectedFollowup.id }
-                              : {}),
-                          },
-                        }}
-                      >
-                        Open Clarification
-                      </Link>
-                    </Button>
-                  </div>
-                ))}
-              </div>
             ) : null}
             {selectedClarification ? (
               [selectedClarification].map((task) => (
@@ -466,110 +546,83 @@ export default async function SalesPage({
             )}
           </CardContent>
         </Card>
+        ) : null}
 
-        <div className="grid gap-6 xl:grid-cols-2">
+        {activeView === "tasks" && selectedFollowup?.status === "Pending" ? (
           <Card>
             <CardHeader>
-              <CardTitle>Technical Handover</CardTitle>
+              <CardTitle>Complete Follow-Up</CardTitle>
               <CardDescription>
-                Draft Enquiries With At Least One Line.
+                {selectedFollowup.enquiryNumber} · {selectedFollowup.companyName}
+                {" · "}{selectedFollowup.dueOn}
               </CardDescription>
-              <BoundedResultNotice
-                actionHref="/commercial/sales/history/export.xlsx"
-                actionLabel="Export complete Sales history"
-                coverage={handoverResults.coverage}
-                section="Technical handover"
-              />
             </CardHeader>
-            <CardContent className="grid gap-3">
-              {handoverTasks.map((task) => {
-                const missing = [
-                  !task.incoterms ? "Incoterms" : null,
-                  !task.paymentTerms ? "Payment terms" : null,
-                  !task.shipmentMode ? "Shipment mode" : null,
-                  !task.packagingTerms ? "Packaging" : null,
-                  !task.currency ? "Currency" : null,
-                  task.conversionRate <= 0 ? "FX rate" : null,
-                ].filter(Boolean)
-                return (
-                  <div
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4"
-                    key={task.enquiryId}
-                  >
-                    <div>
-                      <p className="font-medium">{task.enquiryNumber}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {task.companyName} · {task.totalLines} Lines
-                        {missing.length
-                          ? ` · Missing ${missing.join(", ")}`
-                          : ""}
-                      </p>
-                    </div>
-                    <form action={handOverEnquiryAction}>
-                      <input
-                        type="hidden"
-                        name="enquiry_id"
-                        value={task.enquiryId}
+            <CardContent>
+              <form action={completeFollowupAction}>
+                <input
+                  name="followup_id"
+                  type="hidden"
+                  value={selectedFollowup.id}
+                />
+                <input name="status" type="hidden" value="Completed" />
+                <FieldGroup>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <Field>
+                      <FieldLabel htmlFor="task-followup-note">
+                        Completion Notes
+                      </FieldLabel>
+                      <Input
+                        defaultValue={selectedFollowup.note}
+                        id="task-followup-note"
+                        name="note"
                       />
-                      <Button
-                        type="submit"
-                        size="sm"
-                        disabled={missing.length > 0 || task.salesHoldLines > 0}
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="task-followup-channel">
+                        Next Channel
+                      </FieldLabel>
+                      <NativeSelect
+                        defaultValue={selectedFollowup.channel}
+                        id="task-followup-channel"
+                        name="channel"
                       >
-                        Hand Over
-                      </Button>
-                    </form>
+                        {["Email", "Phone", "WhatsApp"].map((channel) => (
+                          <NativeSelectOption key={channel} value={channel}>
+                            {channel}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="task-followup-next-due">
+                        Next Due Date
+                      </FieldLabel>
+                      <Input
+                        id="task-followup-next-due"
+                        name="next_due_on"
+                        type="date"
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="task-followup-next-note">
+                        Next Reminder
+                      </FieldLabel>
+                      <Input
+                        id="task-followup-next-note"
+                        name="next_note"
+                      />
+                    </Field>
                   </div>
-                )
-              })}
-              {!handoverTasks.length ? (
-                <p className="text-sm text-muted-foreground">
-                  No Enquiries Are Waiting For Handover.
-                </p>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Quote-Ready</CardTitle>
-              <CardDescription>
-                Every Feasible Line Is Costed; Not-Feasible Lines Are Omitted.
-              </CardDescription>
-              <BoundedResultNotice
-                actionHref="/commercial/sales/history/export.xlsx"
-                actionLabel="Export complete Sales history"
-                coverage={quoteReadyResults.coverage}
-                section="Quote-ready"
-              />
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {quoteReadyTasks.map((task) => (
-                <div
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4"
-                  key={task.enquiryId}
-                >
-                  <div>
-                    <p className="font-medium">{task.enquiryNumber}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {task.quotedLines} Quoted · {task.notQuotedLines} Not
-                      Feasible · {task.currency}
-                    </p>
-                  </div>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href="/commercial/quotes">Open Quote Register</Link>
+                  <Button className="w-fit" type="submit">
+                    Complete Follow-Up
                   </Button>
-                </div>
-              ))}
-              {!quoteReadyTasks.length ? (
-                <p className="text-sm text-muted-foreground">
-                  No Complete Draft Quotes Are Waiting.
-                </p>
-              ) : null}
+                </FieldGroup>
+              </form>
             </CardContent>
           </Card>
-        </div>
+        ) : null}
 
+        {activeView === "manual-followup" ? (
         <Card>
           <CardHeader>
             <CardTitle>Manual Follow-Up</CardTitle>
@@ -649,32 +702,29 @@ export default async function SalesPage({
             )}
           </CardContent>
         </Card>
+        ) : null}
 
+        {activeView === "followup-history" ? (
         <Card>
           <CardHeader>
             <CardTitle>Follow-Up History</CardTitle>
             <CardDescription>
-              Pending Work Is Due When Its Local Calendar Date Is Today Or
-              Earlier. Completion May Chain The Next Reminder.
+              Every Saved Follow-Up, Including Pending And Completed Work.
             </CardDescription>
-            <BoundedResultNotice
-              actionHref="/commercial/sales/history/followups/export.xlsx"
-              actionLabel="Export complete follow-up history"
-              coverage={followupResults.coverage}
-              section="Follow-up history"
-            />
           </CardHeader>
           <CardContent>
-            <div className="overflow-hidden rounded-3xl border">
-              <Table>
-                <TableHeader>
+            <div className="max-h-[70vh] overflow-auto rounded-md border">
+              <Table excelFilters>
+                <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
-                    <TableHead>Due</TableHead>
-                    <TableHead>Enq</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Channel</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Notes / Completion</TableHead>
+                    <TableHead data-filterable="true">Due</TableHead>
+                    <TableHead data-filterable="true">Enq</TableHead>
+                    <TableHead data-filterable="true">Quote</TableHead>
+                    <TableHead data-filterable="true">Customer UID</TableHead>
+                    <TableHead data-filterable="true">Customer</TableHead>
+                    <TableHead data-filterable="true">Channel</TableHead>
+                    <TableHead data-filterable="true">Status</TableHead>
+                    <TableHead data-filterable="true">Notes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -682,123 +732,99 @@ export default async function SalesPage({
                     <TableRow key={followup.id}>
                       <TableCell>{followup.dueOn}</TableCell>
                       <TableCell>{followup.enquiryNumber}</TableCell>
+                      <TableCell>{followup.quoteNumber ?? "—"}</TableCell>
+                      <TableCell>{followup.customerUid}</TableCell>
                       <TableCell>{followup.companyName}</TableCell>
                       <TableCell>{followup.channel}</TableCell>
-                      <TableCell>
+                      <TableCell data-filter-value={followup.status}>
                         <Badge variant="outline">{followup.status}</Badge>
                       </TableCell>
-                      <TableCell className="min-w-96">
-                        {followup.status === "Pending" &&
-                        followup.id === selectedFollowup?.id ? (
-                          <form action={completeFollowupAction}>
-                            <input
-                              type="hidden"
-                              name="followup_id"
-                              value={followup.id}
-                            />
-                            <input
-                              type="hidden"
-                              name="status"
-                              value="Completed"
-                            />
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              <Input
-                                name="note"
-                                defaultValue={followup.note}
-                                aria-label="Completion Notes"
-                              />
-                              <NativeSelect
-                                name="channel"
-                                defaultValue={followup.channel}
-                                aria-label="Next Channel"
-                              >
-                                {["Email", "Phone", "WhatsApp"].map(
-                                  (channel) => (
-                                    <NativeSelectOption
-                                      key={channel}
-                                      value={channel}
-                                    >
-                                      {channel}
-                                    </NativeSelectOption>
-                                  )
-                                )}
-                              </NativeSelect>
-                              <Input
-                                name="next_due_on"
-                                type="date"
-                                aria-label="Next Due Date"
-                              />
-                              <Input
-                                name="next_note"
-                                placeholder="Next Reminder"
-                                aria-label="Next Notes"
-                              />
-                            </div>
-                            <Button className="mt-2" size="sm" type="submit">
-                              Complete
-                            </Button>
-                          </form>
-                        ) : followup.status === "Pending" ? (
-                          <Button asChild size="sm" variant="outline">
-                            <Link
-                              href={{
-                                pathname: "/commercial/sales",
-                                query: {
-                                  ...(candidateItemId
-                                    ? { candidate_item: candidateItemId }
-                                    : {}),
-                                  followup: followup.id,
-                                },
-                              }}
-                            >
-                              Open Follow-Up
-                            </Link>
-                          </Button>
-                        ) : (
-                          followup.note || "—"
-                        )}
+                      <TableCell className="max-w-96 whitespace-normal">
+                        {followup.note || "—"}
                       </TableCell>
                     </TableRow>
                   ))}
+                  {!followups.length ? (
+                    <TableRow>
+                      <TableCell
+                        className="py-10 text-center text-muted-foreground"
+                        colSpan={8}
+                      >
+                        No Follow-Up History.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
                 </TableBody>
               </Table>
             </div>
           </CardContent>
         </Card>
+        ) : null}
 
+        {activeView === "sent-quotes" ? (
         <Card>
           <CardHeader>
             <CardTitle>Sent Quotes</CardTitle>
             <CardDescription>
-              Sent Quote Rows And Follow-Up Coverage.
+              Saved Sent-Quote History With Follow-Up Coverage.
             </CardDescription>
-            <BoundedResultNotice
-              actionHref="/commercial/sales/history/sent-quotes/export.xlsx"
-              actionLabel="Export complete sent quote history"
-              coverage={sentQuoteResults.coverage}
-              section="Sent quotes"
-            />
           </CardHeader>
-          <CardContent className="grid gap-3">
-            {sentQuoteTasks.map((task) => (
-              <div
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4"
-                key={task.enquiryId}
-              >
-                <div>
-                  <p className="font-medium">{task.enquiryNumber}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {task.companyName} · {task.sentQuoteItems} Sent · Next{" "}
-                    {task.nextFollowupDue ?? "Not Scheduled"}
-                  </p>
-                </div>
-                <Badge variant="secondary">
-                  {task.pendingFollowups} Pending
-                </Badge>
-              </div>
-            ))}
+          <CardContent>
+            <div className="max-h-[70vh] overflow-auto rounded-md border">
+              <Table excelFilters>
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow>
+                    <TableHead data-filterable="true">Sent At</TableHead>
+                    <TableHead data-filterable="true">Enq</TableHead>
+                    <TableHead data-filterable="true">Customer UID</TableHead>
+                    <TableHead data-filterable="true">Customer</TableHead>
+                    <TableHead data-filterable="true">Currency</TableHead>
+                    <TableHead data-filterable="true">Total Lines</TableHead>
+                    <TableHead data-filterable="true">Quote Items Sent</TableHead>
+                    <TableHead data-filterable="true">Next Follow-Up</TableHead>
+                    <TableHead data-filterable="true">Pending Follow-Ups</TableHead>
+                    <TableHead>Quote PDF</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sentQuoteTasks.map((task) => (
+                    <TableRow key={task.enquiryId}>
+                      <TableCell>{task.latestSentAt.toISOString()}</TableCell>
+                      <TableCell>{task.enquiryNumber}</TableCell>
+                      <TableCell>{task.customerUid}</TableCell>
+                      <TableCell>{task.companyName}</TableCell>
+                      <TableCell>{task.currency}</TableCell>
+                      <TableCell>{task.totalLines}</TableCell>
+                      <TableCell>{task.sentQuoteItems}</TableCell>
+                      <TableCell>{task.nextFollowupDue ?? "—"}</TableCell>
+                      <TableCell>{task.pendingFollowups}</TableCell>
+                      <TableCell>
+                        <Button asChild size="sm" variant="outline">
+                          <Link
+                            href={`/commercial/quotes/enquiry/${task.enquiryId}/pdf`}
+                          >
+                            Open PDF
+                          </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!sentQuoteTasks.length ? (
+                    <TableRow>
+                      <TableCell
+                        className="py-10 text-center text-muted-foreground"
+                        colSpan={10}
+                      >
+                        No Sent Quotes Saved.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
+        ) : null}
       </div>
     )
   } finally {
