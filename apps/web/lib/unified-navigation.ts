@@ -442,7 +442,7 @@ export const commercialNavigation = [
   {
     href: "/commercial/design",
     icon: Factory,
-    label: "Design",
+    label: "Design Tasks",
   },
   {
     href: "/commercial/products",

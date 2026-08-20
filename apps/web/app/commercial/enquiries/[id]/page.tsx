@@ -946,10 +946,10 @@ export default async function EnquiryDetailPage({
                             <NativeSelect
                               id={`${item.id}-portfolio-status`}
                               name="portfolio_match_status"
-                              defaultValue="New Design Required"
+                              defaultValue="New Quoted Part"
                             >
-                              <NativeSelectOption value="New Design Required">
-                                New Design Required
+                              <NativeSelectOption value="New Quoted Part">
+                                New Quoted Part
                               </NativeSelectOption>
                               <NativeSelectOption value="Matches Existing Portfolio">
                                 Matches Existing Portfolio

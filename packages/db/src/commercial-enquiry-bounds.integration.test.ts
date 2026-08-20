@@ -210,7 +210,7 @@ beforeAll(async () => {
         next_stage_status, source_system, source_table, source_id
       )
       SELECT enquiry.organization_id, enquiry_item.id, 'Pending',
-        CASE WHEN value = 9 THEN 'Design In Progress' ELSE 'Pending Design' END,
+        CASE WHEN value = 9 THEN 'In Progress' ELSE 'Pending Design' END,
         CASE WHEN value = 8 THEN 'Product Costing' ELSE 'Not Started' END,
         'test', 'commercial_enquiry_bounds', $2 || ':design:' || value::text
       FROM generate_series(8, 9) value

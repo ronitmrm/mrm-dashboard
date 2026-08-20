@@ -34,6 +34,13 @@ function numeric(formData: FormData, name: string, fallback = 0) {
   return value
 }
 
+function nullableNumber(value: string | undefined) {
+  if (!value) return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) throw new Error("BOM values must be numeric")
+  return parsed
+}
+
 async function withWorkflow<T>(
   capability: string,
   returnPath: string,
@@ -361,27 +368,49 @@ export async function saveDesignAction(formData: FormData) {
   const parentLineNumbers = values("bom_parent_line_number")
   const quantities = values("bom_quantity")
   const packageParts = values("bom_package_part")
+  const packagePartUids = values("bom_package_part_uid")
+  const bomItems = values("bom_item")
+  const rodSizes = values("bom_rod_size")
+  const rodTypes = values("bom_rod_type")
+  const grades = values("bom_grade")
+  const manufacturingProcesses = values("bom_manufacturing_process")
+  const castings = values("bom_casting")
+  const pieceWeights = values("bom_piece_weight")
+  const processesRequired = values("bom_process_required")
+  const notes = values("bom_notes")
   const parsedBomLines =
     portfolioMatchStatus === "Matches Existing Portfolio"
       ? []
       : lineNumbers
           .map((lineNumber, index) => ({
+            bomItem: bomItems[index] || null,
+            casting: nullableNumber(castings[index]),
             componentCode: componentCodes[index] ?? "",
             componentItemType: componentItemTypes[index] || "List",
             componentSource: componentSources[index] || "New",
             existingProductId: existingProductIds[index] || null,
+            grade: grades[index] || null,
             lineNumber: Number(lineNumber || index + 1),
+            manufacturingProcess: manufacturingProcesses[index] || null,
+            notes: notes[index] || null,
             packagePart: packageParts[index] || null,
+            packagePartUid: packagePartUids[index] || null,
             parentLineNumber: parentLineNumbers[index]
               ? Number(parentLineNumbers[index])
               : null,
+            pieceWeight: nullableNumber(pieceWeights[index]),
+            processRequired: processesRequired[index] || null,
             quantity: Number(quantities[index] || 1),
+            rodSize: rodSizes[index] || null,
+            rodType: rodTypes[index] || null,
           }))
           .filter(
             (line) =>
               line.componentCode ||
               line.existingProductId ||
               line.packagePart ||
+              line.bomItem ||
+              line.notes ||
               (lineNumbers.length === 1 && line.lineNumber === 1)
           )
   const bomLines =
@@ -414,13 +443,14 @@ export async function saveDesignAction(formData: FormData) {
         componentsRequired: optionalText(formData, "components_required"),
         designBomCompleted:
           optionalText(formData, "design_bom_completed") ??
-          (requiredText(formData, "design_status") === "Design Complete"
+          (optionalText(formData, "design_status") === "Design Complete"
             ? "Yes"
             : "No"),
         designBomRequired:
           optionalText(formData, "design_bom_required") ?? "Yes",
         designRemarks: optionalText(formData, "design_remarks"),
-        designStatus: requiredText(formData, "design_status"),
+        designStatus:
+          optionalText(formData, "design_status") ?? "Pending Design",
         designerName: optionalText(formData, "designer_name"),
         enquiryItemId: requiredText(formData, "enquiry_item_id"),
         fixtureApproxCost: numeric(formData, "fixture_approx_cost"),
@@ -433,7 +463,7 @@ export async function saveDesignAction(formData: FormData) {
           formData,
           "internal_part_sub_category"
         ),
-        itemType: requiredText(formData, "item_type"),
+        itemType: optionalText(formData, "item_type") ?? "List",
         manufacturingProcess: optionalText(formData, "manufacturing_process"),
         matchedProductId: optionalText(formData, "matched_product_id"),
         operationNotes: optionalText(formData, "operation_notes"),
