@@ -37,4 +37,25 @@ describe("Costing module Excel filters", () => {
       '<TableHead data-filterable="true">Component</TableHead>'
     )
   })
+
+  it("uses filtered tables for Sales tasks, follow-ups, and sent quotes", () => {
+    const sales = source("app/commercial/sales/page.tsx")
+
+    expect(sales).not.toContain("Export Sales History")
+    expect(sales).not.toContain("Export Follow-Ups")
+    expect(sales).not.toContain("Export Sent Quotes")
+    expect(sales.match(/<Table excelFilters>/g)).toHaveLength(3)
+    for (const label of [
+      "Task",
+      "Line",
+      "Customer UID",
+      "Status",
+      "Quote Items Sent",
+      "Pending Follow-Ups",
+    ]) {
+      expect(sales).toContain(
+        `<TableHead data-filterable="true">${label}</TableHead>`
+      )
+    }
+  })
 })
