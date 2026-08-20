@@ -26,6 +26,10 @@ import {
 } from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
 
+import {
+  StoreAssetWorkspacePane,
+  StoreAssetWorkspaceTabs,
+} from "@/components/store-asset-workspace-tabs"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { formatIstDateTime, istDateValue } from "@/lib/date-time"
 import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
@@ -123,40 +127,54 @@ export default async function StoreAssetWorkspacePage({
         </Badge>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Info label="Asset Code" value={asset.typeCode} />
-        <Info label="Unit ID" value={asset.assetCode} />
-        <Info
-          label="Manufacturer Serial"
-          value={asset.manufacturerSerialNumber || "Not recorded"}
-        />
-        <Info
-          label="Classification"
-          value={`${asset.assetType} / ${asset.category} / ${asset.subcategory}`}
-        />
-        <Info label="Asset Name" value={asset.assetName} />
-        <Info
-          label="Current Assignment"
-          value={asset.holderName || asset.locationName || asset.holderType}
-        />
-        <Info
-          label="Warranty Until"
-          value={asset.warrantyUntil || "Not recorded"}
-        />
-        <Info
-          label="Purchase Order"
-          value={asset.orderNumber || "Legacy receipt"}
-        />
-        <Info label="Supplier" value={asset.supplierName || "Not recorded"} />
-        <Info
-          label="Purchase Price"
-          value={asset.unitPrice ? `₹ ${asset.unitPrice}` : "Not recorded"}
-        />
-        <Info label="Acquired On" value={asset.acquiredOn || "Not recorded"} />
-      </div>
+      <StoreAssetWorkspaceTabs showLifecycle={canManageLifecycle}>
+        <StoreAssetWorkspacePane tab="overview">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <Info label="Asset Code" value={asset.typeCode} />
+            <Info label="Unit ID" value={asset.assetCode} />
+            <Info
+              label="Manufacturer Serial"
+              value={asset.manufacturerSerialNumber || "Not recorded"}
+            />
+            <Info
+              label="Classification"
+              value={`${asset.assetType} / ${asset.category} / ${asset.subcategory}`}
+            />
+            <Info label="Asset Name" value={asset.assetName} />
+            <Info
+              label="Current Assignment"
+              value={asset.holderName || asset.locationName || asset.holderType}
+            />
+          </div>
+        </StoreAssetWorkspacePane>
 
-      {canManage ? (
-        <div className="grid gap-6 xl:grid-cols-2 2xl:grid-cols-4">
+        <StoreAssetWorkspacePane tab="suppliers">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Info
+              label="Purchase Order"
+              value={asset.orderNumber || "Legacy receipt"}
+            />
+            <Info label="Supplier" value={asset.supplierName || "Not recorded"} />
+            <Info
+              label="Purchase Price"
+              value={asset.unitPrice ? `₹ ${asset.unitPrice}` : "Not recorded"}
+            />
+            <Info label="Acquired On" value={asset.acquiredOn || "Not recorded"} />
+          </div>
+        </StoreAssetWorkspacePane>
+
+        <StoreAssetWorkspacePane tab="documents">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Info
+              label="Warranty Until"
+              value={asset.warrantyUntil || "Not recorded"}
+            />
+          </div>
+        </StoreAssetWorkspacePane>
+
+        {canManage ? (
+          <>
+            <StoreAssetWorkspacePane tab="movement">
           {canMove ? <Card>
             <CardHeader>
               <CardTitle>Move / Assign Asset</CardTitle>
@@ -220,7 +238,9 @@ export default async function StoreAssetWorkspacePage({
               </form>
             </CardContent>
           </Card> : null}
+            </StoreAssetWorkspacePane>
 
+            <StoreAssetWorkspacePane tab="repairs">
           {canRepair ? <Card>
             <CardHeader>
               <CardTitle>Create Repair PO</CardTitle>
@@ -290,7 +310,12 @@ export default async function StoreAssetWorkspacePage({
               </form>
             </CardContent>
           </Card> : null}
+            </StoreAssetWorkspacePane>
 
+            <StoreAssetWorkspacePane
+              className="grid gap-4 xl:grid-cols-2"
+              tab="maintenance"
+            >
           {canMaintain ? <Card>
             <CardHeader>
               <CardTitle>Add Timetable</CardTitle>
@@ -426,10 +451,12 @@ export default async function StoreAssetWorkspacePage({
               </form>
             </CardContent>
           </Card> : null}
-        </div>
-      ) : null}
+            </StoreAssetWorkspacePane>
+          </>
+        ) : null}
 
-      {canManageLifecycle ? (
+        {canManageLifecycle ? (
+          <StoreAssetWorkspacePane tab="lifecycle">
         <Card>
           <CardHeader>
             <CardTitle>Asset Lifecycle</CardTitle>
@@ -465,8 +492,10 @@ export default async function StoreAssetWorkspacePage({
             </form>
           </CardContent>
         </Card>
-      ) : null}
+          </StoreAssetWorkspacePane>
+        ) : null}
 
+        <StoreAssetWorkspacePane tab="repairs">
       <Card>
         <CardHeader>
           <CardTitle>Repair Purchase Orders</CardTitle>
@@ -545,7 +574,9 @@ export default async function StoreAssetWorkspacePage({
           </Table>
         </CardContent>
       </Card>
+        </StoreAssetWorkspacePane>
 
+        <StoreAssetWorkspacePane tab="maintenance">
       <Card>
         <CardHeader>
           <CardTitle>Maintenance & Calibration Timetable</CardTitle>
@@ -600,7 +631,9 @@ export default async function StoreAssetWorkspacePage({
           </Table>
         </CardContent>
       </Card>
+        </StoreAssetWorkspacePane>
 
+        <StoreAssetWorkspacePane tab="movement">
       <Card>
         <CardHeader>
           <CardTitle>Movement Record</CardTitle>
@@ -648,7 +681,9 @@ export default async function StoreAssetWorkspacePage({
           </Table>
         </CardContent>
       </Card>
+        </StoreAssetWorkspacePane>
 
+        <StoreAssetWorkspacePane tab="maintenance">
       <Card>
         <CardHeader>
           <CardTitle>Maintenance History</CardTitle>
@@ -696,7 +731,9 @@ export default async function StoreAssetWorkspacePage({
           </Table>
         </CardContent>
       </Card>
+        </StoreAssetWorkspacePane>
 
+        <StoreAssetWorkspacePane tab="suppliers">
       <Card>
         <CardHeader>
           <CardTitle>Supplier Price History</CardTitle>
@@ -745,7 +782,9 @@ export default async function StoreAssetWorkspacePage({
           </Table>
         </CardContent>
       </Card>
+        </StoreAssetWorkspacePane>
 
+        <StoreAssetWorkspacePane tab="documents">
       <Card>
         <CardHeader>
           <CardTitle>Bills & Guarantee Cards</CardTitle>
@@ -784,6 +823,8 @@ export default async function StoreAssetWorkspacePage({
           ) : null}
         </CardContent>
       </Card>
+        </StoreAssetWorkspacePane>
+      </StoreAssetWorkspaceTabs>
     </div>
   )
 }
