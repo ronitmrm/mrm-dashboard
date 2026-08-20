@@ -9,7 +9,6 @@ import {
 } from "./postgres-runtime"
 import { calculateCosting, type CostingResult } from "./pricing-calculation"
 
-
 type ProductRow = {
   alloy_premium: string
   annealing: string
@@ -146,7 +145,6 @@ const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => ({
 
 const isBomParent = (itemType: string) =>
   ["package", "assembly"].includes(itemType.toLowerCase())
-
 
 async function writeAuditEvent(
   client: PoolClient,
@@ -713,7 +711,9 @@ async function persistQuote(
   return quoteItemId
 }
 
-export function createCommercialCostingRepository(options: RepositoryPoolOptions) {
+export function createCommercialCostingRepository(
+  options: RepositoryPoolOptions
+) {
   const { close, pool } = repositoryPool(options)
 
   const pricingRegisterBatch = async (
@@ -1327,8 +1327,12 @@ export function createCommercialCostingRepository(options: RepositoryPoolOptions
 
     async sendQuote(input: {
       actorUserId?: string | null
+      followupDueOn: string
       quoteItemId: string
     }) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.followupDueOn)) {
+        throw new Error("Follow-Up Date must use YYYY-MM-DD.")
+      }
       return transaction(pool, async (client) => {
         const root = await client.query<{
           company_name: string
@@ -1461,7 +1465,7 @@ export function createCommercialCostingRepository(options: RepositoryPoolOptions
           )
         }
         if (root.rows[0].enquiry_id) {
-          const note = `Quote sent to ${root.rows[0].company_name}. Follow up within 15 days.`
+          const note = `Quote sent to ${root.rows[0].company_name}.`
           await client.query(
             `
               INSERT INTO sales.followups (
@@ -1470,15 +1474,14 @@ export function createCommercialCostingRepository(options: RepositoryPoolOptions
                 source_system, source_table, source_id, source_payload
               )
               SELECT
-                $1, $2, NULL, current_date + 15, 'Email', 'Pending', $3,
+                $1, $2, $6, $7::date, 'Email', 'Pending', $3,
                 $4, $4, 'mrm-dashboard', 'followups', $5,
                 jsonb_build_object('quoteItemId', $6::text)
               WHERE NOT EXISTS (
                 SELECT 1
                 FROM sales.followups followup
-                WHERE followup.enquiry_id = $2
+                WHERE followup.quote_item_id = $6
                   AND followup.status = 'Pending'
-                  AND followup.note = $3
               )
             `,
             [
@@ -1488,6 +1491,7 @@ export function createCommercialCostingRepository(options: RepositoryPoolOptions
               input.actorUserId ?? null,
               randomUUID(),
               input.quoteItemId,
+              input.followupDueOn,
             ]
           )
         }
@@ -1927,7 +1931,7 @@ export function createCommercialCostingRepository(options: RepositoryPoolOptions
       organizationCode: string,
       options: { revisions?: boolean } = {}
     ) {
-const result = await pool.query<PricingRegisterDatabaseRow>(
+      const result = await pool.query<PricingRegisterDatabaseRow>(
         `
           WITH RECURSIVE roots AS (
             SELECT quote.*
@@ -2036,7 +2040,7 @@ const result = await pool.query<PricingRegisterDatabaseRow>(
         `,
         [organizationCode.trim(), options.revisions ?? false]
       )
-return result.rows.map(pricingRegisterRow)
+      return result.rows.map(pricingRegisterRow)
     },
 
     async listPricingRegisterForExport(

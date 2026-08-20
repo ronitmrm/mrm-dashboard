@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import { Input } from "@workspace/ui/components/input"
 import {
   Table,
   TableBody,
@@ -23,6 +24,7 @@ import { sendQuoteAction } from "@/app/commercial/costing/actions"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { istDateValue } from "@/lib/date-time"
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -43,6 +45,7 @@ export default async function QuotesPage() {
   const quotes = await repository
     .listQuotes("MRMPL")
     .finally(() => repository.close())
+  const today = istDateValue()
 
   return (
     <Card>
@@ -122,14 +125,28 @@ export default async function QuotesPage() {
                           </Button>
                         ) : null}
                         {quote.status === "Draft" ? (
-                          <form action={sendQuoteAction}>
+                          <form
+                            action={sendQuoteAction}
+                            className="flex flex-wrap items-end justify-end gap-2"
+                          >
                             <input
                               name="quote_item_id"
                               type="hidden"
                               value={quote.id}
                             />
+                            <label className="grid gap-1 text-left text-xs font-medium">
+                              Follow-Up Date
+                              <Input
+                                aria-label={`Follow-Up Date For ${quote.quoteNumber}`}
+                                className="h-8 w-36"
+                                min={today}
+                                name="followup_due_on"
+                                required
+                                type="date"
+                              />
+                            </label>
                             <Button size="sm" type="submit">
-                              Mark Sent
+                              Send Quote
                             </Button>
                           </form>
                         ) : (

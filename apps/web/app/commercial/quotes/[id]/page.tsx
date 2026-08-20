@@ -12,6 +12,7 @@ import {
   CardTitle,
   MetricCard,
 } from "@workspace/ui/components/card"
+import { Input } from "@workspace/ui/components/input"
 import {
   Table,
   TableBody,
@@ -25,6 +26,7 @@ import { sendQuoteAction } from "@/app/commercial/costing/actions"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { istDateValue } from "@/lib/date-time"
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -54,6 +56,7 @@ export default async function QuoteDetailPage({
   if (!quote) {
     notFound()
   }
+  const today = istDateValue()
 
   return (
     <div className="grid gap-6">
@@ -81,9 +84,22 @@ export default async function QuoteDetailPage({
                 <Link href="/commercial/quotes">Quote Register</Link>
               </Button>
               {quote.status === "Draft" ? (
-                <form action={sendQuoteAction}>
+                <form
+                  action={sendQuoteAction}
+                  className="flex flex-wrap items-end gap-2"
+                >
                   <input name="quote_item_id" type="hidden" value={quote.id} />
-                  <Button type="submit">Mark Sent</Button>
+                  <label className="grid gap-1 text-xs font-medium">
+                    Follow-Up Date
+                    <Input
+                      className="w-40"
+                      min={today}
+                      name="followup_due_on"
+                      required
+                      type="date"
+                    />
+                  </label>
+                  <Button type="submit">Send Quote</Button>
                 </form>
               ) : null}
             </div>

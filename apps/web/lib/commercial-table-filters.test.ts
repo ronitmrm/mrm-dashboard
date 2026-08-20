@@ -53,9 +53,12 @@ describe("Costing module Excel filters", () => {
       "Quote Items Sent",
       "Pending Follow-Ups",
     ]) {
-      expect(sales).toContain(
-        `<TableHead data-filterable="true">${label}</TableHead>`
+      expect(sales).toMatch(
+        new RegExp(
+          `<TableHead data-filterable="true">\\s*${label}\\s*</TableHead>`
+        )
       )
     }
+    expect(sales).not.toContain("Manual Follow-Up")
   })
 })

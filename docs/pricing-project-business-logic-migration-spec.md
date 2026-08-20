@@ -140,7 +140,7 @@ For a nonblank customer part code, current source activation supersedes every ot
 
 ### 6.4 Follow-up workflow
 
-Follow-ups are `Pending` or completed outcomes and have due date, channel and notes. Completing one may create a next follow-up with a new due date/channel. Sending an enquiry quote creates exactly one pending Email follow-up due in 15 days for that enquiry/message (`pricing/src/app/actions.ts:6896-7036`).
+Follow-ups are `Pending` or completed outcomes and have due date, channel and notes. Completing one may create a next follow-up with a new due date/channel. The archived source created one pending Email follow-up due in 15 days when sending an enquiry quote (`pricing/src/app/actions.ts:6896-7036`). The approved MRMPL target workflow now requires Sales to choose the Follow-Up Date while sending the Quote, creates exactly one pending Email task linked to that Quote, and does not expose separate manual Follow-Up creation.
 
 ### 6.5 PO and PI workflow
 

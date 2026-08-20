@@ -7,3 +7,9 @@ values without changing the Customer.
 
 **Commercial Term Master**: The company-wide active values available for Buyer,
 Incoterms, Payment Terms, Shipment Mode, Packaging, and Currency dropdowns.
+
+**Quote Follow-Up Task**: The pending Sales task created atomically when a
+Quote is sent. Sales must choose its Follow-Up Date during Quote send; the task
+retains the sent Quote reference, uses Email as its initial channel, and remains
+in the Sales Task List until completed or continued with a next Follow-Up Date.
+There is no separate manual Follow-Up creation workflow.
