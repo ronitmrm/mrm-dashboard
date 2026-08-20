@@ -1,4 +1,5 @@
 import { commercialNavigationAccess } from "./commercial-capabilities"
+import { storeNavigationAccess } from "./store-capabilities"
 import { listGrantedCapabilities } from "./require-capability"
 import { hrMasterNavigation, hrNavigation } from "../unified-navigation"
 import { productionModuleIsEnabled } from "../production-module"
@@ -12,6 +13,7 @@ export type UnifiedNavigationAccess = {
   hrHrefs: string[]
   operations: boolean
   store: boolean
+  storeHrefs?: string[]
 }
 
 async function readUnifiedNavigationAccess(
@@ -20,7 +22,7 @@ async function readUnifiedNavigationAccess(
   const capabilities = [
     operationsCapability,
     administrationCapability,
-    "store.read",
+    ...storeNavigationAccess.map(([, capability]) => capability),
     ...[...hrMasterNavigation, ...hrNavigation].map(
       ({ requiredCapability }) => requiredCapability
     ),
@@ -43,7 +45,12 @@ async function readUnifiedNavigationAccess(
     operations:
       productionModuleIsEnabled() &&
       grantedCapabilities.has(operationsCapability),
-    store: grantedCapabilities.has("store.read"),
+    store: storeNavigationAccess.some(([, capability]) =>
+      grantedCapabilities.has(capability)
+    ),
+    storeHrefs: storeNavigationAccess
+      .filter(([, capability]) => grantedCapabilities.has(capability))
+      .map(([href]) => href),
   }
 }
 

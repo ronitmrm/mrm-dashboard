@@ -36,11 +36,11 @@ export default async function Page({
   const capabilities = new Set(
     await listGrantedCapabilities(session.user.id, [
       "operations.corrections.write",
-      "store.manage",
-      "store.read",
+      "store.masters.read",
+      "store.masters.write",
     ])
   )
-  const storeMasterData = capabilities.has("store.read")
+  const storeMasterData = capabilities.has("store.masters.read")
     ? await (async () => {
         const repository = createStoreRepository({
           connectionString: readAuthEnvironment().connectionString,
@@ -102,7 +102,7 @@ export default async function Page({
       )}
       navigationAccess={navigationAccess}
       canDeleteMasters={capabilities.has("operations.corrections.write")}
-      canManageStoreMasters={capabilities.has("store.manage")}
+      canManageStoreMasters={capabilities.has("store.masters.write")}
       storeMasterData={storeMasterData}
       user={{ email: session.user.email, name: session.user.name }}
     />

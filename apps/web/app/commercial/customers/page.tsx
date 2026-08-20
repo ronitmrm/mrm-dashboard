@@ -58,13 +58,13 @@ export default async function CustomersPage({
   const showMasterTables = activeView === "masterTables"
   const bounds = pageBounds(params.page, 15)
   const session = await requireCapability(
-    "pricing.masters.read",
+    "pricing.customers.read",
     "/commercial/customers"
   )
   const grantedCapabilities = await listGrantedCapabilities(session.user.id, [
-    "pricing.masters.write",
+    "pricing.customers.write",
   ])
-  const canWrite = grantedCapabilities.includes("pricing.masters.write")
+  const canWrite = grantedCapabilities.includes("pricing.customers.write")
 
   const repository = createCustomerRepository({
     connectionString: readAuthEnvironment().connectionString,

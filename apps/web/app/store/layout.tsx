@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 
 import { CommercialShell } from "@/components/commercial/commercial-shell"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { requireAuthenticatedSession } from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 
 export const dynamic = "force-dynamic"
@@ -11,7 +11,7 @@ export default async function StoreLayout({
 }: {
   children: ReactNode
 }) {
-  const session = await requireCapability("store.read", "/store")
+  const session = await requireAuthenticatedSession("/store")
   const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
 
   return (

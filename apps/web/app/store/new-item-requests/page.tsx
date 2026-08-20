@@ -39,13 +39,12 @@ import {
 
 export default async function NewItemRequestsPage() {
   const session = await requireCapability(
-    "store.read",
+    "store.new_item_requests.read",
     "/store/new-item-requests"
   )
   const capabilities = new Set(
     await listGrantedCapabilities(session.user.id, [
-      "store.manage",
-      "store.requests.write",
+      "store.new_item_requests.write",
     ])
   )
   const repository = createStoreRepository({
@@ -78,7 +77,7 @@ export default async function NewItemRequestsPage() {
         </p>
       </div>
 
-      {capabilities.has("store.requests.write") ? (
+      {capabilities.has("store.new_item_requests.write") ? (
         <Card>
           <CardHeader>
             <CardTitle>Request a New Item</CardTitle>
@@ -161,7 +160,7 @@ export default async function NewItemRequestsPage() {
                 <TableHead>Department</TableHead>
                 <TableHead>Requested By</TableHead>
                 <TableHead>Status</TableHead>
-                {capabilities.has("store.manage") ? (
+                {capabilities.has("store.new_item_requests.write") ? (
                   <TableHead>Resolve</TableHead>
                 ) : null}
               </TableRow>
@@ -182,7 +181,7 @@ export default async function NewItemRequestsPage() {
                   <TableCell>
                     <Badge variant="outline">{request.status}</Badge>
                   </TableCell>
-                  {capabilities.has("store.manage") ? (
+                  {capabilities.has("store.new_item_requests.write") ? (
                     <TableCell>
                       {request.status === "Pending" ? (
                         <form
@@ -235,7 +234,9 @@ export default async function NewItemRequestsPage() {
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={capabilities.has("store.manage") ? 7 : 6}
+                    colSpan={
+                      capabilities.has("store.new_item_requests.write") ? 7 : 6
+                    }
                   >
                     No New Item Requests.
                   </TableCell>

@@ -10,7 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ documentId: string; itemTypeId: string }> }
 ) {
   const { documentId, itemTypeId } = await params
-  await requireCapability("store.read", "/store/items")
+  await requireCapability("store.masters.read", "/store/items")
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

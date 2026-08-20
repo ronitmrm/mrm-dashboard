@@ -17,7 +17,7 @@ import { PricingTable } from "./pricing-table"
 export const dynamic = "force-dynamic"
 
 export default async function PricingPage() {
-  await requireCapability("pricing.quotes.read", "/commercial/pricing")
+  await requireCapability("pricing.pricing.read", "/commercial/pricing")
   const repository = createCommercialCostingRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

@@ -25,9 +25,26 @@ describe("commercial Better Auth capability contract", () => {
         read: "pricing.enquiries.read",
         write: "pricing.enquiries.write",
       },
+      customers: {
+        read: "pricing.customers.read",
+        write: "pricing.customers.write",
+      },
       masters: {
         read: "pricing.masters.read",
         write: "pricing.masters.write",
+      },
+      products: { read: "pricing.products.read" },
+      assemblies: {
+        read: "pricing.assemblies.read",
+        write: "pricing.assemblies.write",
+      },
+      drawingHistory: {
+        read: "pricing.drawing_history.read",
+        write: "pricing.drawing_history.write",
+      },
+      websiteProducts: {
+        read: "pricing.website_products.read",
+        write: "pricing.website_products.write",
       },
       purchaseOrders: {
         read: "pricing.purchase_orders.read",
@@ -37,6 +54,7 @@ describe("commercial Better Auth capability contract", () => {
         read: "pricing.quotes.read",
         write: "pricing.quotes.write",
       },
+      pricing: { read: "pricing.pricing.read" },
       revisions: {
         read: "pricing.revisions.read",
         write: "pricing.revisions.write",
@@ -55,19 +73,19 @@ describe("commercial Better Auth capability contract", () => {
   test("maps current commercial destinations to their narrow read capability", () => {
     expect(commercialNavigationAccess).toEqual([
       ["/commercial", "pricing.dashboard.read"],
-      ["/commercial/customers", "pricing.masters.read"],
+      ["/commercial/customers", "pricing.customers.read"],
       ["/commercial/enquiries", "pricing.enquiries.read"],
       ["/commercial/sales", "pricing.sales.read"],
       ["/commercial/technical-review", "pricing.technical_review.read"],
       ["/commercial/design", "pricing.design.read"],
       ["/commercial/masters", "pricing.masters.read"],
-      ["/commercial/products", "pricing.masters.read"],
-      ["/commercial/assemblies", "pricing.masters.read"],
-      ["/commercial/drawing-history", "pricing.masters.read"],
-      ["/commercial/website-products", "pricing.masters.read"],
+      ["/commercial/products", "pricing.products.read"],
+      ["/commercial/assemblies", "pricing.assemblies.read"],
+      ["/commercial/drawing-history", "pricing.drawing_history.read"],
+      ["/commercial/website-products", "pricing.website_products.read"],
       ["/commercial/costing", "pricing.costing.read"],
       ["/commercial/quotes", "pricing.quotes.read"],
-      ["/commercial/pricing", "pricing.quotes.read"],
+      ["/commercial/pricing", "pricing.pricing.read"],
       ["/commercial/orders", "pricing.purchase_orders.read"],
       ["/commercial/revisions", "pricing.revisions.read"],
       ["/commercial/corrections", "pricing.corrections.read"],

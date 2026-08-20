@@ -37,12 +37,12 @@ export default async function AssembliesPage({
   searchParams: Promise<{ component?: string; parent?: string }>
 }) {
   const session = await requireCapability(
-    "pricing.masters.read",
+    "pricing.assemblies.read",
     "/commercial/assemblies"
   )
   const canWrite = (
-    await listGrantedCapabilities(session.user.id, ["pricing.masters.write"])
-  ).includes("pricing.masters.write")
+    await listGrantedCapabilities(session.user.id, ["pricing.assemblies.write"])
+  ).includes("pricing.assemblies.write")
   const repository = createProductRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

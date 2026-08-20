@@ -1,3 +1,8 @@
+import {
+  legacyPermissionKeys,
+  pageAccessCatalog,
+} from "../../../lib/auth/page-access-catalog"
+
 export type PermissionOption = {
   key: string
   module: string
@@ -8,7 +13,9 @@ export type PermissionAccessLevel = "full" | "none" | "read"
 
 export type PermissionAccessRow = {
   fullPermissionKeys: string[]
+  href: string | null
   id: string
+  kind: "page" | "task"
   label: string
   module: string
   readPermissionKeys: string[]
@@ -33,6 +40,37 @@ function taskLabel(permission: PermissionOption) {
 export function permissionAccessRows(
   permissions: readonly PermissionOption[]
 ): PermissionAccessRow[] {
+  const permissionKeys = new Set(permissions.map(({ key }) => key))
+  const pagePermissionKeys = new Set<string>()
+  const pageRows = pageAccessCatalog.flatMap((page) => {
+    const hasRead = permissionKeys.has(page.readPermissionKey)
+    const hasWrite = page.writePermissionKey
+      ? permissionKeys.has(page.writePermissionKey)
+      : false
+    if (!hasRead && !hasWrite) return []
+    pagePermissionKeys.add(page.readPermissionKey)
+    if (page.writePermissionKey) pagePermissionKeys.add(page.writePermissionKey)
+    const readPermissionKeys = hasRead ? [page.readPermissionKey] : []
+    const fullPermissionKeys = [
+      ...readPermissionKeys,
+      ...(hasWrite && page.writePermissionKey ? [page.writePermissionKey] : []),
+    ]
+    const supportedLevels: PermissionAccessLevel[] = ["none"]
+    if (hasRead) supportedLevels.push("read")
+    if (hasWrite) supportedLevels.push("full")
+    return [
+      {
+        fullPermissionKeys,
+        href: page.href,
+        id: `page:${page.id}`,
+        kind: "page" as const,
+        label: page.label,
+        module: page.module,
+        readPermissionKeys,
+        supportedLevels,
+      },
+    ]
+  })
   const groups = new Map<
     string,
     {
@@ -43,6 +81,12 @@ export function permissionAccessRows(
   >()
 
   for (const permission of permissions) {
+    if (
+      pagePermissionKeys.has(permission.key) ||
+      legacyPermissionKeys.has(permission.key)
+    ) {
+      continue
+    }
     const { id, kind } = permissionKind(permission.key)
     const group = groups.get(id) ?? {
       full: [],
@@ -54,7 +98,7 @@ export function permissionAccessRows(
     groups.set(id, group)
   }
 
-  return [...groups.entries()]
+  const taskRows = [...groups.entries()]
     .map(([id, group]) => {
       const readPermissionKeys = group.read.map(({ key }) => key).sort()
       const writePermissionKeys = group.full.map(({ key }) => key).sort()
@@ -67,18 +111,21 @@ export function permissionAccessRows(
       if (hasWrite) supportedLevels.push("full")
       return {
         fullPermissionKeys: [...readPermissionKeys, ...writePermissionKeys],
+        href: null,
         id,
+        kind: "task" as const,
         label: taskLabel(labelSource),
         module: group.module,
         readPermissionKeys,
         supportedLevels,
       }
     })
-    .sort(
-      (left, right) =>
-        left.module.localeCompare(right.module) ||
-        left.label.localeCompare(right.label)
-    )
+  return [...pageRows, ...taskRows].sort(
+    (left, right) =>
+      left.module.localeCompare(right.module) ||
+      left.kind.localeCompare(right.kind) ||
+      left.label.localeCompare(right.label)
+  )
 }
 
 export function permissionKeysForSelections(

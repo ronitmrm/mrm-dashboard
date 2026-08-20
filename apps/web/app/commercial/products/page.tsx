@@ -32,7 +32,7 @@ export default async function ProductsPage({
 }: {
   searchParams: Promise<{ page?: string | string[] }>
 }) {
-  await requireCapability("pricing.masters.read", "/commercial/products")
+  await requireCapability("pricing.products.read", "/commercial/products")
   const bounds = pageBounds((await searchParams).page, 25)
 
   const repository = createProductRepository({

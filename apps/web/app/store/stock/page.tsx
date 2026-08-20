@@ -47,17 +47,18 @@ export default async function StoreStockPage({
     requestNumber?: string | string[]
   }>
 }) {
-  const session = await requireCapability("store.read", "/store/stock")
+  const session = await requireCapability("store.stock.read", "/store/stock")
   const capabilities = new Set(
     await listGrantedCapabilities(session.user.id, [
-      "store.manage",
+      "store.stock.write",
       "store.requests.write",
+      "store.asset_history.read",
     ])
   )
   const params = await searchParams
   const requestedMode = firstValue(params.mode)
   const mode =
-    requestedMode === "order" && capabilities.has("store.manage")
+    requestedMode === "order" && capabilities.has("store.stock.write")
       ? "order"
       : requestedMode === "request" && capabilities.has("store.requests.write")
         ? "request"
@@ -107,7 +108,7 @@ export default async function StoreStockPage({
                   <Link href="/store/stock?mode=request">Request Items</Link>
                 </Button>
               ) : null}
-              {capabilities.has("store.manage") ? (
+              {capabilities.has("store.stock.write") ? (
                 <Button
                   asChild
                   variant={mode === "order" ? "default" : "outline"}
@@ -190,12 +191,16 @@ export default async function StoreStockPage({
                       </TableCell>
                     ) : null}
                     <TableCell className="font-medium">
-                      <Link
-                        className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
-                        href={storeAssetWorkspaceHref(item.typeCode)}
-                      >
-                        {item.typeCode}
-                      </Link>
+                      {capabilities.has("store.asset_history.read") ? (
+                        <Link
+                          className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
+                          href={storeAssetWorkspaceHref(item.typeCode)}
+                        >
+                          {item.typeCode}
+                        </Link>
+                      ) : (
+                        item.typeCode
+                      )}
                     </TableCell>
                     <TableCell>
                       {item.assetName}
@@ -217,15 +222,19 @@ export default async function StoreStockPage({
                       {item.trackingMode === "SERIALIZED" ? (
                         item.availableUnitIds.length ? (
                           <div className="flex min-w-32 flex-col gap-1">
-                            {item.availableUnitIds.map((unitId) => (
-                              <Link
-                                className="font-medium underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
-                                href={storeAssetWorkspaceHref(unitId)}
-                                key={unitId}
-                              >
-                                {unitId}
-                              </Link>
-                            ))}
+                            {item.availableUnitIds.map((unitId) =>
+                              capabilities.has("store.asset_history.read") ? (
+                                <Link
+                                  className="font-medium underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
+                                  href={storeAssetWorkspaceHref(unitId)}
+                                  key={unitId}
+                                >
+                                  {unitId}
+                                </Link>
+                              ) : (
+                                <span key={unitId}>{unitId}</span>
+                              )
+                            )}
                           </div>
                         ) : (
                           "None available"

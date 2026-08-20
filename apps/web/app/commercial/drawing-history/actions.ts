@@ -23,7 +23,7 @@ function quantity(formData: FormData, key: string) {
 
 export async function updateDrawingHistoryAction(formData: FormData) {
   const session = await requireCapability(
-    "pricing.masters.write",
+    "pricing.drawing_history.write",
     drawingHistoryPath
   )
   const connectionString = readAuthEnvironment().connectionString

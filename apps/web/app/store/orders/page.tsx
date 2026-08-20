@@ -39,10 +39,15 @@ import {
 import { receiveStoreStockAction } from "../actions"
 
 export default async function StoreOrdersPage() {
-  const session = await requireCapability("store.read", "/store/orders")
+  const session = await requireCapability(
+    "store.purchase_register.read",
+    "/store/orders"
+  )
   const canManage = (
-    await listGrantedCapabilities(session.user.id, ["store.manage"])
-  ).includes("store.manage")
+    await listGrantedCapabilities(session.user.id, [
+      "store.purchase_register.write",
+    ])
+  ).includes("store.purchase_register.write")
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

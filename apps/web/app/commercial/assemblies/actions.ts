@@ -18,7 +18,7 @@ function text(formData: FormData, name: string) {
 
 export async function addBomLineAction(formData: FormData) {
   const session = await requireCapability(
-    "pricing.masters.write",
+    "pricing.assemblies.write",
     assembliesPath
   )
   const quantity = Number(text(formData, "quantity"))
