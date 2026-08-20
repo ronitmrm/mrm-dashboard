@@ -438,6 +438,19 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       technicalRemarks: "Feasible after clarification.",
     })
 
+    const technicalQueue =
+      await repository.listTechnicalReviewQueueBounded("MRMPL")
+    expect(
+      technicalQueue.rows.some(
+        (queueItem) => queueItem.enquiryItemId === line.id
+      )
+    ).toBe(false)
+
+    const designQueue = await repository.listDesignQueueBounded("MRMPL")
+    expect(
+      designQueue.rows.some((queueItem) => queueItem.enquiryItemId === line.id)
+    ).toBe(true)
+
     const quotedPartUid = `Q-${suffix}`
     await repository.saveDesign({
       bomLines: [
