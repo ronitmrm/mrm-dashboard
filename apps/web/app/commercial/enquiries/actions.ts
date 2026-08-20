@@ -22,7 +22,7 @@ import {
 } from "./enquiry-workbook"
 
 const enquiriesPath = "/commercial/enquiries"
-
+const technicalReviewPath = "/commercial/technical-review"
 
 function numeric(formData: FormData, name: string, fallback = 0) {
   const raw = optionalText(formData, name)
@@ -280,6 +280,8 @@ export async function handOverEnquiryAction(formData: FormData) {
 
 export async function updateTechnicalReviewAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
+  const enquiryItemId = requiredText(formData, "enquiry_item_id")
+  const status = requiredText(formData, "technical_review_status")
   const checklistKeys = [
     "drawing_available",
     "grade_material_clear",
@@ -290,22 +292,29 @@ export async function updateTechnicalReviewAction(formData: FormData) {
   ]
   await withWorkflow(
     "pricing.technical_review.write",
-    `${enquiriesPath}/${enquiryId}`,
+    `${technicalReviewPath}/${enquiryItemId}`,
     (workflow, actorUserId) =>
       workflow.updateTechnicalReview({
         actorUserId,
         checklist: Object.fromEntries(
           checklistKeys.map((key) => [key, formData.get(key) === "on"])
         ),
-        enquiryItemId: requiredText(formData, "enquiry_item_id"),
+        enquiryItemId,
         feasibilityReason: optionalText(formData, "feasibility_reason"),
         grade: optionalText(formData, "grade"),
         missingInformation: optionalText(formData, "missing_information"),
-        status: requiredText(formData, "technical_review_status"),
+        status,
         technicalRemarks: optionalText(formData, "technical_remarks"),
       })
   )
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
+  revalidatePath(technicalReviewPath)
+  revalidatePath(`${technicalReviewPath}/${enquiryItemId}`)
+  revalidatePath("/commercial/design")
+  if (["Feasible", "Duplicate / Existing Product"].includes(status)) {
+    redirect(`/commercial/design?item=${enquiryItemId}`)
+  }
+  if (status !== "Pending Review") redirect(technicalReviewPath)
 }
 
 export async function completeSalesClarificationAction(formData: FormData) {

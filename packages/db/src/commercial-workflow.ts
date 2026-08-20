@@ -2668,8 +2668,9 @@ export function createCommercialWorkflowRepository(
           WHERE organization.code = $1
             AND enquiry_item.linked_enquiry_item_id IS NULL
             AND enquiry.technical_handover_status = 'Handed Over'
-            AND enquiry_item.technical_review_status
-              <> 'Need Sales Confirmation'
+            AND enquiry_item.technical_review_status IN (
+              'Pending Review', 'Need Clarification'
+            )
             AND NOT EXISTS (
               SELECT 1 FROM sales.clarification_tasks sales_clarification
               WHERE sales_clarification.enquiry_item_id = enquiry_item.id
@@ -5069,8 +5070,9 @@ export function createCommercialWorkflowRepository(
           WHERE lower(organization.code) = lower($1)
             AND enquiry_item.linked_enquiry_item_id IS NULL
             AND enquiry.technical_handover_status = 'Handed Over'
-            AND enquiry_item.technical_review_status
-              <> 'Need Sales Confirmation'
+            AND enquiry_item.technical_review_status IN (
+              'Pending Review', 'Need Clarification'
+            )
             AND NOT EXISTS (
               SELECT 1 FROM sales.clarification_tasks sales_clarification
               WHERE sales_clarification.enquiry_item_id = enquiry_item.id
