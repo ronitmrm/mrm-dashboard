@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { Pool, PoolClient } from "pg"
 
+import { boundedResult } from "./commercial-bounds"
 import {
   repositoryPool,
   withTransaction as transaction,
@@ -29,6 +30,7 @@ type ProductRow = {
   machining_cost: string
   machining_price_per_piece: string
   marking: string
+  machine_type_id: string | null
   material_grade_id: string | null
   organization_id: string
   overhead_cost: string
@@ -38,12 +40,15 @@ type ProductRow = {
   product_cost_inr: string
   production_type: string | null
   rejection_percent: string
+  remarks: string | null
+  rod_size: string | null
   rod_type_id: string | null
   sealant: string
   uid: string
   uid_kind: string
   washing: string
   weight_100_pcs: string
+  source_payload: Record<string, unknown>
 }
 
 type QuoteInputs = {
@@ -292,6 +297,83 @@ function productSnapshot(product: ProductRow) {
     uid: product.uid,
     washing: asNumber(product.washing),
     weight100Pcs: asNumber(product.weight_100_pcs),
+  }
+}
+
+function costingProcesses(sourcePayload: Record<string, unknown>) {
+  const firstMaterialLine = sourcePayload.firstMaterialLine
+  const firstMaterialRecord =
+    firstMaterialLine && typeof firstMaterialLine === "object"
+      ? (firstMaterialLine as Record<string, unknown>)
+      : null
+  const processText =
+    firstMaterialRecord?.process_required ??
+    firstMaterialRecord?.manufacturing_process ??
+    sourcePayload.process_required ??
+    sourcePayload.manufacturing_process
+  return typeof processText === "string"
+    ? processText
+        .replace(/^(package\s+process|process)\s*:\s*/i, "")
+        .split(/[,;\n]+/)
+        .map((process) => process.trim())
+        .filter(Boolean)
+    : []
+}
+
+function productCostingProduct(
+  row: ProductRow & {
+    machine_type_name: string | null
+    material_alloy_premium: string | null
+    material_extrusion_cost: string | null
+    material_grade_name: string | null
+    rod_type_name: string | null
+  }
+) {
+  return {
+    alloyPremium:
+      asNumber(row.alloy_premium) === 0
+        ? asNumber(row.material_alloy_premium)
+        : asNumber(row.alloy_premium),
+    annealing: asNumber(row.annealing),
+    assemblyOperationCost: asNumber(row.assembly_operation_cost),
+    buffing: asNumber(row.buffing),
+    burningLossPercent: asNumber(row.burning_loss_percent),
+    casting: asNumber(row.casting, 1),
+    checking: asNumber(row.checking),
+    deburring: asNumber(row.deburring),
+    description: row.description,
+    directPurchasePricePerKg: asNumber(row.direct_purchase_price_per_kg),
+    directPurchasePricePerPiece: asNumber(row.direct_purchase_price_per_piece),
+    extrusionCost:
+      asNumber(row.extrusion_cost) === 0
+        ? asNumber(row.material_extrusion_cost)
+        : asNumber(row.extrusion_cost),
+    forgingCost: asNumber(row.forging_cost),
+    id: row.id,
+    itemType: row.item_type,
+    lifecycleStatus: row.lifecycle_status,
+    machineTypeId: row.machine_type_id,
+    machineTypeName: row.machine_type_name,
+    machiningCost: asNumber(row.machining_cost),
+    machiningPricePerPiece: asNumber(row.machining_price_per_piece),
+    marking: asNumber(row.marking),
+    materialGrade: row.material_grade_name,
+    overheadCost: asNumber(row.overhead_cost),
+    piecesPerKg: asNumber(row.pieces_per_kg),
+    plating: asNumber(row.plating),
+    pricingMethod: row.pricing_method,
+    processesRequired: costingProcesses(row.source_payload ?? {}),
+    productCostInr: asNumber(row.product_cost_inr),
+    productionType: row.production_type,
+    rejectionPercent: asNumber(row.rejection_percent),
+    remarks: row.remarks,
+    rodSize: row.rod_size,
+    rodType: row.rod_type_name,
+    sealant: asNumber(row.sealant),
+    uid: row.uid,
+    uidKind: row.uid_kind,
+    washing: asNumber(row.washing),
+    weight100Pcs: asNumber(row.weight_100_pcs),
   }
 }
 
@@ -870,6 +952,218 @@ export function createCommercialCostingRepository(
   return {
     close,
 
+    async getProductCostingProduct(organizationCode: string, itemId: string) {
+      const result = await pool.query<
+        ProductRow & {
+          machine_type_name: string | null
+          material_alloy_premium: string | null
+          material_extrusion_cost: string | null
+          material_grade_name: string | null
+          rod_type_name: string | null
+        }
+      >(
+        `
+          SELECT item.*, grade.name AS material_grade_name,
+            rod_type.name AS rod_type_name,
+            machine_type.name AS machine_type_name,
+            material_rate.alloy_premium AS material_alloy_premium,
+            material_rate.extrusion_cost AS material_extrusion_cost
+          FROM catalog.items item
+          JOIN core.organizations organization
+            ON organization.id = item.organization_id
+          LEFT JOIN catalog.material_grades grade
+            ON grade.id = item.material_grade_id
+          LEFT JOIN catalog.rod_types rod_type
+            ON rod_type.id = item.rod_type_id
+          LEFT JOIN catalog.machine_types machine_type
+            ON machine_type.id = item.machine_type_id
+          LEFT JOIN LATERAL (
+            SELECT rate.alloy_premium, rate.extrusion_cost
+            FROM sales.material_rates rate
+            WHERE rate.organization_id = item.organization_id
+              AND rate.material_grade_id = item.material_grade_id
+              AND rate.rod_type_id = item.rod_type_id
+              AND rate.active
+            ORDER BY rate.effective_on DESC, rate.created_at DESC
+            LIMIT 1
+          ) material_rate ON true
+          WHERE lower(organization.code) = lower($1) AND item.id = $2
+        `,
+        [organizationCode.trim(), itemId]
+      )
+      return result.rows[0] ? productCostingProduct(result.rows[0]) : null
+    },
+
+    async listProductCostingTasksBounded(
+      organizationCode: string,
+      requestedLimit = 200
+    ) {
+      const limit = Math.min(Math.max(Math.floor(requestedLimit), 1), 200)
+      const result = await pool.query<{
+        company_name: string | null
+        created_at: Date
+        description: string
+        detail: string
+        enquiry_item_id: string | null
+        item_id: string | null
+        next_stage_status: string
+        reference: string
+        task_id: string
+        task_type: string
+        uid: string
+      }>(
+        `
+          WITH organization AS (
+            SELECT id FROM core.organizations
+            WHERE lower(code) = lower($1)
+          ), queue AS (
+            SELECT revision.id AS task_id,
+              'Product Parameter Bulk Revision'::text AS task_type,
+              revision.revision_number AS reference,
+              customer.company_name, 'Multiple Products'::text AS uid,
+              revision.reason AS description,
+              revision.revision_route AS detail, revision.status,
+              NULL::uuid AS enquiry_item_id, NULL::uuid AS item_id,
+              revision.created_at, 1 AS sort_order
+            FROM sales.bulk_price_revisions revision
+            LEFT JOIN sales.customers customer ON customer.id = revision.customer_id
+            WHERE revision.organization_id = (SELECT id FROM organization)
+              AND revision.revision_route = 'Product Parameter Bulk Revision'
+              AND revision.status NOT IN ('Completed', 'Pending Customer Costing')
+
+            UNION ALL
+
+            SELECT design.id, 'Product Parameter Costing',
+              enquiry.enquiry_number || ' / Line ' || enquiry_item.line_number,
+              customer.company_name, item.uid, item.description,
+              item.item_type, design.next_stage_status,
+              design.enquiry_item_id, item.id, design.updated_at, 2
+            FROM sales.design_tasks design
+            JOIN sales.enquiry_items enquiry_item
+              ON enquiry_item.id = design.enquiry_item_id
+            JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+            JOIN sales.customers customer ON customer.id = enquiry.customer_id
+            JOIN LATERAL (
+              SELECT candidate.* FROM catalog.items candidate
+              WHERE candidate.organization_id = enquiry.organization_id
+                AND (
+                  candidate.id = enquiry_item.item_id
+                  OR (
+                    enquiry_item.item_id IS NULL
+                    AND lower(candidate.uid) = lower(design.quoted_part_uid)
+                  )
+                )
+              ORDER BY CASE WHEN candidate.id = enquiry_item.item_id THEN 0 ELSE 1 END
+              LIMIT 1
+            ) item ON true
+            WHERE enquiry.organization_id = (SELECT id FROM organization)
+              AND design.matched_product_id IS NULL
+              AND design.design_status IN ('Design Complete', 'Not Required')
+              AND design.next_stage_status = 'Product Costing'
+
+            UNION ALL
+
+            SELECT ecn.id, 'ECN Product Parameter Costing', ecn.ecn_number,
+              NULL, item.uid, item.description, ecn.reason, ecn.status,
+              NULL, item.id, ecn.updated_at, 3
+            FROM sales.engineering_change_notes ecn
+            JOIN catalog.items item ON item.id = ecn.item_id
+            WHERE ecn.organization_id = (SELECT id FROM organization)
+              AND ecn.status = 'Pending Product Costing'
+          )
+          SELECT task_id, task_type, reference, company_name, uid, description,
+            detail, status AS next_stage_status, enquiry_item_id, item_id,
+            created_at
+          FROM queue
+          ORDER BY sort_order, created_at DESC, task_id
+          LIMIT $2
+        `,
+        [organizationCode.trim(), limit + 1]
+      )
+      return boundedResult(
+        result.rows.map((row) => ({
+          companyName: row.company_name,
+          description: row.description,
+          detail: row.detail,
+          enquiryItemId: row.enquiry_item_id,
+          itemId: row.item_id,
+          nextStageStatus: row.next_stage_status,
+          reference: row.reference,
+          taskId: row.task_id,
+          taskType: row.task_type,
+          uid: row.uid,
+        })),
+        limit,
+        result.rows.length > limit
+      )
+    },
+
+    async getProductCostingTaskSummary(organizationCode: string) {
+      const result = await pool.query<{
+        ecn: string
+        new_product_costing: string
+        product_bulk_revisions: string
+      }>(
+        `
+          SELECT
+            (
+              SELECT count(*)::text
+              FROM sales.design_tasks design
+              JOIN sales.enquiry_items enquiry_item
+                ON enquiry_item.id = design.enquiry_item_id
+              JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+              WHERE enquiry.organization_id = organization.id
+                AND design.matched_product_id IS NULL
+                AND design.design_status IN ('Design Complete', 'Not Required')
+                AND design.next_stage_status = 'Product Costing'
+            ) AS new_product_costing,
+            (
+              SELECT count(*)::text FROM sales.bulk_price_revisions revision
+              WHERE revision.organization_id = organization.id
+                AND revision.revision_route = 'Product Parameter Bulk Revision'
+                AND revision.status NOT IN ('Completed', 'Pending Customer Costing')
+            ) AS product_bulk_revisions,
+            (
+              SELECT count(*)::text FROM sales.engineering_change_notes ecn
+              WHERE ecn.organization_id = organization.id
+                AND ecn.status = 'Pending Product Costing'
+            ) AS ecn
+          FROM core.organizations organization
+          WHERE lower(organization.code) = lower($1)
+        `,
+        [organizationCode.trim()]
+      )
+      const row = result.rows[0] ?? {
+        ecn: "0",
+        new_product_costing: "0",
+        product_bulk_revisions: "0",
+      }
+      const newProductCosting = Number(row.new_product_costing)
+      const productBulkRevisions = Number(row.product_bulk_revisions)
+      const ecn = Number(row.ecn)
+      return {
+        ecn,
+        newProductCosting,
+        productBulkRevisions,
+        total: newProductCosting + productBulkRevisions + ecn,
+      }
+    },
+
+    async listProductCostingReferenceData(organizationCode: string) {
+      const result = await pool.query<{ id: string; name: string }>(
+        `
+          SELECT machine_type.id, machine_type.name
+          FROM catalog.machine_types machine_type
+          JOIN core.organizations organization
+            ON organization.id = machine_type.organization_id
+          WHERE lower(organization.code) = lower($1)
+          ORDER BY lower(machine_type.name), machine_type.id
+        `,
+        [organizationCode.trim()]
+      )
+      return { machineTypes: result.rows }
+    },
+
     async updateProductCostParameters(input: {
       action?: "complete" | "in_progress"
       actorUserId?: string | null
@@ -884,6 +1178,7 @@ export function createCommercialCostingRepository(
       extrusionCost?: number | null
       forgingCost?: number
       itemId: string
+      machineTypeId?: string | null
       machiningCost?: number
       marking?: number
       overheadCost?: number
@@ -931,11 +1226,13 @@ export function createCommercialCostingRepository(
             : weight100Pcs > 0
               ? 1000 / weight100Pcs
               : 0
-        const machiningCost =
-          input.machiningCost ?? asNumber(product.machining_cost)
+        const pricingMethod = input.pricingMethod ?? product.pricing_method
+        const isDirectPurchase = pricingMethod === "Direct Purchase"
+        const machiningCost = isDirectPurchase
+          ? 0
+          : (input.machiningCost ?? asNumber(product.machining_cost))
         const machiningPricePerPiece =
           piecesPerKg > 0 ? machiningCost / piecesPerKg : 0
-        const pricingMethod = input.pricingMethod ?? product.pricing_method
         const directPurchasePricePerKg =
           input.directPurchasePricePerKg ??
           asNumber(product.direct_purchase_price_per_kg)
@@ -970,25 +1267,29 @@ export function createCommercialCostingRepository(
           : pricingMethod === "Direct Purchase"
             ? directPurchasePricePerPiece
             : machiningPricePerPiece
-        const alloyPremium =
-          input.alloyPremium ??
-          asNumber(
-            materialRate?.rows[0]?.alloy_premium,
-            asNumber(product.alloy_premium)
-          )
-        const extrusionCost =
-          input.extrusionCost ??
-          asNumber(
-            materialRate?.rows[0]?.extrusion_cost,
-            asNumber(product.extrusion_cost)
-          )
+        const alloyPremium = isDirectPurchase
+          ? 0
+          : (input.alloyPremium ??
+            asNumber(
+              materialRate?.rows[0]?.alloy_premium,
+              asNumber(product.alloy_premium)
+            ))
+        const extrusionCost = isDirectPurchase
+          ? 0
+          : (input.extrusionCost ??
+            asNumber(
+              materialRate?.rows[0]?.extrusion_cost,
+              asNumber(product.extrusion_cost)
+            ))
         const forgingCost =
+          isDirectPurchase ||
           product.production_type?.toLowerCase() === "barstock"
             ? 0
             : (input.forgingCost ?? asNumber(product.forging_cost))
-        const overheadCost = isPackage
-          ? 0
-          : (input.overheadCost ?? asNumber(product.overhead_cost))
+        const overheadCost =
+          isPackage || isDirectPurchase
+            ? 0
+            : (input.overheadCost ?? asNumber(product.overhead_cost))
         const updated = await client.query<ProductRow>(
           `
             UPDATE catalog.items
@@ -1002,9 +1303,10 @@ export function createCommercialCostingRepository(
               deburring = $17, buffing = $18, sealant = $19,
               assembly_operation_cost = $20, overhead_cost = $21,
               rejection_percent = $22, burning_loss_percent = $23,
-              remarks = $24, updated_by_user_id = $25, updated_at = now(),
+              machine_type_id = $24, remarks = $25,
+              updated_by_user_id = $26, updated_at = now(),
               row_version = row_version + 1
-            WHERE id = $26
+            WHERE id = $27
             RETURNING *
           `,
           [
@@ -1019,18 +1321,30 @@ export function createCommercialCostingRepository(
             productCostInr,
             machiningPricePerPiece,
             machiningCost,
-            input.washing ?? asNumber(product.washing),
-            input.checking ?? asNumber(product.checking),
-            input.marking ?? asNumber(product.marking),
-            input.plating ?? asNumber(product.plating),
-            input.annealing ?? asNumber(product.annealing),
-            input.deburring ?? asNumber(product.deburring),
-            input.buffing ?? asNumber(product.buffing),
-            input.sealant ?? asNumber(product.sealant),
+            isDirectPurchase ? 0 : (input.washing ?? asNumber(product.washing)),
+            isDirectPurchase
+              ? 0
+              : (input.checking ?? asNumber(product.checking)),
+            isDirectPurchase ? 0 : (input.marking ?? asNumber(product.marking)),
+            isDirectPurchase ? 0 : (input.plating ?? asNumber(product.plating)),
+            isDirectPurchase
+              ? 0
+              : (input.annealing ?? asNumber(product.annealing)),
+            isDirectPurchase
+              ? 0
+              : (input.deburring ?? asNumber(product.deburring)),
+            isDirectPurchase ? 0 : (input.buffing ?? asNumber(product.buffing)),
+            isDirectPurchase ? 0 : (input.sealant ?? asNumber(product.sealant)),
             assemblyOperationCost,
             overheadCost,
             input.rejectionPercent ?? asNumber(product.rejection_percent),
-            input.burningLossPercent ?? asNumber(product.burning_loss_percent),
+            isDirectPurchase
+              ? 0
+              : (input.burningLossPercent ??
+                asNumber(product.burning_loss_percent)),
+            isDirectPurchase
+              ? null
+              : (input.machineTypeId ?? product.machine_type_id),
             input.remarks ?? null,
             input.actorUserId ?? null,
             product.id,
@@ -1516,7 +1830,11 @@ export function createCommercialCostingRepository(
       })
     },
 
-    async listCostingTasks(organizationCode: string) {
+    async listCostingTasks(
+      organizationCode: string,
+      options: { enquiryItemId?: string; limit?: number } = {}
+    ) {
+      const limit = Math.min(Math.max(Math.floor(options.limit ?? 200), 1), 200)
       const result = await pool.query<{
         alloy_premium: string
         annealing: string
@@ -1598,17 +1916,25 @@ export function createCommercialCostingRepository(
             AND design.next_stage_status IN (
               'Product Costing', 'Product Costing Complete', 'Started'
             )
+            AND ($2::uuid IS NULL OR design.enquiry_item_id = $2)
           ORDER BY enquiry.created_at DESC, enquiry_item.line_number
+          LIMIT $3
         `,
-        [organizationCode.trim()]
+        [organizationCode.trim(), options.enquiryItemId ?? null, limit]
       )
       const bom = await pool.query<{
         depth: number
+        description: string
         item_id: string
         item_type: string
+        lifecycle_status: string
+        line_quantity: string
+        parent_item_id: string
+        product_cost_inr: string
         quantity: string
         root_item_id: string
         uid: string
+        weight_100_pcs: string
       }>(
         `
           WITH RECURSIVE roots AS (
@@ -1647,43 +1973,63 @@ export function createCommercialCostingRepository(
               AND design.next_stage_status IN (
                 'Product Costing', 'Product Costing Complete', 'Started'
               )
+              AND ($2::uuid IS NULL OR design.enquiry_item_id = $2)
+            ORDER BY design.updated_at DESC, design.enquiry_item_id
+            LIMIT $3
           ), tree AS (
-            SELECT roots.root_item_id, line.component_item_id AS item_id,
-              line.quantity::numeric, 1 AS depth
+            SELECT roots.root_item_id, line.parent_item_id,
+              line.component_item_id AS item_id, line.quantity::numeric,
+              line.quantity::numeric AS line_quantity, 1 AS depth
             FROM roots
             JOIN catalog.bom_lines line ON line.parent_item_id = roots.root_item_id
             UNION ALL
-            SELECT tree.root_item_id, line.component_item_id,
-              (tree.quantity * line.quantity)::numeric, tree.depth + 1
+            SELECT tree.root_item_id, line.parent_item_id,
+              line.component_item_id,
+              (tree.quantity * line.quantity)::numeric,
+              line.quantity::numeric, tree.depth + 1
             FROM tree
             JOIN catalog.bom_lines line ON line.parent_item_id = tree.item_id
           )
-          SELECT tree.root_item_id, tree.item_id, tree.quantity, tree.depth,
-            item.uid, item.item_type
+          SELECT tree.root_item_id, tree.parent_item_id, tree.item_id,
+            tree.quantity, tree.line_quantity, tree.depth,
+            item.uid, item.description, item.item_type, item.lifecycle_status,
+            item.product_cost_inr, item.weight_100_pcs
           FROM tree
           JOIN catalog.items item ON item.id = tree.item_id
           ORDER BY tree.root_item_id, tree.depth, item.uid
         `,
-        [organizationCode.trim()]
+        [organizationCode.trim(), options.enquiryItemId ?? null, limit]
       )
       const bomByRoot = new Map<
         string,
         Array<{
           depth: number
+          description: string
           itemId: string
           itemType: string
+          lifecycleStatus: string
+          lineQuantity: number
+          parentItemId: string
+          productCostInr: number
           quantity: number
           uid: string
+          weight100Pcs: number
         }>
       >()
       for (const row of bom.rows) {
         const items = bomByRoot.get(row.root_item_id) ?? []
         items.push({
           depth: row.depth,
+          description: row.description,
           itemId: row.item_id,
           itemType: row.item_type,
+          lifecycleStatus: row.lifecycle_status,
+          lineQuantity: asNumber(row.line_quantity, 1),
+          parentItemId: row.parent_item_id,
+          productCostInr: asNumber(row.product_cost_inr),
           quantity: asNumber(row.quantity),
           uid: row.uid,
+          weight100Pcs: asNumber(row.weight_100_pcs),
         })
         bomByRoot.set(row.root_item_id, items)
       }

@@ -4293,6 +4293,7 @@ export function createCommercialWorkflowRepository(
           package_part_uid: string | null
           parent_line_number: number | null
           piece_weight: string | null
+          process_required: string | null
           quantity: string
           rod_size: string | null
           rod_type: string | null
@@ -4302,7 +4303,7 @@ export function createCommercialWorkflowRepository(
               parent_line_number, component_source, existing_product_id,
               component_item_type, package_part_uid, package_part, rod_size,
               rod_type, grade, manufacturing_process, casting::text,
-              piece_weight::text, design_notes
+              piece_weight::text, process_required, design_notes
             FROM sales.design_bom_lines
             WHERE design_task_id = $1
             ORDER BY line_number
@@ -4314,17 +4315,26 @@ export function createCommercialWorkflowRepository(
           `
             INSERT INTO catalog.items (
               organization_id, uid, description, item_type, production_type,
-              rod_size, weight_100_pcs, casting, remarks, source_system,
-              source_table, source_id, source_payload
+              material_grade_id, rod_type_id, rod_size, weight_100_pcs,
+              casting, remarks, source_system, source_table, source_id,
+              source_payload
             )
             VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9,
-              'mrm-dashboard', 'design_tasks', $10, $11
+              $1, $2, $3, $4, $5,
+              (SELECT id FROM catalog.material_grades
+               WHERE organization_id = $1 AND lower(name) = lower($6)
+               LIMIT 1),
+              (SELECT id FROM catalog.rod_types
+               WHERE organization_id = $1 AND lower(name) = lower($7)
+               LIMIT 1),
+              $8, $9, $10, $11, 'mrm-dashboard', 'design_tasks', $12, $13
             )
             ON CONFLICT (organization_id, lower(uid)) DO UPDATE SET
               description = EXCLUDED.description,
               item_type = EXCLUDED.item_type,
               production_type = EXCLUDED.production_type,
+              material_grade_id = EXCLUDED.material_grade_id,
+              rod_type_id = EXCLUDED.rod_type_id,
               rod_size = EXCLUDED.rod_size,
               weight_100_pcs = EXCLUDED.weight_100_pcs,
               casting = EXCLUDED.casting,
@@ -4340,10 +4350,10 @@ export function createCommercialWorkflowRepository(
             row.description,
             row.item_type,
             row.manufacturing_process,
+            row.item_type === "List" ? (firstLine?.grade ?? null) : null,
+            row.item_type === "List" ? (firstLine?.rod_type ?? null) : null,
             row.item_type === "List" ? (firstLine?.rod_size ?? null) : null,
-            row.item_type === "List"
-              ? asNumber(firstLine?.piece_weight) * 100
-              : 0,
+            row.item_type === "List" ? asNumber(firstLine?.piece_weight) : 0,
             row.item_type === "List" ? asNumber(firstLine?.casting, 1) : 1,
             row.package_process_required ?? row.design_remarks,
             row.id,
@@ -4387,16 +4397,31 @@ export function createCommercialWorkflowRepository(
                 `
                   INSERT INTO catalog.items (
                     organization_id, uid, description, item_type,
-                    production_type, rod_size, weight_100_pcs, casting,
-                    remarks, source_system, source_table, source_id,
-                    source_payload
+                    production_type, material_grade_id, rod_type_id, rod_size,
+                    weight_100_pcs, casting, remarks, source_system,
+                    source_table, source_id, source_payload
                   )
                   VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9,
-                    'mrm-dashboard', 'design_bom_lines', $10, $11
+                    $1, $2, $3, $4, $5,
+                    (SELECT id FROM catalog.material_grades
+                     WHERE organization_id = $1 AND lower(name) = lower($6)
+                     LIMIT 1),
+                    (SELECT id FROM catalog.rod_types
+                     WHERE organization_id = $1 AND lower(name) = lower($7)
+                     LIMIT 1),
+                    $8, $9, $10, $11, 'mrm-dashboard', 'design_bom_lines',
+                    $12, $13
                   )
                   ON CONFLICT (organization_id, lower(uid)) DO UPDATE SET
                     description = EXCLUDED.description,
+                    item_type = EXCLUDED.item_type,
+                    production_type = EXCLUDED.production_type,
+                    material_grade_id = EXCLUDED.material_grade_id,
+                    rod_type_id = EXCLUDED.rod_type_id,
+                    rod_size = EXCLUDED.rod_size,
+                    weight_100_pcs = EXCLUDED.weight_100_pcs,
+                    casting = EXCLUDED.casting,
+                    remarks = EXCLUDED.remarks,
                     source_payload = EXCLUDED.source_payload,
                     updated_at = now(),
                     row_version = catalog.items.row_version + 1
@@ -4409,8 +4434,10 @@ export function createCommercialWorkflowRepository(
                     `${row.description} component ${bomLine.line_number}`,
                   bomLine.component_item_type,
                   bomLine.manufacturing_process,
+                  bomLine.grade,
+                  bomLine.rod_type,
                   bomLine.rod_size,
-                  asNumber(bomLine.piece_weight) * 100,
+                  asNumber(bomLine.piece_weight),
                   asNumber(bomLine.casting, 1),
                   bomLine.design_notes,
                   `${row.id}:${bomLine.line_number}`,

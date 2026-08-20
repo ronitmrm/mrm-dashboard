@@ -166,7 +166,7 @@ describe("unified navigation", () => {
     ).toMatchObject({
       title: "Mechanical Maintenance",
     })
-    expect(commercialNavigation).toHaveLength(17)
+    expect(commercialNavigation).toHaveLength(19)
     expect(
       commercialMasterDataWorkspaceNavigation.map(({ href, label }) => ({
         href,

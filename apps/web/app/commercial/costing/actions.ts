@@ -1,6 +1,9 @@
 "use server"
 
-import { createCommercialCostingRepository } from "@workspace/db"
+import {
+  createCommercialCostingRepository,
+  createCommercialWorkflowRepository,
+} from "@workspace/db"
 import { revalidatePath } from "next/cache"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
@@ -9,6 +12,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { optionalText, requiredText } from "@/lib/form-data"
 
 const costingPath = "/commercial/costing"
+const productCostingPath = "/commercial/product-costing"
 
 function numberValue(formData: FormData, name: string, fallback?: number) {
   const raw = optionalText(formData, name)
@@ -100,6 +104,7 @@ export async function updateProductCostingAction(formData: FormData) {
         extrusionCost: optionalNumber(formData, "extrusion_cost"),
         forgingCost: numberValue(formData, "forging_cost", 0),
         itemId: requiredText(formData, "item_id"),
+        machineTypeId: optionalText(formData, "machine_type_id") ?? null,
         machiningCost: numberValue(formData, "machining_cost", 0),
         marking: numberValue(formData, "marking", 0),
         overheadCost: numberValue(formData, "overhead_cost", 0),
@@ -117,7 +122,32 @@ export async function updateProductCostingAction(formData: FormData) {
       })
   )
   revalidatePath(costingPath)
+  revalidatePath(productCostingPath)
   revalidatePath("/commercial/products")
+}
+
+export async function requestProductCostingDesignClarificationAction(
+  formData: FormData
+) {
+  const session = await requireCapability(
+    commercialCapabilities.costing.write,
+    productCostingPath
+  )
+  const repository = createCommercialWorkflowRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  try {
+    await repository.requestDesignClarification({
+      actorUserId: session.user.id,
+      direction: "Product Costing to Design",
+      enquiryItemId: requiredText(formData, "enquiry_item_id"),
+      message: requiredText(formData, "message"),
+    })
+  } finally {
+    await repository.close()
+  }
+  revalidatePath(productCostingPath)
+  revalidatePath("/commercial/design")
 }
 
 export async function saveQuoteAction(formData: FormData) {
