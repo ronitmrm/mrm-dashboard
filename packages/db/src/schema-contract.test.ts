@@ -304,7 +304,7 @@ afterAll(async () => {
   await pool.end()
 })
 
-test("a representative 0038 database upgrades without changing canonical rows", async () => {
+test("a representative managed 0038 database upgrades with runtime access and canonical rows intact", async () => {
   await migrateDatabase({
     connectionString,
     through: "0038_recruitment_application_cycles.sql",
@@ -391,8 +391,63 @@ test("a representative 0038 database upgrades without changing canonical rows", 
   )
 
   const fingerprintBefore = await representativeUpgradeFingerprint()
+  await migrateDatabase({
+    connectionString,
+    through: "0053_employee_login_access_permissions.sql",
+  })
+  await pool.query(`
+    REVOKE INSERT, UPDATE, DELETE
+      ON identity.employee_links, identity.post_role_assignments
+      FROM mrmpl_web
+  `)
+
+  const restrictedAccess = await pool.query<{
+    employee_link_insert: boolean
+    post_role_insert: boolean
+  }>(`
+    SELECT
+      has_table_privilege(
+        'mrmpl_web', 'identity.employee_links', 'INSERT'
+      ) AS employee_link_insert,
+      has_table_privilege(
+        'mrmpl_web', 'identity.post_role_assignments', 'INSERT'
+      ) AS post_role_insert
+  `)
+  expect(restrictedAccess.rows[0]).toEqual({
+    employee_link_insert: false,
+    post_role_insert: false,
+  })
+
   await migrateDatabase({ connectionString })
   const fingerprintAfter = await representativeUpgradeFingerprint()
+  const restoredAccess = await pool.query<{
+    employee_link_delete: boolean
+    employee_link_insert: boolean
+    employee_link_update: boolean
+    post_role_delete: boolean
+    post_role_insert: boolean
+    post_role_update: boolean
+  }>(`
+    SELECT
+      has_table_privilege(
+        'mrmpl_web', 'identity.employee_links', 'INSERT'
+      ) AS employee_link_insert,
+      has_table_privilege(
+        'mrmpl_web', 'identity.employee_links', 'UPDATE'
+      ) AS employee_link_update,
+      has_table_privilege(
+        'mrmpl_web', 'identity.employee_links', 'DELETE'
+      ) AS employee_link_delete,
+      has_table_privilege(
+        'mrmpl_web', 'identity.post_role_assignments', 'INSERT'
+      ) AS post_role_insert,
+      has_table_privilege(
+        'mrmpl_web', 'identity.post_role_assignments', 'UPDATE'
+      ) AS post_role_update,
+      has_table_privilege(
+        'mrmpl_web', 'identity.post_role_assignments', 'DELETE'
+      ) AS post_role_delete
+  `)
   const preservedHistory = await pool.query<{
     checksum: string
     name: string
@@ -415,6 +470,14 @@ test("a representative 0038 database upgrades without changing canonical rows", 
   `)
 
   expect(fingerprintAfter).toEqual(fingerprintBefore)
+  expect(restoredAccess.rows[0]).toEqual({
+    employee_link_delete: false,
+    employee_link_insert: true,
+    employee_link_update: false,
+    post_role_delete: true,
+    post_role_insert: true,
+    post_role_update: true,
+  })
   expect(preservedHistory.rows).toEqual(priorHistory.rows)
   expect(backfill.rows).toEqual([
     {
