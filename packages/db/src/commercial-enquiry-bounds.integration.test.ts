@@ -251,6 +251,51 @@ describe("bounded enquiry repositories", () => {
     expect(overflow.rows[0]?.enquiryNumber).toBe("EXPORT-0501")
     expect(overflow.rows.at(-1)?.enquiryNumber).toBe("EXPORT-0302")
   })
+
+  test("loads a focused technical review beyond the bounded queue", async () => {
+    const oldest = await pool.query<{ id: string }>(
+      `
+        SELECT item.id
+        FROM sales.enquiry_items item
+        JOIN sales.enquiries enquiry ON enquiry.id = item.enquiry_id
+        JOIN core.organizations organization
+          ON organization.id = enquiry.organization_id
+        WHERE organization.code = $1
+        ORDER BY enquiry.created_at, item.line_number, item.id
+        LIMIT 1
+      `,
+      [exportOrganizationCode]
+    )
+    const enquiryItemId = oldest.rows[0]!.id
+
+    await expect(
+      repository.getTechnicalReviewItem(exportOrganizationCode, enquiryItemId)
+    ).resolves.toMatchObject({
+      enquiryItemId,
+      enquiryNumber: "EXPORT-0001",
+      technicalReviewStatus: "Pending Review",
+    })
+    await expect(
+      repository.getTechnicalReviewItem(emptyOrganizationCode, enquiryItemId)
+    ).resolves.toBeNull()
+  })
+
+  test("summarizes the complete technical-review queue beyond the row cap", async () => {
+    await expect(
+      repository.getTechnicalReviewQueueSummary(exactOrganizationCode)
+    ).resolves.toEqual({
+      needClarification: 0,
+      openReviewTasks: 200,
+      pendingReview: 200,
+    })
+    await expect(
+      repository.getTechnicalReviewQueueSummary(exportOrganizationCode)
+    ).resolves.toEqual({
+      needClarification: 0,
+      openReviewTasks: 501,
+      pendingReview: 501,
+    })
+  })
 })
 
 describe("exhaustive enquiry exports", () => {
