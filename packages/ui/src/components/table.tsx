@@ -11,6 +11,8 @@ import {
 import { cn } from "@workspace/ui/lib/utils"
 import {
   filtersForTableColumns,
+  parsePersistedTableFilters,
+  serializeTableFilters,
   type TableColumnFilters,
   type TableFilterColumn,
 } from "@workspace/ui/lib/table-filter-state"
@@ -24,9 +26,11 @@ import {
 
 type TableProps = React.ComponentProps<"table"> & {
   excelFilters?: boolean
+  filterStorageKey?: string
 }
 
 function headerLabel(cell: HTMLTableCellElement) {
+  if (cell.dataset.filterLabel) return cell.dataset.filterLabel
   const clone = cell.cloneNode(true) as HTMLTableCellElement
   clone.querySelector('[data-slot="table-column-filter-host"]')?.remove()
   return clone.textContent?.trim() ?? ""
@@ -56,11 +60,11 @@ function tableFilterTextParts(node: Node): string[] {
 }
 
 function syncSecondaryPlaceholderVisibility(cell: HTMLTableCellElement) {
-  cell.querySelectorAll<HTMLElement>(tableSecondaryTextSelector).forEach(
-    (element) => {
+  cell
+    .querySelectorAll<HTMLElement>(tableSecondaryTextSelector)
+    .forEach((element) => {
       element.hidden = isTableSecondaryPlaceholder(element.textContent)
-    }
-  )
+    })
 }
 
 function tableSnapshot(table: HTMLTableElement) {
@@ -119,9 +123,16 @@ function sameColumns(left: TableFilterColumn[], right: TableFilterColumn[]) {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
-function Table({ className, excelFilters = true, ...props }: TableProps) {
+function Table({
+  className,
+  excelFilters = true,
+  filterStorageKey,
+  ...props
+}: TableProps) {
   const tableRef = React.useRef<HTMLTableElement>(null)
   const previousColumnsRef = React.useRef<TableFilterColumn[]>([])
+  const hydratedFilterSchemaRef = React.useRef<string | null>(null)
+  const skipNextFilterPersistRef = React.useRef(false)
   const [columns, setColumns] = React.useState<TableFilterColumn[]>([])
   const [filterHosts, setFilterHosts] = React.useState<
     Record<number, HTMLElement>
@@ -159,11 +170,28 @@ function Table({ className, excelFilters = true, ...props }: TableProps) {
         return [[column.index, host]]
       })
     )
-    const applicableFilters = filtersForTableColumns(
+    let applicableFilters = filtersForTableColumns(
       previousColumnsRef.current,
       snapshot.columns,
       filters
     )
+    if (filterStorageKey && snapshot.columns.length) {
+      const schemaKey = `${filterStorageKey}:${JSON.stringify(
+        snapshot.columns.map(({ index, label }) => ({ index, label }))
+      )}`
+      if (hydratedFilterSchemaRef.current !== schemaKey) {
+        try {
+          applicableFilters = parsePersistedTableFilters(
+            window.localStorage.getItem(filterStorageKey),
+            snapshot.columns
+          )
+        } catch {
+          applicableFilters = {}
+        }
+        skipNextFilterPersistRef.current = true
+        hydratedFilterSchemaRef.current = schemaKey
+      }
+    }
     previousColumnsRef.current = snapshot.columns
     if (applicableFilters !== filters) setFilters(applicableFilters)
     setFilterHosts((current) => {
@@ -185,7 +213,7 @@ function Table({ className, excelFilters = true, ...props }: TableProps) {
         return !matchesColumnFilter(value, selected)
       })
     }
-  }, [excelFilters, filters])
+  }, [excelFilters, filterStorageKey, filters])
 
   React.useLayoutEffect(() => {
     refreshTable()
@@ -212,6 +240,26 @@ function Table({ className, excelFilters = true, ...props }: TableProps) {
       for (const row of Array.from(body.rows)) row.hidden = false
     }
   }, [excelFilters])
+
+  React.useEffect(() => {
+    if (!excelFilters || !filterStorageKey || !columns.length) return
+    const schemaKey = `${filterStorageKey}:${JSON.stringify(
+      columns.map(({ index, label }) => ({ index, label }))
+    )}`
+    if (hydratedFilterSchemaRef.current !== schemaKey) return
+    if (skipNextFilterPersistRef.current) {
+      skipNextFilterPersistRef.current = false
+      return
+    }
+    try {
+      window.localStorage.setItem(
+        filterStorageKey,
+        serializeTableFilters(columns, filters)
+      )
+    } catch {
+      // Storage can be unavailable in private or policy-restricted browsers.
+    }
+  }, [columns, excelFilters, filterStorageKey, filters])
 
   return (
     <div className="w-full" data-slot="table-shell">

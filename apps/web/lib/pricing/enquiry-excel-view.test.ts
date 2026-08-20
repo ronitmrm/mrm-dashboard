@@ -1,0 +1,44 @@
+import { describe, expect, test } from "vitest"
+
+import { enquiryExcelViewColumns } from "./enquiry-excel-view"
+
+describe("Pricing enquiry Excel View contract", () => {
+  test("preserves the source workbook column order and provenance", () => {
+    expect(enquiryExcelViewColumns).toEqual([
+      ["enquiryNumber", "ENQ No.", "From enquiry", "mono"],
+      ["lineNumber", "Line", "From enquiry line", undefined],
+      ["customerUid", "Customer UID", "From customer master", "mono"],
+      ["companyName", "Customer", "From customer master", undefined],
+      ["customerPartCode", "Part", "From enquiry line", undefined],
+      ["description", "Description", "From enquiry line", undefined],
+      ["grade", "Grade", "From enquiry line / technical review", undefined],
+      ["quantity", "Qty", "From enquiry line", undefined],
+      ["targetPrice", "Target", "From enquiry line", undefined],
+      ["source", "Source", "From enquiry", undefined],
+      ["priority", "Priority", "From enquiry", undefined],
+      ["buyerName", "Buyer", "From enquiry", undefined],
+      [
+        "drawingReference",
+        "Customer Drawing Reference",
+        "From enquiry line",
+        undefined,
+      ],
+      [
+        "drawingFileName",
+        "Customer Drawing File",
+        "From enquiry line upload",
+        undefined,
+      ],
+      ["currentStatus", "Current Status", "Calculated from workflow", "status"],
+      [
+        "designPartNumber",
+        "Q / C / Product No.",
+        "From design / matched product",
+        "mono",
+      ],
+      ["quotePdfStatus", "Quote PDF", "From sent quote", "status"],
+      ["quotePdfSentAt", "PDF Sent At", "From sent quote", undefined],
+      ["receivedOn", "Received", "From enquiry", undefined],
+    ])
+  })
+})

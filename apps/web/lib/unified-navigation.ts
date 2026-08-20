@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Database,
   Factory,
+  FileSpreadsheet,
   FileClock,
   Gauge,
   Globe2,
@@ -77,14 +78,13 @@ export function dashboardTabHref(
   return `/?${params.toString()}`
 }
 
-const legacyMasterEntryByDashboardTab: Partial<
-  Record<DashboardTabId, string>
-> = {
-  maintenanceMastersTab: "maintenance_master",
-  planningHolidayTab: "planning_holiday",
-  qualityMastersTab: "quality_parameter_master",
-  setupChecklistMasterTab: "setup_checklist_master",
-}
+const legacyMasterEntryByDashboardTab: Partial<Record<DashboardTabId, string>> =
+  {
+    maintenanceMastersTab: "maintenance_master",
+    planningHolidayTab: "planning_holiday",
+    qualityMastersTab: "quality_parameter_master",
+    setupChecklistMasterTab: "setup_checklist_master",
+  }
 
 export function legacyMasterEntryForDashboardTab(tab?: string) {
   return tab
@@ -144,6 +144,12 @@ export function navigationHrefMatches(
   href: string
 ) {
   const destination = new URL(href, "http://mrmpl.local")
+  if (
+    destination.pathname === "/commercial/enquiries" &&
+    pathname.startsWith("/commercial/enquiries/excel-view")
+  ) {
+    return false
+  }
   if (
     pathname.startsWith("/hr/jobs/") &&
     destination.pathname === "/hr" &&
@@ -355,13 +361,13 @@ const universalProductionNavigationIds = new Set(
 
 export const consolidatedProductionNavigation = [] as const
 
-export const universalProductionNavigation = dashboardNavigation.filter(
-  (item) => universalProductionNavigationIds.has(item.id)
-).sort(
-  (left, right) =>
-    universalProductionNavigationOrder.indexOf(left.id) -
-    universalProductionNavigationOrder.indexOf(right.id)
-)
+export const universalProductionNavigation = dashboardNavigation
+  .filter((item) => universalProductionNavigationIds.has(item.id))
+  .sort(
+    (left, right) =>
+      universalProductionNavigationOrder.indexOf(left.id) -
+      universalProductionNavigationOrder.indexOf(right.id)
+  )
 
 const masterDataNavigationIds = new Set<DashboardTabId>([
   "dataEntryTab",
@@ -417,6 +423,11 @@ export const commercialNavigation = [
     href: "/commercial/enquiries",
     icon: ClipboardList,
     label: "Enquiries",
+  },
+  {
+    href: "/commercial/enquiries/excel-view",
+    icon: FileSpreadsheet,
+    label: "Excel View",
   },
   {
     href: "/commercial/sales",
@@ -492,8 +503,11 @@ export const commercialMasterDataWorkspaceNavigation =
       href === "/commercial/website-products"
   )
 
-export const commercialOperationalEntryNavigation =
-  commercialNavigation.filter(({ href }) => href === "/commercial/enquiries")
+export const commercialOperationalEntryNavigation = commercialNavigation.filter(
+  ({ href }) =>
+    href === "/commercial/enquiries" ||
+    href === "/commercial/enquiries/excel-view"
+)
 
 export const commercialCostingNavigation = commercialNavigation.filter(
   ({ href }) =>
