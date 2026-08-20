@@ -408,6 +408,8 @@ export function buildDashboardSnapshot(input: DashboardInput) {
     sameSetupComparison: [],
     productionControl: {
       workOrders: [],
+      rmInwardRows: [],
+      productionOutputRows: [],
       productionDashboardRows: [],
       combinedRows: [],
       machinePlanRows: [],

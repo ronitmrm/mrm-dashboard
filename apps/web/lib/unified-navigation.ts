@@ -40,6 +40,7 @@ export type DashboardTabId =
   | "masterTablesTab"
   | "dataEntryTab"
   | "operationalEntryTab"
+  | "operationalTablesTab"
   | "planningHolidayTab"
   | "setupChecklistMasterTab"
   | "maintenanceMastersTab"
@@ -284,6 +285,13 @@ export const dashboardNavigation: readonly DashboardNavigationItem[] = [
     title: "Data Entry",
   },
   {
+    href: dashboardTabHref("operationalTablesTab"),
+    icon: Database,
+    id: "operationalTablesTab",
+    subtitle: "Search And Export Saved Entries",
+    title: "Master Tables",
+  },
+  {
     href: dashboardTabHref("masterGapsTab"),
     icon: Database,
     id: "masterGapsTab",
@@ -364,8 +372,13 @@ export const masterDataNavigation = dashboardNavigation.filter((item) =>
   masterDataNavigationIds.has(item.id)
 )
 
-export const operationalEntryNavigation = dashboardNavigation.filter(
-  (item) => item.id === "operationalEntryTab"
+const operationalEntryNavigationIds = new Set<DashboardTabId>([
+  "operationalEntryTab",
+  "operationalTablesTab",
+])
+
+export const operationalEntryNavigation = dashboardNavigation.filter((item) =>
+  operationalEntryNavigationIds.has(item.id)
 )
 
 export const productionFloorNavigation = dashboardNavigation
@@ -377,6 +390,7 @@ export const productionFloorNavigation = dashboardNavigation
         "dataEntryTab",
         "masterTablesTab",
         "operationalEntryTab",
+        "operationalTablesTab",
         "machineMasterTab",
         "setupChecklistMasterTab",
         "maintenanceMastersTab",

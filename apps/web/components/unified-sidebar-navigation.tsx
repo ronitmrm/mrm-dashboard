@@ -222,6 +222,10 @@ export function UnifiedSidebarNavigation({
     commercialOperationalEntryNavigation.filter((item) =>
       navigationAccess.commercialHrefs.includes(item.href)
     )
+  const onCommercialOperationalEntry =
+    visibleCommercialOperationalEntryNavigation.some((item) =>
+      navigationHrefMatches(pathname, searchParams, item.href)
+    )
   const visibleHrNavigation = hrNavigation.filter((item) =>
     navigationAccess.hrHrefs.includes(item.href)
   )
@@ -307,11 +311,6 @@ export function UnifiedSidebarNavigation({
           title: item.title,
         }))
       : []),
-    ...visibleCommercialOperationalEntryNavigation.map((item) => ({
-      destination: item.href,
-      id: item.href,
-      title: item.label,
-    })),
   ]
   const filteredOperationalEntryNavigation =
     visibleOperationalEntryNavigation.filter(
@@ -454,7 +453,7 @@ export function UnifiedSidebarNavigation({
             (item) =>
               activeDashboardTab === item.id ||
               navigationHrefMatches(pathname, searchParams, item.destination)
-          )}
+          ) || onCommercialOperationalEntry}
           label="Operational Entry"
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("operationalEntry", open)
@@ -474,7 +473,10 @@ export function UnifiedSidebarNavigation({
                     pathname,
                     searchParams,
                     item.destination
-                  )
+                  ) ||
+                  (onCommercialOperationalEntry &&
+                    (item.id === "operationalTablesTab") ===
+                      (searchParams.get("operationalView") === "masterTables"))
                 }
               >
                 <a href={item.destination}>

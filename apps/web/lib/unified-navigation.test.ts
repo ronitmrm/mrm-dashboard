@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 import { commercialNavigationAccess } from "./auth/commercial-capabilities"
+import { productionCapabilityForTab } from "./auth/production-capabilities"
 import {
   administrationNavigation,
   commercialCostingNavigation,
@@ -80,7 +81,7 @@ describe("unified navigation", () => {
     ]
 
     expect(new Set(hrefs)).toHaveLength(hrefs.length)
-    expect(dashboardNavigation).toHaveLength(22)
+    expect(dashboardNavigation).toHaveLength(23)
     expect(productionFloorNavigation).toHaveLength(11)
     expect(productionFloorNavigation).not.toContainEqual(
       planningHolidayNavigation
@@ -107,7 +108,11 @@ describe("unified navigation", () => {
       operationalEntryNavigation.map(({ id, title }) => ({ id, title }))
     ).toEqual([
       { id: "operationalEntryTab", title: "Data Entry" },
+      { id: "operationalTablesTab", title: "Master Tables" },
     ])
+    expect(productionCapabilityForTab("operationalTablesTab")).toBe(
+      productionCapabilityForTab("operationalEntryTab")
+    )
     expect(consolidatedProductionNavigation).toEqual([])
     expect(productionFloorNavigation.map(({ id }) => id)).not.toEqual(
       expect.arrayContaining([
@@ -140,6 +145,7 @@ describe("unified navigation", () => {
       "dataEntryTab",
       "masterTablesTab",
       "operationalEntryTab",
+      "operationalTablesTab",
       "masterGapsTab",
       "machineMasterTab",
       "planningHolidayTab",

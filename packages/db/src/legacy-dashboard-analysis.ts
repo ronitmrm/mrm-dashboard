@@ -1192,6 +1192,24 @@ function buildProductionControl({
   const totalOutputQty = sum([...rawByJc.values()].map((row) => row.outputQty));
   const totalActualQty = sum([...rawByJc.values()].map((row) => row.actualQty));
   const totalRejectQty = sum([...rawByJc.values()].map((row) => row.rejectQty));
+  const productionOutputRows = productionRows.map((row) => ({
+    prodDate: rowText(row, "PRODUCTION DATE", "PROD DATE"),
+    operatorId: rowText(row, "OPERATOR ID", "operatorId"),
+    operatorName: rowText(row, "OPERATOR NAME", "operatorName"),
+    machineType: rowText(row, "MACHINE TYPE", "machineType"),
+    machine: rowText(row, "MACHINE NO", "machine"),
+    partCode: rowText(row, "PART CODE", "partCode"),
+    jobCard: rowText(row, "JobCardNo", "JOB CARD NO.", "jobCard"),
+    setupNo: rowText(row, "SETUP CODE", "setupNo"),
+    outputQty: safeNumber(rowValue(row, "PRODUCTION QTY (PCS)", "outputQty")),
+    actualQty: safeNumber(rowValue(row, "ACTUAL QTY IN PCS", "actualQty")),
+    targetQty: safeNumber(rowValue(row, "TARGET QTY (PCS)", "targetQty")),
+    rejectQty: rejectionTotalFromRow(row),
+    rejectionType: rowText(row, "REJECTION 1 TYPE OF REJECTION", "rejectionType"),
+    rejectionRemark: rowText(row, "REJECTION 1 REMARK", "rejectionRemark"),
+    downtimeMinutes: safeNumber(rowValue(row, "TOTAL DOWNTIME MINUTES", "downtimeMinutes")),
+    downtimeReason: rowText(row, "DOWNTIME REASON", "downtimeReason"),
+  }));
   const activeMachineConstraints = machineConstraints.length;
   const activePlanOverrides = planOverrides.length;
   const activeRouteChanges = routeChanges.length;
@@ -1257,6 +1275,8 @@ function buildProductionControl({
       issues: masterGaps.map((row) => ({ severity: "warning", sourceSheet: "Work_Order_Import", key: row.jcNo || row.partCode, message: row.nextAction })),
     },
     workOrders: prioritizedWorkOrderRows,
+    rmInwardRows,
+    productionOutputRows,
     productionDashboardRows,
     jobCardStatusTiles: workOrderOutputRows,
     routeSelectionRequired: workOrderOutputRows.filter((row) => row.optionSource === "Planner required" && row.rmStatus === "Received"),

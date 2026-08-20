@@ -109,7 +109,13 @@ import {
   masterDataEntryTypes,
   masterEditDefaults,
   operationalDataEntryTypes,
+  operationalEntryRows,
 } from "@/lib/master-data-workspaces";
+import {
+  externalOperationalEntryOptions,
+  operationalDataDashboardHref,
+  type ExternalOperationalEntryOption,
+} from "@/lib/operational-entry-navigation";
 import {
   refreshLockFromStatus,
   refreshLockHasSettled,
@@ -160,6 +166,7 @@ import {
 } from "@/lib/shop-floor-optimistic";
 import { useTheme } from "@/components/theme-provider";
 import { UnifiedSidebarNavigation } from "@/components/unified-sidebar-navigation";
+import { OperationalWorkspaceTabs } from "@/components/operational-workspace-tabs";
 import { UserAccountFooter } from "@/components/user-account-footer";
 import { JobCardRegister } from "@/components/job-card-register";
 import {
@@ -1847,7 +1854,11 @@ function DashboardContent({
   }
 
   if (activeTab === "operationalEntryTab") {
-    return <DataEntryPanel key={`operational-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={operationalDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} title="Operational Entry" description="Enter Work Orders, Raw-Material Inward, And Production Output Without Mixing Them With Master Data." />;
+    return <div className="grid gap-4"><OperationalWorkspaceTabs activeView="dataEntry" dataEntryHref={operationalDataDashboardHref("dataEntry", productionFloorCode, preferredDataEntryType)} masterTablesHref={operationalDataDashboardHref("masterTables", productionFloorCode, preferredDataEntryType)} /><DataEntryPanel key={`operational-${preferredDataEntryType}`} payload={payload} submitAction={submitAction} preferredEntryType={preferredDataEntryType} preferredDefaults={preferredDataEntryDefaults} allowedEntryTypes={operationalDataEntryTypes} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} onEntryTypeChange={onMasterEntryTypeChange} externalOptions={externalOperationalEntryOptions(navigationAccess, "dataEntry")} title="Operational Entry" description="Enter Work Orders, Raw-Material Inward, Production Output, And Enquiries In One Workspace." /></div>;
+  }
+
+  if (activeTab === "operationalTablesTab") {
+    return <div className="grid gap-4"><OperationalWorkspaceTabs activeView="masterTables" dataEntryHref={operationalDataDashboardHref("dataEntry", productionFloorCode, preferredDataEntryType)} masterTablesHref={operationalDataDashboardHref("masterTables", productionFloorCode, preferredDataEntryType)} /><OperationalTablesPanel payload={payload} productionControl={productionControl} openDataEntry={openDataEntry} preferredEntryType={preferredDataEntryType} productionFloorCode={productionFloorCode} onProductionFloorChange={onProductionFloorChange} onEntryTypeChange={onMasterEntryTypeChange} externalOptions={externalOperationalEntryOptions(navigationAccess, "masterTables")} /></div>;
   }
 
   if (activeTab === "masterTablesTab") {
@@ -7042,6 +7053,204 @@ function DataEntryPanel({
           storeMasterData={storeMasterData}
         />
       ) : null}
+    </section>
+  );
+}
+
+function OperationalTablesPanel({
+  payload,
+  productionControl,
+  openDataEntry,
+  preferredEntryType,
+  productionFloorCode,
+  onProductionFloorChange,
+  onEntryTypeChange,
+  externalOptions = [],
+}: {
+  payload: DashboardPayload;
+  productionControl: DashboardPayload;
+  openDataEntry: (entryType: string, defaults?: Record<string, unknown>) => void;
+  preferredEntryType?: string;
+  productionFloorCode: ProductionFloorCode;
+  onProductionFloorChange: (floorCode: ProductionFloorCode) => void;
+  onEntryTypeChange: (entryType: string) => void;
+  externalOptions?: ExternalOperationalEntryOption[];
+}) {
+  const specs = useMemo(
+    () => dataEntrySpecs.filter((spec) =>
+      (operationalDataEntryTypes as readonly string[]).includes(spec.entryType),
+    ),
+    [],
+  );
+  const [entryType, setEntryType] = useState(() =>
+    specs.some((spec) => spec.entryType === preferredEntryType)
+      ? preferredEntryType ?? ""
+      : specs[0]?.entryType ?? "",
+  );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tableResetKey, setTableResetKey] = useState(0);
+  const selectedSpec = specs.find((spec) => spec.entryType === entryType) ?? specs[0];
+  const dataEntry = asRecord(payload.dataEntry);
+  const rows = useMemo(
+    () => selectedSpec
+      ? operationalEntryRows(selectedSpec.entryType, dataEntry, productionControl)
+      : [],
+    [dataEntry, productionControl, selectedSpec],
+  );
+  const columns = useMemo(
+    () => selectedSpec ? masterTableColumns(selectedSpec) : [],
+    [selectedSpec],
+  );
+  const filteredRows = useMemo(
+    () => rows.filter((row) => masterTableRowMatches(row, columns, searchQuery)),
+    [columns, rows, searchQuery],
+  );
+
+  if (!selectedSpec) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Master Tables</CardTitle>
+          <CardDescription>No Operational Entry Definitions Are Configured.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <section className="grid gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Master Tables</CardTitle>
+          <CardDescription>
+            Search And Export Saved Operational Entries. Enquiries Use The Same
+            Register And Export Workflow.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 @4xl/main:grid-cols-[minmax(220px,320px)_minmax(220px,320px)_minmax(260px,1fr)]">
+          <Field label="Production Unit">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              required
+              value={productionFloorCode}
+              onChange={(event) =>
+                onProductionFloorChange(
+                  normalizeProductionFloorCode(event.target.value),
+                )
+              }
+            >
+              {productionFloors.map((floor) => (
+                <option key={floor.code} value={floor.code}>{floor.label}</option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Entry Table">
+            <SearchableSelect
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={selectedSpec.entryType}
+              onChange={(event) => {
+                const external = externalOptions.find(
+                  (option) => option.id === event.target.value,
+                );
+                if (external) {
+                  window.location.assign(external.href);
+                  return;
+                }
+                setEntryType(event.target.value);
+                onEntryTypeChange(event.target.value);
+                setSearchQuery("");
+                setTableResetKey((current) => current + 1);
+              }}
+            >
+              {specs.map((spec) => (
+                <option key={spec.entryType} value={spec.entryType}>{spec.title}</option>
+              ))}
+              {externalOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.title}</option>
+              ))}
+            </SearchableSelect>
+          </Field>
+          <Field label="Search All Visible Columns">
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search Saved Rows"
+                value={searchQuery}
+              />
+            </div>
+          </Field>
+          <div className="flex flex-wrap items-end gap-2 @4xl/main:col-span-3">
+            <Button type="button" variant="outline" onClick={() => {
+              setSearchQuery("");
+              setTableResetKey((current) => current + 1);
+            }}>Clear Filters</Button>
+            <Button type="button" variant="outline" disabled={!rows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, rows, columns, "all-rows")}>
+              <Download className="size-4" />
+              Download All Rows
+            </Button>
+            <Button type="button" variant="outline" disabled={!filteredRows.length || !columns.length} onClick={() => downloadMasterTableCsv(selectedSpec, filteredRows, columns, "visible-rows")}>
+              <Download className="size-4" />
+              Export Visible Rows
+            </Button>
+            <Button type="button" onClick={() => openDataEntry(selectedSpec.entryType)}>
+              <Plus className="size-4" />
+              Add Entry
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>{selectedSpec.title}</CardTitle>
+              <CardDescription>
+                {selectedSpec.description} Showing {productionFloors.find(
+                  (floor) => floor.code === productionFloorCode,
+                )?.label ?? productionFloorCode}.
+              </CardDescription>
+            </div>
+            <Badge variant="outline">
+              {formatNumber(filteredRows.length)} / {formatNumber(rows.length)} Rows
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!rows.length ? (
+            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+              No Saved Rows Found For This Operational Entry.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-md border">
+              <Table key={`${selectedSpec.entryType}-${tableResetKey}`}>
+                <TableHeader>
+                  <TableRow>
+                    {columns.map((column) => (
+                      <TableHead key={column.key} className="h-10 min-w-28 px-2 py-1 text-xs">
+                        {column.label}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredRows.map((row, index) => (
+                    <TableRow key={masterTableRowKey(selectedSpec.entryType, row, index)}>
+                      {columns.map((column) => (
+                        <TableCell key={column.key} className="max-w-64 whitespace-normal px-2 py-1.5 align-top text-xs leading-5">
+                          {masterTableCellText(row, column.key)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </section>
   );
 }
