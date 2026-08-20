@@ -1,6 +1,8 @@
 import Link from "next/link"
 
 import {
+  commercialTermTypes,
+  createCommercialMasterRepository,
   createCommercialWorkflowRepository,
   createCustomerRepository,
 } from "@workspace/db"
@@ -15,15 +17,10 @@ import {
 } from "@workspace/ui/components/card"
 import {
   Field,
-  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@workspace/ui/components/native-select"
 import {
   Table,
   TableBody,
@@ -32,46 +29,57 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
-import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
 
-import { createEnquiryAction, importEnquiryRegisterAction } from "./actions"
+import { importEnquiryRegisterAction } from "./actions"
+import { EnquiryLogForm, type CommercialTermOptions } from "./enquiry-log-form"
 
 export const dynamic = "force-dynamic"
 
-export default async function EnquiriesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ customer?: string }>
-}) {
+export default async function EnquiriesPage() {
   await requireCapability("pricing.enquiries.read", "/commercial/enquiries")
-  const customerSearch = (await searchParams).customer?.trim() ?? ""
   const connectionString = readAuthEnvironment().connectionString
   const customerRepository = createCustomerRepository({ connectionString })
+  const masterRepository = createCommercialMasterRepository({
+    connectionString,
+  })
   const workflow = createCommercialWorkflowRepository({ connectionString })
-  const { customerOptions, enquiryResult, organizationId } =
+  const { customers, enquiryResult, masterSnapshot, organizationId } =
     await (async () => {
       try {
+        const resolvedOrganizationId =
+          await customerRepository.organizationIdForCode("MRMPL")
+        const [customerRows, enquiries, masters] = await Promise.all([
+          customerRepository.listForOrganization("MRMPL"),
+          workflow.listEnquiriesBounded("MRMPL"),
+          masterRepository.snapshot(resolvedOrganizationId),
+        ])
         return {
-          customerOptions: await customerRepository.searchForOrganization(
-            "MRMPL",
-            customerSearch
-          ),
-          enquiryResult: await workflow.listEnquiriesBounded("MRMPL"),
-          organizationId:
-            await customerRepository.organizationIdForCode("MRMPL"),
+          customers: customerRows.filter(({ status }) => status === "Active"),
+          enquiryResult: enquiries,
+          masterSnapshot: masters,
+          organizationId: resolvedOrganizationId,
         }
       } finally {
         await customerRepository.close()
+        await masterRepository.close()
         await workflow.close()
       }
     })()
   const enquiries = enquiryResult.rows
   const today = istDateValue()
+  const termOptions = Object.fromEntries(
+    commercialTermTypes.map((termType) => [
+      termType,
+      masterSnapshot.commercialTerms
+        .filter((term) => term.active && term.termType === termType)
+        .map((term) => term.name),
+    ])
+  ) as CommercialTermOptions
 
   return (
     <div className="grid gap-6">
@@ -141,165 +149,13 @@ export default async function EnquiriesPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
-          <form
-            className="flex flex-col gap-2 sm:flex-row sm:items-end"
-            id="customer-search"
-          >
-            <Field className="max-w-md flex-1">
-              <FieldLabel htmlFor="customer-query">Find Customer</FieldLabel>
-              <Input
-                defaultValue={customerSearch}
-                id="customer-query"
-                name="customer"
-                placeholder="Customer Uid Or Company"
-              />
-            </Field>
-            <Button type="submit" variant="outline">
-              Search
-            </Button>
-          </form>
-          <BoundedResultNotice
-            actionHref="#customer-search"
-            actionLabel="Refine customer search"
-            coverage={customerOptions.coverage}
-            searchQuery={customerSearch}
-            section="Customer options"
-          />
           {organizationId ? (
-            <form action={createEnquiryAction}>
-              <input
-                type="hidden"
-                name="organization_id"
-                value={organizationId}
-              />
-              <FieldGroup>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <Field>
-                    <FieldLabel htmlFor="enquiry-customer">Customer</FieldLabel>
-                    <NativeSelect
-                      id="enquiry-customer"
-                      name="customer_id"
-                      required
-                    >
-                      {customerOptions.rows.map((customer) => (
-                        <NativeSelectOption
-                          key={customer.id}
-                          value={customer.id}
-                        >
-                          {customer.customerUid} · {customer.companyName}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="enquiry-received">
-                      Received On
-                    </FieldLabel>
-                    <Input
-                      id="enquiry-received"
-                      name="received_on"
-                      type="date"
-                      defaultValue={today}
-                      required
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="enquiry-source">Source</FieldLabel>
-                    <NativeSelect
-                      id="enquiry-source"
-                      name="source"
-                      defaultValue="Email"
-                    >
-                      <NativeSelectOption value="Email">
-                        Email
-                      </NativeSelectOption>
-                      <NativeSelectOption value="Portal">
-                        Portal
-                      </NativeSelectOption>
-                      <NativeSelectOption value="Phone">
-                        Phone
-                      </NativeSelectOption>
-                    </NativeSelect>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="enquiry-priority">Priority</FieldLabel>
-                    <NativeSelect
-                      id="enquiry-priority"
-                      name="priority"
-                      defaultValue="Normal"
-                    >
-                      <NativeSelectOption value="Normal">
-                        Normal
-                      </NativeSelectOption>
-                      <NativeSelectOption value="High">High</NativeSelectOption>
-                      <NativeSelectOption value="Urgent">
-                        Urgent
-                      </NativeSelectOption>
-                    </NativeSelect>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="enquiry-buyer">Buyer</FieldLabel>
-                    <Input id="enquiry-buyer" name="buyer_name" />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="enquiry-incoterms">
-                      Incoterms
-                    </FieldLabel>
-                    <Input id="enquiry-incoterms" name="incoterms" />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="enquiry-payment">
-                      Payment Terms
-                    </FieldLabel>
-                    <Input id="enquiry-payment" name="payment_terms" />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="enquiry-shipment">
-                      Shipment Mode
-                    </FieldLabel>
-                    <Input id="enquiry-shipment" name="shipment_mode" />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="enquiry-packaging">
-                      Packaging
-                    </FieldLabel>
-                    <Input id="enquiry-packaging" name="packaging_terms" />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="enquiry-currency">Currency</FieldLabel>
-                    <Input
-                      id="enquiry-currency"
-                      name="currency"
-                      defaultValue="USD"
-                      required
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="enquiry-fx">
-                      Fx / Exchange Rate
-                    </FieldLabel>
-                    <Input
-                      id="enquiry-fx"
-                      name="conversion_rate"
-                      type="number"
-                      min="0.00000001"
-                      step="0.00000001"
-                      defaultValue="1"
-                      required
-                    />
-                  </Field>
-                </div>
-                <Field>
-                  <FieldLabel htmlFor="enquiry-remarks">Remarks</FieldLabel>
-                  <Textarea id="enquiry-remarks" name="remarks" />
-                  <FieldDescription>
-                    Technical Line Details Are Added After The Enquiry Is
-                    Logged.
-                  </FieldDescription>
-                </Field>
-                <Button type="submit">Log Enquiry</Button>
-              </FieldGroup>
-            </form>
+            <EnquiryLogForm
+              customers={customers}
+              organizationId={organizationId}
+              termOptions={termOptions}
+              today={today}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">
               Load The Mrmpl Organization And Customer Masters Before Logging An

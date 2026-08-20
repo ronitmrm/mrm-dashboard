@@ -19,6 +19,12 @@ export const customers = sales.table("customers", {
   email: text("email"),
   phone: text("phone"),
   country: text("country"),
+  defaultBuyerName: text("default_buyer_name"),
+  defaultIncoterms: text("default_incoterms"),
+  defaultPaymentTerms: text("default_payment_terms"),
+  defaultShipmentMode: text("default_shipment_mode"),
+  defaultPackagingTerms: text("default_packaging_terms"),
+  defaultCurrency: text("default_currency"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
     .notNull()

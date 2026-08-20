@@ -2,11 +2,9 @@ import {
   createCommercialReportingRepository,
   createCustomerRepository,
 } from "@workspace/db"
-import { ArrowRight, BarChart3, Database } from "lucide-react"
-import Link from "next/link"
+import { BarChart3, Database } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
-import { Button } from "@workspace/ui/components/button"
 import {
   Card,
   CardContent,
@@ -235,26 +233,6 @@ export default async function CommercialPage() {
           </div>
         </CardContent>
       </Card>
-
-      <section className="grid gap-3 sm:grid-cols-2">
-        {(
-          [
-            ["Drawing History", "/commercial/drawing-history"],
-            ["Website Product Data", "/commercial/website-products"],
-          ] as const
-        ).map(([label, href]) => (
-          <Button
-            asChild
-            className="justify-between"
-            key={href}
-            variant="outline"
-          >
-            <Link href={href}>
-              {label} <ArrowRight />
-            </Link>
-          </Button>
-        ))}
-      </section>
     </div>
   )
 }

@@ -1,4 +1,9 @@
-import { createCustomerRepository } from "@workspace/db"
+import {
+  commercialTermTypes,
+  createCommercialMasterRepository,
+  createCustomerRepository,
+  type CommercialTermType,
+} from "@workspace/db"
 import { redirect } from "next/navigation"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -44,6 +49,53 @@ export const dynamic = "force-dynamic"
 
 const customersPath = "/commercial/customers"
 
+type CommercialTermOptions = Record<CommercialTermType, string[]>
+
+function CustomerDefaultSelect({
+  customerUid,
+  defaultValue,
+  formId,
+  label,
+  name,
+  options,
+}: {
+  customerUid?: string
+  defaultValue?: string | null
+  formId?: string
+  label: string
+  name: string
+  options: string[]
+}) {
+  const id = formId ? `${formId}-${name.replaceAll("_", "-")}` : `new-${name}`
+  const visibleOptions =
+    defaultValue && !options.includes(defaultValue)
+      ? [defaultValue, ...options]
+      : options
+  return (
+    <Field className={formId ? "min-w-40" : undefined}>
+      <FieldLabel className={formId ? "sr-only" : undefined} htmlFor={id}>
+        {label}
+        {customerUid ? ` For ${customerUid}` : ""}
+      </FieldLabel>
+      <NativeSelect
+        className="w-full"
+        defaultValue={defaultValue ?? ""}
+        form={formId}
+        id={id}
+        name={name}
+        required
+      >
+        <NativeSelectOption value="">Select {label}</NativeSelectOption>
+        {visibleOptions.map((option) => (
+          <NativeSelectOption key={option} value={option}>
+            {option}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+    </Field>
+  )
+}
+
 export default async function CustomersPage({
   searchParams,
 }: {
@@ -69,9 +121,30 @@ export default async function CustomersPage({
   const repository = createCustomerRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const customerPage = await repository
-    .listPageForOrganization("MRMPL", bounds)
-    .finally(() => repository.close())
+  const masterRepository = createCommercialMasterRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  const { customerPage, masterSnapshot } = await (async () => {
+    try {
+      const organizationId = await repository.organizationIdForCode("MRMPL")
+      const [customers, masters] = await Promise.all([
+        repository.listPageForOrganization("MRMPL", bounds),
+        masterRepository.snapshot(organizationId),
+      ])
+      return { customerPage: customers, masterSnapshot: masters }
+    } finally {
+      await repository.close()
+      await masterRepository.close()
+    }
+  })()
+  const termOptions = Object.fromEntries(
+    commercialTermTypes.map((termType) => [
+      termType,
+      masterSnapshot.commercialTerms
+        .filter((term) => term.active && term.termType === termType)
+        .map((term) => term.name),
+    ])
+  ) as CommercialTermOptions
   const visibleCustomers = customerPage.rows
   if (!visibleCustomers.length && bounds.page > 1) {
     redirect(externalMasterViewHref(customersPath, "masterTables"))
@@ -85,10 +158,7 @@ export default async function CustomersPage({
         activeView={activeView}
         allMastersHref={externalMasterAllMastersHref(activeView)}
         dataEntryHref={externalMasterViewHref(customersPath, "dataEntry")}
-        masterTablesHref={externalMasterViewHref(
-          customersPath,
-          "masterTables"
-        )}
+        masterTablesHref={externalMasterViewHref(customersPath, "masterTables")}
       />
 
       {canWrite && showDataEntry ? (
@@ -102,7 +172,7 @@ export default async function CustomersPage({
           <CardContent className="grid gap-5">
             <CompanyWideMasterScope />
             <form action={createCustomerAction}>
-              <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <Field>
                   <FieldLabel htmlFor="new-company-name">
                     Company Name
@@ -136,6 +206,36 @@ export default async function CustomersPage({
                     </NativeSelectOption>
                   </NativeSelect>
                 </Field>
+                <CustomerDefaultSelect
+                  label="Buyer"
+                  name="default_buyer_name"
+                  options={termOptions.buyer}
+                />
+                <CustomerDefaultSelect
+                  label="Incoterms"
+                  name="default_incoterms"
+                  options={termOptions.incoterms}
+                />
+                <CustomerDefaultSelect
+                  label="Payment Terms"
+                  name="default_payment_terms"
+                  options={termOptions.payment_terms}
+                />
+                <CustomerDefaultSelect
+                  label="Shipment Mode"
+                  name="default_shipment_mode"
+                  options={termOptions.shipment_mode}
+                />
+                <CustomerDefaultSelect
+                  label="Packaging"
+                  name="default_packaging_terms"
+                  options={termOptions.packaging_terms}
+                />
+                <CustomerDefaultSelect
+                  label="Currency"
+                  name="default_currency"
+                  options={termOptions.currency}
+                />
               </FieldGroup>
               <Button className="mt-6" type="submit">
                 Add Customer
@@ -145,234 +245,347 @@ export default async function CustomersPage({
         </Card>
       ) : null}
 
-      {showMasterTables ? <Card>
-        <CardHeader>
-          <CardTitle>Customers</CardTitle>
-          <CardDescription>
-            Canonical Customer Masters With Immutable Pricing Source Provenance.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-            <span>
-              Showing {visibleCustomers.length ? bounds.offset + 1 : 0}–
-              {Math.min(bounds.offset + visibleCustomers.length, totalCount)} Of{" "}
-              {totalCount} Customers
-            </span>
-            <div className="flex items-center gap-2">
-              {bounds.page > 1 ? (
-                <Button asChild size="sm" variant="outline">
-                  <a
-                    href={externalMasterViewHref(
-                      customersPath,
-                      "masterTables",
-                      { page: String(bounds.page - 1) }
-                    )}
-                  >
-                    Previous
-                  </a>
-                </Button>
-              ) : (
-                <Button disabled size="sm" variant="outline">
-                  Previous
-                </Button>
-              )}
+      {showMasterTables ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Customers</CardTitle>
+            <CardDescription>
+              Canonical Customer Masters With Immutable Pricing Source
+              Provenance.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
               <span>
-                Page {Math.min(bounds.page, totalPages)} Of {totalPages}
+                Showing {visibleCustomers.length ? bounds.offset + 1 : 0}–
+                {Math.min(bounds.offset + visibleCustomers.length, totalCount)}{" "}
+                Of {totalCount} Customers
               </span>
-              {bounds.page < totalPages ? (
-                <Button asChild size="sm" variant="outline">
-                  <a
-                    href={externalMasterViewHref(
-                      customersPath,
-                      "masterTables",
-                      { page: String(bounds.page + 1) }
-                    )}
-                  >
-                    Next
-                  </a>
-                </Button>
-              ) : (
-                <Button disabled size="sm" variant="outline">
-                  Next
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="overflow-x-auto rounded-3xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead data-filterable="true">Customer Id</TableHead>
-                  <TableHead data-filterable="true">Company</TableHead>
-                  <TableHead data-filterable="true">Email</TableHead>
-                  <TableHead data-filterable="true">Phone</TableHead>
-                  <TableHead data-filterable="true">Country</TableHead>
-                  <TableHead data-filterable="true">Status</TableHead>
-                  {canWrite ? <TableHead>Action</TableHead> : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleCustomers.length ? (
-                  visibleCustomers.map((customer) => {
-                    const formId = `customer-${customer.id}`
-                    return (
-                      <TableRow key={customer.id}>
-                        <TableCell
-                          className="font-medium"
-                          data-filter-value={customer.customerUid}
-                        >
-                          {canWrite ? (
-                            <form action={updateCustomerAction} id={formId}>
-                              <input
-                                name="customer_id"
-                                type="hidden"
-                                value={customer.id}
-                              />
-                            </form>
-                          ) : null}
-                          {customer.customerUid}
-                        </TableCell>
-                        <TableCell data-filter-value={customer.companyName}>
-                          {canWrite ? (
-                            <Field className="min-w-52">
-                              <FieldLabel
-                                className="sr-only"
-                                htmlFor={`${formId}-company`}
-                              >
-                                Company Name For {customer.customerUid}
-                              </FieldLabel>
-                              <Input
-                                defaultValue={customer.companyName}
-                                form={formId}
-                                id={`${formId}-company`}
-                                name="company_name"
-                                required
-                              />
-                            </Field>
-                          ) : (
-                            customer.companyName
-                          )}
-                        </TableCell>
-                        <TableCell data-filter-value={customer.email ?? ""}>
-                          {canWrite ? (
-                            <Field className="min-w-52">
-                              <FieldLabel
-                                className="sr-only"
-                                htmlFor={`${formId}-email`}
-                              >
-                                Email For {customer.customerUid}
-                              </FieldLabel>
-                              <Input
-                                defaultValue={customer.email ?? ""}
-                                form={formId}
-                                id={`${formId}-email`}
-                                name="email"
-                                type="email"
-                              />
-                            </Field>
-                          ) : (
-                            customer.email || "—"
-                          )}
-                        </TableCell>
-                        <TableCell data-filter-value={customer.phone ?? ""}>
-                          {canWrite ? (
-                            <Field className="min-w-44">
-                              <FieldLabel
-                                className="sr-only"
-                                htmlFor={`${formId}-phone`}
-                              >
-                                Phone For {customer.customerUid}
-                              </FieldLabel>
-                              <Input
-                                defaultValue={customer.phone ?? ""}
-                                form={formId}
-                                id={`${formId}-phone`}
-                                name="phone"
-                              />
-                            </Field>
-                          ) : (
-                            customer.phone || "—"
-                          )}
-                        </TableCell>
-                        <TableCell data-filter-value={customer.country ?? ""}>
-                          {canWrite ? (
-                            <Field className="min-w-36">
-                              <FieldLabel
-                                className="sr-only"
-                                htmlFor={`${formId}-country`}
-                              >
-                                Country For {customer.customerUid}
-                              </FieldLabel>
-                              <Input
-                                defaultValue={customer.country ?? ""}
-                                form={formId}
-                                id={`${formId}-country`}
-                                name="country"
-                              />
-                            </Field>
-                          ) : (
-                            customer.country || "—"
-                          )}
-                        </TableCell>
-                        <TableCell data-filter-value={customer.status}>
-                          {canWrite ? (
-                            <Field className="min-w-32">
-                              <FieldLabel
-                                className="sr-only"
-                                htmlFor={`${formId}-status`}
-                              >
-                                Status For {customer.customerUid}
-                              </FieldLabel>
-                              <NativeSelect
-                                className="w-full"
-                                defaultValue={customer.status}
-                                form={formId}
-                                id={`${formId}-status`}
-                                name="status"
-                              >
-                                <NativeSelectOption value="Active">
-                                  Active
-                                </NativeSelectOption>
-                                <NativeSelectOption value="Inactive">
-                                  Inactive
-                                </NativeSelectOption>
-                              </NativeSelect>
-                            </Field>
-                          ) : (
-                            <Badge variant="secondary">{customer.status}</Badge>
-                          )}
-                        </TableCell>
-                        {canWrite ? (
-                          <TableCell>
-                            <Button
-                              form={formId}
-                              size="sm"
-                              type="submit"
-                              variant="outline"
-                            >
-                              Save
-                            </Button>
-                          </TableCell>
-                        ) : null}
-                      </TableRow>
-                    )
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      className="h-32 text-center text-muted-foreground"
-                      colSpan={canWrite ? 7 : 6}
+              <div className="flex items-center gap-2">
+                {bounds.page > 1 ? (
+                  <Button asChild size="sm" variant="outline">
+                    <a
+                      href={externalMasterViewHref(
+                        customersPath,
+                        "masterTables",
+                        { page: String(bounds.page - 1) }
+                      )}
                     >
-                      No Customers Have Been Loaded Into Postgresql Yet.
-                    </TableCell>
-                  </TableRow>
+                      Previous
+                    </a>
+                  </Button>
+                ) : (
+                  <Button disabled size="sm" variant="outline">
+                    Previous
+                  </Button>
                 )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card> : null}
+                <span>
+                  Page {Math.min(bounds.page, totalPages)} Of {totalPages}
+                </span>
+                {bounds.page < totalPages ? (
+                  <Button asChild size="sm" variant="outline">
+                    <a
+                      href={externalMasterViewHref(
+                        customersPath,
+                        "masterTables",
+                        { page: String(bounds.page + 1) }
+                      )}
+                    >
+                      Next
+                    </a>
+                  </Button>
+                ) : (
+                  <Button disabled size="sm" variant="outline">
+                    Next
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-3xl border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead data-filterable="true">Customer Id</TableHead>
+                    <TableHead data-filterable="true">Company</TableHead>
+                    <TableHead data-filterable="true">Email</TableHead>
+                    <TableHead data-filterable="true">Phone</TableHead>
+                    <TableHead data-filterable="true">Country</TableHead>
+                    <TableHead data-filterable="true">Buyer</TableHead>
+                    <TableHead data-filterable="true">Incoterms</TableHead>
+                    <TableHead data-filterable="true">Payment Terms</TableHead>
+                    <TableHead data-filterable="true">Shipment Mode</TableHead>
+                    <TableHead data-filterable="true">Packaging</TableHead>
+                    <TableHead data-filterable="true">Currency</TableHead>
+                    <TableHead data-filterable="true">Status</TableHead>
+                    {canWrite ? <TableHead>Action</TableHead> : null}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleCustomers.length ? (
+                    visibleCustomers.map((customer) => {
+                      const formId = `customer-${customer.id}`
+                      return (
+                        <TableRow key={customer.id}>
+                          <TableCell
+                            className="font-medium"
+                            data-filter-value={customer.customerUid}
+                          >
+                            {canWrite ? (
+                              <form action={updateCustomerAction} id={formId}>
+                                <input
+                                  name="customer_id"
+                                  type="hidden"
+                                  value={customer.id}
+                                />
+                              </form>
+                            ) : null}
+                            {customer.customerUid}
+                          </TableCell>
+                          <TableCell data-filter-value={customer.companyName}>
+                            {canWrite ? (
+                              <Field className="min-w-52">
+                                <FieldLabel
+                                  className="sr-only"
+                                  htmlFor={`${formId}-company`}
+                                >
+                                  Company Name For {customer.customerUid}
+                                </FieldLabel>
+                                <Input
+                                  defaultValue={customer.companyName}
+                                  form={formId}
+                                  id={`${formId}-company`}
+                                  name="company_name"
+                                  required
+                                />
+                              </Field>
+                            ) : (
+                              customer.companyName
+                            )}
+                          </TableCell>
+                          <TableCell data-filter-value={customer.email ?? ""}>
+                            {canWrite ? (
+                              <Field className="min-w-52">
+                                <FieldLabel
+                                  className="sr-only"
+                                  htmlFor={`${formId}-email`}
+                                >
+                                  Email For {customer.customerUid}
+                                </FieldLabel>
+                                <Input
+                                  defaultValue={customer.email ?? ""}
+                                  form={formId}
+                                  id={`${formId}-email`}
+                                  name="email"
+                                  type="email"
+                                />
+                              </Field>
+                            ) : (
+                              customer.email || "—"
+                            )}
+                          </TableCell>
+                          <TableCell data-filter-value={customer.phone ?? ""}>
+                            {canWrite ? (
+                              <Field className="min-w-44">
+                                <FieldLabel
+                                  className="sr-only"
+                                  htmlFor={`${formId}-phone`}
+                                >
+                                  Phone For {customer.customerUid}
+                                </FieldLabel>
+                                <Input
+                                  defaultValue={customer.phone ?? ""}
+                                  form={formId}
+                                  id={`${formId}-phone`}
+                                  name="phone"
+                                />
+                              </Field>
+                            ) : (
+                              customer.phone || "—"
+                            )}
+                          </TableCell>
+                          <TableCell data-filter-value={customer.country ?? ""}>
+                            {canWrite ? (
+                              <Field className="min-w-36">
+                                <FieldLabel
+                                  className="sr-only"
+                                  htmlFor={`${formId}-country`}
+                                >
+                                  Country For {customer.customerUid}
+                                </FieldLabel>
+                                <Input
+                                  defaultValue={customer.country ?? ""}
+                                  form={formId}
+                                  id={`${formId}-country`}
+                                  name="country"
+                                />
+                              </Field>
+                            ) : (
+                              customer.country || "—"
+                            )}
+                          </TableCell>
+                          <TableCell
+                            data-filter-value={customer.defaultBuyerName ?? ""}
+                          >
+                            {canWrite ? (
+                              <CustomerDefaultSelect
+                                customerUid={customer.customerUid}
+                                defaultValue={customer.defaultBuyerName}
+                                formId={formId}
+                                label="Buyer"
+                                name="default_buyer_name"
+                                options={termOptions.buyer}
+                              />
+                            ) : (
+                              customer.defaultBuyerName || "—"
+                            )}
+                          </TableCell>
+                          <TableCell
+                            data-filter-value={customer.defaultIncoterms ?? ""}
+                          >
+                            {canWrite ? (
+                              <CustomerDefaultSelect
+                                customerUid={customer.customerUid}
+                                defaultValue={customer.defaultIncoterms}
+                                formId={formId}
+                                label="Incoterms"
+                                name="default_incoterms"
+                                options={termOptions.incoterms}
+                              />
+                            ) : (
+                              customer.defaultIncoterms || "—"
+                            )}
+                          </TableCell>
+                          <TableCell
+                            data-filter-value={
+                              customer.defaultPaymentTerms ?? ""
+                            }
+                          >
+                            {canWrite ? (
+                              <CustomerDefaultSelect
+                                customerUid={customer.customerUid}
+                                defaultValue={customer.defaultPaymentTerms}
+                                formId={formId}
+                                label="Payment Terms"
+                                name="default_payment_terms"
+                                options={termOptions.payment_terms}
+                              />
+                            ) : (
+                              customer.defaultPaymentTerms || "—"
+                            )}
+                          </TableCell>
+                          <TableCell
+                            data-filter-value={
+                              customer.defaultShipmentMode ?? ""
+                            }
+                          >
+                            {canWrite ? (
+                              <CustomerDefaultSelect
+                                customerUid={customer.customerUid}
+                                defaultValue={customer.defaultShipmentMode}
+                                formId={formId}
+                                label="Shipment Mode"
+                                name="default_shipment_mode"
+                                options={termOptions.shipment_mode}
+                              />
+                            ) : (
+                              customer.defaultShipmentMode || "—"
+                            )}
+                          </TableCell>
+                          <TableCell
+                            data-filter-value={
+                              customer.defaultPackagingTerms ?? ""
+                            }
+                          >
+                            {canWrite ? (
+                              <CustomerDefaultSelect
+                                customerUid={customer.customerUid}
+                                defaultValue={customer.defaultPackagingTerms}
+                                formId={formId}
+                                label="Packaging"
+                                name="default_packaging_terms"
+                                options={termOptions.packaging_terms}
+                              />
+                            ) : (
+                              customer.defaultPackagingTerms || "—"
+                            )}
+                          </TableCell>
+                          <TableCell
+                            data-filter-value={customer.defaultCurrency ?? ""}
+                          >
+                            {canWrite ? (
+                              <CustomerDefaultSelect
+                                customerUid={customer.customerUid}
+                                defaultValue={customer.defaultCurrency}
+                                formId={formId}
+                                label="Currency"
+                                name="default_currency"
+                                options={termOptions.currency}
+                              />
+                            ) : (
+                              customer.defaultCurrency || "—"
+                            )}
+                          </TableCell>
+                          <TableCell data-filter-value={customer.status}>
+                            {canWrite ? (
+                              <Field className="min-w-32">
+                                <FieldLabel
+                                  className="sr-only"
+                                  htmlFor={`${formId}-status`}
+                                >
+                                  Status For {customer.customerUid}
+                                </FieldLabel>
+                                <NativeSelect
+                                  className="w-full"
+                                  defaultValue={customer.status}
+                                  form={formId}
+                                  id={`${formId}-status`}
+                                  name="status"
+                                >
+                                  <NativeSelectOption value="Active">
+                                    Active
+                                  </NativeSelectOption>
+                                  <NativeSelectOption value="Inactive">
+                                    Inactive
+                                  </NativeSelectOption>
+                                </NativeSelect>
+                              </Field>
+                            ) : (
+                              <Badge variant="secondary">
+                                {customer.status}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          {canWrite ? (
+                            <TableCell>
+                              <Button
+                                form={formId}
+                                size="sm"
+                                type="submit"
+                                variant="outline"
+                              >
+                                Save
+                              </Button>
+                            </TableCell>
+                          ) : null}
+                        </TableRow>
+                      )
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        className="h-32 text-center text-muted-foreground"
+                        colSpan={canWrite ? 13 : 12}
+                      >
+                        No Customers Have Been Loaded Into Postgresql Yet.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   )
 }

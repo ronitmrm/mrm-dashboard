@@ -324,8 +324,8 @@ describe("PostgreSQL Better Auth", () => {
       ).resolves.toMatchObject({
         isAdministrator: true,
         users: expect.arrayContaining([
-          { id: administrator.user.id },
-          { id: staff.user.id },
+          expect.objectContaining({ id: administrator.user.id }),
+          expect.objectContaining({ id: staff.user.id }),
         ]),
       })
 

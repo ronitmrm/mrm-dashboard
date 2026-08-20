@@ -1,9 +1,12 @@
 import Link from "next/link"
 
 import {
+  commercialTermTypes,
+  createCommercialMasterRepository,
   createCommercialWorkflowRepository,
   createCustomerRepository,
   createProductRepository,
+  type CommercialTermType,
 } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -59,16 +62,52 @@ const checklist = [
   ["tooling_process_feasible", "Tooling / process feasible"],
 ] as const
 
+function EnquiryTermSelect({
+  defaultValue,
+  label,
+  name,
+  options,
+}: {
+  defaultValue: string | null
+  label: string
+  name: string
+  options: string[]
+}) {
+  const id = `edit-enquiry-${name.replaceAll("_", "-")}`
+  const visibleOptions =
+    defaultValue && !options.includes(defaultValue)
+      ? [defaultValue, ...options]
+      : options
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <NativeSelect
+        className="w-full"
+        defaultValue={defaultValue ?? ""}
+        id={id}
+        name={name}
+        required
+      >
+        <NativeSelectOption value="">Select {label}</NativeSelectOption>
+        {visibleOptions.map((option) => (
+          <NativeSelectOption key={option} value={option}>
+            {option}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+    </Field>
+  )
+}
+
 export default async function EnquiryDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ customer?: string; product?: string }>
+  searchParams: Promise<{ product?: string }>
 }) {
   const { id } = await params
   const selectorParams = await searchParams
-  const customerSearch = selectorParams.customer?.trim() ?? ""
   const productSearch = selectorParams.product?.trim() ?? ""
   await requireCapability(
     "pricing.enquiries.read",
@@ -99,42 +138,42 @@ export default async function EnquiryDetailPage({
   const { snapshot } = loaded
   const drawingHistory = new Map(loaded.drawingHistoryEntries)
   const customerRepository = createCustomerRepository({ connectionString })
+  const masterRepository = createCommercialMasterRepository({
+    connectionString,
+  })
   const productRepository = createProductRepository({ connectionString })
-  const { customerOptions, productOptions, selectedCustomerOptions } =
-    await (async () => {
-      try {
-        return {
-          customerOptions: await customerRepository.searchForOrganization(
-            "MRMPL",
-            customerSearch
-          ),
-          productOptions: await productRepository.searchForOrganization(
-            "MRMPL",
-            productSearch
-          ),
-          selectedCustomerOptions:
-            await customerRepository.searchForOrganization(
-              "MRMPL",
-              snapshot.enquiry.customerUid
-            ),
-        }
-      } finally {
-        await customerRepository.close()
-        await productRepository.close()
+  const { customerRows, masterSnapshot, productOptions } = await (async () => {
+    try {
+      const [customers, products, masters] = await Promise.all([
+        customerRepository.listForOrganization("MRMPL"),
+        productRepository.searchForOrganization("MRMPL", productSearch),
+        masterRepository.snapshot(snapshot.enquiry.organizationId),
+      ])
+      return {
+        customerRows: customers,
+        masterSnapshot: masters,
+        productOptions: products,
       }
-    })()
-  const selectedCustomer = selectedCustomerOptions.rows[0]
-  const customers = customerOptions.rows.some(
-    (customer) => customer.id === snapshot.enquiry.customerId
+    } finally {
+      await customerRepository.close()
+      await masterRepository.close()
+      await productRepository.close()
+    }
+  })()
+  const customers = customerRows.filter(
+    (customer) =>
+      customer.status === "Active" ||
+      customer.id === snapshot.enquiry.customerId
   )
-    ? customerOptions.rows
-    : selectedCustomer
-      ? [selectedCustomer, ...customerOptions.rows].slice(
-          0,
-          customerOptions.coverage.limit
-        )
-      : customerOptions.rows
   const products = productOptions.rows
+  const termOptions = Object.fromEntries(
+    commercialTermTypes.map((termType) => [
+      termType,
+      masterSnapshot.commercialTerms
+        .filter((term) => term.active && term.termType === termType)
+        .map((term) => term.name),
+    ])
+  ) as Record<CommercialTermType, string[]>
 
   return (
     <div className="grid gap-6">
@@ -186,33 +225,6 @@ export default async function EnquiryDetailPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
-          <form
-            className="flex flex-col gap-2 sm:flex-row sm:items-end"
-            id="enquiry-customer-search"
-          >
-            <input name="product" type="hidden" value={productSearch} />
-            <Field className="max-w-md flex-1">
-              <FieldLabel htmlFor="enquiry-customer-query">
-                Find Customer
-              </FieldLabel>
-              <Input
-                defaultValue={customerSearch}
-                id="enquiry-customer-query"
-                name="customer"
-                placeholder="Customer Uid Or Company"
-              />
-            </Field>
-            <Button type="submit" variant="outline">
-              Search
-            </Button>
-          </form>
-          <BoundedResultNotice
-            actionHref="#enquiry-customer-search"
-            actionLabel="Refine customer search"
-            coverage={customerOptions.coverage}
-            searchQuery={customerSearch}
-            section="Customer options"
-          />
           <form action={updateEnquiryAction}>
             <input type="hidden" name="enquiry_id" value={id} />
             <input
@@ -275,67 +287,42 @@ export default async function EnquiryDetailPage({
                     ))}
                   </NativeSelect>
                 </Field>
-                <Field>
-                  <FieldLabel htmlFor="edit-enquiry-buyer">
-                    Buyer Name
-                  </FieldLabel>
-                  <Input
-                    id="edit-enquiry-buyer"
-                    name="buyer_name"
-                    defaultValue={snapshot.enquiry.buyerName ?? ""}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="edit-enquiry-incoterms">
-                    Incoterms
-                  </FieldLabel>
-                  <Input
-                    id="edit-enquiry-incoterms"
-                    name="incoterms"
-                    defaultValue={snapshot.enquiry.incoterms ?? ""}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="edit-enquiry-payment">
-                    Payment Terms
-                  </FieldLabel>
-                  <Input
-                    id="edit-enquiry-payment"
-                    name="payment_terms"
-                    defaultValue={snapshot.enquiry.paymentTerms ?? ""}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="edit-enquiry-shipment">
-                    Shipment Mode
-                  </FieldLabel>
-                  <Input
-                    id="edit-enquiry-shipment"
-                    name="shipment_mode"
-                    defaultValue={snapshot.enquiry.shipmentMode ?? ""}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="edit-enquiry-packaging">
-                    Packaging
-                  </FieldLabel>
-                  <Input
-                    id="edit-enquiry-packaging"
-                    name="packaging_terms"
-                    defaultValue={snapshot.enquiry.packagingTerms ?? ""}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="edit-enquiry-currency">
-                    Currency
-                  </FieldLabel>
-                  <Input
-                    id="edit-enquiry-currency"
-                    name="currency"
-                    defaultValue={snapshot.enquiry.currency}
-                    required
-                  />
-                </Field>
+                <EnquiryTermSelect
+                  defaultValue={snapshot.enquiry.buyerName}
+                  label="Buyer"
+                  name="buyer_name"
+                  options={termOptions.buyer}
+                />
+                <EnquiryTermSelect
+                  defaultValue={snapshot.enquiry.incoterms}
+                  label="Incoterms"
+                  name="incoterms"
+                  options={termOptions.incoterms}
+                />
+                <EnquiryTermSelect
+                  defaultValue={snapshot.enquiry.paymentTerms}
+                  label="Payment Terms"
+                  name="payment_terms"
+                  options={termOptions.payment_terms}
+                />
+                <EnquiryTermSelect
+                  defaultValue={snapshot.enquiry.shipmentMode}
+                  label="Shipment Mode"
+                  name="shipment_mode"
+                  options={termOptions.shipment_mode}
+                />
+                <EnquiryTermSelect
+                  defaultValue={snapshot.enquiry.packagingTerms}
+                  label="Packaging"
+                  name="packaging_terms"
+                  options={termOptions.packaging_terms}
+                />
+                <EnquiryTermSelect
+                  defaultValue={snapshot.enquiry.currency}
+                  label="Currency"
+                  name="currency"
+                  options={termOptions.currency}
+                />
                 <Field>
                   <FieldLabel htmlFor="edit-enquiry-fx">
                     Fx / Exchange Rate
@@ -641,7 +628,6 @@ export default async function EnquiryDetailPage({
           className="flex flex-col gap-2 sm:flex-row sm:items-end"
           id="enquiry-product-search"
         >
-          <input name="customer" type="hidden" value={customerSearch} />
           <Field className="max-w-md flex-1">
             <FieldLabel htmlFor="enquiry-product-query">
               Find Portfolio Product

@@ -16,7 +16,6 @@ import {
   type RepositoryPoolOptions,
 } from "./postgres-runtime"
 
-
 type CommercialTerms = {
   conversionRate?: number
   currency?: string
@@ -726,7 +725,6 @@ async function classifyImportRow(
   }
 }
 
-
 type SalesFollowupHistoryRow = {
   channel: string
   companyName: string
@@ -1257,7 +1255,9 @@ async function getImportReviewWithClient(client: PoolClient, reviewId: string) {
   }
 }
 
-export function createCommercialWorkflowRepository(options: RepositoryPoolOptions) {
+export function createCommercialWorkflowRepository(
+  options: RepositoryPoolOptions
+) {
   const { close, pool } = repositoryPool(options)
 
   return {
@@ -1275,9 +1275,19 @@ export function createCommercialWorkflowRepository(options: RepositoryPoolOption
       source?: string
     }) {
       return transaction(pool, async (client) => {
-        const customer = await client.query<{ id: string }>(
+        const customer = await client.query<{
+          default_buyer_name: string | null
+          default_currency: string | null
+          default_incoterms: string | null
+          default_packaging_terms: string | null
+          default_payment_terms: string | null
+          default_shipment_mode: string | null
+          id: string
+        }>(
           `
-            SELECT id
+            SELECT id, default_buyer_name, default_incoterms,
+              default_payment_terms, default_shipment_mode,
+              default_packaging_terms, default_currency
             FROM sales.customers
             WHERE id = $1 AND organization_id = $2
             FOR SHARE
@@ -1287,6 +1297,7 @@ export function createCommercialWorkflowRepository(options: RepositoryPoolOption
         if (!customer.rows[0]) {
           throw new Error("Customer was not found in this organization.")
         }
+        const customerDefaults = customer.rows[0]
         const enquiryNumber = await nextEnquiryNumber(
           client,
           input.organizationId
@@ -1321,13 +1332,23 @@ export function createCommercialWorkflowRepository(options: RepositoryPoolOption
             input.receivedOn,
             input.source ?? "Email",
             input.priority ?? "Normal",
-            input.buyerName ?? null,
-            terms.incoterms ?? null,
-            terms.paymentTerms ?? null,
-            terms.currency ?? "USD",
+            input.buyerName === undefined
+              ? customerDefaults.default_buyer_name
+              : input.buyerName,
+            terms.incoterms === undefined
+              ? customerDefaults.default_incoterms
+              : terms.incoterms,
+            terms.paymentTerms === undefined
+              ? customerDefaults.default_payment_terms
+              : terms.paymentTerms,
+            terms.currency ?? customerDefaults.default_currency ?? "USD",
             terms.conversionRate ?? 1,
-            terms.shipmentMode ?? null,
-            terms.packagingTerms ?? null,
+            terms.shipmentMode === undefined
+              ? customerDefaults.default_shipment_mode
+              : terms.shipmentMode,
+            terms.packagingTerms === undefined
+              ? customerDefaults.default_packaging_terms
+              : terms.packagingTerms,
             input.remarks ?? null,
             sourceId,
             input,
