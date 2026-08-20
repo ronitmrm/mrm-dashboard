@@ -151,12 +151,13 @@ beforeAll(async () => {
         weight_100_pcs, casting, machining_cost, washing, checking,
         marking, plating, annealing, deburring, buffing, sealant,
         overhead_cost, rejection_percent, burning_loss_percent,
-        source_system, source_table, source_id
+        source_system, source_table, source_id, source_payload
       )
       VALUES (
         $1, $2, 'QUOTE', 'Q', 'Derived precision item', 'List',
         'Barstock', $3, $4, 500, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 'test', 'products', $2
+        0, 0, 'test', 'products', $2,
+        '{"firstMaterialLine":{"manufacturing_process":"Washing, Plating"}}'::jsonb
       )
       RETURNING id
     `,
@@ -176,6 +177,88 @@ afterAll(async () => {
 })
 
 describe("PostgreSQL product-costing and quote workflow", () => {
+  test("loads active material rates and Design-selected processes", async () => {
+    await expect(
+      repository.getProductCostingProduct(organizationCode, itemId)
+    ).resolves.toMatchObject({
+      alloyPremium: 20,
+      extrusionCost: 10,
+      processesRequired: ["Washing", "Plating"],
+    })
+  })
+
+  test("suppresses manufacturing parameters for direct-purchase costing", async () => {
+    const suffix = randomUUID()
+    const direct = await pool.query<{ id: string }>(
+      `
+        INSERT INTO catalog.items (
+          organization_id, uid, uid_kind, lifecycle_status, description,
+          item_type, production_type, weight_100_pcs, alloy_premium,
+          extrusion_cost, forging_cost, machining_cost, washing, checking,
+          marking, plating, annealing, deburring, buffing, sealant,
+          overhead_cost, burning_loss_percent, source_system, source_table,
+          source_id
+        )
+        VALUES (
+          $1, $2, 'QUOTE', 'Q', 'Direct purchase item', 'List', 'Forged',
+          50, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 0.05,
+          'test', 'products', $2
+        )
+        RETURNING id
+      `,
+      [organizationId, `Q-DIRECT-${suffix}`]
+    )
+
+    await repository.updateProductCostParameters({
+      alloyPremium: 99,
+      annealing: 99,
+      burningLossPercent: 0.2,
+      directPurchasePricePerKg: 500,
+      extrusionCost: 99,
+      forgingCost: 99,
+      itemId: direct.rows[0]!.id,
+      machiningCost: 99,
+      overheadCost: 99,
+      pricingMethod: "Direct Purchase",
+      washing: 99,
+      weight100Pcs: 50,
+    })
+
+    await expect(
+      repository.getProductCostingProduct(organizationCode, direct.rows[0]!.id)
+    ).resolves.toMatchObject({
+      alloyPremium: 0,
+      burningLossPercent: 0,
+      directPurchasePricePerKg: 500,
+      directPurchasePricePerPiece: 25,
+      extrusionCost: 0,
+      forgingCost: 0,
+      machiningCost: 0,
+      overheadCost: 0,
+      pricingMethod: "Direct Purchase",
+      washing: 0,
+    })
+  })
+
+  test("bounds the Product Parameter Costing queue while keeping exact metrics", async () => {
+    const result = await repository.listProductCostingTasksBounded(
+      organizationCode,
+      1
+    )
+    const summary =
+      await repository.getProductCostingTaskSummary(organizationCode)
+
+    expect(result.coverage).toMatchObject({ limit: 1, returned: 1 })
+    expect(result.rows[0]).toMatchObject({
+      nextStageStatus: "Product Costing",
+      taskType: "Product Parameter Costing",
+    })
+    expect(summary.newProductCosting).toBeGreaterThanOrEqual(1)
+    expect(summary.total).toBe(
+      summary.newProductCosting + summary.productBulkRevisions + summary.ecn
+    )
+  })
+
   test("preserves product parameter calculations and the quote workbook chain", async () => {
     const product = await repository.updateProductCostParameters({
       action: "complete",

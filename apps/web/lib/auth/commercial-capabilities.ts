@@ -140,6 +140,12 @@ export const commercialPageAccess = [
     "Master Data"
   ),
   page(
+    "commercial.product-costing",
+    "Product Parameter Costing",
+    "/commercial/product-costing",
+    commercialCapabilities.costing
+  ),
+  page(
     "commercial.costing",
     "Product Costing",
     "/commercial/costing",

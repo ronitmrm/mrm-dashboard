@@ -23,6 +23,7 @@ import {
   Settings2,
   ShieldCheck,
   ShoppingCart,
+  SlidersHorizontal,
   TableProperties,
   Undo2,
   UsersRound,
@@ -466,9 +467,14 @@ export const commercialNavigation = [
     label: "Website Products",
   },
   {
+    href: "/commercial/product-costing",
+    icon: SlidersHorizontal,
+    label: "Product Parameter Costing",
+  },
+  {
     href: "/commercial/costing",
     icon: Calculator,
-    label: "Product Costing",
+    label: "Costing Workspace",
   },
   {
     href: "/commercial/quotes",

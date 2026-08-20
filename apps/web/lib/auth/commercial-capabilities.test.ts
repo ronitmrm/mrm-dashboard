@@ -84,6 +84,7 @@ describe("commercial Better Auth capability contract", () => {
       ["/commercial/assemblies", "pricing.assemblies.read"],
       ["/commercial/drawing-history", "pricing.drawing_history.read"],
       ["/commercial/website-products", "pricing.website_products.read"],
+      ["/commercial/product-costing", "pricing.costing.read"],
       ["/commercial/costing", "pricing.costing.read"],
       ["/commercial/quotes", "pricing.quotes.read"],
       ["/commercial/pricing", "pricing.pricing.read"],

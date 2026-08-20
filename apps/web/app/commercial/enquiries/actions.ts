@@ -533,6 +533,7 @@ export async function prepareCostingAction(formData: FormData) {
   )
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
   revalidatePath("/commercial/products")
+  revalidatePath("/commercial/product-costing")
 }
 
 export async function importEnquiryLinesAction(formData: FormData) {
