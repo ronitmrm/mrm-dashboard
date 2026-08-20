@@ -358,7 +358,7 @@ The single table containing Store Purchase Orders and receipt progress, with rec
 _Avoid_: Separate Purchase Order and receipt workspaces.
 
 **Stock Register**:
-The single filterable inventory table for both Consumable and Non Consumable Store Item Types, showing Asset Code, Asset Name, Category, Subcategory, quantity, and Storage Location.
+The single filterable inventory table where Consumables remain quantity-managed rows and every available Non Consumable Unit ID is a separate quantity-one row. Physical-unit rows retain their shared Asset Code and open the individual Asset Workspace from a separately filterable Unit ID column.
 _Avoid_: Separate Consumable table, Physical Asset register on Stock.
 
 **Store Request**:
