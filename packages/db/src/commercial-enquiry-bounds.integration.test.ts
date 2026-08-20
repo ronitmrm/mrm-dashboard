@@ -17,6 +17,7 @@ let emptyOrganizationCode: string
 let exactOrganizationCode: string
 let exportOrganizationCode: string
 let lineExportEnquiryId: string
+let statusOrganizationCode: string
 
 async function createOrganization(code: string, name: string) {
   const organization = await pool.query<{ id: string }>(
@@ -96,6 +97,7 @@ beforeAll(async () => {
   emptyOrganizationCode = `ENQ-EMPTY-${suffix}`
   exactOrganizationCode = `ENQ-EXACT-${suffix}`
   exportOrganizationCode = `ENQ-EXPORT-${suffix}`
+  statusOrganizationCode = `ENQ-STATUS-${suffix}`
 
   await createOrganization(emptyOrganizationCode, "Empty enquiries")
   const exact = await createOrganization(
@@ -110,6 +112,10 @@ beforeAll(async () => {
     `ENQ-LINES-${suffix}`,
     "Line export enquiry"
   )
+  const statuses = await createOrganization(
+    statusOrganizationCode,
+    "Excel view statuses"
+  )
 
   await seedEnquiries({
     count: 200,
@@ -123,6 +129,99 @@ beforeAll(async () => {
     organizationId: overflow.organizationId,
     prefix: "EXPORT",
   })
+  await seedEnquiries({
+    count: 10,
+    customerId: statuses.customerId,
+    organizationId: statuses.organizationId,
+    prefix: "STATUS",
+  })
+
+  await pool.query(
+    `
+      UPDATE sales.enquiries
+      SET technical_handover_status = 'Draft'
+      WHERE organization_id = $1 AND enquiry_number = 'STATUS-0001';
+
+      INSERT INTO sales.clarification_tasks (
+        organization_id, enquiry_id, enquiry_item_id, question, status,
+        source_stage, target_stage, source_system, source_table, source_id
+      )
+      SELECT enquiry.organization_id, enquiry.id, item.id,
+        'Sales must confirm the requirement.', 'Open', 'Technical Review',
+        'Sales', 'test', 'commercial_enquiry_bounds', $2
+      FROM sales.enquiries enquiry
+      JOIN sales.enquiry_items item ON item.enquiry_id = enquiry.id
+      WHERE enquiry.organization_id = $1
+        AND enquiry.enquiry_number = 'STATUS-0002';
+
+      INSERT INTO catalog.items (
+        organization_id, uid, lifecycle_status, description,
+        source_system, source_table, source_id
+      )
+      SELECT $1, 'STATUS-P-' || value::text,
+        CASE WHEN value = 3 THEN 'P' ELSE 'Q' END,
+        'Excel status product ' || value::text,
+        'test', 'commercial_enquiry_bounds', $2 || ':product:' || value::text
+      FROM generate_series(3, 6) value;
+
+      INSERT INTO sales.quote_items (
+        organization_id, quote_number, enquiry_id, enquiry_item_id,
+        customer_id, item_id, lineage_item_id, customer_part_code,
+        quantity, unit_price, status, is_active, sent_at,
+        source_system, source_table, source_id
+      )
+      SELECT enquiry.organization_id, 'STATUS-Q-' || value::text,
+        enquiry.id, enquiry_item.id, enquiry.customer_id, product.id,
+        product.id, enquiry_item.customer_part_code, 1, 1,
+        CASE value
+          WHEN 4 THEN 'Superseded'
+          WHEN 5 THEN 'Sent'
+          ELSE 'Draft'
+        END,
+        false,
+        CASE WHEN value = 5 THEN TIMESTAMPTZ '2026-01-05 10:00:00+00' END,
+        'test', 'commercial_enquiry_bounds', $2 || ':quote:' || value::text
+      FROM generate_series(3, 6) value
+      JOIN sales.enquiries enquiry
+        ON enquiry.organization_id = $1
+        AND enquiry.enquiry_number = 'STATUS-' || lpad(value::text, 4, '0')
+      JOIN sales.enquiry_items enquiry_item
+        ON enquiry_item.enquiry_id = enquiry.id
+      JOIN catalog.items product
+        ON product.organization_id = $1
+        AND product.uid = 'STATUS-P-' || value::text;
+
+      UPDATE sales.enquiry_items
+      SET technical_review_status = 'Not Feasible'
+      WHERE enquiry_id = (
+        SELECT id FROM sales.enquiries
+        WHERE organization_id = $1 AND enquiry_number = 'STATUS-0007'
+      );
+
+      UPDATE sales.enquiry_items item
+      SET technical_review_status = 'Feasible'
+      FROM sales.enquiries enquiry
+      WHERE enquiry.id = item.enquiry_id
+        AND enquiry.organization_id = $1
+        AND enquiry.enquiry_number IN ('STATUS-0008', 'STATUS-0009');
+
+      INSERT INTO sales.design_tasks (
+        organization_id, enquiry_item_id, status, design_status,
+        next_stage_status, source_system, source_table, source_id
+      )
+      SELECT enquiry.organization_id, enquiry_item.id, 'Pending',
+        CASE WHEN value = 9 THEN 'Design In Progress' ELSE 'Pending Design' END,
+        CASE WHEN value = 8 THEN 'Product Costing' ELSE 'Not Started' END,
+        'test', 'commercial_enquiry_bounds', $2 || ':design:' || value::text
+      FROM generate_series(8, 9) value
+      JOIN sales.enquiries enquiry
+        ON enquiry.organization_id = $1
+        AND enquiry.enquiry_number = 'STATUS-' || lpad(value::text, 4, '0')
+      JOIN sales.enquiry_items enquiry_item
+        ON enquiry_item.enquiry_id = enquiry.id;
+    `,
+    [statuses.organizationId, randomUUID()]
+  )
 
   await pool.query(
     `
@@ -252,6 +351,68 @@ describe("bounded enquiry repositories", () => {
     expect(overflow.rows.at(-1)?.enquiryNumber).toBe("EXPORT-0302")
   })
 
+  test("bounds the enquiry Excel view by line in stable business order", async () => {
+    const exact = await repository.listEnquirySpreadsheetBounded(
+      exactOrganizationCode
+    )
+    expect(exact.coverage).toEqual({
+      limit: 200,
+      returned: 200,
+      truncated: false,
+    })
+    expect(exact.rows[0]).toMatchObject({
+      currentStatus: "Technical Review",
+      enquiryNumber: "EXACT-0200",
+      lineNumber: 1,
+      quotePdfStatus: "Not Sent",
+    })
+
+    const overflow = await repository.listEnquirySpreadsheetBounded(
+      exportOrganizationCode
+    )
+    expect(overflow.coverage).toEqual({
+      limit: 200,
+      returned: 200,
+      truncated: true,
+    })
+    expect(overflow.rows[0]?.enquiryNumber).toBe("EXPORT-0501")
+    expect(overflow.rows.at(-1)?.enquiryNumber).toBe("EXPORT-0302")
+    expect(Buffer.byteLength(JSON.stringify(overflow))).toBeLessThan(
+      1024 * 1024
+    )
+  })
+
+  test("preserves the Pricing workflow-status precedence in Excel View", async () => {
+    const result = await repository.listEnquirySpreadsheetBounded(
+      statusOrganizationCode
+    )
+    const statusByEnquiry = Object.fromEntries(
+      result.rows.map((row) => [row.enquiryNumber, row.currentStatus])
+    )
+
+    expect(statusByEnquiry).toMatchObject({
+      "STATUS-0001": "With Sales",
+      "STATUS-0002": "With Sales",
+      "STATUS-0003": "Ordered / P",
+      "STATUS-0004": "Revision Given",
+      "STATUS-0005": "Quote Sent",
+      "STATUS-0006": "Ready To Send",
+      "STATUS-0007": "Cannot Quote",
+      "STATUS-0008": "Product Costing",
+      "STATUS-0009": "Design",
+      "STATUS-0010": "Technical Review",
+    })
+    expect(
+      result.rows.find((row) => row.enquiryNumber === "STATUS-0003")
+    ).toMatchObject({
+      designPartNumber: "STATUS-P-3",
+      quotePdfStatus: "Order Received",
+    })
+    expect(
+      result.rows.find((row) => row.enquiryNumber === "STATUS-0005")
+    ).toMatchObject({ quotePdfStatus: "PDF Sent" })
+  })
+
   test("loads a focused technical review beyond the bounded queue", async () => {
     const oldest = await pool.query<{ id: string }>(
       `
@@ -315,9 +476,7 @@ describe("exhaustive enquiry exports", () => {
       createHash("sha256")
         .update(first.map((row) => row.enquiryNumber).join("\n"))
         .digest("hex")
-    ).toBe(
-      "9d1979b0ebac928e9c56e616fb793235035ffd646612d10564fccbe8e48e1bd9"
-    )
+    ).toBe("9d1979b0ebac928e9c56e616fb793235035ffd646612d10564fccbe8e48e1bd9")
   })
 
   test("reads every selected-enquiry line across keyset batches", async () => {
@@ -332,8 +491,6 @@ describe("exhaustive enquiry exports", () => {
       createHash("sha256")
         .update(result.items.map((row) => row.customerPartCode).join("\n"))
         .digest("hex")
-    ).toBe(
-      "5231db93dd1191eb4a055375a352107cd967a7ec033304adde1eb9473a87fee4"
-    )
+    ).toBe("5231db93dd1191eb4a055375a352107cd967a7ec033304adde1eb9473a87fee4")
   })
 })

@@ -83,14 +83,31 @@ export const commercialPageAccess = [
     commercialCapabilities.enquiries,
     "Operational Entry"
   ),
-  page("commercial.sales", "Sales", "/commercial/sales", commercialCapabilities.sales),
+  page(
+    "commercial.enquiry_excel_view",
+    "Excel View",
+    "/commercial/enquiries/excel-view",
+    commercialCapabilities.enquiries,
+    "Operational Entry"
+  ),
+  page(
+    "commercial.sales",
+    "Sales",
+    "/commercial/sales",
+    commercialCapabilities.sales
+  ),
   page(
     "commercial.technical_review",
     "Technical Review",
     "/commercial/technical-review",
     commercialCapabilities.technicalReview
   ),
-  page("commercial.design", "Design", "/commercial/design", commercialCapabilities.design),
+  page(
+    "commercial.design",
+    "Design",
+    "/commercial/design",
+    commercialCapabilities.design
+  ),
   page(
     "commercial.masters",
     "Pricing Masters",
@@ -134,7 +151,12 @@ export const commercialPageAccess = [
     "/commercial/quotes",
     commercialCapabilities.quotes
   ),
-  page("commercial.pricing", "Pricing", "/commercial/pricing", commercialCapabilities.pricing),
+  page(
+    "commercial.pricing",
+    "Pricing",
+    "/commercial/pricing",
+    commercialCapabilities.pricing
+  ),
   page(
     "commercial.orders",
     "Purchase Orders",

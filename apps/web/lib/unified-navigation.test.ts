@@ -100,7 +100,9 @@ describe("unified navigation", () => {
       "maintenanceTab",
       "correctionsTab",
     ])
-    expect(masterDataNavigation.map(({ id, title }) => ({ id, title }))).toEqual([
+    expect(
+      masterDataNavigation.map(({ id, title }) => ({ id, title }))
+    ).toEqual([
       { id: "dataEntryTab", title: "Data Entry" },
       { id: "masterTablesTab", title: "Master Tables" },
     ])
@@ -164,7 +166,7 @@ describe("unified navigation", () => {
     ).toMatchObject({
       title: "Mechanical Maintenance",
     })
-    expect(commercialNavigation).toHaveLength(16)
+    expect(commercialNavigation).toHaveLength(17)
     expect(
       commercialMasterDataWorkspaceNavigation.map(({ href, label }) => ({
         href,
@@ -181,9 +183,18 @@ describe("unified navigation", () => {
       }))
     ).toEqual([
       { href: "/commercial/enquiries", label: "Enquiries" },
+      {
+        href: "/commercial/enquiries/excel-view",
+        label: "Excel View",
+      },
     ])
     expect(commercialCostingNavigation.map(({ label }) => label)).not.toEqual(
-      expect.arrayContaining(["Customers", "Enquiries", "Website Products"])
+      expect.arrayContaining([
+        "Customers",
+        "Enquiries",
+        "Excel View",
+        "Website Products",
+      ])
     )
     expect(
       commercialCostingNavigation.length +
@@ -238,6 +249,25 @@ describe("unified navigation", () => {
       "/?tab=maintenanceTab&floor=cnc"
     )
     expect(dashboardTabHref("correctionsTab")).toBe("/?tab=correctionsTab")
+  })
+
+  it("selects Excel View without also selecting its Enquiries parent", () => {
+    const searchParams = new URLSearchParams()
+
+    expect(
+      navigationHrefMatches(
+        "/commercial/enquiries/excel-view",
+        searchParams,
+        "/commercial/enquiries/excel-view"
+      )
+    ).toBe(true)
+    expect(
+      navigationHrefMatches(
+        "/commercial/enquiries/excel-view",
+        searchParams,
+        "/commercial/enquiries"
+      )
+    ).toBe(false)
   })
 
   it("sends old Production master bookmarks into company Data Entry", () => {

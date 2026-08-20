@@ -62,6 +62,56 @@ type AddEnquiryItem = {
 
 type TechnicalChecklist = Record<string, boolean>
 
+type EnquirySpreadsheetDatabaseRow = {
+  buyer_name: string | null
+  company_name: string
+  current_status: string
+  customer_part_code: string | null
+  customer_uid: string
+  description: string
+  design_part_no: string | null
+  drawing_file_name: string | null
+  drawing_reference: string | null
+  enquiry_id: string
+  enquiry_item_id: string
+  enquiry_number: string
+  grade: string | null
+  line_number: number
+  priority: string
+  quantity: string
+  quote_pdf_sent_at: Date | null
+  quote_pdf_status: string
+  received_on: string
+  source: string
+  target_price: string | null
+}
+
+function enquirySpreadsheetItemFromRow(row: EnquirySpreadsheetDatabaseRow) {
+  return {
+    buyerName: row.buyer_name,
+    companyName: row.company_name,
+    currentStatus: row.current_status,
+    customerPartCode: row.customer_part_code,
+    customerUid: row.customer_uid,
+    description: row.description,
+    designPartNumber: row.design_part_no,
+    drawingFileName: row.drawing_file_name,
+    drawingReference: row.drawing_reference,
+    enquiryId: row.enquiry_id,
+    enquiryItemId: row.enquiry_item_id,
+    enquiryNumber: row.enquiry_number,
+    grade: row.grade,
+    lineNumber: row.line_number,
+    priority: row.priority,
+    quantity: Number(row.quantity),
+    quotePdfSentAt: row.quote_pdf_sent_at,
+    quotePdfStatus: row.quote_pdf_status,
+    receivedOn: row.received_on,
+    source: row.source,
+    targetPrice: row.target_price === null ? null : Number(row.target_price),
+  }
+}
+
 type TechnicalReviewDatabaseRow = {
   company_name: string
   customer_part_code: string
@@ -5176,6 +5226,157 @@ export function createCommercialWorkflowRepository(
         roots.rows.slice(0, limit)
       )
       return boundedResult(rows, limit, roots.rows.length > limit)
+    },
+
+    async listEnquirySpreadsheetBounded(
+      organizationCode: string,
+      requestedLimit = 200
+    ) {
+      const limit = operationalRootLimit(requestedLimit)
+      const rows = await pool.query<EnquirySpreadsheetDatabaseRow>(
+        `
+          SELECT enquiry_item.id AS enquiry_item_id,
+            enquiry.id AS enquiry_id, enquiry.enquiry_number,
+            enquiry.received_on::text, customer.customer_uid,
+            customer.company_name, enquiry.source, enquiry.priority,
+            enquiry.buyer_name, enquiry_item.line_number,
+            enquiry_item.customer_part_code, enquiry_item.description,
+            enquiry_item.grade, enquiry_item.quantity::text,
+            enquiry_item.target_price::text,
+            enquiry_item.drawing_reference,
+            drawing.file_name AS drawing_file_name,
+            CASE
+              WHEN enquiry.technical_handover_status <> 'Handed Over'
+                THEN 'With Sales'
+              WHEN EXISTS (
+                SELECT 1
+                FROM sales.clarification_tasks clarification
+                WHERE clarification.enquiry_item_id = enquiry_item.id
+                  AND clarification.status = 'Open'
+                  AND clarification.target_stage = 'Sales'
+              ) THEN 'With Sales'
+              WHEN selected_quote.product_lifecycle_status = 'P'
+                OR selected_quote.status = 'Ordered' THEN 'Ordered / P'
+              WHEN selected_quote.status = 'Superseded'
+                OR selected_quote.superseded_by_quote_item_id IS NOT NULL
+                THEN 'Revision Given'
+              WHEN selected_quote.sent_at IS NOT NULL THEN 'Quote Sent'
+              WHEN selected_quote.status = 'Draft' THEN 'Ready To Send'
+              WHEN selected_quote.id IS NOT NULL THEN 'Quote Costing'
+              WHEN enquiry_item.technical_review_status = 'Not Feasible'
+                THEN 'Cannot Quote'
+              WHEN enquiry_item.technical_review_status IN (
+                'Need Clarification', 'Need Sales Confirmation'
+              ) THEN 'With Sales'
+              WHEN enquiry_item.technical_review_status = 'Pending Review'
+                THEN 'Technical Review'
+              WHEN design.next_stage_status = 'Product Costing Complete'
+                OR design.matched_product_id IS NOT NULL THEN 'Quote Costing'
+              WHEN design.next_stage_status IN (
+                'Product Costing', 'Changes Required'
+              ) THEN 'Product Costing'
+              WHEN COALESCE(design.design_status, '') NOT IN ('', 'Not Required')
+                THEN 'Design'
+              ELSE 'Technical Review'
+            END AS current_status,
+            COALESCE(
+              selected_quote.item_uid, matched_product.uid,
+              design.quoted_part_uid, design.internal_drawing_no,
+              matched_product.converted_from_quote_uid
+            ) AS design_part_no,
+            CASE
+              WHEN selected_quote.sent_at IS NOT NULL THEN 'PDF Sent'
+              WHEN selected_quote.product_lifecycle_status = 'P'
+                OR selected_quote.status = 'Ordered' THEN 'Order Received'
+              ELSE 'Not Sent'
+            END AS quote_pdf_status,
+            selected_quote.sent_at AS quote_pdf_sent_at
+          FROM sales.enquiry_items enquiry_item
+          JOIN sales.enquiries enquiry ON enquiry.id = enquiry_item.enquiry_id
+          JOIN sales.customers customer ON customer.id = enquiry.customer_id
+          JOIN core.organizations organization
+            ON organization.id = enquiry.organization_id
+          LEFT JOIN sales.design_tasks design
+            ON design.enquiry_item_id = enquiry_item.id
+          LEFT JOIN catalog.items matched_product
+            ON matched_product.id = design.matched_product_id
+          LEFT JOIN LATERAL (
+            SELECT product.id
+            FROM catalog.items product
+            WHERE product.organization_id = enquiry.organization_id
+              AND (
+                lower(product.uid) = lower(COALESCE(
+                  design.quoted_part_uid, design.internal_drawing_no, ''
+                ))
+                OR lower(COALESCE(product.converted_from_quote_uid, '')) =
+                  lower(COALESCE(
+                    design.quoted_part_uid, design.internal_drawing_no, ''
+                  ))
+              )
+            ORDER BY CASE
+                WHEN lower(product.uid) = lower(COALESCE(
+                  design.quoted_part_uid, design.internal_drawing_no, ''
+                )) THEN 0 ELSE 1
+              END,
+              product.updated_at DESC, product.id DESC
+            LIMIT 1
+          ) designed_product ON true
+          LEFT JOIN LATERAL (
+            SELECT quote.id, quote.status,
+              quote.superseded_by_quote_item_id, quote.sent_at,
+              product.uid AS item_uid,
+              product.lifecycle_status AS product_lifecycle_status
+            FROM sales.quote_items quote
+            JOIN catalog.items product ON product.id = quote.item_id
+            WHERE quote.organization_id = enquiry.organization_id
+              AND quote.status <> 'Cancelled'
+              AND (
+                quote.enquiry_item_id = enquiry_item.id
+                OR (
+                  quote.enquiry_id = enquiry.id
+                  AND quote.item_id = COALESCE(
+                    design.matched_product_id, designed_product.id,
+                    enquiry_item.item_id
+                  )
+                )
+              )
+            ORDER BY
+              CASE WHEN quote.enquiry_item_id = enquiry_item.id THEN 0 ELSE 1 END,
+              CASE
+                WHEN product.lifecycle_status = 'P'
+                  OR quote.status = 'Ordered' THEN 0
+                WHEN quote.is_active THEN 1
+                WHEN quote.sent_at IS NOT NULL THEN 2
+                ELSE 3
+              END,
+              COALESCE(quote.sent_at, quote.updated_at, quote.created_at) DESC,
+              quote.id DESC
+            LIMIT 1
+          ) selected_quote ON true
+          LEFT JOIN LATERAL (
+            SELECT file.file_name
+            FROM core.file_links file_link
+            JOIN core.files file ON file.id = file_link.file_id
+            WHERE file_link.target_schema = 'sales'
+              AND file_link.target_table = 'enquiry_items'
+              AND file_link.target_id = enquiry_item.id
+              AND file_link.purpose = 'drawing'
+            ORDER BY file.created_at DESC, file.id DESC
+            LIMIT 1
+          ) drawing ON true
+          WHERE lower(organization.code) = lower($1)
+            AND enquiry_item.linked_enquiry_item_id IS NULL
+          ORDER BY enquiry.created_at DESC, enquiry.id DESC,
+            enquiry_item.line_number, enquiry_item.id
+          LIMIT $2
+        `,
+        [organizationCode.trim(), limit + 1]
+      )
+      return boundedResult(
+        rows.rows.slice(0, limit).map(enquirySpreadsheetItemFromRow),
+        limit,
+        rows.rows.length > limit
+      )
     },
 
     async listTechnicalReviewQueueBounded(

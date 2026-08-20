@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { filtersForTableColumns } from "@workspace/ui/lib/table-filter-state"
+import {
+  filtersForTableColumns,
+  parsePersistedTableFilters,
+  serializeTableFilters,
+} from "@workspace/ui/lib/table-filter-state"
 
 describe("table filter state", () => {
   it("clears filters when a Production master changes its columns", () => {
@@ -28,8 +32,30 @@ describe("table filter state", () => {
     ]
     const filters = { 0: ["1"] }
 
+    expect(filtersForTableColumns(currentColumns, nextColumns, filters)).toBe(
+      filters
+    )
+  })
+
+  it("round-trips versioned filters only for the same column schema", () => {
+    const columns = [
+      { index: 0, label: "ENQ No.", options: ["ENQ-1", "ENQ-2"] },
+      { index: 1, label: "Status", options: ["With Sales"] },
+    ]
+    const stored = serializeTableFilters(columns, {
+      0: ["ENQ-1"],
+      1: null,
+    })
+
+    expect(parsePersistedTableFilters(stored, columns)).toEqual({
+      0: ["ENQ-1"],
+      1: null,
+    })
     expect(
-      filtersForTableColumns(currentColumns, nextColumns, filters)
-    ).toBe(filters)
+      parsePersistedTableFilters(stored, [
+        { index: 0, label: "Different", options: [] },
+      ])
+    ).toEqual({})
+    expect(parsePersistedTableFilters("not-json", columns)).toEqual({})
   })
 })
