@@ -119,12 +119,14 @@ available physical units for that request's Asset Code and Store; it is never
 entered as free text.
 
 **Stock Register**: The single filterable Store inventory table containing both
-Consumable and Non Consumable Store Item Types. Each row shows Asset Code, Asset
-Name, Category, Subcategory, quantity, and Storage Location. Purchase Order
-mode adds row selection and ordered quantity without opening another form. The
-Asset Code opens its Store Item Workspace. A Non Consumable row also lists each
-available Unit ID, such as `NC001-0001` and `NC001-0002`; its quantity is the
-count of those available physical units, not a shared consumable balance.
+Consumable and Non Consumable items. A Consumable has one quantity-managed row.
+Every available Non Consumable Physical Asset has its own row with quantity one,
+its shared Asset Code in the Asset Code column, and its permanent Unit ID /
+Serial ID in a separately filterable column. For example, `NC001-0001` and
+`NC001-0002` are two rows that both show Asset Code `NC001`; each Unit ID opens
+its individual Asset Workspace. Purchase Order and request controls remain one
+per shared Store Item Type so repeating physical-unit rows cannot create a
+duplicate order or request line.
 
 **Store Page Access**: Access is granted per Store page rather than through one
 module-wide permission. Store Overview, Requests & Issues, New Item Requests,

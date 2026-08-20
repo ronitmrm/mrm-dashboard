@@ -31,6 +31,7 @@ import {
 import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { istDateValue } from "@/lib/date-time"
 import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
+import { storeStockRows } from "@/lib/store-stock-rows"
 
 import { createStorePurchaseOrdersAction } from "../actions"
 
@@ -79,6 +80,7 @@ export default async function StoreStockPage({
     ])
     return { items, supplierPrices }
   })().finally(() => repository.close())
+  const stockRows = storeStockRows(data.items)
   const actionFormId = "stock-row-action"
   const columnCount = mode === "view" ? 9 : mode === "request" ? 10 : 11
 
@@ -146,12 +148,12 @@ export default async function StoreStockPage({
             <TableHeader>
               <TableRow>
                 {mode !== "view" ? <TableHead>Select</TableHead> : null}
-                <TableHead>Asset Code</TableHead>
+                <TableHead data-filterable="true">Asset Code</TableHead>
                 <TableHead>Asset Name</TableHead>
                 <TableHead>Asset Category</TableHead>
                 <TableHead>Asset Subcategory</TableHead>
                 <TableHead>Stock Quantity</TableHead>
-                <TableHead>Available Unit IDs</TableHead>
+                <TableHead data-filterable="true">Unit ID / Serial ID</TableHead>
                 <TableHead>Storage Location</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Master Price</TableHead>
@@ -161,7 +163,7 @@ export default async function StoreStockPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.items.map((item) => {
+              {stockRows.map((item) => {
                 const supplierOptions = data.supplierPrices
                   .filter(
                     (price) =>
@@ -175,24 +177,29 @@ export default async function StoreStockPage({
                   )
                 const hasPrice = supplierOptions.length > 0
                 return (
-                  <TableRow key={item.id}>
+                  <TableRow key={item.rowKey}>
                     {mode !== "view" ? (
                       <TableCell>
-                        <input
-                          aria-label={`Select ${item.typeCode} ${item.identificationName}`}
-                          className="size-4 accent-primary"
-                          defaultChecked={item.id === orderItemId}
-                          disabled={mode === "order" && !hasPrice}
-                          form={actionFormId}
-                          name={
-                            mode === "request" ? "itemTypeId" : "item_type_id"
-                          }
-                          type="checkbox"
-                          value={item.id}
-                        />
+                        {item.actionItem ? (
+                          <input
+                            aria-label={`Select ${item.typeCode} ${item.identificationName}`}
+                            className="size-4 accent-primary"
+                            defaultChecked={item.id === orderItemId}
+                            disabled={mode === "order" && !hasPrice}
+                            form={actionFormId}
+                            name={
+                              mode === "request" ? "itemTypeId" : "item_type_id"
+                            }
+                            type="checkbox"
+                            value={item.id}
+                          />
+                        ) : null}
                       </TableCell>
                     ) : null}
-                    <TableCell className="font-medium">
+                    <TableCell
+                      className="font-medium"
+                      data-filter-value={item.typeCode}
+                    >
                       {capabilities.has("store.asset_history.read") ? (
                         <Link
                           className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
@@ -215,39 +222,35 @@ export default async function StoreStockPage({
                     </TableCell>
                     <TableCell>{item.assetCategory}</TableCell>
                     <TableCell>{item.assetSubcategory}</TableCell>
-                    <TableCell>
-                      {item.trackingMode === "SERIALIZED"
-                        ? `${item.availableUnitIds.length} physical unit${item.availableUnitIds.length === 1 ? "" : "s"}`
-                        : `${item.availableStock} ${item.unit}`}
-                    </TableCell>
-                    <TableCell>
-                      {item.trackingMode === "SERIALIZED" ? (
-                        item.availableUnitIds.length ? (
-                          <div className="flex min-w-32 flex-col gap-1">
-                            {item.availableUnitIds.map((unitId) =>
-                              capabilities.has("store.asset_history.read") ? (
-                                <Link
-                                  className="font-medium underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
-                                  href={storeAssetWorkspaceHref(unitId)}
-                                  key={unitId}
-                                >
-                                  {unitId}
-                                </Link>
-                              ) : (
-                                <span key={unitId}>{unitId}</span>
-                              )
-                            )}
-                          </div>
+                    <TableCell>{item.displayedQuantity}</TableCell>
+                    <TableCell
+                      data-filter-value={
+                        item.unitId ??
+                        (item.trackingMode === "SERIALIZED"
+                          ? "None available"
+                          : "Not applicable")
+                      }
+                    >
+                      {item.unitId ? (
+                        capabilities.has("store.asset_history.read") ? (
+                          <Link
+                            className="font-medium underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-foreground"
+                            href={storeAssetWorkspaceHref(item.unitId)}
+                          >
+                            {item.unitId}
+                          </Link>
                         ) : (
-                          "None available"
+                          item.unitId
                         )
+                      ) : item.trackingMode === "SERIALIZED" ? (
+                        "None available"
                       ) : (
                         "Not applicable"
                       )}
                     </TableCell>
                     <TableCell>{item.storageLocations}</TableCell>
                     <TableCell>
-                      {mode === "order" && supplierOptions.length ? (
+                      {mode === "order" && item.actionItem && supplierOptions.length ? (
                         <NativeSelect
                           aria-label={`Supplier for ${item.typeCode}`}
                           defaultValue={item.currentSupplierId ?? undefined}
@@ -276,26 +279,28 @@ export default async function StoreStockPage({
                     </TableCell>
                     {mode === "order" ? (
                       <TableCell>
-                        <Input
-                          aria-label={`Order quantity for ${item.typeCode}`}
-                          className="min-w-28"
-                          defaultValue={
-                            item.id === orderItemId ? orderQuantity : ""
-                          }
-                          disabled={!hasPrice}
-                          form={actionFormId}
-                          min="0.001"
-                          name={`quantity_${item.id}`}
-                          placeholder={item.unit}
-                          step="0.001"
-                          type="number"
-                        />
+                        {item.actionItem ? (
+                          <Input
+                            aria-label={`Order quantity for ${item.typeCode}`}
+                            className="min-w-28"
+                            defaultValue={
+                              item.id === orderItemId ? orderQuantity : ""
+                            }
+                            disabled={!hasPrice}
+                            form={actionFormId}
+                            min="0.001"
+                            name={`quantity_${item.id}`}
+                            placeholder={item.unit}
+                            step="0.001"
+                            type="number"
+                          />
+                        ) : null}
                       </TableCell>
                     ) : null}
                   </TableRow>
                 )
               })}
-              {!data.items.length ? (
+              {!stockRows.length ? (
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
