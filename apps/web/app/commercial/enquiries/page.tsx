@@ -34,14 +34,22 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { OperationalWorkspaceTabs } from "@/components/operational-workspace-tabs"
 
 import { importEnquiryRegisterAction } from "./actions"
 import { EnquiryLogForm, type CommercialTermOptions } from "./enquiry-log-form"
 
 export const dynamic = "force-dynamic"
 
-export default async function EnquiriesPage() {
+export default async function EnquiriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ operationalView?: string }>
+}) {
   await requireCapability("pricing.enquiries.read", "/commercial/enquiries")
+  const requestedView = (await searchParams).operationalView
+  const operationalView =
+    requestedView === "masterTables" ? "masterTables" : "dataEntry"
   const connectionString = readAuthEnvironment().connectionString
   const customerRepository = createCustomerRepository({ connectionString })
   const masterRepository = createCommercialMasterRepository({
@@ -83,6 +91,11 @@ export default async function EnquiriesPage() {
 
   return (
     <div className="grid gap-6">
+      <OperationalWorkspaceTabs
+        activeView={operationalView}
+        dataEntryHref="/commercial/enquiries?operationalView=dataEntry"
+        masterTablesHref="/commercial/enquiries?operationalView=masterTables"
+      />
       <section className="grid gap-2">
         <h2 className="text-2xl font-semibold tracking-tight">Enquiries</h2>
         <p className="max-w-3xl text-sm text-muted-foreground">
@@ -90,20 +103,23 @@ export default async function EnquiriesPage() {
           And Design Progression In One Postgresql Workflow.
         </p>
         <div className="flex flex-wrap gap-2 pt-2">
-          <Button asChild size="sm" variant="outline">
-            <Link href="/commercial/enquiries/register/export.xlsx">
-              Export Register
-            </Link>
-          </Button>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/commercial/enquiries/register/template.xlsx">
-              Register Template
-            </Link>
-          </Button>
+          {operationalView === "masterTables" ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/commercial/enquiries/register/export.xlsx">
+                Export Register
+              </Link>
+            </Button>
+          ) : (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/commercial/enquiries/register/template.xlsx">
+                Register Template
+              </Link>
+            </Button>
+          )}
         </div>
       </section>
 
-      {organizationId ? (
+      {operationalView === "dataEntry" && organizationId ? (
         <Card>
           <CardHeader>
             <CardTitle>Import Enquiry Register</CardTitle>
@@ -140,32 +156,35 @@ export default async function EnquiriesPage() {
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Log Enquiry</CardTitle>
-          <CardDescription>
-            Enq Numbering Follows The Recovered Monthly Sequence. Commercial
-            Terms Are Validated Again Before Technical Handover.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5">
-          {organizationId ? (
-            <EnquiryLogForm
-              customers={customers}
-              organizationId={organizationId}
-              termOptions={termOptions}
-              today={today}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Load The Mrmpl Organization And Customer Masters Before Logging An
-              Enquiry.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {operationalView === "dataEntry" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Log Enquiry</CardTitle>
+            <CardDescription>
+              Enq Numbering Follows The Recovered Monthly Sequence. Commercial
+              Terms Are Validated Again Before Technical Handover.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            {organizationId ? (
+              <EnquiryLogForm
+                customers={customers}
+                organizationId={organizationId}
+                termOptions={termOptions}
+                today={today}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Load The Mrmpl Organization And Customer Masters Before Logging
+                An Enquiry.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <Card>
+      {operationalView === "masterTables" ? (
+        <Card>
         <CardHeader>
           <CardTitle>Enquiry Register</CardTitle>
           <CardDescription>
@@ -245,7 +264,8 @@ export default async function EnquiriesPage() {
             </Table>
           </div>
         </CardContent>
-      </Card>
+        </Card>
+      ) : null}
     </div>
   )
 }

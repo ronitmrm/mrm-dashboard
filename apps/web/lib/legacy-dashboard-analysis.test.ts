@@ -39,6 +39,48 @@ function todayDateKey() {
 }
 
 describe("buildLegacyDashboardSnapshot", () => {
+  it("keeps saved operational entries available for their table views", () => {
+    const workOrder = {
+      entryType: "work_order",
+      createdAt: "2026-08-20T00:00:00.000Z",
+      payload: { jcNo: "JC-101", partCode: "P-101", orderPcs: 100 },
+    }
+    const receipt = {
+      entryType: "rm_inward",
+      createdAt: "2026-08-20T01:00:00.000Z",
+      payload: {
+        jcNo: "JC-101",
+        rmInwardDate: "2026-08-20",
+        rmInwardKg: 250,
+      },
+    }
+    const output = {
+      prodDate: "2026-08-20",
+      jobCard: "JC-101",
+      partCode: "P-101",
+      setupNo: "1",
+      machine: "C501",
+      machineType: "AUTOMATIC",
+      operatorId: "OP-1",
+      outputQty: 40,
+      actualQty: 40,
+      targetQty: 45,
+      rejectQty: 0,
+    }
+    const snapshot = buildLegacyDashboardSnapshot({
+      workbookName: "PostgreSQL",
+      dataEntries: [workOrder, receipt],
+      productionEntries: [output],
+    })
+
+    expect(snapshot.productionControl.rmInwardRows).toEqual([
+      expect.objectContaining(receipt.payload),
+    ])
+    expect(snapshot.productionControl.productionOutputRows).toEqual([
+      expect.objectContaining(output),
+    ])
+  })
+
   it("blocks planning when a route machine family has no active physical machine in master", () => {
     const snapshot = buildLegacyDashboardSnapshot({
       workbookName: "Convex",

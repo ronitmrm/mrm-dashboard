@@ -21,6 +21,35 @@ export const operationalDataEntryTypes = [
   "software_raw",
 ] as const
 
+const operationalRowSourceByEntryType: Record<string, string> = {
+  rm_inward: "rmInwardRows",
+  software_raw: "productionOutputRows",
+  work_order: "workOrders",
+}
+
+function recordRows(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter(
+        (row): row is Record<string, unknown> =>
+          typeof row === "object" && row !== null && !Array.isArray(row)
+      )
+    : []
+}
+
+export function operationalEntryRows(
+  entryType: string,
+  dataEntry: Record<string, unknown>,
+  productionControl: Record<string, unknown>
+) {
+  const projectedRows = recordRows(
+    productionControl[operationalRowSourceByEntryType[entryType] ?? ""]
+  )
+  const savedRows = recordRows(dataEntry.rows).filter(
+    (row) => row.entryType === entryType
+  )
+  return [...projectedRows, ...savedRows]
+}
+
 const identityFieldsByEntryType: Record<string, readonly string[]> = {
   cycle: ["partNo", "optionNumber", "setupNo"],
   machine_master: ["machineNo"],
