@@ -168,7 +168,12 @@ export default async function EnquiryExcelViewPage() {
                       <Badge variant="outline">{row.currentStatus}</Badge>
                     </TableCell>
                     <TableCell className="font-mono">
-                      {row.designPartNumber ?? "—"}
+                      <Link
+                        className="font-medium text-primary underline-offset-4 hover:underline"
+                        href={`/commercial/design?item=${row.enquiryItemId}&from=excel#design-form`}
+                      >
+                        {row.designPartNumber ?? "Open Design"}
+                      </Link>
                     </TableCell>
                     <TableCell data-filter-value={row.quotePdfStatus}>
                       <Badge variant="outline">{row.quotePdfStatus}</Badge>

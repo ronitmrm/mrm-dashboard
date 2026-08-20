@@ -27,6 +27,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./commercial-design-domain": "./src/commercial-design-domain.ts",
     "./dashboard-analysis": "./src/legacy-dashboard-analysis.ts",
     "./dashboard-corrections": "./src/dashboard-corrections.ts",
     "./dashboard-coverage": "./src/dashboard-coverage.ts",

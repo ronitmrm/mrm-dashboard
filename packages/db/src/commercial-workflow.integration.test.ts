@@ -469,7 +469,7 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       designStatus: "Design Complete",
       enquiryItemId: line.id,
       itemType: "List",
-      portfolioMatchStatus: "New Design Required",
+      portfolioMatchStatus: "New Quoted Part",
       quotedPartUid,
     })
     const costing = await repository.prepareCostingFromDesign(line.id)
@@ -669,7 +669,7 @@ describe("PostgreSQL enquiry-to-design workflow", () => {
       manufacturingProcess: "Machining",
       operationNotes: "Machine, assemble, inspect.",
       packageProcessRequired: "Assembly",
-      portfolioMatchStatus: "New Design Required",
+      portfolioMatchStatus: "New Quoted Part",
       quotedPartUid: null,
       revisionNo: "2",
       targetCompletionDate: "2026-08-05",

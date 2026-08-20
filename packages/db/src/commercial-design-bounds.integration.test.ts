@@ -15,6 +15,8 @@ const repository = createCommercialWorkflowRepository({ connectionString })
 
 let emptyOrganizationCode: string
 let exactOrganizationCode: string
+let historyEnquiryItemId: string
+let historyOrganizationCode: string
 let overflowOrganizationCode: string
 
 async function createOrganization(code: string) {
@@ -91,9 +93,9 @@ async function seedDesignQueue(input: {
           WHEN 1 THEN 'Changes Required'
           WHEN 2 THEN 'Need Clarification'
           WHEN 3 THEN 'Pending Design'
-          ELSE 'Design Complete'
+          ELSE 'In Progress'
         END,
-        'New Design Required', 'test', 'commercial_design_bounds',
+        'New Quoted Part', 'test', 'commercial_design_bounds',
         $1 || ':design:' || value::text
       FROM generate_series(1, $3) value
       JOIN sales.enquiry_items item
@@ -182,10 +184,12 @@ beforeAll(async () => {
   const suffix = randomUUID().slice(0, 8)
   emptyOrganizationCode = `DES-EMPTY-${suffix}`
   exactOrganizationCode = `DES-EXACT-${suffix}`
+  historyOrganizationCode = `DES-HISTORY-${suffix}`
   overflowOrganizationCode = `DES-OVER-${suffix}`
 
   await createOrganization(emptyOrganizationCode)
   const exact = await createOrganization(exactOrganizationCode)
+  const history = await createOrganization(historyOrganizationCode)
   const overflow = await createOrganization(overflowOrganizationCode)
   await seedDesignQueue({
     count: 200,
@@ -194,10 +198,70 @@ beforeAll(async () => {
     prefix: "EXACT",
   })
   await seedDesignQueue({
+    count: 1,
+    customerId: history.customerId,
+    organizationId: history.organizationId,
+    prefix: "HISTORY",
+  })
+  await seedDesignQueue({
     count: 201,
     customerId: overflow.customerId,
     organizationId: overflow.organizationId,
     prefix: "OVER",
+  })
+
+  const historyItem = await pool.query<{ design_id: string; item_id: string }>(
+    `
+      UPDATE sales.design_tasks design
+      SET design_status = 'Design Complete',
+        next_stage_status = 'Product Costing'
+      FROM sales.enquiry_items item
+      WHERE item.id = design.enquiry_item_id
+        AND design.organization_id = $1
+      RETURNING design.id AS design_id, item.id AS item_id
+    `,
+    [history.organizationId]
+  )
+  historyEnquiryItemId = historyItem.rows[0]!.item_id
+  await pool.query(
+    `
+      UPDATE sales.enquiries
+      SET delivery_terms = 'FOB Mumbai', payment_terms = 'Net 30',
+        remarks = 'Historical enquiry context'
+      WHERE organization_id = $1;
+
+      UPDATE sales.enquiry_items
+      SET grade = 'CZ121', target_price = 4.25,
+        remarks = 'Historical line context',
+        drawing_reference = 'DRW-CUSTOMER-1',
+        technical_checklist = '{"drawing_available":true}'::jsonb,
+        missing_information = 'Original tolerance question',
+        feasibility_reason = 'Machinable from bar',
+        technical_remarks = 'Released after review',
+        reviewed_at = TIMESTAMPTZ '2026-08-01 10:00:00+00'
+      WHERE id = $2;
+
+      UPDATE sales.design_bom_lines
+      SET rod_size = '12 mm', rod_type = 'Round', grade = 'CZ121',
+        manufacturing_process = 'Barstock', casting = 1.2,
+        piece_weight = 0.025, process_required = 'Machining, Washing'
+      WHERE design_task_id = $3 AND line_number = 1;
+    `,
+    [
+      history.organizationId,
+      historyEnquiryItemId,
+      historyItem.rows[0]!.design_id,
+    ]
+  )
+  await repository.recordAttachment({
+    byteSize: 128,
+    fileName: "customer-drawing.pdf",
+    organizationId: history.organizationId,
+    purpose: "drawing",
+    sourceId: randomUUID(),
+    storageKey: `design-history/${suffix}/customer-drawing.pdf`,
+    targetId: historyEnquiryItemId,
+    targetTable: "enquiry_items",
   })
 
   await pool.query(
@@ -270,11 +334,12 @@ describe("bounded Design repositories", () => {
         WHERE organization.code = $1
         ORDER BY CASE COALESCE(design.design_status, 'Pending Design')
             WHEN 'Changes Required' THEN 0
-            WHEN 'Need Clarification' THEN 1
-            WHEN 'Pending Design' THEN 2
-            ELSE 3
+            WHEN 'Pending Design' THEN 1
+            WHEN 'In Progress' THEN 2
+            WHEN 'Need Clarification' THEN 3
+            ELSE 4
           END,
-          enquiry.created_at, item.line_number, item.id
+          enquiry.created_at DESC, item.line_number, item.id
         LIMIT 200
       `,
       [overflowOrganizationCode]
@@ -317,6 +382,51 @@ describe("bounded Design repositories", () => {
       await trackedRepository.close()
       await trackedPool.end()
     }
+  })
+
+  test("keeps completed work out of the queue but loads its focused dossier", async () => {
+    const queue = await repository.listDesignQueueBounded(
+      historyOrganizationCode
+    )
+    expect(queue.rows).toEqual([])
+    expect(
+      await repository.getDesignTask(
+        historyOrganizationCode,
+        historyEnquiryItemId
+      )
+    ).toMatchObject({
+      bomLines: [
+        expect.objectContaining({
+          casting: 1.2,
+          grade: "CZ121",
+          manufacturingProcess: "Barstock",
+          pieceWeight: 0.025,
+          processRequired: "Machining, Washing",
+          rodSize: "12 mm",
+          rodType: "Round",
+        }),
+      ],
+      customerDrawingFileName: "customer-drawing.pdf",
+      deliveryTerms: "FOB Mumbai",
+      designStatus: "Design Complete",
+      enquiryRemarks: "Historical enquiry context",
+      lineRemarks: "Historical line context",
+      paymentTerms: "Net 30",
+      technicalChecklist: { drawing_available: true },
+    })
+    await expect(
+      repository.getDesignTask(emptyOrganizationCode, historyEnquiryItemId)
+    ).resolves.toBeNull()
+  })
+
+  test("reports exact active Design queue metrics", async () => {
+    await expect(
+      repository.getDesignQueueSummary(exactOrganizationCode)
+    ).resolves.toEqual({
+      inProgress: 50,
+      openTasks: 200,
+      pendingDesign: 50,
+    })
   })
 
   test("preserves the legacy Design workflow fingerprint", async () => {
