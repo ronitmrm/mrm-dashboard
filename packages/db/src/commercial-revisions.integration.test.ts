@@ -219,6 +219,42 @@ describe("commercial revisions and corrections", () => {
     ).resolves.toEqual([])
   })
 
+  test("exposes only ordered internal products to ECNs and rejects quoted items", async () => {
+    const suffix = randomUUID()
+    const orderedItemId = await createItem(`M-ECN-ELIGIBLE-${suffix}`, "List")
+    const quotedItem = await pool.query<{ id: string }>(
+      `
+        INSERT INTO catalog.items (
+          organization_id, uid, uid_kind, lifecycle_status, description,
+          item_type, source_system, source_table, source_id
+        )
+        VALUES (
+          $1, $2, 'QUOTE', 'Q', 'Quoted ECN blocker', 'List',
+          'test', 'items', $3
+        )
+        RETURNING id
+      `,
+      [organizationId, `Q-ECN-BLOCK-${suffix}`, randomUUID()]
+    )
+
+    const reference =
+      await repository.listEngineeringChangeReferenceData(organizationCode)
+
+    expect(reference.items).toContainEqual(
+      expect.objectContaining({ id: orderedItemId })
+    )
+    expect(reference.items).not.toContainEqual(
+      expect.objectContaining({ id: quotedItem.rows[0]!.id })
+    )
+    await expect(
+      repository.createEngineeringChangeNote({
+        itemId: quotedItem.rows[0]!.id,
+        organizationId,
+        reason: "Quoted products cannot start an ECN",
+      })
+    ).rejects.toThrow("ordered internal product")
+  })
+
   test("revises a child and every active nested parent without rewriting history", async () => {
     const leafId = await createItem(`M${Date.now()}1`, "List")
     const assemblyId = await createItem(`A-${randomUUID()}`, "Assembly")

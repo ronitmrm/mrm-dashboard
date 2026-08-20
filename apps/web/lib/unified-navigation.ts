@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Database,
   Factory,
+  FilePenLine,
   FileSpreadsheet,
   FileClock,
   Gauge,
@@ -483,6 +484,11 @@ export const commercialNavigation = [
     href: "/commercial/orders",
     icon: ShoppingCart,
     label: "Purchase Orders",
+  },
+  {
+    href: "/commercial/ecns",
+    icon: FilePenLine,
+    label: "Engineering Changes",
   },
   {
     href: "/commercial/revisions",
