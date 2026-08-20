@@ -34,8 +34,8 @@ import { ConversationLogsTable } from "@/components/hr/conversation-logs-table"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   listGrantedCapabilities,
-  requireCapability,
 } from "@/lib/auth/require-capability"
+import { requireHrPage } from "@/lib/auth/require-hr-page"
 import { candidateSourceOptions } from "@/lib/recruitment-candidate-sources"
 
 export const dynamic = "force-dynamic"
@@ -49,8 +49,8 @@ export default async function CandidateWorkspacePage({
 }) {
   const { id } = await params
   const feedback = await searchParams
-  const session = await requireCapability(
-    "hr.recruitment.read",
+  const session = await requireHrPage(
+    "hr.candidate_search.read",
     "/hr?panel=candidatesPanel"
   )
   const canWrite = (

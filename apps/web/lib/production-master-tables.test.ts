@@ -17,6 +17,10 @@ import {
 describe("Production master table rows", () => {
   it("keeps planning holidays in the universal master table selector", () => {
     expect(productionMasterTableEntryTypes).toContain("planning_holiday")
+    expect(productionMasterTableEntryTypes).toContain("setup_name_master")
+    expect(productionMasterRowSources.setup_name_master).toEqual([
+      "setupNameMasterRows",
+    ])
   })
 
   it("does not show rows explicitly belonging to another master", () => {

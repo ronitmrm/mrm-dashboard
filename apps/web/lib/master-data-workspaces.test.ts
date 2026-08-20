@@ -10,6 +10,7 @@ import {
 describe("master data workspaces", () => {
   it("keeps reusable masters separate from operational entries", () => {
     expect(masterDataEntryTypes).toEqual([
+      "setup_name_master",
       "route",
       "cycle",
       "tooling",

@@ -45,9 +45,8 @@ export function masterPayloadForScope(
 function canReadRecruitmentMasters(access: UnifiedNavigationAccess) {
   return access.hrHrefs.some((href) =>
     [
-      "/hr?panel=approvedPostPanel",
-      "/hr?panel=jobsPanel",
-      "/hr?panel=candidatesPanel",
+      "/hr?panel=mastersPanel",
+      "/hr?panel=postMasterPanel",
     ].includes(href)
   )
 }
@@ -58,7 +57,9 @@ export function masterDataFallbackLinks(
   if (access.operations) return []
 
   const baseDestination = canReadRecruitmentMasters(access)
-    ? "/hr?panel=mastersPanel"
+    ? access.hrHrefs.includes("/hr?panel=mastersPanel")
+      ? "/hr?panel=mastersPanel"
+      : "/hr?panel=postMasterPanel"
     : access.commercialHrefs.includes("/commercial/masters")
       ? "/commercial/masters"
       : access.commercialHrefs.includes("/commercial/customers")
@@ -69,7 +70,7 @@ export function masterDataFallbackLinks(
   if (!baseDestination) return []
 
   const separator = baseDestination.includes("?") ? "&" : "?"
-  return [
+  const links: MasterDataFallbackLink[] = [
     {
       destination: `${baseDestination}${separator}masterView=dataEntry`,
       id: "dataEntryTab",
@@ -81,6 +82,7 @@ export function masterDataFallbackLinks(
       title: "Master Tables",
     },
   ]
+  return links
 }
 
 export function masterDataDashboardHref(
@@ -126,7 +128,7 @@ export function masterDataNavigationLinks(
     entryType === "store_masters"
       ? parseStoreMasterKey(context.searchParams.get("storeMaster"))
       : null
-  return [
+  const links: MasterDataFallbackLink[] = [
     {
       destination: masterDataDashboardHref(
         "dataEntry",
@@ -148,6 +150,10 @@ export function masterDataNavigationLinks(
       title: "Master Tables",
     },
   ]
+  return links.filter(
+    (item) =>
+      !access.productionTabIds || access.productionTabIds.includes(item.id)
+  )
 }
 
 export function externalMasterDataOptions(
@@ -155,19 +161,19 @@ export function externalMasterDataOptions(
   view: "dataEntry" | "masterTables"
 ): ExternalMasterDataOption[] {
   const options: ExternalMasterDataOption[] = []
-  if (canReadRecruitmentMasters(access)) {
-    options.push(
-      {
-        href: `/hr?panel=mastersPanel&masterView=${view}`,
-        id: "hr_masters",
-        title: "HR Departments & Designations",
-      },
-      {
-        href: `/hr?panel=postMasterPanel&masterView=${view}`,
-        id: "hr_job_templates",
-        title: "HR Job Templates",
-      }
-    )
+  if (access.hrHrefs.includes("/hr?panel=mastersPanel")) {
+    options.push({
+      href: `/hr?panel=mastersPanel&masterView=${view}`,
+      id: "hr_masters",
+      title: "HR Departments & Designations",
+    })
+  }
+  if (access.hrHrefs.includes("/hr?panel=postMasterPanel")) {
+    options.push({
+      href: `/hr?panel=postMasterPanel&masterView=${view}`,
+      id: "hr_job_templates",
+      title: "HR Job Templates",
+    })
   }
 
   if (access.commercialHrefs.includes("/commercial/masters")) {

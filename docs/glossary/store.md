@@ -170,7 +170,8 @@ tooling, or foam tooling in production. Its Asset Code is the only identity
 that Tooling Master may reference; Tooling Master cannot create or accept a
 free-text tool.
 
-**Tooling Requirement**: A manufacturing master record stating that a quantity
-of one existing Tooling Asset Code is used to manufacture a specific production
-item at a route option and setup. It does not assign, reserve, issue, or move a
-physical Store unit, and it does not change Store stock or its holder.
+**Tooling Requirement**: A manufacturing master record that references one
+existing Tooling Asset Code for a specific Route Master Line and identifies it
+as fixture, tooling, or foam tooling. Quantity is not part of this master. It
+does not assign, reserve, issue, or move a physical Store unit, and it does not
+change Store stock or its holder.

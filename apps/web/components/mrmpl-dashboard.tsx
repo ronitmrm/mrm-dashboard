@@ -178,6 +178,13 @@ import {
   jobCardWorkspaceHref,
 } from "@/lib/unified-navigation";
 import { normalizeUserEnteredPayload } from "@workspace/db/user-entry-text";
+import {
+  machineFamilyOptions,
+  planningMasterPayload,
+  routeMasterLineKey,
+  routeMasterLineOptions,
+  setupNameOptions,
+} from "@/lib/planning-master-contract";
 
 type DashboardPayload = Record<string, unknown>;
 
@@ -304,6 +311,14 @@ function MasterDataTabs({
 }
 const dataEntrySpecs: DataEntrySpec[] = [
   {
+    entryType: "setup_name_master",
+    title: "Setup Name Master",
+    description: "Reusable Setup Names Selected By Route Master.",
+    fields: [
+      { name: "setupName", label: "Setup Name", required: true },
+    ],
+  },
+  {
     entryType: "route",
     title: "Route Master",
     description: "Part Route, Option, Setup, And Route-Level Machine Family.",
@@ -312,8 +327,8 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "optionNumber", label: "Option No.", required: true },
       { name: "setupNo", label: "Setup No.", required: true },
       { name: "numberOfSetups", label: "No. Of Setup", type: "number" },
-      { name: "setupName", label: "Setup Name" },
-      { name: "machineFamily", label: "Machine Family" },
+      { name: "setupName", label: "Setup Name", required: true },
+      { name: "machineFamily", label: "Machine Family", required: true },
       { name: "machineType", label: "Machine Type" },
       { name: "stageWeight", label: "Stage Weight Gram", type: "number", step: "0.01" },
     ],
@@ -321,16 +336,16 @@ const dataEntrySpecs: DataEntrySpec[] = [
   {
     entryType: "cycle",
     title: "Cycle Time",
-    description: "Setup Cycle, Loading, Unloading, And Total Timings Used By Planning.",
+    description: "Select A Route Master Line And Enter Only Its Cycle Time.",
     fields: [
       { name: "partNo", label: "Part No.", required: true },
       { name: "optionNumber", label: "Option No.", required: true },
       { name: "setupNo", label: "Setup No.", required: true },
-      { name: "setupName", label: "Setup Name" },
       { name: "cycleTime", label: "Cycle Time Sec", type: "number", step: "0.01", required: true },
-      { name: "loading", label: "Loading Sec", type: "number", step: "0.01", required: true },
-      { name: "unloading", label: "Unloading Sec", type: "number", step: "0.01", required: true },
-      { name: "totalTime", label: "Total Time Sec", type: "number", step: "0.01" },
+      { name: "setupName", label: "Setup Name" },
+      { name: "machineFamily", label: "Machine Family" },
+      { name: "machineType", label: "Machine Type" },
+      { name: "stageWeight", label: "Stage Weight Gram" },
     ],
   },
   {
@@ -342,12 +357,11 @@ const dataEntrySpecs: DataEntrySpec[] = [
       { name: "optionNumber", label: "Option No.", required: true },
       { name: "setupNo", label: "Setup No.", required: true },
       { name: "setupName", label: "Setup Name" },
+      { name: "machineFamily", label: "Machine Family" },
+      { name: "machineType", label: "Machine Type" },
       { name: "fixture", label: "Fixture" },
-      { name: "fixtureQty", label: "Fixture Qty", type: "number" },
       { name: "tooling", label: "Tooling" },
-      { name: "toolingQty", label: "Tooling Qty", type: "number" },
       { name: "foamTool", label: "Foam Tool" },
-      { name: "foamToolQty", label: "Foam Qty", type: "number" },
       { name: "remarks", label: "Remarks" },
     ],
   },
@@ -6862,11 +6876,8 @@ function dataEntryDefaultsFromGap(row: DashboardPayload, entryType: "route" | "c
   return {
     ...defaults,
     fixture: "",
-    fixtureQty: "",
     tooling: "",
-    toolingQty: "",
     foamTool: "",
-    foamToolQty: "",
     remarks: "",
   };
 }
@@ -7935,16 +7946,30 @@ function DataEntryForm({
   ]);
   const resolvedDefaults = generatedCode ? { ...defaults, code: generatedCode } : defaults;
   const toolingAssetCodes = storeMasterData?.items.map((item) => item.typeCode) ?? [];
+  const setupNames = setupNameOptions([
+    ...dataEntryRowsForProductionMaster("setup_name_master", dataEntry ?? {}),
+    ...asArray(productionControl.setupNameMasterRows),
+  ]);
+  const routeMachineFamilies = machineFamilyOptions([
+    ...asArray(productionControl.machinePlanningRows),
+    ...asArray(productionControl.routeMasterRows),
+  ]);
   const lockedFields = new Set(
     defaults.__editingMaster ? immutableMasterFields(spec.entryType) : [],
   );
   const resolvedFields = spec.fields.map((field) => {
+    const routeOptions =
+      spec.entryType === "route" && field.name === "setupName"
+        ? { ...field, options: ["", ...setupNames] }
+        : spec.entryType === "route" && field.name === "machineFamily"
+          ? { ...field, options: ["", ...routeMachineFamilies] }
+          : field;
     const withOptions =
       spec.entryType === "tooling" &&
       toolingAssetCodes.length &&
       ["fixture", "tooling", "foamTool"].includes(field.name)
-        ? { ...field, options: ["", ...toolingAssetCodes] }
-        : field;
+        ? { ...routeOptions, options: ["", ...toolingAssetCodes] }
+        : routeOptions;
     return lockedFields.has(field.name)
       ? { ...withOptions, readOnly: true }
       : withOptions;
@@ -7961,6 +7986,18 @@ function DataEntryForm({
   }
   if (spec.entryType === "quality_parameter_master") {
     return <QualityParameterMasterForm spec={spec} submitAction={submitAction} defaults={defaults} dataEntry={dataEntry} masterRows={masterRows} productionControl={productionControl} />;
+  }
+  if (spec.entryType === "cycle" || spec.entryType === "tooling") {
+    return (
+      <PlanningMasterRelationForm
+        defaults={resolvedDefaults}
+        kind={spec.entryType}
+        routeRows={asArray(productionControl.routeMasterRows)}
+        submitAction={submitAction}
+        productionFloorCode={productionFloorCode}
+        toolingAssetCodes={toolingAssetCodes}
+      />
+    );
   }
   return (
     <Card>
@@ -7990,6 +8027,117 @@ function DataEntryForm({
             if (generatedCode) setLocallyGeneratedCodes((current) => [...current, generatedCode]);
           }}
         />
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlanningMasterRelationForm({
+  defaults,
+  kind,
+  productionFloorCode,
+  routeRows,
+  submitAction,
+  toolingAssetCodes,
+}: {
+  defaults: Record<string, unknown>;
+  kind: "cycle" | "tooling";
+  productionFloorCode?: ProductionFloorCode;
+  routeRows: DashboardPayload[];
+  submitAction: (path: string, body: Record<string, unknown>, options?: { throwOnError?: boolean }) => Promise<void>;
+  toolingAssetCodes: string[];
+}) {
+  const options = useMemo(() => routeMasterLineOptions(routeRows), [routeRows]);
+  const defaultKey = routeMasterLineKey(defaults);
+  const [selectedKey, setSelectedKey] = useState(
+    options.some((option) => option.key === defaultKey) ? defaultKey : "",
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const selected = options.find((option) => option.key === selectedKey)?.value;
+  const title = kind === "cycle" ? "Cycle Time Master" : "Tooling Master";
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const input = Object.fromEntries(new FormData(event.currentTarget).entries());
+      await submitAction("data-entry", {
+        entryType: kind,
+        id: defaults.__entryId,
+        key: defaults.__entryKey,
+        returnTab: defaults.__returnTab,
+        payload: {
+          ...planningMasterPayload(kind, selected, input),
+          ...(productionFloorCode ? { productionFloorCode } : {}),
+        },
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>
+          Select One Existing Route Master Line. Its Part, Option, Setup, Setup Name, And Machine Family Cannot Be Retyped Here.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form aria-busy={isSubmitting} className="grid gap-4" onSubmit={(event) => void submit(event)}>
+          <fieldset className="contents" disabled={isSubmitting}>
+            <Field label="Route Master Line">
+              <SearchableSelect
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                onChange={(event) => setSelectedKey(event.target.value)}
+                required
+                value={selectedKey}
+              >
+                <option value="">Select Part · Option · Setup</option>
+                {options.map((option) => (
+                  <option key={option.key} value={option.key}>{option.label}</option>
+                ))}
+              </SearchableSelect>
+            </Field>
+            {selected ? (
+              <div className="grid gap-3 rounded-xl border bg-muted/30 p-3 md:grid-cols-2 @5xl/main:grid-cols-4">
+                <TileField label="Part No." value={selected.partNo || selected.partCode} />
+                <TileField label="Option No." value={selected.optionNumber} />
+                <TileField label="Setup No." value={selected.setupNo} />
+                <TileField label="Setup Name" value={selected.setupName} />
+                <TileField label="Machine Family" value={selected.machineFamily} />
+                <TileField label="Machine Type" value={selected.machineType} />
+              </div>
+            ) : null}
+            {kind === "cycle" ? (
+              <Field label="Cycle Time Sec">
+                <Input name="cycleTime" type="number" min="0.01" step="0.01" required defaultValue={str(defaults.cycleTime)} />
+              </Field>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 @5xl/main:grid-cols-3">
+                {([
+                  ["fixture", "Fixture"],
+                  ["tooling", "Tooling"],
+                  ["foamTool", "Foam Tool"],
+                ] as const).map(([name, label]) => (
+                  <Field key={name} label={label}>
+                    <SearchableSelect className="h-9 rounded-md border bg-background px-3 text-sm" name={name} defaultValue={str(defaults[name])}>
+                      <option value="">Not Required</option>
+                      {toolingAssetCodes.map((code) => <option key={code} value={code}>{code}</option>)}
+                    </SearchableSelect>
+                  </Field>
+                ))}
+                <Field label="Remarks"><Input name="remarks" defaultValue={str(defaults.remarks)} /></Field>
+              </div>
+            )}
+            <Button className="w-fit" disabled={!selected || isSubmitting} type="submit">
+              <Wrench className="size-4" />
+              {isSubmitting ? "Processing..." : `Save ${title}`}
+            </Button>
+          </fieldset>
+        </form>
       </CardContent>
     </Card>
   );
@@ -8905,6 +9053,8 @@ function LegacyActionForm({
                       ? productionFloors.find((floor) => floor.code === option)?.label ?? option
                       : option
                         ? option.replaceAll("_", " ")
+                        : ["setupName", "machineFamily"].includes(field.name)
+                          ? `Select ${field.label}`
                         : ["fixture", "tooling", "foamTool"].includes(field.name)
                           ? "Select Store Asset Code"
                           : "Normal"}
@@ -11026,6 +11176,7 @@ function dataEntryKey(entryType: string, payload: Record<string, unknown>) {
   if (entryType === "route" || entryType === "cycle" || entryType === "tooling") {
     return [payload.partNo, payload.optionNumber, payload.setupNo].map((value) => str(value).toLowerCase()).join("|");
   }
+  if (entryType === "setup_name_master") return str(payload.setupName).toLowerCase();
   if (entryType === "machine_master") return str(payload.machineNo);
   if (entryType === "employee") return str(payload.empId);
   return "";

@@ -31,6 +31,8 @@ describe("protected server boundaries", () => {
     )
     const guards = [
       "requireCapability(",
+      "requireHrPage(",
+      "requireProductionPage(",
       "authorizedDashboardSession(",
       "authorizePostgresDashboardEvents(",
     ]

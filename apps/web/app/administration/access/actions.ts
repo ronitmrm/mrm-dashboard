@@ -108,6 +108,23 @@ export async function createRoleAction(formData: FormData) {
   revalidatePath(accessPath)
 }
 
+export async function updateRolePermissionsAction(formData: FormData) {
+  const permissionKeys = formData
+    .getAll("permissionKeys")
+    .filter((value): value is string => typeof value === "string")
+
+  await withAccessService(
+    "administration.roles.manage",
+    (access, actorUserId) =>
+      access.updateRolePermissions({
+        actorUserId,
+        permissionKeys,
+        roleKey: requiredText(formData, "roleKey"),
+      })
+  )
+  revalidatePath(accessPath)
+}
+
 export async function assignRoleAction(formData: FormData) {
   await withAccessService(
     "administration.roles.manage",

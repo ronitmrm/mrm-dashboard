@@ -34,8 +34,8 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { formatIstDateTime as formatDateTime } from "@/lib/date-time"
 import {
   listGrantedCapabilities,
-  requireCapability,
 } from "@/lib/auth/require-capability"
+import { requireHrPage } from "@/lib/auth/require-hr-page"
 import {
   recruitmentInterviewerOptions,
   sharedEmployeeMasterRows,
@@ -105,7 +105,7 @@ export default async function JobWorkspacePage({
   const { id } = await params
   const feedback = await searchParams
   const returnPath = `/hr/jobs/${id}`
-  const session = await requireCapability("hr.recruitment.read", returnPath)
+  const session = await requireHrPage("hr.jobs.read", returnPath)
   const grants = await listGrantedCapabilities(session.user.id, [
     "hr.recruitment.write",
   ])

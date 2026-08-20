@@ -42,6 +42,12 @@ type SetPermissionOverrideInput = {
   userId: string
 }
 
+type UpdateRolePermissionsInput = {
+  actorUserId: string
+  permissionKeys: string[]
+  roleKey: string
+}
+
 type UserRow = {
   better_auth_role: string | null
   email: string
@@ -204,6 +210,66 @@ export function createAccessAdministrationRepository(
             metadata: { roleKey },
             targetId: userId,
             targetTable: "users",
+          },
+        ])
+        await client.query("COMMIT")
+      } catch (error) {
+        await client.query("ROLLBACK")
+        throw error
+      } finally {
+        client.release()
+      }
+    },
+
+    async updateRolePermissions({
+      actorUserId,
+      permissionKeys,
+      roleKey,
+    }: UpdateRolePermissionsInput) {
+      const uniquePermissionKeys = [...new Set(permissionKeys)].sort()
+      const client = await pool.connect()
+      try {
+        await client.query("BEGIN")
+        const role = await client.query<{ id: string }>(
+          `SELECT id
+           FROM identity.roles
+           WHERE key = $1 AND NOT is_system
+           FOR UPDATE`,
+          [roleKey]
+        )
+        if (!role.rows[0]) {
+          throw new Error("The selected editable role does not exist")
+        }
+        const permissions = await client.query<{ id: string; key: string }>(
+          `SELECT id, key
+           FROM identity.permissions
+           WHERE key = ANY($1::text[])
+           ORDER BY key`,
+          [uniquePermissionKeys]
+        )
+        if (permissions.rows.length !== uniquePermissionKeys.length) {
+          const found = new Set(permissions.rows.map((row) => row.key))
+          const missing = uniquePermissionKeys.filter((key) => !found.has(key))
+          throw new Error(`Unknown capabilities: ${missing.join(", ")}`)
+        }
+        await client.query(
+          "DELETE FROM identity.role_permissions WHERE role_id = $1",
+          [role.rows[0].id]
+        )
+        await client.query(
+          `INSERT INTO identity.role_permissions (role_id, permission_id)
+           SELECT $1, permission.id
+           FROM identity.permissions permission
+           WHERE permission.key = ANY($2::text[])`,
+          [role.rows[0].id, uniquePermissionKeys]
+        )
+        await appendAccessAuditChanges(client, [
+          {
+            actorUserId,
+            eventType: "access.role.capabilities_replaced",
+            metadata: { permissionKeys: uniquePermissionKeys, roleKey },
+            targetId: role.rows[0].id,
+            targetTable: "roles",
           },
         ])
         await client.query("COMMIT")

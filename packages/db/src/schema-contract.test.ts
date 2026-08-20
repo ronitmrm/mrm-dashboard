@@ -102,6 +102,7 @@ const expectedCanonicalTables = [
   "manufacturing.route_options",
   "manufacturing.route_selections",
   "manufacturing.setup_completion_events",
+  "manufacturing.setup_names",
   "manufacturing.shop_floor_setup_state",
   "manufacturing.shop_floor_stage_events",
   "manufacturing.work_orders",

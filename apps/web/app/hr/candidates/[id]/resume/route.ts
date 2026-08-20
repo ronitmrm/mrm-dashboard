@@ -1,7 +1,7 @@
 import { createRecruitmentRepository } from "@workspace/db"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { requireHrPage } from "@/lib/auth/require-hr-page"
 import { userAttachmentDownloadHeaders } from "@/lib/user-attachment-security"
 import { readUserAttachment } from "@/lib/user-attachment-storage"
 
@@ -9,7 +9,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireCapability("hr.recruitment.read", "/hr?panel=candidatesPanel")
+  await requireHrPage("hr.candidate_search.read", "/hr?panel=candidateSearchPanel")
   const { id } = await params
   const repository = createRecruitmentRepository({
     connectionString: readAuthEnvironment().connectionString,

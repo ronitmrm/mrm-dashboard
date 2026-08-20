@@ -28,6 +28,7 @@ import {
   listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
+import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { istDateValue } from "@/lib/date-time"
 import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
 
@@ -51,16 +52,17 @@ export default async function StoreStockPage({
   const capabilities = new Set(
     await listGrantedCapabilities(session.user.id, [
       "store.stock.write",
-      "store.requests.write",
+      "store.requests.submit",
       "store.asset_history.read",
     ])
   )
+  const storeActions = await listGrantedStoreActions(session.user.id)
   const params = await searchParams
   const requestedMode = firstValue(params.mode)
   const mode =
     requestedMode === "order" && capabilities.has("store.stock.write")
       ? "order"
-      : requestedMode === "request" && capabilities.has("store.requests.write")
+      : requestedMode === "request" && storeActions.has("store.requests.submit")
         ? "request"
         : "view"
   const orderItemId = firstValue(params.orderItemId)
@@ -100,7 +102,7 @@ export default async function StoreStockPage({
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
-              {capabilities.has("store.requests.write") ? (
+              {storeActions.has("store.requests.submit") ? (
                 <Button
                   asChild
                   variant={mode === "request" ? "default" : "outline"}

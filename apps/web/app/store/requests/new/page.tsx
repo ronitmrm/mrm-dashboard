@@ -22,7 +22,7 @@ import { Textarea } from "@workspace/ui/components/textarea"
 
 import { StoreRequestIdentityFields } from "@/components/store/store-request-identity-fields"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { requireStoreAction } from "@/lib/auth/store-action-access"
 import { storeRequestFormPolicy } from "@/lib/store-request-policy"
 
 import { createStoreRequisitionBatchAction } from "../../actions"
@@ -32,8 +32,8 @@ export default async function NewStoreRequestPage({
 }: {
   searchParams: Promise<{ itemTypeId?: string | string[] }>
 }) {
-  const session = await requireCapability(
-    "store.requests.write",
+  const session = await requireStoreAction(
+    "store.requests.submit",
     "/store/requests/new"
   )
   const rawIds = (await searchParams).itemTypeId

@@ -30,9 +30,9 @@ import { readAuthEnvironment } from "@/lib/auth/auth"
 import { formatIstDateTime, istDateValue } from "@/lib/date-time"
 import { storeAssetWorkspaceHref } from "@/lib/store-asset-workspace"
 import {
-  listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
+import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 
 import {
   completeStoreAssetMaintenanceAction,
@@ -53,12 +53,12 @@ export default async function StoreAssetWorkspacePage({
     "store.asset_history.read",
     `/store/assets/${encodeURIComponent(assetCode)}`
   )
-  const canManage =
-    (
-      await listGrantedCapabilities(session.user.id, [
-        "store.asset_history.write",
-      ])
-    ).length > 0
+  const capabilities = await listGrantedStoreActions(session.user.id)
+  const canMove = capabilities.has("store.asset_movement.write")
+  const canMaintain = capabilities.has("store.asset_maintenance.write")
+  const canRepair = capabilities.has("store.asset_repair.write")
+  const canManageLifecycle = capabilities.has("store.asset_lifecycle.write")
+  const canManage = canMove || canMaintain || canRepair
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -157,7 +157,7 @@ export default async function StoreAssetWorkspacePage({
 
       {canManage ? (
         <div className="grid gap-6 xl:grid-cols-2 2xl:grid-cols-4">
-          <Card>
+          {canMove ? <Card>
             <CardHeader>
               <CardTitle>Move / Assign Asset</CardTitle>
               <CardDescription>
@@ -219,9 +219,9 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-          </Card>
+          </Card> : null}
 
-          <Card>
+          {canRepair ? <Card>
             <CardHeader>
               <CardTitle>Create Repair PO</CardTitle>
               <CardDescription>
@@ -289,9 +289,9 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-          </Card>
+          </Card> : null}
 
-          <Card>
+          {canMaintain ? <Card>
             <CardHeader>
               <CardTitle>Add Timetable</CardTitle>
               <CardDescription>
@@ -343,9 +343,9 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-          </Card>
+          </Card> : null}
 
-          <Card>
+          {canMaintain ? <Card>
             <CardHeader>
               <CardTitle>Complete Maintenance</CardTitle>
               <CardDescription>
@@ -425,11 +425,11 @@ export default async function StoreAssetWorkspacePage({
                 </Button>
               </form>
             </CardContent>
-          </Card>
+          </Card> : null}
         </div>
       ) : null}
 
-      {canManage ? (
+      {canManageLifecycle ? (
         <Card>
           <CardHeader>
             <CardTitle>Asset Lifecycle</CardTitle>
@@ -485,7 +485,7 @@ export default async function StoreAssetWorkspacePage({
                 <TableHead>Price</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>PDF</TableHead>
-                {canManage ? <TableHead>Completion</TableHead> : null}
+                {canRepair ? <TableHead>Completion</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -506,7 +506,7 @@ export default async function StoreAssetWorkspacePage({
                       <a href={`/store/orders/${order.id}/pdf`}>Download</a>
                     </Button>
                   </TableCell>
-                  {canManage ? (
+                  {canRepair ? (
                     <TableCell>
                       {order.status === "Open" ? (
                         <form action={completeStoreRepairPurchaseOrderAction}>
@@ -535,7 +535,7 @@ export default async function StoreAssetWorkspacePage({
                 <TableRow>
                   <TableCell
                     className="h-24 text-center text-muted-foreground"
-                    colSpan={canManage ? 8 : 7}
+                    colSpan={canRepair ? 8 : 7}
                   >
                     No Repair Purchase Orders for this Unit ID.
                   </TableCell>

@@ -29,19 +29,22 @@ import {
   type PermissionOption,
   permissionAccessRows,
   permissionKeysForSelections,
+  permissionSelectionsForKeys,
 } from "./permission-access"
 
 export function PermissionSelector({
+  initialPermissionKeys = [],
   permissions,
 }: {
+  initialPermissionKeys?: readonly string[]
   permissions: readonly PermissionOption[]
 }) {
   const [query, setQuery] = useState("")
+  const rows = useMemo(() => permissionAccessRows(permissions), [permissions])
   const [selections, setSelections] = useState<
     Record<string, PermissionAccessLevel>
-  >({})
+  >(() => permissionSelectionsForKeys(rows, initialPermissionKeys))
   const normalizedQuery = query.trim().toLowerCase()
-  const rows = useMemo(() => permissionAccessRows(permissions), [permissions])
   const visibleRows = rows.filter(
     (row) =>
       !normalizedQuery ||

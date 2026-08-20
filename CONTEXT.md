@@ -8,6 +8,18 @@ MRM Dashboard supports production planning and shop-floor tracking for job cards
 One operation in a part route. A setup may run on one machine or be split across compatible parallel machines.
 _Avoid_: Operation when referring to a route step in the dashboard.
 
+**Setup Name**:
+A reusable manufacturing operation name selected from Setup Name Master and referenced by Route Master lines within one Production Floor.
+_Avoid_: Free-text operation name, setup description typed again in Cycle Time Master.
+
+**Route Master Line**:
+One Part Code, route option, and setup-number combination that selects a Setup Name and Route Machine Family for a Production Floor.
+_Avoid_: Re-entered route details in Cycle Time Master or Tooling Master.
+
+**Cycle Time Standard**:
+The cycle-time value assigned to one existing Route Master Line. Its Part Code, route option, setup number, Setup Name, and Route Machine Family come from that route line.
+_Avoid_: Independently typed setup identity, loading/unloading copy.
+
 **WIP Stream**:
 The planned or actual output produced by one machine for one setup, bounded by that machine's start date, end date, quantity, and daily capacity.
 _Avoid_: Machine output bucket.

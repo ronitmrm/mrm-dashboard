@@ -8,7 +8,7 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   listGrantedCapabilities,
-  requireCapability,
+  requireAuthenticatedSession,
 } from "@/lib/auth/require-capability"
 import { getUnifiedNavigationAccess } from "@/lib/auth/unified-navigation-access"
 import { productionModuleIsEnabled } from "@/lib/production-module"
@@ -17,6 +17,8 @@ import {
   legacyMasterEntryForDashboardTab,
   type DashboardTabId,
 } from "@/lib/unified-navigation"
+import { productionCapabilityForTab } from "@/lib/auth/production-capabilities"
+import { requireProductionPage } from "@/lib/auth/require-production-page"
 
 export default async function Page({
   searchParams,
@@ -31,7 +33,7 @@ export default async function Page({
 
   const { MrmplDashboard } = await import("@/components/mrmpl-dashboard")
   const query = await searchParams
-  const session = await requireCapability("operations.dashboard.read", "/")
+  const session = await requireAuthenticatedSession("/")
   const navigationAccess = await getUnifiedNavigationAccess(session.user.id)
   const capabilities = new Set(
     await listGrantedCapabilities(session.user.id, [
@@ -80,11 +82,20 @@ export default async function Page({
     : null
   const requestedTab = Array.isArray(query.tab) ? query.tab[0] : query.tab
   const legacyMasterEntry = legacyMasterEntryForDashboardTab(requestedTab)
-  const initialDashboardTab = legacyMasterEntry
+  const requestedDashboardTab = legacyMasterEntry
     ? "dataEntryTab"
     : dashboardNavigation.some((item) => item.id === requestedTab)
       ? (requestedTab as DashboardTabId)
       : "productionControlTab"
+  const initialDashboardTab = navigationAccess.productionTabIds?.includes(
+    requestedDashboardTab
+  )
+    ? requestedDashboardTab
+    : navigationAccess.productionTabIds?.[0] ?? requestedDashboardTab
+  const pageCapability = productionCapabilityForTab(initialDashboardTab)
+  if (pageCapability) {
+    await requireProductionPage(pageCapability, "/")
+  }
   const requestedFloor = Array.isArray(query.floor)
     ? query.floor[0]
     : query.floor
