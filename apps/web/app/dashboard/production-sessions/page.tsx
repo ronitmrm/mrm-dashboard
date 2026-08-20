@@ -2,7 +2,7 @@ import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 import { redirect } from "next/navigation"
 
 import { ProductionSessionsWorkspace } from "@/components/production-sessions-workspace"
-import { requireCapability } from "@/lib/auth/require-capability"
+import { requireProductionPage } from "@/lib/auth/require-production-page"
 import { productionModuleIsEnabled } from "@/lib/production-module"
 
 export default async function Page({
@@ -12,8 +12,8 @@ export default async function Page({
 }) {
   if (!productionModuleIsEnabled()) redirect("/commercial")
   const query = await searchParams
-  await requireCapability(
-    "operations.dashboard.read",
+  await requireProductionPage(
+    "operations.production_sessions.read",
     "/dashboard/production-sessions"
   )
 

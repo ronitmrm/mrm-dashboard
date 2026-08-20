@@ -25,9 +25,9 @@ import {
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
-  listGrantedCapabilities,
   requireCapability,
 } from "@/lib/auth/require-capability"
+import { listGrantedStoreActions } from "@/lib/auth/store-action-access"
 import { formatIstDateTime } from "@/lib/date-time"
 import { createStoreIssueFormModel } from "@/lib/store-issue-form"
 import { storePurchaseOrderHref } from "@/lib/unified-navigation"
@@ -39,9 +39,9 @@ export default async function StoreRequestsPage() {
     "store.requests.read",
     "/store/requests"
   )
-  const canManage = (
-    await listGrantedCapabilities(session.user.id, ["store.requests.write"])
-  ).includes("store.requests.write")
+  const canManage = (await listGrantedStoreActions(session.user.id)).has(
+    "store.requests.issue"
+  )
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })

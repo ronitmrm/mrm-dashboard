@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   permissionAccessRows,
   permissionKeysForSelections,
+  permissionSelectionsForKeys,
 } from "./permission-access"
 
 const permissions = [
@@ -55,6 +56,16 @@ const permissions = [
     key: "operations.production.write",
     module: "operations",
     name: "Record production",
+  },
+  {
+    key: "planning.planner_actions.read",
+    module: "planning",
+    name: "View Planner Actions",
+  },
+  {
+    key: "hr.interview_schedule.read",
+    module: "hr",
+    name: "View Interview Schedule",
   },
   {
     key: "quality.inspections.read",
@@ -114,6 +125,15 @@ describe("permission access table", () => {
     })
   })
 
+  it("lists Production and HR workspaces as independent pages", () => {
+    const rows = permissionAccessRows(permissions)
+
+    expect(rows.find(({ id }) => id === "page:production.productionControlTab"))
+      .toMatchObject({ label: "Planner Actions", module: "Production" })
+    expect(rows.find(({ id }) => id === "page:hr.interviewsPanel"))
+      .toMatchObject({ label: "Interview Schedule", module: "HR & Recruitment" })
+  })
+
   it("combines matching non-page capabilities into one task row", () => {
     expect(permissionAccessRows(permissions)).toContainEqual({
       fullPermissionKeys: [
@@ -153,6 +173,43 @@ describe("permission access table", () => {
       "pricing.customers.read",
       "pricing.customers.write",
       "pricing.dashboard.read",
+    ])
+  })
+
+  it("loads an existing role into the same read-only/full-access table", () => {
+    const rows = permissionAccessRows(permissions)
+
+    expect(
+      permissionSelectionsForKeys(rows, [
+        "pricing.customers.read",
+        "pricing.customers.write",
+        "store.stock.read",
+      ])
+    ).toMatchObject({
+      "page:commercial.customers": "full",
+      "page:store.stock": "read",
+    })
+  })
+
+  it("keeps the legacy dashboard read gate behind any Production page", () => {
+    expect(
+      permissionKeysForSelections(permissionAccessRows(permissions), {
+        "page:production.productionControlTab": "read",
+      })
+    ).toEqual([
+      "operations.dashboard.read",
+      "planning.planner_actions.read",
+    ])
+  })
+
+  it("keeps the legacy recruitment read gate behind any HR recruitment page", () => {
+    expect(
+      permissionKeysForSelections(permissionAccessRows(permissions), {
+        "page:hr.interviewsPanel": "read",
+      })
+    ).toEqual([
+      "hr.interview_schedule.read",
+      "hr.recruitment.read",
     ])
   })
 })

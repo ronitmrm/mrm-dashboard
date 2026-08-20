@@ -2,6 +2,8 @@ import {
   legacyPermissionKeys,
   pageAccessCatalog,
 } from "../../../lib/auth/page-access-catalog"
+import { productionPageCapabilities } from "../../../lib/auth/production-capabilities"
+import { hrMasterNavigation, hrNavigation } from "../../../lib/unified-navigation"
 
 export type PermissionOption = {
   key: string
@@ -143,5 +145,38 @@ export function permissionKeysForSelections(
           : []
     for (const key of keys) permissionKeys.add(key)
   }
+  if (
+    Object.values(productionPageCapabilities).some((key) =>
+      permissionKeys.has(key)
+    )
+  ) {
+    permissionKeys.add("operations.dashboard.read")
+  }
+  if (
+    [...hrMasterNavigation, ...hrNavigation].some(({ requiredCapability }) =>
+      requiredCapability !== "hr.employees.read" &&
+      permissionKeys.has(requiredCapability)
+    )
+  ) {
+    permissionKeys.add("hr.recruitment.read")
+  }
   return [...permissionKeys].sort()
+}
+
+export function permissionSelectionsForKeys(
+  rows: readonly PermissionAccessRow[],
+  permissionKeys: readonly string[]
+) {
+  const granted = new Set(permissionKeys)
+  return Object.fromEntries(
+    rows.map((row) => {
+      const hasFull =
+        row.fullPermissionKeys.length > row.readPermissionKeys.length &&
+        row.fullPermissionKeys.every((key) => granted.has(key))
+      const hasRead =
+        row.readPermissionKeys.length > 0 &&
+        row.readPermissionKeys.every((key) => granted.has(key))
+      return [row.id, hasFull ? "full" : hasRead ? "read" : "none"]
+    })
+  ) as Record<string, PermissionAccessLevel>
 }

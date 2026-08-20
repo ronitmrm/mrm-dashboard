@@ -1,4 +1,5 @@
 export const masterDataEntryTypes = [
+  "setup_name_master",
   "route",
   "cycle",
   "tooling",
@@ -37,6 +38,7 @@ const identityFieldsByEntryType: Record<string, readonly string[]> = {
   rejection_type_master: ["code"],
   route: ["partNo", "optionNumber", "setupNo"],
   setup_checklist_master: ["checklistCode", "sequence"],
+  setup_name_master: ["setupName"],
   tooling: ["partNo", "optionNumber", "setupNo"],
 }
 

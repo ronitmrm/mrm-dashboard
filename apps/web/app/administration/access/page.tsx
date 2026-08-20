@@ -61,6 +61,7 @@ import {
   provisionStaffAction,
   setPermissionOverrideAction,
   setPostRoleAction,
+  updateRolePermissionsAction,
 } from "./actions"
 import { PermissionSelector } from "./permission-selector"
 
@@ -713,22 +714,33 @@ export default async function AccessAdministrationPage({
             Custom Roles Use Only The Selected Capabilities.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2">
+        <CardContent className="grid gap-3">
           {snapshot.roles.map((role) => (
-            <div className="grid gap-2 rounded-2xl border p-4" key={role.id}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium">{role.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {role.description ?? role.key}
-                  </p>
-                </div>
-                {role.isSystem ? <Badge>System</Badge> : null}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {role.permissionKeys.length} Capabilities
-              </p>
-            </div>
+            <details className="rounded-2xl border" key={role.id}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+                <span>
+                  <span className="block font-medium">{role.name}</span>
+                  <span className="block text-sm text-muted-foreground">
+                    {role.description ?? role.key} · {role.permissionKeys.length} capabilities
+                  </span>
+                </span>
+                {role.isSystem ? <Badge>System</Badge> : <Badge variant="outline">Edit Access</Badge>}
+              </summary>
+              {role.isSystem ? (
+                <p className="border-t p-4 text-sm text-muted-foreground">
+                  System Administrator access is managed by the software.
+                </p>
+              ) : (
+                <form action={updateRolePermissionsAction} className="grid gap-4 border-t p-4">
+                  <input name="roleKey" type="hidden" value={role.key} />
+                  <PermissionSelector
+                    initialPermissionKeys={role.permissionKeys}
+                    permissions={snapshot.permissions}
+                  />
+                  <Button className="w-fit" type="submit">Save {role.name} Access</Button>
+                </form>
+              )}
+            </details>
           ))}
         </CardContent>
       </Card> : null}

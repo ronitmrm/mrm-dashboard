@@ -19,8 +19,8 @@ import { RecruitmentPanel } from "@/components/hr/recruitment-panel"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import {
   listGrantedCapabilities,
-  requireCapability,
 } from "@/lib/auth/require-capability"
+import { requireHrPage } from "@/lib/auth/require-hr-page"
 import { hrMasterNavigation, hrNavigation } from "@/lib/unified-navigation"
 import { normalizeRecruitmentMasterKind } from "@/lib/recruitment-master-navigation"
 
@@ -49,7 +49,7 @@ export default async function HrRecruitmentPage({
   const activeItem = requestedItem ?? hrNavigation[0]
   if (!activeItem) redirect("/unauthorized")
 
-  const session = await requireCapability(
+  const session = await requireHrPage(
     activeItem.requiredCapability,
     activeItem.href
   )

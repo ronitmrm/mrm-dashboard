@@ -41,6 +41,7 @@ const masterTargets = {
   rejection_remark_master: ["quality", "rejection_remarks", "source_id"],
   rejection_type_master: ["quality", "rejection_types", "source_id"],
   route: ["manufacturing", "operation_setups", "source_id"],
+  setup_name_master: ["manufacturing", "setup_names", "source_id"],
   setup_checklist_master: [
     "quality",
     "setup_checklist_template_items",
@@ -76,6 +77,7 @@ const renamableMasterColumns: Partial<
   commercial_shipping: "name",
   commercial_subcategory: "name",
   commercial_website_field: "option_value",
+  setup_name_master: "name",
 }
 
 export type MasterDataKind = keyof typeof masterTargets

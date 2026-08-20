@@ -22,14 +22,15 @@ describe("PostgreSQL dashboard client cutover", () => {
   test("the root dashboard is protected by Better Auth capability checks", async () => {
     const source = await readFile(pageUrl, "utf8")
 
-    expect(source).toContain('requireCapability("operations.dashboard.read", "/")')
+    expect(source).toContain('requireAuthenticatedSession("/")')
+    expect(source).toContain("productionCapabilityForTab(initialDashboardTab)")
+    expect(source).toContain("await requireProductionPage(pageCapability")
   })
 
   test("specialized dashboard routes use the same Better Auth boundary", async () => {
     const source = await readFile(dashboardLayoutUrl, "utf8")
 
-    expect(source).toContain("requireCapability(")
-    expect(source).toContain('"operations.dashboard.read"')
+    expect(source).toContain('requireAuthenticatedSession("/dashboard")')
   })
 
   test("the dashboard API has no authenticated Convex fallback", async () => {

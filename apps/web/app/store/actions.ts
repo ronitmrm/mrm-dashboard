@@ -15,6 +15,10 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import {
+  requireStoreAction,
+  type StoreActionCapability,
+} from "@/lib/auth/store-action-access"
+import {
   resolveStoreRequestDepartment,
   storeRequestFormPolicy,
 } from "@/lib/store-request-policy"
@@ -70,11 +74,12 @@ function holderType(formData: FormData) {
 
 async function withStore<T>(
   capability:
-    | "store.asset_history.write"
+    | StoreActionCapability
     | "store.masters.write"
     | "store.new_item_requests.write"
     | "store.purchase_register.write"
-    | "store.requests.write"
+    | "store.requests.issue"
+    | "store.requests.submit"
     | "store.stock.write",
   operation: (
     repository: ReturnType<typeof createStoreRepository>,
@@ -83,7 +88,11 @@ async function withStore<T>(
     actorEmail: string
   ) => Promise<T>
 ) {
-  const session = await requireCapability(capability, storePath)
+  const session =
+    capability.startsWith("store.asset_") ||
+    capability.startsWith("store.requests.")
+      ? await requireStoreAction(capability as StoreActionCapability, storePath)
+      : await requireCapability(capability, storePath)
   const repository = createStoreRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
@@ -473,7 +482,7 @@ export async function createStoreRequisitionBatchAction(formData: FormData) {
     )
   }
   await withStore(
-    "store.requests.write",
+    "store.requests.submit",
     async (repository, actorUserId, organizationId) => {
       const policy = storeRequestFormPolicy(
         await repository.requisitionRequestContext({
@@ -510,7 +519,7 @@ export async function createStoreRequisitionBatchAction(formData: FormData) {
 
 export async function issueStoreRequisitionAction(formData: FormData) {
   await withStore(
-    "store.requests.write",
+    "store.requests.issue",
     async (repository, actorUserId, organizationId, actorEmail) =>
       repository.issueRequisition({
         actorUserId,
@@ -619,7 +628,7 @@ export async function createStorePurchaseOrdersAction(formData: FormData) {
 
 export async function createStoreRepairPurchaseOrderAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_repair.write", (repository, actorUserId, organizationId) =>
     repository.createRepairPurchaseOrder({
       actorUserId,
       assetCode,
@@ -640,7 +649,7 @@ export async function completeStoreRepairPurchaseOrderAction(
   formData: FormData
 ) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_repair.write", (repository, actorUserId, organizationId) =>
     repository.completeRepairPurchaseOrder({
       actorUserId,
       assetCode,
@@ -654,7 +663,7 @@ export async function completeStoreRepairPurchaseOrderAction(
 
 export async function moveStoreAssetAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_movement.write", (repository, actorUserId, organizationId) =>
     repository.moveAsset({
       actorUserId,
       assetCode,
@@ -673,7 +682,7 @@ export async function moveStoreAssetAction(formData: FormData) {
 
 export async function scheduleStoreAssetMaintenanceAction(formData: FormData) {
   const assetCode = requiredText(formData, "asset_code")
-  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_maintenance.write", (repository, actorUserId, organizationId) =>
     repository.scheduleAssetMaintenance({
       actorUserId,
       assetCode,
@@ -692,7 +701,7 @@ export async function setStoreAssetLifecycleAction(formData: FormData) {
   if (!["BROKEN", "SCRAPPED", "UNDER_MAINTENANCE"].includes(status)) {
     throw new Error("Asset status is invalid.")
   }
-  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_lifecycle.write", (repository, actorUserId, organizationId) =>
     repository.setAssetLifecycleStatus({
       actorUserId,
       assetCode,
@@ -712,7 +721,7 @@ export async function completeStoreAssetMaintenanceAction(formData: FormData) {
   if (!["MAINTENANCE", "CALIBRATION", "BREAKDOWN"].includes(type)) {
     throw new Error("Maintenance type is invalid.")
   }
-  await withStore("store.asset_history.write", (repository, actorUserId, organizationId) =>
+  await withStore("store.asset_maintenance.write", (repository, actorUserId, organizationId) =>
     repository.completeAssetMaintenance({
       actorUserId,
       assetCode,

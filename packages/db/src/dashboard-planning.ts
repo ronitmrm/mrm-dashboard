@@ -856,6 +856,7 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
       organizationId: string
       productionFloorCode?: string
       replaceSetups?: boolean
+      requireSetupNameMaster?: boolean
       routeCode: string
       sourcePayload?: unknown
       setups: Array<{
@@ -951,6 +952,27 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
               "Route setup and sequence numbers must be positive."
             )
           }
+          const requestedSetupName =
+            setup.operationName?.trim() || setup.operationCode.trim()
+          const setupName = await client.query<{ id: string; name: string }>(
+            `
+              SELECT setup_name.id, setup_name.name
+              FROM manufacturing.setup_names setup_name
+              WHERE setup_name.organization_id = $1
+                AND setup_name.production_floor_id = $2
+                AND lower(btrim(setup_name.name)) = lower(btrim($3))
+                AND setup_name.active
+              LIMIT 1
+            `,
+            [input.organizationId, productionFloorId, requestedSetupName]
+          )
+          if (input.requireSetupNameMaster && !setupName.rows[0]) {
+            throw new Error(
+              "Select a Setup Name that exists in Setup Name Master."
+            )
+          }
+          const canonicalSetupName =
+            setupName.rows[0]?.name ?? setup.operationName?.trim() ?? null
           retainedSetupNumbers.push(setup.setupNumber)
           const current = await client.query<{ id: string }>(
             `
@@ -969,16 +991,18 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
                   legacy_setup_code = COALESCE($5, legacy_setup_code),
                   source_system = 'mrm-dashboard',
                   source_table = 'dataEntries', source_payload = $6,
-                  updated_at = now(), row_version = row_version + 1
-                WHERE id = $7
+                  setup_name_id = $7, updated_at = now(),
+                  row_version = row_version + 1
+                WHERE id = $8
               `,
               [
                 requiredText(setup.operationCode, "Operation code"),
-                setup.operationName?.trim() || null,
+                canonicalSetupName,
                 setup.sequence,
                 input.actorUserId ?? null,
                 setup.legacySetupCode?.trim() || String(setup.setupNumber),
                 sourcePayload,
+                setupName.rows[0]?.id ?? null,
                 current.rows[0].id,
               ]
             )
@@ -987,12 +1011,13 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
               `
                 INSERT INTO manufacturing.operation_setups (
                   organization_id, route_option_id, setup_number,
-                  legacy_setup_code, operation_code, operation_name, sequence,
+                  legacy_setup_code, operation_code, operation_name,
+                  setup_name_id, sequence,
                   active, created_by_user_id, updated_by_user_id,
                   source_system, source_table, source_id, source_payload
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $8,
-                  'mrm-dashboard', 'dataEntries', $9, $10)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $9,
+                  'mrm-dashboard', 'dataEntries', $10, $11)
               `,
               [
                 input.organizationId,
@@ -1000,7 +1025,8 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
                 setup.setupNumber,
                 setup.legacySetupCode?.trim() || String(setup.setupNumber),
                 requiredText(setup.operationCode, "Operation code"),
-                setup.operationName?.trim() || null,
+                canonicalSetupName,
+                setupName.rows[0]?.id ?? null,
                 setup.sequence,
                 input.actorUserId ?? null,
                 randomUUID(),
@@ -1023,6 +1049,72 @@ export function createDashboardPlanningRepository(options: RepositoryPoolOptions
         }
         await queueDashboardRefresh(client, input.organizationId)
         return { id: routeOptionId }
+      })
+    },
+
+    async upsertSetupName(input: {
+      actorUserId?: string | null
+      name: string
+      organizationId: string
+      productionFloorCode?: string
+      sourcePayload?: unknown
+    }) {
+      return transaction(pool, async (client) => {
+        const name = requiredText(input.name, "Setup name")
+        const productionFloorCode = normalizeProductionFloorCode(
+          input.productionFloorCode
+        )
+        const productionFloorId = await ensureProductionFloorId(
+          client,
+          input.organizationId,
+          productionFloorCode
+        )
+        await businessKeyLock(
+          client,
+          "manufacturing.setup_name",
+          `${productionFloorCode}:${name}`
+        )
+        const existing = await client.query<{ id: string }>(
+          `SELECT id
+           FROM manufacturing.setup_names
+           WHERE organization_id = $1
+             AND production_floor_id = $2
+             AND lower(btrim(name)) = lower(btrim($3))
+           FOR UPDATE`,
+          [input.organizationId, productionFloorId, name]
+        )
+        const sourcePayload = input.sourcePayload ?? {
+          productionFloorCode,
+          setupName: name,
+        }
+        const result = existing.rows[0]
+          ? await client.query<{ id: string }>(
+              `UPDATE manufacturing.setup_names
+               SET name = $1, active = true, updated_by_user_id = $2,
+                 source_payload = $3, updated_at = now()
+               WHERE id = $4
+               RETURNING id`,
+              [name, input.actorUserId ?? null, sourcePayload, existing.rows[0].id]
+            )
+          : await client.query<{ id: string }>(
+              `INSERT INTO manufacturing.setup_names (
+                 organization_id, production_floor_id, name, active,
+                 created_by_user_id, updated_by_user_id, source_system,
+                 source_table, source_id, source_payload
+               ) VALUES ($1, $2, $3, true, $4, $4, 'mrm-dashboard',
+                 'setup_name_master', $5, $6)
+               RETURNING id`,
+              [
+                input.organizationId,
+                productionFloorId,
+                name,
+                input.actorUserId ?? null,
+                randomUUID(),
+                sourcePayload,
+              ]
+            )
+        await queueDashboardRefresh(client, input.organizationId)
+        return result.rows[0]!
       })
     },
 

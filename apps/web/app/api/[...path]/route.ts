@@ -110,6 +110,7 @@ function dashboardRouteError(err: unknown) {
 }
 
 const dataEntryTemplateFields: Record<string, string[]> = {
+  setup_name_master: ["setupName"],
   route: [
     "partNo",
     "optionNumber",
@@ -124,11 +125,7 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "partNo",
     "optionNumber",
     "setupNo",
-    "setupName",
     "cycleTime",
-    "loading",
-    "unloading",
-    "totalTime",
   ],
   tooling: [
     "partNo",
@@ -136,11 +133,8 @@ const dataEntryTemplateFields: Record<string, string[]> = {
     "setupNo",
     "setupName",
     "fixture",
-    "fixtureQty",
     "tooling",
-    "toolingQty",
     "foamTool",
-    "foamToolQty",
     "remarks",
   ],
   work_order: [
@@ -478,6 +472,7 @@ const postgresMasterEntryTypes = new Set([
   "machine_master",
   "planning_holiday",
   "route",
+  "setup_name_master",
   "tooling",
   "work_order",
 ])
@@ -489,6 +484,16 @@ async function savePlanningMasterEntry(
   entryType: string,
   payload: Record<string, unknown>
 ) {
+  if (entryType === "setup_name_master") {
+    return repository.upsertSetupName({
+      actorUserId,
+      name: text(payload.setupName),
+      organizationId,
+      productionFloorCode: text(payload.productionFloorCode),
+      sourcePayload: payload,
+    })
+  }
+
   if (entryType === "machine_master") {
     const requestedFloor = parseProductionFloorCode(payload.productionFloorCode)
     if (!requestedFloor) {
@@ -542,6 +547,7 @@ async function savePlanningMasterEntry(
       organizationId,
       productionFloorCode: text(payload.productionFloorCode),
       replaceSetups: false,
+      requireSetupNameMaster: true,
       routeCode,
       setups: [
         {
@@ -558,15 +564,6 @@ async function savePlanningMasterEntry(
 
   if (entryType === "cycle") {
     const cycleTime = numeric(payload.cycleTime)
-    const splitLoadingUnloading =
-      numeric(payload.loading) + numeric(payload.unloading)
-    const loadingUnloading =
-      splitLoadingUnloading || numeric(payload.loadingUnloading)
-    const sourcePayload = {
-      ...payload,
-      loadingUnloading,
-      totalTime: numeric(payload.totalTime) || cycleTime + loadingUnloading,
-    }
     return repository.upsertCycleStandard({
       actorUserId,
       cycleTimeSeconds: cycleTime,
@@ -575,8 +572,8 @@ async function savePlanningMasterEntry(
       productionFloorCode: text(payload.productionFloorCode),
       routeCode,
       setupNumber: setupNumber!,
-      setupTimeMinutes: loadingUnloading,
-      sourcePayload,
+      setupTimeMinutes: 0,
+      sourcePayload: payload,
     })
   }
 
@@ -584,20 +581,17 @@ async function savePlanningMasterEntry(
     const toolingRows = [
       {
         code: optionalText(payload.fixture),
-        quantity: payload.fixtureQty,
         type: "Fixture",
       },
       {
         code: optionalText(payload.tooling),
-        quantity: payload.toolingQty,
         type: "Tooling",
       },
       {
         code: optionalText(payload.foamTool),
-        quantity: payload.foamToolQty,
         type: "Foam tool",
       },
-    ].filter((row): row is { code: string; quantity: unknown; type: string } =>
+    ].filter((row): row is { code: string; type: string } =>
       Boolean(row.code)
     )
     if (!toolingRows.length) {
@@ -613,7 +607,7 @@ async function savePlanningMasterEntry(
             itemUid,
             organizationId,
             productionFloorCode: text(payload.productionFloorCode),
-            quantity: numeric(row.quantity) || 1,
+            quantity: 1,
             routeCode,
             setupNumber: setupNumber!,
             sourcePayload: payload,

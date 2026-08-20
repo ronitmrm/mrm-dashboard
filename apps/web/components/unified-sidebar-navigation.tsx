@@ -257,7 +257,10 @@ export function UnifiedSidebarNavigation({
         .map((floor) => ({
           floor,
           items: filterProductionItems(
-            productionFloorNavigation,
+            productionFloorNavigation.filter((item) =>
+              !navigationAccess.productionTabIds ||
+              navigationAccess.productionTabIds.includes(item.id)
+            ),
             normalizedMenuSearch,
             `${floor.label} ${floor.shortLabel} production`.toLowerCase()
           ),
@@ -266,7 +269,11 @@ export function UnifiedSidebarNavigation({
     : []
   const filteredUniversalProductionNavigation = navigationAccess.operations
     ? filterProductionItems(
-        [...universalProductionNavigation, ...consolidatedProductionNavigation],
+        [...universalProductionNavigation, ...consolidatedProductionNavigation].filter(
+          (item) =>
+            !navigationAccess.productionTabIds ||
+            navigationAccess.productionTabIds.includes(item.id)
+        ),
         normalizedMenuSearch,
         "universal production corrections reverse wrong entries data entry master tables machine master checklists maintenance quality masters"
       )
@@ -288,7 +295,9 @@ export function UnifiedSidebarNavigation({
       )
   )
   const visibleOperationalEntryNavigation = [
-    ...(navigationAccess.operations
+    ...(navigationAccess.operations &&
+      (!navigationAccess.productionTabIds ||
+        navigationAccess.productionTabIds.includes("operationalEntryTab"))
       ? operationalEntryNavigation.map((item) => ({
           destination: universalProductionNavigationHref(
             item.id,

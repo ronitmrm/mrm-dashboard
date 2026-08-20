@@ -39,6 +39,11 @@ Its Data Entry and CSV import require one of the recognized Production Units.
 Quality Inspection Parameter Master is production-unit-scoped even though the
 three quality code masters above are company-wide.
 
+Setup Name Master, Route Master, Cycle Time Master, and Tooling Master are
+production-unit masters. Route Master selects Setup Name and Machine Family;
+Cycle Time Master and Tooling Master select an existing Route Master Line and
+cannot redefine its identity.
+
 **Master Identity**: The permanent system identity and generated code of one
 master record. Editing its permitted details does not create a second master
 or change its identity.

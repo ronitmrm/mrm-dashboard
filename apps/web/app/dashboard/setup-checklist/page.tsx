@@ -1,7 +1,7 @@
 import { normalizeProductionFloorCode } from "@workspace/db/production-floors"
 import { redirect } from "next/navigation"
 
-import { requireCapability } from "@/lib/auth/require-capability"
+import { requireProductionPage } from "@/lib/auth/require-production-page"
 import { productionModuleIsEnabled } from "@/lib/production-module"
 
 export default async function Page({
@@ -13,8 +13,8 @@ export default async function Page({
 
   const { SetupChecklistPage } = await import("@/components/mrmpl-dashboard")
   const query = await searchParams
-  await requireCapability(
-    "operations.dashboard.read",
+  await requireProductionPage(
+    "operations.machinist_tasks.read",
     "/dashboard/setup-checklist"
   )
   return (

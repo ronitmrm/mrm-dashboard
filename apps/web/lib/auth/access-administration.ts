@@ -58,6 +58,12 @@ type SetPermissionOverrideInput = {
   userId: string
 }
 
+type UpdateRolePermissionsInput = {
+  actorUserId: string
+  permissionKeys: string[]
+  roleKey: string
+}
+
 export function createAccessAdministrationService({
   auth,
   connectionString,
@@ -151,6 +157,19 @@ export function createAccessAdministrationService({
     async assignRole({ actorUserId, roleKey, userId }: AssignRoleInput) {
       await requireActorCapability(actorUserId, MANAGE_ROLES_CAPABILITY)
       return access.assignRole({ actorUserId, roleKey, userId })
+    },
+
+    async updateRolePermissions({
+      actorUserId,
+      permissionKeys,
+      roleKey,
+    }: UpdateRolePermissionsInput) {
+      await requireActorCapability(actorUserId, MANAGE_ROLES_CAPABILITY)
+      return access.updateRolePermissions({
+        actorUserId,
+        permissionKeys: [...new Set(permissionKeys)].sort(),
+        roleKey,
+      })
     },
 
     async setPostRole(input: SetPostRoleInput) {

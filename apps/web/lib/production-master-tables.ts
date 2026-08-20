@@ -21,6 +21,7 @@ export const productionUnitQualityMasterEntryTypes = [
 ] as const
 
 export const productionMasterTableEntryTypes = [
+  "setup_name_master",
   "route",
   "cycle",
   "tooling",
@@ -60,6 +61,7 @@ export function dataEntryRowsForProductionMaster(
 }
 
 export const productionMasterRowSources: Record<string, readonly string[]> = {
+  setup_name_master: ["setupNameMasterRows"],
   route: ["routeMasterRows"],
   cycle: ["cycleMasterRows"],
   tooling: ["toolingMasterRows"],

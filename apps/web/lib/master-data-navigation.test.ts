@@ -58,7 +58,10 @@ describe("master data navigation", () => {
           "/commercial/customers",
           "/commercial/website-products",
         ],
-        hrHrefs: ["/hr?panel=approvedPostPanel"],
+        hrHrefs: [
+          "/hr?panel=mastersPanel",
+          "/hr?panel=postMasterPanel",
+        ],
         operations: true,
         store: true,
       },
@@ -115,6 +118,27 @@ describe("master data navigation", () => {
     ])
   })
 
+  it("requires each HR master permission independently", () => {
+    expect(
+      externalMasterDataOptions(
+        {
+          administration: false,
+          commercialHrefs: [],
+          hrHrefs: ["/hr?panel=postMasterPanel"],
+          operations: false,
+          store: false,
+        },
+        "masterTables"
+      )
+    ).toEqual([
+      {
+        href: "/hr?panel=postMasterPanel&masterView=masterTables",
+        id: "hr_job_templates",
+        title: "HR Job Templates",
+      },
+    ])
+  })
+
   it("does not expose another module without its read permission", () => {
     expect(
       externalMasterDataOptions(
@@ -135,7 +159,7 @@ describe("master data navigation", () => {
       masterDataFallbackLinks({
         administration: false,
         commercialHrefs: [],
-        hrHrefs: ["/hr?panel=jobsPanel"],
+        hrHrefs: ["/hr?panel=mastersPanel"],
         operations: false,
         store: false,
       })

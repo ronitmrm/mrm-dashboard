@@ -7,7 +7,18 @@ describe("store page capability contract", () => {
     expect(storeCapabilities).toEqual({
       assetHistory: {
         read: "store.asset_history.read",
-        write: "store.asset_history.write",
+      },
+      assetLifecycle: {
+        write: "store.asset_lifecycle.write",
+      },
+      assetMaintenance: {
+        write: "store.asset_maintenance.write",
+      },
+      assetMovement: {
+        write: "store.asset_movement.write",
+      },
+      assetRepair: {
+        write: "store.asset_repair.write",
       },
       masters: {
         read: "store.masters.read",
@@ -24,7 +35,12 @@ describe("store page capability contract", () => {
       },
       requests: {
         read: "store.requests.read",
-        write: "store.requests.write",
+      },
+      requestIssue: {
+        write: "store.requests.issue",
+      },
+      requestSubmit: {
+        write: "store.requests.submit",
       },
       stock: {
         read: "store.stock.read",
