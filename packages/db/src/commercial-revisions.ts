@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { PoolClient } from "pg"
 
+import { selectorSearchTerm } from "./commercial-bounds"
 import {
   repositoryPool,
   withTransaction as transaction,
@@ -1547,10 +1548,408 @@ export function createCommercialRevisionsRepository(
       }))
     },
 
+    async listCustomerBulkPriceRevisionsBounded(
+      organizationCode: string,
+      options: { limit?: number } = {}
+    ) {
+      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 200), 1), 200)
+      const result = await pool.query<{
+        active_price_count: string
+        change_count: string
+        company_name: string | null
+        effective_on: string
+        id: string
+        reason: string
+        revision_number: string
+        revision_route: string
+        revised_quote_count: string
+        status: string
+        total_count: string
+      }>(
+        `
+          WITH organization AS (
+            SELECT id FROM core.organizations
+            WHERE lower(code) = lower($1)
+          ), active_by_customer AS (
+            SELECT quote.customer_id, count(*) AS active_price_count
+            FROM sales.quote_items quote
+            WHERE quote.organization_id = (SELECT id FROM organization)
+              AND quote.is_active AND quote.status IN ('Sent', 'Accepted')
+            GROUP BY quote.customer_id
+          ), active_total AS (
+            SELECT coalesce(sum(active_price_count), 0) AS active_price_count
+            FROM active_by_customer
+          )
+          SELECT revision.id, revision.revision_number, revision.status,
+            revision.reason, revision.effective_on::text,
+            revision.revision_route, customer.company_name,
+            count(DISTINCT change.stage_group_id)::text AS change_count,
+            count(DISTINCT change.replacement_quote_item_id)::text
+              AS revised_quote_count,
+            max(CASE
+              WHEN revision.customer_id IS NULL
+                THEN active_total.active_price_count
+              ELSE coalesce(active_by_customer.active_price_count, 0)
+            END)::text AS active_price_count,
+            count(*) OVER()::text AS total_count
+          FROM sales.bulk_price_revisions revision
+          JOIN organization ON organization.id = revision.organization_id
+          LEFT JOIN sales.customers customer
+            ON customer.id = revision.customer_id
+          LEFT JOIN active_by_customer
+            ON active_by_customer.customer_id = revision.customer_id
+          CROSS JOIN active_total
+          LEFT JOIN sales.bulk_price_revision_changes change
+            ON change.bulk_price_revision_id = revision.id
+          WHERE revision.status <> 'Completed'
+            AND (
+              revision.revision_route IN (
+                'Customer Parameter Bulk Revision',
+                'Customer Parameter Costing Only',
+                'Bulk Revision'
+              )
+              OR (
+                revision.revision_route = 'Product Parameter Bulk Revision'
+                AND revision.status = 'Pending Customer Costing'
+              )
+            )
+          GROUP BY revision.id, customer.company_name
+          ORDER BY revision.created_at DESC, revision.id DESC
+          LIMIT $2
+        `,
+        [organizationCode.trim(), limit]
+      )
+      const total = Number(result.rows[0]?.total_count ?? 0)
+      return {
+        coverage: {
+          limit,
+          returned: result.rows.length,
+          total,
+          truncated: result.rows.length < total,
+        },
+        rows: result.rows.map((row) => ({
+          activePriceCount: Number(row.active_price_count),
+          changeCount: Number(row.change_count),
+          companyName: row.company_name,
+          effectiveOn: row.effective_on,
+          id: row.id,
+          reason: row.reason,
+          revisedQuoteCount: Number(row.revised_quote_count),
+          revisionNumber: row.revision_number,
+          revisionRoute: row.revision_route,
+          status: row.status,
+        })),
+      }
+    },
+
+    async getCustomerBulkPriceRevision(
+      organizationCode: string,
+      bulkPriceRevisionId: string
+    ) {
+      const result = await pool.query<{
+        active_price_count: string
+        change_count: string
+        company_name: string | null
+        effective_on: string
+        id: string
+        reason: string
+        revision_number: string
+        revision_route: string
+        revised_quote_count: string
+        status: string
+      }>(
+        `
+          SELECT revision.id, revision.revision_number, revision.status,
+            revision.reason, revision.effective_on::text,
+            revision.revision_route, customer.company_name,
+            count(DISTINCT change.stage_group_id)::text AS change_count,
+            count(DISTINCT change.replacement_quote_item_id)::text
+              AS revised_quote_count,
+            (
+              SELECT count(*)::text
+              FROM sales.quote_items quote
+              WHERE quote.organization_id = revision.organization_id
+                AND quote.is_active AND quote.status IN ('Sent', 'Accepted')
+                AND (
+                  revision.customer_id IS NULL
+                  OR quote.customer_id = revision.customer_id
+                )
+            ) AS active_price_count
+          FROM sales.bulk_price_revisions revision
+          JOIN core.organizations organization
+            ON organization.id = revision.organization_id
+          LEFT JOIN sales.customers customer
+            ON customer.id = revision.customer_id
+          LEFT JOIN sales.bulk_price_revision_changes change
+            ON change.bulk_price_revision_id = revision.id
+          WHERE lower(organization.code) = lower($1)
+            AND revision.id = $2
+            AND (
+              revision.revision_route IN (
+                'Customer Parameter Bulk Revision',
+                'Customer Parameter Costing Only',
+                'Bulk Revision'
+              )
+              OR (
+                revision.revision_route = 'Product Parameter Bulk Revision'
+                AND revision.status = 'Pending Customer Costing'
+              )
+            )
+          GROUP BY revision.id, customer.company_name
+        `,
+        [organizationCode.trim(), bulkPriceRevisionId]
+      )
+      const row = result.rows[0]
+      return row
+        ? {
+            activePriceCount: Number(row.active_price_count),
+            changeCount: Number(row.change_count),
+            companyName: row.company_name,
+            effectiveOn: row.effective_on,
+            id: row.id,
+            reason: row.reason,
+            revisedQuoteCount: Number(row.revised_quote_count),
+            revisionNumber: row.revision_number,
+            revisionRoute: row.revision_route,
+            status: row.status,
+          }
+        : null
+    },
+
+    async getCustomerBulkRevisionSummary(organizationCode: string) {
+      const result = await pool.query<{
+        active_price_count: string
+        after_product_revision: string
+        commercial_only_revision: string
+        open_revision_count: string
+      }>(
+        `
+          WITH organization AS (
+            SELECT id FROM core.organizations
+            WHERE lower(code) = lower($1)
+          ), revisions AS (
+            SELECT revision.*
+            FROM sales.bulk_price_revisions revision
+            JOIN organization ON organization.id = revision.organization_id
+            WHERE revision.status <> 'Completed'
+              AND (
+                revision.revision_route IN (
+                  'Customer Parameter Bulk Revision',
+                  'Customer Parameter Costing Only',
+                  'Bulk Revision'
+                )
+                OR (
+                  revision.revision_route = 'Product Parameter Bulk Revision'
+                  AND revision.status = 'Pending Customer Costing'
+                )
+              )
+          ), active_by_customer AS (
+            SELECT quote.customer_id, count(*) AS active_price_count
+            FROM sales.quote_items quote
+            WHERE quote.organization_id = (SELECT id FROM organization)
+              AND quote.is_active AND quote.status IN ('Sent', 'Accepted')
+            GROUP BY quote.customer_id
+          ), active_total AS (
+            SELECT coalesce(sum(active_price_count), 0) AS active_price_count
+            FROM active_by_customer
+          )
+          SELECT count(*)::text AS open_revision_count,
+            count(*) FILTER (
+              WHERE revision_route <> 'Product Parameter Bulk Revision'
+            )::text AS commercial_only_revision,
+            count(*) FILTER (
+              WHERE revision_route = 'Product Parameter Bulk Revision'
+            )::text AS after_product_revision,
+            coalesce(sum(CASE
+              WHEN revisions.customer_id IS NULL
+                THEN active_total.active_price_count
+              ELSE coalesce(active_by_customer.active_price_count, 0)
+            END), 0)::text AS active_price_count
+          FROM revisions
+          LEFT JOIN active_by_customer
+            ON active_by_customer.customer_id = revisions.customer_id
+          CROSS JOIN active_total
+        `,
+        [organizationCode.trim()]
+      )
+      const row = result.rows[0]!
+      return {
+        activePriceCount: Number(row.active_price_count),
+        afterProductRevision: Number(row.after_product_revision),
+        commercialOnlyRevision: Number(row.commercial_only_revision),
+        openRevisionCount: Number(row.open_revision_count),
+      }
+    },
+
+    async listCustomerBulkRevisionReferenceData(
+      organizationCode: string,
+      options: { limit?: number; query?: string } = {}
+    ) {
+      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 50), 1), 50)
+      const search = selectorSearchTerm(options.query ?? "")
+      const organization = await pool.query<{ id: string }>(
+        "SELECT id FROM core.organizations WHERE lower(code) = lower($1)",
+        [organizationCode.trim()]
+      )
+      const organizationId = organization.rows[0]?.id ?? null
+      if (!organizationId) {
+        return {
+          coverage: { limit, returned: 0, total: 0, truncated: false },
+          organizationId: null,
+          rows: [],
+        }
+      }
+      const result = await pool.query<{
+        company_name: string
+        customer_uid: string
+        id: string
+        total_count: string
+      }>(
+        `
+          SELECT customer.id, customer.customer_uid, customer.company_name,
+            count(*) OVER()::text AS total_count
+          FROM sales.customers customer
+          WHERE customer.organization_id = $1
+            AND customer.status = 'Active'
+            AND (
+              $2 = ''
+              OR lower(btrim(customer.customer_uid)) = $2
+              OR lower(btrim(customer.company_name)) = $2
+              OR (
+                $3::text IS NOT NULL
+                AND lower(customer.customer_uid || ' ' || customer.company_name)
+                  LIKE $3 ESCAPE '\\'
+              )
+            )
+          ORDER BY
+            CASE
+              WHEN lower(btrim(customer.customer_uid)) = $2 THEN 0
+              WHEN lower(btrim(customer.company_name)) = $2 THEN 1
+              ELSE 2
+            END,
+            customer.company_name, customer.id
+          LIMIT $4
+        `,
+        [organizationId, search.query, search.containsPattern, limit]
+      )
+      const total = Number(result.rows[0]?.total_count ?? 0)
+      return {
+        coverage: {
+          limit,
+          returned: result.rows.length,
+          total,
+          truncated: result.rows.length < total,
+        },
+        organizationId,
+        rows: result.rows.map((row) => ({
+          companyName: row.company_name,
+          customerUid: row.customer_uid,
+          id: row.id,
+        })),
+      }
+    },
+
+    async listBulkPriceRevisionActivePricesBounded(
+      bulkPriceRevisionId: string,
+      options: { limit?: number; query?: string } = {}
+    ) {
+      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 200), 1), 200)
+      const search = selectorSearchTerm(options.query ?? "")
+      const result = await pool.query<{
+        approved_price_usd: string
+        company_name: string
+        conversion_rate: string
+        customer_part_code: string | null
+        description: string
+        id: string
+        packing_cost: string
+        profit_percent: string
+        purchase_times: string
+        quote_number: string
+        scrap_rate: string
+        shipping_cost: string
+        total_count: string
+        uid: string
+      }>(
+        `
+          WITH revision AS (
+            SELECT organization_id, customer_id
+            FROM sales.bulk_price_revisions
+            WHERE id = $1
+          )
+          SELECT quote.id, quote.quote_number, quote.customer_part_code,
+            quote.approved_price_usd, quote.scrap_rate, quote.packing_cost,
+            quote.shipping_cost, quote.purchase_times, quote.profit_percent,
+            quote.conversion_rate, customer.company_name, item.uid,
+            item.description, count(*) OVER()::text AS total_count
+          FROM sales.quote_items quote
+          JOIN revision ON revision.organization_id = quote.organization_id
+          JOIN sales.customers customer ON customer.id = quote.customer_id
+          JOIN catalog.items item ON item.id = quote.item_id
+          WHERE quote.is_active AND quote.status IN ('Sent', 'Accepted')
+            AND (
+              revision.customer_id IS NULL
+              OR quote.customer_id = revision.customer_id
+            )
+            AND (
+              $2 = ''
+              OR lower(btrim(coalesce(quote.customer_part_code, ''))) = $2
+              OR lower(btrim(quote.quote_number)) = $2
+              OR lower(btrim(item.uid)) = $2
+              OR (
+                $3::text IS NOT NULL
+                AND lower(
+                  coalesce(quote.customer_part_code, '') || ' ' ||
+                  quote.quote_number || ' ' || item.uid || ' ' ||
+                  item.description
+                ) LIKE $3 ESCAPE '\\'
+              )
+            )
+          ORDER BY
+            CASE
+              WHEN lower(btrim(coalesce(quote.customer_part_code, ''))) = $2
+                THEN 0
+              WHEN lower(btrim(quote.quote_number)) = $2 THEN 1
+              WHEN lower(btrim(item.uid)) = $2 THEN 2
+              ELSE 3
+            END,
+            customer.company_name, item.uid,
+            quote.sent_at DESC NULLS LAST, quote.updated_at DESC, quote.id DESC
+          LIMIT $4
+        `,
+        [bulkPriceRevisionId, search.query, search.containsPattern, limit]
+      )
+      const total = Number(result.rows[0]?.total_count ?? 0)
+      return {
+        coverage: {
+          limit,
+          returned: result.rows.length,
+          total,
+          truncated: result.rows.length < total,
+        },
+        rows: result.rows.map((row) => ({
+          approvedPriceUsd: asNumber(row.approved_price_usd),
+          companyName: row.company_name,
+          conversionRate: asNumber(row.conversion_rate),
+          customerPartCode: row.customer_part_code,
+          description: row.description,
+          id: row.id,
+          packingCost: asNumber(row.packing_cost),
+          profitPercent: asNumber(row.profit_percent),
+          purchaseTimes: asNumber(row.purchase_times, 1),
+          quoteNumber: row.quote_number,
+          scrapRate: asNumber(row.scrap_rate),
+          shippingCost: asNumber(row.shipping_cost),
+          uid: row.uid,
+        })),
+      }
+    },
+
     async listBulkPriceRevisionStages(bulkPriceRevisionId: string) {
       const result = await pool.query<{
         field_label: string
         field_name: string
+        is_applied: boolean
         new_value: string
         notes: string | null
         preview_rows: Array<{
@@ -1567,6 +1966,7 @@ export function createCommercialRevisionsRepository(
             change.field_label, change.new_value::text,
             max(change.selected_count)::integer AS selected_count,
             max(change.skipped_count)::integer AS skipped_count,
+            bool_or(change.applied_at IS NOT NULL) AS is_applied,
             max(change.notes) AS notes,
             jsonb_agg(change.preview_json ORDER BY change.created_at, change.id)
               AS preview_rows
@@ -1582,6 +1982,7 @@ export function createCommercialRevisionsRepository(
       return result.rows.map((row) => ({
         fieldLabel: row.field_label,
         fieldName: row.field_name,
+        isApplied: row.is_applied,
         newValue: asNumber(row.new_value),
         notes: row.notes,
         previewRows: row.preview_rows,
@@ -2124,18 +2525,15 @@ export function createCommercialRevisionsRepository(
           throw new Error("Unsupported bulk revision field.")
         }
         const field = bulkRevisionFields[input.fieldName]
-        if (
+        const isProductStage =
           row.revision_route === "Product Parameter Bulk Revision" &&
-          !productFields.has(input.fieldName)
-        ) {
+          row.status !== "Pending Customer Costing"
+        if (isProductStage && !productFields.has(input.fieldName)) {
           throw new Error(
             "Product revisions can only stage product-level parameters."
           )
         }
-        if (
-          row.revision_route === "Customer Parameter Bulk Revision" &&
-          !customerFields.has(input.fieldName)
-        ) {
+        if (!isProductStage && !customerFields.has(input.fieldName)) {
           throw new Error(
             "Customer revisions can only stage customer-level parameters."
           )
@@ -2275,6 +2673,7 @@ export function createCommercialRevisionsRepository(
             DELETE FROM sales.bulk_price_revision_changes
             WHERE bulk_price_revision_id = $1 AND stage_group_id = $2
               AND replacement_quote_item_id IS NULL
+              AND applied_at IS NULL
           `,
           [input.bulkPriceRevisionId, input.stageGroupId]
         )

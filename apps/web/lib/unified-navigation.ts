@@ -492,6 +492,11 @@ export const commercialNavigation = [
     label: "Purchase Orders",
   },
   {
+    href: "/commercial/customer-bulk-revision",
+    icon: RefreshCcw,
+    label: "Customer Bulk Revision",
+  },
+  {
     href: "/commercial/ecns",
     icon: FilePenLine,
     label: "Engineering Changes",

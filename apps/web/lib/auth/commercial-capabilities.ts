@@ -176,6 +176,12 @@ export const commercialPageAccess = [
     commercialCapabilities.purchaseOrders
   ),
   page(
+    "commercial.customer-bulk-revision",
+    "Customer Bulk Revision",
+    "/commercial/customer-bulk-revision",
+    commercialCapabilities.revisions
+  ),
+  page(
     "commercial.ecns",
     "Engineering Change Notes",
     "/commercial/ecns",

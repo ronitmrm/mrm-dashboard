@@ -1,0 +1,653 @@
+import Link from "next/link"
+
+import {
+  bulkRevisionFields,
+  createCommercialRevisionsRepository,
+} from "@workspace/db"
+import { Badge } from "@workspace/ui/components/badge"
+import { Button } from "@workspace/ui/components/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  MetricCard,
+} from "@workspace/ui/components/card"
+import { Field, FieldLabel } from "@workspace/ui/components/field"
+import { Input } from "@workspace/ui/components/input"
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@workspace/ui/components/native-select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
+import { Textarea } from "@workspace/ui/components/textarea"
+
+import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { readAuthEnvironment } from "@/lib/auth/auth"
+import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
+import { requireCapability } from "@/lib/auth/require-capability"
+
+import {
+  completeBulkPriceRevisionAction,
+  createBulkPriceRevisionAction,
+  deleteBulkPriceRevisionStageAction,
+  stageBulkPriceRevisionAction,
+} from "../revisions/actions"
+
+export const dynamic = "force-dynamic"
+
+const customerFields = Object.entries(bulkRevisionFields).filter(
+  ([, field]) => field.route === "customer"
+)
+
+const activePriceHeadings = [
+  "Select",
+  "Customer",
+  "Customer Part",
+  "Product",
+  "Current Price",
+  "Scrap",
+  "Packing",
+  "Shipping",
+  "OR",
+  "Profit",
+  "FX",
+] as const
+
+const money = (value: number) =>
+  new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 4,
+    minimumFractionDigits: 2,
+  }).format(value)
+
+const percent = (value: number) => `${money(value * 100)}%`
+
+function localDate() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, "0")
+  const day = String(now.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function validUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  )
+}
+
+export default async function CustomerBulkRevisionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    customerSearch?: string
+    priceSearch?: string
+    revision?: string
+  }>
+}) {
+  await requireCapability(
+    commercialCapabilities.revisions.read,
+    "/commercial/customer-bulk-revision"
+  )
+  const params = await searchParams
+  const selectedRevisionId = validUuid(params.revision?.trim() ?? "")
+    ? params.revision!.trim()
+    : ""
+  const customerSearch = params.customerSearch?.trim() ?? ""
+  const priceSearch = params.priceSearch?.trim() ?? ""
+  const repository = createCommercialRevisionsRepository({
+    connectionString: readAuthEnvironment().connectionString,
+  })
+  const data = await (async () => {
+    try {
+      const [queue, summary, reference, selectedRevision, stages, prices] =
+        await Promise.all([
+          repository.listCustomerBulkPriceRevisionsBounded("MRMPL"),
+          repository.getCustomerBulkRevisionSummary("MRMPL"),
+          repository.listCustomerBulkRevisionReferenceData("MRMPL", {
+            query: customerSearch,
+          }),
+          selectedRevisionId
+            ? repository.getCustomerBulkPriceRevision(
+                "MRMPL",
+                selectedRevisionId
+              )
+            : Promise.resolve(null),
+          selectedRevisionId
+            ? repository.listBulkPriceRevisionStages(selectedRevisionId)
+            : Promise.resolve([]),
+          selectedRevisionId
+            ? repository.listBulkPriceRevisionActivePricesBounded(
+                selectedRevisionId,
+                { query: priceSearch }
+              )
+            : Promise.resolve({
+                coverage: {
+                  limit: 200,
+                  returned: 0,
+                  total: 0,
+                  truncated: false,
+                },
+                rows: [],
+              }),
+        ])
+      return { prices, queue, reference, selectedRevision, stages, summary }
+    } finally {
+      await repository.close()
+    }
+  })()
+  const { prices, queue, reference, selectedRevision, stages, summary } = data
+  const isCompleted = selectedRevision?.status === "Completed"
+
+  return (
+    <div className="grid gap-6">
+      <section className="grid gap-2">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Customer Parameter Bulk Revision
+            </h1>
+            <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
+              Select Active Customer Prices, Stage Commercial Parameter Changes,
+              Preview Their Effect, Then Create Immutable Quote Revisions Once.
+            </p>
+          </div>
+          <Button asChild variant="outline">
+            <Link href="/commercial/revisions">All Price Revisions</Link>
+          </Button>
+        </div>
+        <BoundedResultNotice
+          coverage={queue.coverage}
+          section="Customer bulk revision queue"
+        />
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Customer Revision Requests"
+          value={summary.openRevisionCount}
+        />
+        <MetricCard
+          label="Commercial-Only Revision"
+          value={summary.commercialOnlyRevision}
+        />
+        <MetricCard
+          label="After Product Revision"
+          value={summary.afterProductRevision}
+        />
+        <MetricCard
+          label="Customer Prices In Scope"
+          value={summary.activePriceCount}
+        />
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.55fr)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer Revision Queue</CardTitle>
+            <CardDescription>
+              Open Customer-Side Requests Only. Product Revisions Appear Here
+              Only After They Reach Customer Costing.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-[34rem] overflow-auto rounded-md border">
+              <Table excelFilters>
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow>
+                    <TableHead data-filterable="true">Request</TableHead>
+                    <TableHead data-filterable="true">Customer</TableHead>
+                    <TableHead data-filterable="true">Route</TableHead>
+                    <TableHead>Active Prices</TableHead>
+                    <TableHead>Staged</TableHead>
+                    <TableHead data-filterable="true">Status</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {queue.rows.map((revision) => (
+                    <TableRow
+                      className="[contain-intrinsic-size:auto_48px] [content-visibility:auto]"
+                      key={revision.id}
+                    >
+                      <TableCell className="font-mono">
+                        {revision.revisionNumber}
+                      </TableCell>
+                      <TableCell>
+                        {revision.companyName ?? "All Customers"}
+                      </TableCell>
+                      <TableCell>{revision.revisionRoute}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {revision.activePriceCount}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {revision.changeCount}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{revision.status}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button asChild size="sm" variant="outline">
+                          <Link
+                            href={`/commercial/customer-bulk-revision?revision=${encodeURIComponent(revision.id)}#customer-bulk-workbench`}
+                          >
+                            Open Revision
+                          </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!queue.rows.length ? (
+                    <TableRow>
+                      <TableCell className="h-24 text-center" colSpan={7}>
+                        No Customer Parameter Bulk Revisions Are Pending.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Start A Customer Revision</CardTitle>
+            <CardDescription>
+              Sales Selects One Customer And Records Why Its Active Prices Need
+              Commercial Recalculation.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <form className="flex gap-2" method="get">
+              <Input
+                aria-label="Search customers"
+                defaultValue={customerSearch}
+                name="customerSearch"
+                placeholder="Search customer code or name"
+              />
+              <Button type="submit" variant="outline">
+                Find
+              </Button>
+            </form>
+            <BoundedResultNotice
+              coverage={reference.coverage}
+              searchQuery={customerSearch}
+              section="Customer selector"
+            />
+            {reference.organizationId ? (
+              <form
+                action={createBulkPriceRevisionAction}
+                className="grid gap-4"
+              >
+                <input
+                  name="organization_id"
+                  type="hidden"
+                  value={reference.organizationId}
+                />
+                <input
+                  name="revision_route"
+                  type="hidden"
+                  value="Customer Parameter Bulk Revision"
+                />
+                <Field>
+                  <FieldLabel htmlFor="customer-revision-customer">
+                    Customer
+                  </FieldLabel>
+                  <NativeSelect
+                    id="customer-revision-customer"
+                    name="customer_id"
+                    required
+                  >
+                    <NativeSelectOption value="">
+                      Select Customer
+                    </NativeSelectOption>
+                    {reference.rows.map((customer) => (
+                      <NativeSelectOption key={customer.id} value={customer.id}>
+                        {customer.customerUid} · {customer.companyName}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="customer-revision-effective">
+                    Effective Date
+                  </FieldLabel>
+                  <Input
+                    defaultValue={localDate()}
+                    id="customer-revision-effective"
+                    name="effective_on"
+                    required
+                    type="date"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="customer-revision-reason">
+                    Reason
+                  </FieldLabel>
+                  <Textarea
+                    id="customer-revision-reason"
+                    name="reason"
+                    required
+                  />
+                </Field>
+                <Button className="w-fit" type="submit">
+                  Send Customer Revision To Costing
+                </Button>
+              </form>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                The Mrmpl Organization Must Be Loaded First.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card id="customer-bulk-workbench">
+        <CardHeader>
+          <CardTitle>Customer Revision Workbench</CardTitle>
+          <CardDescription>
+            Only The Selected Revision And A Bounded, Server-Searchable Price
+            Set Are Loaded. Profit Accepts A Whole Percentage Such As 9 For 9%.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6">
+          {selectedRevision ? (
+            <>
+              <div className="flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    <Badge variant={isCompleted ? "default" : "secondary"}>
+                      {selectedRevision.status}
+                    </Badge>
+                    <Badge variant="outline">
+                      {selectedRevision.revisionRoute}
+                    </Badge>
+                  </div>
+                  <p className="font-mono font-semibold">
+                    {selectedRevision.revisionNumber}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedRevision.companyName ?? "All Customers"} ·
+                    Effective {selectedRevision.effectiveOn}
+                  </p>
+                  <p className="mt-2 text-sm whitespace-pre-wrap">
+                    {selectedRevision.reason}
+                  </p>
+                </div>
+                <Button asChild size="sm" variant="ghost">
+                  <Link href="/commercial/customer-bulk-revision#customer-bulk-workbench">
+                    Close Workbench
+                  </Link>
+                </Button>
+              </div>
+
+              <div className="grid gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <form className="flex flex-1 gap-2" method="get">
+                    <input
+                      name="revision"
+                      type="hidden"
+                      value={selectedRevision.id}
+                    />
+                    <Input
+                      aria-label="Search active customer prices"
+                      defaultValue={priceSearch}
+                      name="priceSearch"
+                      placeholder="Search customer part, quote, UID, or description"
+                    />
+                    <Button type="submit" variant="outline">
+                      Search Prices
+                    </Button>
+                  </form>
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    {selectedRevision.activePriceCount} Active Prices In Scope
+                  </p>
+                </div>
+                <BoundedResultNotice
+                  coverage={prices.coverage}
+                  searchQuery={priceSearch}
+                  section="Active customer prices"
+                />
+              </div>
+
+              {!isCompleted ? (
+                <form
+                  action={stageBulkPriceRevisionAction}
+                  className="grid gap-4"
+                >
+                  <input
+                    name="bulk_price_revision_id"
+                    type="hidden"
+                    value={selectedRevision.id}
+                  />
+                  <div className="max-h-[36rem] overflow-auto rounded-md border">
+                    <table className="w-full caption-bottom text-sm">
+                      <thead className="sticky top-0 z-10 bg-background [&_tr]:border-b">
+                        <tr>
+                          {activePriceHeadings.map((heading) => (
+                            <th
+                              className="h-12 px-3 text-left align-middle font-medium whitespace-nowrap text-foreground"
+                              key={heading}
+                            >
+                              {heading}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="[&_tr:last-child]:border-0">
+                        {prices.rows.map((price) => (
+                          <tr
+                            className="border-b transition-colors [contain-intrinsic-size:auto_48px] [content-visibility:auto] hover:bg-muted/50"
+                            key={price.id}
+                          >
+                            <td className="p-3 align-middle whitespace-nowrap">
+                              <input
+                                aria-label={`Select ${price.customerPartCode ?? price.uid}`}
+                                name="selected_quote_item_ids"
+                                type="checkbox"
+                                value={price.id}
+                              />
+                            </td>
+                            <td className="p-3 align-middle whitespace-nowrap">
+                              {price.companyName}
+                            </td>
+                            <td className="p-3 align-middle font-mono whitespace-nowrap">
+                              {price.customerPartCode ?? "—"}
+                            </td>
+                            <td className="p-3 align-middle whitespace-nowrap">
+                              <span className="font-mono">{price.uid}</span>
+                              <span className="block max-w-64 text-xs text-muted-foreground">
+                                {price.description}
+                              </span>
+                            </td>
+                            <td className="p-3 align-middle whitespace-nowrap tabular-nums">
+                              $ {money(price.approvedPriceUsd)}
+                            </td>
+                            <td className="p-3 align-middle whitespace-nowrap">
+                              {money(price.scrapRate)}
+                            </td>
+                            <td className="p-3 align-middle whitespace-nowrap">
+                              {money(price.packingCost)}
+                            </td>
+                            <td className="p-3 align-middle whitespace-nowrap">
+                              {money(price.shippingCost)}
+                            </td>
+                            <td className="p-3 align-middle whitespace-nowrap">
+                              {money(price.purchaseTimes)}
+                            </td>
+                            <td className="p-3 align-middle whitespace-nowrap">
+                              {percent(price.profitPercent)}
+                            </td>
+                            <td className="p-3 align-middle whitespace-nowrap">
+                              {money(price.conversionRate)}
+                            </td>
+                          </tr>
+                        ))}
+                        {!prices.rows.length ? (
+                          <tr>
+                            <td className="h-24 text-center" colSpan={11}>
+                              No Active Prices Match This Search.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <Field>
+                      <FieldLabel htmlFor="customer-bulk-field">
+                        Parameter
+                      </FieldLabel>
+                      <NativeSelect
+                        id="customer-bulk-field"
+                        name="field_name"
+                        required
+                      >
+                        {customerFields.map(([value, field]) => (
+                          <NativeSelectOption key={value} value={value}>
+                            {field.label}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="customer-bulk-value">
+                        New Value
+                      </FieldLabel>
+                      <Input
+                        id="customer-bulk-value"
+                        name="new_value"
+                        required
+                        step="any"
+                        type="number"
+                      />
+                    </Field>
+                    <Field className="sm:col-span-2">
+                      <FieldLabel htmlFor="customer-bulk-notes">
+                        Change Note
+                      </FieldLabel>
+                      <Input id="customer-bulk-notes" name="notes" />
+                    </Field>
+                  </div>
+                  <Button
+                    className="w-fit"
+                    disabled={!prices.rows.length}
+                    type="submit"
+                  >
+                    Stage Selected Prices
+                  </Button>
+                </form>
+              ) : null}
+
+              <div className="grid gap-3 border-t pt-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-medium">Staged Customer Changes</p>
+                    <p className="text-xs text-muted-foreground">
+                      Each Group Retains Its Selected Price Set And Stored
+                      Preview.
+                    </p>
+                  </div>
+                  {!isCompleted ? (
+                    <form action={completeBulkPriceRevisionAction}>
+                      <input
+                        name="bulk_price_revision_id"
+                        type="hidden"
+                        value={selectedRevision.id}
+                      />
+                      <Button disabled={!stages.length} type="submit">
+                        Complete And Create Revisions
+                      </Button>
+                    </form>
+                  ) : null}
+                </div>
+                {stages.map((stage) => (
+                  <div
+                    className="grid gap-3 rounded-2xl border bg-muted/20 p-4 [contain-intrinsic-size:auto_120px] [content-visibility:auto]"
+                    key={stage.stageGroupId}
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="font-medium">
+                          {stage.fieldLabel} →{" "}
+                          {stage.fieldName === "profit_percent"
+                            ? percent(stage.newValue)
+                            : money(stage.newValue)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {stage.selectedCount} Selected
+                          {stage.skippedCount
+                            ? ` · ${stage.skippedCount} Skipped By Process Guard`
+                            : ""}
+                        </p>
+                        {stage.notes ? (
+                          <p className="mt-1 text-sm">{stage.notes}</p>
+                        ) : null}
+                      </div>
+                      {!isCompleted && !stage.isApplied ? (
+                        <form action={deleteBulkPriceRevisionStageAction}>
+                          <input
+                            name="bulk_price_revision_id"
+                            type="hidden"
+                            value={selectedRevision.id}
+                          />
+                          <input
+                            name="stage_group_id"
+                            type="hidden"
+                            value={stage.stageGroupId}
+                          />
+                          <Button size="sm" type="submit" variant="ghost">
+                            Remove Stage
+                          </Button>
+                        </form>
+                      ) : stage.isApplied ? (
+                        <Badge variant="outline">Applied Stage</Badge>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {stage.previewRows.map((preview) => (
+                        <span
+                          className="rounded-full border bg-background px-2 py-1 tabular-nums"
+                          key={preview.quoteItemId}
+                        >
+                          $ {money(preview.oldPrice)} → ${" "}
+                          {money(preview.newPrice)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {!stages.length ? (
+                  <p className="rounded-2xl border p-6 text-center text-sm text-muted-foreground">
+                    No Customer Parameter Changes Have Been Staged Yet.
+                  </p>
+                ) : null}
+              </div>
+            </>
+          ) : selectedRevisionId ? (
+            <p className="text-sm text-muted-foreground">
+              This Customer Bulk Revision Is No Longer Available In This
+              Workflow.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Open One Customer Revision From The Queue To Select Prices And
+              Stage Changes.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
