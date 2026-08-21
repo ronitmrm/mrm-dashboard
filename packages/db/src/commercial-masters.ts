@@ -994,9 +994,12 @@ export function createCommercialMasterRepository(
         id: string
         kind: EditableCommercialMasterKind
         label: string
-      }>(`${editableQueries[input.kind]} ORDER BY lower(label), id`, [
-        input.organizationId,
-      ])
+      }>(
+        `SELECT id, kind, label
+         FROM (${editableQueries[input.kind]}) editable_rows
+         ORDER BY lower(label), id`,
+        [input.organizationId]
+      )
       return result.rows
     },
 
