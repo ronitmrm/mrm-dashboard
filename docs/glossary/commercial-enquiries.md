@@ -20,18 +20,17 @@ queue. Saving the decision stays within Technical Review; it does not start
 Design work or transfer the reviewer into the Design workspace.
 _Avoid_: Feasible means Design started.
 
-**Design Portfolio Review**: The mandatory first step for a released Enquiry
-line. Design searches the Current Portfolio by Product UID or description and
-either selects an existing Product or confirms that a new Product is required.
-Selecting an existing Product marks Design Not Required.
+**Design Task Detail**: The read-only page opened by Start Task for one released
+Enquiry line. It shows the complete Technical Review in a structured form and
+offers separate actions to search the Current Portfolio or open the Design form.
+Portfolio search occurs on the Current Portfolio page, not inside the task.
 
-**Design Work Start**: The Design team's explicit confirmation, after Design
-Portfolio Review, that a new Product is required. It changes Pending Design to
-In Progress and opens that line's separate new-Product Design workspace. Saving
-incomplete work remains In Progress; completing its required BOM changes it to
-Design Complete.
-_Avoid_: Starting Design before portfolio review, opening every Design editor
-inside the queue, automatic start on Technical Review completion.
+**Design Work Start**: The Design team's explicit choice to open the Design form
+for one released line. It changes Pending Design to In Progress and opens that
+line's separate new-Product Design workspace. Saving incomplete work remains In
+Progress; completing its required BOM changes it to Design Complete.
+_Avoid_: Inline portfolio search, opening every Design editor inside the queue,
+automatic start on Technical Review completion.
 
 **Customer Parameter Costing**: The customer- and Enquiry-specific price step
 after Product Parameter Costing. It applies scrap/purchase factors, profit,

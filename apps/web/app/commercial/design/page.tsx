@@ -54,7 +54,7 @@ export default async function DesignPage() {
         <h2 className="text-2xl font-semibold tracking-tight">Design Tasks</h2>
         <p className="max-w-4xl text-sm text-muted-foreground">
           Technically approved enquiry lines arrive here as an Excel-style work
-          queue. Check the current portfolio before starting any new design.
+          queue. Start a task to review its complete Technical Review details.
         </p>
       </section>
 
@@ -75,8 +75,8 @@ export default async function DesignPage() {
         <CardHeader>
           <CardTitle>Approved Line Items</CardTitle>
           <CardDescription>
-            Review the portfolio first. A separate workspace opens only after
-            the Design team confirms that a new product is required.
+            Start Task opens the released line details. The Design form remains
+            separate from this queue.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -134,8 +134,8 @@ export default async function DesignPage() {
                         >
                           <Link href={designTaskHref(item)}>
                             {item.portfolioMatchStatus === "New Quoted Part"
-                              ? "Open Workspace"
-                              : "Check Portfolio"}
+                              ? "Open Design Form"
+                              : "Start Task"}
                           </Link>
                         </Button>
                       </TableCell>

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 
@@ -11,24 +13,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Input } from "@workspace/ui/components/input"
+import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@workspace/ui/components/table"
+  Field,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@workspace/ui/components/field"
 
-import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { technicalReviewChecklist } from "@/lib/pricing/technical-review"
 
-import {
-  selectDesignPortfolioProductAction,
-  startDesignWorkAction,
-} from "../../enquiries/actions"
+import { startDesignWorkAction } from "../../enquiries/actions"
 
 export const dynamic = "force-dynamic"
 
@@ -36,61 +33,64 @@ function display(value: number | string | null | undefined) {
   return value === null || value === undefined || value === "" ? "—" : value
 }
 
-export default async function DesignPortfolioReviewPage({
+function ReviewField({
+  children,
+  label,
+}: {
+  children: ReactNode
+  label: string
+}) {
+  return (
+    <Field className="gap-1">
+      <FieldLabel>{label}</FieldLabel>
+      <div className="min-h-5 text-sm font-medium">{children}</div>
+    </Field>
+  )
+}
+
+export default async function DesignTaskDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ q?: string | string[] }>
 }) {
   const { id } = await params
   await requireCapability("pricing.design.read", `/commercial/design/${id}`)
-  const queryValue = (await searchParams).q
-  const query = typeof queryValue === "string" ? queryValue.trim() : ""
   const workflow = createCommercialWorkflowRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const data = await (async () => {
-    try {
-      const selectedItem = await workflow.getDesignTask("MRMPL", id)
-      if (!selectedItem) return null
-      const productOptions = query
-        ? await workflow.searchDesignPortfolioProducts("MRMPL", query)
-        : {
-            coverage: { limit: 50, returned: 0, truncated: false },
-            rows: [],
-          }
-      return { productOptions, selectedItem }
-    } finally {
-      await workflow.close()
-    }
-  })()
-  if (!data) notFound()
-  if (data.selectedItem.portfolioMatchStatus === "New Quoted Part") {
+  const selectedItem = await workflow
+    .getDesignTask("MRMPL", id)
+    .finally(() => workflow.close())
+
+  if (!selectedItem) notFound()
+  if (selectedItem.portfolioMatchStatus === "New Quoted Part") {
     redirect(`/commercial/design/${id}/new`)
   }
-  if (data.selectedItem.portfolioMatchStatus === "Matches Existing Portfolio") {
+  if (selectedItem.portfolioMatchStatus === "Matches Existing Portfolio") {
     redirect("/commercial/design")
   }
-  const { productOptions, selectedItem } = data
+
+  const portfolioSearch =
+    selectedItem.customerPartCode?.trim() || selectedItem.description
 
   return (
     <div className="grid gap-6">
       <section className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid gap-2">
           <Button asChild className="w-fit" size="sm" variant="ghost">
-            <Link href="/commercial/design">Back To Design Queue</Link>
+            <Link href="/commercial/design">Back To Design Tasks</Link>
           </Button>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-semibold tracking-tight">
-              Check Current Portfolio
+              {selectedItem.enquiryNumber} / Line {selectedItem.lineNumber}
             </h2>
+            <Badge variant="outline">
+              {selectedItem.technicalReviewStatus}
+            </Badge>
             <Badge variant="secondary">{selectedItem.designStatus}</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            {selectedItem.enquiryNumber} / Line {selectedItem.lineNumber} ·{" "}
-            {display(selectedItem.customerPartCode)} ·{" "}
-            {selectedItem.description}
+            {selectedItem.customerUid} · {selectedItem.companyName}
           </p>
         </div>
         <Button asChild size="sm" variant="outline">
@@ -102,124 +102,151 @@ export default async function DesignPortfolioReviewPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Search Before Starting Design</CardTitle>
+          <CardTitle>Technical Review Details</CardTitle>
           <CardDescription>
-            Search by Product UID or description. Select a matching product, or
-            confirm that a new product must be designed.
+            Review the complete released line before searching the portfolio or
+            opening the Design form.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-5">
-          <form
-            className="flex flex-col gap-2 sm:flex-row"
-            id="portfolio-search"
-            role="search"
-          >
-            <Input
-              aria-label="Search current portfolio by Product UID or description"
-              className="max-w-xl"
-              defaultValue={query}
-              name="q"
-              placeholder="Product UID or description"
-              required
-            />
-            <Button type="submit">Search Current Portfolio</Button>
-            {query ? (
-              <Button asChild type="button" variant="outline">
-                <Link href={`/commercial/design/${id}`}>Clear</Link>
-              </Button>
-            ) : null}
-          </form>
+        <CardContent className="grid gap-6">
+          <FieldSet>
+            <FieldLegend>Enquiry Line</FieldLegend>
+            <div className="grid gap-4 rounded-2xl border bg-muted/20 p-4 md:grid-cols-2 xl:grid-cols-4">
+              <ReviewField label="Customer Part">
+                {display(selectedItem.customerPartCode)}
+              </ReviewField>
+              <ReviewField label="Description">
+                {selectedItem.description}
+              </ReviewField>
+              <ReviewField label="Quantity">
+                {display(selectedItem.quantity)}
+              </ReviewField>
+              <ReviewField label="Grade">
+                {display(selectedItem.grade)}
+              </ReviewField>
+              <ReviewField label="Target Price">
+                {display(selectedItem.targetPrice)}
+              </ReviewField>
+              <ReviewField label="Drawing Reference">
+                {display(selectedItem.drawingReference)}
+              </ReviewField>
+              <ReviewField label="Delivery Terms">
+                {display(selectedItem.deliveryTerms)}
+              </ReviewField>
+              <ReviewField label="Payment Terms">
+                {display(selectedItem.paymentTerms)}
+              </ReviewField>
+              <ReviewField label="Line Remarks">
+                {display(selectedItem.lineRemarks)}
+              </ReviewField>
+              <ReviewField label="Enquiry Remarks">
+                {display(selectedItem.enquiryRemarks)}
+              </ReviewField>
+            </div>
+          </FieldSet>
 
-          {query ? (
-            <>
-              <BoundedResultNotice
-                actionHref="#portfolio-search"
-                actionLabel="Refine product search"
-                coverage={productOptions.coverage}
-                searchQuery={query}
-                section="Current Portfolio"
-              />
-              <div className="overflow-x-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Product UID</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {productOptions.rows.length ? (
-                      productOptions.rows.map((product) => (
-                        <TableRow key={product.id}>
-                          <TableCell className="font-medium">
-                            {product.uid}
-                          </TableCell>
-                          <TableCell>{product.description}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{product.itemType}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <form action={selectDesignPortfolioProductAction}>
-                              <input
-                                name="enquiry_id"
-                                type="hidden"
-                                value={selectedItem.enquiryId}
-                              />
-                              <input
-                                name="enquiry_item_id"
-                                type="hidden"
-                                value={selectedItem.enquiryItemId}
-                              />
-                              <input
-                                name="matched_product_id"
-                                type="hidden"
-                                value={product.id}
-                              />
-                              <Button size="sm" type="submit">
-                                Use Product
-                              </Button>
-                            </form>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          className="h-28 text-center text-muted-foreground"
-                          colSpan={4}
-                        >
-                          No portfolio products match “{query}”.
-                        </TableCell>
-                      </TableRow>
+          <FieldSet>
+            <FieldLegend>Technical Checklist</FieldLegend>
+            <div className="grid gap-3 rounded-2xl border p-4 sm:grid-cols-2 xl:grid-cols-3">
+              {technicalReviewChecklist.map(([key, label]) => (
+                <Field
+                  className="items-center"
+                  key={key}
+                  orientation="horizontal"
+                >
+                  <Checkbox
+                    defaultChecked={Boolean(
+                      selectedItem.technicalChecklist[key]
                     )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-muted/30 p-4">
-                <p className="text-sm text-muted-foreground">
-                  Reviewed the results and found no matching product?
-                </p>
-                <form action={startDesignWorkAction}>
-                  <input
-                    name="enquiry_item_id"
-                    type="hidden"
-                    value={selectedItem.enquiryItemId}
+                    disabled
+                    id={`design-${selectedItem.enquiryItemId}-${key}`}
                   />
-                  <Button type="submit" variant="outline">
-                    Create New Product
-                  </Button>
-                </form>
+                  <FieldLabel
+                    htmlFor={`design-${selectedItem.enquiryItemId}-${key}`}
+                  >
+                    {label}
+                  </FieldLabel>
+                </Field>
+              ))}
+            </div>
+          </FieldSet>
+
+          <FieldSet>
+            <FieldLegend>Technical Review Result</FieldLegend>
+            <div className="grid gap-4 rounded-2xl border bg-muted/20 p-4 md:grid-cols-2 xl:grid-cols-4">
+              <ReviewField label="Review Status">
+                <Badge variant="outline">
+                  {selectedItem.technicalReviewStatus}
+                </Badge>
+              </ReviewField>
+              <ReviewField label="Reviewed Grade">
+                {display(selectedItem.grade)}
+              </ReviewField>
+              <ReviewField label="Missing Information">
+                {display(selectedItem.missingInformation)}
+              </ReviewField>
+              <ReviewField label="Feasibility Reason">
+                {display(selectedItem.feasibilityReason)}
+              </ReviewField>
+              <div className="md:col-span-2 xl:col-span-4">
+                <ReviewField label="Technical Remarks">
+                  {display(selectedItem.technicalRemarks)}
+                </ReviewField>
               </div>
-            </>
-          ) : (
-            <p className="rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-              Enter a Product UID or description to review the current portfolio
-              before deciding.
-            </p>
-          )}
+            </div>
+          </FieldSet>
+
+          {selectedItem.latestClarificationMessage ? (
+            <div className="rounded-2xl border bg-muted/40 p-4 text-sm">
+              <p className="font-medium">
+                {selectedItem.latestClarificationSource ?? "Clarification"}
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                {selectedItem.latestClarificationMessage}
+              </p>
+            </div>
+          ) : null}
+
+          {selectedItem.customerDrawingFileName ? (
+            <Button asChild className="w-fit" size="sm" variant="outline">
+              <Link
+                href={`/commercial/enquiry-items/${selectedItem.enquiryItemId}/drawing`}
+                target="_blank"
+              >
+                Open Customer Drawing
+              </Link>
+            </Button>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Choose Next Step</CardTitle>
+          <CardDescription>
+            Search the Current Portfolio in its own page, or proceed to the
+            separate Design form for this part.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          <Button asChild variant="outline">
+            <Link
+              href={{
+                pathname: "/commercial/products",
+                query: { q: portfolioSearch },
+              }}
+            >
+              Search Part In Portfolio
+            </Link>
+          </Button>
+          <form action={startDesignWorkAction}>
+            <input
+              name="enquiry_item_id"
+              type="hidden"
+              value={selectedItem.enquiryItemId}
+            />
+            <Button type="submit">Open Design Form</Button>
+          </form>
         </CardContent>
       </Card>
     </div>
