@@ -149,6 +149,18 @@ describe("Pricing commercial master maintenance", () => {
     ])
 
     await expect(
+      repository.listEditableRows({
+        kind: "commercial_rod_type",
+        organizationId,
+      })
+    ).resolves.toEqual([
+      expect.objectContaining({
+        kind: "commercial_rod_type",
+        label: "SOLID",
+      }),
+    ])
+
+    await expect(
       repository.materialRateFor({
         grade: " c3604 ",
         organizationId,
