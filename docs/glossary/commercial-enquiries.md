@@ -8,6 +8,25 @@ values without changing the Customer.
 **Commercial Term Master**: The company-wide active values available for Buyer,
 Incoterms, Payment Terms, Shipment Mode, Packaging, and Currency dropdowns.
 
+**Enquiry Intake**: The Sales-owned recording and correction of one Enquiry's
+commercial terms and line items before downstream work. Its line register opens
+one selected line for editing and does not expose Technical Review or Design
+inputs.
+_Avoid_: Combined enquiry, Technical Review, and Design workspace.
+
+**Technical Review Release**: A Technical Review decision that marks one line
+Feasible or Duplicate / Existing Product and makes it available in the Design
+queue. Saving the decision stays within Technical Review; it does not start
+Design work or transfer the reviewer into the Design workspace.
+_Avoid_: Feasible means Design started.
+
+**Design Work Start**: The Design team's explicit acceptance of one released
+Enquiry line from the Design queue. It changes Pending Design to In Progress and
+opens that line's dedicated Design workspace. Saving incomplete work remains In
+Progress; completing its required BOM changes it to Design Complete.
+_Avoid_: Opening every Design editor inside the queue, automatic start on
+Technical Review completion.
+
 **Customer Parameter Costing**: The customer- and Enquiry-specific price step
 after Product Parameter Costing. It applies scrap/purchase factors, profit,
 packaging, shipping, overhead, and FX without changing the Product master cost.

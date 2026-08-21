@@ -5,7 +5,6 @@ import {
   createCommercialMasterRepository,
   createCommercialWorkflowRepository,
   createCustomerRepository,
-  createProductRepository,
   type CommercialTermType,
 } from "@workspace/db"
 import { Badge } from "@workspace/ui/components/badge"
@@ -17,7 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
-import { Checkbox } from "@workspace/ui/components/checkbox"
+
 import {
   Field,
   FieldDescription,
@@ -31,12 +30,19 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@workspace/ui/components/native-select"
-import { Separator } from "@workspace/ui/components/separator"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@workspace/ui/components/table"
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-import { BoundedResultNotice } from "@/components/bounded-result-notice"
+import { selectedEnquiryLine } from "@/lib/pricing/enquiry-detail"
 
 import {
   addEnquiryItemAction,
@@ -44,23 +50,11 @@ import {
   deleteEnquiryAction,
   handOverEnquiryAction,
   importEnquiryLinesAction,
-  prepareCostingAction,
-  saveDesignAction,
   updateEnquiryAction,
   updateEnquiryItemAction,
-  updateTechnicalReviewAction,
 } from "../actions"
 
 export const dynamic = "force-dynamic"
-
-const checklist = [
-  ["drawing_available", "Drawing available"],
-  ["grade_material_clear", "Grade / material clear"],
-  ["drawing_information_complete", "Drawing information complete"],
-  ["finish_plating_clear", "Finish / plating clear"],
-  ["packaging_clear", "Packaging clear"],
-  ["tooling_process_feasible", "Tooling / process feasible"],
-] as const
 
 function EnquiryTermSelect({
   defaultValue,
@@ -104,11 +98,11 @@ export default async function EnquiryDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ product?: string }>
+  searchParams: Promise<{ line?: string }>
 }) {
   const { id } = await params
   const selectorParams = await searchParams
-  const productSearch = selectorParams.product?.trim() ?? ""
+  const selectedLineId = selectorParams.line?.trim()
   await requireCapability(
     "pricing.enquiries.read",
     `/commercial/enquiries/${id}`
@@ -118,46 +112,39 @@ export default async function EnquiryDetailPage({
   const loaded = await (async () => {
     try {
       const snapshot = await workflow.getEnquiry(id)
-      const drawingHistoryEntries = await Promise.all(
-        snapshot.items.map(
-          async (item) =>
+      const selectedItem = selectedEnquiryLine(snapshot.items, selectedLineId)
+      const drawingHistoryEntries = selectedItem
+        ? [
             [
-              item.id,
+              selectedItem.id,
               await workflow.listDrawingHistory({
-                enquiryItemId: item.id,
+                enquiryItemId: selectedItem.id,
                 organizationId: snapshot.enquiry.organizationId,
               }),
-            ] as const
-        )
-      )
-      return { drawingHistoryEntries, snapshot }
+            ] as const,
+          ]
+        : []
+      return { drawingHistoryEntries, selectedItem, snapshot }
     } finally {
       await workflow.close()
     }
   })()
-  const { snapshot } = loaded
+  const { selectedItem, snapshot } = loaded
   const drawingHistory = new Map(loaded.drawingHistoryEntries)
   const customerRepository = createCustomerRepository({ connectionString })
   const masterRepository = createCommercialMasterRepository({
     connectionString,
   })
-  const productRepository = createProductRepository({ connectionString })
-  const { customerRows, masterSnapshot, productOptions } = await (async () => {
+  const { customerRows, masterSnapshot } = await (async () => {
     try {
-      const [customers, products, masters] = await Promise.all([
+      const [customers, masters] = await Promise.all([
         customerRepository.listForOrganization("MRMPL"),
-        productRepository.searchForOrganization("MRMPL", productSearch),
         masterRepository.snapshot(snapshot.enquiry.organizationId),
       ])
-      return {
-        customerRows: customers,
-        masterSnapshot: masters,
-        productOptions: products,
-      }
+      return { customerRows: customers, masterSnapshot: masters }
     } finally {
       await customerRepository.close()
       await masterRepository.close()
-      await productRepository.close()
     }
   })()
   const customers = customerRows.filter(
@@ -165,7 +152,7 @@ export default async function EnquiryDetailPage({
       customer.status === "Active" ||
       customer.id === snapshot.enquiry.customerId
   )
-  const products = productOptions.rows
+
   const termOptions = Object.fromEntries(
     commercialTermTypes.map((termType) => [
       termType,
@@ -618,513 +605,261 @@ export default async function EnquiryDetailPage({
 
       <section className="grid gap-4">
         <div>
-          <h3 className="text-lg font-semibold">Line Workflow</h3>
+          <h3 className="text-lg font-semibold">Enquiry Line Items</h3>
           <p className="text-sm text-muted-foreground">
-            Technical Review And Design Retain The Recovered Pricing Status
-            Values And Handoff Gates.
+            Select one line to open its Sales correction view. Technical Review
+            and Design are handled in their own modules after handover.
           </p>
         </div>
-        <form
-          className="flex flex-col gap-2 sm:flex-row sm:items-end"
-          id="enquiry-product-search"
-        >
-          <Field className="max-w-md flex-1">
-            <FieldLabel htmlFor="enquiry-product-query">
-              Find Portfolio Product
-            </FieldLabel>
-            <Input
-              defaultValue={productSearch}
-              id="enquiry-product-query"
-              name="product"
-              placeholder="Product Uid Or Description"
-            />
-          </Field>
-          <Button type="submit" variant="outline">
-            Search
-          </Button>
-        </form>
-        <BoundedResultNotice
-          actionHref="#enquiry-product-search"
-          actionLabel="Refine product search"
-          coverage={productOptions.coverage}
-          searchQuery={productSearch}
-          section="Portfolio product options"
-        />
-        {snapshot.items.length ? (
-          snapshot.items.map((item) => {
-            const clarification = snapshot.clarifications.find(
-              (task) => task.enquiryItemId === item.id && task.status === "Open"
-            )
-            const canStartCosting =
-              (item.designStatus === "Design Complete" ||
-                item.designStatus === "Not Required") &&
-              (item.nextStageStatus === "Not Started" ||
-                item.nextStageStatus === "Changes Required")
-            return (
-              <Card key={item.id}>
-                <CardHeader>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <CardTitle>
-                        Line {item.lineNumber} ·{" "}
-                        {item.customerPartCode || "Unspecified part"}
-                      </CardTitle>
-                      <CardDescription>{item.description}</CardDescription>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">
-                        {item.technicalReviewStatus}
-                      </Badge>
-                      {item.designStatus ? (
-                        <Badge variant="secondary">{item.designStatus}</Badge>
-                      ) : null}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="grid gap-6">
-                  <form
-                    action={updateEnquiryItemAction}
-                    className="rounded-2xl border p-4"
-                  >
-                    <input type="hidden" name="enquiry_id" value={id} />
-                    <input
-                      type="hidden"
-                      name="enquiry_item_id"
-                      value={item.id}
-                    />
-                    <input
-                      type="hidden"
-                      name="organization_id"
-                      value={snapshot.enquiry.organizationId}
-                    />
-                    <FieldGroup>
-                      <FieldSet>
-                        <FieldLegend>Sales Line Correction</FieldLegend>
-                        <FieldDescription>
-                          Corrections After Handover Reset Technical And Pending
-                          Design State. Downstream Quotes And Orders Lock Edits.
-                        </FieldDescription>
-                      </FieldSet>
-                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                        <Field>
-                          <FieldLabel htmlFor={`${item.id}-edit-part`}>
-                            Part
-                          </FieldLabel>
-                          <Input
-                            id={`${item.id}-edit-part`}
-                            name="part"
-                            defaultValue={item.customerPartCode ?? ""}
-                            required
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor={`${item.id}-edit-description`}>
-                            Description
-                          </FieldLabel>
-                          <Input
-                            id={`${item.id}-edit-description`}
-                            name="description"
-                            defaultValue={item.description}
-                            required
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor={`${item.id}-edit-grade`}>
-                            Grade
-                          </FieldLabel>
-                          <Input
-                            id={`${item.id}-edit-grade`}
-                            name="grade"
-                            defaultValue={item.grade ?? ""}
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor={`${item.id}-edit-quantity`}>
-                            Quantity
-                          </FieldLabel>
-                          <Input
-                            id={`${item.id}-edit-quantity`}
-                            name="quantity"
-                            type="number"
-                            min="0"
-                            step="0.00000001"
-                            defaultValue={item.quantity}
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor={`${item.id}-edit-target`}>
-                            Target Price
-                          </FieldLabel>
-                          <Input
-                            id={`${item.id}-edit-target`}
-                            name="target_price"
-                            type="number"
-                            min="0"
-                            step="0.000001"
-                            defaultValue={item.targetPrice ?? 0}
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor={`${item.id}-edit-drawing-ref`}>
-                            Drawing Reference
-                          </FieldLabel>
-                          <Input
-                            id={`${item.id}-edit-drawing-ref`}
-                            name="drawing_reference"
-                            defaultValue={item.drawingReference ?? ""}
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor={`${item.id}-edit-drawing-file`}>
-                            Replacement Drawing
-                          </FieldLabel>
-                          <Input
-                            id={`${item.id}-edit-drawing-file`}
-                            name="drawing_file"
-                            type="file"
-                            accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg"
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor={`${item.id}-edit-remarks`}>
-                            Remarks
-                          </FieldLabel>
-                          <Input
-                            id={`${item.id}-edit-remarks`}
-                            name="remarks"
-                            defaultValue={item.remarks ?? ""}
-                          />
-                        </Field>
-                      </div>
-                      <div className="flex flex-wrap gap-3">
-                        <Button type="submit">Update Line</Button>
-                        {item.drawingFileId ? (
-                          <Button asChild type="button" variant="outline">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="overflow-x-auto rounded-md border">
+              <Table
+                excelFilters
+                filterStorageKey="mrmpl:commercial:enquiry-lines:filters:v1"
+              >
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Line</TableHead>
+                    <TableHead>Part</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Grade</TableHead>
+                    <TableHead className="text-right">Quantity</TableHead>
+                    <TableHead className="text-right">Target Price</TableHead>
+                    <TableHead>Drawing</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {snapshot.items.length ? (
+                    snapshot.items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{item.lineNumber}</TableCell>
+                        <TableCell className="font-medium">
+                          {item.customerPartCode || "—"}
+                        </TableCell>
+                        <TableCell>{item.description}</TableCell>
+                        <TableCell>{item.grade || "—"}</TableCell>
+                        <TableCell className="text-right">
+                          {item.quantity}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {item.targetPrice ?? "—"}
+                        </TableCell>
+                        <TableCell>
+                          {item.drawingFileName ?? item.drawingReference ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button asChild size="sm" variant="outline">
                             <Link
-                              href={`/commercial/enquiry-items/${item.id}/drawing`}
+                              href={{
+                                hash: "line-detail",
+                                pathname: `/commercial/enquiries/${id}`,
+                                query: { line: item.id },
+                              }}
                             >
-                              Open {item.drawingFileName ?? "drawing"}
+                              Open
                             </Link>
                           </Button>
-                        ) : null}
-                      </div>
-                      {(drawingHistory.get(item.id)?.length ?? 0) > 0 ? (
-                        <div className="grid gap-2 rounded-2xl bg-muted/40 p-3">
-                          <p className="text-xs font-medium tracking-wide text-muted-foreground">
-                            Drawing History
-                          </p>
-                          {drawingHistory
-                            .get(item.id)!
-                            .map((drawing, index) => (
-                              <div
-                                className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                                key={drawing.id}
-                              >
-                                <span>
-                                  {index === 0
-                                    ? "Current"
-                                    : `Revision ${index}`}{" "}
-                                  · {drawing.fileName} · {drawing.byteSize}{" "}
-                                  Bytes
-                                </span>
-                                {index === 0 ? (
-                                  <Link
-                                    className="font-medium underline underline-offset-4"
-                                    href={`/commercial/enquiry-items/${item.id}/drawing`}
-                                  >
-                                    Open
-                                  </Link>
-                                ) : null}
-                              </div>
-                            ))}
-                        </div>
-                      ) : null}
-                    </FieldGroup>
-                  </form>
-                  <div className="grid gap-6 xl:grid-cols-2">
-                    <form action={updateTechnicalReviewAction}>
-                      <input type="hidden" name="enquiry_id" value={id} />
-                      <input
-                        type="hidden"
-                        name="enquiry_item_id"
-                        value={item.id}
-                      />
-                      <FieldGroup>
-                        <FieldSet>
-                          <FieldLegend>Technical Review</FieldLegend>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            {checklist.map(([key, label]) => (
-                              <Field
-                                key={key}
-                                orientation="horizontal"
-                                className="items-center"
-                              >
-                                <Checkbox id={`${item.id}-${key}`} name={key} />
-                                <FieldLabel htmlFor={`${item.id}-${key}`}>
-                                  {label}
-                                </FieldLabel>
-                              </Field>
-                            ))}
-                          </div>
-                        </FieldSet>
-                        <Field>
-                          <FieldLabel htmlFor={`${item.id}-review-status`}>
-                            Review Status
-                          </FieldLabel>
-                          <NativeSelect
-                            id={`${item.id}-review-status`}
-                            name="technical_review_status"
-                            defaultValue={item.technicalReviewStatus}
-                          >
-                            <NativeSelectOption value="Pending Review">
-                              Pending Review
-                            </NativeSelectOption>
-                            <NativeSelectOption value="Need Clarification">
-                              Need Clarification
-                            </NativeSelectOption>
-                            <NativeSelectOption value="Feasible">
-                              Feasible
-                            </NativeSelectOption>
-                            <NativeSelectOption value="Not Feasible">
-                              Not Feasible
-                            </NativeSelectOption>
-                            <NativeSelectOption value="Duplicate / Existing Product">
-                              Duplicate / Existing Product
-                            </NativeSelectOption>
-                          </NativeSelect>
-                        </Field>
-                        <Field>
-                          <FieldLabel
-                            htmlFor={`${item.id}-missing-information`}
-                          >
-                            Missing Information
-                          </FieldLabel>
-                          <Textarea
-                            id={`${item.id}-missing-information`}
-                            name="missing_information"
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor={`${item.id}-technical-remarks`}>
-                            Technical Remarks
-                          </FieldLabel>
-                          <Textarea
-                            id={`${item.id}-technical-remarks`}
-                            name="technical_remarks"
-                          />
-                        </Field>
-                        <Button type="submit">Save Technical Review</Button>
-                      </FieldGroup>
-                    </form>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        className="py-10 text-center text-muted-foreground"
+                        colSpan={8}
+                      >
+                        Add at least one line before handing the enquiry to
+                        Technical Review.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
 
-                    <form action={saveDesignAction}>
-                      <input type="hidden" name="enquiry_id" value={id} />
-                      <input
-                        type="hidden"
-                        name="organization_id"
-                        value={snapshot.enquiry.organizationId}
+        {selectedItem ? (
+          <Card id="line-detail">
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <CardTitle>
+                    Line {selectedItem.lineNumber} ·{" "}
+                    {selectedItem.customerPartCode || "Unspecified part"}
+                  </CardTitle>
+                  <CardDescription>{selectedItem.description}</CardDescription>
+                </div>
+                <Button asChild size="sm" variant="ghost">
+                  <Link href={`/commercial/enquiries/${id}`}>Close Line</Link>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <form action={updateEnquiryItemAction}>
+                <input type="hidden" name="enquiry_id" value={id} />
+                <input
+                  type="hidden"
+                  name="enquiry_item_id"
+                  value={selectedItem.id}
+                />
+                <input
+                  type="hidden"
+                  name="organization_id"
+                  value={snapshot.enquiry.organizationId}
+                />
+                <FieldGroup>
+                  <FieldSet>
+                    <FieldLegend>Sales Line Correction</FieldLegend>
+                    <FieldDescription>
+                      Corrections after handover reset pending downstream work.
+                      Quotes and orders lock further edits.
+                    </FieldDescription>
+                  </FieldSet>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <Field>
+                      <FieldLabel htmlFor={`${selectedItem.id}-edit-part`}>
+                        Part
+                      </FieldLabel>
+                      <Input
+                        id={`${selectedItem.id}-edit-part`}
+                        name="part"
+                        defaultValue={selectedItem.customerPartCode ?? ""}
+                        required
                       />
-                      <input
-                        type="hidden"
-                        name="enquiry_item_id"
-                        value={item.id}
+                    </Field>
+                    <Field>
+                      <FieldLabel
+                        htmlFor={`${selectedItem.id}-edit-description`}
+                      >
+                        Description
+                      </FieldLabel>
+                      <Input
+                        id={`${selectedItem.id}-edit-description`}
+                        name="description"
+                        defaultValue={selectedItem.description}
+                        required
                       />
-                      <FieldGroup>
-                        <FieldSet>
-                          <FieldLegend>Design Handoff</FieldLegend>
-                          <FieldDescription>
-                            Existing Portfolio Matches Skip Product Design. New
-                            List Designs Retain Their First Material Line For
-                            Costing.
-                          </FieldDescription>
-                        </FieldSet>
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <Field>
-                            <FieldLabel htmlFor={`${item.id}-portfolio-status`}>
-                              Portfolio Decision
-                            </FieldLabel>
-                            <NativeSelect
-                              id={`${item.id}-portfolio-status`}
-                              name="portfolio_match_status"
-                              defaultValue="New Quoted Part"
-                            >
-                              <NativeSelectOption value="New Quoted Part">
-                                New Quoted Part
-                              </NativeSelectOption>
-                              <NativeSelectOption value="Matches Existing Portfolio">
-                                Matches Existing Portfolio
-                              </NativeSelectOption>
-                            </NativeSelect>
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor={`${item.id}-design-status`}>
-                              Design Status
-                            </FieldLabel>
-                            <NativeSelect
-                              id={`${item.id}-design-status`}
-                              name="design_status"
-                              defaultValue={
-                                item.designStatus || "Pending Design"
-                              }
-                            >
-                              <NativeSelectOption value="Pending Design">
-                                Pending Design
-                              </NativeSelectOption>
-                              <NativeSelectOption value="Design Complete">
-                                Design Complete
-                              </NativeSelectOption>
-                              <NativeSelectOption value="Need Clarification">
-                                Need Clarification
-                              </NativeSelectOption>
-                            </NativeSelect>
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor={`${item.id}-matched-product`}>
-                              Matched Product
-                            </FieldLabel>
-                            <NativeSelect
-                              id={`${item.id}-matched-product`}
-                              name="matched_product_id"
-                              defaultValue=""
-                            >
-                              <NativeSelectOption value="">
-                                No Portfolio Match
-                              </NativeSelectOption>
-                              {products.map((product) => (
-                                <NativeSelectOption
-                                  key={product.id}
-                                  value={product.id}
-                                >
-                                  {product.uid} · {product.description}
-                                </NativeSelectOption>
-                              ))}
-                            </NativeSelect>
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor={`${item.id}-quoted-uid`}>
-                              New Q Part
-                            </FieldLabel>
-                            <Input
-                              id={`${item.id}-quoted-uid`}
-                              name="quoted_part_uid"
-                            />
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor={`${item.id}-item-type`}>
-                              Item Type
-                            </FieldLabel>
-                            <NativeSelect
-                              id={`${item.id}-item-type`}
-                              name="item_type"
-                              defaultValue="List"
-                            >
-                              <NativeSelectOption value="List">
-                                List
-                              </NativeSelectOption>
-                              <NativeSelectOption value="Package">
-                                Package
-                              </NativeSelectOption>
-                              <NativeSelectOption value="Assembly">
-                                Assembly
-                              </NativeSelectOption>
-                            </NativeSelect>
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor={`${item.id}-process`}>
-                              Manufacturing Process
-                            </FieldLabel>
-                            <Input
-                              id={`${item.id}-process`}
-                              name="manufacturing_process"
-                            />
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor={`${item.id}-rod-size`}>
-                              Rod Size
-                            </FieldLabel>
-                            <Input id={`${item.id}-rod-size`} name="rod_size" />
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor={`${item.id}-rod-type`}>
-                              Rod Type
-                            </FieldLabel>
-                            <Input id={`${item.id}-rod-type`} name="rod_type" />
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor={`${item.id}-piece-weight`}>
-                              Piece Weight
-                            </FieldLabel>
-                            <Input
-                              id={`${item.id}-piece-weight`}
-                              name="piece_weight"
-                              type="number"
-                              min="0"
-                              step="0.00000001"
-                              defaultValue="0"
-                            />
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor={`${item.id}-casting`}>
-                              Casting
-                            </FieldLabel>
-                            <Input
-                              id={`${item.id}-casting`}
-                              name="casting"
-                              type="number"
-                              min="0"
-                              step="0.00000001"
-                              defaultValue="1"
-                            />
-                          </Field>
-                        </div>
-                        <Button type="submit">Save Design Decision</Button>
-                      </FieldGroup>
-                    </form>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor={`${selectedItem.id}-edit-grade`}>
+                        Grade
+                      </FieldLabel>
+                      <Input
+                        id={`${selectedItem.id}-edit-grade`}
+                        name="grade"
+                        defaultValue={selectedItem.grade ?? ""}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor={`${selectedItem.id}-edit-quantity`}>
+                        Quantity
+                      </FieldLabel>
+                      <Input
+                        id={`${selectedItem.id}-edit-quantity`}
+                        name="quantity"
+                        type="number"
+                        min="0"
+                        step="0.00000001"
+                        defaultValue={selectedItem.quantity}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor={`${selectedItem.id}-edit-target`}>
+                        Target Price
+                      </FieldLabel>
+                      <Input
+                        id={`${selectedItem.id}-edit-target`}
+                        name="target_price"
+                        type="number"
+                        min="0"
+                        step="0.000001"
+                        defaultValue={selectedItem.targetPrice ?? 0}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel
+                        htmlFor={`${selectedItem.id}-edit-drawing-ref`}
+                      >
+                        Drawing Reference
+                      </FieldLabel>
+                      <Input
+                        id={`${selectedItem.id}-edit-drawing-ref`}
+                        name="drawing_reference"
+                        defaultValue={selectedItem.drawingReference ?? ""}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel
+                        htmlFor={`${selectedItem.id}-edit-drawing-file`}
+                      >
+                        Replacement Drawing
+                      </FieldLabel>
+                      <Input
+                        id={`${selectedItem.id}-edit-drawing-file`}
+                        name="drawing_file"
+                        type="file"
+                        accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg"
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor={`${selectedItem.id}-edit-remarks`}>
+                        Remarks
+                      </FieldLabel>
+                      <Input
+                        id={`${selectedItem.id}-edit-remarks`}
+                        name="remarks"
+                        defaultValue={selectedItem.remarks ?? ""}
+                      />
+                    </Field>
                   </div>
-
-                  {clarification ? (
-                    <>
-                      <Separator />
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
-                        <p className="text-sm text-muted-foreground">
-                          {clarification.sourceStage} Requested A Sales Match
-                          Decision For This Line.
-                        </p>
-                        <Button asChild>
-                          <Link href="/commercial/sales">
-                            Resolve In Sales Queue
-                          </Link>
-                        </Button>
-                      </div>
-                    </>
+                  <div className="flex flex-wrap gap-3">
+                    <Button type="submit">Update Line</Button>
+                    {selectedItem.drawingFileId ? (
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={`/commercial/enquiry-items/${selectedItem.id}/drawing`}
+                        >
+                          Open {selectedItem.drawingFileName ?? "drawing"}
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                  {(drawingHistory.get(selectedItem.id)?.length ?? 0) > 0 ? (
+                    <div className="grid gap-2 rounded-2xl bg-muted/40 p-3">
+                      <p className="text-xs font-medium tracking-wide text-muted-foreground">
+                        Drawing History
+                      </p>
+                      {drawingHistory
+                        .get(selectedItem.id)!
+                        .map((drawing, index) => (
+                          <div
+                            className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                            key={drawing.id}
+                          >
+                            <span>
+                              {index === 0 ? "Current" : `Revision ${index}`} ·{" "}
+                              {drawing.fileName} · {drawing.byteSize} Bytes
+                            </span>
+                            {index === 0 ? (
+                              <Link
+                                className="font-medium underline underline-offset-4"
+                                href={`/commercial/enquiry-items/${selectedItem.id}/drawing`}
+                              >
+                                Open
+                              </Link>
+                            ) : null}
+                          </div>
+                        ))}
+                    </div>
                   ) : null}
-
-                  {canStartCosting ? (
-                    <>
-                      <Separator />
-                      <form action={prepareCostingAction}>
-                        <input type="hidden" name="enquiry_id" value={id} />
-                        <input
-                          type="hidden"
-                          name="enquiry_item_id"
-                          value={item.id}
-                        />
-                        <Button type="submit">Prepare Product Costing</Button>
-                      </form>
-                    </>
-                  ) : null}
-                </CardContent>
-              </Card>
-            )
-          })
-        ) : (
-          <Card>
-            <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              Add At Least One Line Before Handing The Enquiry To Technical
-              Review.
+                </FieldGroup>
+              </form>
             </CardContent>
           </Card>
-        )}
+        ) : null}
       </section>
     </div>
   )

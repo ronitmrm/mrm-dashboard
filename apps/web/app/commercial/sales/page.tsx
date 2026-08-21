@@ -209,42 +209,53 @@ export default async function SalesPage({
                           <Badge variant="outline">{task.status}</Badge>
                         </TableCell>
                         <TableCell>
-                          {task.action === "handover" ? (
-                            <form action={handOverEnquiryAction}>
-                              <input
-                                name="enquiry_id"
-                                type="hidden"
-                                value={task.enquiryId}
-                              />
-                              <Button
-                                disabled={task.status === "Blocked"}
-                                size="sm"
-                                type="submit"
-                              >
-                                Hand Over
+                          <div className="flex flex-wrap gap-2">
+                            {task.action === "handover" ? (
+                              <form action={handOverEnquiryAction}>
+                                <input
+                                  name="enquiry_id"
+                                  type="hidden"
+                                  value={task.enquiryId}
+                                />
+                                <Button
+                                  disabled={task.status === "Blocked"}
+                                  size="sm"
+                                  type="submit"
+                                >
+                                  Hand Over
+                                </Button>
+                              </form>
+                            ) : task.action === "quote" ? (
+                              <Button asChild size="sm" variant="outline">
+                                <Link href="/commercial/quotes">
+                                  Open Quotes
+                                </Link>
                               </Button>
-                            </form>
-                          ) : task.action === "quote" ? (
-                            <Button asChild size="sm" variant="outline">
-                              <Link href="/commercial/quotes">Open Quotes</Link>
-                            </Button>
-                          ) : (
+                            ) : (
+                              <Button asChild size="sm" variant="outline">
+                                <Link
+                                  href={{
+                                    pathname: "/commercial/sales",
+                                    query: {
+                                      view: "tasks",
+                                      ...(task.action === "clarification"
+                                        ? { candidate_item: task.sourceId }
+                                        : { followup: task.sourceId }),
+                                    },
+                                  }}
+                                >
+                                  Open
+                                </Link>
+                              </Button>
+                            )}
                             <Button asChild size="sm" variant="outline">
                               <Link
-                                href={{
-                                  pathname: "/commercial/sales",
-                                  query: {
-                                    view: "tasks",
-                                    ...(task.action === "clarification"
-                                      ? { candidate_item: task.sourceId }
-                                      : { followup: task.sourceId }),
-                                  },
-                                }}
+                                href={`/commercial/enquiries/${task.enquiryId}`}
                               >
-                                Open
+                                Open Enquiry
                               </Link>
                             </Button>
-                          )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

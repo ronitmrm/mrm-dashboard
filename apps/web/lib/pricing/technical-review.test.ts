@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest"
 import {
   countTechnicalReviewChecks,
   technicalReviewChecklist,
+  technicalReviewReturnPath,
   technicalReviewChecklistFromFormData,
   technicalReviewStatuses,
 } from "./technical-review"
@@ -37,5 +38,14 @@ describe("technical review workflow", () => {
       tooling_process_feasible: false,
     })
     expect(countTechnicalReviewChecks(checklist)).toBe(2)
+  })
+
+  test("keeps released work with the Technical Review team", () => {
+    expect(technicalReviewReturnPath("Feasible", "line-1")).toBe(
+      "/commercial/technical-review"
+    )
+    expect(technicalReviewReturnPath("Pending Review", "line-1")).toBe(
+      "/commercial/technical-review/line-1"
+    )
   })
 })
