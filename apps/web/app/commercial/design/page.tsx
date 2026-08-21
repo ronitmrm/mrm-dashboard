@@ -1,6 +1,7 @@
 import Link from "next/link"
 
 import { createCommercialWorkflowRepository } from "@workspace/db"
+import { designTaskHref } from "@workspace/db/commercial-design-domain"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -23,8 +24,6 @@ import {
 import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
-
-import { startDesignWorkAction } from "../enquiries/actions"
 
 export const dynamic = "force-dynamic"
 
@@ -55,7 +54,7 @@ export default async function DesignPage() {
         <h2 className="text-2xl font-semibold tracking-tight">Design Tasks</h2>
         <p className="max-w-4xl text-sm text-muted-foreground">
           Technically approved enquiry lines arrive here as an Excel-style work
-          queue. Start a line only when the Design team accepts it.
+          queue. Check the current portfolio before starting any new design.
         </p>
       </section>
 
@@ -76,8 +75,8 @@ export default async function DesignPage() {
         <CardHeader>
           <CardTitle>Approved Line Items</CardTitle>
           <CardDescription>
-            Start Work changes a pending line to In Progress and opens its
-            dedicated workspace. Completed lines leave this active queue.
+            Review the portfolio first. A separate workspace opens only after
+            the Design team confirms that a new product is required.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -124,26 +123,21 @@ export default async function DesignPage() {
                       <TableCell>{item.portfolioMatchStatus}</TableCell>
                       <TableCell>{display(item.designerName)}</TableCell>
                       <TableCell className="text-right">
-                        {item.designStatus === "Pending Design" ? (
-                          <form action={startDesignWorkAction}>
-                            <input
-                              name="enquiry_item_id"
-                              type="hidden"
-                              value={item.enquiryItemId}
-                            />
-                            <Button size="sm" type="submit">
-                              Start Work
-                            </Button>
-                          </form>
-                        ) : (
-                          <Button asChild size="sm" variant="outline">
-                            <Link
-                              href={`/commercial/design/${item.enquiryItemId}`}
-                            >
-                              Open Workspace
-                            </Link>
-                          </Button>
-                        )}
+                        <Button
+                          asChild
+                          size="sm"
+                          variant={
+                            item.portfolioMatchStatus === "New Quoted Part"
+                              ? "outline"
+                              : "default"
+                          }
+                        >
+                          <Link href={designTaskHref(item)}>
+                            {item.portfolioMatchStatus === "New Quoted Part"
+                              ? "Open Workspace"
+                              : "Check Portfolio"}
+                          </Link>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))

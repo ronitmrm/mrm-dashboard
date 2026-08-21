@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest"
 import {
   designPortfolioDecisions,
   designStatuses,
+  designTaskHref,
   designTaskStatusAfterStart,
   designTaskIsEditable,
   designTaskIsOpen,
@@ -10,6 +11,21 @@ import {
 } from "@workspace/db/commercial-design-domain"
 
 describe("Pricing Design Task contract", () => {
+  test("routes portfolio review before a separate new-design workspace", () => {
+    expect(
+      designTaskHref({
+        enquiryItemId: "line-1",
+        portfolioMatchStatus: "Pending",
+      })
+    ).toBe("/commercial/design/line-1")
+    expect(
+      designTaskHref({
+        enquiryItemId: "line-1",
+        portfolioMatchStatus: "New Quoted Part",
+      })
+    ).toBe("/commercial/design/line-1/new")
+  })
+
   test("starts only an available design task", () => {
     expect(designTaskStatusAfterStart("Pending Design")).toBe("In Progress")
     expect(designTaskStatusAfterStart("In Progress")).toBe("In Progress")
