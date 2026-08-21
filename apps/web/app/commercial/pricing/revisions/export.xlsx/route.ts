@@ -16,19 +16,22 @@ export async function GET(request: Request) {
   )
   const url = new URL(request.url)
   const customer = url.searchParams.get("customer") ?? ""
-  const code = url.searchParams.get("code")?.trim().toLowerCase() ?? ""
+  const code = url.searchParams.get("code")?.trim() ?? ""
   const repository = createCommercialCostingRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const allRows = await repository
-    .listPricingRegisterForExport("MRMPL", { revisions: true })
-    .finally(() => repository.close())
-  const rows = code
-    ? allRows.filter(
-        (row) =>
-          row.customerId === customer &&
-          row.customerPartCode?.trim().toLowerCase() === code
-      )
-    : []
+  const rows = await (async () => {
+    try {
+      return code
+        ? await repository.listPricingRegisterForExport("MRMPL", {
+            customerId: customer,
+            customerPartCode: code,
+            revisions: true,
+          })
+        : []
+    } finally {
+      await repository.close()
+    }
+  })()
   return xlsxResponse(buildPricingWorkbook(rows), pricingWorkbookFilename)
 }

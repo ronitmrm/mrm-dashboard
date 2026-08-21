@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { Pool, PoolClient } from "pg"
 
-import { boundedResult } from "./commercial-bounds"
+import { boundedResult, selectorSearchTerm } from "./commercial-bounds"
 import {
   repositoryPool,
   withTransaction as transaction,
@@ -106,6 +106,8 @@ type PricingRegisterDatabaseRow = {
   status: string
   unit_price: string
   uid: string
+  website_product_description: string | null
+  website_size: string | null
 }
 
 const asNumber = (value: unknown, fallback = 0) => {
@@ -115,6 +117,9 @@ const asNumber = (value: unknown, fallback = 0) => {
 
 const exportBatchSize = (value: number) =>
   Math.min(Math.max(Math.floor(value), 1), 500)
+
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => ({
   calculation: row.calculation_json,
@@ -146,6 +151,8 @@ const pricingRegisterRow = (row: PricingRegisterDatabaseRow) => ({
   status: row.status,
   unitPrice: asNumber(row.unit_price),
   uid: row.uid,
+  websiteProductDescription: row.website_product_description,
+  websiteSize: row.website_size,
 })
 
 const isBomParent = (itemType: string) =>
@@ -822,11 +829,16 @@ export function createCommercialCostingRepository(
         id: string
         revision: number
       }
+      customerId?: string
+      customerPartCode?: string
       limit?: number
+      query?: string
       revisions?: boolean
     }
   ) => {
     const cursor = input.cursor
+    const search = selectorSearchTerm(input.query ?? "")
+    const customerPartCode = input.customerPartCode?.trim().toLowerCase() || null
     const result = await queryable.query<PricingRegisterDatabaseRow>(
       `
         WITH RECURSIVE roots AS (
@@ -837,6 +849,7 @@ export function createCommercialCostingRepository(
           JOIN core.organizations organization
             ON organization.id = quote.organization_id
           JOIN sales.customers customer ON customer.id = quote.customer_id
+          JOIN catalog.items root_item ON root_item.id = quote.item_id
           WHERE lower(organization.code) = lower($1)
             AND (
               $2::boolean
@@ -847,6 +860,34 @@ export function createCommercialCostingRepository(
               SELECT 1
               FROM sales.quote_package_components component
               WHERE component.child_quote_item_id = quote.id
+            )
+            AND ($8::uuid IS NULL OR quote.customer_id = $8)
+            AND (
+              $9::text IS NULL
+              OR lower(btrim(coalesce(quote.customer_part_code, ''))) = $9
+            )
+            AND (
+              $10 = ''
+              OR lower(btrim(coalesce(quote.customer_part_code, ''))) = $10
+              OR lower(btrim(quote.quote_number)) = $10
+              OR lower(btrim(customer.customer_uid)) = $10
+              OR lower(btrim(root_item.uid)) = $10
+              OR (
+                $11::text IS NOT NULL
+                AND (
+                  lower(
+                    btrim(coalesce(quote.customer_part_code, '')) || ' ' ||
+                    btrim(quote.quote_number)
+                  ) LIKE $11 ESCAPE '\\'
+                  OR lower(
+                    coalesce(root_item.uid, '') || ' ' ||
+                    coalesce(root_item.description, '')
+                  ) LIKE $11 ESCAPE '\\'
+                  OR lower(
+                    customer.company_name || ' ' || customer.customer_uid
+                  ) LIKE $11 ESCAPE '\\'
+                )
+              )
             )
             AND (
               $3::text IS NULL
@@ -895,6 +936,11 @@ export function createCommercialCostingRepository(
           COALESCE(member.unit_price, 0)::text AS unit_price,
           customer.id AS customer_id, customer.customer_uid,
           customer.company_name, item.uid,
+          CASE WHEN item.lifecycle_status = 'P'
+            THEN website.product_description ELSE NULL END
+            AS website_product_description,
+          CASE WHEN item.lifecycle_status = 'P'
+            THEN website.size ELSE NULL END AS website_size,
           COALESCE(snapshot.item_type, item.item_type) AS item_type,
           item.lifecycle_status, enquiry.enquiry_number,
           enquiry.currency, enquiry_item.line_number,
@@ -936,6 +982,8 @@ export function createCommercialCostingRepository(
         LEFT JOIN sales.quote_items member ON member.id = tree.quote_item_id
         JOIN sales.customers customer ON customer.id = root.customer_id
         JOIN catalog.items item ON item.id = tree.item_id
+        LEFT JOIN catalog.website_product_profiles website
+          ON website.item_id = item.id
         LEFT JOIN catalog.items parent ON parent.id = tree.parent_item_id
         LEFT JOIN catalog.material_grades grade
           ON grade.id = item.material_grade_id
@@ -958,6 +1006,10 @@ export function createCommercialCostingRepository(
         cursor?.revision ?? null,
         cursor?.id ?? null,
         input.limit ?? null,
+        input.customerId ?? null,
+        customerPartCode,
+        search.query,
+        search.containsPattern,
       ]
     )
     return result.rows
@@ -2784,6 +2836,11 @@ export function createCommercialCostingRepository(
             COALESCE(member.unit_price, 0)::text AS unit_price,
             customer.id AS customer_id, customer.customer_uid,
             customer.company_name, item.uid,
+            CASE WHEN item.lifecycle_status = 'P'
+              THEN website.product_description ELSE NULL END
+              AS website_product_description,
+            CASE WHEN item.lifecycle_status = 'P'
+              THEN website.size ELSE NULL END AS website_size,
             COALESCE(snapshot.item_type, item.item_type) AS item_type,
             item.lifecycle_status, enquiry.enquiry_number,
             enquiry.currency, enquiry_item.line_number,
@@ -2825,6 +2882,8 @@ export function createCommercialCostingRepository(
           LEFT JOIN sales.quote_items member ON member.id = tree.quote_item_id
           JOIN sales.customers customer ON customer.id = root.customer_id
           JOIN catalog.items item ON item.id = tree.item_id
+          LEFT JOIN catalog.website_product_profiles website
+            ON website.item_id = item.id
           LEFT JOIN catalog.items parent ON parent.id = tree.parent_item_id
           LEFT JOIN catalog.material_grades grade
             ON grade.id = item.material_grade_id
@@ -2846,11 +2905,67 @@ export function createCommercialCostingRepository(
       return result.rows.map(pricingRegisterRow)
     },
 
+    async listPricingRegisterBounded(
+      organizationCode: string,
+      options: { limit?: number; query?: string } = {}
+    ) {
+      const limit = Math.min(Math.max(Math.floor(options.limit ?? 200), 1), 200)
+      const batch = await pricingRegisterBatch(pool, organizationCode, {
+        limit: limit + 1,
+        query: options.query,
+      })
+      const rootIds: string[] = []
+      const seenRootIds = new Set<string>()
+      for (const row of batch) {
+        if (!seenRootIds.has(row.root_quote_item_id)) {
+          seenRootIds.add(row.root_quote_item_id)
+          rootIds.push(row.root_quote_item_id)
+        }
+      }
+      const visibleRootIds = new Set(rootIds.slice(0, limit))
+      const rows = batch
+        .filter((row) => visibleRootIds.has(row.root_quote_item_id))
+        .map(pricingRegisterRow)
+      return {
+        coverage: {
+          limit,
+          returned: visibleRootIds.size,
+          truncated: rootIds.length > limit,
+        },
+        rows,
+      }
+    },
+
+    async listPricingRevisionHistory(
+      organizationCode: string,
+      input: { customerId: string; customerPartCode: string }
+    ) {
+      const customerPartCode = input.customerPartCode.trim()
+      if (!customerPartCode || !uuidPattern.test(input.customerId)) return []
+      const rows = await pricingRegisterBatch(pool, organizationCode, {
+        customerId: input.customerId,
+        customerPartCode,
+        revisions: true,
+      })
+      return rows.map(pricingRegisterRow)
+    },
+
     async listPricingRegisterForExport(
       organizationCode: string,
-      options: { revisions?: boolean } = {},
+      options: {
+        customerId?: string
+        customerPartCode?: string
+        query?: string
+        revisions?: boolean
+      } = {},
       requestedBatchSize = 500
     ) {
+      if (
+        options.customerId !== undefined &&
+        !uuidPattern.test(options.customerId)
+      ) {
+        return []
+      }
       const limit = exportBatchSize(requestedBatchSize)
       return transaction(pool, async (client) => {
         await client.query(
@@ -2869,7 +2984,10 @@ export function createCommercialCostingRepository(
         while (true) {
           const batch = await pricingRegisterBatch(client, organizationCode, {
             cursor,
+            customerId: options.customerId,
+            customerPartCode: options.customerPartCode,
             limit,
+            query: options.query,
             revisions: options.revisions,
           })
           rows.push(...batch.map(pricingRegisterRow))

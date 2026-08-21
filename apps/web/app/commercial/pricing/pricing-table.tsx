@@ -16,15 +16,20 @@ import {
 } from "./pricing-workbook"
 
 export function PricingTable({
+  filterStorageKey,
   revisionLinks = true,
   rows,
 }: {
+  filterStorageKey?: string
   revisionLinks?: boolean
   rows: PricingRegisterRow[]
 }) {
   return (
     <div className="max-h-[70vh] overflow-auto rounded-xl border">
-      <Table className="min-w-max text-xs">
+      <Table
+        className="min-w-max text-xs"
+        filterStorageKey={filterStorageKey}
+      >
         <TableHeader className="sticky top-0 z-10 bg-background">
           <TableRow>
             {pricingHeaders.map((header) => (
@@ -45,7 +50,10 @@ export function PricingTable({
             rows.map((row) => {
               const view = toPricingViewRow(row)
               return (
-                <TableRow key={row.rowKey}>
+                <TableRow
+                  className="[contain-intrinsic-size:auto_48px] [content-visibility:auto]"
+                  key={row.rowKey}
+                >
                   {pricingHeaders.map((header) => {
                     const cell = view[header]
                     return (

@@ -929,3 +929,23 @@ Candidate and queue tables stay server rendered with content visibility for
 offscreen rows. Product identity expansion and Package / Assembly ancestor
 discovery use set-based PostgreSQL queries; migration `0083` adds the partial
 active-price Product scope index.
+
+## 31. Pricing workflow surface — 2026-08-21
+
+The source Pricing spreadsheet is available at `/commercial/pricing`. It keeps
+the exact `Pricing View` workbook columns, immutable Product and calculation
+snapshots, recursive Package / Assembly rows through depth ten, parent and BOM
+quantity identity, percentage display conversion, currency placement, and
+purchased-product Website size and MRMPL description.
+
+The operational register is bounded to 200 root Quotes after server-side
+customer, Customer Part Code, Quote Number, Customer UID, and Product UID search.
+Every recursive child row for a returned root remains complete. Client Excel
+filters persist in the browser and offscreen rows use content visibility.
+Migration `0084` adds the active/editable root scope and Customer search indexes.
+
+Customer Part Code drill-down executes as a customer-and-code-scoped PostgreSQL
+history query rather than loading every historical Quote into the page. Current
+and revision exports remain exhaustive, use stable 500-root keyset batches in
+one repeatable-read transaction, and apply the same server scope before reading
+recursive snapshot rows.

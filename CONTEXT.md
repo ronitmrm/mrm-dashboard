@@ -16,6 +16,10 @@ _Avoid_: Editing active Quote rows in place, product parameter revision, custome
 A two-stage, cross-customer request that applies staged Product Parameter changes to Product Master for selected active Sent or Accepted prices, expands the affected Product identity across every active customer price, then waits in Customer Bulk Revision for optional customer parameter changes before creating immutable replacement Quote revisions through every affected Package or Assembly ancestor.
 _Avoid_: Creating Quote revisions during the product stage, editing active Quote rows in place, customer-only revision.
 
+**Pricing Register**:
+The current customer-price spreadsheet built from active or editable root Quotes and their immutable recursive Product and calculation snapshots. It keeps Package / Assembly parent, depth, quantity, commercial inputs, formula evidence, currency, and purchased-product website descriptions together; selecting a Customer Part Code opens its complete retained Quote revision history.
+_Avoid_: Product Master price, mutable calculation sheet, unscoped full-history load.
+
 **Setup**:
 One operation in a part route. A setup may run on one machine or be split across compatible parallel machines.
 _Avoid_: Operation when referring to a route step in the dashboard.
