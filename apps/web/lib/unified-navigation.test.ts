@@ -39,6 +39,8 @@ describe("unified navigation", () => {
     expect(source).toContain('label="Operational Entry"')
     expect(source).toContain("filteredMasterDataNavigation.map")
     expect(source).toContain("filteredOperationalEntryNavigation.map")
+    expect(source).toContain("filteredCommercialOperationalEntryNavigation.map")
+    expect(source).toContain("CostingSubmoduleLabel")
     expect(source).not.toContain("visibleCommercialMasterDataNavigation.map")
   })
 
@@ -49,7 +51,7 @@ describe("unified navigation", () => {
     )
     const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
-    expect(nativeLinks).toHaveLength(4)
+    expect(nativeLinks).toHaveLength(5)
     expect(source).toContain(
       "<a href={productionNavigationHref(item.id, floor.code)}>"
     )

@@ -93,10 +93,7 @@ function defaultExpandedSections(
       ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
     )
   return {
-    costing:
-      pathname.startsWith("/commercial") &&
-      !onCommercialMasterData &&
-      !onCommercialOperationalEntry,
+    costing: pathname.startsWith("/commercial") && !onCommercialMasterData,
     hr: pathname.startsWith("/hr"),
     masterData:
       activeDashboardTab === "dataEntryTab" ||
@@ -222,10 +219,6 @@ export function UnifiedSidebarNavigation({
     commercialOperationalEntryNavigation.filter((item) =>
       navigationAccess.commercialHrefs.includes(item.href)
     )
-  const onCommercialOperationalEntry =
-    visibleCommercialOperationalEntryNavigation.some((item) =>
-      navigationHrefMatches(pathname, searchParams, item.href)
-    )
   const visibleHrNavigation = hrNavigation.filter((item) =>
     navigationAccess.hrHrefs.includes(item.href)
   )
@@ -245,6 +238,11 @@ export function UnifiedSidebarNavigation({
     visibleCommercialNavigation,
     normalizedMenuSearch,
     "costing commercial"
+  )
+  const filteredCommercialOperationalEntryNavigation = filterNavigationItems(
+    visibleCommercialOperationalEntryNavigation,
+    normalizedMenuSearch,
+    "costing commercial operational entry enquiries excel view"
   )
   const filteredHrNavigation = filterNavigationItems(
     visibleHrNavigation,
@@ -299,10 +297,17 @@ export function UnifiedSidebarNavigation({
       )
   )
   const visibleOperationalEntryNavigation = [
+    ...visibleCommercialOperationalEntryNavigation.map((item) => ({
+      dashboardTabId: undefined,
+      destination: item.href,
+      id: `commercial:${item.href}`,
+      title: item.label,
+    })),
     ...(navigationAccess.operations &&
-      (!navigationAccess.productionTabIds ||
-        navigationAccess.productionTabIds.includes("operationalEntryTab"))
+    (!navigationAccess.productionTabIds ||
+      navigationAccess.productionTabIds.includes("operationalEntryTab"))
       ? operationalEntryNavigation.map((item) => ({
+          dashboardTabId: item.id,
           destination: universalProductionNavigationHref(
             item.id,
             activeProductionFloor
@@ -317,7 +322,7 @@ export function UnifiedSidebarNavigation({
       (item) =>
         !normalizedMenuSearch ||
         item.title.toLowerCase().includes(normalizedMenuSearch) ||
-        "operational entry work orders rm inward production output enquiries".includes(
+        "operational entry work orders rm inward production output enquiries excel view".includes(
           normalizedMenuSearch
         )
     )
@@ -451,9 +456,10 @@ export function UnifiedSidebarNavigation({
           icon={ListChecks}
           isActive={visibleOperationalEntryNavigation.some(
             (item) =>
-              activeDashboardTab === item.id ||
+              (item.dashboardTabId !== undefined &&
+                activeDashboardTab === item.dashboardTabId) ||
               navigationHrefMatches(pathname, searchParams, item.destination)
-          ) || onCommercialOperationalEntry}
+          )}
           label="Operational Entry"
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("operationalEntry", open)
@@ -468,15 +474,13 @@ export function UnifiedSidebarNavigation({
                 asChild
                 className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
                 isActive={
-                  activeDashboardTab === item.id ||
+                  (item.dashboardTabId !== undefined &&
+                    activeDashboardTab === item.dashboardTabId) ||
                   navigationHrefMatches(
                     pathname,
                     searchParams,
                     item.destination
-                  ) ||
-                  (onCommercialOperationalEntry &&
-                    (item.id === "operationalTablesTab") ===
-                      (searchParams.get("operationalView") === "masterTables"))
+                  )
                 }
               >
                 <a href={item.destination}>
@@ -564,12 +568,18 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
-      {filteredCommercialNavigation.length ? (
+      {filteredCommercialNavigation.length ||
+      filteredCommercialOperationalEntryNavigation.length ? (
         <NavigationSection
           icon={Calculator}
-          isActive={visibleCommercialNavigation.some((item) =>
-            navigationHrefMatches(pathname, searchParams, item.href)
-          )}
+          isActive={
+            visibleCommercialNavigation.some((item) =>
+              navigationHrefMatches(pathname, searchParams, item.href)
+            ) ||
+            visibleCommercialOperationalEntryNavigation.some((item) =>
+              navigationHrefMatches(pathname, searchParams, item.href)
+            )
+          }
           label="Costing"
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("costing", open)
@@ -597,6 +607,32 @@ export function UnifiedSidebarNavigation({
               </SidebarMenuSubButton>
             </SidebarMenuSubItem>
           ))}
+          {filteredCommercialOperationalEntryNavigation.length ? (
+            <>
+              <CostingSubmoduleLabel label="Operational Entry" />
+              {filteredCommercialOperationalEntryNavigation.map((item) => (
+                <SidebarMenuSubItem key={`costing:${item.href}`}>
+                  <SidebarMenuSubButton
+                    asChild
+                    className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                    isActive={navigationHrefMatches(
+                      pathname,
+                      searchParams,
+                      item.href
+                    )}
+                  >
+                    <a href={item.href}>
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
+                      />
+                      <span>{item.label}</span>
+                    </a>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              ))}
+            </>
+          ) : null}
         </NavigationSection>
       ) : null}
 
@@ -725,6 +761,7 @@ export function UnifiedSidebarNavigation({
       !filteredHrNavigation.length &&
       !filteredStoreNavigation.length &&
       !filteredCommercialNavigation.length &&
+      !filteredCommercialOperationalEntryNavigation.length &&
       !filteredMasterDataNavigation.length &&
       !filteredOperationalEntryNavigation.length &&
       !filteredUniversalProductionNavigation.length &&
@@ -736,6 +773,16 @@ export function UnifiedSidebarNavigation({
         </p>
       ) : null}
     </>
+  )
+}
+
+function CostingSubmoduleLabel({ label }: { label: string }) {
+  return (
+    <SidebarMenuSubItem aria-hidden="true" className="pt-2">
+      <span className="px-2.5 text-[0.7rem] font-semibold tracking-wide text-sidebar-foreground/50 uppercase">
+        {label}
+      </span>
+    </SidebarMenuSubItem>
   )
 }
 
