@@ -37,5 +37,6 @@ export async function addBomLineAction(formData: FormData) {
     await repository.close()
   }
   revalidatePath(assembliesPath)
-  revalidatePath("/commercial/costing")
+  revalidatePath("/commercial/product-costing")
+  revalidatePath("/commercial/customer-costing")
 }

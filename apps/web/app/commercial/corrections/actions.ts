@@ -41,7 +41,8 @@ export async function reverseDesignCostingHandoffAction(formData: FormData) {
   )
   revalidatePath(correctionsPath)
   revalidatePath("/commercial/enquiries")
-  revalidatePath("/commercial/costing")
+  revalidatePath("/commercial/product-costing")
+  revalidatePath("/commercial/customer-costing")
 }
 
 export async function reverseProductEntryAction(formData: FormData) {
