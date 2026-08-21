@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 
 import type { Pool, PoolClient, QueryResult } from "pg"
 
+import { boundedResult, selectorSearchTerm } from "./commercial-bounds"
 import { repositoryPool, type RepositoryPoolOptions } from "./postgres-runtime"
 
 const threadStandardRules = [
@@ -426,80 +427,141 @@ async function writeAudit(
 async function syncWebsiteAssemblies(
   client: PoolClient,
   organizationId: string,
+  profileId: string,
   actorUserId?: string | null
 ) {
-  const profiles = await client.query<{ id: string; item_id: string }>(
-    `SELECT id, item_id FROM catalog.website_product_profiles
-     WHERE organization_id = $1`,
-    [organizationId]
-  )
-  for (const profile of profiles.rows) {
-    const related = await client.query<{
-      part_code: string | null
-      uid: string
-    }>(
-      `
-        SELECT related.uid, website.part_code
-        FROM (
-          SELECT child.uid, child.id related_item_id,
-            COALESCE(bom.sequence, 2147483647) sequence, bom.id sort_id
-          FROM catalog.bom_lines bom
-          JOIN catalog.items child ON child.id = bom.component_item_id
-          WHERE bom.parent_item_id = $1
-          UNION ALL
-          SELECT parent.uid, parent.id,
-            COALESCE(bom.sequence, 2147483647), bom.id
-          FROM catalog.bom_lines bom
-          JOIN catalog.items parent ON parent.id = bom.parent_item_id
-          WHERE bom.component_item_id = $1
-        ) related
+  await client.query(
+    `
+      WITH edited_item AS (
+        SELECT item_id
+        FROM catalog.website_product_profiles
+        WHERE organization_id = $1 AND id = $2
+      ),
+      affected_profiles AS (
+        SELECT profile.id profile_id, profile.item_id
+        FROM catalog.website_product_profiles profile
+        JOIN edited_item edited ON edited.item_id = profile.item_id
+        WHERE profile.organization_id = $1
+        UNION
+        SELECT profile.id, profile.item_id
+        FROM edited_item edited
+        JOIN catalog.bom_lines bom
+          ON bom.organization_id = $1
+         AND bom.component_item_id = edited.item_id
+        JOIN catalog.website_product_profiles profile
+          ON profile.organization_id = $1
+         AND profile.item_id = bom.parent_item_id
+        UNION
+        SELECT profile.id, profile.item_id
+        FROM edited_item edited
+        JOIN catalog.bom_lines bom
+          ON bom.organization_id = $1
+         AND bom.parent_item_id = edited.item_id
+        JOIN catalog.website_product_profiles profile
+          ON profile.organization_id = $1
+         AND profile.item_id = bom.component_item_id
+      ),
+      related AS (
+        SELECT affected.profile_id, child.uid, website.part_code,
+          COALESCE(bom.sequence, 2147483647) sequence, bom.id sort_id
+        FROM affected_profiles affected
+        JOIN catalog.bom_lines bom
+          ON bom.organization_id = $1
+         AND bom.parent_item_id = affected.item_id
+        JOIN catalog.items child ON child.id = bom.component_item_id
         LEFT JOIN catalog.website_product_profiles website
-          ON website.item_id = related.related_item_id
-        ORDER BY related.sequence, related.sort_id, related.uid
-      `,
-      [profile.item_id]
-    )
-    const slots = Array.from({ length: 6 }, (_, index) => related.rows[index])
-    const codes = related.rows
-      .map((row) => row.part_code?.trim())
-      .filter((value): value is string => Boolean(value))
-    await client.query(
-      `
-        UPDATE catalog.website_product_profiles
-        SET final_assemblies_code = $1,
-          assembly_uid_1 = $2, assembly_code_1 = $3,
-          assembly_uid_2 = $4, assembly_code_2 = $5,
-          assembly_uid_3 = $6, assembly_code_3 = $7,
-          assembly_uid_4 = $8, assembly_code_4 = $9,
-          assembly_uid_5 = $10, assembly_code_5 = $11,
-          assembly_uid_6 = $12, assembly_code_6 = $13,
-          updated_by_user_id = $14, updated_at = now(),
-          row_version = row_version + 1
-        WHERE id = $15
-      `,
-      [
-        codes.join("; ") || null,
-        slots[0]?.uid ?? null,
-        slots[0]?.part_code ?? null,
-        slots[1]?.uid ?? null,
-        slots[1]?.part_code ?? null,
-        slots[2]?.uid ?? null,
-        slots[2]?.part_code ?? null,
-        slots[3]?.uid ?? null,
-        slots[3]?.part_code ?? null,
-        slots[4]?.uid ?? null,
-        slots[4]?.part_code ?? null,
-        slots[5]?.uid ?? null,
-        slots[5]?.part_code ?? null,
-        actorUserId ?? null,
-        profile.id,
-      ]
-    )
-  }
+          ON website.organization_id = $1 AND website.item_id = child.id
+        UNION ALL
+        SELECT affected.profile_id, parent.uid, website.part_code,
+          COALESCE(bom.sequence, 2147483647), bom.id
+        FROM affected_profiles affected
+        JOIN catalog.bom_lines bom
+          ON bom.organization_id = $1
+         AND bom.component_item_id = affected.item_id
+        JOIN catalog.items parent ON parent.id = bom.parent_item_id
+        LEFT JOIN catalog.website_product_profiles website
+          ON website.organization_id = $1 AND website.item_id = parent.id
+      ),
+      derived AS (
+        SELECT affected.profile_id,
+          string_agg(
+            btrim(related.part_code), '; '
+            ORDER BY related.sequence, related.sort_id, related.uid
+          ) FILTER (
+            WHERE COALESCE(btrim(related.part_code), '') <> ''
+          ) final_assemblies_code,
+          (array_agg(related.uid ORDER BY related.sequence,
+            related.sort_id, related.uid))[1] assembly_uid_1,
+          (array_agg(related.part_code ORDER BY related.sequence,
+            related.sort_id, related.uid))[1] assembly_code_1,
+          (array_agg(related.uid ORDER BY related.sequence,
+            related.sort_id, related.uid))[2] assembly_uid_2,
+          (array_agg(related.part_code ORDER BY related.sequence,
+            related.sort_id, related.uid))[2] assembly_code_2,
+          (array_agg(related.uid ORDER BY related.sequence,
+            related.sort_id, related.uid))[3] assembly_uid_3,
+          (array_agg(related.part_code ORDER BY related.sequence,
+            related.sort_id, related.uid))[3] assembly_code_3,
+          (array_agg(related.uid ORDER BY related.sequence,
+            related.sort_id, related.uid))[4] assembly_uid_4,
+          (array_agg(related.part_code ORDER BY related.sequence,
+            related.sort_id, related.uid))[4] assembly_code_4,
+          (array_agg(related.uid ORDER BY related.sequence,
+            related.sort_id, related.uid))[5] assembly_uid_5,
+          (array_agg(related.part_code ORDER BY related.sequence,
+            related.sort_id, related.uid))[5] assembly_code_5,
+          (array_agg(related.uid ORDER BY related.sequence,
+            related.sort_id, related.uid))[6] assembly_uid_6,
+          (array_agg(related.part_code ORDER BY related.sequence,
+            related.sort_id, related.uid))[6] assembly_code_6
+        FROM affected_profiles affected
+        LEFT JOIN related ON related.profile_id = affected.profile_id
+        GROUP BY affected.profile_id
+      )
+      UPDATE catalog.website_product_profiles profile
+      SET final_assemblies_code = derived.final_assemblies_code,
+        assembly_uid_1 = derived.assembly_uid_1,
+        assembly_code_1 = derived.assembly_code_1,
+        assembly_uid_2 = derived.assembly_uid_2,
+        assembly_code_2 = derived.assembly_code_2,
+        assembly_uid_3 = derived.assembly_uid_3,
+        assembly_code_3 = derived.assembly_code_3,
+        assembly_uid_4 = derived.assembly_uid_4,
+        assembly_code_4 = derived.assembly_code_4,
+        assembly_uid_5 = derived.assembly_uid_5,
+        assembly_code_5 = derived.assembly_code_5,
+        assembly_uid_6 = derived.assembly_uid_6,
+        assembly_code_6 = derived.assembly_code_6,
+        updated_by_user_id = $3, updated_at = now(),
+        row_version = profile.row_version + 1
+      FROM derived
+      WHERE profile.id = derived.profile_id
+        AND ROW(
+          profile.final_assemblies_code,
+          profile.assembly_uid_1, profile.assembly_code_1,
+          profile.assembly_uid_2, profile.assembly_code_2,
+          profile.assembly_uid_3, profile.assembly_code_3,
+          profile.assembly_uid_4, profile.assembly_code_4,
+          profile.assembly_uid_5, profile.assembly_code_5,
+          profile.assembly_uid_6, profile.assembly_code_6
+        ) IS DISTINCT FROM ROW(
+          derived.final_assemblies_code,
+          derived.assembly_uid_1, derived.assembly_code_1,
+          derived.assembly_uid_2, derived.assembly_code_2,
+          derived.assembly_uid_3, derived.assembly_code_3,
+          derived.assembly_uid_4, derived.assembly_code_4,
+          derived.assembly_uid_5, derived.assembly_code_5,
+          derived.assembly_uid_6, derived.assembly_code_6
+        )
+    `,
+    [organizationId, profileId, actorUserId ?? null]
+  )
 }
 
 const exportBatchSize = (value: number) =>
   Math.min(Math.max(Math.floor(value), 1), 500)
+const websiteOperationalLimit = (value: number) =>
+  Math.min(Math.max(Math.floor(value), 1), 200)
 
 async function readSnapshot<T>(
   pool: Pool,
@@ -923,30 +985,53 @@ export function createCommercialReportingRepository(
       active?: boolean | null
       category?: string | null
       organizationId: string
+      profileId?: string | null
       query?: string | null
       status?: string | null
-    }) {
+    }, requestedLimit = 200) {
+      const limit = websiteOperationalLimit(requestedLimit)
+      const search = selectorSearchTerm(input.query ?? "")
       const result = await pool.query<WebsiteDatabaseRow>(
         `${websiteSelect}
          WHERE profiles.organization_id = $1
            AND ($2::boolean IS NULL OR profiles.is_active = $2)
            AND ($3::text IS NULL OR profiles.website_status = $3)
            AND ($4::text IS NULL OR profiles.category = $4)
-           AND ($5::text IS NULL OR concat_ws(' ', items.uid, profiles.part_code,
-             profiles.product_description, profiles.category,
-             profiles.sub_category, profiles.grade) ILIKE '%' || $5 || '%')
-         ORDER BY CASE WHEN items.uid ~ '^M[0-9]+$'
+           AND ($5::uuid IS NULL OR profiles.id = $5)
+           AND (
+             $6::text = ''
+             OR lower(btrim(COALESCE(profiles.part_code, ''))) = $6
+             OR lower(btrim(items.uid)) = $6
+             OR ($7::text IS NOT NULL AND lower(
+               COALESCE(profiles.part_code, '') || ' ' ||
+               COALESCE(profiles.product_description, '') || ' ' ||
+               COALESCE(profiles.category, '') || ' ' ||
+               COALESCE(profiles.sub_category, '') || ' ' ||
+               COALESCE(profiles.grade, '')
+             ) LIKE $7 ESCAPE '\\')
+           )
+         ORDER BY CASE
+             WHEN $6::text <> '' AND (
+               lower(btrim(COALESCE(profiles.part_code, ''))) = $6
+               OR lower(btrim(items.uid)) = $6
+             ) THEN 0 ELSE 1
+           END,
+           CASE WHEN items.uid ~ '^M[0-9]+$'
            THEN substring(items.uid from 2)::bigint ELSE 9223372036854775807 END,
-           items.uid, profiles.id`,
+           items.uid, profiles.id
+         LIMIT $8`,
         [
           input.organizationId,
           input.active ?? null,
           optional(input.status),
           optional(input.category),
-          optional(input.query),
+          optional(input.profileId),
+          search.query,
+          search.containsPattern,
+          limit + 1,
         ]
       )
-      return result.rows.map(websiteRow)
+      return boundedResult(result.rows.map(websiteRow), limit)
     },
 
     async listDrawingHistoryForExport(
@@ -1408,6 +1493,7 @@ export function createCommercialReportingRepository(
         await syncWebsiteAssemblies(
           client,
           input.organizationId,
+          input.profileId,
           input.actorUserId
         )
         await writeAudit(client, {

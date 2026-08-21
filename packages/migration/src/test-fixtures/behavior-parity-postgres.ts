@@ -2227,7 +2227,7 @@ export async function captureCanonicalBehaviorParityFixture({
               revision: entry.revision,
               revisionDate: entry.revisionDate,
             })),
-            websiteProducts: websiteProducts.map((entry) => ({
+            websiteProducts: websiteProducts.rows.map((entry) => ({
               partCode: entry.partCode,
               productDescription: entry.productDescription,
               websiteStatus: entry.websiteStatus,
