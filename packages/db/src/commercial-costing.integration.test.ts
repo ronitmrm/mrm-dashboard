@@ -878,4 +878,59 @@ describe("PostgreSQL product-costing and quote workflow", () => {
       new Set(exported.map((row) => row.quoteNumber)).size
     ).toBeGreaterThan(1)
   })
+
+  test("bounds the current pricing register after search and scopes complete revision history", async () => {
+    const firstPage = await repository.listPricingRegisterBounded(
+      organizationCode,
+      { limit: 1 }
+    )
+    expect(firstPage.coverage).toMatchObject({
+      limit: 1,
+      returned: 1,
+      truncated: true,
+    })
+
+    const current = await repository.listPricingRegisterBounded(
+      organizationCode,
+      { limit: 1, query: "CUSTOMER-PART-08" }
+    )
+    expect(current.coverage).toEqual({
+      limit: 1,
+      returned: 1,
+      truncated: false,
+    })
+    const currentRoot = current.rows.find((row) => row.componentDepth === 0)
+    expect(currentRoot).toMatchObject({
+      customerPartCode: "CUSTOMER-PART-08",
+      isActive: true,
+    })
+
+    const history = await repository.listPricingRevisionHistory(
+      organizationCode,
+      {
+        customerId: currentRoot!.customerId,
+        customerPartCode: " customer-part-08 ",
+      }
+    )
+    expect(
+      history
+        .filter((row) => row.componentDepth === 0)
+        .map((row) => row.status)
+    ).toEqual(expect.arrayContaining(["Sent", "Superseded"]))
+    expect(
+      history
+        .filter((row) => row.componentDepth === 0)
+        .every(
+          (row) =>
+            row.customerId === currentRoot!.customerId &&
+            row.customerPartCode === "CUSTOMER-PART-08"
+        )
+    ).toBe(true)
+    await expect(
+      repository.listPricingRevisionHistory(organizationCode, {
+        customerId: "not-a-customer-id",
+        customerPartCode: "CUSTOMER-PART-08",
+      })
+    ).resolves.toEqual([])
+  })
 })

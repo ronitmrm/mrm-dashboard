@@ -24,6 +24,13 @@ accepts a customer's PO price. The prior sent Quote remains immutable. The new
 Quote may complete only when its price matches the requested PO price to four
 decimal places; sending that exact replacement resolves the PO revision.
 
+**Pricing Register**: The current customer-price spreadsheet built from active
+or editable root Quotes and their immutable recursive Product and calculation
+snapshots. Package / Assembly rows retain parent, BOM depth, quantity,
+commercial inputs, formula evidence, and currency. Purchased Products also show
+their current Website Product size and MRMPL Product Description. Selecting a
+Customer Part Code opens its complete retained Quote revision history.
+
 **Quote Follow-Up Task**: The pending Sales task created atomically when a
 Quote is sent. Sales must choose its Follow-Up Date during Quote send; the task
 retains the sent Quote reference, uses Email as its initial channel, and remains

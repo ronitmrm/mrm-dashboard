@@ -34,8 +34,8 @@ export function toPricingViewRow(row: PricingRegisterRow): PricingViewRow {
     UID: row.uid,
     "Q/P": row.componentDepth > 0 ? "" : row.lifecycleStatus,
     Description: value(product, "description"),
-    Size: "",
-    "MRMPL Product Description": "",
+    Size: row.websiteSize ?? "",
+    "MRMPL Product Description": row.websiteProductDescription ?? "",
     Shipping: row.shippingTerms ?? "",
     Packaging: row.packaging ?? "",
     Pricing: value(product, "pricingMethod"),
@@ -136,6 +136,8 @@ export const pricingHeaders = Object.keys(
     status: "",
     uid: "",
     unitPrice: 0,
+    websiteProductDescription: null,
+    websiteSize: null,
   })
 )
 

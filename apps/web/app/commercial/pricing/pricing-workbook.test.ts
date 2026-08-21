@@ -49,6 +49,8 @@ const row: PricingRegisterRow = {
   status: "Sent",
   uid: "Q001",
   unitPrice: 1.25,
+  websiteProductDescription: "Purchased valve",
+  websiteSize: "1/2 inch",
 }
 
 describe("Pricing spreadsheet workbook", () => {
@@ -57,6 +59,8 @@ describe("Pricing spreadsheet workbook", () => {
     expect(view["Rejection %"]).toBe(5)
     expect(view["BL %"]).toBe(3)
     expect(view.Profit).toBe(20)
+    expect(view.Size).toBe("1/2 inch")
+    expect(view["MRMPL Product Description"]).toBe("Purchased valve")
     expect(pricingWorkbookFilename).toBe("pricing-view.xlsx")
 
     const workbook = buildPricingWorkbook([row])

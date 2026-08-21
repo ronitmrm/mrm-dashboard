@@ -26,20 +26,22 @@ export default async function PricingRevisionsPage({
     "/commercial/pricing/revisions"
   )
   const { code = "", customer = "" } = await searchParams
-  const normalizedCode = code.trim().toLowerCase()
+  const customerPartCode = code.trim()
   const repository = createCommercialCostingRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
-  const allRows = await repository
-    .listPricingRegister("MRMPL", { revisions: true })
-    .finally(() => repository.close())
-  const rows = normalizedCode
-    ? allRows.filter(
-        (row) =>
-          row.customerId === customer &&
-          row.customerPartCode?.trim().toLowerCase() === normalizedCode
-      )
-    : []
+  const rows = await (async () => {
+    try {
+      return customerPartCode
+        ? await repository.listPricingRevisionHistory("MRMPL", {
+            customerId: customer,
+            customerPartCode,
+          })
+        : []
+    } finally {
+      await repository.close()
+    }
+  })()
   const query =
     "?customer=" +
     encodeURIComponent(customer) +
@@ -69,7 +71,11 @@ export default async function PricingRevisionsPage({
         </div>
       </CardHeader>
       <CardContent>
-        <PricingTable revisionLinks={false} rows={rows} />
+        <PricingTable
+          filterStorageKey="mrmpl:commercial:pricing-revisions:filters:v1"
+          revisionLinks={false}
+          rows={rows}
+        />
       </CardContent>
     </Card>
   )

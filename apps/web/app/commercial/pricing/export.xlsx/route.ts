@@ -9,13 +9,14 @@ import {
   pricingWorkbookFilename,
 } from "../pricing-workbook"
 
-export async function GET() {
+export async function GET(request: Request) {
   await requireCapability("pricing.pricing.read", "/commercial/pricing")
+  const query = new URL(request.url).searchParams.get("q")?.trim() ?? ""
   const repository = createCommercialCostingRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
   const rows = await repository
-    .listPricingRegisterForExport("MRMPL")
+    .listPricingRegisterForExport("MRMPL", { query })
     .finally(() => repository.close())
   return xlsxResponse(buildPricingWorkbook(rows), pricingWorkbookFilename)
 }
