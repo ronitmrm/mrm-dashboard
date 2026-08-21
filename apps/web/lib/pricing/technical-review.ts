@@ -30,3 +30,12 @@ export function countTechnicalReviewChecks(
   }
   return checked
 }
+
+export function technicalReviewReturnPath(
+  status: string,
+  enquiryItemId: string
+) {
+  return status === "Pending Review"
+    ? `/commercial/technical-review/${enquiryItemId}`
+    : "/commercial/technical-review"
+}

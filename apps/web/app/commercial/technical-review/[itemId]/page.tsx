@@ -86,8 +86,9 @@ export default async function TechnicalReviewItemPage({
         <CardHeader>
           <CardTitle>Focused Technical Review</CardTitle>
           <CardDescription>
-            Complete This Line Without Other Queue Items On Screen. A Feasible
-            Or Existing-Product Decision Opens The Item In Design.
+            Complete This Line Without Other Queue Items On Screen. Released
+            Lines Return To This Team&apos;s Queue And Become Available To
+            Design.
           </CardDescription>
         </CardHeader>
         <CardContent>

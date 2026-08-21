@@ -13,6 +13,17 @@ export const designPortfolioDecisions = [
   "Matches Existing Portfolio",
 ] as const
 
+export function designTaskStatusAfterStart(status: string) {
+  if (status === "Pending Design") return "In Progress"
+  if (status === "In Progress" || status === "Changes Required") {
+    return status
+  }
+
+  throw new Error(
+    `Design work cannot start from the current status: ${status}.`
+  )
+}
+
 export function designTaskIsOpen(designStatus: string) {
   return !["Design Complete", "Not Required"].includes(designStatus)
 }

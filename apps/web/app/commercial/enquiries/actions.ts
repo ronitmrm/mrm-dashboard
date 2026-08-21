@@ -10,7 +10,10 @@ import { redirect } from "next/navigation"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { optionalText, requiredText } from "@/lib/form-data"
-import { technicalReviewChecklistFromFormData } from "@/lib/pricing/technical-review"
+import {
+  technicalReviewChecklistFromFormData,
+  technicalReviewReturnPath,
+} from "@/lib/pricing/technical-review"
 import {
   deleteUserAttachment,
   saveUserAttachment,
@@ -23,6 +26,7 @@ import {
 } from "./enquiry-workbook"
 
 const enquiriesPath = "/commercial/enquiries"
+const designPath = "/commercial/design"
 const technicalReviewPath = "/commercial/technical-review"
 
 function numeric(formData: FormData, name: string, fallback = 0) {
@@ -309,10 +313,7 @@ export async function updateTechnicalReviewAction(formData: FormData) {
   revalidatePath(technicalReviewPath)
   revalidatePath(`${technicalReviewPath}/${enquiryItemId}`)
   revalidatePath("/commercial/design")
-  if (["Feasible", "Duplicate / Existing Product"].includes(status)) {
-    redirect(`/commercial/design?item=${enquiryItemId}`)
-  }
-  if (status !== "Pending Review") redirect(technicalReviewPath)
+  redirect(technicalReviewReturnPath(status, enquiryItemId))
 }
 
 export async function completeSalesClarificationAction(formData: FormData) {
@@ -351,8 +352,22 @@ export async function completeSalesClarificationAction(formData: FormData) {
   revalidatePath("/commercial/technical-review")
 }
 
+export async function startDesignWorkAction(formData: FormData) {
+  const enquiryItemId = requiredText(formData, "enquiry_item_id")
+  await withWorkflow(
+    "pricing.design.write",
+    designPath,
+    (workflow, actorUserId) =>
+      workflow.startDesignWork({ actorUserId, enquiryItemId })
+  )
+  revalidatePath(designPath)
+  revalidatePath(`${designPath}/${enquiryItemId}`)
+  redirect(`${designPath}/${enquiryItemId}`)
+}
+
 export async function saveDesignAction(formData: FormData) {
   const enquiryId = requiredText(formData, "enquiry_id")
+  const enquiryItemId = requiredText(formData, "enquiry_item_id")
   const organizationId = requiredText(formData, "organization_id")
   const portfolioMatchStatus = requiredText(formData, "portfolio_match_status")
   const quotedPartUid = optionalText(formData, "quoted_part_uid")
@@ -452,7 +467,7 @@ export async function saveDesignAction(formData: FormData) {
         designStatus:
           optionalText(formData, "design_status") ?? "Pending Design",
         designerName: optionalText(formData, "designer_name"),
-        enquiryItemId: requiredText(formData, "enquiry_item_id"),
+        enquiryItemId,
         fixtureApproxCost: numeric(formData, "fixture_approx_cost"),
         fixtureRequired: optionalText(formData, "fixture_required") ?? "No",
         gaugesRequired: optionalText(formData, "gauges_required") ?? "No",
@@ -497,7 +512,8 @@ export async function saveDesignAction(formData: FormData) {
     }
   }
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
-  revalidatePath("/commercial/design")
+  revalidatePath(designPath)
+  revalidatePath(`${designPath}/${enquiryItemId}`)
 }
 
 export async function requestDesignClarificationAction(formData: FormData) {

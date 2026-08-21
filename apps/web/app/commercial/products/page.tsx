@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card"
+import { Input } from "@workspace/ui/components/input"
 import {
   Table,
   TableBody,
@@ -30,20 +31,29 @@ export const dynamic = "force-dynamic"
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string | string[] }>
+  searchParams: Promise<{
+    page?: string | string[]
+    q?: string | string[]
+  }>
 }) {
   await requireCapability("pricing.products.read", "/commercial/products")
-  const bounds = pageBounds((await searchParams).page, 25)
+  const params = await searchParams
+  const query = typeof params.q === "string" ? params.q.trim() : ""
+  const bounds = pageBounds(params.page, 25)
 
   const repository = createProductRepository({
     connectionString: readAuthEnvironment().connectionString,
   })
   const productPage = await repository
-    .listPageForOrganization("MRMPL", bounds)
+    .listPageForOrganization("MRMPL", { ...bounds, value: query })
     .finally(() => repository.close())
   const products = productPage.rows
   if (!products.length && bounds.page > 1) {
-    redirect("/commercial/products")
+    redirect(
+      query
+        ? `/commercial/products?q=${encodeURIComponent(query)}`
+        : "/commercial/products"
+    )
   }
   const totalCount = productPage.coverage.total ?? 0
   const totalPages = Math.max(1, Math.ceil(totalCount / bounds.limit))
@@ -58,6 +68,21 @@ export default async function ProductsPage({
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <form className="mb-4 flex flex-col gap-2 sm:flex-row" role="search">
+          <Input
+            aria-label="Search products by UID or description"
+            className="max-w-md"
+            defaultValue={query}
+            name="q"
+            placeholder="Search Product UID or description"
+          />
+          <Button type="submit">Search</Button>
+          {query ? (
+            <Button asChild type="button" variant="outline">
+              <Link href="/commercial/products">Clear</Link>
+            </Button>
+          ) : null}
+        </form>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
           <span>
             Showing {products.length ? bounds.offset + 1 : 0}–
@@ -67,7 +92,15 @@ export default async function ProductsPage({
           <div className="flex items-center gap-2">
             {bounds.page > 1 ? (
               <Button asChild size="sm" variant="outline">
-                <Link href={`/commercial/products?page=${bounds.page - 1}`}>
+                <Link
+                  href={{
+                    pathname: "/commercial/products",
+                    query: {
+                      page: bounds.page - 1,
+                      ...(query ? { q: query } : {}),
+                    },
+                  }}
+                >
                   Previous
                 </Link>
               </Button>
@@ -81,7 +114,15 @@ export default async function ProductsPage({
             </span>
             {bounds.page < totalPages ? (
               <Button asChild size="sm" variant="outline">
-                <Link href={`/commercial/products?page=${bounds.page + 1}`}>
+                <Link
+                  href={{
+                    pathname: "/commercial/products",
+                    query: {
+                      page: bounds.page + 1,
+                      ...(query ? { q: query } : {}),
+                    },
+                  }}
+                >
                   Next
                 </Link>
               </Button>
@@ -132,7 +173,9 @@ export default async function ProductsPage({
                     className="h-32 text-center text-muted-foreground"
                     colSpan={7}
                   >
-                    No Products Have Been Loaded Into Postgresql Yet.
+                    {query
+                      ? `No products match “${query}”.`
+                      : "No Products Have Been Loaded Into Postgresql Yet."}
                   </TableCell>
                 </TableRow>
               )}

@@ -58,7 +58,6 @@ type CreateProduct = {
   weight100Pcs?: number
 }
 
-
 type ProductSelectorOptions = {
   itemTypes?: string[]
 }
@@ -170,10 +169,24 @@ export function createProductRepository(options: RepositoryPoolOptions) {
 
     async listPageForOrganization(
       organizationCode: string,
-      options: { limit: number; offset: number }
+      options: { limit: number; offset: number; value?: string }
     ) {
       const limit = Math.min(Math.max(Math.trunc(options.limit), 1), 200)
       const offset = Math.max(Math.trunc(options.offset), 0)
+      const { containsPattern, query } = selectorSearchTerm(options.value ?? "")
+      const organization = sql`lower(${organizations.code}) = lower(${organizationCode.trim()})`
+      const search = query
+        ? containsPattern
+          ? sql`lower(coalesce(${items.uid}, '') || ' ' || coalesce(${items.description}, '')) like ${containsPattern}`
+          : sql`lower(${items.uid}) = ${query}`
+        : undefined
+      const order = query
+        ? [
+            sql`case when lower(${items.uid}) = ${query} then 0 else 1 end`,
+            asc(items.uid),
+            asc(items.id),
+          ]
+        : [asc(items.uid), asc(items.id)]
 
       const rows = await database
         .select({
@@ -182,10 +195,8 @@ export function createProductRepository(options: RepositoryPoolOptions) {
         })
         .from(items)
         .innerJoin(organizations, eq(items.organizationId, organizations.id))
-        .where(
-          sql`lower(${organizations.code}) = lower(${organizationCode.trim()})`
-        )
-        .orderBy(asc(items.uid), asc(items.id))
+        .where(and(organization, search))
+        .orderBy(...order)
         .limit(limit)
         .offset(offset)
 

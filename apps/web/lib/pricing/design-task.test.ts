@@ -3,12 +3,24 @@ import { describe, expect, test } from "vitest"
 import {
   designPortfolioDecisions,
   designStatuses,
+  designTaskStatusAfterStart,
   designTaskIsEditable,
   designTaskIsOpen,
   deriveDesignTaskState,
 } from "@workspace/db/commercial-design-domain"
 
 describe("Pricing Design Task contract", () => {
+  test("starts only an available design task", () => {
+    expect(designTaskStatusAfterStart("Pending Design")).toBe("In Progress")
+    expect(designTaskStatusAfterStart("In Progress")).toBe("In Progress")
+    expect(designTaskStatusAfterStart("Changes Required")).toBe(
+      "Changes Required"
+    )
+    expect(() => designTaskStatusAfterStart("Need Clarification")).toThrow(
+      "Design work cannot start"
+    )
+  })
+
   test("preserves queue, lock, and save-state transitions", () => {
     expect(designStatuses).toEqual([
       "Pending Design",

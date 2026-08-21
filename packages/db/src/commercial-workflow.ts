@@ -13,6 +13,7 @@ import {
 import {
   deriveDesignTaskState,
   designTaskIsEditable,
+  designTaskStatusAfterStart,
 } from "./commercial-design-domain"
 import {
   repositoryPool,
@@ -3779,6 +3780,89 @@ export function createCommercialWorkflowRepository(
         quoteNumber: row.quote_number,
         status: row.status,
       }))
+    },
+
+    async startDesignWork(input: {
+      actorUserId?: string | null
+      enquiryItemId: string
+    }) {
+      return transaction(pool, async (client) => {
+        const context = await client.query<{
+          design_status: string | null
+          organization_id: string
+          technical_review_status: string
+        }>(
+          `
+            SELECT enquiry_item.organization_id,
+              enquiry_item.technical_review_status,
+              design.design_status
+            FROM sales.enquiry_items enquiry_item
+            LEFT JOIN sales.design_tasks design
+              ON design.enquiry_item_id = enquiry_item.id
+            WHERE enquiry_item.id = $1
+            FOR UPDATE OF enquiry_item
+          `,
+          [input.enquiryItemId]
+        )
+        const line = context.rows[0]
+        if (!line) throw new Error("Line item was not found.")
+        if (
+          !["Feasible", "Duplicate / Existing Product"].includes(
+            line.technical_review_status
+          )
+        ) {
+          throw new Error("Technical Review must release the line to Design.")
+        }
+
+        const designStatus = designTaskStatusAfterStart(
+          line.design_status ?? "Pending Design"
+        )
+        const result = await client.query<{
+          design_status: string
+          id: string
+        }>(
+          `
+            INSERT INTO sales.design_tasks (
+              organization_id, enquiry_item_id, status, design_status,
+              assigned_date, created_by_user_id, updated_by_user_id,
+              source_system, source_table, source_id, source_payload
+            ) VALUES (
+              $1, $2, $3, $3, now(), $4, $4,
+              'mrm-dashboard', 'design_tasks', $5, $6
+            )
+            ON CONFLICT (enquiry_item_id) DO UPDATE SET
+              status = EXCLUDED.status,
+              design_status = EXCLUDED.design_status,
+              assigned_date = COALESCE(
+                sales.design_tasks.assigned_date,
+                EXCLUDED.assigned_date
+              ),
+              updated_by_user_id = EXCLUDED.updated_by_user_id,
+              updated_at = now(),
+              row_version = sales.design_tasks.row_version + 1
+            RETURNING id, design_status
+          `,
+          [
+            line.organization_id,
+            input.enquiryItemId,
+            designStatus,
+            input.actorUserId ?? null,
+            randomUUID(),
+            { enquiryItemId: input.enquiryItemId, started: true },
+          ]
+        )
+        const started = result.rows[0]
+        if (!started) throw new Error("Design task could not be started.")
+        await writeAuditEvent(client, {
+          actorUserId: input.actorUserId,
+          eventType: "design.started",
+          metadata: { designStatus: started.design_status },
+          organizationId: line.organization_id,
+          targetId: started.id,
+          targetTable: "design_tasks",
+        })
+        return { designStatus: started.design_status, id: started.id }
+      })
     },
 
     async saveDesign(input: {
