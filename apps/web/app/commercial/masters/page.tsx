@@ -2,6 +2,7 @@ import {
   createCommercialMasterRepository,
   createCustomerRepository,
   type CommercialMasterSnapshot,
+  type EditableCommercialMasterKind,
 } from "@workspace/db"
 import { Alert, AlertDescription } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
@@ -29,17 +30,12 @@ import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import {
   commercialMasterSelection,
+  commercialMasterTemplateHref,
   commercialMasterViewHref,
 } from "@/lib/commercial-master-workspace"
 import { CommercialMasterTable } from "./commercial-master-table"
 
 export const dynamic = "force-dynamic"
-
-type Editable = Awaited<
-  ReturnType<
-    ReturnType<typeof createCommercialMasterRepository>["listEditable"]
-  >
->
 
 export default async function MastersPage({
   searchParams,
@@ -55,28 +51,42 @@ export default async function MastersPage({
     "pricing.masters.read",
     "/commercial/masters"
   )
-  const canWrite = (
-    await listGrantedCapabilities(session.user.id, ["pricing.masters.write"])
-  ).includes("pricing.masters.write")
-  const connectionString = readAuthEnvironment().connectionString
-  const customers = createCustomerRepository({ connectionString })
-  const repository = createCommercialMasterRepository({ connectionString })
-  let snapshot: CommercialMasterSnapshot
-  let editable: Editable
-  try {
-    const organizationId = await customers.organizationIdForCode("MRMPL")
-    snapshot = await repository.snapshot(organizationId)
-    editable = await repository.listEditable(organizationId)
-  } finally {
-    await repository.close()
-    await customers.close()
-  }
-  const feedback = await searchParams
+  const [grantedCapabilities, feedback] = await Promise.all([
+    listGrantedCapabilities(session.user.id, ["pricing.masters.write"]),
+    searchParams,
+  ])
+  const canWrite = grantedCapabilities.includes("pricing.masters.write")
   const activeView =
     feedback.masterView === "masterTables" ? "masterTables" : "dataEntry"
   const selection = commercialMasterSelection(feedback.kind)
   const showDataEntry = activeView === "dataEntry"
   const showMasterTables = activeView === "masterTables"
+  let snapshot: CommercialMasterSnapshot | null = null
+  let editableRows: Array<{
+    id: string
+    kind: EditableCommercialMasterKind
+    label: string
+  }> = []
+
+  if ((showDataEntry && canWrite) || showMasterTables) {
+    const connectionString = readAuthEnvironment().connectionString
+    const customers = createCustomerRepository({ connectionString })
+    const repository = createCommercialMasterRepository({ connectionString })
+    try {
+      const organizationId = await customers.organizationIdForCode("MRMPL")
+      if (showDataEntry && canWrite) {
+        snapshot = await repository.snapshot(organizationId)
+      } else {
+        editableRows = await repository.listEditableRows({
+          kind: selection.tableKind,
+          organizationId,
+        })
+      }
+    } finally {
+      await repository.close()
+      await customers.close()
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -116,8 +126,10 @@ export default async function MastersPage({
               <CompanyWideMasterScope />
               <div className="flex flex-wrap gap-3">
                 <Button asChild variant="outline">
-                  <Link href="/commercial/masters/template.xlsx">
-                    Download Template
+                  <Link
+                    href={commercialMasterTemplateHref(selection.entryKind)}
+                  >
+                    Download Selected Template
                   </Link>
                 </Button>
                 <Button asChild variant="outline">
@@ -149,7 +161,7 @@ export default async function MastersPage({
             </CardContent>
           </Card>
 
-          {canWrite ? (
+          {canWrite && snapshot ? (
             <Card>
               <CardHeader>
                 <CardTitle>Add Or Update A Master</CardTitle>
@@ -179,7 +191,7 @@ export default async function MastersPage({
                   Edit names or safely replace and delete duplicate masters.
                 </CardDescription>
               </div>
-              <Badge variant="outline">{editable.allMasters.length}</Badge>
+              <Badge variant="outline">{editableRows.length}</Badge>
             </div>
           </CardHeader>
           <CardContent>
@@ -187,7 +199,7 @@ export default async function MastersPage({
               canWrite={canWrite}
               initialKind={selection.entryKind}
               key={selection.entryKind}
-              rows={editable.allMasters}
+              rows={editableRows}
             />
           </CardContent>
         </Card>

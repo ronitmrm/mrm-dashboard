@@ -76,6 +76,23 @@ export type CommercialMasterEntryKind =
 export type CommercialMasterTableKind =
   (typeof commercialMasterKinds)[number]["tableKind"]
 
+const templateKeys = {
+  application: "applications",
+  category: "categories",
+  certification: "certifications",
+  commercialTerm: "commercials",
+  machineType: "machines",
+  materialGrade: "grades",
+  materialRate: "materials",
+  packagingOption: "packaging",
+  process: "processes",
+  quoteTerm: "quote-terms",
+  rodType: "rod-types",
+  shippingTerm: "shipping",
+  subcategory: "subcategories",
+  websiteField: "website-material",
+} as const satisfies Record<CommercialMasterEntryKind, string>
+
 const defaultSelection = commercialMasterKinds[0]
 
 export function commercialMasterSelection(kind?: string | null) {
@@ -97,4 +114,12 @@ export function commercialMasterViewHref(
     kind: selection.entryKind,
   })
   return `/commercial/masters?${params.toString()}`
+}
+
+export function commercialMasterTemplateHref(kind?: string | null) {
+  const selection = commercialMasterSelection(kind)
+  const params = new URLSearchParams({
+    master: templateKeys[selection.entryKind],
+  })
+  return `/commercial/masters/template.xlsx?${params.toString()}`
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   commercialMasterSelection,
+  commercialMasterTemplateHref,
   commercialMasterViewHref,
 } from "./commercial-master-workspace"
 
@@ -12,9 +13,7 @@ describe("commercial master workspace", () => {
       label: "Material grade",
       tableKind: "commercial_material_grade",
     })
-    expect(
-      commercialMasterViewHref("masterTables", "materialGrade")
-    ).toBe(
+    expect(commercialMasterViewHref("masterTables", "materialGrade")).toBe(
       "/commercial/masters?masterView=masterTables&kind=materialGrade"
     )
   })
@@ -27,9 +26,16 @@ describe("commercial master workspace", () => {
     })
   })
 
-  it("falls back safely when the address contains an unknown master", () => {
-    expect(commercialMasterSelection("unknown").entryKind).toBe(
-      "materialGrade"
+  it("downloads the source workbook sheet for the selected master", () => {
+    expect(commercialMasterTemplateHref("materialGrade")).toBe(
+      "/commercial/masters/template.xlsx?master=grades"
     )
+    expect(commercialMasterTemplateHref("commercial_shipping")).toBe(
+      "/commercial/masters/template.xlsx?master=shipping"
+    )
+  })
+
+  it("falls back safely when the address contains an unknown master", () => {
+    expect(commercialMasterSelection("unknown").entryKind).toBe("materialGrade")
   })
 })
