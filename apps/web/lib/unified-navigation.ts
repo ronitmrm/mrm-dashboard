@@ -492,6 +492,11 @@ export const commercialNavigation = [
     label: "Purchase Orders",
   },
   {
+    href: "/commercial/product-bulk-revision",
+    icon: RefreshCcw,
+    label: "Product Bulk Revision",
+  },
+  {
     href: "/commercial/customer-bulk-revision",
     icon: RefreshCcw,
     label: "Customer Bulk Revision",
