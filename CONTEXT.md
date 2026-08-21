@@ -12,6 +12,10 @@ _Avoid_: Fixed customer terms, enquiry-only terms.
 A staged, customer-scoped request that applies one or more commercial parameter changes to selected active Sent or Accepted prices, previews the recalculation, and completes once by creating immutable replacement Quote revisions through every affected Package or Assembly ancestor.
 _Avoid_: Editing active Quote rows in place, product parameter revision, customer default update.
 
+**Product Bulk Revision**:
+A two-stage, cross-customer request that applies staged Product Parameter changes to Product Master for selected active Sent or Accepted prices, expands the affected Product identity across every active customer price, then waits in Customer Bulk Revision for optional customer parameter changes before creating immutable replacement Quote revisions through every affected Package or Assembly ancestor.
+_Avoid_: Creating Quote revisions during the product stage, editing active Quote rows in place, customer-only revision.
+
 **Setup**:
 One operation in a part route. A setup may run on one machine or be split across compatible parallel machines.
 _Avoid_: Operation when referring to a route step in the dashboard.

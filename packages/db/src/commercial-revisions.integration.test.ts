@@ -36,6 +36,7 @@ async function createItem(uid: string, itemType: string) {
 
 async function createQuote(input: {
   child?: { itemId: string; quoteItemId: string; total: number }
+  customerId?: string
   customerPartCode?: string | null
   itemId: string
   itemType: string
@@ -63,7 +64,7 @@ async function createQuote(input: {
     [
       organizationId,
       `REV-${sourceId}`,
-      customerId,
+      input.customerId ?? customerId,
       input.itemId,
       input.customerPartCode ?? null,
       input.total,
@@ -314,6 +315,136 @@ describe("commercial revisions and corrections", () => {
         stageGroupId: customerStage.stageGroupId,
       })
     ).rejects.toThrow("not found")
+  })
+
+  test("hands a product bulk revision to customer costing before revising every active customer price", async () => {
+    const suffix = randomUUID()
+    const sharedItemId = await createItem(`M-PBR-${suffix}`, "List")
+    await pool.query(
+      "UPDATE catalog.items SET overhead_cost = 1 WHERE id = $1",
+      [sharedItemId]
+    )
+    const secondCustomer = await pool.query<{ id: string }>(
+      `
+        INSERT INTO sales.customers (
+          organization_id, customer_uid, company_name, status,
+          source_system, source_table, source_id
+        )
+        VALUES ($1, $2, 'Second Product Revision Customer', 'Active',
+          'test', 'customers', $3)
+        RETURNING id
+      `,
+      [organizationId, `PBR-${suffix}`, randomUUID()]
+    )
+    const firstQuoteId = await createQuote({
+      customerPartCode: `PBR-A-${suffix}`,
+      itemId: sharedItemId,
+      itemType: "List",
+      processBase: 10,
+      profitPercent: 0.2,
+      total: 12,
+    })
+    const secondQuoteId = await createQuote({
+      customerId: secondCustomer.rows[0]!.id,
+      customerPartCode: `PBR-B-${suffix}`,
+      itemId: sharedItemId,
+      itemType: "List",
+      processBase: 10,
+      profitPercent: 0.2,
+      total: 12,
+    })
+    const revision = await repository.createBulkPriceRevision({
+      effectiveOn: "2026-08-21",
+      organizationId,
+      reason: "Raise shared overhead before customer recosting",
+      revisionRoute: "Product Parameter Bulk Revision",
+    })
+
+    const productQueue =
+      await repository.listProductBulkPriceRevisionsBounded(organizationCode)
+    expect(productQueue.rows).toContainEqual(
+      expect.objectContaining({
+        activePriceCount: 2,
+        id: revision.id,
+        status: "Pending Costing",
+      })
+    )
+    const productPrices =
+      await repository.listProductBulkRevisionActivePricesBounded(revision.id)
+    expect(new Set(productPrices.rows.map((price) => price.id))).toEqual(
+      new Set([firstQuoteId, secondQuoteId])
+    )
+
+    await expect(
+      repository.stageBulkPriceRevisionChange({
+        bulkPriceRevisionId: revision.id,
+        fieldName: "overhead_cost",
+        newValue: 4,
+        selectedQuoteItemIds: [firstQuoteId],
+      })
+    ).resolves.toMatchObject({ selectedCount: 1, skippedCount: 0 })
+    await expect(
+      repository.completeBulkPriceRevision({
+        bulkPriceRevisionId: revision.id,
+      })
+    ).resolves.toEqual({
+      revisedQuoteCount: 0,
+      status: "Pending Customer Costing",
+    })
+    await expect(
+      pool.query<{ overhead_cost: string }>(
+        "SELECT overhead_cost::text FROM catalog.items WHERE id = $1",
+        [sharedItemId]
+      )
+    ).resolves.toMatchObject({ rows: [{ overhead_cost: "4" }] })
+
+    const handedOff = await repository.listBulkPriceRevisions(organizationCode)
+    expect(handedOff).toContainEqual(
+      expect.objectContaining({
+        id: revision.id,
+        revisedQuoteCount: 0,
+        status: "Pending Customer Costing",
+      })
+    )
+    expect(
+      (
+        await repository.listProductBulkPriceRevisionsBounded(organizationCode)
+      ).rows
+    ).not.toContainEqual(expect.objectContaining({ id: revision.id }))
+    expect(
+      (
+        await repository.listCustomerBulkPriceRevisionsBounded(
+          organizationCode
+        )
+      ).rows
+    ).toContainEqual(expect.objectContaining({ id: revision.id }))
+    expect(await repository.listBulkPriceRevisionStages(revision.id)).toEqual([
+      expect.objectContaining({
+        fieldName: "overhead_cost",
+        isApplied: true,
+        selectedCount: 1,
+      }),
+    ])
+
+    await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: revision.id,
+      fieldName: "profit_percent",
+      newValue: 0.25,
+      selectedQuoteItemIds: [firstQuoteId],
+    })
+    await expect(
+      repository.completeBulkPriceRevision({
+        bulkPriceRevisionId: revision.id,
+      })
+    ).resolves.toEqual({ revisedQuoteCount: 2, status: "Completed" })
+
+    const activeAfter =
+      await repository.listBulkPriceRevisionActivePricesBounded(revision.id)
+    expect(activeAfter.rows).toHaveLength(2)
+    expect(activeAfter.rows.map((price) => price.id)).not.toContain(firstQuoteId)
+    expect(activeAfter.rows.map((price) => price.id)).not.toContain(
+      secondQuoteId
+    )
   })
 
   test("lists engineering change notes for an organization with no ECNs", async () => {

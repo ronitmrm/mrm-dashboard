@@ -39,7 +39,7 @@ function taskHref(task: {
   taskType: string
 }) {
   if (task.taskType === "Product Parameter Bulk Revision") {
-    return "/commercial/revisions"
+    return `/commercial/product-bulk-revision?revision=${encodeURIComponent(task.taskId)}#product-bulk-workbench`
   }
   if (task.taskType === "ECN Product Parameter Costing") {
     return `/commercial/ecns?ecn=${encodeURIComponent(task.taskId)}#ecn-workbench`

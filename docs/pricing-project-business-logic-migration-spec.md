@@ -910,3 +910,22 @@ price search. Only the selected revision loads its complete staged groups; the
 active-price candidate table stays server rendered and uses content visibility
 for offscreen rows. Migration `0082` adds the open customer-revision queue
 index without changing canonical revision state.
+
+## 30. Product Bulk Revision workflow surface — 2026-08-21
+
+The Product Parameter Bulk Revision source module is available at
+`/commercial/product-bulk-revision`. It retains the 15-field product allowlist,
+process-eligibility guards, active Sent/Accepted cross-customer price scope,
+grouped previews, and the source workflow's two-stage completion contract.
+
+Product completion updates Product Master, freezes the product stages, expands
+the selected Product identities across every active customer price, and moves
+the request to `Pending Customer Costing` without creating Quote revisions.
+Customer Bulk Revision then permits the six customer fields and creates the
+recursive immutable Quote replacements only on its own completion.
+
+The MRM surface uses a 200-row queue and 200-result server-backed price search.
+Candidate and queue tables stay server rendered with content visibility for
+offscreen rows. Product identity expansion and Package / Assembly ancestor
+discovery use set-based PostgreSQL queries; migration `0083` adds the partial
+active-price Product scope index.

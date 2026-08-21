@@ -384,42 +384,77 @@ async function getComponents(client: PoolClient, quoteItemId: string) {
   return result.rows
 }
 
-async function activeParentQuoteIds(
-  client: PoolClient,
-  childQuoteItemId: string
-) {
-  const result = await client.query<{ id: string }>(
-    `
-      SELECT DISTINCT parent.id
-      FROM sales.quote_package_components component
-      JOIN sales.quote_product_snapshots snapshot
-        ON snapshot.id = component.quote_product_snapshot_id
-      JOIN sales.quote_items parent ON parent.id = snapshot.quote_item_id
-      WHERE component.child_quote_item_id = $1
-        AND parent.is_active
-        AND parent.status IN ('Sent', 'Accepted')
-    `,
-    [childQuoteItemId]
-  )
-  return result.rows.map((row) => row.id)
-}
-
 async function collectQuoteAncestors(
   client: PoolClient,
   selectedQuoteIds: string[]
 ) {
-  const all = new Set(selectedQuoteIds)
-  const queue = [...selectedQuoteIds]
-  while (queue.length) {
-    const child = queue.shift()!
-    for (const parent of await activeParentQuoteIds(client, child)) {
-      if (!all.has(parent)) {
-        all.add(parent)
-        queue.push(parent)
-      }
-    }
-  }
-  return all
+  if (!selectedQuoteIds.length) return new Set<string>()
+  const result = await client.query<{ id: string }>(
+    `
+      WITH RECURSIVE affected(id) AS (
+        SELECT unnest($1::uuid[])
+        UNION
+        SELECT parent.id
+        FROM affected child
+        JOIN sales.quote_package_components component
+          ON component.child_quote_item_id = child.id
+        JOIN sales.quote_product_snapshots snapshot
+          ON snapshot.id = component.quote_product_snapshot_id
+        JOIN sales.quote_items parent ON parent.id = snapshot.quote_item_id
+        WHERE parent.is_active AND parent.status IN ('Sent', 'Accepted')
+      )
+      SELECT DISTINCT id FROM affected
+    `,
+    [selectedQuoteIds]
+  )
+  return new Set(result.rows.map((row) => row.id))
+}
+
+async function topLevelAffectedQuoteIds(
+  client: PoolClient,
+  affectedQuoteIds: Set<string>
+) {
+  const ids = [...affectedQuoteIds]
+  if (!ids.length) return []
+  const nested = await client.query<{ child_id: string }>(
+    `
+      SELECT DISTINCT component.child_quote_item_id AS child_id
+      FROM sales.quote_package_components component
+      JOIN sales.quote_product_snapshots snapshot
+        ON snapshot.id = component.quote_product_snapshot_id
+      JOIN sales.quote_items parent ON parent.id = snapshot.quote_item_id
+      WHERE component.child_quote_item_id = ANY($1::uuid[])
+        AND parent.id = ANY($1::uuid[])
+        AND parent.is_active AND parent.status IN ('Sent', 'Accepted')
+    `,
+    [ids]
+  )
+  const nestedIds = new Set(nested.rows.map((row) => row.child_id))
+  return ids.filter((id) => !nestedIds.has(id))
+}
+
+async function expandProductBulkRevisionQuoteIds(
+  client: PoolClient,
+  organizationId: string,
+  selectedQuoteIds: string[]
+) {
+  if (!selectedQuoteIds.length) return []
+  const result = await client.query<{ id: string }>(
+    `
+      WITH selected_items AS (
+        SELECT DISTINCT item_id
+        FROM sales.quote_items
+        WHERE organization_id = $1 AND id = ANY($2::uuid[])
+      )
+      SELECT DISTINCT quote.id
+      FROM sales.quote_items quote
+      JOIN selected_items ON selected_items.item_id = quote.item_id
+      WHERE quote.organization_id = $1
+        AND quote.is_active AND quote.status IN ('Sent', 'Accepted')
+    `,
+    [organizationId, selectedQuoteIds]
+  )
+  return result.rows.map((row) => row.id)
 }
 
 async function getProduct(client: PoolClient, itemId: string, lock = false) {
@@ -1548,6 +1583,184 @@ export function createCommercialRevisionsRepository(
       }))
     },
 
+    async listProductBulkPriceRevisionsBounded(
+      organizationCode: string,
+      options: { limit?: number } = {}
+    ) {
+      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 200), 1), 200)
+      const result = await pool.query<{
+        active_price_count: string
+        change_count: string
+        company_name: string | null
+        effective_on: string
+        id: string
+        reason: string
+        revision_number: string
+        revision_route: string
+        revised_quote_count: string
+        status: string
+        total_count: string
+      }>(
+        `
+          WITH organization AS (
+            SELECT id FROM core.organizations
+            WHERE lower(code) = lower($1)
+          ), active_prices AS (
+            SELECT count(*) AS active_price_count
+            FROM sales.quote_items quote
+            WHERE quote.organization_id = (SELECT id FROM organization)
+              AND quote.is_active AND quote.status IN ('Sent', 'Accepted')
+          )
+          SELECT revision.id, revision.revision_number, revision.status,
+            revision.reason, revision.effective_on::text,
+            revision.revision_route, NULL::text AS company_name,
+            count(DISTINCT change.stage_group_id)::text AS change_count,
+            count(DISTINCT change.replacement_quote_item_id)::text
+              AS revised_quote_count,
+            max(active_prices.active_price_count)::text AS active_price_count,
+            count(*) OVER()::text AS total_count
+          FROM sales.bulk_price_revisions revision
+          JOIN organization ON organization.id = revision.organization_id
+          CROSS JOIN active_prices
+          LEFT JOIN sales.bulk_price_revision_changes change
+            ON change.bulk_price_revision_id = revision.id
+          WHERE revision.revision_route = 'Product Parameter Bulk Revision'
+            AND revision.status NOT IN ('Completed', 'Pending Customer Costing')
+          GROUP BY revision.id
+          ORDER BY revision.created_at DESC, revision.id DESC
+          LIMIT $2
+        `,
+        [organizationCode.trim(), limit]
+      )
+      const total = Number(result.rows[0]?.total_count ?? 0)
+      return {
+        coverage: {
+          limit,
+          returned: result.rows.length,
+          total,
+          truncated: result.rows.length < total,
+        },
+        rows: result.rows.map((row) => ({
+          activePriceCount: Number(row.active_price_count),
+          changeCount: Number(row.change_count),
+          companyName: row.company_name,
+          effectiveOn: row.effective_on,
+          id: row.id,
+          reason: row.reason,
+          revisedQuoteCount: Number(row.revised_quote_count),
+          revisionNumber: row.revision_number,
+          revisionRoute: row.revision_route,
+          status: row.status,
+        })),
+      }
+    },
+
+    async getProductBulkPriceRevision(
+      organizationCode: string,
+      bulkPriceRevisionId: string
+    ) {
+      const result = await pool.query<{
+        active_price_count: string
+        change_count: string
+        effective_on: string
+        id: string
+        reason: string
+        revision_number: string
+        revision_route: string
+        revised_quote_count: string
+        status: string
+      }>(
+        `
+          SELECT revision.id, revision.revision_number, revision.status,
+            revision.reason, revision.effective_on::text,
+            revision.revision_route,
+            count(DISTINCT change.stage_group_id)::text AS change_count,
+            count(DISTINCT change.replacement_quote_item_id)::text
+              AS revised_quote_count,
+            (
+              SELECT count(*)::text
+              FROM sales.quote_items quote
+              WHERE quote.organization_id = revision.organization_id
+                AND quote.is_active AND quote.status IN ('Sent', 'Accepted')
+            ) AS active_price_count
+          FROM sales.bulk_price_revisions revision
+          JOIN core.organizations organization
+            ON organization.id = revision.organization_id
+          LEFT JOIN sales.bulk_price_revision_changes change
+            ON change.bulk_price_revision_id = revision.id
+          WHERE lower(organization.code) = lower($1)
+            AND revision.id = $2
+            AND revision.revision_route = 'Product Parameter Bulk Revision'
+            AND revision.status NOT IN ('Completed', 'Pending Customer Costing')
+          GROUP BY revision.id
+        `,
+        [organizationCode.trim(), bulkPriceRevisionId]
+      )
+      const row = result.rows[0]
+      return row
+        ? {
+            activePriceCount: Number(row.active_price_count),
+            changeCount: Number(row.change_count),
+            companyName: null,
+            effectiveOn: row.effective_on,
+            id: row.id,
+            reason: row.reason,
+            revisedQuoteCount: Number(row.revised_quote_count),
+            revisionNumber: row.revision_number,
+            revisionRoute: row.revision_route,
+            status: row.status,
+          }
+        : null
+    },
+
+    async getProductBulkRevisionSummary(organizationCode: string) {
+      const result = await pool.query<{
+        active_price_count: string
+        open_revision_count: string
+        organization_id: string
+        staged_change_count: string
+      }>(
+        `
+          WITH organization AS (
+            SELECT id FROM core.organizations
+            WHERE lower(code) = lower($1)
+          ), revisions AS (
+            SELECT revision.id
+            FROM sales.bulk_price_revisions revision
+            JOIN organization ON organization.id = revision.organization_id
+            WHERE revision.revision_route = 'Product Parameter Bulk Revision'
+              AND revision.status NOT IN (
+                'Completed', 'Pending Customer Costing'
+              )
+          ), active_prices AS (
+            SELECT count(*) AS active_price_count
+            FROM sales.quote_items quote
+            WHERE quote.organization_id = (SELECT id FROM organization)
+              AND quote.is_active AND quote.status IN ('Sent', 'Accepted')
+          )
+          SELECT organization.id AS organization_id,
+            count(DISTINCT revisions.id)::text AS open_revision_count,
+            count(DISTINCT change.stage_group_id)::text AS staged_change_count,
+            (max(active_prices.active_price_count) *
+              count(DISTINCT revisions.id))::text AS active_price_count
+          FROM organization
+          CROSS JOIN active_prices
+          LEFT JOIN revisions ON true
+          LEFT JOIN sales.bulk_price_revision_changes change
+            ON change.bulk_price_revision_id = revisions.id
+          GROUP BY organization.id
+        `,
+        [organizationCode.trim()]
+      )
+      const row = result.rows[0]
+      return {
+        activePriceCount: Number(row?.active_price_count ?? 0),
+        openRevisionCount: Number(row?.open_revision_count ?? 0),
+        organizationId: row?.organization_id ?? null,
+        stagedChangeCount: Number(row?.staged_change_count ?? 0),
+      }
+    },
+
     async listCustomerBulkPriceRevisionsBounded(
       organizationCode: string,
       options: { limit?: number } = {}
@@ -1941,6 +2154,131 @@ export function createCommercialRevisionsRepository(
           scrapRate: asNumber(row.scrap_rate),
           shippingCost: asNumber(row.shipping_cost),
           uid: row.uid,
+        })),
+      }
+    },
+
+    async listProductBulkRevisionActivePricesBounded(
+      bulkPriceRevisionId: string,
+      options: { limit?: number; query?: string } = {}
+    ) {
+      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 200), 1), 200)
+      const search = selectorSearchTerm(options.query ?? "")
+      const result = await pool.query<{
+        alloy_premium: string
+        annealing: string
+        approved_price_usd: string
+        assembly_operation_cost: string
+        buffing: string
+        casting: string
+        checking: string
+        company_name: string
+        customer_part_code: string | null
+        deburring: string
+        description: string
+        ext_cost: string
+        forging_cost: string
+        id: string
+        item_type: string
+        machining_cost: string
+        marking: string
+        overhead_cost: string
+        pieces_per_kg: string
+        plating: string
+        production_type: string | null
+        quote_number: string
+        sealant: string
+        total_count: string
+        uid: string
+        washing: string
+      }>(
+        `
+          WITH revision AS (
+            SELECT organization_id
+            FROM sales.bulk_price_revisions
+            WHERE id = $1
+              AND revision_route = 'Product Parameter Bulk Revision'
+              AND status NOT IN ('Completed', 'Pending Customer Costing')
+          )
+          SELECT quote.id, quote.quote_number, quote.customer_part_code,
+            quote.approved_price_usd, customer.company_name, item.uid,
+            item.description, item.item_type, item.production_type,
+            item.pieces_per_kg, item.casting, item.alloy_premium,
+            item.extrusion_cost AS ext_cost, item.forging_cost,
+            item.machining_cost, item.washing, item.checking, item.marking,
+            item.plating, item.annealing, item.deburring, item.buffing,
+            item.sealant, item.assembly_operation_cost, item.overhead_cost,
+            count(*) OVER()::text AS total_count
+          FROM sales.quote_items quote
+          JOIN revision ON revision.organization_id = quote.organization_id
+          JOIN sales.customers customer ON customer.id = quote.customer_id
+          JOIN catalog.items item ON item.id = quote.item_id
+          WHERE quote.is_active AND quote.status IN ('Sent', 'Accepted')
+            AND (
+              $2 = ''
+              OR lower(btrim(coalesce(quote.customer_part_code, ''))) = $2
+              OR lower(btrim(quote.quote_number)) = $2
+              OR lower(btrim(item.uid)) = $2
+              OR lower(btrim(customer.company_name)) = $2
+              OR (
+                $3::text IS NOT NULL
+                AND lower(
+                  customer.company_name || ' ' ||
+                  coalesce(quote.customer_part_code, '') || ' ' ||
+                  quote.quote_number || ' ' || item.uid || ' ' ||
+                  item.description
+                ) LIKE $3 ESCAPE '\\'
+              )
+            )
+          ORDER BY
+            CASE
+              WHEN lower(btrim(coalesce(quote.customer_part_code, ''))) = $2
+                THEN 0
+              WHEN lower(btrim(quote.quote_number)) = $2 THEN 1
+              WHEN lower(btrim(item.uid)) = $2 THEN 2
+              WHEN lower(btrim(customer.company_name)) = $2 THEN 3
+              ELSE 4
+            END,
+            item.uid, customer.company_name,
+            quote.sent_at DESC NULLS LAST, quote.updated_at DESC, quote.id DESC
+          LIMIT $4
+        `,
+        [bulkPriceRevisionId, search.query, search.containsPattern, limit]
+      )
+      const total = Number(result.rows[0]?.total_count ?? 0)
+      return {
+        coverage: {
+          limit,
+          returned: result.rows.length,
+          total,
+          truncated: result.rows.length < total,
+        },
+        rows: result.rows.map((row) => ({
+          alloyPremium: asNumber(row.alloy_premium),
+          annealing: asNumber(row.annealing),
+          approvedPriceUsd: asNumber(row.approved_price_usd),
+          assemblyOperationCost: asNumber(row.assembly_operation_cost),
+          buffing: asNumber(row.buffing),
+          casting: asNumber(row.casting),
+          checking: asNumber(row.checking),
+          companyName: row.company_name,
+          customerPartCode: row.customer_part_code,
+          deburring: asNumber(row.deburring),
+          description: row.description,
+          extCost: asNumber(row.ext_cost),
+          forgingCost: asNumber(row.forging_cost),
+          id: row.id,
+          itemType: row.item_type,
+          machiningCost: asNumber(row.machining_cost),
+          marking: asNumber(row.marking),
+          overheadCost: asNumber(row.overhead_cost),
+          piecesPerKg: asNumber(row.pieces_per_kg),
+          plating: asNumber(row.plating),
+          productionType: row.production_type,
+          quoteNumber: row.quote_number,
+          sealant: asNumber(row.sealant),
+          uid: row.uid,
+          washing: asNumber(row.washing),
         })),
       }
     },
@@ -2702,24 +3040,29 @@ export function createCommercialRevisionsRepository(
       return transaction(pool, async (client) => {
         const revision = await client.query<{
           organization_id: string
+          revision_route: string
           status: string
         }>(
-          "SELECT organization_id, status FROM sales.bulk_price_revisions WHERE id = $1 FOR UPDATE",
+          "SELECT organization_id, revision_route, status FROM sales.bulk_price_revisions WHERE id = $1 FOR UPDATE",
           [input.bulkPriceRevisionId]
         )
         const row = revision.rows[0]
         if (!row || row.status === "Completed") {
           throw new Error("Open bulk revision was not found.")
         }
+        const lockedRevision = row
         const changes = await client.query<{
+          applied_at: Date | null
           field_name: string
           id: string
           new_value: string
           old_price: string
           prior_quote_item_id: string
+          stage_group_id: string
         }>(
           `
-            SELECT id, prior_quote_item_id, old_price, field_name, new_value
+            SELECT id, prior_quote_item_id, old_price, field_name, new_value,
+              stage_group_id, applied_at
             FROM sales.bulk_price_revision_changes
             WHERE bulk_price_revision_id = $1
               AND replacement_quote_item_id IS NULL
@@ -2731,53 +3074,178 @@ export function createCommercialRevisionsRepository(
         if (!changes.rows.length) {
           throw new Error("Add at least one bulk change before completing.")
         }
-        const selectedIds = changes.rows.map(
-          (change) => change.prior_quote_item_id
-        )
-        const affected = await collectQuoteAncestors(client, selectedIds)
-        const overrides = new Map<string, QuoteOverride>()
+
+        const stageGroups = new Map<string, typeof changes.rows>()
         for (const change of changes.rows) {
-          if (!isBulkRevisionField(change.field_name)) {
-            throw new Error("Unsupported staged bulk revision field.")
+          const group = stageGroups.get(change.stage_group_id) ?? []
+          group.push(change)
+          stageGroups.set(change.stage_group_id, group)
+        }
+
+        async function requireActivePrices(quoteIds: string[]) {
+          const uniqueIds = [...new Set(quoteIds)]
+          const active = await client.query<{ id: string }>(
+            `
+              SELECT id
+              FROM sales.quote_items
+              WHERE organization_id = $1 AND id = ANY($2::uuid[])
+                AND is_active AND status IN ('Sent', 'Accepted')
+              FOR UPDATE
+            `,
+            [lockedRevision.organization_id, uniqueIds]
+          )
+          if (active.rows.length !== uniqueIds.length) {
+            throw new Error(
+              "One or more staged prices are no longer active."
+            )
           }
-          const quoteOverrides =
-            overrides.get(change.prior_quote_item_id) ??
-            new Map<string, number>()
-          quoteOverrides.set(change.field_name, asNumber(change.new_value))
-          overrides.set(change.prior_quote_item_id, quoteOverrides)
-          const productColumn = productColumnByField[change.field_name]
-          if (productFields.has(change.field_name) && productColumn) {
+          return uniqueIds
+        }
+
+        const isProductRoute =
+          lockedRevision.revision_route === "Product Parameter Bulk Revision"
+        const isProductStage =
+          isProductRoute &&
+          lockedRevision.status !== "Pending Customer Costing"
+
+        if (isProductStage) {
+          for (const [stageGroupId, group] of stageGroups) {
+            const fieldName = group[0]!.field_name
+            if (
+              !isBulkRevisionField(fieldName) ||
+              !productFields.has(fieldName) ||
+              group.some((change) => change.applied_at)
+            ) {
+              throw new Error(
+                `Bulk stage ${stageGroupId} is not an unapplied product parameter.`
+              )
+            }
+            const selectedQuoteIds = await requireActivePrices(
+              group.map((change) => change.prior_quote_item_id)
+            )
+            const expandedQuoteIds = await requireActivePrices(
+              await expandProductBulkRevisionQuoteIds(
+                client,
+                lockedRevision.organization_id,
+                selectedQuoteIds
+              )
+            )
+            const productColumn = productColumnByField[fieldName]
+            if (!productColumn) {
+              throw new Error("Unsupported staged product parameter.")
+            }
             await client.query(
               `
                 UPDATE catalog.items item
                 SET ${productColumn} = $1, updated_by_user_id = $2,
                   updated_at = now(), row_version = row_version + 1
-                FROM sales.quote_items quote
-                WHERE quote.id = $3 AND item.id = quote.item_id
+                WHERE item.id IN (
+                  SELECT DISTINCT quote.item_id
+                  FROM sales.quote_items quote
+                  WHERE quote.id = ANY($3::uuid[])
+                )
               `,
               [
-                asNumber(change.new_value),
+                asNumber(group[0]!.new_value),
                 input.actorUserId ?? null,
-                change.prior_quote_item_id,
+                selectedQuoteIds,
+              ]
+            )
+            await client.query(
+              `
+                UPDATE sales.bulk_price_revision_changes
+                SET applied_at = now(), final_quote_item_ids_json = $1
+                WHERE bulk_price_revision_id = $2 AND stage_group_id = $3
+                  AND replacement_quote_item_id IS NULL
+              `,
+              [
+                JSON.stringify(expandedQuoteIds),
+                input.bulkPriceRevisionId,
+                stageGroupId,
               ]
             )
           }
-        }
-        const cache = new Map<string, RevisedQuote>()
-        const roots = [...affected]
-        for (const quoteId of roots) {
-          const parents = await activeParentQuoteIds(client, quoteId)
-          if (!parents.some((parent) => affected.has(parent))) {
-            await createRevisedQuote(client, {
-              actorUserId: input.actorUserId,
-              affectedQuoteIds: affected,
-              cache,
-              overrides,
-              quoteItemId: quoteId,
-              sourceKind: "Bulk Revision",
-              sourceRecordId: input.bulkPriceRevisionId,
-            })
+          await client.query(
+            `
+              UPDATE sales.bulk_price_revisions
+              SET status = 'Pending Customer Costing', completed_at = NULL,
+                updated_by_user_id = $1, updated_at = now(),
+                row_version = row_version + 1
+              WHERE id = $2
+            `,
+            [input.actorUserId ?? null, input.bulkPriceRevisionId]
+          )
+          await writeAuditEvent(client, {
+            actorUserId: input.actorUserId,
+            eventType: "bulk_price_revision.product_parameters_applied",
+            metadata: { stagedGroupCount: stageGroups.size },
+            organizationId: lockedRevision.organization_id,
+            targetId: input.bulkPriceRevisionId,
+            targetTable: "bulk_price_revisions",
+          })
+          return {
+            revisedQuoteCount: 0,
+            status: "Pending Customer Costing",
           }
+        }
+
+        const selectedIds = new Set<string>()
+        const overrides = new Map<string, QuoteOverride>()
+        for (const [stageGroupId, group] of stageGroups) {
+          const fieldName = group[0]!.field_name
+          if (!isBulkRevisionField(fieldName)) {
+            throw new Error("Unsupported staged bulk revision field.")
+          }
+          const isAppliedProductStage =
+            isProductRoute &&
+            productFields.has(fieldName) &&
+            group.every((change) => change.applied_at)
+          const isUnappliedCustomerStage =
+            customerFields.has(fieldName) &&
+            group.every((change) => !change.applied_at)
+          if (
+            (isProductRoute &&
+              !isAppliedProductStage &&
+              !isUnappliedCustomerStage) ||
+            (!isProductRoute && !isUnappliedCustomerStage)
+          ) {
+            throw new Error(
+              `Bulk stage ${stageGroupId} is not valid for customer costing.`
+            )
+          }
+          const stagedQuoteIds = await requireActivePrices(
+            group.map((change) => change.prior_quote_item_id)
+          )
+          const quoteIds = isAppliedProductStage
+            ? await requireActivePrices(
+                await expandProductBulkRevisionQuoteIds(
+                  client,
+                  lockedRevision.organization_id,
+                  stagedQuoteIds
+                )
+              )
+            : stagedQuoteIds
+          for (const quoteId of quoteIds) {
+            selectedIds.add(quoteId)
+            const quoteOverrides =
+              overrides.get(quoteId) ?? new Map<string, number>()
+            quoteOverrides.set(fieldName, asNumber(group[0]!.new_value))
+            overrides.set(quoteId, quoteOverrides)
+          }
+        }
+        const affected = await collectQuoteAncestors(client, [...selectedIds])
+        const cache = new Map<string, RevisedQuote>()
+        const roots = await topLevelAffectedQuoteIds(client, affected)
+        for (const quoteId of roots) {
+          await createRevisedQuote(client, {
+            actorUserId: input.actorUserId,
+            affectedQuoteIds: affected,
+            cache,
+            overrides,
+            quoteItemId: quoteId,
+            sourceKind: "Bulk Revision",
+            sourceRecordId: input.bulkPriceRevisionId,
+          })
         }
         const finalIds = [...cache.values()].map(
           (quote) => quote.replacementQuoteItemId
@@ -2793,7 +3261,8 @@ export function createCommercialRevisionsRepository(
               `
                 UPDATE sales.bulk_price_revision_changes
                 SET replacement_quote_item_id = $1, new_price = $2,
-                  applied_at = now(), final_quote_item_ids_json = $3,
+                  applied_at = COALESCE(applied_at, now()),
+                  final_quote_item_ids_json = $3,
                   calculation_evidence = $4
                 WHERE id = ANY($5::uuid[])
               `,
@@ -2828,14 +3297,14 @@ export function createCommercialRevisionsRepository(
                 )
               `,
               [
-                row.organization_id,
+                lockedRevision.organization_id,
                 input.bulkPriceRevisionId,
                 oldQuoteId,
                 revised.replacementQuoteItemId,
                 old.approved_price_usd,
                 revised.newPrice,
                 JSON.stringify(finalIds),
-                { propagatedFrom: selectedIds, revisionOrder },
+                { propagatedFrom: [...selectedIds], revisionOrder },
                 input.actorUserId ?? null,
                 randomUUID(),
                 { derived: true },
@@ -2857,7 +3326,7 @@ export function createCommercialRevisionsRepository(
           actorUserId: input.actorUserId,
           eventType: "bulk_price_revision.completed",
           metadata: { revisedQuoteCount: cache.size },
-          organizationId: row.organization_id,
+          organizationId: lockedRevision.organization_id,
           targetId: input.bulkPriceRevisionId,
           targetTable: "bulk_price_revisions",
         })

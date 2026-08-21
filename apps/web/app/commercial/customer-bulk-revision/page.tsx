@@ -62,11 +62,12 @@ const activePriceHeadings = [
   "FX",
 ] as const
 
-const money = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 4,
-    minimumFractionDigits: 2,
-  }).format(value)
+const numberFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 4,
+  minimumFractionDigits: 2,
+})
+
+const money = (value: number) => numberFormatter.format(value)
 
 const percent = (value: number) => `${money(value * 100)}%`
 
