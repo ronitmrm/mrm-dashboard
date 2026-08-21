@@ -196,13 +196,18 @@ describe("unified navigation", () => {
         "Enquiries",
         "Excel View",
         "Website Products",
+        "Commercial Overview",
+        "Products",
+        "Assembly / Bom",
+        "Quote Register",
+        "Price Revisions",
       ])
     )
     expect(
       commercialCostingNavigation.length +
         commercialMasterDataWorkspaceNavigation.length +
         commercialOperationalEntryNavigation.length
-    ).toBe(commercialNavigation.length)
+    ).toBe(commercialNavigation.length - 5)
     expect(commercialNavigation.map(({ label }) => label)).not.toContain(
       "Pricing Masters"
     )

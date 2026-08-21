@@ -536,7 +536,14 @@ export const commercialCostingNavigation = commercialNavigation.filter(
     !commercialMasterDataWorkspaceNavigation.some(
       (item) => item.href === href
     ) &&
-    !commercialOperationalEntryNavigation.some((item) => item.href === href)
+    !commercialOperationalEntryNavigation.some((item) => item.href === href) &&
+    ![
+      "/commercial",
+      "/commercial/products",
+      "/commercial/assemblies",
+      "/commercial/quotes",
+      "/commercial/revisions",
+    ].includes(href)
 )
 
 export const commercialMasterNavigation = {
