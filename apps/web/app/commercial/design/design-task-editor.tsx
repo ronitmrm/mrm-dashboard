@@ -283,13 +283,15 @@ export function DesignTaskEditor({
   editable,
   initial,
   products,
+  portfolioDecisionLocked = false,
 }: {
   editable: boolean
   initial: EditorInitial
   products: ProductOption[]
+  portfolioDecisionLocked?: boolean
 }) {
   const [portfolioDecision, setPortfolioDecision] = useState(
-    initial.portfolioMatchStatus
+    portfolioDecisionLocked ? "New Quoted Part" : initial.portfolioMatchStatus
   )
   const [itemType, setItemType] = useState(initial.itemType)
   const [toolingRequired, setToolingRequired] = useState(
@@ -314,23 +316,37 @@ export function DesignTaskEditor({
       <input name="revision_no" type="hidden" value="0" />
       <input name="approval_status" type="hidden" value="Pending" />
       <FieldSet>
-        <FieldLegend>Portfolio Decision</FieldLegend>
+        <FieldLegend>
+          {portfolioDecisionLocked
+            ? "New Product Design"
+            : "Portfolio Decision"}
+        </FieldLegend>
         <FieldDescription>
-          Match an ordered internal product, or create a controlled quoted part.
+          {portfolioDecisionLocked
+            ? "The portfolio review confirmed that a new controlled product is required."
+            : "Match an ordered internal product, or create a controlled quoted part."}{" "}
           Q, C, and nested A identifiers are allocated atomically on save.
         </FieldDescription>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <ChoiceField
-            defaultValue={initial.portfolioMatchStatus}
-            label="Decision"
-            name="portfolio_match_status"
-            onChange={setPortfolioDecision}
-            options={[
-              "Pending",
-              "New Quoted Part",
-              "Matches Existing Portfolio",
-            ]}
-          />
+          {portfolioDecisionLocked ? (
+            <input
+              name="portfolio_match_status"
+              type="hidden"
+              value="New Quoted Part"
+            />
+          ) : (
+            <ChoiceField
+              defaultValue={initial.portfolioMatchStatus}
+              label="Decision"
+              name="portfolio_match_status"
+              onChange={setPortfolioDecision}
+              options={[
+                "Pending",
+                "New Quoted Part",
+                "Matches Existing Portfolio",
+              ]}
+            />
+          )}
           {portfolioDecision === "Matches Existing Portfolio" ? (
             <Field>
               <FieldLabel>

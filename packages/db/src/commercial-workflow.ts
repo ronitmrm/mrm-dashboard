@@ -3824,15 +3824,17 @@ export function createCommercialWorkflowRepository(
           `
             INSERT INTO sales.design_tasks (
               organization_id, enquiry_item_id, status, design_status,
-              assigned_date, created_by_user_id, updated_by_user_id,
+              portfolio_match_status, assigned_date, created_by_user_id,
+              updated_by_user_id,
               source_system, source_table, source_id, source_payload
             ) VALUES (
-              $1, $2, $3, $3, now(), $4, $4,
+              $1, $2, $3, $3, 'New Quoted Part', now(), $4, $4,
               'mrm-dashboard', 'design_tasks', $5, $6
             )
             ON CONFLICT (enquiry_item_id) DO UPDATE SET
               status = EXCLUDED.status,
               design_status = EXCLUDED.design_status,
+              portfolio_match_status = EXCLUDED.portfolio_match_status,
               assigned_date = COALESCE(
                 sales.design_tasks.assigned_date,
                 EXCLUDED.assigned_date

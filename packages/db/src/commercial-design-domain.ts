@@ -13,6 +13,16 @@ export const designPortfolioDecisions = [
   "Matches Existing Portfolio",
 ] as const
 
+export function designTaskHref(input: {
+  enquiryItemId: string
+  portfolioMatchStatus: string
+}) {
+  const reviewHref = `/commercial/design/${input.enquiryItemId}`
+  return input.portfolioMatchStatus === "New Quoted Part"
+    ? `${reviewHref}/new`
+    : reviewHref
+}
+
 export function designTaskStatusAfterStart(status: string) {
   if (status === "Pending Design") return "In Progress"
   if (status === "In Progress" || status === "Changes Required") {

@@ -362,7 +362,37 @@ export async function startDesignWorkAction(formData: FormData) {
   )
   revalidatePath(designPath)
   revalidatePath(`${designPath}/${enquiryItemId}`)
-  redirect(`${designPath}/${enquiryItemId}`)
+  revalidatePath(`${designPath}/${enquiryItemId}/new`)
+  redirect(`${designPath}/${enquiryItemId}/new`)
+}
+
+export async function selectDesignPortfolioProductAction(formData: FormData) {
+  const enquiryId = requiredText(formData, "enquiry_id")
+  const enquiryItemId = requiredText(formData, "enquiry_item_id")
+  const matchedProductId = requiredText(formData, "matched_product_id")
+  await withWorkflow(
+    "pricing.design.write",
+    `${designPath}/${enquiryItemId}`,
+    (workflow, actorUserId) =>
+      workflow.saveDesign({
+        actorUserId,
+        bomLines: [],
+        designBomCompleted: "Yes",
+        designBomRequired: "No",
+        designStatus: "Not Required",
+        enquiryItemId,
+        itemType: "List",
+        matchedProductId,
+        portfolioMatchStatus: "Matches Existing Portfolio",
+        quotedPartUid: null,
+      })
+  )
+  revalidatePath(`${enquiriesPath}/${enquiryId}`)
+  revalidatePath(designPath)
+  revalidatePath(`${designPath}/${enquiryItemId}`)
+  revalidatePath("/commercial/products")
+  revalidatePath("/commercial/product-costing")
+  redirect(designPath)
 }
 
 export async function saveDesignAction(formData: FormData) {
@@ -514,6 +544,7 @@ export async function saveDesignAction(formData: FormData) {
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
   revalidatePath(designPath)
   revalidatePath(`${designPath}/${enquiryItemId}`)
+  revalidatePath(`${designPath}/${enquiryItemId}/new`)
 }
 
 export async function requestDesignClarificationAction(formData: FormData) {
