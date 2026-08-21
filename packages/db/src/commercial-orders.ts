@@ -1526,6 +1526,36 @@ export function createCommercialOrdersRepository(options: RepositoryPoolOptions)
       })
     },
 
+    async listResolvableQuoteRevisionRequestIds(
+      replacementQuoteItemId: string
+    ) {
+      const result = await pool.query<{ id: string }>(
+        `
+          SELECT request.id
+          FROM sales.quote_revision_requests request
+          JOIN sales.quote_items prior_quote
+            ON prior_quote.id = request.quote_item_id
+          JOIN sales.quote_items replacement
+            ON replacement.id = $1
+          WHERE request.status = 'Open'
+            AND request.organization_id = replacement.organization_id
+            AND request.item_id = replacement.item_id
+            AND prior_quote.customer_id = replacement.customer_id
+            AND replacement.status IN ('Sent', 'Accepted')
+            AND abs(
+              request.requested_price - COALESCE(
+                replacement.approved_price_usd,
+                replacement.rate_usd,
+                replacement.unit_price
+              )
+            ) < 0.0001
+          ORDER BY request.created_at, request.id
+        `,
+        [replacementQuoteItemId]
+      )
+      return result.rows.map((row) => row.id)
+    },
+
     async generateProformaInvoice(input: {
       actorUserId?: string | null
       invoiceDate?: string

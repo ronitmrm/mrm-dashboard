@@ -3,6 +3,7 @@ import type { UnifiedNavigationAccess } from "./auth/unified-navigation-access"
 export type PersonalDashboardWidgetId =
   | "access-administration"
   | "commercial-costing"
+  | "commercial-customer-costing"
   | "commercial-customers"
   | "commercial-design"
   | "commercial-enquiries"
@@ -58,6 +59,7 @@ const widgetCatalog: readonly PersonalDashboardWidget[] = [
   { id: "commercial-technical-review", title: "Technical Review", description: "Review commercial items awaiting technical input.", href: "/commercial/technical-review", module: "Costing", requiredHref: "/commercial/technical-review", scope: "commercial", summary: "none" },
   { id: "commercial-design", title: "Design Tasks", description: "Open design tasks and product drawings.", href: "/commercial/design", module: "Costing", requiredHref: "/commercial/design", scope: "commercial", summary: "none" },
   { id: "commercial-costing", title: "Product Parameter Costing", description: "Prepare and review product-level costing.", href: "/commercial/product-costing", module: "Costing", requiredHref: "/commercial/product-costing", scope: "commercial", summary: "none" },
+  { id: "commercial-customer-costing", title: "Customer Parameter Costing", description: "Calculate customer-specific quotes after product costing.", href: "/commercial/customer-costing", module: "Costing", requiredHref: "/commercial/customer-costing", scope: "commercial", summary: "none" },
   { id: "commercial-quotes", title: "Quote Register", description: "Track quotations and customer responses.", href: "/commercial/quotes", module: "Costing", requiredHref: "/commercial/quotes", scope: "commercial", summary: "none" },
   { id: "commercial-pricing", title: "Pricing", description: "View current product pricing records.", href: "/commercial/pricing", module: "Costing", requiredHref: "/commercial/pricing", scope: "commercial", summary: "none" },
   { id: "commercial-orders", title: "Purchase Orders", description: "Open customer purchase orders and processing.", href: "/commercial/orders", module: "Costing", requiredHref: "/commercial/orders", scope: "commercial", summary: "none" },

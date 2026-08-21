@@ -472,9 +472,9 @@ export const commercialNavigation = [
     label: "Product Parameter Costing",
   },
   {
-    href: "/commercial/costing",
+    href: "/commercial/customer-costing",
     icon: Calculator,
-    label: "Costing Workspace",
+    label: "Customer Parameter Costing",
   },
   {
     href: "/commercial/quotes",

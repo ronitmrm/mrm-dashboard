@@ -2,6 +2,7 @@
 
 import {
   createCommercialCostingRepository,
+  createCommercialOrdersRepository,
   createCommercialWorkflowRepository,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
@@ -12,6 +13,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import { optionalText, requiredText } from "@/lib/form-data"
 
 const costingPath = "/commercial/costing"
+const customerCostingPath = "/commercial/customer-costing"
 const productCostingPath = "/commercial/product-costing"
 
 function numberValue(formData: FormData, name: string, fallback?: number) {
@@ -80,7 +82,7 @@ export async function updateProductCostingAction(formData: FormData) {
     (repository, actorUserId) =>
       repository.updateProductCostParameters({
         action:
-          requiredText(formData, "action") === "complete"
+          optionalText(formData, "action") === "complete"
             ? "complete"
             : "in_progress",
         actorUserId,
@@ -123,6 +125,7 @@ export async function updateProductCostingAction(formData: FormData) {
   )
   revalidatePath(costingPath)
   revalidatePath(productCostingPath)
+  revalidatePath(customerCostingPath)
   revalidatePath("/commercial/products")
 }
 
@@ -173,9 +176,13 @@ export async function saveQuoteAction(formData: FormData) {
 
   await withCosting(
     "pricing.costing.write",
-    costingPath,
+    customerCostingPath,
     (repository, actorUserId) =>
       repository.saveQuote({
+        action:
+          optionalText(formData, "action") === "complete"
+            ? "complete"
+            : "in_progress",
         actorUserId,
         assemblyProfitPercents: assemblyIds.map((itemId, index) => ({
           itemId,
@@ -201,17 +208,22 @@ export async function saveQuoteAction(formData: FormData) {
         itemId: requiredText(formData, "item_id"),
         packaging: optionalText(formData, "packaging"),
         quantity: numberValue(formData, "quantity", 0),
+        quoteRevisionRequestId: optionalText(
+          formData,
+          "quote_revision_request_id"
+        ),
         shippingTerms: optionalText(formData, "shipping_terms"),
       })
   )
   revalidatePath(costingPath)
+  revalidatePath(customerCostingPath)
   revalidatePath("/commercial/quotes")
 }
 
 export async function sendQuoteBackToProductCostingAction(formData: FormData) {
   await withCosting(
     commercialCapabilities.costing.write,
-    costingPath,
+    customerCostingPath,
     (repository, actorUserId) =>
       repository.sendQuoteBackToProductCosting({
         actorUserId,
@@ -220,6 +232,7 @@ export async function sendQuoteBackToProductCostingAction(formData: FormData) {
       })
   )
   revalidatePath(costingPath)
+  revalidatePath(customerCostingPath)
   revalidatePath("/commercial/design")
   revalidatePath("/commercial/quotes")
 }
@@ -227,13 +240,37 @@ export async function sendQuoteBackToProductCostingAction(formData: FormData) {
 export async function sendQuoteAction(formData: FormData) {
   const quoteItemId = requiredText(formData, "quote_item_id")
   const followupDueOn = requiredText(formData, "followup_due_on")
-  await withCosting(
+  const session = await requireCapability(
     commercialCapabilities.quotes.write,
-    "/commercial/quotes",
-    (repository, actorUserId) =>
-      repository.sendQuote({ actorUserId, followupDueOn, quoteItemId })
+    "/commercial/quotes"
   )
+  const environment = readAuthEnvironment()
+  const costing = createCommercialCostingRepository({
+    connectionString: environment.connectionString,
+  })
+  const orders = createCommercialOrdersRepository({
+    connectionString: environment.connectionString,
+  })
+  try {
+    await costing.sendQuote({
+      actorUserId: session.user.id,
+      followupDueOn,
+      quoteItemId,
+    })
+    const requestIds =
+      await orders.listResolvableQuoteRevisionRequestIds(quoteItemId)
+    for (const quoteRevisionRequestId of requestIds) {
+      await orders.resolveQuoteRevisionRequest({
+        actorUserId: session.user.id,
+        quoteRevisionRequestId,
+        replacementQuoteItemId: quoteItemId,
+      })
+    }
+  } finally {
+    await Promise.all([costing.close(), orders.close()])
+  }
   revalidatePath(costingPath)
+  revalidatePath(customerCostingPath)
   revalidatePath("/commercial/quotes")
   revalidatePath(`/commercial/quotes/${quoteItemId}`)
   revalidatePath("/commercial/sales")

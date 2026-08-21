@@ -586,7 +586,7 @@ async function loadSalesMatchCandidatesForItems(
         JOIN catalog.items item ON item.id = quote.item_id
         WHERE quote.organization_id = requested.organization_id
           AND quote.customer_id = requested.customer_id
-          AND quote.status IN ('Draft', 'Sent', 'Accepted', 'Ordered')
+          AND quote.status IN ('Draft', 'Ready', 'Sent', 'Accepted', 'Ordered')
         ORDER BY match_rank, quote.sent_at DESC NULLS LAST,
           quote.updated_at DESC, quote.id DESC
         LIMIT $2
@@ -860,7 +860,7 @@ async function classifyImportRow(
       JOIN catalog.items item ON item.id = quote.item_id
       WHERE quote.organization_id = $1
         AND quote.customer_id = $2
-        AND quote.status IN ('Draft', 'Sent', 'Accepted')
+        AND quote.status IN ('Draft', 'Ready', 'Sent', 'Accepted')
         AND (
           lower(btrim(coalesce(quote.customer_part_code, ''))) = $3
           OR lower(btrim(item.uid)) = $3
@@ -938,7 +938,7 @@ async function classifyImportRow(
               design.matched_product_id,
               enquiry_item.item_id
             )
-            AND quote.status IN ('Draft', 'Sent', 'Accepted')
+            AND quote.status IN ('Draft', 'Ready', 'Sent', 'Accepted')
         )
       ORDER BY enquiry.created_at DESC, enquiry_item.line_number DESC,
         enquiry_item.id DESC
@@ -975,7 +975,7 @@ async function classifyImportRow(
       JOIN catalog.items item ON item.id = quote.item_id
       WHERE quote.organization_id = $1
         AND quote.customer_id = $2
-        AND quote.status IN ('Draft', 'Sent', 'Accepted')
+        AND quote.status IN ('Draft', 'Ready', 'Sent', 'Accepted')
         AND lower(coalesce(quote.customer_part_code, '')) LIKE $3
       ORDER BY quote.sent_at DESC NULLS LAST, quote.updated_at DESC,
         quote.id DESC
@@ -1001,7 +1001,7 @@ async function classifyImportRow(
       JOIN catalog.items item ON item.id = quote.item_id
       WHERE quote.organization_id = $1
         AND quote.customer_id = $2
-        AND quote.status IN ('Draft', 'Sent', 'Accepted')
+        AND quote.status IN ('Draft', 'Ready', 'Sent', 'Accepted')
         AND lower(btrim(item.description)) = $3
       ORDER BY quote.sent_at DESC NULLS LAST, quote.updated_at DESC,
         quote.id DESC
@@ -2639,12 +2639,12 @@ export function createCommercialWorkflowRepository(
           JOIN sales.enquiry_items item ON item.enquiry_id = enquiry.id
           LEFT JOIN sales.quote_items quote
             ON quote.enquiry_item_id = item.id
-            AND quote.status IN ('Draft', 'Sent', 'Accepted', 'Ordered')
+            AND quote.status IN ('Ready', 'Sent', 'Accepted', 'Ordered')
           WHERE organization.code = $1
             AND EXISTS (
               SELECT 1 FROM sales.quote_items ready_quote
               WHERE ready_quote.enquiry_id = enquiry.id
-                AND ready_quote.status = 'Draft'
+                AND ready_quote.status = 'Ready'
                 AND ready_quote.sent_at IS NULL
             )
             AND NOT EXISTS (
@@ -2655,7 +2655,7 @@ export function createCommercialWorkflowRepository(
                   SELECT 1 FROM sales.quote_items resolved_quote
                   WHERE resolved_quote.enquiry_item_id = pending_item.id
                     AND resolved_quote.status IN (
-                      'Draft', 'Sent', 'Accepted', 'Ordered'
+                      'Ready', 'Sent', 'Accepted', 'Ordered'
                     )
                 )
             )
@@ -2874,7 +2874,9 @@ export function createCommercialWorkflowRepository(
             ON quote.organization_id = requested.organization_id
             AND quote.customer_id = requested.customer_id
           JOIN catalog.items item ON item.id = quote.item_id
-          WHERE quote.status IN ('Draft', 'Sent', 'Accepted', 'Ordered')
+          WHERE quote.status IN (
+            'Draft', 'Ready', 'Sent', 'Accepted', 'Ordered'
+          )
             AND (
               $2::text = ''
               OR lower(btrim(coalesce(quote.customer_part_code, ''))) = $2
@@ -3447,7 +3449,7 @@ export function createCommercialWorkflowRepository(
                 JOIN catalog.items item ON item.id = quote.item_id
                 WHERE quote.id = $1 AND quote.customer_id = $2
                   AND quote.status IN (
-                    'Draft', 'Sent', 'Accepted', 'Ordered'
+                    'Draft', 'Ready', 'Sent', 'Accepted', 'Ordered'
                   )
               `,
               [quoteItemId, taskRow.customer_id]
@@ -5573,7 +5575,7 @@ export function createCommercialWorkflowRepository(
                 OR selected_quote.superseded_by_quote_item_id IS NOT NULL
                 THEN 'Revision Given'
               WHEN selected_quote.sent_at IS NOT NULL THEN 'Quote Sent'
-              WHEN selected_quote.status = 'Draft' THEN 'Ready To Send'
+              WHEN selected_quote.status = 'Ready' THEN 'Ready To Send'
               WHEN selected_quote.id IS NOT NULL THEN 'Quote Costing'
               WHEN enquiry_item.technical_review_status = 'Not Feasible'
                 THEN 'Cannot Quote'

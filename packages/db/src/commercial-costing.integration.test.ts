@@ -259,6 +259,33 @@ describe("PostgreSQL product-costing and quote workflow", () => {
     )
   })
 
+  test("bounds the Customer Parameter Costing queue while keeping exact metrics", async () => {
+    await repository.updateProductCostParameters({
+      action: "complete",
+      itemId,
+    })
+
+    const result = await repository.listCustomerCostingTasksBounded(
+      organizationCode,
+      1
+    )
+    const summary =
+      await repository.getCustomerCostingTaskSummary(organizationCode)
+
+    expect(result.coverage).toMatchObject({ limit: 1, returned: 1 })
+    expect(result.rows[0]).toMatchObject({
+      enquiryItemId,
+      taskType: "New Quote Costing",
+    })
+    expect(summary.newQuoteCosting).toBeGreaterThanOrEqual(1)
+    expect(summary.total).toBe(
+      summary.newQuoteCosting +
+        summary.poPriceMatch +
+        summary.bulkPriceRevision +
+        summary.ecnPriceReview
+    )
+  })
+
   test("preserves product parameter calculations and the quote workbook chain", async () => {
     const product = await repository.updateProductCostParameters({
       action: "complete",
@@ -320,8 +347,15 @@ describe("PostgreSQL product-costing and quote workflow", () => {
       status: "Draft",
       totalRateInr: 150.6,
     })
+    await expect(
+      repository.sendQuote({
+        followupDueOn: "2026-09-30",
+        quoteItemId: quote.id,
+      })
+    ).rejects.toThrow("Complete Customer Parameter Costing")
 
     const updatedDraft = await repository.saveQuote({
+      action: "complete",
       customerPartCode: "CUSTOMER-PART-08",
       enquiryItemId,
       inputs: {
@@ -339,6 +373,7 @@ describe("PostgreSQL product-costing and quote workflow", () => {
       shippingTerms: "FOB",
     })
     expect(updatedDraft.id).toBe(quote.id)
+    expect(updatedDraft.status).toBe("Ready")
 
     const followupDueOn = "2026-09-30"
     const sent = await repository.sendQuote({
@@ -448,7 +483,7 @@ describe("PostgreSQL product-costing and quote workflow", () => {
         itemId,
         quantity: 100,
       })
-    ).rejects.toThrow("already been sent")
+    ).rejects.toThrow("already been completed or sent")
 
     await expect(
       pool.query(
@@ -468,6 +503,7 @@ describe("PostgreSQL product-costing and quote workflow", () => {
       itemId,
     })
     const second = await repository.saveQuote({
+      action: "complete",
       customerPartCode: "CUSTOMER-PART-08",
       enquiryItemId: secondEnquiryItemId,
       inputs: {
@@ -539,6 +575,7 @@ describe("PostgreSQL product-costing and quote workflow", () => {
         itemId: item.id,
       })
       const quote = await repository.saveQuote({
+        action: "complete",
         customerPartCode: code,
         enquiryItemId: collisionEnquiryItemId,
         inputs: {
@@ -617,6 +654,7 @@ describe("PostgreSQL product-costing and quote workflow", () => {
           itemId: item.id,
         })
         const quote = await repository.saveQuote({
+          action: "complete",
           customerPartCode: code,
           enquiryItemId: concurrentEnquiryItemId,
           inputs: {
@@ -734,6 +772,7 @@ describe("PostgreSQL product-costing and quote workflow", () => {
       pricingMethod: "Derived",
     })
     const quote = await repository.saveQuote({
+      action: "complete",
       assemblyProfitPercents: [{ itemId: assembly, profitPercent: 0.1 }],
       childInputs: [
         { itemId: leafA, profitPercent: 0.1, purchaseTimes: 1, scrapRate: 0 },

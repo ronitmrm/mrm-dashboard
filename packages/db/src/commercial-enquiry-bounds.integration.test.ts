@@ -176,6 +176,7 @@ beforeAll(async () => {
         CASE value
           WHEN 4 THEN 'Superseded'
           WHEN 5 THEN 'Sent'
+          WHEN 6 THEN 'Ready'
           ELSE 'Draft'
         END,
         false,
