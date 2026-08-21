@@ -23,7 +23,10 @@ const fixture: CommercialMasterSnapshot = {
   applications: [{ name: "Heating", sortOrder: 2 }],
   categories: [{ code: "01", name: "Fittings" }],
   certifications: [{ name: "ROHS", sortOrder: 3 }],
-  commercialTerms: [{ active: true, name: "FOB", termType: "incoterms" }],
+  commercialTerms: [
+    { active: true, name: "Purchasing", termType: "buyer" },
+    { active: true, name: "FOB", termType: "incoterms" },
+  ],
   customers: [
     {
       companyName: "Fixture Customer",
@@ -125,7 +128,7 @@ describe("Pricing commercial master maintenance", () => {
       errors: [],
       ignored: 0,
     })
-    expect(result.created).toBe(15)
+    expect(result.created).toBe(16)
 
     await repository.upsertNamed({
       actorUserId,
@@ -157,6 +160,19 @@ describe("Pricing commercial master maintenance", () => {
       expect.objectContaining({
         kind: "commercial_rod_type",
         label: "SOLID",
+      }),
+    ])
+
+    await expect(
+      repository.listEditableRows({
+        kind: "commercial_commercial_term",
+        organizationId,
+        termType: "buyer",
+      })
+    ).resolves.toEqual([
+      expect.objectContaining({
+        kind: "commercial_commercial_term",
+        label: "Purchasing",
       }),
     ])
 

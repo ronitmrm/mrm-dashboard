@@ -16,7 +16,9 @@ import { useState } from "react"
 
 import {
   commercialMasterKinds,
+  commercialMasterSelection,
   commercialMasterViewHref,
+  commercialMasterWorkspaceKind,
   type CommercialMasterEntryKind,
 } from "@/lib/commercial-master-workspace"
 
@@ -57,13 +59,23 @@ function NameInput({ label = "Name" }: { label?: string }) {
 
 export function MasterMaintenanceForm({
   initialKind,
+  initialTermType,
   snapshot,
 }: {
   initialKind: CommercialMasterEntryKind
+  initialTermType?: CommercialTermType
   snapshot: CommercialMasterSnapshot
 }) {
   const router = useRouter()
   const [kind, setKind] = useState<CommercialMasterEntryKind>(initialKind)
+  const [termType, setTermType] = useState<CommercialTermType | undefined>(
+    initialTermType
+  )
+  const [workspaceKind, setWorkspaceKind] = useState(() =>
+    commercialMasterWorkspaceKind(
+      commercialMasterSelection(initialTermType ?? initialKind)
+    )
+  )
   const isSimple = [
     "materialGrade",
     "rodType",
@@ -74,30 +86,42 @@ export function MasterMaintenanceForm({
   return (
     <form action={upsertMasterAction}>
       <input name="master_view" type="hidden" value="dataEntry" />
+      <input name="kind" type="hidden" value={kind} />
+      <input name="workspace_kind" type="hidden" value={workspaceKind} />
       <FieldGroup className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Field>
           <FieldLabel htmlFor="master-kind">Master</FieldLabel>
           <NativeSelect
             className="w-full"
             id="master-kind"
-            name="kind"
             onChange={(event) => {
-              const nextKind = event.target.value as CommercialMasterEntryKind
-              setKind(nextKind)
-              router.replace(commercialMasterViewHref("dataEntry", nextKind), {
-                scroll: false,
-              })
+              const nextSelection = commercialMasterSelection(
+                event.target.value
+              )
+              const nextWorkspaceKind =
+                commercialMasterWorkspaceKind(nextSelection)
+              setKind(nextSelection.entryKind)
+              setTermType(
+                "termType" in nextSelection
+                  ? nextSelection.termType
+                  : undefined
+              )
+              setWorkspaceKind(nextWorkspaceKind)
+              router.replace(
+                commercialMasterViewHref("dataEntry", nextWorkspaceKind),
+                { scroll: false }
+              )
             }}
-            value={kind}
+            value={workspaceKind}
           >
-            {commercialMasterKinds.map((option) => (
-              <NativeSelectOption
-                key={option.entryKind}
-                value={option.entryKind}
-              >
+            {commercialMasterKinds.map((option) => {
+              const optionKind = commercialMasterWorkspaceKind(option)
+              return (
+                <NativeSelectOption key={optionKind} value={optionKind}>
                 {option.label}
-              </NativeSelectOption>
-            ))}
+                </NativeSelectOption>
+              )
+            })}
           </NativeSelect>
         </Field>
 
@@ -234,20 +258,24 @@ export function MasterMaintenanceForm({
 
         {kind === "commercialTerm" ? (
           <>
-            <Field>
-              <FieldLabel htmlFor="master-term-type">Type</FieldLabel>
-              <NativeSelect
-                className="w-full"
-                id="master-term-type"
-                name="term_type"
-              >
-                {commercialTermTypes.map((termType) => (
-                  <NativeSelectOption key={termType} value={termType}>
-                    {termType.replaceAll("_", " ")}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
+            {termType ? (
+              <input name="term_type" type="hidden" value={termType} />
+            ) : (
+              <Field>
+                <FieldLabel htmlFor="master-term-type">Type</FieldLabel>
+                <NativeSelect
+                  className="w-full"
+                  id="master-term-type"
+                  name="term_type"
+                >
+                  {commercialTermTypes.map((option) => (
+                    <NativeSelectOption key={option} value={option}>
+                      {option.replaceAll("_", " ")}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+            )}
             <NameInput label="Value" />
           </>
         ) : null}
@@ -271,7 +299,7 @@ export function MasterMaintenanceForm({
         ) : null}
       </FieldGroup>
       <Button className="mt-6" type="submit">
-        Add Or Update Master
+        Add Or Update {commercialMasterSelection(workspaceKind).label}
       </Button>
     </form>
   )

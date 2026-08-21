@@ -989,16 +989,24 @@ export function createCommercialMasterRepository(
     async listEditableRows(input: {
       kind: EditableCommercialMasterKind
       organizationId: string
+      termType?: CommercialTermType
     }) {
+      const filtersCommercialTerm =
+        input.kind === "commercial_commercial_term" && input.termType
+      const editableQuery = `${editableQueries[input.kind]}${
+        filtersCommercialTerm ? " AND term_type = $2" : ""
+      }`
       const result = await pool.query<{
         id: string
         kind: EditableCommercialMasterKind
         label: string
       }>(
         `SELECT id, kind, label
-         FROM (${editableQueries[input.kind]}) editable_rows
+         FROM (${editableQuery}) editable_rows
          ORDER BY lower(label), id`,
-        [input.organizationId]
+        filtersCommercialTerm
+          ? [input.organizationId, input.termType]
+          : [input.organizationId]
       )
       return result.rows
     },

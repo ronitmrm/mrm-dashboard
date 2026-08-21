@@ -32,6 +32,7 @@ import {
   commercialMasterSelection,
   commercialMasterTemplateHref,
   commercialMasterViewHref,
+  commercialMasterWorkspaceKind,
 } from "@/lib/commercial-master-workspace"
 import { CommercialMasterTable } from "./commercial-master-table"
 
@@ -59,6 +60,7 @@ export default async function MastersPage({
   const activeView =
     feedback.masterView === "masterTables" ? "masterTables" : "dataEntry"
   const selection = commercialMasterSelection(feedback.kind)
+  const selectionKind = commercialMasterWorkspaceKind(selection)
   const showDataEntry = activeView === "dataEntry"
   const showMasterTables = activeView === "masterTables"
   let snapshot: CommercialMasterSnapshot | null = null
@@ -80,6 +82,8 @@ export default async function MastersPage({
         editableRows = await repository.listEditableRows({
           kind: selection.tableKind,
           organizationId,
+          termType:
+            "termType" in selection ? selection.termType : undefined,
         })
       }
     } finally {
@@ -94,11 +98,11 @@ export default async function MastersPage({
         activeView={activeView}
         dataEntryHref={commercialMasterViewHref(
           "dataEntry",
-          selection.entryKind
+          selectionKind
         )}
         masterTablesHref={commercialMasterViewHref(
           "masterTables",
-          selection.entryKind
+          selectionKind
         )}
       />
       {feedback.error ? (
@@ -172,7 +176,10 @@ export default async function MastersPage({
               <CardContent>
                 <MasterMaintenanceForm
                   initialKind={selection.entryKind}
-                  key={selection.entryKind}
+                  initialTermType={
+                    "termType" in selection ? selection.termType : undefined
+                  }
+                  key={selectionKind}
                   snapshot={snapshot}
                 />
               </CardContent>
@@ -197,8 +204,8 @@ export default async function MastersPage({
           <CardContent>
             <CommercialMasterTable
               canWrite={canWrite}
-              initialKind={selection.entryKind}
-              key={selection.entryKind}
+              initialKind={selectionKind}
+              key={selectionKind}
               rows={editableRows}
             />
           </CardContent>
