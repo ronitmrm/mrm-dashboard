@@ -93,7 +93,10 @@ function defaultExpandedSections(
       ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
     )
   return {
-    costing: pathname.startsWith("/commercial") && !onCommercialMasterData,
+    costing:
+      pathname.startsWith("/commercial") &&
+      !onCommercialMasterData &&
+      !onCommercialOperationalEntry,
     hr: pathname.startsWith("/hr"),
     masterData:
       activeDashboardTab === "dataEntryTab" ||
@@ -242,7 +245,7 @@ export function UnifiedSidebarNavigation({
   const filteredCommercialOperationalEntryNavigation = filterNavigationItems(
     visibleCommercialOperationalEntryNavigation,
     normalizedMenuSearch,
-    "costing commercial operational entry enquiries excel view"
+    "commercial operational entry enquiries"
   )
   const filteredHrNavigation = filterNavigationItems(
     visibleHrNavigation,
@@ -322,7 +325,7 @@ export function UnifiedSidebarNavigation({
       (item) =>
         !normalizedMenuSearch ||
         item.title.toLowerCase().includes(normalizedMenuSearch) ||
-        "operational entry work orders rm inward production output enquiries excel view".includes(
+        "operational entry work orders rm inward production output enquiries".includes(
           normalizedMenuSearch
         )
     )
@@ -568,18 +571,12 @@ export function UnifiedSidebarNavigation({
         </NavigationSection>
       ) : null}
 
-      {filteredCommercialNavigation.length ||
-      filteredCommercialOperationalEntryNavigation.length ? (
+      {filteredCommercialNavigation.length ? (
         <NavigationSection
           icon={Calculator}
-          isActive={
-            visibleCommercialNavigation.some((item) =>
-              navigationHrefMatches(pathname, searchParams, item.href)
-            ) ||
-            visibleCommercialOperationalEntryNavigation.some((item) =>
-              navigationHrefMatches(pathname, searchParams, item.href)
-            )
-          }
+          isActive={visibleCommercialNavigation.some((item) =>
+            navigationHrefMatches(pathname, searchParams, item.href)
+          )}
           label="Costing"
           onOpenChange={(open) => {
             if (!normalizedMenuSearch) setSectionOpen("costing", open)
@@ -607,32 +604,6 @@ export function UnifiedSidebarNavigation({
               </SidebarMenuSubButton>
             </SidebarMenuSubItem>
           ))}
-          {filteredCommercialOperationalEntryNavigation.length ? (
-            <>
-              <CostingSubmoduleLabel label="Operational Entry" />
-              {filteredCommercialOperationalEntryNavigation.map((item) => (
-                <SidebarMenuSubItem key={`costing:${item.href}`}>
-                  <SidebarMenuSubButton
-                    asChild
-                    className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
-                    isActive={navigationHrefMatches(
-                      pathname,
-                      searchParams,
-                      item.href
-                    )}
-                  >
-                    <a href={item.href}>
-                      <span
-                        aria-hidden="true"
-                        className="size-1.5 shrink-0 rounded-full bg-current opacity-55"
-                      />
-                      <span>{item.label}</span>
-                    </a>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              ))}
-            </>
-          ) : null}
         </NavigationSection>
       ) : null}
 
@@ -773,16 +744,6 @@ export function UnifiedSidebarNavigation({
         </p>
       ) : null}
     </>
-  )
-}
-
-function CostingSubmoduleLabel({ label }: { label: string }) {
-  return (
-    <SidebarMenuSubItem aria-hidden="true" className="pt-2">
-      <span className="px-2.5 text-[0.7rem] font-semibold tracking-wide text-sidebar-foreground/50 uppercase">
-        {label}
-      </span>
-    </SidebarMenuSubItem>
   )
 }
 

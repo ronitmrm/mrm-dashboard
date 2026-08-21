@@ -526,9 +526,7 @@ export const commercialMasterDataWorkspaceNavigation =
   )
 
 export const commercialOperationalEntryNavigation = commercialNavigation.filter(
-  ({ href }) =>
-    href === "/commercial/enquiries" ||
-    href === "/commercial/enquiries/excel-view"
+  ({ href }) => href === "/commercial/enquiries"
 )
 
 export const commercialCostingNavigation = commercialNavigation.filter(

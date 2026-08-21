@@ -39,8 +39,10 @@ describe("unified navigation", () => {
     expect(source).toContain('label="Operational Entry"')
     expect(source).toContain("filteredMasterDataNavigation.map")
     expect(source).toContain("filteredOperationalEntryNavigation.map")
-    expect(source).toContain("filteredCommercialOperationalEntryNavigation.map")
-    expect(source).toContain("CostingSubmoduleLabel")
+    expect(source).toContain(
+      "filteredCommercialOperationalEntryNavigation = filterNavigationItems"
+    )
+    expect(source).not.toContain("CostingSubmoduleLabel")
     expect(source).not.toContain("visibleCommercialMasterDataNavigation.map")
   })
 
@@ -51,7 +53,7 @@ describe("unified navigation", () => {
     )
     const nativeLinks = source.match(/<a href=\{item\.href\}>/g) ?? []
 
-    expect(nativeLinks).toHaveLength(5)
+    expect(nativeLinks).toHaveLength(4)
     expect(source).toContain(
       "<a href={productionNavigationHref(item.id, floor.code)}>"
     )
@@ -185,16 +187,14 @@ describe("unified navigation", () => {
       }))
     ).toEqual([
       { href: "/commercial/enquiries", label: "Enquiries" },
-      {
-        href: "/commercial/enquiries/excel-view",
-        label: "Excel View",
-      },
     ])
+    expect(commercialCostingNavigation.map(({ label }) => label)).toContain(
+      "Excel View"
+    )
     expect(commercialCostingNavigation.map(({ label }) => label)).not.toEqual(
       expect.arrayContaining([
         "Customers",
         "Enquiries",
-        "Excel View",
         "Website Products",
         "Commercial Overview",
         "Products",
