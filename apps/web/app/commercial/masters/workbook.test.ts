@@ -102,6 +102,13 @@ describe("Pricing masters workbook", () => {
     )
   })
 
+  test("falls back to the complete source template for an unknown master", () => {
+    expect(buildMastersWorkbook(undefined, "unknown").SheetNames).toEqual(
+      buildMastersWorkbook().SheetNames
+    )
+    expect(masterTemplateFilename("unknown")).toBe("masters-template.xlsx")
+  })
+
   test("accepts source header aliases and transformations", () => {
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(

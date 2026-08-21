@@ -137,6 +137,18 @@ describe("Pricing commercial master maintenance", () => {
     expect(snapshot).toEqual(fixture)
 
     await expect(
+      repository.listEditableRows({
+        kind: "commercial_shipping",
+        organizationId,
+      })
+    ).resolves.toEqual([
+      expect.objectContaining({
+        kind: "commercial_shipping",
+        label: "Air",
+      }),
+    ])
+
+    await expect(
       repository.materialRateFor({
         grade: " c3604 ",
         organizationId,

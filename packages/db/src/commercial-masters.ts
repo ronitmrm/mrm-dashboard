@@ -28,6 +28,26 @@ export const commercialTermTypes = [
 export type WebsiteFieldType = (typeof websiteFieldTypes)[number]
 export type CommercialTermType = (typeof commercialTermTypes)[number]
 
+export const editableCommercialMasterKinds = [
+  "commercial_application",
+  "commercial_category",
+  "commercial_certification",
+  "commercial_commercial_term",
+  "commercial_machine_type",
+  "commercial_material_grade",
+  "commercial_material_rate",
+  "commercial_packaging",
+  "commercial_process",
+  "commercial_quote_term",
+  "commercial_rod_type",
+  "commercial_shipping",
+  "commercial_subcategory",
+  "commercial_website_field",
+] as const
+
+export type EditableCommercialMasterKind =
+  (typeof editableCommercialMasterKinds)[number]
+
 type ActiveNamedValue = {
   active: boolean
   name: string
@@ -782,6 +802,42 @@ export function createCommercialMasterRepository(
 ) {
   const { close, pool } = repositoryPool(options)
 
+  const editableQueries = {
+    commercial_application:
+      "SELECT id, 'commercial_application' kind, name label FROM catalog.website_applications WHERE organization_id = $1",
+    commercial_category:
+      "SELECT id, 'commercial_category' kind, name label FROM catalog.item_categories WHERE organization_id = $1",
+    commercial_certification:
+      "SELECT id, 'commercial_certification' kind, name label FROM catalog.website_certifications WHERE organization_id = $1",
+    commercial_commercial_term:
+      "SELECT id, 'commercial_commercial_term' kind, name label FROM sales.commercial_terms WHERE organization_id = $1",
+    commercial_machine_type:
+      "SELECT id, 'commercial_machine_type' kind, name label FROM catalog.machine_types WHERE organization_id = $1",
+    commercial_material_grade:
+      "SELECT id, 'commercial_material_grade' kind, name label FROM catalog.material_grades WHERE organization_id = $1",
+    commercial_material_rate: `
+      SELECT rate.id, 'commercial_material_rate' kind,
+        grade.name || ' / ' || rod.name label
+      FROM sales.material_rates rate
+      JOIN catalog.material_grades grade ON grade.id = rate.material_grade_id
+      JOIN catalog.rod_types rod ON rod.id = rate.rod_type_id
+      WHERE rate.organization_id = $1`,
+    commercial_packaging:
+      "SELECT id, 'commercial_packaging' kind, name label FROM sales.packaging_options WHERE organization_id = $1",
+    commercial_process:
+      "SELECT id, 'commercial_process' kind, name label FROM catalog.design_processes WHERE organization_id = $1",
+    commercial_quote_term:
+      "SELECT id, 'commercial_quote_term' kind, label FROM sales.quote_term_templates WHERE organization_id = $1",
+    commercial_rod_type:
+      "SELECT id, 'commercial_rod_type' kind, name label FROM catalog.rod_types WHERE organization_id = $1",
+    commercial_shipping:
+      "SELECT id, 'commercial_shipping' kind, name label FROM sales.shipping_terms WHERE organization_id = $1",
+    commercial_subcategory:
+      "SELECT id, 'commercial_subcategory' kind, name label FROM catalog.item_subcategories WHERE organization_id = $1",
+    commercial_website_field:
+      "SELECT id, 'commercial_website_field' kind, option_value label FROM catalog.website_field_options WHERE organization_id = $1",
+  } as const satisfies Record<EditableCommercialMasterKind, string>
+
   async function snapshot(organizationId: string) {
     return transaction(pool, async (client) => {
       await client.query(
@@ -929,6 +985,20 @@ export function createCommercialMasterRepository(
 
   return {
     close,
+
+    async listEditableRows(input: {
+      kind: EditableCommercialMasterKind
+      organizationId: string
+    }) {
+      const result = await pool.query<{
+        id: string
+        kind: EditableCommercialMasterKind
+        label: string
+      }>(`${editableQueries[input.kind]} ORDER BY lower(label), id`, [
+        input.organizationId,
+      ])
+      return result.rows
+    },
 
     async importSnapshot(
       input: MutationContext & {

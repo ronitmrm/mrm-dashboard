@@ -320,9 +320,10 @@ export function buildMastersWorkbook(
   selectedKey?: string
 ) {
   const workbook = XLSX.utils.book_new()
-  const selected = selectedKey
-    ? sheetDefinitions.filter((definition) => definition.key === selectedKey)
-    : sheetDefinitions
+  const selectedDefinition = selectedKey
+    ? sheetDefinitions.find((definition) => definition.key === selectedKey)
+    : undefined
+  const selected = selectedDefinition ? [selectedDefinition] : sheetDefinitions
 
   for (const definition of selected) {
     const data = snapshot
@@ -338,7 +339,8 @@ export function buildMastersWorkbook(
 }
 
 export function masterTemplateFilename(selectedKey?: string) {
-  return selectedKey
+  return selectedKey &&
+    sheetDefinitions.some((definition) => definition.key === selectedKey)
     ? `${selectedKey}-master-template.xlsx`
     : "masters-template.xlsx"
 }
