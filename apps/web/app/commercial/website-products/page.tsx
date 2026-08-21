@@ -31,6 +31,7 @@ import {
 import { Textarea } from "@workspace/ui/components/textarea"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
+import { BoundedResultNotice } from "@/components/bounded-result-notice"
 import { CompanyWideMasterScope } from "@/components/company-wide-master-scope"
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import { requireCapability } from "@/lib/auth/require-capability"
@@ -237,11 +238,11 @@ export default async function WebsiteProductsPage({
     connectionString,
   })
   const repository = createCommercialReportingRepository({ connectionString })
-  let rows
+  let result
   let masters
   try {
     const organizationId = await customers.organizationIdForCode("MRMPL")
-    ;[rows, masters] = await Promise.all([
+    ;[result, masters] = await Promise.all([
       repository.listWebsiteProducts({
         active:
           filters.active === "true"
@@ -251,7 +252,8 @@ export default async function WebsiteProductsPage({
               : null,
         category: filters.category,
         organizationId,
-        query: filters.q,
+        profileId: showDataEntry ? filters.edit : undefined,
+        query: showMasterTables ? filters.q : undefined,
         status: filters.status,
       }),
       mastersRepository.snapshot(organizationId),
@@ -261,6 +263,7 @@ export default async function WebsiteProductsPage({
     await mastersRepository.close()
     await customers.close()
   }
+  const rows = result.rows
   const editing = rows.find((row) => row.profileId === filters.edit)
   const websiteOptions = (fieldType: string) =>
     masters.websiteFields
@@ -299,6 +302,13 @@ export default async function WebsiteProductsPage({
               </Link>
             </Button>
           </div>
+          <BoundedResultNotice
+            actionHref={`${websiteProductsPath}/export.xlsx`}
+            actionLabel="Export every Website Product"
+            coverage={result.coverage}
+            searchQuery={filters.q?.trim()}
+            section="Website Products"
+          />
         </CardHeader>
         <CardContent>
           <form className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_12rem_12rem_12rem_auto_auto]">
@@ -367,6 +377,12 @@ export default async function WebsiteProductsPage({
           </CardHeader>
           <CardContent className="grid gap-5">
             <CompanyWideMasterScope />
+            <BoundedResultNotice
+              actionHref={`${websiteProductsPath}/export.xlsx`}
+              actionLabel="Export every Website Product"
+              coverage={result.coverage}
+              section="Website Product choices"
+            />
             <form className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <input name="masterView" type="hidden" value="dataEntry" />
               <div className="grid min-w-0 flex-1 gap-2">
@@ -615,7 +631,7 @@ export default async function WebsiteProductsPage({
         <CardHeader>
           <CardTitle>Website Product Excel View</CardTitle>
           <CardDescription>
-            Showing {rows.length} Ordered Product Rows.
+            Showing {result.coverage.returned} Ordered Product Rows.
           </CardDescription>
         </CardHeader>
         <CardContent>

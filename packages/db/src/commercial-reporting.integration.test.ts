@@ -207,6 +207,10 @@ describe("commercial drawing, website, and analytics parity", () => {
       description: "Child fitting",
       uid: `M-${randomUUID()}`,
     })
+    const unrelatedId = await createItem({
+      description: "Unrelated fitting",
+      uid: `M-${randomUUID()}`,
+    })
     const profiles = await pool.query<{ id: string; item_id: string }>(
       `
         INSERT INTO catalog.website_product_profiles (
@@ -217,10 +221,20 @@ describe("commercial drawing, website, and analytics parity", () => {
           ($1, $2, 'Parent fitting', false, 'test', 'website_product_entries', $4,
             '{"websiteStatus":"In Progress","isActive":true}'::jsonb),
           ($1, $3, 'Child fitting', false, 'test', 'website_product_entries', $5,
+            '{"websiteStatus":"In Progress","isActive":false}'::jsonb),
+          ($1, $6, 'Unrelated fitting', false, 'test', 'website_product_entries', $7,
             '{"websiteStatus":"In Progress","isActive":false}'::jsonb)
         RETURNING id, item_id
       `,
-      [organizationId, parentId, childId, randomUUID(), randomUUID()]
+      [
+        organizationId,
+        parentId,
+        childId,
+        randomUUID(),
+        randomUUID(),
+        unrelatedId,
+        randomUUID(),
+      ]
     )
     await pool.query(
       `
@@ -234,6 +248,9 @@ describe("commercial drawing, website, and analytics parity", () => {
     )
     const childProfile = profiles.rows.find((row) => row.item_id === childId)!
     const parentProfile = profiles.rows.find((row) => row.item_id === parentId)!
+    const unrelatedProfile = profiles.rows.find(
+      (row) => row.item_id === unrelatedId
+    )!
 
     const completeFields = {
       additionalNotes: "Catalog approved",
@@ -268,6 +285,12 @@ describe("commercial drawing, website, and analytics parity", () => {
       organizationId,
       profileId: parentProfile.id,
     })
+    const unrelatedVersion = await pool.query<{ row_version: string }>(
+      `SELECT row_version::text
+       FROM catalog.website_product_profiles
+       WHERE id = $1`,
+      [unrelatedProfile.id]
+    )
 
     expect(parent).toMatchObject({
       assemblyCode1: "01-101-001",
@@ -282,11 +305,72 @@ describe("commercial drawing, website, and analytics parity", () => {
     })
     const listedParent = (
       await repository.listWebsiteProducts({ organizationId })
-    ).find((row) => row.profileId === parentProfile.id)
+    ).rows.find((row) => row.profileId === parentProfile.id)
     expect(listedParent).toMatchObject({
       partCode: "01-101-002",
       websiteStatus: "Completed",
     })
+    expect(unrelatedVersion.rows[0]?.row_version).toBe("0")
+  })
+
+  test("bounds Website Product operations and searches before the cap", async () => {
+    const suffix = randomUUID()
+    const items = await pool.query<{ id: string; uid: string }>(
+      `
+        INSERT INTO catalog.items (
+          organization_id, uid, uid_kind, lifecycle_status, description,
+          source_system, source_table, source_id
+        )
+        SELECT $1, 'WBP-' || $2 || '-' || series, 'INTERNAL', 'P',
+          'Bounded website fixture ' || series,
+          'test', 'items', gen_random_uuid()::text
+        FROM generate_series(1, 3) series
+        RETURNING id, uid
+      `,
+      [organizationId, suffix]
+    )
+    await pool.query(
+      `
+        INSERT INTO catalog.website_product_profiles (
+          organization_id, item_id, title, part_code, published,
+          source_system, source_table, source_id, source_payload
+        )
+        SELECT $1, item.id, item.uid, 'WP-' || $2 || '-' || row_number,
+          false, 'test', 'website_product_entries', gen_random_uuid()::text,
+          '{"websiteStatus":"In Progress","isActive":false}'::jsonb
+        FROM unnest($3::uuid[]) WITH ORDINALITY AS source(item_id, row_number)
+        JOIN catalog.items item ON item.id = source.item_id
+      `,
+      [
+        organizationId,
+        suffix,
+        items.rows.map((row) => row.id),
+      ]
+    )
+
+    const bounded = await repository.listWebsiteProducts(
+      { organizationId },
+      2
+    )
+    expect(bounded.coverage).toEqual({
+      limit: 2,
+      returned: 2,
+      truncated: true,
+    })
+    expect(bounded.rows).toHaveLength(2)
+
+    const focused = await repository.listWebsiteProducts(
+      { organizationId, query: `WP-${suffix}-3` },
+      2
+    )
+    expect(focused.coverage).toEqual({
+      limit: 2,
+      returned: 1,
+      truncated: false,
+    })
+    expect(focused.rows.map((row) => row.partCode)).toEqual([
+      `WP-${suffix}-3`,
+    ])
   })
 
   test("exports complete drawing and website histories across batches", async () => {
@@ -306,7 +390,7 @@ describe("commercial drawing, website, and analytics parity", () => {
     )
 
     expect(drawingExport).toEqual(drawingCanonical)
-    expect(websiteExport).toEqual(websiteCanonical)
+    expect(websiteExport).toEqual(websiteCanonical.rows)
     expect(websiteExport.length).toBeGreaterThan(1)
   })
 
