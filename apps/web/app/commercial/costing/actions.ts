@@ -12,7 +12,6 @@ import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
 import { optionalText, requiredText } from "@/lib/form-data"
 
-const costingPath = "/commercial/costing"
 const customerCostingPath = "/commercial/customer-costing"
 const productCostingPath = "/commercial/product-costing"
 
@@ -78,7 +77,7 @@ async function withCosting<T>(
 export async function updateProductCostingAction(formData: FormData) {
   await withCosting(
     "pricing.costing.write",
-    costingPath,
+    productCostingPath,
     (repository, actorUserId) =>
       repository.updateProductCostParameters({
         action:
@@ -123,7 +122,6 @@ export async function updateProductCostingAction(formData: FormData) {
         weight100Pcs: numberValue(formData, "weight_100_pcs", 0),
       })
   )
-  revalidatePath(costingPath)
   revalidatePath(productCostingPath)
   revalidatePath(customerCostingPath)
   revalidatePath("/commercial/products")
@@ -215,7 +213,6 @@ export async function saveQuoteAction(formData: FormData) {
         shippingTerms: optionalText(formData, "shipping_terms"),
       })
   )
-  revalidatePath(costingPath)
   revalidatePath(customerCostingPath)
   revalidatePath("/commercial/quotes")
 }
@@ -231,7 +228,7 @@ export async function sendQuoteBackToProductCostingAction(formData: FormData) {
         itemId: requiredText(formData, "item_id"),
       })
   )
-  revalidatePath(costingPath)
+  revalidatePath(productCostingPath)
   revalidatePath(customerCostingPath)
   revalidatePath("/commercial/design")
   revalidatePath("/commercial/quotes")
@@ -269,7 +266,6 @@ export async function sendQuoteAction(formData: FormData) {
   } finally {
     await Promise.all([costing.close(), orders.close()])
   }
-  revalidatePath(costingPath)
   revalidatePath(customerCostingPath)
   revalidatePath("/commercial/quotes")
   revalidatePath(`/commercial/quotes/${quoteItemId}`)

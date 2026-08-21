@@ -152,12 +152,6 @@ export const commercialPageAccess = [
     commercialCapabilities.costing
   ),
   page(
-    "commercial.costing",
-    "Product Costing",
-    "/commercial/costing",
-    commercialCapabilities.costing
-  ),
-  page(
     "commercial.quotes",
     "Quote Register",
     "/commercial/quotes",
