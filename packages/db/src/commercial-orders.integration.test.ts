@@ -454,7 +454,11 @@ describe("commercial purchase orders and proforma invoices", () => {
   test("keeps our price or creates a visible costing revision request", async () => {
     const code = `DIFF-${randomUUID()}`
     const itemId = await createItem(`M-${randomUUID()}`)
-    await createSentQuote({ customerPartCode: code, itemId, price: 10 })
+    const priorQuoteId = await createSentQuote({
+      customerPartCode: code,
+      itemId,
+      price: 10,
+    })
     const order = await repository.createPurchaseOrder({
       customerId,
       organizationId,
@@ -492,7 +496,7 @@ describe("commercial purchase orders and proforma invoices", () => {
       matchStatus: "Pending Costing Revision",
       piPrice: null,
     })
-    const requests = await pool.query(
+    const requests = await pool.query<{ id: string }>(
       "SELECT id FROM sales.quote_revision_requests WHERE purchase_order_line_id = $1 AND status = 'Open'",
       [reviseLine.id]
     )
@@ -500,6 +504,35 @@ describe("commercial purchase orders and proforma invoices", () => {
     await expect(
       repository.generateProformaInvoice({ purchaseOrderId: order.id })
     ).rejects.toThrow("completed")
+
+    await pool.query(
+      `
+        UPDATE sales.quote_items
+        SET status = 'Superseded', is_active = false,
+          updated_at = now(), row_version = row_version + 1
+        WHERE id = $1
+      `,
+      [priorQuoteId]
+    )
+    const replacementQuoteId = await createSentQuote({
+      customerPartCode: code,
+      itemId,
+      price: 12,
+      revision: 2,
+    })
+    await expect(
+      repository.listResolvableQuoteRevisionRequestIds(replacementQuoteId)
+    ).resolves.toEqual([requests.rows[0]!.id])
+    const resolved = await repository.resolveQuoteRevisionRequest({
+      quoteRevisionRequestId: requests.rows[0]!.id,
+      replacementQuoteItemId: replacementQuoteId,
+    })
+    expect(resolved).toMatchObject({
+      decision: "Matched",
+      matchStatus: "Matched",
+      piPrice: 12,
+      quoteItemId: replacementQuoteId,
+    })
   })
 
   test("imports lines atomically and reuses one quote-request enquiry", async () => {

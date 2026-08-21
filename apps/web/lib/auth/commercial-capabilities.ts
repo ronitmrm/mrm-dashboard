@@ -146,6 +146,12 @@ export const commercialPageAccess = [
     commercialCapabilities.costing
   ),
   page(
+    "commercial.customer-costing",
+    "Customer Parameter Costing",
+    "/commercial/customer-costing",
+    commercialCapabilities.costing
+  ),
+  page(
     "commercial.costing",
     "Product Costing",
     "/commercial/costing",

@@ -121,7 +121,7 @@ async function seedSalesOrganization(input: {
       SELECT item.organization_id,
         $4 || '-D-' || lpad(value::text, 4, '0'), 1, item.enquiry_id,
         item.id, $5, $6, $6, item.customer_part_code, 1, value, 'USD',
-        'Draft', false, NULL,
+        'Ready', false, NULL,
         TIMESTAMPTZ '2026-01-01 00:00:00+00' + value * INTERVAL '1 minute',
         'test', 'commercial_sales_operations',
         $1 || ':draft:' || value::text

@@ -8,6 +8,22 @@ values without changing the Customer.
 **Commercial Term Master**: The company-wide active values available for Buyer,
 Incoterms, Payment Terms, Shipment Mode, Packaging, and Currency dropdowns.
 
+**Customer Parameter Costing**: The customer- and Enquiry-specific price step
+after Product Parameter Costing. It applies scrap/purchase factors, profit,
+packaging, shipping, overhead, and FX without changing the Product master cost.
+Only one selected Enquiry and its recursive BOM are opened for editing at a
+time.
+
+**Ready Quote**: A Customer Parameter Costing result explicitly completed for
+Sales. An In-Progress Quote remains `Draft` and editable; a `Ready` Quote is
+locked for Costing and may be sent by Sales. Sending makes its saved calculation
+and recursive Product snapshots immutable.
+
+**PO Price Match Costing**: A controlled replacement Quote requested when Sales
+accepts a customer's PO price. The prior sent Quote remains immutable. The new
+Quote may complete only when its price matches the requested PO price to four
+decimal places; sending that exact replacement resolves the PO revision.
+
 **Quote Follow-Up Task**: The pending Sales task created atomically when a
 Quote is sent. Sales must choose its Follow-Up Date during Quote send; the task
 retains the sent Quote reference, uses Email as its initial channel, and remains

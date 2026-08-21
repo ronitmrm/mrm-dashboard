@@ -83,7 +83,7 @@ export default async function QuoteDetailPage({
               <Button asChild variant="outline">
                 <Link href="/commercial/quotes">Quote Register</Link>
               </Button>
-              {quote.status === "Draft" ? (
+              {quote.status === "Ready" ? (
                 <form
                   action={sendQuoteAction}
                   className="flex flex-wrap items-end gap-2"
@@ -101,6 +101,14 @@ export default async function QuoteDetailPage({
                   </label>
                   <Button type="submit">Send Quote</Button>
                 </form>
+              ) : quote.status === "Draft" && quote.enquiryItemId ? (
+                <Button asChild>
+                  <Link
+                    href={`/commercial/customer-costing?task=${encodeURIComponent(quote.enquiryItemId)}#customer-cost-form`}
+                  >
+                    Continue Costing
+                  </Link>
+                </Button>
               ) : null}
             </div>
           </div>

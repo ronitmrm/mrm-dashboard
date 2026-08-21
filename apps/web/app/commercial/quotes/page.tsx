@@ -54,12 +54,12 @@ export default async function QuotesPage() {
           <div>
             <CardTitle>Quote Register</CardTitle>
             <CardDescription>
-              Draft, Active, And Superseded Quote Revisions. Sent Values Are
-              Immutable And Remain Available As Historical Evidence.
+              In-Progress, Ready, Active, And Superseded Quote Revisions. Sent
+              Values Are Immutable And Remain Available As Historical Evidence.
             </CardDescription>
           </div>
           <Button asChild variant="outline">
-            <Link href="/commercial/costing">Return To Costing</Link>
+            <Link href="/commercial/customer-costing">Return To Costing</Link>
           </Button>
         </div>
       </CardHeader>
@@ -124,7 +124,7 @@ export default async function QuotesPage() {
                             </Link>
                           </Button>
                         ) : null}
-                        {quote.status === "Draft" ? (
+                        {quote.status === "Ready" ? (
                           <form
                             action={sendQuoteAction}
                             className="flex flex-wrap items-end justify-end gap-2"
@@ -149,6 +149,14 @@ export default async function QuotesPage() {
                               Send Quote
                             </Button>
                           </form>
+                        ) : quote.status === "Draft" && quote.enquiryItemId ? (
+                          <Button asChild size="sm" variant="outline">
+                            <Link
+                              href={`/commercial/customer-costing?task=${encodeURIComponent(quote.enquiryItemId)}#customer-cost-form`}
+                            >
+                              Continue Costing
+                            </Link>
+                          </Button>
                         ) : (
                           <Button asChild size="sm" variant="ghost">
                             <Link href={`/commercial/quotes/${quote.id}`}>
