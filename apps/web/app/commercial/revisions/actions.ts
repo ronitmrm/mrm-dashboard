@@ -11,6 +11,7 @@ import { optionalText, requiredText } from "@/lib/form-data"
 
 const revisionsPath = "/commercial/revisions"
 const ecnsPath = "/commercial/ecns"
+const customerBulkRevisionPath = "/commercial/customer-bulk-revision"
 
 function numberValue(formData: FormData, name: string) {
   const value = Number(requiredText(formData, name))
@@ -121,6 +122,7 @@ export async function createBulkPriceRevisionAction(formData: FormData) {
     })
   )
   revalidatePath(revisionsPath)
+  revalidatePath(customerBulkRevisionPath)
 }
 
 export async function stageBulkPriceRevisionAction(formData: FormData) {
@@ -139,6 +141,7 @@ export async function stageBulkPriceRevisionAction(formData: FormData) {
     })
   )
   revalidatePath(revisionsPath)
+  revalidatePath(customerBulkRevisionPath)
 }
 
 export async function deleteBulkPriceRevisionStageAction(formData: FormData) {
@@ -150,6 +153,7 @@ export async function deleteBulkPriceRevisionStageAction(formData: FormData) {
     })
   )
   revalidatePath(revisionsPath)
+  revalidatePath(customerBulkRevisionPath)
 }
 
 export async function completeBulkPriceRevisionAction(formData: FormData) {
@@ -160,6 +164,7 @@ export async function completeBulkPriceRevisionAction(formData: FormData) {
     })
   )
   revalidatePath(revisionsPath)
+  revalidatePath(customerBulkRevisionPath)
   revalidatePath("/commercial/quotes")
 }
 

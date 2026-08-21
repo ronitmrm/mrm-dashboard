@@ -8,6 +8,10 @@ MRM Dashboard supports production planning and shop-floor tracking for job cards
 The buyer, Incoterms, payment terms, shipment mode, packaging, and currency normally used for a Customer. A new Enquiry copies these defaults, while that Enquiry may select different active Commercial Master values without changing the Customer.
 _Avoid_: Fixed customer terms, enquiry-only terms.
 
+**Customer Bulk Revision**:
+A staged, customer-scoped request that applies one or more commercial parameter changes to selected active Sent or Accepted prices, previews the recalculation, and completes once by creating immutable replacement Quote revisions through every affected Package or Assembly ancestor.
+_Avoid_: Editing active Quote rows in place, product parameter revision, customer default update.
+
 **Setup**:
 One operation in a part route. A setup may run on one machine or be split across compatible parallel machines.
 _Avoid_: Operation when referring to a route step in the dashboard.

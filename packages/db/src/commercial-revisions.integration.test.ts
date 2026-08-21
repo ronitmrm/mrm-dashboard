@@ -213,6 +213,109 @@ describe("commercial revisions and corrections", () => {
     expect(bulkRevisionFields.scrap_rate.valueType).toBe("number")
   })
 
+  test("bounds the customer bulk revision queue and searches only its active customer prices", async () => {
+    const suffix = randomUUID()
+    const firstItemId = await createItem(`M-CBR-A-${suffix}`, "List")
+    const secondItemId = await createItem(`M-CBR-B-${suffix}`, "List")
+    const firstQuoteId = await createQuote({
+      customerPartCode: `CBR-A-${suffix}`,
+      itemId: firstItemId,
+      itemType: "List",
+      processBase: 10,
+      profitPercent: 0.2,
+      total: 12,
+    })
+    await createQuote({
+      customerPartCode: `CBR-B-${suffix}`,
+      itemId: secondItemId,
+      itemType: "List",
+      processBase: 11,
+      profitPercent: 0.2,
+      total: 13.2,
+    })
+    const firstRevision = await repository.createBulkPriceRevision({
+      customerId,
+      effectiveOn: "2026-08-21",
+      organizationId,
+      reason: "First bounded customer revision",
+      revisionRoute: "Customer Parameter Bulk Revision",
+    })
+    await repository.createBulkPriceRevision({
+      customerId,
+      effectiveOn: "2026-08-22",
+      organizationId,
+      reason: "Second bounded customer revision",
+      revisionRoute: "Customer Parameter Bulk Revision",
+    })
+    const productRevision = await repository.createBulkPriceRevision({
+      effectiveOn: "2026-08-23",
+      organizationId,
+      reason: "Product revisions stay outside the customer-only queue",
+      revisionRoute: "Product Parameter Bulk Revision",
+    })
+
+    const queue = await repository.listCustomerBulkPriceRevisionsBounded(
+      organizationCode,
+      { limit: 1 }
+    )
+    expect(queue.coverage).toEqual({
+      limit: 1,
+      returned: 1,
+      total: 2,
+      truncated: true,
+    })
+    expect(queue.rows[0]).toMatchObject({
+      activePriceCount: 2,
+      revisionRoute: "Customer Parameter Bulk Revision",
+    })
+
+    const prices = await repository.listBulkPriceRevisionActivePricesBounded(
+      firstRevision.id,
+      { limit: 1, query: `CBR-A-${suffix}` }
+    )
+    expect(prices).toEqual({
+      coverage: { limit: 1, returned: 1, total: 1, truncated: false },
+      rows: [
+        expect.objectContaining({
+          customerPartCode: `CBR-A-${suffix}`,
+          id: firstQuoteId,
+        }),
+      ],
+    })
+
+    await pool.query(
+      "UPDATE sales.bulk_price_revisions SET status = 'Pending Customer Costing' WHERE id = $1",
+      [productRevision.id]
+    )
+    const customerStageQueue =
+      await repository.listCustomerBulkPriceRevisionsBounded(organizationCode)
+    expect(customerStageQueue.coverage.total).toBe(3)
+    expect(customerStageQueue.rows).toContainEqual(
+      expect.objectContaining({
+        id: productRevision.id,
+        revisionRoute: "Product Parameter Bulk Revision",
+        status: "Pending Customer Costing",
+      })
+    )
+    const customerStage = await repository.stageBulkPriceRevisionChange({
+      bulkPriceRevisionId: productRevision.id,
+      fieldName: "profit_percent",
+      newValue: 0.25,
+      selectedQuoteItemIds: [firstQuoteId],
+    })
+    expect(customerStage).toMatchObject({ selectedCount: 1 })
+    await pool.query(
+      "UPDATE sales.bulk_price_revision_changes SET applied_at = now() WHERE stage_group_id = $1",
+      [customerStage.stageGroupId]
+    )
+    await expect(
+      repository.deleteBulkPriceRevisionStage({
+        bulkPriceRevisionId: productRevision.id,
+        stageGroupId: customerStage.stageGroupId,
+      })
+    ).rejects.toThrow("not found")
+  })
+
   test("lists engineering change notes for an organization with no ECNs", async () => {
     await expect(
       repository.listEngineeringChangeNotes(organizationCode)
