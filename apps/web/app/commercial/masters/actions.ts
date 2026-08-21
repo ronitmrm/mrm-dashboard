@@ -17,6 +17,7 @@ import { requireCapability } from "@/lib/auth/require-capability"
 import {
   commercialMasterSelection,
   commercialMasterViewHref,
+  commercialMasterWorkspaceKind,
 } from "@/lib/commercial-master-workspace"
 
 import { parseMastersWorkbook } from "./workbook"
@@ -28,10 +29,13 @@ function mastersReturnPath(formData: FormData) {
   return view === "dataEntry" || view === "masterTables"
     ? commercialMasterViewHref(
         view,
-        commercialMasterSelection(
-          formData.get("kind")?.toString() ??
-            formData.get("master_kind")?.toString()
-        ).entryKind
+        commercialMasterWorkspaceKind(
+          commercialMasterSelection(
+            formData.get("workspace_kind")?.toString() ??
+              formData.get("kind")?.toString() ??
+              formData.get("master_kind")?.toString()
+          )
+        )
       )
     : mastersPath
 }

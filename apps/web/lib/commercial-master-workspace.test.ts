@@ -26,6 +26,19 @@ describe("commercial master workspace", () => {
     })
   })
 
+  it("exposes Buyer as a dedicated commercial master", () => {
+    expect(commercialMasterSelection("buyer")).toMatchObject({
+      entryKind: "commercialTerm",
+      label: "Buyer",
+      tableKind: "commercial_commercial_term",
+      termType: "buyer",
+      workspaceKind: "buyer",
+    })
+    expect(commercialMasterViewHref("dataEntry", "buyer")).toBe(
+      "/commercial/masters?masterView=dataEntry&kind=buyer"
+    )
+  })
+
   it("downloads the source workbook sheet for the selected master", () => {
     expect(commercialMasterTemplateHref("materialGrade")).toBe(
       "/commercial/masters/template.xlsx?master=grades"

@@ -36,7 +36,7 @@ import {
   commercialMasterKinds,
   commercialMasterSelection,
   commercialMasterViewHref,
-  type CommercialMasterEntryKind,
+  commercialMasterWorkspaceKind,
 } from "@/lib/commercial-master-workspace"
 
 type CommercialMasterRow = {
@@ -58,15 +58,17 @@ export function CommercialMasterTable({
   rows,
 }: {
   canWrite: boolean
-  initialKind: CommercialMasterEntryKind
+  initialKind: string
   rows: CommercialMasterRow[]
 }) {
   const router = useRouter()
-  const initialTableKind = commercialMasterSelection(initialKind).tableKind
-  const [kind, setKind] = useState(initialTableKind)
+  const [workspaceKind, setWorkspaceKind] = useState(() =>
+    commercialMasterWorkspaceKind(commercialMasterSelection(initialKind))
+  )
   const [editing, setEditing] = useState<CommercialMasterRow | null>(null)
   const [deleting, setDeleting] = useState<CommercialMasterRow | null>(null)
-  const visibleRows = rows.filter((row) => row.kind === kind)
+  const selection = commercialMasterSelection(workspaceKind)
+  const visibleRows = rows.filter((row) => row.kind === selection.tableKind)
   const replacementRows = deleting
     ? rows.filter((row) => row.kind === deleting.kind && row.id !== deleting.id)
     : []
@@ -79,22 +81,23 @@ export function CommercialMasterTable({
           id="commercial-master-table-kind"
           onChange={(event) => {
             const nextKind = commercialMasterSelection(event.target.value)
-            setKind(nextKind.tableKind)
+            const nextWorkspaceKind = commercialMasterWorkspaceKind(nextKind)
+            setWorkspaceKind(nextWorkspaceKind)
             router.replace(
-              commercialMasterViewHref("masterTables", nextKind.entryKind),
+              commercialMasterViewHref("masterTables", nextWorkspaceKind),
               { scroll: false }
             )
           }}
-          value={kind}
+          value={workspaceKind}
         >
-          {commercialMasterKinds.map((option) => (
-            <NativeSelectOption
-              key={option.tableKind}
-              value={option.tableKind}
-            >
-              {option.label}
-            </NativeSelectOption>
-          ))}
+          {commercialMasterKinds.map((option) => {
+            const optionKind = commercialMasterWorkspaceKind(option)
+            return (
+              <NativeSelectOption key={optionKind} value={optionKind}>
+                {option.label}
+              </NativeSelectOption>
+            )
+          })}
         </NativeSelect>
       </Field>
       <div className="overflow-x-auto rounded-md border">
@@ -143,8 +146,7 @@ export function CommercialMasterTable({
                   className="py-10 text-center text-muted-foreground"
                   colSpan={canWrite ? 2 : 1}
                 >
-                  No {commercialMasterSelection(kind).label.toLowerCase()} records
-                  yet.
+                  No {selection.label.toLowerCase()} records yet.
                 </TableCell>
               </TableRow>
             ) : null}
@@ -171,6 +173,11 @@ export function CommercialMasterTable({
               <input name="master_view" type="hidden" value="masterTables" />
               <input name="master_id" type="hidden" value={editing.id} />
               <input name="master_kind" type="hidden" value={editing.kind} />
+              <input
+                name="workspace_kind"
+                type="hidden"
+                value={workspaceKind}
+              />
               <Field>
                 <FieldLabel htmlFor="commercial-master-edit-name">
                   Name
@@ -216,6 +223,11 @@ export function CommercialMasterTable({
               <input name="master_view" type="hidden" value="masterTables" />
               <input name="master_id" type="hidden" value={deleting.id} />
               <input name="master_kind" type="hidden" value={deleting.kind} />
+              <input
+                name="workspace_kind"
+                type="hidden"
+                value={workspaceKind}
+              />
               <Field>
                 <FieldLabel htmlFor="commercial-master-replacement">
                   Replacement (Required Only If Used)

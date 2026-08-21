@@ -61,8 +61,45 @@ export const commercialMasterKinds = [
   },
   {
     entryKind: "commercialTerm",
-    label: "Commercial term",
+    label: "Buyer",
     tableKind: "commercial_commercial_term",
+    termType: "buyer",
+    workspaceKind: "buyer",
+  },
+  {
+    entryKind: "commercialTerm",
+    label: "Incoterms",
+    tableKind: "commercial_commercial_term",
+    termType: "incoterms",
+    workspaceKind: "incoterms",
+  },
+  {
+    entryKind: "commercialTerm",
+    label: "Payment terms",
+    tableKind: "commercial_commercial_term",
+    termType: "payment_terms",
+    workspaceKind: "payment_terms",
+  },
+  {
+    entryKind: "commercialTerm",
+    label: "Shipment mode",
+    tableKind: "commercial_commercial_term",
+    termType: "shipment_mode",
+    workspaceKind: "shipment_mode",
+  },
+  {
+    entryKind: "commercialTerm",
+    label: "Packaging terms",
+    tableKind: "commercial_commercial_term",
+    termType: "packaging_terms",
+    workspaceKind: "packaging_terms",
+  },
+  {
+    entryKind: "commercialTerm",
+    label: "Currency",
+    tableKind: "commercial_commercial_term",
+    termType: "currency",
+    workspaceKind: "currency",
   },
   {
     entryKind: "quoteTerm",
@@ -75,6 +112,17 @@ export type CommercialMasterEntryKind =
   (typeof commercialMasterKinds)[number]["entryKind"]
 export type CommercialMasterTableKind =
   (typeof commercialMasterKinds)[number]["tableKind"]
+
+export type CommercialMasterSelection =
+  (typeof commercialMasterKinds)[number]
+
+export function commercialMasterWorkspaceKind(
+  selection: CommercialMasterSelection
+) {
+  return "workspaceKind" in selection
+    ? selection.workspaceKind
+    : selection.entryKind
+}
 
 const templateKeys = {
   application: "applications",
@@ -99,7 +147,9 @@ export function commercialMasterSelection(kind?: string | null) {
   return (
     commercialMasterKinds.find(
       (candidate) =>
-        candidate.entryKind === kind || candidate.tableKind === kind
+        candidate.entryKind === kind ||
+        candidate.tableKind === kind ||
+        ("workspaceKind" in candidate && candidate.workspaceKind === kind)
     ) ?? defaultSelection
   )
 }
@@ -111,7 +161,7 @@ export function commercialMasterViewHref(
   const selection = commercialMasterSelection(kind)
   const params = new URLSearchParams({
     masterView: view,
-    kind: selection.entryKind,
+    kind: commercialMasterWorkspaceKind(selection),
   })
   return `/commercial/masters?${params.toString()}`
 }
