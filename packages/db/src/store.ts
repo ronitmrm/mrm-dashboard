@@ -193,6 +193,36 @@ async function machineIdForReference(
   return result.rows[0].id
 }
 
+export async function authorizeStoreItemTypeArtifactTarget(
+  client: PoolClient,
+  input: { itemTypeId: string; organizationId: string }
+) {
+  const target = await client.query<{ id: string }>(
+    `
+      SELECT id FROM store.item_types
+      WHERE id = $1 AND organization_id = $2 AND active
+      FOR KEY SHARE
+    `,
+    [requiredText(input.itemTypeId, "Store Item Type"), input.organizationId]
+  )
+  if (!target.rows[0]) throw new Error("Store Item Type was not found.")
+}
+
+export async function authorizeStoreReceiptArtifactTarget(
+  client: PoolClient,
+  input: { organizationId: string; receiptId: string }
+) {
+  const target = await client.query<{ id: string }>(
+    `
+      SELECT id FROM store.receipts
+      WHERE id = $1 AND organization_id = $2
+      FOR KEY SHARE
+    `,
+    [requiredText(input.receiptId, "Store receipt"), input.organizationId]
+  )
+  if (!target.rows[0]) throw new Error("Store receipt was not found.")
+}
+
 export function createStoreRepository(options: RepositoryPoolOptions) {
   const { close, pool } = repositoryPool(options)
 
@@ -1601,20 +1631,49 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         fileName: string
         id: string
         itemTypeId: string
+        publicUrl: string | null
         storageKey: string
       }>(
         `
-          SELECT document.id, document.item_type_id AS "itemTypeId",
-            document.file_name AS "fileName",
-            document.storage_key AS "storageKey"
-          FROM store.documents document
-          JOIN store.item_types item ON item.id = document.item_type_id
-          WHERE document.organization_id = $1
-            AND document.document_type = 'ASSET_DRAWING'
-            AND document.file_name IS NOT NULL
-            AND document.storage_key IS NOT NULL
-            AND item.active
-          ORDER BY document.created_at DESC
+          SELECT drawing.id, drawing."itemTypeId", drawing."fileName",
+            drawing."storageKey", drawing."publicUrl"
+          FROM (
+            SELECT file.id, link.target_id AS "itemTypeId",
+              file.file_name AS "fileName", file.storage_key AS "storageKey",
+              object.public_url AS "publicUrl", file.created_at
+            FROM core.file_links link
+            JOIN core.files file ON file.id = link.file_id
+            JOIN core.file_objects object ON object.id = file.physical_object_id
+            JOIN store.item_types item ON item.id = link.target_id
+            WHERE link.organization_id = $1
+              AND link.target_schema = 'store'
+              AND link.target_table = 'item_types'
+              AND link.purpose = 'asset_drawing' AND link.is_current
+              AND file.lifecycle_state = 'current'
+              AND object.lifecycle_state = 'available'
+              AND item.organization_id = $1 AND item.active
+            UNION ALL
+            SELECT document.id, document.item_type_id AS "itemTypeId",
+              document.file_name AS "fileName",
+              document.storage_key AS "storageKey", NULL::text AS "publicUrl",
+              document.created_at
+            FROM store.documents document
+            JOIN store.item_types item ON item.id = document.item_type_id
+            WHERE document.organization_id = $1
+              AND document.document_type = 'ASSET_DRAWING'
+              AND document.file_name IS NOT NULL
+              AND document.storage_key IS NOT NULL
+              AND item.active
+              AND NOT EXISTS (
+                SELECT 1 FROM core.file_links link
+                WHERE link.organization_id = document.organization_id
+                  AND link.target_schema = 'store'
+                  AND link.target_table = 'item_types'
+                  AND link.target_id = document.item_type_id
+                  AND link.purpose = 'asset_drawing' AND link.is_current
+              )
+          ) drawing
+          ORDER BY drawing.created_at DESC
         `,
         [organizationId]
       )
@@ -1683,17 +1742,34 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     }) {
       const result = await pool.query<{
         fileName: string
-        storageKey: string
+        publicUrl: string | null
+        storageKey: string | null
       }>(
         `
-          SELECT document.file_name AS "fileName",
-            document.storage_key AS "storageKey"
-          FROM store.documents document
-          WHERE document.id = $1 AND document.organization_id = $2
-            AND document.item_type_id = $3
-            AND document.document_type = 'ASSET_DRAWING'
-            AND document.file_name IS NOT NULL
-            AND document.storage_key IS NOT NULL
+          SELECT drawing."fileName", drawing."storageKey", drawing."publicUrl"
+          FROM (
+            SELECT file.id, file.file_name AS "fileName",
+              file.storage_key AS "storageKey", object.public_url AS "publicUrl"
+            FROM core.file_links link
+            JOIN core.files file ON file.id = link.file_id
+            JOIN core.file_objects object ON object.id = file.physical_object_id
+            WHERE file.id = $1 AND link.organization_id = $2
+              AND link.target_schema = 'store'
+              AND link.target_table = 'item_types' AND link.target_id = $3
+              AND link.purpose = 'asset_drawing' AND link.is_current
+              AND file.lifecycle_state = 'current'
+              AND object.lifecycle_state = 'available'
+            UNION ALL
+            SELECT document.id, document.file_name AS "fileName",
+              document.storage_key AS "storageKey", NULL::text AS "publicUrl"
+            FROM store.documents document
+            WHERE document.id = $1 AND document.organization_id = $2
+              AND document.item_type_id = $3
+              AND document.document_type = 'ASSET_DRAWING'
+              AND document.file_name IS NOT NULL
+              AND document.storage_key IS NOT NULL
+          ) drawing
+          LIMIT 1
         `,
         [input.documentId, input.organizationId, input.itemTypeId]
       )
@@ -2106,8 +2182,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
       actorUserId?: string | null
       billDate?: string | null
       billNumber?: string | null
-      guaranteeCardFileName?: string | null
-      guaranteeCardStorageKey?: string | null
       locationId: string
       manufacturerSerialNumbers?: string[]
       organizationId: string
@@ -2300,24 +2374,6 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
             ]
           )
         }
-        if (input.guaranteeCardFileName?.trim()) {
-          await client.query(
-            `
-              INSERT INTO store.documents (
-                organization_id, receipt_id, document_type, bill_number,
-                file_name, storage_key, created_by_user_id
-              ) VALUES ($1, $2, 'GUARANTEE_CARD', $3, $4, $5, $6)
-            `,
-            [
-              input.organizationId,
-              receipt.rows[0]!.id,
-              input.billNumber?.trim() || null,
-              input.guaranteeCardFileName.trim(),
-              input.guaranteeCardStorageKey?.trim() || null,
-              input.actorUserId ?? null,
-            ]
-          )
-        }
         await client.query(
           `
             UPDATE store.purchase_order_lines
@@ -2352,7 +2408,7 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
           `,
           [input.actorUserId ?? null, input.purchaseOrderLineId]
         )
-        return { assetCodes, receiptNumber }
+        return { assetCodes, receiptId: receipt.rows[0]!.id, receiptNumber }
       })
     },
 
@@ -2942,26 +2998,75 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
         documentType: string
         fileName: string | null
         id: string
+        publicUrl: string | null
         storageKey: string | null
       }>(
         `
-          SELECT document.id, document.document_type AS "documentType",
-            document.bill_number AS "billNumber", document.file_name AS "fileName",
-            document.storage_key AS "storageKey"
-          FROM store.documents document
-          WHERE document.organization_id = $1
-            AND (
-              document.asset_id = $2
-              OR document.receipt_id = (
-                SELECT line.receipt_id FROM store.assets linked_asset
-                JOIN store.receipt_lines line ON line.id = linked_asset.receipt_line_id
-                WHERE linked_asset.id = $2
+          SELECT document.id, document."documentType", document."billNumber",
+            document."fileName", document."storageKey", document."publicUrl"
+          FROM (
+            SELECT file.id,
+              CASE link.purpose
+                WHEN 'asset_drawing' THEN 'ASSET_DRAWING'
+                WHEN 'guarantee_card' THEN 'GUARANTEE_CARD'
+              END AS "documentType",
+              NULL::text AS "billNumber", file.file_name AS "fileName",
+              file.storage_key AS "storageKey", object.public_url AS "publicUrl",
+              file.created_at
+            FROM store.assets linked_asset
+            LEFT JOIN store.receipt_lines receipt_line
+              ON receipt_line.id = linked_asset.receipt_line_id
+            JOIN core.file_links link ON link.organization_id = linked_asset.organization_id
+              AND link.target_schema = 'store'
+              AND (
+                (link.target_table = 'item_types'
+                  AND link.target_id = linked_asset.item_type_id
+                  AND link.purpose = 'asset_drawing')
+                OR (link.target_table = 'receipts'
+                  AND link.target_id = receipt_line.receipt_id
+                  AND link.purpose = 'guarantee_card')
               )
-              OR document.item_type_id = (
-                SELECT linked_asset.item_type_id FROM store.assets linked_asset
-                WHERE linked_asset.id = $2
+              AND link.is_current
+            JOIN core.files file ON file.id = link.file_id
+              AND file.lifecycle_state = 'current'
+            JOIN core.file_objects object ON object.id = file.physical_object_id
+              AND object.lifecycle_state = 'available'
+            WHERE linked_asset.organization_id = $1 AND linked_asset.id = $2
+            UNION ALL
+            SELECT legacy.id, legacy.document_type AS "documentType",
+              legacy.bill_number AS "billNumber", legacy.file_name AS "fileName",
+              legacy.storage_key AS "storageKey", NULL::text AS "publicUrl",
+              legacy.created_at
+            FROM store.documents legacy
+            WHERE legacy.organization_id = $1
+              AND (
+                legacy.asset_id = $2
+                OR legacy.receipt_id = (
+                  SELECT line.receipt_id FROM store.assets linked_asset
+                  JOIN store.receipt_lines line ON line.id = linked_asset.receipt_line_id
+                  WHERE linked_asset.id = $2
+                )
+                OR legacy.item_type_id = (
+                  SELECT linked_asset.item_type_id FROM store.assets linked_asset
+                  WHERE linked_asset.id = $2
+                )
               )
-            )
+              AND NOT EXISTS (
+                SELECT 1 FROM core.file_links link
+                WHERE link.organization_id = legacy.organization_id
+                  AND link.target_schema = 'store' AND link.is_current
+                  AND (
+                    (legacy.document_type = 'ASSET_DRAWING'
+                      AND link.target_table = 'item_types'
+                      AND link.target_id = legacy.item_type_id
+                      AND link.purpose = 'asset_drawing')
+                    OR (legacy.document_type = 'GUARANTEE_CARD'
+                      AND link.target_table = 'receipts'
+                      AND link.target_id = legacy.receipt_id
+                      AND link.purpose = 'guarantee_card')
+                  )
+              )
+          ) document
           ORDER BY document.created_at DESC
         `,
         [input.organizationId, asset.rows[0].id]
@@ -3443,23 +3548,49 @@ export function createStoreRepository(options: RepositoryPoolOptions) {
     }) {
       const result = await pool.query<{
         fileName: string
-        storageKey: string
+        publicUrl: string | null
+        storageKey: string | null
       }>(
         `
-          SELECT document.file_name AS "fileName",
-            document.storage_key AS "storageKey"
-          FROM store.documents document
-          JOIN store.assets asset ON asset.organization_id = document.organization_id
-          LEFT JOIN store.receipt_lines line ON line.id = asset.receipt_line_id
-          WHERE document.id = $1 AND document.organization_id = $2
-            AND lower(asset.asset_code) = lower($3)
-            AND (
-              document.asset_id = asset.id
-              OR document.receipt_id = line.receipt_id
-              OR document.item_type_id = asset.item_type_id
-            )
-            AND document.file_name IS NOT NULL
-            AND document.storage_key IS NOT NULL
+          SELECT document."fileName", document."storageKey", document."publicUrl"
+          FROM (
+            SELECT file.id, file.file_name AS "fileName",
+              file.storage_key AS "storageKey", object.public_url AS "publicUrl"
+            FROM store.assets asset
+            LEFT JOIN store.receipt_lines line ON line.id = asset.receipt_line_id
+            JOIN core.file_links link ON link.organization_id = asset.organization_id
+              AND link.target_schema = 'store'
+              AND (
+                (link.target_table = 'item_types'
+                  AND link.target_id = asset.item_type_id
+                  AND link.purpose = 'asset_drawing')
+                OR (link.target_table = 'receipts'
+                  AND link.target_id = line.receipt_id
+                  AND link.purpose = 'guarantee_card')
+              )
+              AND link.is_current
+            JOIN core.files file ON file.id = link.file_id
+              AND file.lifecycle_state = 'current'
+            JOIN core.file_objects object ON object.id = file.physical_object_id
+              AND object.lifecycle_state = 'available'
+            WHERE file.id = $1 AND asset.organization_id = $2
+              AND lower(asset.asset_code) = lower($3)
+            UNION ALL
+            SELECT legacy.id, legacy.file_name AS "fileName",
+              legacy.storage_key AS "storageKey", NULL::text AS "publicUrl"
+            FROM store.documents legacy
+            JOIN store.assets asset ON asset.organization_id = legacy.organization_id
+            LEFT JOIN store.receipt_lines line ON line.id = asset.receipt_line_id
+            WHERE legacy.id = $1 AND legacy.organization_id = $2
+              AND lower(asset.asset_code) = lower($3)
+              AND (
+                legacy.asset_id = asset.id
+                OR legacy.receipt_id = line.receipt_id
+                OR legacy.item_type_id = asset.item_type_id
+              )
+              AND legacy.file_name IS NOT NULL
+              AND legacy.storage_key IS NOT NULL
+          ) document
           LIMIT 1
         `,
         [input.documentId, input.organizationId, input.assetCode]

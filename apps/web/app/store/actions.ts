@@ -1,8 +1,11 @@
 "use server"
 
-import { randomUUID } from "node:crypto"
+import { createHash } from "node:crypto"
 
 import {
+  authorizeStoreItemTypeArtifactTarget,
+  authorizeStoreReceiptArtifactTarget,
+  createArtifactService,
   createMasterDataLifecycleRepository,
   createStoreRepository,
   type MasterDataKind,
@@ -22,11 +25,8 @@ import {
   resolveStoreRequestDepartment,
   storeRequestFormPolicy,
 } from "@/lib/store-request-policy"
-import {
-  deleteUserAttachment,
-  saveUserAttachment,
-} from "@/lib/user-attachment-storage"
 import { validateUserAttachment } from "@/lib/user-attachment-security"
+import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
 
 const storePath = "/store"
 const holderTypes = [
@@ -291,47 +291,36 @@ export async function createStoreAssetNameAction(formData: FormData) {
 
 export async function createStoreItemTypeAction(formData: FormData) {
   const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
-  try {
-    const previousStorageKey = await withStore(
-      "store.masters.write",
-      async (repository, actorUserId, organizationId) => {
-        const masterId = optionalText(formData, "master_id")
-        const input = {
+  await withStore(
+    "store.masters.write",
+    async (repository, actorUserId, organizationId) => {
+      const masterId = optionalText(formData, "master_id")
+      const input = {
+        actorUserId,
+        assetCategoryId: requiredText(formData, "asset_category_id"),
+        assetNameId: requiredText(formData, "asset_name_id"),
+        assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
+        assetType: assetType(formData),
+        applicableItemCode: optionalText(formData, "applicable_item_code"),
+        drawingNumber: optionalText(formData, "drawing_number"),
+        identificationName: requiredText(formData, "identification_name"),
+        minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
+        organizationId,
+        unit: requiredText(formData, "unit"),
+      }
+      const item = masterId
+        ? await repository.updateItemType({ ...input, id: masterId })
+        : await repository.createItemType(input)
+      if (savedDrawing) {
+        await storeItemDrawingArtifact({
+          ...savedDrawing,
           actorUserId,
-          assetCategoryId: requiredText(formData, "asset_category_id"),
-          assetNameId: requiredText(formData, "asset_name_id"),
-          assetSubcategoryId: requiredText(formData, "asset_subcategory_id"),
-          assetType: assetType(formData),
-          applicableItemCode: optionalText(formData, "applicable_item_code"),
-          drawingNumber: optionalText(formData, "drawing_number"),
-          identificationName: requiredText(formData, "identification_name"),
-          minimumStock: Number(optionalText(formData, "minimum_stock") ?? 0),
-          organizationId,
-          unit: requiredText(formData, "unit"),
-        }
-        const item = masterId
-          ? await repository.updateItemType({ ...input, id: masterId })
-          : await repository.createItemType(input)
-        if (!savedDrawing) return null
-        const drawing = await repository.recordItemTypeDrawing({
-          actorUserId,
-          fileName: savedDrawing.fileName,
           itemTypeId: item.id,
           organizationId,
-          storageKey: savedDrawing.storageKey,
         })
-        return drawing.previousStorageKey
       }
-    )
-    if (previousStorageKey && previousStorageKey !== savedDrawing?.storageKey) {
-      await deleteUserAttachment(previousStorageKey).catch(() => undefined)
     }
-  } catch (error) {
-    if (savedDrawing) {
-      await deleteUserAttachment(savedDrawing.storageKey).catch(() => undefined)
-    }
-    throw error
-  }
+  )
   revalidateStore()
 }
 
@@ -350,39 +339,63 @@ async function saveAssetDrawing(upload: FormDataEntryValue | null) {
     fileName: upload.name,
     purpose: "drawing",
   })
-  const storageKey = `store/drawings/${randomUUID()}-${validated.fileName}`
-  await saveUserAttachment({
-    bytes,
-    mediaType: validated.mediaType,
-    storageKey,
+  return { bytes, fileName: validated.fileName, mediaType: validated.mediaType }
+}
+
+async function storeItemDrawingArtifact(input: {
+  actorUserId: string
+  bytes: Buffer
+  fileName: string
+  itemTypeId: string
+  mediaType: string
+  organizationId: string
+}) {
+  const artifacts = createArtifactService({
+    connectionString: readAuthEnvironment().connectionString,
+    provider: createUploadThingArtifactProvider(),
   })
-  return { fileName: validated.fileName, storageKey }
+  try {
+    const sha256 = createHash("sha256").update(input.bytes).digest("hex")
+    await artifacts.store({
+      actorUserId: input.actorUserId,
+      authorizeTarget: (client) =>
+        authorizeStoreItemTypeArtifactTarget(client, input),
+      bytes: input.bytes,
+      fileName: input.fileName,
+      idempotencyKey: [
+        "store-item-drawing",
+        input.itemTypeId,
+        input.fileName,
+        sha256,
+      ].join(":"),
+      mediaType: input.mediaType,
+      organizationId: input.organizationId,
+      origin: "uploaded",
+      purpose: "asset_drawing",
+      target: {
+        id: input.itemTypeId,
+        schema: "store",
+        table: "item_types",
+      },
+    })
+  } finally {
+    await artifacts.close()
+  }
 }
 
 export async function uploadStoreItemDrawingAction(formData: FormData) {
   const savedDrawing = await saveAssetDrawing(formData.get("asset_drawing"))
   if (!savedDrawing) throw new Error("Select an Asset drawing to upload.")
-  try {
-    const previousStorageKey = await withStore(
-      "store.masters.write",
-      async (repository, actorUserId, organizationId) =>
-        (
-          await repository.recordItemTypeDrawing({
-            actorUserId,
-            fileName: savedDrawing.fileName,
-            itemTypeId: requiredText(formData, "item_type_id"),
-            organizationId,
-            storageKey: savedDrawing.storageKey,
-          })
-        ).previousStorageKey
-    )
-    if (previousStorageKey && previousStorageKey !== savedDrawing.storageKey) {
-      await deleteUserAttachment(previousStorageKey).catch(() => undefined)
-    }
-  } catch (error) {
-    await deleteUserAttachment(savedDrawing.storageKey).catch(() => undefined)
-    throw error
-  }
+  await withStore(
+    "store.masters.write",
+    (_repository, actorUserId, organizationId) =>
+      storeItemDrawingArtifact({
+        ...savedDrawing,
+        actorUserId,
+        itemTypeId: requiredText(formData, "item_type_id"),
+        organizationId,
+      })
+  )
   revalidateStore()
 }
 
@@ -550,55 +563,79 @@ async function saveGuaranteeCard(upload: FormDataEntryValue | null) {
     fileName: upload.name,
     purpose: "purchase-order",
   })
-  const storageKey = `store/${randomUUID()}-${validated.fileName}`
-  await saveUserAttachment({
-    bytes,
-    mediaType: validated.mediaType,
-    storageKey,
-  })
-  return { fileName: validated.fileName, storageKey }
+  return { bytes, fileName: validated.fileName, mediaType: validated.mediaType }
 }
 
 export async function receiveStoreStockAction(formData: FormData) {
   const savedFile = await saveGuaranteeCard(formData.get("guarantee_card"))
-  try {
-    await withStore(
-      "store.purchase_register.write",
-      async (repository, actorUserId, organizationId) => {
-        const [requestContext, location] = await Promise.all([
-          repository.requisitionRequestContext({
-            organizationId,
-            userId: actorUserId,
-          }),
-          repository.ensurePrimaryStoreLocation({
-            actorUserId,
-            organizationId,
-          }),
-        ])
-        return repository.receiveStock({
-          actorUserId,
-          billDate: optionalText(formData, "bill_date"),
-          billNumber: optionalText(formData, "bill_number"),
-          guaranteeCardFileName: savedFile?.fileName,
-          guaranteeCardStorageKey: savedFile?.storageKey,
-          locationId: location.id,
+  await withStore(
+    "store.purchase_register.write",
+    async (repository, actorUserId, organizationId) => {
+      const [requestContext, location] = await Promise.all([
+        repository.requisitionRequestContext({
           organizationId,
-          purchaseOrderLineId: requiredText(
-            formData,
-            "purchase_order_line_id"
-          ),
-          quantity: positiveNumber(formData, "quantity"),
-          receivedBy: requestContext.requesterEmail,
-          warrantyUntil: optionalText(formData, "warranty_until"),
+          userId: actorUserId,
+        }),
+        repository.ensurePrimaryStoreLocation({
+          actorUserId,
+          organizationId,
+        }),
+      ])
+      const received = await repository.receiveStock({
+        actorUserId,
+        billDate: optionalText(formData, "bill_date"),
+        billNumber: optionalText(formData, "bill_number"),
+        locationId: location.id,
+        organizationId,
+        purchaseOrderLineId: requiredText(
+          formData,
+          "purchase_order_line_id"
+        ),
+        quantity: positiveNumber(formData, "quantity"),
+        receivedBy: requestContext.requesterEmail,
+        warrantyUntil: optionalText(formData, "warranty_until"),
+      })
+      if (savedFile) {
+        const artifacts = createArtifactService({
+          connectionString: readAuthEnvironment().connectionString,
+          provider: createUploadThingArtifactProvider(),
         })
+        try {
+          const sha256 = createHash("sha256")
+            .update(savedFile.bytes)
+            .digest("hex")
+          await artifacts.store({
+            actorUserId,
+            authorizeTarget: (client) =>
+              authorizeStoreReceiptArtifactTarget(client, {
+                organizationId,
+                receiptId: received.receiptId,
+              }),
+            bytes: savedFile.bytes,
+            fileName: savedFile.fileName,
+            idempotencyKey: [
+              "store-guarantee-card",
+              received.receiptId,
+              savedFile.fileName,
+              sha256,
+            ].join(":"),
+            mediaType: savedFile.mediaType,
+            organizationId,
+            origin: "uploaded",
+            purpose: "guarantee_card",
+            target: {
+              id: received.receiptId,
+              schema: "store",
+              table: "receipts",
+            },
+          })
+        } finally {
+          await artifacts.close()
+        }
       }
-    )
-  } catch (error) {
-    if (savedFile) {
-      await deleteUserAttachment(savedFile.storageKey).catch(() => undefined)
+      return received
     }
-    throw error
-  }
+  )
   revalidateStore()
 }
 

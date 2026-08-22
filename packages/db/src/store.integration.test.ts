@@ -3,9 +3,17 @@ import { randomUUID } from "node:crypto"
 import { Pool } from "pg"
 import { afterAll, beforeAll, describe, expect, test } from "vitest"
 
+import {
+  createArtifactService,
+  type ArtifactStorageProvider,
+} from "./artifacts"
 import { migrateDatabase } from "./migrate"
 import { createMaintenanceRepository } from "./maintenance"
-import { createStoreRepository } from "./store"
+import {
+  authorizeStoreItemTypeArtifactTarget,
+  authorizeStoreReceiptArtifactTarget,
+  createStoreRepository,
+} from "./store"
 
 const connectionString =
   process.env.TEST_DATABASE_URL ??
@@ -18,6 +26,19 @@ const suffix = randomUUID().slice(0, 8)
 let organizationId: string
 let legacyItemTypeId: string
 let legacyAssetId: string
+let legacyAssetCode: string
+
+class StoreArtifactProvider implements ArtifactStorageProvider {
+  readonly uploads: Array<{ bytes: Buffer; name: string }> = []
+
+  async delete() {}
+
+  async upload(input: Parameters<ArtifactStorageProvider["upload"]>[0]) {
+    this.uploads.push({ bytes: input.bytes, name: input.name })
+    const key = `store-artifact-${randomUUID()}`
+    return { key, url: `https://files.example.test/${key}` }
+  }
+}
 
 beforeAll(async () => {
   await migrateDatabase({
@@ -57,6 +78,11 @@ beforeAll(async () => {
   )
   legacyAssetId = legacyAsset.rows[0]!.id
   await migrateDatabase({ connectionString })
+  const migratedAsset = await pool.query<{ assetCode: string }>(
+    `SELECT asset_code AS "assetCode" FROM store.assets WHERE id = $1`,
+    [legacyAssetId]
+  )
+  legacyAssetCode = migratedAsset.rows[0]!.assetCode
 })
 
 afterAll(async () => {
@@ -112,6 +138,306 @@ async function createPurchaseOrder(
 }
 
 describe("Store requests", () => {
+  test("keeps current and superseded Item drawings while reusing Organization bytes", async () => {
+    const firstItem = await store.createItemType({
+      ...(await createClassification("Artifact Drawing One")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Artifact Drawing One ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const secondItem = await store.createItemType({
+      ...(await createClassification("Artifact Drawing Two")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Artifact Drawing Two ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const provider = new StoreArtifactProvider()
+    const artifacts = createArtifactService({ connectionString, provider })
+    const sharedBytes = Buffer.from("%PDF-1.7\nshared Store drawing")
+    const replacementBytes = Buffer.from("%PDF-1.7\nreplacement Store drawing")
+    const target = (itemTypeId: string) => ({
+      id: itemTypeId,
+      schema: "store",
+      table: "item_types",
+    })
+    const saveDrawing = (input: {
+      bytes: Buffer
+      fileName: string
+      idempotencyKey: string
+      itemTypeId: string
+    }) =>
+      artifacts.store({
+        actorUserId: null,
+        authorizeTarget: (client) =>
+          authorizeStoreItemTypeArtifactTarget(client, {
+            itemTypeId: input.itemTypeId,
+            organizationId,
+          }),
+        bytes: input.bytes,
+        fileName: input.fileName,
+        idempotencyKey: input.idempotencyKey,
+        mediaType: "application/pdf",
+        organizationId,
+        origin: "uploaded",
+        purpose: "asset_drawing",
+        target: target(input.itemTypeId),
+      })
+
+    try {
+      const first = await saveDrawing({
+        bytes: sharedBytes,
+        fileName: "drawing-v1.pdf",
+        idempotencyKey: `store-drawing:${firstItem.id}:v1`,
+        itemTypeId: firstItem.id,
+      })
+      const duplicate = await saveDrawing({
+        bytes: sharedBytes,
+        fileName: "drawing-copy.pdf",
+        idempotencyKey: `store-drawing:${secondItem.id}:v1`,
+        itemTypeId: secondItem.id,
+      })
+      const replacement = await saveDrawing({
+        bytes: replacementBytes,
+        fileName: "drawing-v2.pdf",
+        idempotencyKey: `store-drawing:${firstItem.id}:v2`,
+        itemTypeId: firstItem.id,
+      })
+
+      expect(first.id).not.toBe(duplicate.id)
+      expect(first.providerKey).toBe(duplicate.providerKey)
+      expect(provider.uploads).toHaveLength(2)
+      await expect(
+        artifacts.listHistory({
+          organizationId,
+          purpose: "asset_drawing",
+          target: target(firstItem.id),
+        })
+      ).resolves.toMatchObject([
+        {
+          fileName: "drawing-v2.pdf",
+          isCurrent: true,
+          lifecycleState: "current",
+          version: 2,
+        },
+        {
+          fileName: "drawing-v1.pdf",
+          isCurrent: false,
+          lifecycleState: "superseded",
+          version: 1,
+        },
+      ])
+      await expect(
+        store.getItemTypeDrawing({
+          documentId: replacement.id,
+          itemTypeId: firstItem.id,
+          organizationId,
+        })
+      ).resolves.toMatchObject({
+        fileName: "drawing-v2.pdf",
+        publicUrl: replacement.publicUrl,
+        storageKey: replacement.providerKey,
+      })
+      const drawings = await store.listItemTypeDrawings(organizationId)
+      expect(drawings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            fileName: "drawing-v2.pdf",
+            id: replacement.id,
+            itemTypeId: firstItem.id,
+          }),
+          expect.objectContaining({
+            fileName: "drawing-copy.pdf",
+            id: duplicate.id,
+            itemTypeId: secondItem.id,
+          }),
+        ])
+      )
+      const independentRows = await pool.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM store.documents
+         WHERE item_type_id = ANY($1::uuid[])`,
+        [[firstItem.id, secondItem.id]]
+      )
+      expect(independentRows.rows[0]?.count).toBe("0")
+    } finally {
+      await artifacts.close()
+    }
+  })
+
+  test("shows canonical Guarantee Cards in Asset Workspace and keeps legacy Store files readable", async () => {
+    const item = await store.createItemType({
+      ...(await createClassification("Artifact Guarantee")),
+      assetType: "NON_CONSUMABLE",
+      identificationName: `Artifact Guarantee ${suffix}`,
+      organizationId,
+      unit: "Nos",
+    })
+    const purchaseOrder = await createPurchaseOrder(item.id, 1, "200.00")
+    const location = await store.ensurePrimaryStoreLocation({ organizationId })
+    const received = await store.receiveStock({
+      locationId: location.id,
+      organizationId,
+      purchaseOrderLineId: purchaseOrder.id,
+      quantity: 1,
+      receivedBy: "store.integration@example.com",
+    })
+    const assetCode = received.assetCodes[0]!
+    const provider = new StoreArtifactProvider()
+    const artifacts = createArtifactService({ connectionString, provider })
+    const target = {
+      id: received.receiptId,
+      schema: "store",
+      table: "receipts",
+    }
+
+    try {
+      const drawing = await artifacts.store({
+        actorUserId: null,
+        authorizeTarget: (client) =>
+          authorizeStoreItemTypeArtifactTarget(client, {
+            itemTypeId: item.id,
+            organizationId,
+          }),
+        bytes: Buffer.from("%PDF-1.7\nphysical asset drawing"),
+        fileName: "physical-asset-drawing.pdf",
+        idempotencyKey: `store-drawing:${item.id}:physical-asset`,
+        mediaType: "application/pdf",
+        organizationId,
+        origin: "uploaded",
+        purpose: "asset_drawing",
+        target: { id: item.id, schema: "store", table: "item_types" },
+      })
+      const first = await artifacts.store({
+        actorUserId: null,
+        authorizeTarget: (client) =>
+          authorizeStoreReceiptArtifactTarget(client, {
+            organizationId,
+            receiptId: received.receiptId,
+          }),
+        bytes: Buffer.from("%PDF-1.7\nfirst guarantee card"),
+        fileName: "guarantee-v1.pdf",
+        idempotencyKey: `store-guarantee:${received.receiptId}:v1`,
+        mediaType: "application/pdf",
+        organizationId,
+        origin: "uploaded",
+        purpose: "guarantee_card",
+        target,
+      })
+      const replacement = await artifacts.store({
+        actorUserId: null,
+        authorizeTarget: (client) =>
+          authorizeStoreReceiptArtifactTarget(client, {
+            organizationId,
+            receiptId: received.receiptId,
+          }),
+        bytes: Buffer.from("%PDF-1.7\nreplacement guarantee card"),
+        fileName: "guarantee-v2.pdf",
+        idempotencyKey: `store-guarantee:${received.receiptId}:v2`,
+        mediaType: "application/pdf",
+        organizationId,
+        origin: "uploaded",
+        purpose: "guarantee_card",
+        target,
+      })
+
+      await expect(
+        artifacts.listHistory({
+          organizationId,
+          purpose: "guarantee_card",
+          target,
+        })
+      ).resolves.toMatchObject([
+        { fileName: "guarantee-v2.pdf", isCurrent: true, version: 2 },
+        {
+          fileName: "guarantee-v1.pdf",
+          isCurrent: false,
+          lifecycleState: "superseded",
+          version: 1,
+        },
+      ])
+      const workspace = await store.getAssetWorkspace({
+        assetCode,
+        organizationId,
+      })
+      expect(workspace?.documents).toContainEqual(
+        expect.objectContaining({
+          documentType: "GUARANTEE_CARD",
+          fileName: "guarantee-v2.pdf",
+          id: replacement.id,
+        })
+      )
+      expect(workspace?.documents).toContainEqual(
+        expect.objectContaining({
+          documentType: "ASSET_DRAWING",
+          fileName: "physical-asset-drawing.pdf",
+          id: drawing.id,
+        })
+      )
+      await expect(
+        store.getAssetDocument({
+          assetCode,
+          documentId: replacement.id,
+          organizationId,
+        })
+      ).resolves.toMatchObject({
+        fileName: "guarantee-v2.pdf",
+        publicUrl: replacement.publicUrl,
+        storageKey: replacement.providerKey,
+      })
+      const independentRows = await pool.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM store.documents
+         WHERE receipt_id = $1 AND document_type = 'GUARANTEE_CARD'`,
+        [received.receiptId]
+      )
+      expect(independentRows.rows[0]?.count).toBe("0")
+
+      const legacyDrawing = await store.recordItemTypeDrawing({
+        fileName: "legacy-drawing.pdf",
+        itemTypeId: legacyItemTypeId,
+        organizationId,
+        storageKey: "store/drawings/legacy-drawing.pdf",
+      })
+      await expect(
+        store.getItemTypeDrawing({
+          documentId: legacyDrawing.id,
+          itemTypeId: legacyItemTypeId,
+          organizationId,
+        })
+      ).resolves.toMatchObject({
+        fileName: "legacy-drawing.pdf",
+        publicUrl: null,
+        storageKey: "store/drawings/legacy-drawing.pdf",
+      })
+      const legacyGuarantee = await pool.query<{ id: string }>(
+        `INSERT INTO store.documents (
+           organization_id, asset_id, document_type, file_name, storage_key
+         ) VALUES ($1, $2, 'GUARANTEE_CARD', $3, $4)
+         RETURNING id`,
+        [
+          organizationId,
+          legacyAssetId,
+          "legacy-guarantee.pdf",
+          "store/legacy-guarantee.pdf",
+        ]
+      )
+      await expect(
+        store.getAssetDocument({
+          assetCode: legacyAssetCode,
+          documentId: legacyGuarantee.rows[0]!.id,
+          organizationId,
+        })
+      ).resolves.toMatchObject({
+        fileName: "legacy-guarantee.pdf",
+        publicUrl: null,
+        storageKey: "store/legacy-guarantee.pdf",
+      })
+      expect(first.id).not.toBe(replacement.id)
+    } finally {
+      await artifacts.close()
+    }
+  })
+
   test("auto-generates Supplier codes and rejects duplicate names and GST numbers", async () => {
     const supplier = await store.createSupplier({
       address: "Industrial Area, Pune",

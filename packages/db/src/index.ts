@@ -70,6 +70,8 @@ export {
   type MasterDataKind,
 } from "./master-data-lifecycle"
 export {
+  authorizeStoreItemTypeArtifactTarget,
+  authorizeStoreReceiptArtifactTarget,
   createStoreRepository,
   type StoreAssetType,
   type StoreHolderType,
