@@ -1,5 +1,16 @@
 import Link from "next/link"
 import { createStoreRepository } from "@workspace/db"
+import {
+  AlertTriangle,
+  Boxes,
+  Building2,
+  ClipboardList,
+  Package,
+  TableProperties,
+  Warehouse,
+  Wrench,
+} from "lucide-react"
+
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -19,9 +30,16 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 
+import {
+  DashboardGrid,
+  DashboardPageHeader,
+  DashboardSection,
+  DataTableCard,
+  StatusSummary,
+} from "@/components/dashboard/dashboard-components"
 import { readAuthEnvironment } from "@/lib/auth/auth"
-import { istDateValue } from "@/lib/date-time"
 import { requireCapability } from "@/lib/auth/require-capability"
+import { istDateValue } from "@/lib/date-time"
 
 export default async function StoreOverviewPage() {
   await requireCapability("store.overview.read", "/store")
@@ -50,134 +68,164 @@ export default async function StoreOverviewPage() {
   const dueAssets = snapshot.assets.filter(
     (asset) => asset.nextDueOn && asset.nextDueOn <= istDateValue()
   )
+  const pendingCodeRequests = snapshot.codeRequests.filter(
+    (row) => row.status === "Pending"
+  ).length
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Store</h2>
-          <p className="text-sm text-muted-foreground">
-            Multi-location stock, returnable assets, requests, movement and
-            maintenance.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild variant="outline">
-            <Link href="/store/orders">Purchase Register</Link>
-          </Button>
-          <Button asChild>
-            <Link href="/store/stock">Select Items</Link>
-          </Button>
-        </div>
-      </div>
+    <div className="grid gap-6">
+      <DashboardPageHeader
+        actions={
+          <>
+            <Button asChild variant="outline">
+              <Link href="/store/orders">Purchase Register</Link>
+            </Button>
+            <Button asChild>
+              <Link href="/store/stock">Select Items</Link>
+            </Button>
+          </>
+        }
+        description="Multi-location stock, returnable assets, requests, movement and maintenance."
+        icon={Warehouse}
+        title="Store"
+      />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Store Locations" value={snapshot.locations.length} />
-        <MetricCard label="Item Types" value={snapshot.items.length} />
-        <MetricCard label="Physical Assets" value={snapshot.assets.length} />
-        <MetricCard label="Open Requests" value={openRequests.length} />
-        <MetricCard label="Due Maintenance" value={dueAssets.length} />
-      </div>
+      <DashboardSection
+        description="Current stock, asset, request, and maintenance volume."
+        title="Key Performance Indicators"
+      >
+        <DashboardGrid columns="five">
+          <MetricCard
+            description="Active stock locations"
+            icon={<Building2 aria-hidden="true" />}
+            label="Store Locations"
+            tone="neutral"
+            value={snapshot.locations.length}
+          />
+          <MetricCard
+            description="Coded inventory types"
+            icon={<Boxes aria-hidden="true" />}
+            label="Item Types"
+            tone="brand"
+            value={snapshot.items.length}
+          />
+          <MetricCard
+            description="Tracked returnable units"
+            icon={<Package aria-hidden="true" />}
+            label="Physical Assets"
+            tone="accent"
+            value={snapshot.assets.length}
+          />
+          <MetricCard
+            description="Pending or partially issued"
+            icon={<ClipboardList aria-hidden="true" />}
+            label="Open Requests"
+            tone={openRequests.length ? "warning" : "success"}
+            value={openRequests.length}
+          />
+          <MetricCard
+            description="Maintenance or calibration due"
+            icon={<Wrench aria-hidden="true" />}
+            label="Due Maintenance"
+            tone={dueAssets.length ? "error" : "success"}
+            value={dueAssets.length}
+          />
+        </DashboardGrid>
+      </DashboardSection>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Open Department Requests</CardTitle>
-            <CardDescription>
-              Available stock is calculated live for every row.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Request</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Available</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {openRequests.slice(0, 8).map((request) => (
-                  <TableRow key={request.id}>
-                    <TableCell className="font-medium">
-                      {request.requestNumber}
-                    </TableCell>
-                    <TableCell>{request.department}</TableCell>
-                    <TableCell>{request.identificationName}</TableCell>
-                    <TableCell>
-                      {request.availableStock} {request.unit}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{request.status}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!openRequests.length ? (
+      <DashboardSection
+        description="Requests ready for store action and exceptions requiring attention."
+        title="Operational Overview"
+      >
+        <DashboardGrid columns="two">
+          <DataTableCard
+            description="Available stock is calculated live for every row."
+            icon={TableProperties}
+            title="Open Department Requests"
+          >
+            <div className="overflow-x-auto rounded-lg border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell
-                      className="h-24 text-center text-muted-foreground"
-                      colSpan={5}
-                    >
-                      No open requests.
-                    </TableCell>
+                    <TableHead>Request</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Item</TableHead>
+                    <TableHead>Available</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {openRequests.slice(0, 8).map((request) => (
+                    <TableRow key={request.id}>
+                      <TableCell className="font-medium">
+                        {request.requestNumber}
+                      </TableCell>
+                      <TableCell>{request.department}</TableCell>
+                      <TableCell>{request.identificationName}</TableCell>
+                      <TableCell>
+                        {request.availableStock} {request.unit}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{request.status}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!openRequests.length ? (
+                    <TableRow>
+                      <TableCell
+                        className="h-24 text-center text-muted-foreground"
+                        colSpan={5}
+                      >
+                        No open requests.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </div>
+          </DataTableCard>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Attention Required</CardTitle>
-            <CardDescription>
-              Stock alerts, missing codes and due maintenance.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <Attention
-              label="Low Stock Items"
-              value={lowStock.length}
-              href="/store/stock"
-            />
-            <Attention
-              label="Pending Code Requests"
-              value={
-                snapshot.codeRequests.filter((row) => row.status === "Pending")
-                  .length
-              }
-              href="/store/new-item-requests"
-            />
-            <Attention
-              label="Maintenance / Calibration Due"
-              value={dueAssets.length}
-              href="/store/stock"
-            />
-          </CardContent>
-        </Card>
-      </div>
+          <Card className="h-full">
+            <CardHeader className="border-b border-border/70 pb-4">
+              <div className="flex items-start gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]">
+                  <AlertTriangle aria-hidden="true" className="size-4" />
+                </span>
+                <div>
+                  <CardTitle>Attention Required</CardTitle>
+                  <CardDescription>
+                    Stock alerts, missing codes and due maintenance.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-1">
+              <StatusSummary
+                items={[
+                  {
+                    href: "/store/stock",
+                    label: "Low Stock Items",
+                    tone: lowStock.length ? "error" : "success",
+                    value: lowStock.length,
+                  },
+                  {
+                    href: "/store/new-item-requests",
+                    label: "Pending Code Requests",
+                    tone: pendingCodeRequests ? "warning" : "success",
+                    value: pendingCodeRequests,
+                  },
+                  {
+                    href: "/store/stock",
+                    label: "Maintenance / Calibration Due",
+                    tone: dueAssets.length ? "error" : "success",
+                    value: dueAssets.length,
+                  },
+                ]}
+              />
+            </CardContent>
+          </Card>
+        </DashboardGrid>
+      </DashboardSection>
     </div>
-  )
-}
-
-function Attention({
-  href,
-  label,
-  value,
-}: {
-  href: string
-  label: string
-  value: number
-}) {
-  return (
-    <Link
-      className="flex items-center justify-between rounded-lg border p-4 hover:bg-muted/50"
-      href={href}
-    >
-      <span className="font-medium">{label}</span>
-      <Badge variant={value ? "destructive" : "secondary"}>{value}</Badge>
-    </Link>
   )
 }

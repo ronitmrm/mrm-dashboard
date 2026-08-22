@@ -1,6 +1,14 @@
 import * as React from "react"
+import {
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
+  CircleMinus,
+} from "lucide-react"
 
 import { cn } from "@workspace/ui/lib/utils"
+import { Skeleton } from "@workspace/ui/components/skeleton"
 
 function Card({
   className,
@@ -92,41 +100,215 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function MetricCard({
-  className,
-  description,
-  icon,
-  label,
-  onClick,
-  value,
-}: {
+type MetricCardTone =
+  | "neutral"
+  | "brand"
+  | "accent"
+  | "success"
+  | "warning"
+  | "error"
+  | "info"
+
+type MetricCardTrend = "up" | "down" | "flat"
+
+type MetricCardProps = {
   className?: string
+  chart?: React.ReactNode
+  comparison?: React.ReactNode
   description?: React.ReactNode
+  error?: React.ReactNode
   icon?: React.ReactNode
   label: React.ReactNode
+  loading?: boolean
   onClick?: () => void
+  status?: React.ReactNode
+  tone?: MetricCardTone
+  trend?: MetricCardTrend
+  unit?: React.ReactNode
   value: React.ReactNode
-}) {
+}
+
+const metricToneClassNames: Record<
+  MetricCardTone,
+  { accent: string; icon: string; status: string }
+> = {
+  accent: {
+    accent: "bg-[var(--mrm-tennis)]",
+    icon: "bg-[var(--color-accent-tint)] text-[var(--color-on-accent)]",
+    status:
+      "border-[var(--mrm-tennis)]/35 bg-[var(--color-accent-tint)] text-[var(--color-on-accent)]",
+  },
+  brand: {
+    accent: "bg-primary",
+    icon: "bg-[var(--color-brand-tint)] text-primary",
+    status: "border-primary/20 bg-[var(--color-brand-tint)] text-primary",
+  },
+  error: {
+    accent: "bg-[var(--color-error)]",
+    icon: "bg-[var(--color-error-bg)] text-[var(--color-error-text)]",
+    status:
+      "border-[var(--color-error)]/20 bg-[var(--color-error-bg)] text-[var(--color-error-text)]",
+  },
+  info: {
+    accent: "bg-[var(--color-info)]",
+    icon: "bg-[var(--color-info-bg)] text-[var(--color-info-text)]",
+    status:
+      "border-[var(--color-info)]/20 bg-[var(--color-info-bg)] text-[var(--color-info-text)]",
+  },
+  neutral: {
+    accent: "bg-border",
+    icon: "bg-muted text-muted-foreground",
+    status: "border-border bg-muted text-muted-foreground",
+  },
+  success: {
+    accent: "bg-[var(--color-success)]",
+    icon: "bg-[var(--color-success-bg)] text-[var(--color-success-text)]",
+    status:
+      "border-[var(--color-success)]/20 bg-[var(--color-success-bg)] text-[var(--color-success-text)]",
+  },
+  warning: {
+    accent: "bg-[var(--color-warning)]",
+    icon: "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]",
+    status:
+      "border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]",
+  },
+}
+
+function MetricCard({
+  chart,
+  className,
+  comparison,
+  description,
+  error,
+  icon,
+  label,
+  loading = false,
+  onClick,
+  status,
+  tone = "neutral",
+  trend,
+  unit,
+  value,
+}: MetricCardProps) {
+  const toneClassNames = metricToneClassNames[tone]
+  const TrendIcon =
+    trend === "up"
+      ? ArrowUpRight
+      : trend === "down"
+        ? ArrowDownRight
+        : CircleMinus
   const content = (
     <>
-      <div className="min-w-0">
-        <div className="truncate text-xs font-medium text-muted-foreground">
-          {label}
-        </div>
-        <div className="text-base font-semibold tabular-nums">{value}</div>
-        {description ? (
-          <div className="truncate text-[10px] text-muted-foreground">
-            {description}
+      <span
+        aria-hidden="true"
+        className={cn("absolute inset-x-0 top-0 h-0.5", toneClassNames.accent)}
+      />
+      {loading ? (
+        <div
+          aria-label={`Loading ${String(label)}`}
+          className="grid w-full gap-3"
+          role="status"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="grid flex-1 gap-2">
+              <Skeleton className="h-3 w-1/2" />
+              <Skeleton className="h-8 w-2/3" />
+            </div>
+            <Skeleton className="size-9 rounded-lg" />
           </div>
-        ) : null}
-      </div>
-      {icon ? <div className="shrink-0 text-primary">{icon}</div> : null}
+          <Skeleton className="h-3 w-4/5" />
+        </div>
+      ) : error ? (
+        <div
+          className="flex min-w-0 items-start gap-3 text-[var(--color-error-text)]"
+          role="alert"
+        >
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-error-bg)]">
+            <AlertTriangle aria-hidden="true" className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-xs font-semibold tracking-[0.08em] uppercase">
+              {label}
+            </div>
+            <div className="mt-1 text-sm">{error}</div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid w-full gap-3">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+                {label}
+              </div>
+              <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
+                <span className="truncate font-heading text-2xl font-semibold tracking-tight text-[var(--color-text-strong)] tabular-nums">
+                  {value}
+                </span>
+                {unit ? (
+                  <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                    {unit}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            {icon ? (
+              <span
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-lg [&_svg]:size-4",
+                  toneClassNames.icon
+                )}
+              >
+                {icon}
+              </span>
+            ) : null}
+          </div>
+          {description ? (
+            <div className="line-clamp-2 text-xs text-muted-foreground">
+              {description}
+            </div>
+          ) : null}
+          {comparison || status ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {comparison ? (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-medium",
+                    toneClassNames.status
+                  )}
+                >
+                  {trend ? (
+                    <TrendIcon aria-hidden="true" className="size-3" />
+                  ) : null}
+                  {comparison}
+                </span>
+              ) : null}
+              {status ? (
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full border px-2 py-0.5 font-medium",
+                    toneClassNames.status
+                  )}
+                >
+                  {status}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {chart ? <div className="mt-auto min-h-7">{chart}</div> : null}
+        </div>
+      )}
+      {onClick && !loading && !error ? (
+        <ArrowRight
+          aria-hidden="true"
+          className="absolute right-3 bottom-3 size-3.5 text-muted-foreground opacity-0 transition-[opacity,transform] group-hover/metric:translate-x-0.5 group-hover/metric:opacity-100 group-focus-visible/metric:opacity-100"
+        />
+      ) : null}
     </>
   )
   const metricClassName = cn(
-    "flex min-h-11 items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 text-left shadow-[var(--shadow-sm)]",
+    "group/metric relative flex min-h-28 items-stretch overflow-hidden rounded-lg border border-border bg-card p-4 text-left shadow-[var(--shadow-sm)]",
     onClick &&
-      "transition-[border-color,box-shadow,background-color] duration-[var(--dur-fast)] ease-[var(--ease-standard)] hover:border-primary/50 hover:bg-muted/40 hover:shadow-[var(--shadow-md)] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none",
+      "pr-8 transition-[border-color,box-shadow,background-color] duration-[var(--dur-fast)] ease-[var(--ease-standard)] hover:border-primary/35 hover:bg-[var(--color-brand-tint)] hover:shadow-[var(--shadow-md)] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none",
     className
   )
 
@@ -134,13 +316,14 @@ function MetricCard({
     <button
       className={metricClassName}
       data-slot="metric-card"
+      data-tone={tone}
       onClick={onClick}
       type="button"
     >
       {content}
     </button>
   ) : (
-    <div className={metricClassName} data-slot="metric-card">
+    <div className={metricClassName} data-slot="metric-card" data-tone={tone}>
       {content}
     </div>
   )
@@ -155,4 +338,7 @@ export {
   CardDescription,
   CardContent,
   MetricCard,
+  type MetricCardProps,
+  type MetricCardTone,
+  type MetricCardTrend,
 }
