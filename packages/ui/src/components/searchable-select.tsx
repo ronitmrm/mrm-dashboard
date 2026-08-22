@@ -64,7 +64,7 @@ function collectOptions(
     }
 
     const nextGroup =
-      child.type === "optgroup" || props.label ? props.label ?? group : group
+      child.type === "optgroup" || props.label ? (props.label ?? group) : group
     options.push(...collectOptions(props.children, nextGroup))
   })
 
@@ -164,7 +164,7 @@ function SearchableSelect({
           aria-labelledby={ariaLabelledBy}
           aria-required={required}
           className={cn(
-            "flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-3xl border border-input bg-background py-1 pr-3 pl-3 text-sm shadow-xs transition-[color,box-shadow,background-color,border-color] outline-none hover:border-primary/45 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-primary/20 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 data-[size=sm]:h-8 dark:bg-input/20 dark:hover:border-primary/60",
+            "flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-input bg-background py-1 pr-3 pl-3 text-sm shadow-none transition-[color,box-shadow,background-color,border-color] outline-none hover:border-primary/45 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 data-[size=sm]:h-8 data-[size=sm]:rounded-sm dark:bg-input/20 dark:hover:border-primary/60",
             className
           )}
           data-size={size}
@@ -211,7 +211,9 @@ function SearchableSelect({
             filteredOptions.map((option, index) => {
               const previousGroup = filteredOptions[index - 1]?.group
               return (
-                <React.Fragment key={`${option.group ?? ""}-${option.value}-${index}`}>
+                <React.Fragment
+                  key={`${option.group ?? ""}-${option.value}-${index}`}
+                >
                   {option.group && option.group !== previousGroup ? (
                     <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
                       {option.group}
@@ -219,7 +221,7 @@ function SearchableSelect({
                   ) : null}
                   <button
                     aria-selected={option.value === selectedValue}
-                    className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+                    className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50 aria-selected:bg-accent/15 aria-selected:text-foreground"
                     disabled={option.disabled}
                     onClick={() => selectValue(option.value)}
                     role="option"
@@ -227,7 +229,10 @@ function SearchableSelect({
                   >
                     <span className="min-w-0 truncate">{option.label}</span>
                     {option.value === selectedValue ? (
-                      <CheckIcon aria-hidden="true" className="size-4 shrink-0" />
+                      <CheckIcon
+                        aria-hidden="true"
+                        className="size-4 shrink-0"
+                      />
                     ) : null}
                   </button>
                 </React.Fragment>

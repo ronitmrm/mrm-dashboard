@@ -39,17 +39,17 @@ export function StoreAssetWorkspaceTabs({
     <div className="grid gap-4">
       <nav
         aria-label="Asset Workspace sections"
-        className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1"
+        className="flex gap-0 overflow-x-auto border-b"
       >
         {tabs.map((tab) => (
           <Button
             aria-pressed={activeTab === tab.key}
-            className="shrink-0"
+            className="shrink-0 rounded-none border-b-2 border-transparent bg-transparent shadow-none aria-pressed:border-[var(--color-accent)] aria-pressed:text-foreground"
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             size="sm"
             type="button"
-            variant={activeTab === tab.key ? "default" : "ghost"}
+            variant="ghost"
           >
             {tab.label}
           </Button>

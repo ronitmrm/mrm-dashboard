@@ -37,15 +37,15 @@ export function UserAccountFooter({
         </span>
         <span className="grid min-w-0 flex-1 gap-0.5">
           <span className="truncate text-sm font-semibold">{user.name}</span>
-          <span className="truncate text-xs text-muted-foreground">
+          <span className="truncate text-xs text-sidebar-foreground/70">
             {user.email}
           </span>
         </span>
-        <KeyRound className="size-4 shrink-0 text-muted-foreground" />
+        <KeyRound className="size-4 shrink-0 text-sidebar-foreground/70" />
       </Link>
       <Button
         aria-label="Sign out"
-        className="size-9 shrink-0 text-muted-foreground hover:text-destructive"
+        className="size-9 shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-white"
         disabled={isSigningOut}
         onClick={() => void signOut()}
         title="Sign out"
