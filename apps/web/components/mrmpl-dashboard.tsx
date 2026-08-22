@@ -85,6 +85,14 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table"
+import {
+  DashboardErrorState,
+  DashboardGrid,
+  DashboardLoadingSkeleton,
+  DashboardPageHeader,
+  DashboardSection,
+  DataTableCard,
+} from "@/components/dashboard/dashboard-components"
 
 import { MasterDataViewTabs } from "@/components/master-data-view-tabs"
 import {
@@ -2236,20 +2244,18 @@ function DashboardShell({
             </div>
           ) : null}
           {isDashboardUnavailable ? (
-            <Card className="max-w-xl">
-              <CardHeader>
-                <CardTitle>Dashboard Unavailable</CardTitle>
-                <CardDescription>
-                  {dashboardDeliveryState.lastError ??
-                    "Dashboard data could not be loaded."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+            <DashboardErrorState
+              action={
                 <Button type="button" onClick={retryDashboardDelivery}>
                   Retry Dashboard Load
                 </Button>
-              </CardContent>
-            </Card>
+              }
+              description={
+                dashboardDeliveryState.lastError ??
+                "Dashboard data could not be loaded."
+              }
+              title="Dashboard Unavailable"
+            />
           ) : isDashboardLoading ? (
             <DashboardSkeleton />
           ) : (
@@ -2931,111 +2937,154 @@ function ProductionDashboardPanel({ payload }: { payload: DashboardPayload }) {
   ].filter(Boolean)
 
   return (
-    <section className="grid gap-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <MetricCard
-          label="Total Work Orders"
-          value={formatNumber(rows.length)}
-        />
-        <MetricCard label="Pending Dispatch" value={formatNumber(pending)} />
-        <MetricCard label="Dispatched" value={formatNumber(dispatched)} />
-      </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Production Dashboard</CardTitle>
-          <CardDescription>
+    <section className="grid gap-6">
+      <DashboardPageHeader
+        description={
+          <>
             {formatNumber(rmReceived)} Work Orders Have Received Raw Material.
             Current Probable Dates Recalculate With Live Production Progress.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {floorLoadErrors.length ? (
-            <div
-              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
-              role="status"
-            >
-              Some Production Units Could Not Be Loaded. The Table Will Retry
-              Automatically.
-            </div>
-          ) : null}
-          <div className="overflow-x-auto rounded-md border">
-            <Table excelFilters>
-              <TableHeader className="sticky top-0 z-10 bg-background">
-                <TableRow>
-                  <TableHead className="min-w-28">JC No.</TableHead>
-                  <TableHead className="min-w-32">FG PO No.</TableHead>
-                  <TableHead className="min-w-28">Part Code</TableHead>
-                  <TableHead className="min-w-36">Production Unit</TableHead>
-                  <TableHead className="min-w-28 text-right">
-                    Ordered Qty
-                  </TableHead>
-                  <TableHead className="min-w-20">Unit</TableHead>
-                  <TableHead className="min-w-36">RM Received Date</TableHead>
-                  <TableHead className="min-w-52">
-                    Planned Dispatch Date During RM Receipt
-                  </TableHead>
-                  <TableHead className="min-w-52">
-                    Current Probable Dispatch Date
-                  </TableHead>
-                  <TableHead className="min-w-28">Status</TableHead>
-                  <TableHead className="min-w-36">Dispatched Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.length ? (
-                  rows.map((row) => (
-                    <TableRow
-                      key={`${displayValue(row.jcNo)}-${displayValue(row.partCode)}`}
-                    >
-                      <TableCell>
-                        <Link
-                          className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline"
-                          href={jobCardWorkspaceHref(
-                            displayValue(row.jcNo),
-                            normalizeProductionFloorCode(
-                              row.productionFloorCode
-                            )
-                          )}
-                          title={`Open Job Card ${displayValue(row.jcNo)}`}
-                        >
-                          {displayValue(row.jcNo)}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{displayValue(row.fgPoNo)}</TableCell>
-                      <TableCell>{displayValue(row.partCode)}</TableCell>
-                      <TableCell>{displayValue(row.productionUnit)}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatNumber(Number(row.orderedQty) || 0)}
-                      </TableCell>
-                      <TableCell>{displayValue(row.unit)}</TableCell>
-                      <TableCell>{displayValue(row.rmReceivedDate)}</TableCell>
-                      <TableCell>
-                        {displayValue(row.plannedDispatchDateAtRmReceipt)}
-                      </TableCell>
-                      <TableCell>
-                        {displayValue(row.currentProbableDispatchDate)}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge value={row.status} />
-                      </TableCell>
-                      <TableCell>{displayValue(row.dispatchedDate)}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
+          </>
+        }
+        icon={LayoutDashboard}
+        title="Production Dashboard"
+      />
+
+      <DashboardSection
+        description="Work-order volume and dispatch position across every production unit."
+        title="Key Performance Indicators"
+      >
+        <DashboardGrid columns="three">
+          <MetricCard
+            description="Across all production units"
+            icon={<ListChecks aria-hidden="true" />}
+            label="Total Work Orders"
+            tone="brand"
+            value={formatNumber(rows.length)}
+          />
+          <MetricCard
+            description="Awaiting dispatch completion"
+            icon={<Activity aria-hidden="true" />}
+            label="Pending Dispatch"
+            tone={pending ? "warning" : "success"}
+            value={formatNumber(pending)}
+          />
+          <MetricCard
+            description="Completed dispatches"
+            icon={<CheckCircle2 aria-hidden="true" />}
+            label="Dispatched"
+            tone="success"
+            value={formatNumber(dispatched)}
+          />
+        </DashboardGrid>
+      </DashboardSection>
+
+      <DashboardSection
+        description="Current probable dispatch dates based on live production progress."
+        title="Operational Detail"
+      >
+        <DataTableCard
+          description="All Production Units In One Dispatch View."
+          icon={LayoutDashboard}
+          title="Work Order Dispatch Overview"
+        >
+          <div className="grid gap-4">
+            {floorLoadErrors.length ? (
+              <div
+                className="rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] px-3 py-2 text-sm text-[var(--color-warning-text)]"
+                role="status"
+              >
+                Some Production Units Could Not Be Loaded. The Table Will Retry
+                Automatically.
+              </div>
+            ) : null}
+            <div className="overflow-x-auto rounded-lg border">
+              <Table excelFilters>
+                <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
-                    <TableCell
-                      colSpan={11}
-                      className="h-28 text-center text-sm text-muted-foreground"
-                    >
-                      No Work Orders Available.
-                    </TableCell>
+                    <TableHead className="min-w-28">JC No.</TableHead>
+                    <TableHead className="min-w-32">FG PO No.</TableHead>
+                    <TableHead className="min-w-28">Part Code</TableHead>
+                    <TableHead className="min-w-36">Production Unit</TableHead>
+                    <TableHead className="min-w-28 text-right">
+                      Ordered Qty
+                    </TableHead>
+                    <TableHead className="min-w-20">Unit</TableHead>
+                    <TableHead className="min-w-36">RM Received Date</TableHead>
+                    <TableHead className="min-w-52">
+                      Planned Dispatch Date During RM Receipt
+                    </TableHead>
+                    <TableHead className="min-w-52">
+                      Current Probable Dispatch Date
+                    </TableHead>
+                    <TableHead className="min-w-28">Status</TableHead>
+                    <TableHead className="min-w-36">Dispatched Date</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {rows.length ? (
+                    rows.map((row) => (
+                      <TableRow
+                        key={[
+                          displayValue(row.jcNo),
+                          displayValue(row.partCode),
+                        ].join("-")}
+                      >
+                        <TableCell>
+                          <Link
+                            className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline"
+                            href={jobCardWorkspaceHref(
+                              displayValue(row.jcNo),
+                              normalizeProductionFloorCode(
+                                row.productionFloorCode
+                              )
+                            )}
+                            title={"Open Job Card " + displayValue(row.jcNo)}
+                          >
+                            {displayValue(row.jcNo)}
+                          </Link>
+                        </TableCell>
+                        <TableCell>{displayValue(row.fgPoNo)}</TableCell>
+                        <TableCell>{displayValue(row.partCode)}</TableCell>
+                        <TableCell>
+                          {displayValue(row.productionUnit)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatNumber(Number(row.orderedQty) || 0)}
+                        </TableCell>
+                        <TableCell>{displayValue(row.unit)}</TableCell>
+                        <TableCell>
+                          {displayValue(row.rmReceivedDate)}
+                        </TableCell>
+                        <TableCell>
+                          {displayValue(row.plannedDispatchDateAtRmReceipt)}
+                        </TableCell>
+                        <TableCell>
+                          {displayValue(row.currentProbableDispatchDate)}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge value={row.status} />
+                        </TableCell>
+                        <TableCell>
+                          {displayValue(row.dispatchedDate)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        colSpan={11}
+                        className="h-28 text-center text-sm text-muted-foreground"
+                      >
+                        No Work Orders Available.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </DataTableCard>
+      </DashboardSection>
     </section>
   )
 }
@@ -17068,20 +17117,7 @@ function readFileAsDataUrl(file: File) {
 }
 
 function DashboardSkeleton() {
-  return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 md:grid-cols-2 @5xl/main:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-32 rounded-lg" />
-        ))}
-      </div>
-      <Skeleton className="h-96 rounded-lg" />
-      <div className="grid gap-4 md:grid-cols-2">
-        <Skeleton className="h-72 rounded-lg" />
-        <Skeleton className="h-72 rounded-lg" />
-      </div>
-    </div>
-  )
+  return <DashboardLoadingSkeleton />
 }
 
 function formatDate(value: Date | string) {

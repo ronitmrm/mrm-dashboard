@@ -29,6 +29,8 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
+  MetricCard,
+  type MetricCardTone,
 } from "@workspace/ui/components/card"
 import { Checkbox } from "@workspace/ui/components/checkbox"
 import {
@@ -41,6 +43,12 @@ import {
   DialogTrigger,
 } from "@workspace/ui/components/dialog"
 
+import {
+  DashboardEmptyState,
+  DashboardGrid,
+  DashboardPageHeader,
+  DashboardSection,
+} from "@/components/dashboard/dashboard-components"
 import type {
   PersonalDashboardWidget,
   PersonalDashboardWidgetId,
@@ -57,6 +65,16 @@ const moduleIcons = {
   Store: Boxes,
 } as const
 
+const moduleTones: Record<PersonalDashboardWidget["module"], MetricCardTone> = {
+  Administration: "info",
+  Costing: "accent",
+  "HR & Recruitment": "info",
+  "Master Data": "neutral",
+  "Operational Entry": "brand",
+  Production: "success",
+  Store: "warning",
+}
+
 export function PersonalDashboard({
   availableWidgets,
   metrics,
@@ -72,9 +90,8 @@ export function PersonalDashboard({
   selectedWidgetIds: PersonalDashboardWidgetId[]
   userName: string
 }) {
-  const [selectedIds, setSelectedIds] = useState<PersonalDashboardWidgetId[]>(
-    selectedWidgetIds
-  )
+  const [selectedIds, setSelectedIds] =
+    useState<PersonalDashboardWidgetId[]>(selectedWidgetIds)
   const availableById = useMemo(
     () => new Map(availableWidgets.map((widget) => [widget.id, widget])),
     [availableWidgets]
@@ -107,92 +124,98 @@ export function PersonalDashboard({
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="grid gap-1">
-          <div className="flex items-center gap-2">
-            <LayoutDashboard className="size-5 text-primary" />
-            <h2 className="text-2xl font-semibold tracking-tight">My Dashboard</h2>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Welcome {userName}. Keep the information and shortcuts useful to your work here.
-          </p>
-        </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="outline">
-              <Settings2 /> Customize Dashboard
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-3xl">
-            <form action={onSave} className="grid gap-5">
-              <DialogHeader>
-                <DialogTitle>Customize My Dashboard</DialogTitle>
-                <DialogDescription>
-                  Choose cards you can access, then arrange their display order.
-                </DialogDescription>
-              </DialogHeader>
-              <input
-                name="widgetIds"
-                type="hidden"
-                value={JSON.stringify(selectedIds)}
-              />
-              <div className="grid gap-2 sm:grid-cols-2">
-                {availableWidgets.map((widget) => (
-                  <label
-                    className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 hover:bg-muted/40"
-                    key={widget.id}
-                  >
-                    <Checkbox
-                      checked={selectedIds.includes(widget.id)}
-                      onCheckedChange={() => toggle(widget.id)}
-                    />
-                    <span className="grid gap-0.5">
-                      <span className="font-medium">{widget.title}</span>
-                      <span className="text-xs text-muted-foreground">{widget.module}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {orderedSelection.length ? (
-                <div className="grid gap-2">
-                  <p className="text-sm font-medium">Display Order</p>
-                  {orderedSelection.map((widget, index) => (
-                    <div
-                      className="flex items-center gap-2 rounded-lg border px-3 py-2"
+      <DashboardPageHeader
+        actions={
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Settings2 aria-hidden="true" /> Customize Dashboard
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl">
+              <form action={onSave} className="grid gap-5">
+                <DialogHeader>
+                  <DialogTitle>Customize My Dashboard</DialogTitle>
+                  <DialogDescription>
+                    Choose cards you can access, then arrange their display
+                    order.
+                  </DialogDescription>
+                </DialogHeader>
+                <input
+                  name="widgetIds"
+                  type="hidden"
+                  value={JSON.stringify(selectedIds)}
+                />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {availableWidgets.map((widget) => (
+                    <label
+                      className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 hover:bg-muted/40"
                       key={widget.id}
                     >
-                      <span className="min-w-0 flex-1 truncate">{widget.title}</span>
-                      <Button
-                        aria-label={`Move ${widget.title} up`}
-                        disabled={index === 0}
-                        onClick={() => move(widget.id, -1)}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <ArrowUp />
-                      </Button>
-                      <Button
-                        aria-label={`Move ${widget.title} down`}
-                        disabled={index === orderedSelection.length - 1}
-                        onClick={() => move(widget.id, 1)}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <ArrowDown />
-                      </Button>
-                    </div>
+                      <Checkbox
+                        checked={selectedIds.includes(widget.id)}
+                        onCheckedChange={() => toggle(widget.id)}
+                      />
+                      <span className="grid gap-0.5">
+                        <span className="font-medium">{widget.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {widget.module}
+                        </span>
+                      </span>
+                    </label>
                   ))}
                 </div>
-              ) : null}
-              <DialogFooter>
-                <SaveButton />
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+                {orderedSelection.length ? (
+                  <div className="grid gap-2">
+                    <p className="text-sm font-medium">Display Order</p>
+                    {orderedSelection.map((widget, index) => (
+                      <div
+                        className="flex items-center gap-2 rounded-lg border px-3 py-2"
+                        key={widget.id}
+                      >
+                        <span className="min-w-0 flex-1 truncate">
+                          {widget.title}
+                        </span>
+                        <Button
+                          aria-label={"Move " + widget.title + " up"}
+                          disabled={index === 0}
+                          onClick={() => move(widget.id, -1)}
+                          size="icon-sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <ArrowUp aria-hidden="true" />
+                        </Button>
+                        <Button
+                          aria-label={"Move " + widget.title + " down"}
+                          disabled={index === orderedSelection.length - 1}
+                          onClick={() => move(widget.id, 1)}
+                          size="icon-sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <ArrowDown aria-hidden="true" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <DialogFooter>
+                  <SaveButton />
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        }
+        description={
+          <>
+            Welcome {userName}. Keep the information and shortcuts useful to
+            your work here.
+          </>
+        }
+        icon={LayoutDashboard}
+        title="My Dashboard"
+      />
 
       {saved ? (
         <Alert>
@@ -200,26 +223,28 @@ export function PersonalDashboard({
         </Alert>
       ) : null}
 
-      {orderedSelection.length ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {orderedSelection.map((widget) => (
-            <DashboardCard
-              key={widget.id}
-              metrics={metrics[widget.id]}
-              widget={widget}
-            />
-          ))}
-        </div>
-      ) : (
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle>Your Dashboard Is Empty</CardTitle>
-            <CardDescription>
-              Use Customize Dashboard to add the information and shortcuts you need.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
+      <DashboardSection
+        description="Your selected modules, live summaries, and direct work shortcuts."
+        title="My Workspace"
+      >
+        {orderedSelection.length ? (
+          <DashboardGrid columns="three">
+            {orderedSelection.map((widget) => (
+              <DashboardCard
+                key={widget.id}
+                metrics={metrics[widget.id]}
+                widget={widget}
+              />
+            ))}
+          </DashboardGrid>
+        ) : (
+          <DashboardEmptyState
+            description="Use Customize Dashboard to add the information and shortcuts you need."
+            icon={LayoutDashboard}
+            title="Your Dashboard Is Empty"
+          />
+        )}
+      </DashboardSection>
     </div>
   )
 }
@@ -232,12 +257,13 @@ function DashboardCard({
   widget: PersonalDashboardWidget
 }) {
   const Icon = moduleIcons[widget.module]
+  const tone = moduleTones[widget.module]
   return (
     <Card className="h-full">
-      <CardHeader>
+      <CardHeader className="border-b border-border/70 pb-4">
         <div className="flex items-start justify-between gap-3">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Icon className="size-4" />
+          <span className="flex size-9 items-center justify-center rounded-lg bg-[var(--color-brand-tint)] text-primary">
+            <Icon aria-hidden="true" className="size-4" />
           </span>
           <Badge variant="outline">{widget.module}</Badge>
         </div>
@@ -245,19 +271,22 @@ function DashboardCard({
         <CardDescription>{widget.description}</CardDescription>
       </CardHeader>
       {metrics?.length ? (
-        <CardContent className="grid grid-cols-3 gap-2">
+        <CardContent className="grid grid-cols-3 gap-2 pt-1">
           {metrics.map((metric) => (
-            <div className="rounded-lg bg-muted/60 p-3" key={metric.label}>
-              <p className="text-xl font-semibold tabular-nums">{metric.value}</p>
-              <p className="text-xs text-muted-foreground">{metric.label}</p>
-            </div>
+            <MetricCard
+              className="min-h-20 p-3"
+              key={metric.label}
+              label={metric.label}
+              tone={tone}
+              value={metric.value}
+            />
           ))}
         </CardContent>
       ) : null}
       <CardFooter className="mt-auto">
         <Button asChild className="w-full justify-between" variant="outline">
           <Link href={widget.href}>
-            Open {widget.title} <ArrowRight />
+            Open {widget.title} <ArrowRight aria-hidden="true" />
           </Link>
         </Button>
       </CardFooter>
@@ -269,7 +298,11 @@ function SaveButton() {
   const { pending } = useFormStatus()
   return (
     <Button disabled={pending} type="submit">
-      {pending ? <LoaderCircle className="animate-spin" /> : <Settings2 />}
+      {pending ? (
+        <LoaderCircle aria-hidden="true" className="animate-spin" />
+      ) : (
+        <Settings2 aria-hidden="true" />
+      )}
       {pending ? "Saving" : "Save Dashboard"}
     </Button>
   )

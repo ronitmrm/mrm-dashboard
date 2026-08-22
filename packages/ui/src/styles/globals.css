@@ -79,6 +79,11 @@
   --color-accent: var(--mrm-tennis);
   --color-on-accent: var(--mrm-jungle);
   --color-focus: var(--mrm-green);
+  --color-brand-tint: #edf5f1;
+  --color-jungle-tint: #edf1ee;
+  --color-accent-tint: #f2f8e8;
+  --dashboard-grid-gap: var(--space-4);
+  --dashboard-chart-height: 14rem;
 
   /* Signal status roles */
   --color-error: #d32f2f;
@@ -139,11 +144,11 @@
   --border: var(--color-border);
   --input: var(--color-border-strong);
   --ring: var(--color-focus);
-  --chart-1: var(--mrm-jungle);
-  --chart-2: var(--mrm-green);
-  --chart-3: var(--mrm-tennis);
-  --chart-4: var(--mrm-lime);
-  --chart-5: var(--mrm-grey);
+  --chart-1: var(--mrm-green);
+  --chart-2: #2e7d5b;
+  --chart-3: #5e9c74;
+  --chart-4: var(--mrm-tennis);
+  --chart-5: var(--mrm-jungle);
   --radius: var(--radius-app-md);
   --sidebar: var(--color-chrome);
   --sidebar-foreground: var(--color-on-chrome);
@@ -173,6 +178,9 @@
   --color-accent: var(--mrm-tennis);
   --color-on-accent: #06210f;
   --color-focus: var(--mrm-tennis);
+  --color-brand-tint: #173d2b;
+  --color-jungle-tint: #172d1e;
+  --color-accent-tint: #263b1e;
   --background: var(--color-bg);
   --foreground: var(--color-text);
   --card: var(--color-surface);
@@ -191,11 +199,11 @@
   --border: var(--color-border);
   --input: var(--color-border-strong);
   --ring: var(--color-focus);
-  --chart-1: var(--mrm-jungle);
-  --chart-2: var(--mrm-green);
-  --chart-3: var(--mrm-tennis);
-  --chart-4: var(--mrm-lime);
-  --chart-5: var(--mrm-grey);
+  --chart-1: #2e9b6e;
+  --chart-2: #58ad82;
+  --chart-3: #7fbd99;
+  --chart-4: var(--mrm-tennis);
+  --chart-5: #9aa69c;
   --sidebar: var(--color-chrome);
   --sidebar-foreground: var(--color-on-chrome);
   --sidebar-primary: var(--color-accent);

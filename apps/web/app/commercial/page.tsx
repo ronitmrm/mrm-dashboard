@@ -2,17 +2,22 @@ import {
   createCommercialReportingRepository,
   createCustomerRepository,
 } from "@workspace/db"
-import { BarChart3, Database } from "lucide-react"
+import {
+  BadgeCheck,
+  BarChart3,
+  Calculator,
+  CircleDollarSign,
+  Clock3,
+  Database,
+  Inbox,
+  PackageCheck,
+  Send,
+  TableProperties,
+  Users,
+} from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  MetricCard,
-} from "@workspace/ui/components/card"
+import { MetricCard } from "@workspace/ui/components/card"
 import {
   Table,
   TableBody,
@@ -22,37 +27,17 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 
+import {
+  ChartCard,
+  DashboardBarChart,
+  DashboardGrid,
+  DashboardPageHeader,
+  DashboardSection,
+  DataTableCard,
+} from "@/components/dashboard/dashboard-components"
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { commercialCapabilities } from "@/lib/auth/commercial-capabilities"
 import { requireCapability } from "@/lib/auth/require-capability"
-
-function MetricBars({
-  rows,
-}: {
-  rows: Array<{ count: number; label: string }>
-}) {
-  const maximum = Math.max(1, ...rows.map((row) => row.count))
-  return (
-    <div className="grid gap-3">
-      {rows.map((row) => (
-        <div className="grid gap-1" key={row.label}>
-          <div className="flex justify-between gap-3 text-sm">
-            <span>{row.label}</span>
-            <span className="font-medium tabular-nums">{row.count}</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary"
-              style={{
-                width: String(Math.max(2, (row.count / maximum) * 100)) + "%",
-              }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 export default async function CommercialPage() {
   await requireCapability(commercialCapabilities.dashboard.read, "/commercial")
@@ -69,87 +54,153 @@ export default async function CommercialPage() {
     await customers.close()
   }
   const stats = [
-    ["Customers", dashboard.stats.customers],
-    ["Enquiries", dashboard.stats.enquiries],
-    ["Quoted this month", dashboard.stats.monthlyQuoted],
-    ["Pending costing", dashboard.stats.pendingCosting],
-    ["Q prices", dashboard.stats.quoted],
-    ["Ordered", dashboard.stats.ordered],
-    ["Active P prices", dashboard.stats.pPrices],
-    ["Follow-ups due", dashboard.stats.pendingFollowups],
+    {
+      description: "Canonical customer masters",
+      icon: Users,
+      label: "Customers",
+      tone: "neutral",
+      value: dashboard.stats.customers,
+    },
+    {
+      description: "Commercial enquiries received",
+      icon: Inbox,
+      label: "Enquiries",
+      tone: "brand",
+      value: dashboard.stats.enquiries,
+    },
+    {
+      description: "Sent in the current month",
+      icon: Send,
+      label: "Quoted this month",
+      tone: "info",
+      value: dashboard.stats.monthlyQuoted,
+    },
+    {
+      description: "Awaiting costing completion",
+      icon: Calculator,
+      label: "Pending costing",
+      tone: "warning",
+      value: dashboard.stats.pendingCosting,
+    },
+    {
+      description: "Active quoted prices",
+      icon: CircleDollarSign,
+      label: "Q prices",
+      tone: "neutral",
+      value: dashboard.stats.quoted,
+    },
+    {
+      description: "Converted commercial lines",
+      icon: PackageCheck,
+      label: "Ordered",
+      tone: "success",
+      value: dashboard.stats.ordered,
+    },
+    {
+      description: "Active production prices",
+      icon: BadgeCheck,
+      label: "Active P prices",
+      tone: "accent",
+      value: dashboard.stats.pPrices,
+    },
+    {
+      description: "Customer actions now due",
+      icon: Clock3,
+      label: "Follow-ups due",
+      tone: "error",
+      value: dashboard.stats.pendingFollowups,
+    },
   ] as const
 
   return (
     <div className="grid gap-6">
-      <section className="grid gap-2">
-        <Badge className="w-fit" variant="outline">
-          <Database /> Canonical Postgresql Analytics
-        </Badge>
-        <h2 className="font-heading text-2xl font-medium tracking-tight">
-          Commercial Workflow Dashboard
-        </h2>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Source-Equivalent Counts, Six-Month Quoting, Workflow Load, Quote Mix,
-          Material Lead Time, And Customer Pareto—All Bounded To Mrmpl.
-        </p>
-      </section>
+      <DashboardPageHeader
+        badge={
+          <Badge variant="outline">
+            <Database aria-hidden="true" /> Canonical Postgresql Analytics
+          </Badge>
+        }
+        description="Source-Equivalent Counts, Six-Month Quoting, Workflow Load, Quote Mix, Material Lead Time, And Customer Pareto—All Bounded To Mrmpl."
+        icon={BarChart3}
+        title="Commercial Workflow Dashboard"
+      />
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map(([label, count]) => (
-          <MetricCard key={label} label={label} value={count} />
-        ))}
-      </section>
+      <DashboardSection
+        description="A concise view of commercial volume, conversion, and work requiring attention."
+        title="Key Performance Indicators"
+      >
+        <DashboardGrid>
+          {stats.map((stat) => {
+            const Icon = stat.icon
+            return (
+              <MetricCard
+                description={stat.description}
+                icon={<Icon aria-hidden="true" />}
+                key={stat.label}
+                label={stat.label}
+                tone={stat.tone}
+                value={stat.value}
+              />
+            )
+          })}
+        </DashboardGrid>
+      </DashboardSection>
 
-      <section className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="size-4" /> Quoted Items — Six Months
-            </CardTitle>
-            <CardDescription>
-              Sent, Non-Superseded Quote Items By Source Month Bucket.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MetricBars
+      <DashboardSection
+        description="Volume and queue comparisons using the same source definitions as before."
+        title="Trends & Comparisons"
+      >
+        <DashboardGrid columns="two">
+          <ChartCard
+            description="Sent, Non-Superseded Quote Items By Source Month Bucket."
+            empty={!dashboard.monthlyQuotedItems.length}
+            title="Quoted Items — Six Months"
+          >
+            <DashboardBarChart
               rows={dashboard.monthlyQuotedItems.map((row) => ({
-                count: row.count,
                 label: row.month,
+                value: row.count,
               }))}
             />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Workflow Load</CardTitle>
-            <CardDescription>
-              Open Work Using The Source Queue Definitions.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MetricBars rows={dashboard.workflowLoad} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Quote Mix</CardTitle>
-            <CardDescription>
-              Purchase, Quoted, And In-Costing Commercial Rows.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MetricBars rows={dashboard.quoteMix} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Material Lead Time</CardTitle>
-            <CardDescription>
-              Average Days From Enquiry Receipt To Quote Send.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto rounded-xl border">
+          </ChartCard>
+          <ChartCard
+            description="Open Work Using The Source Queue Definitions."
+            empty={!dashboard.workflowLoad.length}
+            title="Workflow Load"
+          >
+            <DashboardBarChart
+              rows={dashboard.workflowLoad.map((row) => ({
+                label: row.label,
+                value: row.count,
+              }))}
+            />
+          </ChartCard>
+        </DashboardGrid>
+      </DashboardSection>
+
+      <DashboardSection
+        description="Commercial composition and elapsed-time detail."
+        title="Operational Detail"
+      >
+        <DashboardGrid columns="two">
+          <ChartCard
+            description="Purchase, Quoted, And In-Costing Commercial Rows."
+            empty={!dashboard.quoteMix.length}
+            title="Quote Mix"
+          >
+            <DashboardBarChart
+              rows={dashboard.quoteMix.map((row) => ({
+                label: row.label,
+                value: row.count,
+              }))}
+            />
+          </ChartCard>
+          <DataTableCard
+            description="Average Days From Enquiry Receipt To Quote Send."
+            icon={TableProperties}
+            title="Material Lead Time"
+          >
+            <div className="overflow-x-auto rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -184,19 +235,20 @@ export default async function CommercialPage() {
                 </TableBody>
               </Table>
             </div>
-          </CardContent>
-        </Card>
-      </section>
+          </DataTableCard>
+        </DashboardGrid>
+      </DashboardSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Customer Quote Pareto</CardTitle>
-          <CardDescription>
-            Top Eight Customers By Sent Quote Items With Cumulative Share.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto rounded-xl border">
+      <DashboardSection
+        description="The customers contributing most to sent quote volume."
+        title="Supporting Analysis"
+      >
+        <DataTableCard
+          description="Top Eight Customers By Sent Quote Items With Cumulative Share."
+          icon={Users}
+          title="Customer Quote Pareto"
+        >
+          <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -231,8 +283,8 @@ export default async function CommercialPage() {
               </TableBody>
             </Table>
           </div>
-        </CardContent>
-      </Card>
+        </DataTableCard>
+      </DashboardSection>
     </div>
   )
 }
