@@ -12,7 +12,7 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-lg border border-border/80 bg-card py-(--card-spacing) text-sm text-card-foreground shadow-xs [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
+        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-lg border border-border bg-card py-(--card-spacing) text-sm text-card-foreground shadow-[var(--shadow-sm)] [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
         className
       )}
       {...props}
@@ -37,7 +37,10 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("font-heading text-base font-semibold tracking-tight", className)}
+      className={cn(
+        "font-heading text-base font-semibold tracking-normal text-[var(--color-text-strong)]",
+        className
+      )}
       {...props}
     />
   )
@@ -107,7 +110,7 @@ function MetricCard({
   const content = (
     <>
       <div className="min-w-0">
-        <div className="truncate text-[10px] font-medium text-emerald-800 dark:text-emerald-200">
+        <div className="truncate text-xs font-medium text-muted-foreground">
           {label}
         </div>
         <div className="text-base font-semibold tabular-nums">{value}</div>
@@ -121,9 +124,9 @@ function MetricCard({
     </>
   )
   const metricClassName = cn(
-    "flex min-h-11 items-center justify-between gap-2 rounded-lg border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-background to-green-100/70 p-2.5 text-left shadow-xs shadow-emerald-950/5 dark:border-emerald-900/50 dark:from-emerald-950/35 dark:via-background dark:to-green-950/25",
+    "flex min-h-11 items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 text-left shadow-[var(--shadow-sm)]",
     onClick &&
-      "transition hover:border-emerald-400 hover:shadow-sm focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+      "transition-[border-color,box-shadow,background-color] duration-[var(--dur-fast)] ease-[var(--ease-standard)] hover:border-primary/50 hover:bg-muted/40 hover:shadow-[var(--shadow-md)] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none",
     className
   )
 

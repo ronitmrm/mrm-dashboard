@@ -2137,7 +2137,7 @@ function DashboardShell({
       }
     >
       <Sidebar variant="sidebar">
-        <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
+        <SidebarHeader className="border-b border-black/10 bg-[var(--color-logo-surface)] px-3 py-3">
           <Link
             className="flex items-center px-2 py-2"
             href={dashboardTabHref(
@@ -2170,7 +2170,7 @@ function DashboardShell({
         <SidebarRail />
       </Sidebar>
       <SidebarInset>
-        <header className="sticky top-0 z-10 flex h-(--header-height) items-center gap-3 border-b bg-background/95 px-4 backdrop-blur lg:px-6">
+        <header className="sticky top-0 z-10 flex h-(--header-height) items-center gap-3 border-b bg-card/95 px-4 backdrop-blur lg:px-6">
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-5" />
           <div className="min-w-0 flex-1">

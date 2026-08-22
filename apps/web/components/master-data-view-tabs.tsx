@@ -16,7 +16,8 @@ import {
   withMasterSelectionContext,
 } from "@/lib/master-module"
 
-const linkClass = "border-b-2 px-4 py-3 text-sm font-medium transition-colors"
+const linkClass =
+  "border-b-2 px-4 py-3 text-sm font-medium transition-colors duration-[var(--dur-base)]"
 
 type MasterDataViewTabsProps = {
   activeView: "dataEntry" | "masterTables"
@@ -119,7 +120,7 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
             aria-selected={props.activeView === "dataEntry"}
             className={`${linkClass} ${
               props.activeView === "dataEntry"
-                ? "border-primary text-foreground"
+                ? "border-[var(--color-accent)] text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
             href={dataEntryHref}
@@ -131,7 +132,7 @@ export function MasterDataViewTabs(props: MasterDataViewTabsProps) {
             aria-selected={props.activeView === "masterTables"}
             className={`${linkClass} ${
               props.activeView === "masterTables"
-                ? "border-primary text-foreground"
+                ? "border-[var(--color-accent)] text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
             href={masterTablesHref}

@@ -14,7 +14,8 @@ import {
 } from "@/lib/operational-entry-module"
 import { operationalEntryTransferAction } from "@/lib/operational-entry-transfer"
 
-const linkClass = "border-b-2 px-4 py-3 text-sm font-medium transition-colors"
+const linkClass =
+  "border-b-2 px-4 py-3 text-sm font-medium transition-colors duration-[var(--dur-base)]"
 
 export function OperationalWorkspaceTabs({
   activeView,
@@ -71,7 +72,7 @@ export function OperationalWorkspaceTabs({
           className={[
             linkClass,
             activeView === "dataEntry"
-              ? "border-primary text-foreground"
+              ? "border-[var(--color-accent)] text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground",
           ].join(" ")}
           href={lockedDataEntryHref}
@@ -84,7 +85,7 @@ export function OperationalWorkspaceTabs({
           className={[
             linkClass,
             activeView === "masterTables"
-              ? "border-primary text-foreground"
+              ? "border-[var(--color-accent)] text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground",
           ].join(" ")}
           href={lockedMasterTablesHref}

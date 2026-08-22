@@ -366,7 +366,7 @@ export function UnifiedSidebarNavigation({
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                  className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
                   isActive={pathname === personalDashboardNavigation.href}
                 >
                   <a href={personalDashboardNavigation.href}>
@@ -403,7 +403,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.id}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
                 isActive={
                   activeDashboardTab === item.id ||
                   navigationHrefMatches(
@@ -448,7 +448,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.id}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
                 isActive={
                   (item.dashboardTabId === "operationalEntryTab" &&
                     onCommercialOperationalEntry) ||
@@ -490,7 +490,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -526,7 +526,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -562,7 +562,7 @@ export function UnifiedSidebarNavigation({
             <SidebarMenuSubItem key={item.href}>
               <SidebarMenuSubButton
                 asChild
-                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
                 isActive={navigationHrefMatches(
                   pathname,
                   searchParams,
@@ -603,7 +603,7 @@ export function UnifiedSidebarNavigation({
               <SidebarMenuSubItem key={`${floor.code}:${item.id}`}>
                 <SidebarMenuSubButton
                   asChild
-                  className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-primary data-[active=true]:bg-transparent data-[active=true]:font-semibold data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                  className="h-8 rounded-md px-2.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
                   isActive={
                     floor.code === activeProductionFloor &&
                     item.id === activeDashboardTab
@@ -644,7 +644,7 @@ export function UnifiedSidebarNavigation({
                 <SidebarMenuItem key={item.id}>
                   <SidebarMenuButton
                     asChild
-                    className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                    className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
                     isActive={activeDashboardTab === item.id}
                   >
                     {onDashboardTabSelect ? (
@@ -684,7 +684,7 @@ export function UnifiedSidebarNavigation({
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
-                    className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                    className="h-10 rounded-lg px-3 font-medium hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
                     isActive={navigationHrefMatches(
                       pathname,
                       searchParams,
@@ -780,17 +780,17 @@ function NavigationSection({
     >
       <SidebarGroup className="p-0">
         <SidebarMenu>
-          <SidebarMenuItem className="overflow-hidden rounded-lg transition-colors group-data-[state=open]/collapsible:bg-sidebar-primary/[0.07]">
+          <SidebarMenuItem className="overflow-hidden rounded-lg transition-colors group-data-[state=open]/collapsible:bg-sidebar-accent">
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
-                className="h-10 rounded-lg px-3 font-medium group-data-[state=open]/collapsible:text-sidebar-primary hover:bg-sidebar-primary/10 hover:text-sidebar-primary data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:shadow-none"
+                className="h-10 rounded-lg px-3 font-medium group-data-[state=open]/collapsible:text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
                 isActive={isActive}
                 title={label}
                 type="button"
               >
                 <Icon className="size-[18px]" />
                 <span className="truncate">{label}</span>
-                <span className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[state=open]/collapsible:text-sidebar-primary">
+                <span className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-transform duration-[var(--dur-base)] group-data-[state=open]/collapsible:rotate-90 group-data-[state=open]/collapsible:text-sidebar-foreground">
                   <ChevronRight className="size-3.5" />
                 </span>
               </SidebarMenuButton>
