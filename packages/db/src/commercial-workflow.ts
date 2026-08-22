@@ -413,6 +413,7 @@ async function designRowsWithRelations(
               AND file_link.target_schema = 'sales'
               AND file_link.target_table = 'design_tasks'
               AND file_link.target_id = ANY($2::uuid[])
+              AND file_link.is_current
             ORDER BY file_link.target_id, file.created_at DESC, file.id DESC
           `,
           [roots[0]!.organization_id, designIds]
@@ -427,7 +428,8 @@ async function designRowsWithRelations(
         WHERE file_link.target_schema = 'sales'
           AND file_link.target_table = 'enquiry_items'
           AND file_link.target_id = ANY($1::uuid[])
-          AND file_link.purpose = 'drawing'
+          AND file_link.purpose IN ('drawing', 'sales_clarification')
+          AND file_link.is_current
         ORDER BY file_link.target_id, file.created_at DESC, file.id DESC
       `,
       [itemIds]
@@ -1558,6 +1560,123 @@ async function getImportReviewWithClient(client: PoolClient, reviewId: string) {
       suggestedAction: row.suggested_action,
     })),
     status: review.rows[0].status,
+  }
+}
+
+export type CommercialAttachmentAuthorization =
+  | {
+      enquiryId: string
+      enquiryItemId: string
+      kind: "enquiry_item"
+      organizationId: string
+    }
+  | {
+      clarificationTaskId: string
+      enquiryId: string
+      enquiryItemId: string
+      kind: "sales_clarification"
+      organizationId: string
+    }
+  | {
+      designId: string
+      enquiryId: string
+      enquiryItemId: string
+      kind: "design"
+      organizationId: string
+    }
+
+export async function authorizeCommercialAttachmentTarget(
+  client: PoolClient,
+  input: CommercialAttachmentAuthorization,
+  options: { requireOpenState: boolean }
+) {
+  if (input.kind === "sales_clarification") {
+    const target = await client.query<{ id: string }>(
+      `
+        SELECT clarification.id
+        FROM sales.clarification_tasks clarification
+        JOIN sales.enquiry_items enquiry_item
+          ON enquiry_item.id = clarification.enquiry_item_id
+        WHERE clarification.id = $1
+          AND clarification.enquiry_item_id = $2
+          AND clarification.enquiry_id = $3
+          AND clarification.organization_id = $4
+          AND enquiry_item.organization_id = $4
+          AND ($5::boolean = false OR (
+            clarification.target_stage = 'Sales'
+            AND clarification.status = 'Open'
+          ))
+        FOR UPDATE OF clarification, enquiry_item
+      `,
+      [
+        input.clarificationTaskId,
+        input.enquiryItemId,
+        input.enquiryId,
+        input.organizationId,
+        options.requireOpenState,
+      ]
+    )
+    if (!target.rows[0]) {
+      throw new Error("Sales clarification attachment target was not found.")
+    }
+    return
+  }
+
+  if (input.kind === "design") {
+    const target = await client.query<{
+      design_status: string
+      next_stage_status: string
+    }>(
+      `
+        SELECT design.design_status, design.next_stage_status
+        FROM sales.design_tasks design
+        JOIN sales.enquiry_items enquiry_item
+          ON enquiry_item.id = design.enquiry_item_id
+        WHERE design.id = $1
+          AND design.enquiry_item_id = $2
+          AND enquiry_item.enquiry_id = $3
+          AND design.organization_id = $4
+          AND enquiry_item.organization_id = $4
+        FOR UPDATE OF design, enquiry_item
+      `,
+      [
+        input.designId,
+        input.enquiryItemId,
+        input.enquiryId,
+        input.organizationId,
+      ]
+    )
+    const row = target.rows[0]
+    if (!row) {
+      throw new Error("Design attachment target was not found.")
+    }
+    if (
+      options.requireOpenState &&
+      !designTaskIsEditable({
+        designStatus: row.design_status,
+        nextStageStatus: row.next_stage_status,
+      })
+    ) {
+      throw new Error(
+        "Design attachments cannot be changed because the next step has already started."
+      )
+    }
+    return
+  }
+
+  const target = await client.query<{ id: string }>(
+    `
+      SELECT enquiry_item.id
+      FROM sales.enquiry_items enquiry_item
+      WHERE enquiry_item.id = $1
+        AND enquiry_item.enquiry_id = $2
+        AND enquiry_item.organization_id = $3
+      FOR UPDATE OF enquiry_item
+    `,
+    [input.enquiryItemId, input.enquiryId, input.organizationId]
+  )
+  if (!target.rows[0]) {
+    throw new Error("Enquiry attachment target was not found.")
   }
 }
 
@@ -2988,7 +3107,8 @@ export function createCommercialWorkflowRepository(
             WHERE file_link.target_schema = 'sales'
               AND file_link.target_table = 'enquiry_items'
               AND file_link.target_id = enquiry_item.id
-              AND file_link.purpose = 'drawing'
+              AND file_link.purpose IN ('drawing', 'sales_clarification')
+              AND file_link.is_current
             ORDER BY file.created_at DESC, file.id DESC
             LIMIT 1
           ) drawing ON true
@@ -4764,7 +4884,12 @@ export function createCommercialWorkflowRepository(
 
     async listAttachments(input: {
       organizationId: string
-      purpose?: "cad" | "customer_marked" | "drawing" | "internal_drawing"
+      purpose?:
+        | "cad"
+        | "customer_marked"
+        | "drawing"
+        | "internal_drawing"
+        | "sales_clarification"
       targetId: string
       targetTable: "design_tasks" | "enquiry_items"
     }) {
@@ -4773,22 +4898,34 @@ export function createCommercialWorkflowRepository(
         created_at: Date
         file_name: string
         id: string
+        is_current: boolean
+        lifecycle_state: "current" | "deleted" | "superseded"
         media_type: string | null
+        object_lifecycle_state:
+          | "available"
+          | "deleted"
+          | "deletion_failed"
+          | null
         purpose: string
+        public_url: string | null
         storage_key: string
+        version: number
       }>(
         `
           SELECT file.id, file.file_name, file.media_type,
             file.byte_size::text, file.storage_key, file.created_at,
-            file_link.purpose
+            file.lifecycle_state, file_link.purpose, file_link.version,
+            file_link.is_current, object.public_url,
+            object.lifecycle_state AS object_lifecycle_state
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
+          LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
           WHERE file_link.organization_id = $1
             AND file_link.target_schema = 'sales'
             AND file_link.target_table = $2
             AND file_link.target_id = $3
             AND ($4::text IS NULL OR file_link.purpose = $4)
-          ORDER BY file.created_at DESC, file.id DESC
+          ORDER BY file_link.version DESC, file.created_at DESC, file.id DESC
         `,
         [
           input.organizationId,
@@ -4802,15 +4939,25 @@ export function createCommercialWorkflowRepository(
         createdAt: row.created_at,
         fileName: row.file_name,
         id: row.id,
+        isCurrent: row.is_current,
+        lifecycleState: row.lifecycle_state,
         mediaType: row.media_type,
+        objectLifecycleState: row.object_lifecycle_state,
         purpose: row.purpose,
+        publicUrl: row.public_url,
         storageKey: row.storage_key,
+        version: row.version,
       }))
     },
 
     async listAttachmentsForTargets(input: {
       organizationId: string
-      purpose?: "cad" | "customer_marked" | "drawing" | "internal_drawing"
+      purpose?:
+        | "cad"
+        | "customer_marked"
+        | "drawing"
+        | "internal_drawing"
+        | "sales_clarification"
       targetIds: string[]
       targetTable: "design_tasks" | "enquiry_items"
     }) {
@@ -4826,23 +4973,36 @@ export function createCommercialWorkflowRepository(
         created_at: Date
         file_name: string
         id: string
+        is_current: boolean
+        lifecycle_state: "current" | "deleted" | "superseded"
         media_type: string | null
+        object_lifecycle_state:
+          | "available"
+          | "deleted"
+          | "deletion_failed"
+          | null
         purpose: string
+        public_url: string | null
         storage_key: string
         target_id: string
+        version: number
       }>(
         `
           SELECT file_link.target_id, file.id, file.file_name, file.media_type,
             file.byte_size::text, file.storage_key, file.created_at,
-            file_link.purpose
+            file.lifecycle_state, file_link.purpose, file_link.version,
+            file_link.is_current, object.public_url,
+            object.lifecycle_state AS object_lifecycle_state
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
+          LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
           WHERE file_link.organization_id = $1
             AND file_link.target_schema = 'sales'
             AND file_link.target_table = $2
             AND file_link.target_id = ANY($3::uuid[])
             AND ($4::text IS NULL OR file_link.purpose = $4)
-          ORDER BY file_link.target_id, file.created_at DESC, file.id DESC
+          ORDER BY file_link.target_id, file_link.version DESC,
+            file.created_at DESC, file.id DESC
         `,
         [
           input.organizationId,
@@ -4862,9 +5022,14 @@ export function createCommercialWorkflowRepository(
           createdAt: row.created_at,
           fileName: row.file_name,
           id: row.id,
+          isCurrent: row.is_current,
+          lifecycleState: row.lifecycle_state,
           mediaType: row.media_type,
+          objectLifecycleState: row.object_lifecycle_state,
           purpose: row.purpose,
+          publicUrl: row.public_url,
           storageKey: row.storage_key,
+          version: row.version,
         })
         attachmentsByTarget.set(row.target_id, attachments)
       }
@@ -4884,6 +5049,7 @@ export function createCommercialWorkflowRepository(
         is_current: boolean
         lifecycle_state: "current" | "deleted" | "superseded"
         public_url: string | null
+        purpose: string
         storage_key: string
         version: number
       }>(
@@ -4891,7 +5057,7 @@ export function createCommercialWorkflowRepository(
           SELECT file.id, file.file_name, file.media_type,
             file.byte_size::text, file.storage_key, file.created_at,
             file.lifecycle_state, file_link.is_current, file_link.version,
-            object.public_url
+            file_link.purpose, object.public_url
           FROM core.file_links file_link
           JOIN core.files file ON file.id = file_link.file_id
           LEFT JOIN core.file_objects object ON object.id = file.physical_object_id
@@ -4899,8 +5065,8 @@ export function createCommercialWorkflowRepository(
             AND file_link.target_schema = 'sales'
             AND file_link.target_table = 'enquiry_items'
             AND file_link.target_id = $2
-            AND file_link.purpose = 'drawing'
-          ORDER BY file_link.version DESC, file.id DESC
+            AND file_link.purpose IN ('drawing', 'sales_clarification')
+          ORDER BY file.created_at DESC, file.id DESC
         `,
         [input.organizationId, input.enquiryItemId]
       )
@@ -4912,6 +5078,7 @@ export function createCommercialWorkflowRepository(
         isCurrent: row.is_current,
         lifecycleState: row.lifecycle_state,
         mediaType: row.media_type,
+        purpose: row.purpose,
         publicUrl: row.public_url,
         storageKey: row.storage_key,
         version: row.version,
@@ -4949,9 +5116,9 @@ export function createCommercialWorkflowRepository(
             AND file_link.target_schema = 'sales'
             AND file_link.target_table = 'enquiry_items'
             AND file_link.target_id = $2
-            AND file_link.purpose = 'drawing'
+            AND file_link.purpose IN ('drawing', 'sales_clarification')
             AND file_link.is_current
-          ORDER BY file_link.version DESC, file.id DESC
+          ORDER BY file.created_at DESC, file.id DESC
           LIMIT 1
         `,
         [input.organizationId, input.enquiryItemId]
@@ -5418,7 +5585,8 @@ export function createCommercialWorkflowRepository(
               WHERE file_link.target_schema = 'sales'
                 AND file_link.target_table = 'enquiry_items'
                 AND file_link.target_id = item.id
-                AND file_link.purpose = 'drawing'
+                AND file_link.purpose IN ('drawing', 'sales_clarification')
+                AND file_link.is_current
               ORDER BY file.created_at DESC, file.id DESC
               LIMIT 1
             ) drawing ON true
@@ -5846,7 +6014,8 @@ export function createCommercialWorkflowRepository(
             WHERE file_link.target_schema = 'sales'
               AND file_link.target_table = 'enquiry_items'
               AND file_link.target_id = enquiry_item.id
-              AND file_link.purpose = 'drawing'
+              AND file_link.purpose IN ('drawing', 'sales_clarification')
+              AND file_link.is_current
             ORDER BY file.created_at DESC, file.id DESC
             LIMIT 1
           ) drawing ON true
@@ -5965,7 +6134,8 @@ export function createCommercialWorkflowRepository(
                 WHERE file_link.target_schema = 'sales'
                   AND file_link.target_table = 'enquiry_items'
                   AND file_link.target_id = ANY($1::uuid[])
-                  AND file_link.purpose = 'drawing'
+                  AND file_link.purpose IN ('drawing', 'sales_clarification')
+                  AND file_link.is_current
                 ORDER BY file_link.target_id,
                   file.created_at DESC, file.id DESC
               `,
@@ -6427,7 +6597,8 @@ export function createCommercialWorkflowRepository(
                 WHERE file_link.target_schema = 'sales'
                   AND file_link.target_table = 'enquiry_items'
                   AND file_link.target_id = item.id
-                  AND file_link.purpose = 'drawing'
+                  AND file_link.purpose IN ('drawing', 'sales_clarification')
+                  AND file_link.is_current
                 ORDER BY file.created_at DESC, file.id DESC
                 LIMIT 1
               ) drawing ON true

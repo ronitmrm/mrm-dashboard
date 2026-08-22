@@ -1,27 +1,27 @@
 "use server"
 
-import { createHash, randomUUID } from "node:crypto"
-import path from "node:path"
+import { createHash } from "node:crypto"
 
 import {
+  authorizeCommercialAttachmentTarget,
   createArtifactService,
   createCommercialWorkflowRepository,
+  type CommercialAttachmentAuthorization,
 } from "@workspace/db"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
 import { readAuthEnvironment } from "@/lib/auth/auth"
 import { requireCapability } from "@/lib/auth/require-capability"
+import {
+  type CommercialArtifactPurpose,
+  validateCommercialAttachment,
+} from "@/lib/commercial-attachment"
 import { optionalText, requiredText } from "@/lib/form-data"
 import {
   technicalReviewChecklistFromFormData,
   technicalReviewReturnPath,
 } from "@/lib/pricing/technical-review"
-import {
-  deleteUserAttachment,
-  saveUserAttachment,
-} from "@/lib/user-attachment-storage"
-import { validateUserAttachment } from "@/lib/user-attachment-security"
 import { createUploadThingArtifactProvider } from "@/lib/uploadthing-artifact-provider"
 
 import {
@@ -71,10 +71,11 @@ async function withWorkflow<T>(
 async function persistAttachment(
   file: File,
   input: {
+    authorization: CommercialAttachmentAuthorization
     capability?: string
     enquiryId: string
     organizationId: string
-    purpose?: "cad" | "customer_marked" | "drawing" | "internal_drawing"
+    purpose?: CommercialArtifactPurpose
     targetId: string
     targetTable?: "design_tasks" | "enquiry_items"
   }
@@ -82,76 +83,56 @@ async function persistAttachment(
   if (file.size > 25 * 1024 * 1024) {
     throw new Error("Drawing files must not exceed 25 MB.")
   }
-  await withWorkflow(
+  const session = await requireCapability(
     input.capability ?? "pricing.enquiries.write",
-    `${enquiriesPath}/${input.enquiryId}`,
-    async (workflow, actorUserId) => {
-      const bytes = Buffer.from(await file.arrayBuffer())
-      const { fileName, mediaType } = validateUserAttachment({
-        bytes,
-        fileName: file.name,
-        purpose: "drawing",
-      })
-      const sha256 = createHash("sha256").update(bytes).digest("hex")
-      if ((input.targetTable ?? "enquiry_items") === "enquiry_items") {
-        const service = createArtifactService({
-          connectionString: readAuthEnvironment().connectionString,
-          provider: createUploadThingArtifactProvider(),
-        })
-        try {
-          await service.store({
-            actorUserId,
-            bytes,
-            fileName,
-            idempotencyKey: [
-              "enquiry-drawing",
-              input.targetId,
-              input.purpose ?? "drawing",
-              sha256,
-            ].join(":"),
-            mediaType,
-            organizationId: input.organizationId,
-            origin: "uploaded",
-            purpose: input.purpose ?? "drawing",
-            target: {
-              id: input.targetId,
-              schema: "sales",
-              table: "enquiry_items",
-            },
-          })
-        } finally {
-          await service.close()
-        }
-        return
-      }
-      const sourceId = randomUUID()
-      const storageKey = path.posix.join(
-        "attachments",
-        input.enquiryId,
-        input.targetId,
-        sourceId,
-        fileName
-      )
-      await saveUserAttachment({ bytes, mediaType, storageKey })
-      try {
-        await workflow.recordAttachment({
-          byteSize: bytes.byteLength,
-          fileName,
-          mediaType,
-          organizationId: input.organizationId,
-          sha256,
-          sourceId,
-          storageKey,
-          purpose: input.purpose,
-          targetId: input.targetId,
-          targetTable: input.targetTable,
-        })
-      } catch (error) {
-        await deleteUserAttachment(storageKey).catch(() => undefined)
-        throw error
-      }
-    }
+    `${enquiriesPath}/${input.enquiryId}`
   )
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const { fileName, mediaType, purpose } = validateCommercialAttachment({
+    bytes,
+    declaredMediaType: file.type,
+    fileName: file.name,
+    purpose: input.purpose ?? "drawing",
+  })
+  const sha256 = createHash("sha256").update(bytes).digest("hex")
+  const service = createArtifactService({
+    connectionString: readAuthEnvironment().connectionString,
+    provider: createUploadThingArtifactProvider(),
+  })
+  try {
+    await service.store({
+      actorUserId: session.user.id,
+      authorizeTarget: (client, { isRetry }) =>
+        authorizeCommercialAttachmentTarget(client, input.authorization, {
+          requireOpenState: !isRetry,
+        }),
+      bytes,
+      fileName,
+      idempotencyKey: [
+        "commercial-attachment",
+        input.targetTable ?? "enquiry_items",
+        input.targetId,
+        purpose,
+        fileName,
+        sha256,
+      ].join(":"),
+      mediaType,
+      organizationId: input.organizationId,
+      origin: "uploaded",
+      purpose,
+      supersedesPurposes:
+        purpose === "drawing" || purpose === "sales_clarification"
+          ? ["drawing", "sales_clarification"]
+          : undefined,
+      target: {
+        id: input.targetId,
+        schema: "sales",
+        table: input.targetTable ?? "enquiry_items",
+      },
+    })
+  } finally {
+    await service.close()
+  }
 }
 
 export async function createEnquiryAction(formData: FormData) {
@@ -230,6 +211,12 @@ export async function addEnquiryItemAction(formData: FormData) {
   const drawing = formData.get("drawing_file")
   if (drawing instanceof File && drawing.size > 0) {
     await persistAttachment(drawing, {
+      authorization: {
+        enquiryId,
+        enquiryItemId: line.id,
+        kind: "enquiry_item",
+        organizationId,
+      },
       enquiryId,
       organizationId,
       targetId: line.id,
@@ -304,6 +291,12 @@ export async function updateEnquiryItemAction(formData: FormData) {
   const drawing = formData.get("drawing_file")
   if (drawing instanceof File && drawing.size > 0) {
     await persistAttachment(drawing, {
+      authorization: {
+        enquiryId,
+        enquiryItemId,
+        kind: "enquiry_item",
+        organizationId,
+      },
       enquiryId,
       organizationId,
       targetId: enquiryItemId,
@@ -352,16 +345,34 @@ export async function updateTechnicalReviewAction(formData: FormData) {
 }
 
 export async function completeSalesClarificationAction(formData: FormData) {
+  const clarificationTaskId = requiredText(formData, "clarification_task_id")
   const enquiryId = requiredText(formData, "enquiry_id")
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   const organizationId = requiredText(formData, "organization_id")
+  const drawing = formData.get("drawing_file")
+  if (drawing instanceof File && drawing.size > 0) {
+    await persistAttachment(drawing, {
+      authorization: {
+        clarificationTaskId,
+        enquiryId,
+        enquiryItemId,
+        kind: "sales_clarification",
+        organizationId,
+      },
+      capability: "pricing.sales.write",
+      enquiryId,
+      organizationId,
+      purpose: "sales_clarification",
+      targetId: enquiryItemId,
+    })
+  }
   await withWorkflow(
     "pricing.sales.write",
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) =>
       workflow.completeSalesClarification({
         actorUserId,
-        clarificationTaskId: requiredText(formData, "clarification_task_id"),
+        clarificationTaskId,
         customerPartCode: requiredText(formData, "part"),
         description: requiredText(formData, "description"),
         drawingReference: optionalText(formData, "drawing_reference"),
@@ -374,14 +385,6 @@ export async function completeSalesClarificationAction(formData: FormData) {
         targetPrice: numeric(formData, "target_price"),
       })
   )
-  const drawing = formData.get("drawing_file")
-  if (drawing instanceof File && drawing.size > 0) {
-    await persistAttachment(drawing, {
-      enquiryId,
-      organizationId,
-      targetId: enquiryItemId,
-    })
-  }
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
   revalidatePath("/commercial/sales")
   revalidatePath("/commercial/technical-review")
@@ -402,6 +405,7 @@ export async function startDesignWorkAction(formData: FormData) {
 }
 
 export async function saveDesignAction(formData: FormData) {
+  const designId = requiredText(formData, "design_id")
   const enquiryId = requiredText(formData, "enquiry_id")
   const enquiryItemId = requiredText(formData, "enquiry_item_id")
   const organizationId = requiredText(formData, "organization_id")
@@ -481,7 +485,32 @@ export async function saveDesignAction(formData: FormData) {
             rodType: optionalText(formData, "rod_type"),
           },
         ]
-  const saved = await withWorkflow(
+  const attachmentFiles = [
+    ["internal_drawing_file", "internal_drawing"],
+    ["customer_marked_file", "customer_marked"],
+    ["cad_file", "cad"],
+  ] as const
+  for (const [field, purpose] of attachmentFiles) {
+    const file = formData.get(field)
+    if (file instanceof File && file.size > 0) {
+      await persistAttachment(file, {
+        authorization: {
+          designId,
+          enquiryId,
+          enquiryItemId,
+          kind: "design",
+          organizationId,
+        },
+        capability: "pricing.design.write",
+        enquiryId,
+        organizationId,
+        purpose,
+        targetId: designId,
+        targetTable: "design_tasks",
+      })
+    }
+  }
+  await withWorkflow(
     "pricing.design.write",
     `${enquiriesPath}/${enquiryId}`,
     (workflow, actorUserId) =>
@@ -530,23 +559,6 @@ export async function saveDesignAction(formData: FormData) {
         toolingRequired: optionalText(formData, "tooling_required") ?? "No",
       })
   )
-  for (const [field, purpose] of [
-    ["internal_drawing_file", "internal_drawing"],
-    ["customer_marked_file", "customer_marked"],
-    ["cad_file", "cad"],
-  ] as const) {
-    const file = formData.get(field)
-    if (file instanceof File && file.size > 0) {
-      await persistAttachment(file, {
-        capability: "pricing.design.write",
-        enquiryId,
-        organizationId,
-        purpose,
-        targetId: saved.id,
-        targetTable: "design_tasks",
-      })
-    }
-  }
   revalidatePath(`${enquiriesPath}/${enquiryId}`)
   revalidatePath(designPath)
   revalidatePath(`${designPath}/${enquiryItemId}`)

@@ -32,6 +32,14 @@ Progress; completing its required BOM changes it to Design Complete.
 _Avoid_: Inline portfolio search, opening every Design editor inside the queue,
 automatic start on Technical Review completion.
 
+**Commercial Attachment**: Immutable drawing or CAD evidence retained through
+the shared Artifact lifecycle. Enquiry drawings, Sales Clarification responses,
+Design internal drawings, customer-marked drawings, and CAD files keep separate
+business purposes and filenames. Replacing one purpose creates a new current
+version and supersedes the former version without overwriting its bytes; exact
+bytes may share one Organization-scoped physical object.
+_Avoid_: Mutable file paths, overwriting stored bytes, merging logical purposes.
+
 **Customer Parameter Costing**: The customer- and Enquiry-specific price step
 after Product Parameter Costing. It applies scrap/purchase factors, profit,
 packaging, shipping, overhead, and FX without changing the Product master cost.

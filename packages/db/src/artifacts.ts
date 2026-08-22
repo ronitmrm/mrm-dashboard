@@ -21,6 +21,10 @@ export type ArtifactTarget = {
 
 export type StoreArtifactInput = {
   actorUserId: string | null
+  authorizeTarget?: (
+    client: PoolClient,
+    context: { isRetry: boolean }
+  ) => Promise<void>
   bytes: Buffer
   fileName: string
   idempotencyKey: string
@@ -28,6 +32,7 @@ export type StoreArtifactInput = {
   organizationId: string
   origin: "generated" | "uploaded"
   purpose: string
+  supersedesPurposes?: readonly string[]
   target: ArtifactTarget
 }
 
@@ -109,7 +114,6 @@ function targetLockKey(input: StoreArtifactInput) {
     input.target.schema,
     input.target.table,
     input.target.id,
-    input.purpose,
   ].join(":")
 }
 
@@ -193,6 +197,12 @@ export function createArtifactService(input: {
         throw new Error("Artifact bytes are required.")
       const sha256 = createHash("sha256").update(storeInput.bytes).digest("hex")
       const fingerprint = `${sha256}:${storeInput.bytes.byteLength}`
+      const replacedPurposes = [
+        ...new Set([
+          storeInput.purpose,
+          ...(storeInput.supersedesPurposes ?? []),
+        ]),
+      ]
       const client = await pool.connect()
       let uploadedKey: string | undefined
       try {
@@ -202,9 +212,11 @@ export function createArtifactService(input: {
         ])
         const retry = await existingArtifact(client, storeInput)
         if (retry) {
+          await storeInput.authorizeTarget?.(client, { isRetry: true })
           await client.query("COMMIT")
           return artifactResult(retry)
         }
+        await storeInput.authorizeTarget?.(client, { isRetry: false })
 
         await client.query(
           "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
@@ -258,14 +270,14 @@ export function createArtifactService(input: {
             SELECT coalesce(max(version), 0)::integer + 1 AS version
             FROM core.file_links
             WHERE organization_id = $1 AND target_schema = $2
-              AND target_table = $3 AND target_id = $4 AND purpose = $5
+              AND target_table = $3 AND target_id = $4 AND purpose = ANY($5::text[])
           `,
           [
             storeInput.organizationId,
             storeInput.target.schema,
             storeInput.target.table,
             storeInput.target.id,
-            storeInput.purpose,
+            replacedPurposes,
           ]
         )
         const version = versionResult.rows[0]!.version
@@ -275,14 +287,15 @@ export function createArtifactService(input: {
             SET is_current = false, deactivated_at = now(), updated_at = now(),
               row_version = row_version + 1
             WHERE organization_id = $1 AND target_schema = $2
-              AND target_table = $3 AND target_id = $4 AND purpose = $5 AND is_current
+              AND target_table = $3 AND target_id = $4
+              AND purpose = ANY($5::text[]) AND is_current
           `,
           [
             storeInput.organizationId,
             storeInput.target.schema,
             storeInput.target.table,
             storeInput.target.id,
-            storeInput.purpose,
+            replacedPurposes,
           ]
         )
         await client.query(
@@ -292,7 +305,7 @@ export function createArtifactService(input: {
             FROM core.file_links link
             WHERE link.file_id = file.id AND link.organization_id = $1
               AND link.target_schema = $2 AND link.target_table = $3
-              AND link.target_id = $4 AND link.purpose = $5
+              AND link.target_id = $4 AND link.purpose = ANY($5::text[])
               AND NOT link.is_current AND file.lifecycle_state = 'current'
           `,
           [
@@ -300,7 +313,7 @@ export function createArtifactService(input: {
             storeInput.target.schema,
             storeInput.target.table,
             storeInput.target.id,
-            storeInput.purpose,
+            replacedPurposes,
           ]
         )
         const file = await client.query<{ id: string }>(

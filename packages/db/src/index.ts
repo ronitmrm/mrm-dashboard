@@ -39,7 +39,11 @@ export {
   bulkRevisionFields,
   createCommercialRevisionsRepository,
 } from "./commercial-revisions"
-export { createCommercialWorkflowRepository } from "./commercial-workflow"
+export {
+  authorizeCommercialAttachmentTarget,
+  createCommercialWorkflowRepository,
+  type CommercialAttachmentAuthorization,
+} from "./commercial-workflow"
 export { createCustomerRepository } from "./customers"
 export { createDashboardPlanningRepository } from "./dashboard-planning"
 export {
