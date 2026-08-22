@@ -73,6 +73,8 @@ import {
   TableRow,
 } from "@workspace/ui/components/table";
 
+import { MasterDataViewTabs } from "@/components/master-data-view-tabs";
+
 import {
   dashboardConnectionLabel,
   dashboardCoverageNotice,
@@ -292,27 +294,22 @@ function MasterDataTabs({
 }) {
   const searchParams = useSearchParams();
   const selectedStoreMaster = searchParams.get("storeMaster");
-  const linkClass =
-    "border-b-2 px-4 py-3 text-sm font-medium transition-colors";
   return (
-    <nav
-      aria-label="Master Data views"
-      className="flex border-b"
-      role="tablist"
-    >
-      <Link
-        aria-selected={activeView === "dataEntry"}
-        className={`${linkClass} ${activeView === "dataEntry" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-        href={masterDataDashboardHref("dataEntry", productionFloorCode, entryType, selectedStoreMaster)}
-        role="tab"
-      >Data Entry</Link>
-      <Link
-        aria-selected={activeView === "masterTables"}
-        className={`${linkClass} ${activeView === "masterTables" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-        href={masterDataDashboardHref("masterTables", productionFloorCode, entryType, selectedStoreMaster)}
-        role="tab"
-      >Master Tables</Link>
-    </nav>
+    <MasterDataViewTabs
+      activeView={activeView}
+      dataEntryHref={masterDataDashboardHref(
+        "dataEntry",
+        productionFloorCode,
+        entryType,
+        selectedStoreMaster
+      )}
+      masterTablesHref={masterDataDashboardHref(
+        "masterTables",
+        productionFloorCode,
+        entryType,
+        selectedStoreMaster
+      )}
+    />
   );
 }
 const dataEntrySpecs: DataEntrySpec[] = [
