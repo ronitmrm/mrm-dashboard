@@ -99,6 +99,7 @@ function defaultExpandedSections(
       !onCommercialOperationalEntry,
     hr: pathname.startsWith("/hr"),
     masterData:
+      pathname.startsWith("/masters") ||
       activeDashboardTab === "dataEntryTab" ||
       activeDashboardTab === "masterTablesTab" ||
       onCommercialMasterData,
@@ -284,6 +285,11 @@ export function UnifiedSidebarNavigation({
       )
     : []
   const visibleMasterDataNavigation = [
+    {
+      destination: "/masters",
+      id: "masterSelection" as const,
+      title: "Master Selection" as const,
+    },
     ...masterDataNavigationLinks(navigationAccess, {
       entryType: activeMasterEntryType,
       pathname,

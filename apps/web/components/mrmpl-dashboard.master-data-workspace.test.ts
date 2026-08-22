@@ -8,15 +8,23 @@ describe("Master Data workspace", () => {
       new URL("./mrmpl-dashboard.tsx", import.meta.url),
       "utf8"
     )
+    const tabsSource = readFileSync(
+      new URL("./master-data-view-tabs.tsx", import.meta.url),
+      "utf8"
+    )
 
-    expect(source).toContain('<MasterDataTabs activeView="dataEntry"')
-    expect(source).toContain('<MasterDataTabs activeView="masterTables"')
+    expect(source).toMatch(/<MasterDataTabs\s+activeView="dataEntry"/)
+    expect(source).toMatch(/<MasterDataTabs\s+activeView="masterTables"/)
     expect(source).toContain("entryType={preferredDataEntryType}")
     expect(source).toContain("onEntryTypeChange={onMasterEntryTypeChange}")
-    expect(source).toContain("Data Entry</Link>")
-    expect(source).toContain("Master Tables</Link>")
-    expect(source).toContain("masterEditDefaults(selectedSpec.entryType, row)")
-    expect(source).toContain("immutableMasterFields(spec.entryType)")
+    expect(tabsSource).toContain("Data Entry")
+    expect(tabsSource).toContain("Master Table")
+    expect(tabsSource).toContain("Back to Master Selection")
+    expect(tabsSource).toContain("MasterDataUnsavedGuard")
+    expect(source).toMatch(
+      /masterEditDefaults\(\s*selectedSpec\.entryType,\s*row\s*\)/
+    )
+    expect(source).toMatch(/immutableMasterFields\(spec\.entryType\)/)
     expect(source).toContain('submitAction("master-delete"')
     expect(source).toContain("Select Replacement (Required Only If Used)")
     expect(source).not.toContain('<optgroup label="Other Modules">')
